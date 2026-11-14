@@ -1236,3 +1236,75 @@ fn hs2_wbredm_a_resolution_raced_by_another_is_retried_rather_than_denied() {
     let entry = f.runtime.audit(&f.owner.id, 0, 500).unwrap().entries;
     assert_eq!(entry.last().unwrap().record.outcome, AuditOutcome::Allowed);
 }
+
+/// HS2-EZV83C: a sync that reaches a run while the orchestrator's own handoff is half
+/// done (the old claim released, the new one not yet taken) waits for the handoff and
+/// then reads the finished result. It never records the handoff as a person's
+/// intervention, so the history holds the handoff alone.
+#[test]
+fn hs2_ezv83c_a_sync_during_a_handoff_never_records_an_intervention() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    granted(&m, &mut tx);
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Handed over");
+    let run = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a", &mut tx);
+    let owner = m.owner.id.clone();
+    let before = run.history.len();
+    let (finished, synced) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        // The orchestrator's operation on the run is in flight.
+        let operation = RunRegistry::new(&m.home)
+            .operation_lock(&owner, &run.run_id)
+            .unwrap();
+        release(&m, &ticket, "worker-a");
+        let (m, owner, run_id) = (&m, &owner, run.run_id.clone());
+        scope.spawn(move || {
+            let mut rng = Rng(900);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            let view = m.runtime.run_sync(owner, &run_id, Some(&worker()), &mut tx);
+            finished.send(view).unwrap();
+        });
+        // The sync cannot read the half-done handoff while the operation holds the run.
+        assert!(synced.try_recv().is_err());
+        // The handoff completes on this thread (the lock is reentrant here).
+        let handed = m
+            .runtime
+            .run_handoff(
+                owner,
+                &run.run_id,
+                HandoffRun {
+                    to_worker: Some("worker-b".into()),
+                    worker_label: None,
+                    lease_minutes: Some(30),
+                },
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .run;
+        assert_eq!(handed.worker_id.as_deref(), Some("worker-b"));
+        drop(operation);
+    });
+    let view = synced.recv().unwrap().unwrap();
+    assert_eq!(view.run.state, RunState::Dispatched);
+    assert_eq!(view.run.worker_id.as_deref(), Some("worker-b"));
+    let added: Vec<_> = view.run.history[before..]
+        .iter()
+        .map(|entry| (entry.control, entry.to))
+        .collect();
+    assert_eq!(added, [(Some(RunControl::Handoff), RunState::Dispatched)]);
+    assert!(
+        !kinds(&m, &view.run)
+            .iter()
+            .any(|(_, reason)| reason.as_deref() == Some("claim_released")),
+        "the half-done handoff was never published as a released claim"
+    );
+}

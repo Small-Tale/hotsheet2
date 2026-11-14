@@ -849,3 +849,63 @@ fn hs2_68dwam_a_transition_supersedes_the_stored_reconciliation() {
         Some(outcome(400, Disposition::NeedsAttention))
     );
 }
+
+/// HS2-EZV83C: the operation lock on one run excludes every other holder until it is
+/// dropped, is reentrant on its own thread, and leaves other runs' stripes alone.
+#[test]
+fn hs2_ezv83c_run_operation_lock_excludes_and_is_reentrant() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = RunRegistry::new(home.path());
+    let run = id(42);
+    let stripe = super::runs::operation_stripe(OWNER, &run);
+    let lock_path = home.path().join(format!(
+        "orchestration-run-operations/{stripe:02}.json.lock"
+    ));
+    let free = || {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        crate::FileLock::try_acquire(file).unwrap().is_some()
+    };
+    // The stripe is stable: the same run always maps to the same lock file.
+    assert_eq!(stripe, super::runs::operation_stripe(OWNER, &run));
+    assert!(stripe < RUN_OPERATION_STRIPES);
+
+    let outer = registry.operation_lock(OWNER, &run).unwrap();
+    assert!(outer.is_outermost());
+    assert!(!free(), "a held run lock excludes another holder");
+    // Repeated on the same thread: no self-deadlock, and the inner guard does not
+    // release what the outer one holds.
+    let inner = registry.operation_lock(OWNER, &run).unwrap();
+    assert!(!inner.is_outermost());
+    drop(inner);
+    assert!(!free());
+    // Another thread waits for the holder rather than going ahead.
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let other = {
+        let registry = registry.clone();
+        let run = run.clone();
+        std::thread::spawn(move || {
+            let guard = registry.operation_lock(OWNER, &run).unwrap();
+            sender.send(guard.is_outermost()).unwrap();
+        })
+    };
+    assert!(receiver.try_recv().is_err());
+    drop(outer);
+    assert!(
+        receiver.recv().unwrap(),
+        "the waiter takes the lock once it is free"
+    );
+    other.join().unwrap();
+    assert!(free(), "dropping every guard releases the lock");
+    // Empty then refill: the lock is taken again after a full release.
+    let again = registry.operation_lock(OWNER, &run).unwrap();
+    assert!(again.is_outermost());
+    drop(again);
+    assert!(free());
+    // Malformed identifiers never name a lock file.
+    assert!(registry.operation_lock("../escape", &run).is_err());
+    assert!(registry.operation_lock(OWNER, "../escape").is_err());
+}

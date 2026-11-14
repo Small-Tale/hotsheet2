@@ -1880,6 +1880,20 @@ or reversed. An action that changes nothing writes nothing.
   because reopening it could put two active runs on one target ticket. Only this
   machine's record changes, and the next successful read of the target still wins.
 
+**One operation at a time per run (HS2-EZV83C).** A handoff releases one claim and
+takes another before it records anything, and a cancel releases the claim before it
+records `cancelled`. Each claim change wakes the follower, whose sync could read the
+target in between and record the orchestrator's own change as a person's intervention
+(`dispatched -> intervened -> dispatched`). So every operation that reads a run, acts
+on its target and records the result (sync, dispatch, renew, cancel, handoff, pause,
+resume, correct) holds that run's operation lock throughout
+(`RunRegistry::operation_lock`: one of 64 striped lock files under
+`orchestration-run-operations/` in the machine home, shared by every process and
+reentrant on one thread). A sync that waited reads the run again under the lock, so it
+aligns with the finished operation, never with the record it read before. A resume
+releases the lock before its reconciliation, and no locked section takes another
+run's lock.
+
 Reconciliation and handoff pass the gate (§26.7) as `tickets_read` and a continuing
 `work_start`. Pause, resume and correct change only the orchestration project's own
 record and must work while the target is unreachable, so they do not need a fresh

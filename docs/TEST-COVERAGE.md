@@ -3514,6 +3514,12 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   service.
 - `contracts.spec.ts # HS2-WBREDM` validates the real server's reconcile, pause,
   resume, handoff, correct, status and event responses against the contract.
+- `run_tests.rs # hs2_ezv83c` pins the run operation lock: it excludes another
+  holder until dropped, is reentrant on its own thread, is free again after a full
+  release and refuses malformed identifiers. `tests/recovery.rs # hs2_ezv83c` starts
+  a sync while a handoff is half done (old claim released) and shows that the sync
+  waits and records no intervention; `contracts.spec.ts # HS2-WBREDM` was the load
+  test that exposed it (HS2-EZV83C).
 - `tests/recovery.rs # hs2_wbredm_a_resolution_raced` pins the gate resolving again
   when another resolution of the same target lands in between, which a follower and
   a request otherwise turned into a false `target_unavailable`.

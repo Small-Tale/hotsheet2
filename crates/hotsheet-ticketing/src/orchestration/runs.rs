@@ -306,11 +306,88 @@ pub struct RunRegistry {
     storage: Storage,
 }
 
+/// HS2-EZV83C: how many lock files the run operation locks are spread over. A run
+/// always maps to the same one; two runs sharing one only wait for each other.
+pub const RUN_OPERATION_STRIPES: u64 = 64;
+
+thread_local! {
+    /// The operation lock files this thread holds, so a nested operation on the same
+    /// run (or a run on the same stripe) does not wait for itself.
+    static HELD_OPERATION_LOCKS: std::cell::RefCell<Vec<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// HS2-EZV83C: held while one operation reads a run, acts on its target and records
+/// the outcome. Dropping it lets the next operation on that run proceed.
+#[must_use = "the run is only protected while the guard is held"]
+pub struct RunOperationGuard {
+    held: Option<(std::path::PathBuf, crate::FileLock)>,
+}
+
+impl RunOperationGuard {
+    /// True when this guard took the lock, false when this thread already held it.
+    pub fn is_outermost(&self) -> bool {
+        self.held.is_some()
+    }
+}
+
+impl Drop for RunOperationGuard {
+    fn drop(&mut self) {
+        if let Some((path, lock)) = self.held.take() {
+            HELD_OPERATION_LOCKS.with(|held| held.borrow_mut().retain(|item| *item != path));
+            drop(lock);
+        }
+    }
+}
+
+/// FNV-1a: stable across processes and releases, unlike the standard hasher.
+pub(crate) fn operation_stripe(owner_checkout_id: &str, run_id: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in owner_checkout_id
+        .bytes()
+        .chain(std::iter::once(0))
+        .chain(run_id.bytes())
+    {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash % RUN_OPERATION_STRIPES
+}
+
 impl RunRegistry {
     pub fn new(home: &Path) -> Self {
         Self {
             storage: Storage::machine_named(home, "orchestration-runs.json"),
         }
+    }
+
+    /// HS2-EZV83C: serialize the operations on one run across threads and processes.
+    /// An operation that changes the target (a claim taken, released or handed over)
+    /// and then records the result holds this throughout, and so does a sync that
+    /// reads the run and the target and records what it found. Without it, a sync
+    /// that read the target half-way through the orchestrator's own handoff or cancel
+    /// recorded that change as a person's intervention. Reentrant on one thread.
+    pub fn operation_lock(
+        &self,
+        owner_checkout_id: &str,
+        run_id: &str,
+    ) -> Result<RunOperationGuard, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        valid_token(run_id)?;
+        let stripe = operation_stripe(owner_checkout_id, run_id);
+        let storage = Storage::machine_named(
+            self.storage.anchor(),
+            &format!("orchestration-run-operations/{stripe:02}.json"),
+        );
+        let path = storage.path.clone();
+        if HELD_OPERATION_LOCKS.with(|held| held.borrow().contains(&path)) {
+            return Ok(RunOperationGuard { held: None });
+        }
+        let lock = storage.lock()?;
+        HELD_OPERATION_LOCKS.with(|held| held.borrow_mut().push(path.clone()));
+        Ok(RunOperationGuard {
+            held: Some((path, lock)),
+        })
     }
 
     fn read_file(&self) -> Result<RunFile, OrchestrationError> {

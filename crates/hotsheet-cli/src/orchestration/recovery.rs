@@ -241,6 +241,7 @@ impl OrchestrationRuntime {
         if let Some(reason) = &request.reason {
             identifier(reason, "bounded reason code required")?;
         }
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
@@ -279,6 +280,7 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
         let actor_id = actor_id(actor)?;
+        let operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
@@ -298,6 +300,7 @@ impl OrchestrationRuntime {
             )?;
             self.control_audit(owner_id, &resumed, actor, "run_resume", None, tx)?;
         }
+        drop(operation);
         self.run_reconcile(owner_id, run_id, actor, tx)
             .or_else(|_| self.run(owner_id, run_id).map(view))
     }
@@ -326,6 +329,11 @@ impl OrchestrationRuntime {
                 "lease minutes must be 5 to 240",
             ));
         }
+        // HS2-EZV83C: the old claim's release, the new claim and the record of the
+        // handoff are one step to a concurrent sync. Without this, the server's own
+        // follower read the target in between and recorded the handoff as a person's
+        // intervention (`dispatched -> intervened -> dispatched`).
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
@@ -469,6 +477,7 @@ impl OrchestrationRuntime {
         if let Some(worker) = &request.worker_id {
             identifier(worker, "bounded worker id required")?;
         }
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));

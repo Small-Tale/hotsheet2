@@ -9,8 +9,9 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::DenialReason;
 use hotsheet_ticketing::orchestration::{
     DispatchMode, NewRun, Run, RunControl, RunError, RunEvent, RunEventJournal, RunEventKind,
-    RunEventPage, RunEventSource, RunObservation, RunRegistry, RunState, RunTarget, RunTicket,
-    RunUnreachable, RunUpdate, TargetAction, TargetFacts, TargetOpError, align,
+    RunEventPage, RunEventSource, RunObservation, RunOperationGuard, RunRegistry, RunState,
+    RunTarget, RunTicket, RunUnreachable, RunUpdate, TargetAction, TargetFacts, TargetOpError,
+    align,
 };
 use hotsheet_ticketing::{ApiTicket, FsStore, OpError, ops};
 use serde::{Deserialize, Serialize};
@@ -238,6 +239,17 @@ impl OrchestrationRuntime {
 
     pub(super) fn runs(&self) -> RunRegistry {
         RunRegistry::new(&self.home)
+    }
+
+    /// HS2-EZV83C: hold while reading a run, acting on its target and recording the
+    /// outcome, so a concurrent sync never records the orchestrator's own change
+    /// half-way through as someone else's.
+    pub(super) fn run_lock(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+    ) -> Result<RunOperationGuard, OrchestrationError> {
+        self.runs().operation_lock(owner_id, run_id)
     }
 
     /// HS2-7QHWHJ: record one fact in the owner's run event stream. Best effort: a run
@@ -597,6 +609,14 @@ impl OrchestrationRuntime {
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
             )?;
+            // HS2-EZV83C: from here the target's claim and the run record change
+            // together; a sync waits rather than reading half of it.
+            let _operation = self.run_lock(owner_id, &run.run_id)?;
+            let run = if created {
+                run
+            } else {
+                self.run(owner_id, &run.run_id)?
+            };
             // A duplicate of a dispatch that already went past `requested`.
             if !created && run.state != RunState::Requested {
                 return Ok(RunView::from(run));
@@ -718,6 +738,7 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
         let minutes = lease(lease_minutes)?;
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.mode != DispatchMode::Direct || run.state != RunState::Dispatched {
             return Err(OrchestrationError::Run(RunError::NotActive));
@@ -799,6 +820,9 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
+        // HS2-EZV83C: releasing the claim and recording the cancel are one step to a
+        // concurrent sync; it never sees the release as a person's intervention.
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Err(OrchestrationError::Run(RunError::NotActive));
@@ -911,6 +935,10 @@ impl OrchestrationRuntime {
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<RunView, OrchestrationError> {
+        // HS2-EZV83C: read the record and the target, and record what was found, with
+        // no other operation on this run in between: a handoff or cancel that is half
+        // done is waited for, never recorded as someone else's intervention.
+        let _operation = self.run_lock(owner_id, run_id)?;
         let run = self.run(owner_id, run_id)?;
         if run.state.is_terminal() {
             return Ok(run.into());

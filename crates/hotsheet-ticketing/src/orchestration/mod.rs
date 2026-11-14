@@ -120,9 +120,9 @@ pub use run_events::{
     RunEvent, RunEventEntry, RunEventJournal, RunEventKind, RunEventPage, RunEventSource,
 };
 pub use runs::{
-    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, Run, RunControl, RunError, RunObservation,
-    RunPause, RunRegistry, RunState, RunTarget, RunTicket, RunTransition, RunUnreachable,
-    RunUpdate,
+    DispatchMode, MAX_RUN_HISTORY, MAX_RUNS, NewRun, RUN_OPERATION_STRIPES, Run, RunControl,
+    RunError, RunObservation, RunOperationGuard, RunPause, RunRegistry, RunState, RunTarget,
+    RunTicket, RunTransition, RunUnreachable, RunUpdate,
 };
 pub use scheduler::{
     Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
