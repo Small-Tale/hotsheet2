@@ -91,6 +91,34 @@ async fn next_live(
     .expect("the expected live state was pushed")
 }
 
+/// HS2-21YW0A: the next pushed live state for `store` that satisfies `want`, waiting on the
+/// change bus alone. For state that a file watcher reports: the Codex rollout watch starts its
+/// platform stream on its own thread (FSEventStreamStart can take seconds under load) and reads
+/// once more three seconds after each new subscription, so under load the push can come after
+/// a fixed 10 s bound although nothing is wrong. nextest's hang guard bounds the wait.
+async fn awaited_live(
+    events: &mut tokio::sync::broadcast::Receiver<ChangeEvent>,
+    store: &str,
+    want: impl Fn(&Value) -> bool,
+) -> Value {
+    loop {
+        let event = match events.recv().await {
+            Ok(event) => event,
+            // Each live state is a whole snapshot, so a missed one is replaced by the next.
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => panic!("change bus closed"),
+        };
+        if event.kind != "live_state" || event.store != store {
+            continue;
+        }
+        let live =
+            serde_json::to_value(event.live.expect("live_state carries a snapshot")).unwrap();
+        if want(&live) {
+            return live;
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn hs2_jttqmy_live_state_follows_claims_release_and_feedback_without_rules() {
     let h = harness();
@@ -749,7 +777,7 @@ async fn hs2_b4eq87_codex_terminal_usage_records_in_its_project_store() {
         text,
     )
     .unwrap();
-    next_live(&mut events, &b.id, |live| {
+    awaited_live(&mut events, &b.id, |live| {
         live["rates"]["tokens"]["minutes"]
             .as_array()
             .is_some_and(|minutes| minutes.iter().any(|minute| minute["tokens"] == 33))
