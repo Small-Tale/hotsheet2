@@ -160,9 +160,23 @@ only when it _begins_ with the case-sensitive phrase. The line may have up to th
 spaces of indentation and an optional Markdown heading, list or emphasis prefix. The
 phrase must be followed by the end of the line or a non-word character. Quoted lines,
 fenced code, indented code, inline code and mid-line mentions never count, so prose
-that describes feedback state cannot flag a new ticket. Notes keep the HS1 rule of an
-unquoted phrase anywhere on a line. `crates/hotsheet-model/src/details_feedback_marker_cases.json`
-is the shared case table for the core and the web client.
+that describes feedback state cannot flag a new ticket.
+Notes whose kind was omitted use the same line-start rule (HS2-RG6Z9H), on append and
+when a stored Regular note without `kind_explicit` is read. AI notes routinely discuss
+the marker, so a mid-line mention no longer turns a note into a request. Notes alone
+also accept HS1's urgent form, `IMMEDIATE` and one space before the phrase, because
+HS1's ask-feedback tool wrote it at the start of a note. A stored `kind: feedback_needed`
+is never re-inferred: a request written earlier from a mid-line mention stays a request
+until its kind is corrected. The HS2-C1CFSH warning follows the same rule, so an
+explicit Regular note that only mentions the marker mid-line is not warned about.
+`crates/hotsheet-model/src/details_feedback_marker_cases.json` is the shared case table
+for details and notes in the core and the web client; its `notes_also_open` cases differ.
+HS1 read the phrase anywhere on an unquoted line. `hotsheet-cli import` applies that
+rule once (`Note::hs1_text_requests_feedback`) and writes a matching HS1 note as
+`kind: feedback_needed`, so imported notes keep their HS1 meaning. Stores imported
+before HS2-RG6Z9H hold such notes as Regular without a kind; their HS1 tool prompts
+begin with the marker and still count, while a mid-line-only mention now reads as
+Regular.
 Older readers ignore this marker and may still infer feedback; older writers may
 strip it. Upgrade every writer before relying on explicit intent. This additive
 marker does not claim compatibility with old inference semantics (HS2-CV5NMC).

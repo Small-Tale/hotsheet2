@@ -1,5 +1,5 @@
 {
-  "_comment": "HS2-FF9ZMS: details feedback-marker cases shared by Note::details_request_feedback (Rust) and detailsTextRequestsFeedback (clients/web). Synthetic text only.",
+  "_comment": "HS2-FF9ZMS, HS2-RG6Z9H: feedback-marker cases shared by Note::details_request_feedback / Note::text_requests_feedback (Rust) and detailsTextRequestsFeedback / textRequestsFeedback (clients/web). Details and notes agree on `opens` and `never`, except that notes also open on each `notes_also_open` case (HS1's urgent prefix). Synthetic text only.",
   "opens": [
     "FEEDBACK NEEDED",
     "FEEDBACK NEEDED: which layout?",
@@ -20,7 +20,12 @@
     "Shows the FEEDBACK NEEDED state and the needs-review flag when a note asks.",
     "The derived `FEEDBACK NEEDED` state counts toward needs-review.",
     "`FEEDBACK NEEDED` at the start of a line is still inline code.",
-    "IMMEDIATE FEEDBACK NEEDED: a prefix word is prose",
+    "IMMEDIATE FEEDBACK NEEDED: a prefix word is prose in details",
+    "- **IMMEDIATE FEEDBACK NEEDED:** urgent in a list",
+    "Context first. IMMEDIATE FEEDBACK NEEDED choose one",
+    "IMMEDIATELY FEEDBACK NEEDED is another word",
+    "Not working: the ticket has a FEEDBACK NEEDED note but no purple border",
+    "Not FEEDBACK NEEDED",
     "FEEDBACK NEEDEDS is another word",
     "FEEDBACK NEEDED_SUFFIX is an identifier",
     "feedback needed from the user",
@@ -33,5 +38,9 @@
     "",
     "FEEDBACK NEEDEDé is a longer Unicode word",
     "FEEDBACK NEEDED٣ ends in an Arabic-Indic digit"
+  ],
+  "notes_also_open": [
+    "IMMEDIATE FEEDBACK NEEDED: a prefix word is prose in details",
+    "- **IMMEDIATE FEEDBACK NEEDED:** urgent in a list"
   ]
 }

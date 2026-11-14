@@ -32122,7 +32122,7 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     let explicit = body_json(
         patch(
             path.clone(),
-            serde_json::json!({"note":"not FEEDBACK NEEDED","note_kind":"regular"}),
+            serde_json::json!({"note":"FEEDBACK NEEDED: synthetic marker","note_kind":"regular"}),
         )
         .await,
     )
@@ -32137,7 +32137,7 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     let legacy = body_json(
         patch(
             path.clone(),
-            serde_json::json!({"note":"not FEEDBACK NEEDED"}),
+            serde_json::json!({"note":"FEEDBACK NEEDED: synthetic marker"}),
         )
         .await,
     )

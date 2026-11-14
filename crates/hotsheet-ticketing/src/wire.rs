@@ -935,7 +935,11 @@ mod tests {
             actor: None,
             text: "Context first. IMMEDIATE FEEDBACK NEEDED choose one".into(),
         });
+        // HS2-RG6Z9H: a mid-line mention is no longer a legacy request on either shape.
+        assert!(!TicketRow::from(&waiting).feedback_needed);
+        assert_eq!(ApiTicket::from(&waiting).notes[0].kind, NoteKind::Regular);
 
+        waiting.notes[0].text = "Context first.\n\nIMMEDIATE FEEDBACK NEEDED choose one".into();
         assert!(TicketRow::from(&waiting).feedback_needed);
         assert_eq!(
             ApiTicket::from(&waiting).notes[0].kind,

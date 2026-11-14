@@ -197,35 +197,51 @@ impl Note {
         Some(id)
     }
 
-    /// Whether regular-note text uses HS1's historical feedback marker.
+    /// Whether note text carried HS1's historical feedback marker (HS1 import only).
     ///
-    /// HS1 deliberately accepted the all-caps phrase anywhere in the note and did
-    /// not require a colon. Keep the match case-sensitive so ordinary prose such as
-    /// "feedback needed from the user" does not accidentally open an exchange.
-    ///
-    /// Markdown blockquote lines are ignored (HS2-HG7FZ0): a reply that quotes the
-    /// original request back — which the client's inline-reply composer does, prefixing
-    /// each quoted line with `> ` — must not be mistaken for a *new* feedback request. A
-    /// genuine new request the author writes on an unquoted line still opens an exchange.
-    pub fn text_requests_feedback(text: &str) -> bool {
+    /// HS1 accepted the case-sensitive all-caps phrase anywhere on a line and did not
+    /// require a colon. HS2 readers no longer use this rule (HS2-RG6Z9H): the HS1 importer
+    /// applies it once and stores the result as the note's kind, so an imported note keeps
+    /// the meaning HS1 gave it. Markdown blockquote lines are ignored (HS2-HG7FZ0).
+    pub fn hs1_text_requests_feedback(text: &str) -> bool {
         text.lines()
             .filter(|line| !line.trim_start().starts_with('>'))
             .any(|line| line.contains("FEEDBACK NEEDED"))
     }
 
+    /// Whether note text opens a feedback request when its kind was not set explicitly
+    /// (HS2-RG6Z9H).
+    ///
+    /// Notes use the details line-start rule ([`Self::details_request_feedback`]), so prose
+    /// that mentions the marker mid-line, in inline code, in a quote or in a code block
+    /// never opens a request. A reply that quotes the original request back (HS2-HG7FZ0)
+    /// therefore stays a reply. Notes alone also accept HS1's urgent form, the word
+    /// `IMMEDIATE` and one space before the phrase, because HS1's ask-feedback tool wrote
+    /// that prefix at the start of a note. The web client mirrors this in
+    /// `textRequestsFeedback` (`clients/web/src/feedback-needed.ts`).
+    pub fn text_requests_feedback(text: &str) -> bool {
+        Self::line_start_feedback_marker(text, true)
+    }
+
     /// Whether ticket details carry the dedicated feedback marker (HS2-FF9ZMS).
     ///
-    /// Notes keep HS1's anywhere-on-a-line rule ([`Self::text_requests_feedback`]), but
-    /// details are free prose that often describes feedback state, so a mention there
+    /// Details are free prose that often describes feedback state, so a mention there
     /// must not open a request on a new ticket. Details open one only when a line *begins*
     /// with the case-sensitive phrase:
     /// - up to three spaces of indentation are allowed, then an optional heading (`#`…),
     ///   list (`-`, `*`, `+`, `1.`, `1)`) and emphasis (`**`, `__`, `*`, `_`) prefix;
     /// - the phrase must be followed by the end of the line or a non-word character.
     ///
-    /// Quoted lines, fenced code blocks and indented code never count. The web client
-    /// mirrors this in `detailsTextRequestsFeedback` (`clients/web/src/feedback-needed.ts`).
+    /// Quoted lines, fenced code blocks and indented code never count. Notes use the same
+    /// rule plus HS1's urgent prefix ([`Self::text_requests_feedback`], HS2-RG6Z9H). The
+    /// web client mirrors this in `detailsTextRequestsFeedback`
+    /// (`clients/web/src/feedback-needed.ts`).
     pub fn details_request_feedback(text: &str) -> bool {
+        Self::line_start_feedback_marker(text, false)
+    }
+
+    /// The shared line-start marker scan; `allow_immediate` admits HS1's urgent prefix.
+    fn line_start_feedback_marker(text: &str, allow_immediate: bool) -> bool {
         const MARKER: &str = "FEEDBACK NEEDED";
         let mut fence: Option<(char, usize)> = None;
         for line in text.lines() {
@@ -275,6 +291,9 @@ impl Note {
                     break;
                 }
             }
+            if allow_immediate {
+                rest = rest.strip_prefix("IMMEDIATE ").unwrap_or(rest);
+            }
             if let Some(after) = rest.strip_prefix(MARKER) {
                 // The matching closing emphasis ends the word; any other word character
                 // (FEEDBACK NEEDEDS, FEEDBACK NEEDED_X) means this is not the marker.
@@ -296,7 +315,9 @@ impl Note {
 
     /// Canonical append/read inference for legacy callers only (HS2-CV5NMC).
     /// Early automation wrote the feedback marker as a regular note. Preserve that
-    /// convention unless the caller explicitly selected the note kind.
+    /// convention unless the caller explicitly selected the note kind. Only a line-start
+    /// marker counts (HS2-RG6Z9H, [`Self::text_requests_feedback`]); a stored non-regular
+    /// kind is returned unchanged, so reads never reclassify a stored request.
     pub fn infer_kind(kind: NoteKind, explicit: bool, text: &str) -> NoteKind {
         if kind == NoteKind::Regular
             && !explicit
@@ -325,8 +346,10 @@ impl Note {
             && !self.is_ai_thumbs_feedback()
     }
 
-    /// Whether an explicitly `regular` note carries an unquoted feedback marker that its
-    /// kind suppresses (HS2-C1CFSH). Such a note never opens a request, which is almost
+    /// Whether an explicitly `regular` note carries a line-start feedback marker that its
+    /// kind suppresses (HS2-C1CFSH). It uses the note rule (HS2-RG6Z9H), so a note that
+    /// only mentions the marker mid-line is not warned about: without the explicit kind it
+    /// would not open a request either. Such a note never opens a request, which is almost
     /// always an authoring mistake, so write paths warn about it. A linked reply is
     /// intentionally regular and AI thumbs ratings are never requests, so both are exempt.
     pub fn explicit_kind_suppresses_feedback_marker(
@@ -988,7 +1011,7 @@ mod tests {
             NoteKind::Regular,
             "2026-10-26T00:00:00Z",
         );
-        n.text = "not FEEDBACK NEEDED".into();
+        n.text = "FEEDBACK NEEDED: which one?".into();
         assert!(n.is_feedback_needed_request());
         n.kind_explicit = true;
         assert!(!n.is_feedback_needed_request());
@@ -1259,6 +1282,20 @@ mod tests {
             false,
             "feedback needed in prose"
         ));
+        // HS2-RG6Z9H: a mid-line mention would not open a request without the explicit
+        // kind either, so the kind suppresses nothing and the warning stays quiet.
+        assert!(!suppressed(
+            NoteKind::Regular,
+            true,
+            false,
+            "The FEEDBACK NEEDED marker is now line-start only."
+        ));
+        assert!(suppressed(
+            NoteKind::Regular,
+            true,
+            false,
+            "IMMEDIATE FEEDBACK NEEDED: urgent"
+        ));
     }
 
     #[test]
@@ -1341,19 +1378,95 @@ mod tests {
     }
 
     #[test]
-    fn legacy_feedback_marker_matches_hs1s_flexible_read_rules() {
+    fn hs1_feedback_marker_keeps_hs1s_flexible_rule_for_import() {
         for text in [
             "FEEDBACK NEEDED: choose one",
             "Context first. FEEDBACK NEEDED: choose one",
             "FEEDBACK NEEDED choose one",
             "IMMEDIATE FEEDBACK NEEDED: choose one",
         ] {
-            assert!(Note::text_requests_feedback(text), "{text:?}");
+            assert!(Note::hs1_text_requests_feedback(text), "{text:?}");
         }
-
-        assert!(!Note::text_requests_feedback(
+        assert!(!Note::hs1_text_requests_feedback(
             "I think feedback needed from the user before continuing."
         ));
+        assert!(!Note::hs1_text_requests_feedback(
+            "> FEEDBACK NEEDED: quoted"
+        ));
+    }
+
+    #[test]
+    fn hs2_rg6z9h_notes_open_feedback_only_with_a_line_start_marker() {
+        // Notes share the details case table; only HS1's urgent prefix differs.
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("details_feedback_marker_cases.json")).unwrap();
+        let also: Vec<&str> = cases["notes_also_open"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|text| text.as_str().unwrap())
+            .collect();
+        assert!(!also.is_empty());
+        for text in cases["opens"].as_array().unwrap() {
+            let text = text.as_str().unwrap();
+            assert!(Note::text_requests_feedback(text), "{text:?}");
+        }
+        for text in cases["never"].as_array().unwrap() {
+            let text = text.as_str().unwrap();
+            assert_eq!(
+                Note::text_requests_feedback(text),
+                also.contains(&text),
+                "{text:?}"
+            );
+        }
+        for text in &also {
+            assert!(!Note::details_request_feedback(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn hs2_rg6z9h_note_kind_transitions() {
+        let mut n = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            NoteKind::Regular,
+            "2026-11-06T00:00:00Z",
+        );
+        // Mid-line mention with an omitted kind: regular on append and on read.
+        n.text = "Root cause: the FEEDBACK NEEDED rule matched mid-line.".into();
+        assert_eq!(
+            Note::infer_kind(NoteKind::Regular, false, &n.text),
+            NoteKind::Regular
+        );
+        assert!(!n.is_feedback_needed_request());
+        // Line-start marker with an omitted kind: a request.
+        n.text = "Context.\n\nFEEDBACK NEEDED: which layout?".into();
+        assert_eq!(
+            Note::infer_kind(NoteKind::Regular, false, &n.text),
+            NoteKind::FeedbackNeeded
+        );
+        assert!(n.is_feedback_needed_request());
+        // A quoted line never opens one.
+        n.text = "> FEEDBACK NEEDED: which layout?\n\nWide.".into();
+        assert!(!n.is_feedback_needed_request());
+        // An explicit kind wins over the marker in both directions.
+        n.text = "FEEDBACK NEEDED: which layout?".into();
+        n.kind_explicit = true;
+        assert!(!n.is_feedback_needed_request());
+        assert_eq!(
+            Note::infer_kind(NoteKind::Regular, true, &n.text),
+            NoteKind::Regular
+        );
+        n.kind = NoteKind::FeedbackNeeded;
+        n.text = "Only a mid-line FEEDBACK NEEDED mention.".into();
+        assert!(n.is_feedback_needed_request());
+        // A stored request kind is never re-inferred on read, even when written before
+        // this rule by the HS1 rule from a mid-line mention (the kind is not explicit).
+        n.kind_explicit = false;
+        assert!(n.is_feedback_needed_request());
+        assert_eq!(
+            Note::infer_kind(NoteKind::FeedbackNeeded, false, "no marker at all"),
+            NoteKind::FeedbackNeeded
+        );
     }
 
     #[test]
@@ -1369,8 +1482,8 @@ mod tests {
             let text = text.as_str().unwrap();
             assert!(!Note::details_request_feedback(text), "{text:?}");
         }
-        // Notes keep HS1's anywhere-on-a-line rule; only details changed.
-        assert!(Note::text_requests_feedback(
+        // Notes follow the same line-start rule since HS2-RG6Z9H.
+        assert!(!Note::text_requests_feedback(
             "Shows the FEEDBACK NEEDED state when a note asks."
         ));
     }
@@ -1410,7 +1523,7 @@ mod tests {
             ">> deeply quoted FEEDBACK NEEDED: choose one\n\nThanks, A works."
         ));
         assert!(Note::text_requests_feedback(
-            "> quoting an old FEEDBACK NEEDED\n\nActually FEEDBACK NEEDED: which server?"
+            "> quoting an old FEEDBACK NEEDED\n\nFEEDBACK NEEDED: which server?"
         ));
         let quoting_reply = Note {
             kind: NoteKind::Regular,

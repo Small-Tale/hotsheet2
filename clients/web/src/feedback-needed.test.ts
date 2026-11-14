@@ -176,17 +176,26 @@ describe('isFeedbackNeeded', () => {
       expect(fullTicketFeedbackNeeded({ details: '', notes: allAnswered })).toBe(false);
     }
   });
-  it('matches the core HS1 marker rule for notes', () => {
-    expect(textRequestsFeedback('Context. FEEDBACK NEEDED: choose one')).toBe(true);
-    expect(textRequestsFeedback('feedback needed from someone')).toBe(false);
-  });
-  it('HS2-FF9ZMS details open a request only from a line-start marker, case for case with the core', () => {
-    const cases = JSON.parse(
+  const markerCases = () =>
+    JSON.parse(
       readFileSync(
         new URL('../../../crates/hotsheet-model/src/details_feedback_marker_cases.json', import.meta.url),
         'utf8',
       ),
-    ) as { opens: string[]; never: string[] };
+    ) as { opens: string[]; never: string[]; notes_also_open: string[] };
+  it('HS2-RG6Z9H notes open a request only from a line-start marker, case for case with the core', () => {
+    expect(textRequestsFeedback('Context. FEEDBACK NEEDED: choose one')).toBe(false);
+    expect(textRequestsFeedback('Context.\n\nFEEDBACK NEEDED: choose one')).toBe(true);
+    expect(textRequestsFeedback('IMMEDIATE FEEDBACK NEEDED: choose one')).toBe(true);
+    expect(textRequestsFeedback('feedback needed from someone')).toBe(false);
+    const cases = markerCases();
+    expect(cases.notes_also_open.length).toBeGreaterThan(0);
+    for (const text of cases.opens) expect(textRequestsFeedback(text), JSON.stringify(text)).toBe(true);
+    for (const text of cases.never)
+      expect(textRequestsFeedback(text), JSON.stringify(text)).toBe(cases.notes_also_open.includes(text));
+  });
+  it('HS2-FF9ZMS details open a request only from a line-start marker, case for case with the core', () => {
+    const cases = markerCases();
     expect(cases.opens.length).toBeGreaterThan(5);
     expect(cases.never.length).toBeGreaterThan(5);
     for (const text of cases.opens) expect(detailsTextRequestsFeedback(text), JSON.stringify(text)).toBe(true);
@@ -202,7 +211,7 @@ describe('isFeedbackNeeded', () => {
   it('ignores the marker inside quoted reply lines but honors an unquoted new request (HS2-HG7FZ0)', () => {
     expect(textRequestsFeedback('> Context. FEEDBACK NEEDED: choose one\n\nGo with A.')).toBe(false);
     expect(textRequestsFeedback('>> deeply quoted FEEDBACK NEEDED\n\nThanks.')).toBe(false);
-    expect(textRequestsFeedback('> quoted FEEDBACK NEEDED\n\nActually FEEDBACK NEEDED: which one?')).toBe(true);
+    expect(textRequestsFeedback('> quoted FEEDBACK NEEDED\n\nFEEDBACK NEEDED: which one?')).toBe(true);
   });
   it('infers full-ticket state for older servers while trusting an explicit new-server value', () => {
     expect(fullTicketFeedbackNeeded({ details: 'FEEDBACK NEEDED: choose one', notes: [] })).toBe(true);

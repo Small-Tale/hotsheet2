@@ -5164,14 +5164,17 @@ An explicitly `regular` note keeps its kind even when its text carries an unquot
 (stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes return a
 warning naming `note_kind feedback_needed` as the fix, after an append and after an edit
 that leaves such a note; linked replies are exempt (HS2-C1CFSH).
-For compatibility with HS1 and early HS2 automation, a regular note containing the
-case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
-kind at the wire boundary and participates in the same exchange. The phrase may appear
-after introductory context and its colon is optional; lowercase prose does not match.
+For compatibility with HS1 and early HS2 automation, a regular note whose kind was not
+set explicitly is normalized to the `feedback_needed` kind at the wire boundary, and
+participates in the same exchange, when a line begins with the case-sensitive all-caps
+phrase `FEEDBACK NEEDED`. Notes use the description rule (HS2-RG6Z9H, docs/17): context
+may precede it on earlier lines, HS1's `IMMEDIATE` prefix is accepted, and the colon is
+optional; a mid-line mention, inline code, a code block and lowercase prose do not match,
+so a note that only discusses the marker stays an ordinary note.
 The marker is ignored inside Markdown blockquote lines (those beginning with `>`), so a
 reply that quotes the original request back — which the inline-reply composer produces —
 is not mistaken for a new request and does not reopen the exchange (HS2-HG7FZ0); an
-unquoted marker the author adds in the same reply still opens one.
+unquoted line-start marker the author adds in the same reply still opens one.
 New core writes promote the same marker to the first-class kind. Rebuilding an older
 disposable index must therefore recompute the compact flag for unchanged ticket files.
 

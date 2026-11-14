@@ -8893,6 +8893,61 @@ fn hs2_c1cfsh_edit_warns_when_explicit_regular_suppresses_a_feedback_marker() {
         .stderr(predicate::str::contains("warning:").not());
 }
 
+/// HS2-RG6Z9H: the reported shape. A note appended through the shipped CLI without
+/// `--note-kind` that discusses the marker mid-line stays Regular in the stored file and
+/// opens no request; a line-start marker still does. Neither warns.
+#[test]
+fn hs2_rg6z9h_cli_note_mentioning_the_marker_mid_line_stays_regular() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Synthetic marker discussion");
+    let read = || {
+        let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+    };
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "## Preliminary thoughts\n\nRoot cause: the FEEDBACK NEEDED rule matches mid-line.",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+    let ticket = read();
+    assert_eq!(ticket.notes[0].kind, hotsheet_model::NoteKind::Regular);
+    assert!(!ticket.notes[0].feedback_request);
+    assert!(!ticket.feedback_needed());
+    let file = std::fs::read_to_string(
+        hotsheet_ticketing::FsStore::open(p)
+            .unwrap()
+            .ticket_path(&ticket.id),
+    )
+    .unwrap();
+    assert!(!file.contains("kind: feedback_needed"));
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "Context.\n\nFEEDBACK NEEDED: which layout?",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+    let ticket = read();
+    assert_eq!(
+        ticket.notes[1].kind,
+        hotsheet_model::NoteKind::FeedbackNeeded
+    );
+    assert!(ticket.feedback_needed());
+}
+
 #[test]
 fn edit_accepts_notes_but_warns_about_unresolved_attachment_references() {
     let dir = tempfile::tempdir().unwrap();
@@ -13928,7 +13983,7 @@ fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
         .assert()
         .success();
     let slug = new_ticket(dir.path(), "Synthetic explicit kind");
-    let body = "Implementation prerequisite, not FEEDBACK NEEDED or a decision.";
+    let body = "FEEDBACK NEEDED: implementation prerequisite, not a decision.";
     hs(dir.path())
         .args(["edit", &slug, "--note", body, "--note-kind", "regular"])
         .assert()

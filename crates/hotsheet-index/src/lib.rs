@@ -21,8 +21,9 @@ use sha2::{Digest, Sha256};
 /// content hash are never re-derived, and an older process sharing the file would keep
 /// writing the old projection (21: explicit note kinds, HS2-4ZFB8K; 22: the ticket
 /// creator column, HS2-9FPHWY; 23: group columns, HS2-PDSHNN; 24: `group_key` holds a group
-/// id or a legacy name key, HS2-9KZSD4; 25: the claim host column, HS2-DQJPW0).
-const SCHEMA_VERSION: i64 = 25;
+/// id or a legacy name key, HS2-9KZSD4; 25: the claim host column, HS2-DQJPW0; 26: notes
+/// infer feedback only from a line-start marker, HS2-RG6Z9H).
+const SCHEMA_VERSION: i64 = 26;
 
 /// `index_meta` key naming the repository that recorded `head` (HS2-ABV2J3).
 const GIT_OWNER_META: &str = "git_owner";

@@ -5959,7 +5959,7 @@ mod tests {
         let ticket = titled(&store, "Synthetic kind correction");
         let id = ticket.id;
         let note_id = Ulid::new();
-        let body = "Implementation prerequisite, not FEEDBACK NEEDED or a decision.";
+        let body = "FEEDBACK NEEDED: implementation prerequisite, not a decision.";
         let created = ts("2026-10-26T01:00:00Z");
         let explicit = add_note_with_metadata(
             &store,
@@ -6085,8 +6085,11 @@ mod tests {
         assert!(store.read_ticket(&id).unwrap().feedback_needed());
     }
 
+    /// HS2-RG6Z9H: an omitted kind infers a request only from a line-start marker. A note
+    /// that discusses the marker mid-line stays regular, and each stored kind survives a
+    /// reload unchanged (reads never reclassify it).
     #[test]
-    fn add_note_promotes_hs1_style_embedded_marker_without_a_colon() {
+    fn hs2_rg6z9h_add_note_infers_feedback_only_from_a_line_start_marker() {
         let (_d, store) = store();
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
         create(
@@ -6097,18 +6100,89 @@ mod tests {
             NewTicket::default(),
         )
         .unwrap();
+        let add = |note: &str, at: &str, text: &str| {
+            add_note(
+                &store,
+                &id,
+                Ulid::from_string(note).unwrap(),
+                ts(at),
+                NoteKind::Regular,
+                text.into(),
+            )
+            .unwrap()
+        };
 
-        let ticket = add_note(
+        let mention = add(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+            "2026-08-19T01:00:00Z",
+            "Root cause: the FEEDBACK NEEDED rule matched anywhere on a line.",
+        );
+        assert_eq!(mention.notes[0].kind, NoteKind::Regular);
+        assert!(!mention.notes[0].feedback_request);
+        assert!(!mention.feedback_needed());
+        assert_eq!(
+            note_feedback_marker_warning(&mention, &mention.notes[0].id),
+            None
+        );
+
+        let request = add(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            "2026-08-19T02:00:00Z",
+            "Context first.\n\nFEEDBACK NEEDED choose a layout",
+        );
+        assert_eq!(request.notes[1].kind, NoteKind::FeedbackNeeded);
+        assert!(request.notes[1].feedback_request);
+        assert!(request.feedback_needed());
+
+        let reloaded = store.read_ticket(&id).unwrap();
+        assert_eq!(reloaded, request);
+        let kinds: Vec<_> = reloaded.notes.iter().map(|n| n.kind).collect();
+        assert_eq!(kinds, vec![NoteKind::Regular, NoteKind::FeedbackNeeded]);
+    }
+
+    /// HS2-RG6Z9H: a request stored before this rule from a mid-line mention keeps its
+    /// stored kind on read; only the explicit kind correction changes it.
+    #[test]
+    fn hs2_rg6z9h_stored_mid_line_request_kind_is_not_re_inferred() {
+        let (_d, store) = store();
+        let ticket = titled(&store, "Synthetic stored request");
+        let mut stored = store.read_ticket(&ticket.id).unwrap();
+        let note_id = Ulid::new();
+        stored.notes.push(Note {
+            id: note_id,
+            kind: NoteKind::FeedbackNeeded,
+            created_at: ts("2026-11-06T00:00:00Z"),
+            edited_at: ts("2026-11-06T00:00:00Z"),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            kind_explicit: false,
+            feedback_request: true,
+            response_to: None,
+            ai_feedback: None,
+            human_edited: false,
+            actor: None,
+            text: "Discussing the FEEDBACK NEEDED marker mid-line.".into(),
+        });
+        store.write_ticket(&stored).unwrap();
+        let reloaded = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(reloaded.notes[0].kind, NoteKind::FeedbackNeeded);
+        assert!(reloaded.feedback_needed());
+        let corrected = edit_note_with_metadata(
             &store,
-            &id,
-            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap(),
-            ts("2026-08-19T01:00:00Z"),
-            NoteKind::Regular,
-            "Context first. FEEDBACK NEEDED choose a layout".into(),
+            &ticket.id,
+            &note_id,
+            ts("2026-11-06T01:00:00Z"),
+            NoteEditInput {
+                kind: Some(NoteKind::Regular),
+                ..Default::default()
+            },
         )
         .unwrap();
-
-        assert_eq!(ticket.notes[0].kind, NoteKind::FeedbackNeeded);
+        assert!(!corrected.feedback_needed());
+        // The explicit regular note only mentions the marker, so the HS2-C1CFSH warning
+        // stays quiet.
+        assert_eq!(note_feedback_marker_warning(&corrected, &note_id), None);
     }
 
     #[test]

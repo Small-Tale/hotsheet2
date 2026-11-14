@@ -884,9 +884,21 @@ fn build_ticket(
                     .unwrap_or(time::OffsetDateTime::UNIX_EPOCH),
                 )
             });
+            let ai_feedback = hotsheet_model::AiFeedback::from_legacy_text(&n.text);
+            // HS1 read the marker anywhere on an unquoted line; HS2 reads only a line-start
+            // marker (HS2-RG6Z9H). Classify once with HS1's rule so an imported note keeps
+            // the meaning HS1 gave it, and store that as the note's kind.
+            let kind = if ai_feedback.is_none()
+                && !Note::text_is_ai_thumbs_feedback(&n.text)
+                && Note::hs1_text_requests_feedback(&n.text)
+            {
+                NoteKind::FeedbackNeeded
+            } else {
+                NoteKind::Regular
+            };
             Note {
                 id,
-                kind: NoteKind::Regular,
+                kind,
                 created_at: created_at.clone(),
                 edited_at: created_at,
                 summary: None,
@@ -895,7 +907,7 @@ fn build_ticket(
                 kind_explicit: false,
                 feedback_request: false,
                 response_to: None,
-                ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&n.text),
+                ai_feedback,
                 human_edited: false,
                 actor: None,
                 text: n.text.clone(),
@@ -1397,6 +1409,52 @@ mod tests {
         // The HS1 ticket numbers are retained so legacy references resolve/search (HS2-4H2ZR1).
         assert_eq!(root.legacy_number.as_deref(), Some("HS-1200"));
         assert_eq!(dep.legacy_number.as_deref(), Some("HS-1234"));
+    }
+
+    /// HS2-RG6Z9H: HS2 reads only a line-start feedback marker, so the importer stores
+    /// HS1's anywhere-on-a-line classification as the note kind and the imported ticket
+    /// keeps HS1's feedback meaning through a store round trip.
+    #[test]
+    fn hs2_rg6z9h_import_keeps_hs1_mid_line_feedback_requests() {
+        let (_dir, store) = temp_store();
+        let mut export = export_json();
+        export.tickets.truncate(1);
+        let notes = [
+            ("Done.", "2026-08-01T00:00:00Z"),
+            (
+                "> FEEDBACK NEEDED: quoted back\n\nUse A.",
+                "2026-08-01T00:01:00Z",
+            ),
+            (
+                "Context first. FEEDBACK NEEDED choose one",
+                "2026-08-01T00:02:00Z",
+            ),
+        ];
+        export.tickets[0].notes = notes
+            .iter()
+            .map(|(text, at)| ExportNote {
+                id: None,
+                text: (*text).to_string(),
+                created_at: Some((*at).to_string()),
+            })
+            .collect();
+        import(&store, &export, Path::new(".")).unwrap();
+        let id = import_id(&export.project, &export.tickets[0], 0);
+        let ticket = store.read_ticket(&id).unwrap();
+        let kinds: Vec<_> = ticket.notes.iter().map(|note| note.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                NoteKind::Regular,
+                NoteKind::Regular,
+                NoteKind::FeedbackNeeded
+            ]
+        );
+        // HS1's request kept its meaning although HS2 alone would not infer it.
+        assert!(!Note::text_requests_feedback(&ticket.notes[2].text));
+        assert!(ticket.notes[2].is_feedback_needed_request());
+        assert!(!ticket.notes[2].kind_explicit && !ticket.notes[2].feedback_request);
+        assert!(ticket.feedback_needed());
     }
 
     #[test]
