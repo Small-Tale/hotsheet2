@@ -43,7 +43,9 @@ function fixture({ cherryPick = false, batch = false, superseded = false, differ
   writeFileSync(join(project, 'scripts/gate-smoke.json'), JSON.stringify({ stages: smokeStages }));
   git(project, 'add', 'base.txt', '.gitignore', 'scripts/gate-smoke.json');
   git(project, 'commit', '-m', 'Synthetic base');
-  git(root, 'init', '--bare', remote);
+  // HS2-E6NFF6: name the bare remote's HEAD; CI's Git defaults to `master`, so a clone of an
+  // unnamed remote would check out no branch.
+  git(root, 'init', '--bare', '-b', 'main', remote);
   git(project, 'remote', 'add', 'origin', remote);
   git(project, 'push', '-u', 'origin', 'main');
   const branch = slug.toLowerCase();
@@ -851,7 +853,7 @@ test('HS2-EBART6 preserves the worktree and branch when origin/main is missing, 
     if (condition === 'stale') {
       // Another clone advances origin/main to a commit this checkout has never fetched.
       const other = join(f.root, 'other');
-      git(f.root, 'clone', '-q', remote, other);
+      git(f.root, 'clone', '-q', '-b', 'main', remote, other);
       git(other, 'config', 'user.name', 'Synthetic Test');
       git(other, 'config', 'user.email', 'synthetic@example.invalid');
       git(other, 'commit', '--allow-empty', '-m', 'Synthetic unfetched main');
