@@ -642,6 +642,7 @@ impl OrchestrationRuntime {
                     .filter(|id| !seen.iter().any(|(read, _)| read == id))
                     .collect();
                 self.provisional_targets_seen(owner_id, &seen, now_ms)?;
+                // HS2-FJ6MDW: targets this pass did not sample are read alone.
                 self.provisional_targets_read(owner_id, &others, actor, tx)?;
             }
             let read = |runtime: &Self, tx: &mut Transaction<'_>| {

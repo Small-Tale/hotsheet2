@@ -58,6 +58,27 @@ pub struct TargetEventPage {
     /// The host no longer retains everything after `since`; treat every ticket of the
     /// checkout as possibly changed.
     pub overflow: bool,
+    /// HS2-FJ6MDW: the hosted project's own speculation setting as of this answer, so a
+    /// follower learns a change of it without a capacity read. Absent from an older
+    /// host, which says nothing about it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speculation: Option<HostedSpeculation>,
+}
+
+/// HS2-FJ6MDW: a hosted project's own speculation setting, alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedSpeculation {
+    /// `None`: the project does not opt in.
+    pub speculation: Option<hotsheet_ticketing::orchestration::TargetSpeculation>,
+}
+
+impl HostedSpeculation {
+    /// What the rule reads: a project that does not opt in is not allowed.
+    pub fn setting(self) -> hotsheet_ticketing::orchestration::TargetSpeculation {
+        self.speculation
+            .unwrap_or(hotsheet_ticketing::orchestration::TargetSpeculation::NOT_OPTED_IN)
+    }
 }
 
 /// The host's live record of ticket changes. A server supplies it from its change
@@ -105,6 +126,8 @@ pub struct WatchStep {
     /// HS2-TMA4YA: plan tickets of this target read again because they changed (or the
     /// follower could not tell what it missed), so their readiness was published.
     pub refreshed: usize,
+    /// HS2-FJ6MDW: the target's own speculation setting changed and was stored.
+    pub speculation_changed: bool,
 }
 
 /// The actor a run's supervision acts as: whoever dispatched it.
@@ -127,7 +150,25 @@ impl OrchestrationRuntime {
                 TargetOpError::PeerUnsupported,
             ));
         };
-        events.poll(&checkout, since, wait_ms.min(MAX_TARGET_EVENT_WAIT_MS))
+        let mut page = events.poll(&checkout, since, wait_ms.min(MAX_TARGET_EVENT_WAIT_MS))?;
+        // HS2-FJ6MDW: read after the wait, so the answer carries the setting as it is
+        // when the follower receives it.
+        page.speculation = Some(HostedSpeculation {
+            speculation: super::capacity::checkout_speculation(&checkout.root),
+        });
+        Ok(page)
+    }
+
+    /// HS2-FJ6MDW hosted half: the hosted project's own speculation setting, alone. It
+    /// samples nothing; ordinary authenticated project data like the capacity read.
+    pub fn hosted_speculation(
+        &self,
+        checkout_id: &str,
+    ) -> Result<HostedSpeculation, OrchestrationError> {
+        let checkout = self.owner(checkout_id)?;
+        Ok(HostedSpeculation {
+            speculation: super::capacity::checkout_speculation(&checkout.root),
+        })
     }
 
     /// One step of following a target: hold one bounded request open for its ticket
@@ -263,6 +304,25 @@ impl OrchestrationRuntime {
         state.cursor = Some(page.cursor);
         let reconnected = std::mem::take(&mut state.reconnecting);
         let caught_up = first || reset || page.overflow || reconnected;
+        // HS2-FJ6MDW: a changed setting of the target's own project changes what the
+        // provisional rule answers. It is stored and wakes the owner's scheduler, and
+        // nothing is read or stored while the owner's policy does not opt in.
+        if let Some(reported) = page.speculation {
+            if self.speculating(owner_id).is_some()
+                && self
+                    .provisional_targets_seen(
+                        owner_id,
+                        &[(target_id.to_owned(), Some(reported.setting()))],
+                        now_ms,
+                    )
+                    .unwrap_or(false)
+            {
+                self.readiness_reevaluate(owner_id, now_ms);
+                self.scheduler_wake(owner_id);
+                step.woke_scheduler = true;
+                step.speculation_changed = true;
+            }
+        }
         if wakes_scheduler(&page, &sessions, &runs, caught_up) {
             self.scheduler_wake(owner_id);
             step.woke_scheduler = true;

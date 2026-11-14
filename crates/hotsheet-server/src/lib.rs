@@ -2328,6 +2328,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{checkout}/target-capacity",
             get(routes::orchestration::read),
         )
+        // HS2-FJ6MDW: a hosted project's own speculation setting, alone.
+        .route(
+            "/checkouts/{checkout}/target-speculation",
+            get(routes::orchestration::read),
+        )
         .route(
             "/checkouts/{checkout}/target-admission",
             post(routes::orchestration::write),

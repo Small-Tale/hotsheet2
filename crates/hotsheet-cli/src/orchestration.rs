@@ -127,8 +127,8 @@ pub use validation_output::{
     RetainedOutput, VALIDATION_OUTPUT_DIRECTORY, read_retained,
 };
 pub use watch::{
-    MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,
-    WatchState, WatchStep,
+    HostedSpeculation, MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent,
+    TargetTicketEvent, WatchState, WatchStep,
 };
 #[cfg(test)]
 mod tests;

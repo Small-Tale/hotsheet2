@@ -68,6 +68,8 @@ pub fn is_path(path: &str) -> bool {
             ]
             // HS2-J8PRTV: the hosted capacity snapshot and admission answer.
             | ["checkouts", _, "target-capacity" | "target-admission"]
+            // HS2-FJ6MDW: the hosted project's speculation setting alone.
+            | ["checkouts", _, "target-speculation"]
             // HS2-G1PKK2: a long poll on the hosting machine's resource wait.
             | ["checkouts", _, "target-resource-wait"]
             // HS2-WN0MXZ: validation steps (orchestrating) and the hosted execution.
@@ -577,6 +579,10 @@ impl OrchestrationRuntime {
                 )?)
             }
             // HS2-7QHWHJ hosted half: ticket changes after a cursor, with a bounded wait.
+            // HS2-FJ6MDW hosted half: the project's own speculation setting alone.
+            ("GET", ["checkouts", checkout, "target-speculation"]) => {
+                value(self.hosted_speculation(checkout)?)
+            }
             ("GET", ["checkouts", checkout, "target-events"]) => {
                 let since = match query_text(path, "since")? {
                     None => None,

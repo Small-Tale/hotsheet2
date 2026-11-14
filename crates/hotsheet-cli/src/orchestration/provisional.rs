@@ -380,15 +380,16 @@ impl OrchestrationRuntime {
 
     // ---- What the rule reads ----
 
-    /// Record what each target's machine said of its own speculation setting.
+    /// Record what each target's machine said of its own speculation setting. True
+    /// when a stored setting changed.
     pub(super) fn provisional_targets_seen(
         &self,
         owner_id: &str,
         seen: &[(String, Option<TargetSpeculation>)],
         now_ms: u64,
-    ) -> Result<(), OrchestrationError> {
+    ) -> Result<bool, OrchestrationError> {
         if seen.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         self.provisional_store()
             .update::<Document, _>(owner_id, |document| {
@@ -406,7 +407,7 @@ impl OrchestrationRuntime {
                         changed = true;
                     }
                 }
-                Ok(((), changed))
+                Ok((changed, changed))
             })
     }
 
@@ -425,17 +426,55 @@ impl OrchestrationRuntime {
             .iter()
             .map(|target_id| {
                 let speculation = Self::target_ref(owner_id, target_id)
-                    .and_then(|target| self.target_capacity(&target, &[], actor, tx))
-                    .ok()
-                    .map(|snapshot| {
-                        snapshot
-                            .speculation
-                            .unwrap_or(TargetSpeculation::NOT_OPTED_IN)
-                    });
+                    .and_then(|target| self.target_speculation(&target, actor, tx))
+                    .ok();
                 (target_id.clone(), speculation)
             })
             .collect();
         self.provisional_targets_seen(owner_id, &seen, tx.clock.now_ms())
+            .map(|_| ())
+    }
+
+    /// HS2-FJ6MDW: a target project's own speculation setting, read alone through the
+    /// gate as `gates_observe`: no capacity sample is taken. An older host without the
+    /// read answers from its capacity snapshot, as before.
+    pub fn target_speculation(
+        &self,
+        target: &TargetRef,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetSpeculation, OrchestrationError> {
+        let authorized = self.authorize(
+            target,
+            actor,
+            ActionRequest::new(TargetAction::GatesObserve),
+            tx,
+        )?;
+        let outcome = Self::destination(&authorized).and_then(|destination| {
+            serde_json::from_value::<super::watch::HostedSpeculation>(self.hosted_call_at(
+                destination,
+                "/target-speculation",
+                "GET",
+                "",
+                None,
+                tx,
+            )?)
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        });
+        self.finish(target, &authorized, &outcome, tx)?;
+        match outcome {
+            Ok(hosted) => Ok(hosted.setting()),
+            Err(OrchestrationError::TargetOperation(
+                hotsheet_ticketing::orchestration::TargetOpError::PeerUnsupported,
+            )) => self
+                .target_capacity(target, &[], actor, tx)
+                .map(|snapshot| {
+                    snapshot
+                        .speculation
+                        .unwrap_or(TargetSpeculation::NOT_OPTED_IN)
+                }),
+            Err(error) => Err(error),
+        }
     }
 
     /// The targets a step's provisional standing depends on: its own and those of its

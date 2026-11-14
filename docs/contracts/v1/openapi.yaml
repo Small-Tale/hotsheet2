@@ -4114,6 +4114,38 @@ paths:
         schema:
           type: string
           pattern: ^[0-9a-f]{64}$
+  /checkouts/{checkout}/target-speculation:
+    description: A hosted project's own committed speculation setting, alone (HS2-FJ6MDW). It samples nothing. Ordinary
+      authenticated project data under the caller's device role, so a remote orchestrator can read it.
+    get:
+      operationId: readHostedSpeculation
+      responses:
+        '200':
+          description: The setting, or null when the project does not opt in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedSpeculation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -20086,6 +20118,33 @@ components:
         overflow:
           description: The host no longer retains everything after `since`; treat every ticket as possibly changed.
           type: boolean
+        speculation:
+          $ref: '#/components/schemas/HostedSpeculation'
+      additionalProperties: false
+    HostedSpeculation:
+      description:
+        A hosted project's own committed speculation setting, alone (HS2-FJ6MDW). `speculation` is null when the project
+        does not opt in. The change feed carries it with every answer, so a follower learns a change without a capacity
+        read.
+      type: object
+      required:
+        - speculation
+      properties:
+        speculation:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required:
+                - enabled
+                - max_depth
+              properties:
+                enabled:
+                  type: boolean
+                max_depth:
+                  type: integer
+                  minimum: 1
+                  maximum: 8
+              additionalProperties: false
       additionalProperties: false
     OrchestrationToolCapacityState:
       description:

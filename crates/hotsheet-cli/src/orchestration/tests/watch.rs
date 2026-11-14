@@ -90,6 +90,7 @@ impl TargetEvents for Feed {
                     .collect()
             }),
             overflow: self.overflow.load(Ordering::SeqCst),
+            speculation: None,
         })
     }
 }

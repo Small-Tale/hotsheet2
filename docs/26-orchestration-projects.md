@@ -3633,6 +3633,21 @@ and its depth.
 A prerequisite whose gate already passed while its ticket is not yet confirmed
 closed is allowed with no base: nothing is pending beneath it.
 
+### Reading a target's own setting (HS2-FJ6MDW)
+
+A target project's own setting is read alone with `GET
+/checkouts/{checkout}/target-speculation`, which answers the project's committed
+setting (`null` when it does not opt in) and samples nothing. The dispatch guard and
+a scheduling pass read it through the gate as `gates_observe`; a pass that already
+sampled a target's capacity uses the setting that came with it. An older host
+without the read is asked for its capacity as before.
+
+The target's change feed (§26.9, `target-events`) carries the same setting with every
+answer. While the owner's policy opts in, a follower that sees it change stores it,
+publishes the new readiness and wakes the scheduler; an unchanged answer stores and
+wakes nothing. Like every observation, a dry-run pass still stores what it read: it is
+what the target said, not a decision.
+
 ### Dispatch
 
 `run dispatch` (§26.9) on a provisional step asks the policy. Without the opt-in for
@@ -3778,9 +3793,6 @@ The workspace view of provisional state is HS2-0D60T8.
 
 - Nothing acts on at-risk or reopened work: the run is left as it is, and the step
   is not dispatched again by itself after the fix (HS2-2K0DM8).
-- A target's own setting is learned from a capacity read, so each decision samples
-  the target's machine, a dry-run `scheduler plan` stores what it read, and a change
-  of the setting is noticed at the next read (HS2-FJ6MDW).
 - Standing gates about several commits are refused rather than built on (HS2-08F1M8).
 
 ### Headless surface

@@ -238,17 +238,7 @@ impl OrchestrationRuntime {
         // HS2-JSF985: the hosted project's own committed opt-in. It is reported only
         // when the project opts in, so the answer of every project that does not is
         // what it always was; an orchestrator reads its absence as not allowed.
-        .with_speculation(
-            hotsheet_ticketing::provisional::SpeculationPolicy::read(
-                &hotsheet_ticketing::Settings::for_project(&checkout.root),
-            )
-            .ok()
-            .filter(|policy| policy.enabled)
-            .map(|policy| TargetSpeculation {
-                enabled: policy.enabled,
-                max_depth: policy.max_depth,
-            }),
-        )
+        .with_speculation(checkout_speculation(&checkout.root))
         // HS2-AWB7BX: the owner's own admission limits are part of the room.
         .with_admission_version(
             &AdmissionStore::new(&self.home)
@@ -431,4 +421,20 @@ pub(super) fn capacity_query(namespaces: &[String], after: Option<&str>, wait_ms
     } else {
         format!("?{}", parts.join("&"))
     }
+}
+
+/// HS2-JSF985: a hosted project's own committed opt-in to provisional readiness, as
+/// its machine reports it: only when the project opts in, so every project that does
+/// not answers what it always did. HS2-FJ6MDW: also the cheap `target-speculation`
+/// read and the change feed's report.
+pub(super) fn checkout_speculation(root: &str) -> Option<TargetSpeculation> {
+    hotsheet_ticketing::provisional::SpeculationPolicy::read(
+        &hotsheet_ticketing::Settings::for_project(root),
+    )
+    .ok()
+    .filter(|policy| policy.enabled)
+    .map(|policy| TargetSpeculation {
+        enabled: policy.enabled,
+        max_depth: policy.max_depth,
+    })
 }

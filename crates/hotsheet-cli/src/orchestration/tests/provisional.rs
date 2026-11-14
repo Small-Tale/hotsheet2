@@ -1799,3 +1799,103 @@ fn hs2_jsf985_routes_share_the_runtime_and_are_machine_local() {
         assert_eq!(post("reopen", body, &mut tx).unwrap_err().code(), code);
     }
 }
+
+/// A host change feed with nothing to report.
+struct QuietFeed;
+impl TargetEvents for QuietFeed {
+    fn poll(
+        &self,
+        _: &Checkout,
+        _: Option<u64>,
+        _: u64,
+    ) -> Result<TargetEventPage, OrchestrationError> {
+        Ok(TargetEventPage {
+            cursor: 1,
+            events: Vec::new(),
+            sessions: Vec::new(),
+            overflow: false,
+            speculation: None,
+        })
+    }
+}
+
+/// HS2-FJ6MDW: a target's own speculation setting is read alone, without a capacity
+/// sample, and the target's change feed carries it: a change is stored, changes the
+/// standing and wakes the scheduler once.
+#[test]
+fn hs2_fj6mdw_a_targets_setting_is_read_alone_and_followed_by_its_feed() {
+    tx!(tx);
+    let mut t = two(Some(&Opt::on()), &mut tx);
+    t.m.runtime = t.m.runtime.clone().with_target_events(Arc::new(QuietFeed));
+    let on = hotsheet_ticketing::orchestration::TargetSpeculation {
+        enabled: true,
+        max_depth: 1,
+    };
+    // The hosted read: the project's committed setting, nothing else.
+    assert_eq!(
+        t.m.runtime
+            .hosted_speculation(&t.second.id)
+            .unwrap()
+            .speculation,
+        Some(on)
+    );
+    assert!(t.m.runtime.hosted_speculation("unknown-checkout").is_err());
+    // The orchestrating read passes the gate as an observation and samples nothing.
+    let sampled = t.probe.asked.load(Ordering::SeqCst);
+    let target = OrchestrationRuntime::target_ref(&t.owner(), &id(2)).unwrap();
+    assert_eq!(
+        t.m.runtime
+            .target_speculation(&target, Some(&worker()), &mut tx)
+            .unwrap(),
+        on
+    );
+    assert_eq!(t.probe.asked.load(Ordering::SeqCst), sampled);
+    assert_eq!(
+        t.audited("gates_observe").last().unwrap().0,
+        AuditOutcome::Succeeded
+    );
+    // The feed reports the setting with every answer: an unchanged one stores and
+    // wakes nothing.
+    let mut state = WatchState::default();
+    let first =
+        t.m.runtime
+            .watch_step(&t.owner(), &id(2), &mut state, 0, &mut tx);
+    assert!(first.active && !first.failed);
+    let quiet =
+        t.m.runtime
+            .watch_step(&t.owner(), &id(2), &mut state, 0, &mut tx);
+    assert!(!quiet.speculation_changed && !quiet.woke_scheduler);
+    // The working project turns speculation off: the next answer stores it, wakes the
+    // scheduler and refuses the provisional step, with no capacity read.
+    own_policy(&t.second.root, false, 1);
+    let sampled = t.probe.asked.load(Ordering::SeqCst);
+    let changed =
+        t.m.runtime
+            .watch_step(&t.owner(), &id(2), &mut state, 0, &mut tx);
+    assert!(changed.speculation_changed && changed.woke_scheduler);
+    assert_eq!(t.probe.asked.load(Ordering::SeqCst), sampled);
+    assert_eq!(
+        t.show(&t.step_b, &mut tx)
+            .speculation
+            .unwrap()
+            .refusal
+            .as_deref(),
+        Some("target_speculation_disabled")
+    );
+    // Seen once: the same answer again changes nothing.
+    assert!(
+        !t.m.runtime
+            .watch_step(&t.owner(), &id(2), &mut state, 0, &mut tx)
+            .speculation_changed
+    );
+    // An owner whose policy does not opt in stores nothing from the feed.
+    let off = two(None, &mut tx);
+    let off_runtime = off
+        .m
+        .runtime
+        .clone()
+        .with_target_events(Arc::new(QuietFeed));
+    let mut state = WatchState::default();
+    off_runtime.watch_step(&off.owner(), &id(2), &mut state, 0, &mut tx);
+    assert!(!off.file().exists());
+}

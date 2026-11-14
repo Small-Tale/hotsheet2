@@ -110,6 +110,8 @@ impl TargetEvents for ServerEvents {
             events: Vec::new(),
             sessions: Vec::new(),
             overflow: false,
+            // HS2-FJ6MDW: filled by the shared runtime after the wait.
+            speculation: None,
         };
         // Whether the event was one this checkout's followers want.
         let take = |page: &mut TargetEventPage, event: &crate::ChangeEvent| {
