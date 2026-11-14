@@ -95,6 +95,11 @@ and `clients/web/src/features/standby.test.ts` prefer the exit-time window read,
 the snapshots saw, and show unknown when neither counts; `clients/web/tests/standby.spec.ts` shows a
 read total that no snapshot carried after a three-hour standby.
 
+HS2-D4TK0W: `clients/web/src/components/ticket-store-sync-banner.test.ts` holds the banner back while
+Hot Sheet's AI repair is `started` or `session_asked` within 30 minutes, and shows it once the repair
+finished, failed, could not be asked, or ran past the grace period. It never holds back rejected,
+history-recovery, or persistent-offline failures.
+
 HS2-H4REBS: `clients/web/src/remote-projects/host.test.ts` accepts an address without a port, refuses
 paths and credentials, and pairs over HTTPS without a CA or a pre-session identity read.
 `clients/web/src/peer-gateway.test.ts` pins the gateway prefixes to the Rust router, forwards a
