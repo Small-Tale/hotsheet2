@@ -292,3 +292,12 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
     expect(prevented).toBe(4);
   });
 });
+
+describe('the Orchestration view fills its area (HS2-3JH0QV)', () => {
+  it('pins the body to the remaining row whether or not a failure banner shows', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync(new URL('./orchestration-timeline-view.css', import.meta.url), 'utf8');
+    expect(css).toContain('grid-template-rows: auto minmax(0, 1fr);');
+    expect(css).toMatch(/\.orchestration-timeline-view__body \{[^}]*grid-row: 2;/);
+  });
+});

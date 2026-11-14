@@ -9,8 +9,12 @@
   /* The board scrolls inside the view; it never widens the work area (HS2-J89JC7). */
   grid-template-columns: minmax(0, 1fr);
 }
+/* The body always takes the remaining row, also when no failure banner fills the first one: auto-placed
+   alone it would land in the auto row, which WebKit sizes shorter than its content, so a column's
+   tickets scrolled inside with the board's space empty below (HS2-3JH0QV). */
 .orchestration-timeline-view__body {
   display: grid;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);

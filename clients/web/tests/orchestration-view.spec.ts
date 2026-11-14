@@ -493,6 +493,18 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowLeft');
       await expectAt(plan.second.slug);
+      // HS2-3JH0QV: the board fills the view below the page header, so no column scrolls its few
+      // cards inside a short box (WebKit sized the auto row short of its content).
+      const fit = await view.evaluate((root) => {
+        const body = root.querySelector<HTMLElement>('.orchestration-timeline-view__body')!;
+        return {
+          gap: root.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom,
+          overflowing: [...root.querySelectorAll<HTMLElement>('.ticket-board-column__tickets')].filter(
+            (tickets) => tickets.scrollHeight > tickets.clientHeight + 1,
+          ).length,
+        };
+      });
+      expect(fit).toEqual({ gap: 0, overflowing: 0 });
       await capture(page, `arrows-${width}`, 'hs2-t4v1tx');
     }
 
