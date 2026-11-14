@@ -176,10 +176,20 @@ fn ended(end: ExecutionEnd, started_at_ms: u64, started: Instant) -> ExecutionOu
 
 /// Read a stream to its end, keeping only its digest and size. Past `limit` it stops
 /// reading and says so.
-fn digest(mut stream: impl Read, limit: u64, over: &AtomicBool) -> Option<StreamRef> {
+fn digest(
+    mut stream: impl Read,
+    limit: u64,
+    over: &AtomicBool,
+    mut retain: Option<super::validation_output::Retaining>,
+) -> Option<StreamRef> {
     let mut hash = Sha256::new();
     let mut bytes = 0u64;
     let mut buffer = vec![0u8; 64 * 1024];
+    let finish = |retain: Option<super::validation_output::Retaining>, digest: Option<&str>| {
+        if let Some(retain) = retain {
+            retain.finish(digest, std::time::SystemTime::now());
+        }
+    };
     loop {
         match stream.read(&mut buffer) {
             Ok(0) => break,
@@ -187,22 +197,29 @@ fn digest(mut stream: impl Read, limit: u64, over: &AtomicBool) -> Option<Stream
                 bytes += read as u64;
                 if bytes > limit {
                     over.store(true, Ordering::SeqCst);
+                    finish(retain, None);
                     return None;
                 }
                 hash.update(&buffer[..read]);
+                // HS2-ZCR3Y7: a small stream is kept whole on this machine.
+                if let Some(retain) = &mut retain {
+                    retain.write(&buffer[..read]);
+                }
             }
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(_) => return None,
+            Err(_) => {
+                finish(retain, None);
+                return None;
+            }
         }
     }
-    Some(StreamRef {
-        sha256: hash
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect(),
-        bytes,
-    })
+    let sha256: String = hash
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    finish(retain, Some(&sha256));
+    Some(StreamRef { sha256, bytes })
 }
 
 /// Stop a step and everything it started.
@@ -294,6 +311,7 @@ pub(super) fn execute(
     started_at_ms: u64,
     cancel: &AtomicBool,
     execution_id: &str,
+    retain: Option<&Path>,
 ) -> ExecutionOutcome {
     let started = Instant::now();
     // A relative program with a directory part is the checkout's own script; a bare
@@ -341,9 +359,10 @@ pub(super) fn execute(
     for (index, stream) in streams.into_iter().enumerate() {
         let Some(stream) = stream else { continue };
         let (sender, over) = (sender.clone(), over.clone());
+        let retaining = retain.and_then(super::validation_output::Retaining::start);
         readers += 1;
         std::thread::spawn(move || {
-            let _ = sender.send((index, digest(stream, output_limit, &over)));
+            let _ = sender.send((index, digest(stream, output_limit, &over, retaining)));
         });
     }
     drop(sender);
@@ -490,6 +509,7 @@ impl OrchestrationRuntime {
                     Some((program, args, timeout_seconds)) => {
                         let running = execution.clone();
                         let step_execution = request.execution_id.clone();
+                        let retain = self.validation_output_dir(&checkout.id);
                         let timeout = Duration::from_secs(u64::from(timeout_seconds));
                         std::thread::spawn(move || {
                             running.finish(execute(
@@ -501,6 +521,7 @@ impl OrchestrationRuntime {
                                 started_at_ms,
                                 &running.cancel,
                                 &step_execution,
+                                Some(&retain),
                             ));
                         });
                     }

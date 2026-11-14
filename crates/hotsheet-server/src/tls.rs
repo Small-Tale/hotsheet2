@@ -395,6 +395,8 @@ mod tests {
             "/checkouts/owner/orchestration/permission-rules/id",
             // HS2-JWV5S1: and so are the retired files.
             "/checkouts/owner/orchestration/retired-permissions",
+            // HS2-ZCR3Y7: kept step output never leaves the machine.
+            "/checkouts/owner/target-validation-output/0000000000000000000000000000000000000000000000000000000000000000",
             // HS2-AZ15GA: orchestrating uses this machine's gate.
             "/checkouts/owner/orchestration/tickets/create",
             "/checkouts/owner/orchestration/tickets/links",

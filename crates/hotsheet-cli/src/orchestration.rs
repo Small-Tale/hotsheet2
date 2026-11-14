@@ -35,6 +35,7 @@ mod tickets;
 mod timeline;
 mod tool_capacity;
 mod validation;
+mod validation_output;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
@@ -117,6 +118,10 @@ pub use validation::{
     HostedValidationCancel, HostedValidationStart, ListValidations, MAX_VALIDATION_OUTPUT_BYTES,
     MAX_VALIDATION_WAIT_MS, RunValidation, STEP_EXECUTION_VARIABLE, TargetProfiles,
     ValidationRunView, ValidationStepRef, validation_environment,
+};
+pub use validation_output::{
+    MAX_RETAINED_COPIES, MAX_RETAINED_STREAM_BYTES, MAX_RETAINED_TOTAL_BYTES, RETAINED_OUTPUT_TTL,
+    RetainedOutput, VALIDATION_OUTPUT_DIRECTORY, read_retained,
 };
 pub use watch::{
     MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,

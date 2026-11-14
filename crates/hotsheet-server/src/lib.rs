@@ -2312,6 +2312,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{checkout}/target-validation-profiles",
             get(routes::orchestration::read),
         )
+        // HS2-ZCR3Y7: kept step output by digest, machine-local.
+        .route(
+            "/checkouts/{checkout}/target-validation-output/{digest}",
+            get(routes::orchestration::read),
+        )
         // HS2-J8PRTV: this machine's capacity and its own admission answer, read when
         // asked; and the orchestrating side's gated reach to a target's machine.
         .route(

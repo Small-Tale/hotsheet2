@@ -1134,6 +1134,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
             7,
             &AtomicBool::new(false),
             "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            None,
         )
     };
     let small = sh("printf ok; printf problem >&2; exit 2", 1024);
@@ -1172,6 +1173,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         7,
         &AtomicBool::new(false),
         "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        None,
     );
     assert_eq!(family.end, ExecutionEnd::TimedOut);
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
@@ -1262,11 +1264,159 @@ fn hs2_w02pta_a_step_sees_only_the_reviewed_environment() {
         7,
         &AtomicBool::new(false),
         "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        None,
     );
     assert_eq!(
         (probe.end, probe.exit_code),
         (ExecutionEnd::Exited, Some(0))
     );
+}
+
+/// HS2-ZCR3Y7: the machine that runs a step keeps a small stream whole, under the
+/// digest the result records, and reads it back by digest for that checkout only. A
+/// long stream keeps its digest only. Copies expire and stay within the machine's
+/// bounds; a damaged copy is refused.
+#[test]
+fn hs2_zcr3y7_small_output_is_kept_on_the_host_and_read_back_by_digest() {
+    use base64::Engine;
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let start = |n: u128, line: &str| HostedValidationStart {
+        execution_id: id(n),
+        check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), line.into()],
+        },
+        timeout_seconds: 20,
+        wait_ms: 8_000,
+    };
+    // Nothing kept yet.
+    assert!(matches!(
+        m.runtime.validation_output(&m.target.id, OK_SHA256),
+        Err(OrchestrationError::NotFound)
+    ));
+    assert!(matches!(
+        m.runtime.validation_output(&m.target.id, "not-a-digest"),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    let done = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            start(40, "printf ok; printf problem >&2"),
+            &mut tx,
+        )
+        .unwrap();
+    let outcome = done.outcome.unwrap();
+    let stdout = outcome.stdout.unwrap();
+    let stderr = outcome.stderr.unwrap();
+    assert_eq!(stdout.sha256, OK_SHA256);
+    // Both streams are read back through the router, by digest, as they were.
+    let read = |digest: &str, tx: &mut Transaction<'_>| {
+        m.runtime.request(
+            "GET",
+            &format!(
+                "/checkouts/{}/target-validation-output/{digest}",
+                m.target.id
+            ),
+            &Value::Null,
+            tx,
+        )
+    };
+    let kept = read(OK_SHA256, &mut tx).unwrap();
+    assert_eq!(kept["bytes"], 2);
+    let decode = |value: &Value| {
+        base64::engine::general_purpose::STANDARD
+            .decode(value["content_base64"].as_str().unwrap())
+            .unwrap()
+    };
+    assert_eq!(decode(&kept), b"ok");
+    assert_eq!(decode(&read(&stderr.sha256, &mut tx).unwrap()), b"problem");
+    // Another checkout of this machine cannot read it.
+    assert!(matches!(
+        m.runtime.validation_output(&m.owner.id, OK_SHA256),
+        Err(OrchestrationError::NotFound)
+    ));
+    // The copy is private and sits on the hosting machine only.
+    let directory = m.home.join(VALIDATION_OUTPUT_DIRECTORY).join(&m.target.id);
+    let file = directory.join(OK_SHA256);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    // The same output again is kept once (its empty stderr is a third copy).
+    m.runtime
+        .hosted_validation_start(&m.target.id, start(41, "printf ok"), &mut tx)
+        .unwrap();
+    let copies = |dir: &Path| {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(copies(&directory).len(), 3, "{:?}", copies(&directory));
+    // A stream over the cap keeps its digest only, and leaves no partial file.
+    let big = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            start(42, "head -c 4194305 /dev/zero"),
+            &mut tx,
+        )
+        .unwrap();
+    let big = big.outcome.unwrap().stdout.unwrap();
+    assert_eq!(big.bytes, MAX_RETAINED_STREAM_BYTES + 1);
+    assert!(matches!(
+        m.runtime.validation_output(&m.target.id, &big.sha256),
+        Err(OrchestrationError::NotFound)
+    ));
+    assert_eq!(copies(&directory).len(), 3, "{:?}", copies(&directory));
+    assert!(
+        copies(&directory)
+            .iter()
+            .all(|name| !name.starts_with(".partial"))
+    );
+    // A damaged copy is refused, never served.
+    std::fs::write(&file, b"tampered").unwrap();
+    assert!(matches!(
+        m.runtime.validation_output(&m.target.id, OK_SHA256),
+        Err(OrchestrationError::Corrupt)
+    ));
+    // Pruning: an expired copy goes; beyond the count bound the oldest go first.
+    let root = m.home.join(VALIDATION_OUTPUT_DIRECTORY);
+    let now = std::time::SystemTime::now();
+    let old = std::fs::File::options().write(true).open(&file).unwrap();
+    old.set_modified(now - RETAINED_OUTPUT_TTL - std::time::Duration::from_secs(60))
+        .unwrap();
+    drop(old);
+    crate::orchestration::validation_output::prune(&root, now);
+    assert!(!file.exists());
+    let filler = root.join("filler");
+    std::fs::create_dir_all(&filler).unwrap();
+    for n in 0..MAX_RETAINED_COPIES {
+        let path = filler.join(format!("{n:064x}"));
+        std::fs::write(&path, b"").unwrap();
+        let handle = std::fs::File::options().write(true).open(&path).unwrap();
+        handle
+            .set_modified(now - std::time::Duration::from_secs(1_000 - (n as u64 % 1_000)))
+            .unwrap();
+    }
+    crate::orchestration::validation_output::prune(&root, now);
+    let remaining = copies(&filler).len() + copies(&directory).len();
+    assert_eq!(remaining, MAX_RETAINED_COPIES);
 }
 
 /// A remote peer whose transport can be made to fail or to refuse.

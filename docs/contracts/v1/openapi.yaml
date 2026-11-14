@@ -3973,6 +3973,47 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-validation-output/{digest}:
+    description:
+      A kept copy of one validation step output stream on the machine that ran the step, by its SHA-256 (HS2-ZCR3Y7).
+      Machine-local; there is no remote read.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readValidationOutput
+      description: The stream, checked against its digest. Only streams of at most 4 MiB are kept, for 14 days.
+      responses:
+        '200':
+          description: The kept stream.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetainedValidationOutput'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: digest
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9a-f]{64}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -24545,6 +24586,24 @@ components:
               name:
                 type: string
             additionalProperties: false
+      additionalProperties: false
+    RetainedValidationOutput:
+      description: HS2-ZCR3Y7. One kept output stream, base64 encoded.
+      type: object
+      required:
+        - sha256
+        - bytes
+        - content_base64
+      properties:
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        bytes:
+          type: integer
+          minimum: 0
+          maximum: 4194304
+        content_base64:
+          type: string
       additionalProperties: false
     RemoteIdentity:
       type: object

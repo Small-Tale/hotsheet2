@@ -116,6 +116,13 @@ enum ValidationCmd {
         #[arg(long)]
         target: Option<String>,
     },
+    /// HS2-ZCR3Y7: print a kept copy of a step's output stream by its SHA-256, from
+    /// the --project checkout this machine hosts. Only small streams are kept, only on
+    /// the machine that ran the step, and only for 14 days.
+    Output {
+        /// The stream's SHA-256, as a result records it.
+        sha256: String,
+    },
     /// Remove a step and its retained results.
     Remove {
         #[command(flatten)]
@@ -187,6 +194,11 @@ pub(super) fn route(
         ),
         ValidationCmd::Show { step } => ("POST", format!("{base}/evidence"), of(&step)),
         ValidationCmd::Remove { step } => ("POST", format!("{base}/remove"), of(&step)),
+        ValidationCmd::Output { sha256 } => (
+            "GET",
+            format!("/checkouts/{project}/target-validation-output/{sha256}"),
+            Value::Null,
+        ),
         ValidationCmd::Profiles { target: None } => (
             "GET",
             format!("/checkouts/{project}/target-validation-profiles"),

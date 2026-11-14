@@ -74,6 +74,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "validations", _]
             | ["checkouts", _, "target-validations"]
             | ["checkouts", _, "target-validation-profiles"]
+            // HS2-ZCR3Y7: kept step output, machine-local.
+            | ["checkouts", _, "target-validation-output", _]
             // HS2-42TARA: the plan of prerequisites and its readiness.
             | ["checkouts", _, "orchestration", "readiness", _]
             // HS2-GDJXGZ: orchestrator-owned sessions (orchestrating) and the hosted half.
@@ -152,6 +154,8 @@ pub fn is_machine_path(path: &str) -> bool {
             // passes its gate. The hosted `target-validations` route stays ordinary
             // authenticated data so a remote orchestrator can reach it.
             | ["checkouts", _, "orchestration", "validations", _]
+            // HS2-ZCR3Y7: kept step output never leaves the machine that ran the step.
+            | ["checkouts", _, "target-validation-output", _]
             // HS2-42TARA: the plan and what it is computed from are this machine's.
             | ["checkouts", _, "orchestration", "readiness", _]
             // HS2-GDJXGZ: session records are this machine's and a start passes its
@@ -608,6 +612,9 @@ impl OrchestrationRuntime {
                 value(self.hosted_validation_start(checkout, decode(body)?, tx)?)
             }
             // HS2-YYNW9F: the profiles this checkout offers, checked.
+            ("GET", ["checkouts", checkout, "target-validation-output", digest]) => {
+                value(self.validation_output(checkout, digest)?)
+            }
             ("GET", ["checkouts", checkout, "target-validation-profiles"]) => {
                 value(self.hosted_validation_profiles(checkout)?)
             }

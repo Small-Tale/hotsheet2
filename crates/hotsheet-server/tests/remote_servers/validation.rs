@@ -764,3 +764,65 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         .unwrap()
         .unwrap();
 }
+
+/// HS2-ZCR3Y7: a step's small output is kept on the machine that ran it and read back
+/// by digest through the real service (bearer required) and the owned CLI; the hosted
+/// start answers digests only, never the bytes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_zcr3y7_kept_output_is_read_by_digest_on_the_hosting_machine() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let router = app(host);
+    let (status, started) = api(
+        router.clone(),
+        "POST",
+        &format!("/checkouts/{}/target-validations", checkout.id),
+        json!({"execution_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "check":{"kind":"command","program":"/bin/sh","args":["-c","printf ok"]},
+            "timeout_seconds":20,"wait_ms":8000}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["outcome"]["stdout"]["sha256"], OK_SHA256);
+    assert!(!started.to_string().contains("\"ok\""));
+    let path = format!(
+        "/checkouts/{}/target-validation-output/{OK_SHA256}",
+        checkout.id
+    );
+    assert_eq!(
+        api(router.clone(), "GET", &path, Value::Null, false)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, kept) = api(router.clone(), "GET", &path, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{kept}");
+    assert_eq!(kept["bytes"], 2);
+    assert_eq!(kept["content_base64"], "b2s=");
+    let unknown = format!(
+        "/checkouts/{}/target-validation-output/{}",
+        checkout.id,
+        "0".repeat(64)
+    );
+    assert_eq!(
+        api(router.clone(), "GET", &unknown, Value::Null, true)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    // The owned CLI on the same machine reads it without a server.
+    let read = cli_named(
+        &home,
+        &["-C", source.to_str().unwrap(), "orchestration"],
+        &["validation", "output", OK_SHA256, "--project", &checkout.id],
+    );
+    assert_eq!(read["content_base64"], "b2s=");
+}

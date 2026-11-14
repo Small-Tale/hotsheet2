@@ -1427,12 +1427,25 @@ outcome the host observed: how the execution ended, the exit code, when it start
 how long it took, and for each of standard output and standard error the SHA-256 and
 the size in bytes.
 
-The host reads a step's output only to digest it and keeps none of it. Output is
-never returned by a route, written to the result file, a journal, an event or a
-ticket note. A step that writes more than 64 MiB to one stream is stopped and
-`failed`. The note added to the orchestration ticket when an attempt finishes names
-the step, the attempt, the state, the result id and the target, and nothing else.
-Keeping a bounded copy of the output on the target's own machine is HS2-ZCR3Y7.
+The host digests a step's output as it reads it. Output is never returned by a
+hosted route, written to the result file, a journal, an event or a ticket note, and
+never reaches the orchestrating machine. A step that writes more than 64 MiB to one
+stream is stopped and `failed`. The note added to the orchestration ticket when an
+attempt finishes names the step, the attempt, the state, the result id and the
+target, and nothing else.
+
+**Kept output (HS2-ZCR3Y7).** So that a failed step can be inspected, the machine
+that ran it keeps each stream of at most 4 MiB whole, under the SHA-256 the result
+records, in `${HOTSHEET_HOME}/orchestration-validation-output/<checkout-id>/<sha256>`
+(directories 0700, files 0600). A longer stream keeps its digest only, since a
+truncated copy would not match it. Copies expire after 14 days, and the machine keeps
+at most 512 of them and 256 MiB in all, dropping the oldest; pruning happens when a
+copy is written. The read path is machine-local only: `orchestration validation
+output <sha256> --project <checkout-id>` and `GET
+/checkouts/{checkout}/target-validation-output/{sha256}` (bearer and literal loopback)
+answer the stream base64-encoded, only from that checkout's copies, and refuse a copy
+that no longer matches its digest. There is no remote read and no MCP action:
+output can contain customer data, so it stays on the machine that produced it.
 
 ### Evidence
 
