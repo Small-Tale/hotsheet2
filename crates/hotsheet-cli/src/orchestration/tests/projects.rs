@@ -407,3 +407,85 @@ fn hs2_w27n1d_project_paths_route_and_only_add_and_remove_are_machine_local() {
         "/checkouts/owner/orchestration/projects/01ARZ3NDEKTSV4RRFFQ69G5FAV"
     ));
 }
+
+/// HS2-SHHGC6: the settings fingerprint changes exactly when what Settings →
+/// Orchestration shows changes: the type, the declaration, the policy and this
+/// machine's bindings. Reads, repeats and the resolve every detail runs leave it.
+#[test]
+fn hs2_shhgc6_the_settings_fingerprint_follows_what_the_settings_show() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let print = || f.runtime.orchestration_fingerprint(&f.owner.id).unwrap();
+    let base = format!("/checkouts/{}/orchestration", f.owner.id);
+    let fresh = print();
+    // Reads change nothing; repeating a read neither.
+    call(
+        &f,
+        &mut tx,
+        "GET",
+        &format!("{base}/project-type"),
+        Value::Null,
+    );
+    call(&f, &mut tx, "GET", &format!("{base}/policy"), Value::Null);
+    assert_eq!(print(), fresh);
+    // The type.
+    orchestration(&f, &mut tx);
+    let typed = print();
+    assert_ne!(typed, fresh);
+    orchestration(&f, &mut tx);
+    assert_eq!(print(), typed, "a repeated switch changes nothing");
+    // A project: declared and bound in one step.
+    let added = call(
+        &f,
+        &mut tx,
+        "POST",
+        &format!("{base}/projects"),
+        json!({"destination":local(&f),"label":"Synthetic target","actor":person()}),
+    );
+    let target = added["target_id"].as_str().unwrap().to_owned();
+    let with_project = print();
+    assert_ne!(with_project, typed);
+    // The fresh check a detail runs renews times only.
+    for _ in 0..2 {
+        call(
+            &f,
+            &mut tx,
+            "GET",
+            &format!("{base}/targets/{target}/resolve"),
+            Value::Null,
+        );
+        assert_eq!(print(), with_project);
+    }
+    // The policy.
+    call(
+        &f,
+        &mut tx,
+        "PUT",
+        &format!("{base}/policy"),
+        json!({"expected_revision":null,"policy":{"machine":{"max_sessions":3}},"actor":person()}),
+    );
+    let with_policy = print();
+    assert_ne!(with_policy, with_project);
+    // Removing the project unbinds and tombstones it.
+    call(
+        &f,
+        &mut tx,
+        "DELETE",
+        &format!("{base}/projects/{target}"),
+        json!({"actor":person()}),
+    );
+    assert_ne!(print(), with_policy);
+    // The paths a host watches: the owner's .hotsheet2 and this machine's home.
+    let paths = f.runtime.orchestration_watch_paths(&f.owner.id).unwrap();
+    assert_eq!(paths.len(), 2);
+    assert!(paths[0].ends_with(".hotsheet2"));
+    assert!(
+        f.runtime
+            .orchestration_fingerprint("unknown-owner")
+            .is_err()
+    );
+}

@@ -314,3 +314,156 @@ async fn hs2_w27n1d_cli_http_and_mcp_share_project_type_and_projects() {
         ]
     );
 }
+
+/// Wait for the owner's `orchestration_changed` events after `cursor` with the long
+/// poll, until one arrives or `wait_ms` passes; then count what arrived.
+async fn announced_within(
+    router: axum::Router,
+    mut cursor: u64,
+    owner: &str,
+    wait_ms: u64,
+) -> (u64, usize) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
+    let mut seen = 0;
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let (status, polled) = api(
+            router.clone(),
+            "GET",
+            &format!("/ws/poll?since={cursor}&timeout_ms={}", left.as_millis()),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{polled}");
+        seen += polled["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "orchestration_changed" && event["id"] == owner)
+            .count();
+        cursor = polled["cursor"].as_u64().unwrap();
+        if seen > 0 || left.is_zero() {
+            return (cursor, seen);
+        }
+    }
+}
+
+/// HS2-SHHGC6: once a client reads an owner's orchestration settings, a change a CLI
+/// process writes without the server (type, policy, a project's binding) is announced
+/// as `orchestration_changed`, from file events and not a timer; a write that changes
+/// nothing the settings show is not, and a change the server made is announced once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_shhgc6_a_cli_change_without_the_server_is_announced() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("host-store");
+    let memory = Arc::new(Memory::default());
+    let host = state(&source, &home);
+    let owner = configured_owner(&source, &home, &root.path().join("owner"));
+    let api_project = configured_owner(&source, &home, &root.path().join("api"));
+    let host = host.with_orchestration_runtime(shared_runtime(&source, &home, &memory));
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", owner.id);
+    let (cursor, _) = changes_after(router.clone(), 0, &owner.id).await;
+    // A client shows the settings: the read starts the watcher and announces nothing.
+    let (status, _) = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/project-type"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (cursor, quiet) = announced_within(router.clone(), cursor, &owner.id, 600).await;
+    assert_eq!(quiet, 0);
+
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    // The type, switched by a CLI process without the server.
+    let set = cli_named(
+        &home,
+        &human,
+        &[
+            "project-type",
+            "--project",
+            &owner.id,
+            "--set",
+            "orchestration",
+        ],
+    );
+    assert_eq!(set["changed"], true);
+    let (cursor, announced) = announced_within(router.clone(), cursor, &owner.id, 15_000).await;
+    assert!(announced >= 1, "the CLI switch is announced");
+    // The same switch again changes nothing the settings show.
+    cli_named(
+        &home,
+        &human,
+        &[
+            "project-type",
+            "--project",
+            &owner.id,
+            "--set",
+            "orchestration",
+        ],
+    );
+    let (cursor, repeated) = announced_within(router.clone(), cursor, &owner.id, 1_500).await;
+    assert_eq!(repeated, 0, "an unchanged write is not announced");
+    // A project added (declared and bound in this machine's home) by the CLI.
+    cli_named(
+        &home,
+        &human,
+        &[
+            "project",
+            "add",
+            &api_project.id,
+            "--project",
+            &owner.id,
+            "--label",
+            "API",
+        ],
+    );
+    let (cursor, announced) = announced_within(router.clone(), cursor, &owner.id, 15_000).await;
+    assert!(announced >= 1, "the CLI add is announced");
+    // The policy, set by the CLI.
+    let policy = root.path().join("policy.json");
+    std::fs::write(&policy, br#"{"machine":{"max_sessions":3}}"#).unwrap();
+    cli_named(
+        &home,
+        &human,
+        &[
+            "policy",
+            "set",
+            "--project",
+            &owner.id,
+            "--file",
+            policy.to_str().unwrap(),
+        ],
+    );
+    let (cursor, announced) = announced_within(router.clone(), cursor, &owner.id, 15_000).await;
+    assert!(announced >= 1, "the CLI policy is announced");
+    // A change the server makes itself is announced by the server, and the watcher
+    // does not add another for the same change.
+    let (status, _) = api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/project-type"),
+        json!({"project_type":"software","keep_projects":true,"actor":{"role":"human"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (cursor, first) = announced_within(router.clone(), cursor, &owner.id, 5_000).await;
+    assert_eq!(first, 1);
+    let (_, more) = announced_within(router.clone(), cursor, &owner.id, 1_500).await;
+    assert_eq!(more, 0, "announced once");
+    host.begin_stopping();
+}

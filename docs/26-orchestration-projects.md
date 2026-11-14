@@ -51,7 +51,7 @@
 > category with its projects, project detail and limits-only policy ship in the web client
 > (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27), and Start Orchestration
 > needs no placement actor (HS2-XYAHB4); per-project limits and tool accounts are edited in
-> Settings (HS2-7WF6JD).
+> Settings (HS2-7WF6JD), and changes a CLI process writes are announced live (HS2-SHHGC6).
 
 ## 26.1 Boundary and existing foundations
 
@@ -4138,8 +4138,22 @@ checkout, after every successful owner request that changes what these settings 
 (type, declaration, binding, project add or remove, policy, session start, stop, takeover
 or sync) and after each scheduling pass that acted. The web client reads the shown
 category again on that event, on any `orchestration_session` event, and on a stream
-resync; it never polls. A change written by a CLI process without the server announces
-nothing until the next of those (HS2-SHHGC6).
+resync; it never polls.
+
+**Changes a CLI process writes (HS2-SHHGC6).** A `hotsheet-cli` process can change the
+type, the declaration, this machine's bindings or the policy without a server request.
+Once a client reads an owner's settings (GET `project-type`, `targets` or `policy`), the
+server watches the files they come from with a native file watcher, without recursion:
+the owner's `.hotsheet2` directory (watched through the project root until it exists)
+and the machine home. A file event wakes it; after a 150 ms pause in events it reads
+`orchestration_fingerprint` (a digest of the effective type, the declaration, the
+policy revision and each declared target's destination, last failure and whether it
+was confirmed; the times every resolve renews are left out, so reading the settings
+never changes it) and publishes the same `orchestration_changed` event only when the
+digest differs from the last one seen. A change the server makes itself records the
+new digest before it announces, so it is normally announced once; a rare second
+announcement is harmless, clients read again. The watcher reads nothing on a timer and
+ends when the server stops. The watched paths are `orchestration_watch_paths`.
 
 ### Headless surface
 

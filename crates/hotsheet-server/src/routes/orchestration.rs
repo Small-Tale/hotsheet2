@@ -28,7 +28,7 @@ pub(crate) fn server_runtime(
     runtime(state, handle)
 }
 
-fn runtime(
+pub(super) fn runtime(
     state: &AppState,
     handle: tokio::runtime::Handle,
 ) -> Result<Arc<OrchestrationRuntime>, OrchestrationError> {
@@ -281,7 +281,7 @@ fn ensure_watchers(state: &AppState, owner: &str) {
 /// names the server instance as well as the machine home, so a server started after
 /// another over the same home in one process runs its own tasks, while each of them
 /// ends at its next step once its own server is stopping.
-fn loop_key(state: &AppState, owner: &str) -> String {
+pub(super) fn loop_key(state: &AppState, owner: &str) -> String {
     format!(
         "{}|{:p}|{owner}",
         state.machine_home().display(),
@@ -613,8 +613,23 @@ async fn execute(
     let follow = watched.map(|owner| (state.clone(), owner));
     let scheduled = scheduled_owner(&method, &path).map(|owner| (state.clone(), owner));
     let changed = changed_owner(&method, &path).map(|owner| (state.clone(), owner));
+    // HS2-SHHGC6: a reader of the owner's settings gets its files watched, so a change
+    // a CLI process writes without this server is announced too.
+    let settings = super::orchestration_settings_watch::settings_owner(&method, &path)
+        .map(|owner| (state.clone(), owner));
     let result = execute_blocking(state, method, path, body).await;
+    if let (Ok(_), Some((state, owner))) = (&result, settings) {
+        let _ = tokio::task::spawn_blocking(move || {
+            super::orchestration_settings_watch::ensure_settings_watcher(&state, &owner);
+        })
+        .await;
+    }
     if let (Ok(_), Some((state, owner))) = (&result, changed) {
+        let (seen_state, seen_owner) = (state.clone(), owner.clone());
+        let _ = tokio::task::spawn_blocking(move || {
+            super::orchestration_settings_watch::seen_after_change(&seen_state, &seen_owner);
+        })
+        .await;
         note_orchestration_change(&state, &owner);
     }
     // HS2-ECWG50: a policy that now enables automatic placement gets its loop.

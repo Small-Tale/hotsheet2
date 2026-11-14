@@ -412,3 +412,55 @@ impl OrchestrationRuntime {
         })
     }
 }
+
+impl OrchestrationRuntime {
+    /// HS2-SHHGC6: a digest of what Settings → Orchestration shows for the owner: its
+    /// effective project type, its target declaration, its policy and this machine's
+    /// binding of each declared target. A host compares it before and after a file
+    /// change to announce a change a CLI process wrote without a server request.
+    /// Times that every resolve renews (when a binding was last checked or confirmed)
+    /// are left out, so reading the settings never changes the digest. Writes nothing
+    /// and contacts nothing.
+    pub fn orchestration_fingerprint(&self, owner_id: &str) -> Result<u64, OrchestrationError> {
+        use std::hash::{Hash, Hasher};
+        let owner = self.owner(owner_id)?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        // An unreadable type or policy is part of what shows; it hashes as its code.
+        match self.type_state(&owner) {
+            Ok(state) => (state.current.code(), state.declared).hash(&mut hasher),
+            Err(error) => error.code().hash(&mut hasher),
+        }
+        let manifest = self.flow(&owner)?.declarations()?;
+        serde_json::to_string(&manifest)
+            .map_err(|_| OrchestrationError::Corrupt)?
+            .hash(&mut hasher);
+        match self.policy(owner_id) {
+            Ok(view) => (view.enabled, view.revision).hash(&mut hasher),
+            Err(error) => error.code().hash(&mut hasher),
+        }
+        for binding in self.bindings(owner_id)? {
+            (
+                binding.target.target_id,
+                serde_json::to_string(&binding.destination).unwrap_or_default(),
+                serde_json::to_string(&binding.last_failure).unwrap_or_default(),
+                binding.confirmed_at_ms.is_some(),
+            )
+                .hash(&mut hasher);
+        }
+        Ok(hasher.finish())
+    }
+
+    /// HS2-SHHGC6: the directories whose files the fingerprint reads: the owner's
+    /// `.hotsheet2` (project type, declaration, policy) and this machine's home
+    /// (bindings). Each is watched without recursion.
+    pub fn orchestration_watch_paths(
+        &self,
+        owner_id: &str,
+    ) -> Result<Vec<PathBuf>, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        Ok(vec![
+            Path::new(&owner.root).join(".hotsheet2"),
+            self.home.clone(),
+        ])
+    }
+}

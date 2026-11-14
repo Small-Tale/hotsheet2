@@ -16,6 +16,7 @@ pub(crate) mod notifiers;
 pub(crate) mod orchestration;
 pub(crate) mod orchestration_permissions;
 pub(crate) mod orchestration_sessions;
+pub(crate) mod orchestration_settings_watch;
 pub(crate) mod permissions;
 pub(crate) mod project_tools;
 pub(crate) mod providers;
