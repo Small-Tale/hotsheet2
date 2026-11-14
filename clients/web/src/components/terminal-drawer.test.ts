@@ -510,7 +510,7 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('data-action="toggle-terminal-drawer"');
     expect(markup).not.toContain('data-component="tab-bar"');
     expect(css).toMatchSource(
-      ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: var(--terminal-focus-top); left: var(--terminal-focus-left); width: var(--terminal-focus-width); height: var(--terminal-focus-height);",
+      ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: calc(var(--terminal-focus-top) + env(safe-area-inset-top)); left: calc(var(--terminal-focus-left) + env(safe-area-inset-left)); width: calc(var(--terminal-focus-width) - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(var(--terminal-focus-height) - env(safe-area-inset-top));",
     );
     // The Exit pill floats in a Kerf FloatingToolbar that owns the safe-area inset (HS2-798JS4).
     expect(markup).toContain('aria-label="Terminal Focus Exit"');
@@ -796,5 +796,20 @@ describe('TerminalDrawer chat permission indicator (HS2-NHRDMW)', () => {
     // A stopped chat's error takes the trailing slot; no mode means no indicator.
     expect(draw({ label: 'Accept edits' }, 'Model at capacity')).not.toContain('Permissions:');
     expect(draw()).not.toContain('terminal-drawer__permission-mode');
+  });
+});
+
+describe('HS2-P14MCB phone focus mode stays out of the status bar', () => {
+  it('starts the focused drawer below and inside the top and side safe areas', () => {
+    const css = readFileSync(new URL('./terminal-drawer.css', import.meta.url), 'utf8');
+    const rule = /\.terminal-drawer\[data-focus-mode='true'\] \{([^}]*)\}/u.exec(css)?.[1] ?? '';
+    expect(rule).toContain('top: calc(var(--terminal-focus-top) + env(safe-area-inset-top));');
+    expect(rule).toContain('left: calc(var(--terminal-focus-left) + env(safe-area-inset-left));');
+    expect(rule).toContain(
+      'width: calc(var(--terminal-focus-width) - env(safe-area-inset-left) - env(safe-area-inset-right));',
+    );
+    expect(rule).toContain('height: calc(var(--terminal-focus-height) - env(safe-area-inset-top));');
+    // No padding on the root: the rail already pads its own content (Kerf analyzer KUI-L004).
+    expect(rule).not.toContain('padding');
   });
 });
