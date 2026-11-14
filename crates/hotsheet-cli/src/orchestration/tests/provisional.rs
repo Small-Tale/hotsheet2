@@ -1899,3 +1899,61 @@ fn hs2_fj6mdw_a_targets_setting_is_read_alone_and_followed_by_its_feed() {
     off_runtime.watch_step(&off.owner(), &id(2), &mut state, 0, &mut tx);
     assert!(!off.file().exists());
 }
+
+/// HS2-08F1M8: a prerequisite whose run links standing CI gates of two workflows at
+/// different commits is built on with both commits as bases, and the work is
+/// confirmed only once both are green.
+#[test]
+fn hs2_08f1m8_work_on_gates_about_several_commits_waits_for_every_commit() {
+    tx!(tx);
+    let t = two(Some(&Opt::on()), &mut tx);
+    let lint =
+        t.m.runtime
+            .gate_link(
+                &t.owner(),
+                &t.run_a,
+                serde_json::from_value(json!({"commit": sha('c'), "provider": CI,
+                "repository": "example/widgets", "workflow": "Lint"}))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .gate
+            .gate_id;
+    t.dispatch_b(&mut tx).unwrap();
+    let work = t.only();
+    let mut commits: Vec<_> = work
+        .gates
+        .iter()
+        .map(|gate| (gate.commit.clone(), gate.result))
+        .collect();
+    commits.sort_by(|left, right| left.0.cmp(&right.0));
+    assert_eq!(
+        commits,
+        [
+            (sha('a'), GateResult::Pending),
+            (sha('c'), GateResult::Pending)
+        ]
+    );
+    assert_eq!(work.depth, 1);
+    // One commit green: still provisional on the other.
+    t.ci_says(&t.run_a, &sha('a'), GateState::Passed, 1, &mut tx);
+    assert_eq!(t.only().state, SpeculationState::Provisional);
+    // Both green: confirmed.
+    t.ci_says(&t.run_a, &sha('c'), GateState::Passed, 2, &mut tx);
+    let confirmed = t.only();
+    assert_eq!(confirmed.state, SpeculationState::Confirmed);
+    assert!(
+        confirmed
+            .gates
+            .iter()
+            .all(|gate| gate.result == GateResult::Green)
+    );
+    assert!(
+        confirmed
+            .gates
+            .iter()
+            .any(|gate| gate.gate_ids == [lint.clone()])
+    );
+}

@@ -3618,9 +3618,15 @@ What the rule cannot know is decided first, and an unknown is a refusal:
   the opt-in holds none and its steps are `opt_out_unknown`. A dispatch and a
   scheduling pass read the named tickets again through the gate first, as
   `readiness refresh` does.
+- **Several commits (HS2-08F1M8).** A prerequisite whose latest run links standing
+  CI gates about more than one commit (workflows gated at different commits) is
+  built on with every commit as a base: each commit is judged by its own gates as if
+  the prerequisite pinned it, a green commit is no base, a red one refuses as a
+  single red gate does, and the depth counts them side by side, not stacked. The
+  record carries one gate per commit, and the work is confirmed only when all are
+  green. A commit whose own gates are unknown is still `gate_commit_ambiguous`.
 - **Not speculated on.** A prerequisite that needs a `deployment` while its CI gate
-  pends (`deployment_gate_pending`, HS2-QBERH6), and standing gates about more than
-  one commit (`gate_commit_ambiguous`).
+  pends (`deployment_gate_pending`, HS2-QBERH6).
 
 Refusal codes are the ones above, `policy_speculation_not_allowed`,
 `prerequisite_speculation_not_allowed`, `target_speculation_disabled`, and the rule's
@@ -3793,7 +3799,6 @@ The workspace view of provisional state is HS2-0D60T8.
 
 - Nothing acts on at-risk or reopened work: the run is left as it is, and the step
   is not dispatched again by itself after the fix (HS2-2K0DM8).
-- Standing gates about several commits are refused rather than built on (HS2-08F1M8).
 
 ### Headless surface
 

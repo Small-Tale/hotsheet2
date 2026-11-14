@@ -333,7 +333,9 @@ pub fn provisional_standings(
             }
         }
         let mut refusal = None;
-        let mut pending: Vec<(&Prerequisite, Ulid)> = Vec::new();
+        // Each with whether its commit was named by the plan (pinned) rather than by
+        // one of several standing gates (HS2-08F1M8).
+        let mut pending: Vec<(Prerequisite, bool, Ulid)> = Vec::new();
         for prerequisite in &step.prerequisites {
             let (Prerequisite::Ticket { gates, commit, .. }, Some(key)) =
                 (prerequisite, prerequisite.ticket_key())
@@ -365,16 +367,55 @@ pub fn provisional_standings(
                 refusal = Some(("deployment_gate_pending", prerequisite));
                 break;
             }
-            let node: Node = (key, *gates, commit.clone());
-            if gate_commit(facts, &node).is_none() {
-                refusal = Some(("gate_commit_ambiguous", prerequisite));
-                break;
-            }
-            let Some(id) = projection.ticket(prerequisite) else {
-                continue;
+            let node: Node = (key.clone(), *gates, commit.clone());
+            // HS2-08F1M8: standing gates about several commits (workflows gated at
+            // different commits) are built on with every commit as a base: each is
+            // judged as a prerequisite pinned to it. A commit without its own gate
+            // facts is still ambiguous.
+            let parts: Vec<Prerequisite> = match gate_commit(facts, &node) {
+                Some(_) => vec![prerequisite.clone()],
+                None => match gate_of(facts, &node) {
+                    Some(gate)
+                        if gate.commits.len() > 1
+                            && gate.commits.iter().all(|commit| {
+                                facts
+                                    .commit_gates
+                                    .contains_key(&(key.0.clone(), commit.clone()))
+                            }) =>
+                    {
+                        gate.commits
+                            .iter()
+                            .map(|one| match prerequisite {
+                                Prerequisite::Ticket {
+                                    target_id,
+                                    connection_id,
+                                    native_id,
+                                    gates,
+                                    ..
+                                } => Prerequisite::Ticket {
+                                    target_id: target_id.clone(),
+                                    connection_id: connection_id.clone(),
+                                    native_id: native_id.clone(),
+                                    gates: *gates,
+                                    commit: Some(one.clone()),
+                                },
+                                other => other.clone(),
+                            })
+                            .collect()
+                    }
+                    _ => {
+                        refusal = Some(("gate_commit_ambiguous", prerequisite));
+                        break;
+                    }
+                },
             };
-            dependent.blocked_by.push(id);
-            pending.push((prerequisite, id));
+            for part in parts {
+                let Some(id) = projection.ticket(&part) else {
+                    continue;
+                };
+                dependent.blocked_by.push(id);
+                pending.push((part, commit.is_some(), id));
+            }
         }
         if let Some((code, prerequisite)) = refusal {
             standings.insert(
@@ -393,7 +434,8 @@ pub fn provisional_standings(
             max_depth,
             ..ProvisionalStanding::default()
         };
-        for (prerequisite, id) in pending {
+        for (prerequisite, pinned, id) in &pending {
+            let (prerequisite, pinned, id) = (prerequisite, *pinned, *id);
             let probe = Probe(&projection.gates);
             match blocker_readiness(&rule, &dependent, &id, &projection.tickets, &probe) {
                 BlockerReadiness::Confirmed { .. } => {}
@@ -416,7 +458,7 @@ pub fn provisional_standings(
                             .unwrap_or_default(),
                         gate: base.gate.result,
                         depth: base.depth,
-                        pinned: node.2.is_some(),
+                        pinned,
                     });
                 }
                 BlockerReadiness::Blocked { reason } => {

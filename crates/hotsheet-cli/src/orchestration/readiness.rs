@@ -297,9 +297,22 @@ impl OrchestrationRuntime {
                 }
             }
             if let Some(run) = latest {
-                facts
-                    .gates
-                    .insert(key.clone(), of(&|gate| gate.run_id == run.run_id));
+                let latest = of(&|gate| gate.run_id == run.run_id);
+                // HS2-08F1M8: gates about several commits are judged commit by commit,
+                // so each commit's own gates are known too.
+                if latest.commits.len() > 1 {
+                    for commit in &latest.commits {
+                        facts.commit_gates.insert(
+                            (key.0.clone(), commit.clone()),
+                            of(&|gate| {
+                                gate.run_id == run.run_id
+                                    && gate.target_id == key.0
+                                    && gate.commit == *commit
+                            }),
+                        );
+                    }
+                }
+                facts.gates.insert(key.clone(), latest);
             }
             facts.tickets.insert(key, known);
         }

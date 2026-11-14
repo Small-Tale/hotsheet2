@@ -843,3 +843,59 @@ fn hs2_j3smmt_a_changed_document_retires_before_it_is_written() {
         .unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), before);
 }
+
+/// HS2-08F1M8: standing CI gates about several commits are built on with every commit
+/// as a base; each commit is judged by its own gates, a green one is no base, a red
+/// one refuses, and a commit without its own gate facts stays ambiguous.
+#[test]
+fn hs2_08f1m8_gates_about_several_commits_make_every_commit_a_base() {
+    let several = |c: GateState| {
+        let mut f = Fixture::new();
+        f.facts
+            .gates
+            .insert(ticket_key(&f.a), gate(GateState::Pending, &['a', 'c']));
+        f.facts
+            .commit_gates
+            .insert((id(1), sha('a')), gate(GateState::Pending, &['a']));
+        f.facts
+            .commit_gates
+            .insert((id(1), sha('c')), gate(c, &['c']));
+        f
+    };
+    let bases = |standing: &ProvisionalStanding| -> Vec<(String, GateResult, bool)> {
+        standing
+            .bases
+            .iter()
+            .map(|basis| (basis.commit.clone(), basis.gate, basis.pinned))
+            .collect()
+    };
+    // Both pending: both commits are bases, side by side, so the depth is one.
+    let both = several(GateState::Pending).standing(2);
+    assert!(both.allowed, "{both:?}");
+    assert_eq!(both.depth, 1);
+    assert_eq!(
+        bases(&both),
+        [
+            (sha('a'), GateResult::Pending, false),
+            (sha('c'), GateResult::Pending, false),
+        ]
+    );
+    assert!(both.bases.iter().all(|basis| basis.native_id == "A"));
+    // One commit already green: only the pending one is a base.
+    let one = several(GateState::Passed).standing(2);
+    assert!(one.allowed);
+    assert_eq!(bases(&one), [(sha('a'), GateResult::Pending, false)]);
+    // One commit red: refused, as a single red gate is.
+    let red = several(GateState::Failed).standing(2);
+    assert_eq!(
+        (red.allowed, red.refusal.as_deref()),
+        (false, Some("gate_red"))
+    );
+    // A commit whose own gates are unknown: still ambiguous.
+    let mut unknown = several(GateState::Pending);
+    unknown.facts.commit_gates.remove(&(id(1), sha('c')));
+    assert_eq!(
+        unknown.standing(2).refusal.as_deref(),
+        Some("gate_commit_ambiguous")
+    );
+}
