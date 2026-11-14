@@ -285,3 +285,55 @@ fn hs2_sv4smy_an_identical_observation_read_repeats_only_within_the_window() {
     }
     assert!(!coalescible(&record(1, "tickets_write", Allowed)));
 }
+
+/// HS2-5ZT4GY: a continued validation wait is recorded once per operation within the
+/// window, whatever other operations write between its waits; anything else about the
+/// operation is recorded.
+#[test]
+fn hs2_5zt4gy_continued_validation_waits_fold_per_operation() {
+    use AuditOutcome::{Allowed, Denied, Succeeded};
+    let wait = |at_ms, operation: &str| {
+        let mut entry = record(at_ms, "validation_run", Allowed);
+        entry.operation_id = Some(operation.into());
+        entry.reason = Some("continuing".into());
+        entry
+    };
+    let first = {
+        let mut entry = record(1_000, "validation_run", Allowed);
+        entry.reason = Some("rule".into());
+        entry.permission_id = Some("rule-1".into());
+        entry
+    };
+    assert!(continued_wait(&wait(1, "op-1")) && coalescible(&wait(1, "op-1")));
+    // The decision that started the operation, and its outcome, are never folded.
+    assert!(!coalescible(&first));
+    assert!(!coalescible(&record(1, "validation_run", Succeeded)));
+    let mut denied = wait(1, "op-1");
+    denied.outcome = Denied;
+    assert!(!coalescible(&denied));
+    let mut outside = wait(1, "op-1");
+    outside.operation_id = None;
+    assert!(!coalescible(&outside));
+    let mut other_action = wait(1, "op-1");
+    other_action.action = "work_start".into();
+    assert!(!coalescible(&other_action));
+    // Empty, then only the starting decision: the first continued wait is written.
+    assert!(!repeats(&[], &wait(1_100, "op-1")));
+    assert!(!repeats(std::slice::from_ref(&first), &wait(1_100, "op-1")));
+    // Later waits repeat it inside the window, with another operation in between.
+    let journal = [wait(1_150, "op-2"), wait(1_100, "op-1"), first.clone()];
+    assert!(repeats(&journal, &wait(1_200, "op-1")));
+    assert!(!repeats(&journal[1..], &wait(1_200, "op-2")));
+    assert!(repeats(&journal, &wait(1_200, "op-2")));
+    // Past the window, or after a denial of the same operation, it is written again.
+    assert!(!repeats(&journal, &wait(1_100 + AUDIT_COALESCE_MS, "op-1")));
+    let mut refused = wait(1_180, "op-1");
+    refused.outcome = Denied;
+    refused.reason = Some("target_unavailable".into());
+    let after_denial = [refused, wait(1_100, "op-1"), first];
+    assert!(!repeats(&after_denial, &wait(1_200, "op-1")));
+    // Another actor's or target's waits are another subject.
+    let mut elsewhere = wait(1_200, "op-1");
+    elsewhere.target_id = Some("t2".into());
+    assert!(!repeats(&journal, &elsewhere));
+}

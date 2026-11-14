@@ -544,6 +544,16 @@ three targets wrote 360 entries an hour and rotated older decisions out of the 2
 journal within a day; now such reads write at most two entries per target and window,
 whatever the pass rate.
 
+**Repeated validation waits (HS2-5ZT4GY).** Each bounded wait on a running validation
+attempt passes the gate again, so the grant and the destination are checked on every
+request, and is allowed as `continuing` under its operation id. Such an entry is
+written only when the newest entry of the same operation (same actor, target and
+action) is not the same continued wait within the window; entries of other operations
+in between do not count. A step of up to an hour, waited on every 8 seconds, so writes
+its starting decision, one continued wait per 10 minutes and its outcome, instead of
+one entry per wait (up to 450). A refusal of a wait, a different reason or permission,
+and the outcome are always written.
+
 A segment rotates at 1 MiB to one retained predecessor, so the journal is bounded
 near 2 MiB per owner. `seq` never restarts. A reader passes `after` and gets later
 entries, a `cursor` to continue from, `more`, and `gap: true` when retention removed
@@ -1502,8 +1512,8 @@ not allow running checks and the reverse.
 Every gate answer and every finished attempt is in the audit journal under
 `validation_run`, the latter as `succeeded` for `passed` and `failed` with the state
 code otherwise. A changed definition is `validation_define` and a removal
-`validation_remove`. Each bounded wait passes the gate again and is recorded; folding
-those is HS2-5ZT4GY. When a run request names a dispatch `run_id`, that run's event
+`validation_remove`. Each bounded wait passes the gate again; a continued wait of the
+same operation is recorded once per window (HS2-5ZT4GY, §26.7). When a run request names a dispatch `run_id`, that run's event
 stream (§26.9) carries a `validation` event when the attempt starts and when it
 finishes, with the state as its reason and the result id in its key.
 

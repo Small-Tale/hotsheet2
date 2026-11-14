@@ -42,7 +42,7 @@ pub use assignment::{
 pub use audit::{
     AUDIT_COALESCE_MS, AuditEntry, AuditJournal, AuditOutcome, AuditPage, AuditRecord, Journal,
     JournalEntry, JournalPage, JournalRecord, MAX_AUDIT_PAGE, MAX_AUDIT_SEGMENT_BYTES, RepeatCheck,
-    coalescible, repeats,
+    coalescible, continued_wait, repeats,
 };
 pub use bindings::BindingRegistry;
 pub use capacity::{

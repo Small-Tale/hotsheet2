@@ -68,15 +68,28 @@ pub struct AuditRecord {
 pub const AUDIT_COALESCE_MS: u64 = 10 * 60 * 1000;
 
 /// HS2-SV4SMY: whether a record may be folded into an identical earlier one: an
-/// observation (`gates_observe`) that was allowed or succeeded, outside any operation.
-/// Denials, failures and every action that acts on a target are always recorded.
+/// observation (`gates_observe`) that was allowed or succeeded, outside any operation,
+/// or a continued validation wait ([`continued_wait`]). Denials, failures and every
+/// other action that acts on a target are always recorded.
 pub fn coalescible(record: &AuditRecord) -> bool {
-    record.action == "gates_observe"
-        && record.operation_id.is_none()
-        && matches!(
-            record.outcome,
-            AuditOutcome::Allowed | AuditOutcome::Succeeded
-        )
+    continued_wait(record)
+        || (record.action == "gates_observe"
+            && record.operation_id.is_none()
+            && matches!(
+                record.outcome,
+                AuditOutcome::Allowed | AuditOutcome::Succeeded
+            ))
+}
+
+/// HS2-5ZT4GY: a `validation_run` request that continues an operation already
+/// decided: each bounded wait on a running attempt passes the gate again (grant and
+/// destination are re-checked every time) and is allowed as `continuing`. Recording
+/// every such wait would fill the bounded journal during one long step.
+pub fn continued_wait(record: &AuditRecord) -> bool {
+    record.action == "validation_run"
+        && record.operation_id.is_some()
+        && record.outcome == AuditOutcome::Allowed
+        && record.reason.as_deref() == Some("continuing")
 }
 
 /// The same actor's same action on the same target.
@@ -126,6 +139,16 @@ impl<'a> RepeatCheck<'a> {
             self.stage.set(2);
             repeat
         };
+        // HS2-5ZT4GY: a continued wait repeats when the newest entry of its own
+        // operation is the same continued wait; other operations' entries between them
+        // do not count, so concurrent steps fold their waits independently.
+        if continued_wait(next) {
+            return if previous.operation_id == next.operation_id {
+                decided(identical(previous, next))
+            } else {
+                false
+            };
+        }
         match (self.stage.get(), next.outcome) {
             (0, AuditOutcome::Succeeded) => decided(identical(previous, next)),
             (0, AuditOutcome::Allowed) => {

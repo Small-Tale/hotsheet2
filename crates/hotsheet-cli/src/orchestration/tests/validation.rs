@@ -1973,3 +1973,74 @@ fn hs2_yynw9f_profiles_are_listed_checked_and_read_through_the_gate() {
     assert_eq!(slow.outcome.unwrap().end, ExecutionEnd::TimedOut);
     assert!(started.elapsed() < std::time::Duration::from_secs(8));
 }
+
+/// HS2-5ZT4GY: every wait on a long step passes the gate again, but the journal
+/// records a continued wait of the same operation once; a refusal in between and the
+/// outcome are still recorded.
+#[test]
+fn hs2_5zt4gy_repeated_validation_waits_are_audited_once() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    profiles(
+        &m.target.root,
+        &[("gated", "while [ ! -f go ]; do sleep 0.05; done")],
+    );
+    let ticket = m.orchestration_ticket("Coordinate");
+    m.runtime
+        .validation_define(
+            &m.owner.id,
+            profile(&ticket, "gated", "gated"),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let wait = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime.validation_run(
+            &m.owner.id,
+            run(&ticket, "gated", "op-1", 0),
+            Some(&worker()),
+            tx,
+        )
+    };
+    let entries = |m: &Machine| {
+        m.runtime
+            .audit(&m.owner.id, 0, 500)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.operation_id.as_deref() == Some("op-1"))
+            .map(|entry| (entry.record.outcome, entry.record.reason))
+            .collect::<Vec<_>>()
+    };
+    for _ in 0..5 {
+        assert_eq!(
+            wait(&m, &mut tx).unwrap().result.state,
+            ValidationState::Running
+        );
+    }
+    let continuing = (AuditOutcome::Allowed, Some("continuing".to_owned()));
+    let decided = entries(&m);
+    assert_eq!(decided.len(), 2, "{decided:?}");
+    assert_eq!(decided[1], continuing);
+    // The destination is still checked on every wait: unbound, the wait is refused
+    // and recorded; bound again, the next continued wait is recorded once more.
+    super::tickets::unbind(&m, 1, &mut tx);
+    assert!(wait(&m, &mut tx).is_err());
+    super::tickets::rebind(&m, 1, &mut tx);
+    for _ in 0..3 {
+        wait(&m, &mut tx).unwrap();
+    }
+    std::fs::write(Path::new(&m.target.root).join("go"), "").unwrap();
+    let finished = until_finished(&m, &ticket, "gated", "op-1", &mut tx);
+    assert_eq!(finished.result.state, ValidationState::Passed);
+    let recorded = entries(&m);
+    assert_eq!(recorded.len(), 5, "{recorded:?}");
+    assert_eq!(recorded[2].0, AuditOutcome::Denied);
+    assert_eq!(recorded[3], continuing);
+    assert_eq!(recorded[4], (AuditOutcome::Succeeded, None));
+}
