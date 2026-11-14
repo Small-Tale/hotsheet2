@@ -139,7 +139,11 @@ function fixturePolicy(): OrchestrationPolicyView {
         { tool: 'codex', max_sessions: 3, weight: 60 },
         { tool: 'claude', max_sessions: 2, weight: 50 },
       ],
-      targets: [],
+      // API is not listed: no session may start there, so admission is not asked (HS2-Y3N3PH).
+      targets: [
+        { target_id: DEMO_TARGETS.web, tools: [{ tool: 'codex' }, { tool: 'claude' }], max_sessions: 2 },
+        { target_id: DEMO_TARGETS.docs, tools: [{ tool: 'codex' }, { tool: 'claude' }], max_sessions: 1 },
+      ],
       wind_down: { idle_minutes: 15, keep_warm: 0 },
       speculation: { allowed: false },
       placement: {

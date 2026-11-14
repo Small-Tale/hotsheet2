@@ -281,6 +281,107 @@ test('HS2-W27N1D captures Project Type, Orchestration, the Add Project menu and 
   }
 });
 
+/**
+ * HS2-Y3N3PH: adding a project is the consent to read it (HS2-XHQ1EH), so an added project's detail
+ * reads capacity and admission through the real gate without anyone being asked. Checked in the
+ * real shell against the real server, with captures at wide, medium and narrow widths.
+ */
+test('HS2-Y3N3PH the project detail reads capacity and admission for an added project', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Web'],
+      [docs, 'Docs'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    // The policy lets Codex sessions run on Web; Docs lists no tool.
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'codex', max_sessions: 2 }],
+        targets: [{ target_id: targets.Web, tools: [{ tool: 'codex' }], max_sessions: 1 }],
+      },
+      actor: { role: 'human' },
+    });
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await showProjectSettings(page, 'General');
+    await expect(page.locator('[data-component="project-general-settings"]')).toHaveAttribute(
+      'data-project-type',
+      'orchestration',
+    );
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const detail = page.locator('[data-component="orchestration-project-detail"]');
+    const open = async (label: string) => {
+      await settings
+        .locator('[data-orchestration-project]')
+        .filter({ hasText: label })
+        .getByRole('button', { name: new RegExp(label) })
+        .first()
+        .click();
+      await expect(detail).toHaveAttribute('data-target-id', targets[label]);
+    };
+    await open('Web');
+    const capacity = detail.getByRole('region', { name: 'Capacity and Admission' });
+    // Capacity and admission are read, not refused.
+    await expect(capacity.getByText('Free Memory')).toBeVisible();
+    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+    await expect(capacity).toContainText(/Can start|Refused/);
+    await expect(detail).not.toContainText('is not available');
+    await expect(detail).not.toContainText('not allowed it yet');
+    // Nobody was asked: no permission request was filed for these reads.
+    const permissions = await server.request<{ requests: unknown[] }>(`${base}/permissions`);
+    expect(permissions.requests).toEqual([]);
+    // A project the policy lists no tool for says so in place instead of a refusal.
+    await open('Docs');
+    await expect(capacity.getByText('Free Memory')).toBeVisible();
+    await expect(capacity).toContainText('No AI tool is allowed here yet');
+    await expect(detail).not.toContainText('is not available');
+    await open('Web');
+    await expect(capacity.getByText('Codex Admission')).toBeVisible();
+
+    const directory = join('target', 'visual-captures', 'hs2-y3n3ph');
+    await mkdir(directory, { recursive: true });
+    for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      await expect(capacity.getByText('Codex Admission')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({
+        path: join(
+          directory,
+          `hs2-y3n3ph-project-detail-${String(size.width)}${index === 3 ? '-after-390' : ''}-${browserName}.png`,
+        ),
+        animations: 'disabled',
+      });
+    }
+  } finally {
+    await server.stop();
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

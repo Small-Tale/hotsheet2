@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { ApiHttpError } from '../api';
 import type { ConfirmationOptions } from '../confirmation';
 import {
   createDemoOrchestrationApi,
@@ -203,6 +204,35 @@ describe('a project detail (HS2-W27N1D)', () => {
     t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
     await vi.waitFor(() => {
       expect(t.api.orchestrationCapacity).toHaveBeenLastCalledWith(DEMO_OWNER, DEMO_TARGETS.web, ['vm']);
+    });
+  });
+
+  it('asks admission only for the tools the policy allows on the project, and words refusals by code (HS2-Y3N3PH)', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.api);
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.loading).toBe(false);
+    });
+    expect(t.api.orchestrationAdmission).not.toHaveBeenCalled();
+    expect(t.settings.detailOf(DEMO_OWNER)).toMatchObject({ admissions: [], admissionTools: [] });
+    // A refusal names its cause; an added project is never "not allowed yet".
+    const refusals: [string, RegExp][] = [
+      ['policy_denied', /policy does not allow it/],
+      ['target_unavailable', /cannot be reached/],
+      ['permission_required', /permission request/],
+      ['something_new', /refused \(something_new\)/],
+    ];
+    for (const [code, words] of refusals) {
+      vi.mocked(t.api.orchestrationCapacity).mockRejectedValueOnce(new ApiHttpError('refused', 403, code));
+      await t.settings.loadDetail(DEMO_OWNER, DEMO_TARGETS.api);
+      expect(t.settings.detailOf(DEMO_OWNER)?.capacityError).toMatch(words);
+      expect(t.settings.detailOf(DEMO_OWNER)?.capacityError).not.toMatch(/not allowed it yet/);
+    }
+    // Listed tools are asked, in the project's order.
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.web);
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.admissionTools).toEqual(['codex', 'claude']);
     });
   });
 

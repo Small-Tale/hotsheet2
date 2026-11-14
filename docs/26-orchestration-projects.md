@@ -4099,7 +4099,12 @@ the type changes to Software while it shows.
   the project after the shared confirmation. The app names its person `hotsheet-app` for
   reads and session actions that need an identified actor; adding the project is the
   consent to read it, so capacity and admission reads succeed without asking anyone
-  (HS2-XHQ1EH, HS2-Y3N3PH). Show in Drawer for a remote project's session is unverified
+  (HS2-XHQ1EH, HS2-Y3N3PH). The id stays: the gate needs an identified actor, and
+  observation never asks. Admission is asked only for the tools the policy lets
+  sessions use on that project; with none the detail says _No AI tool is allowed here
+  yet_ rather than showing the policy's refusal. A part that is refused says why by the
+  refusal's code (the policy's limits, an unreachable project, a pending permission
+  request), never "not allowed yet". Show in Drawer for a remote project's session is unverified
   (HS2-6E32N4).
 - **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
   caps and weights (an empty Sessions field leaves the tool out), wind-down and

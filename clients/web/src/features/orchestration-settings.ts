@@ -84,6 +84,8 @@ export interface OrchestrationDetailState {
   capacity?: OrchestrationCapacity;
   capacityError?: string;
   admissions: OrchestrationAdmission[];
+  /** The tools the policy lets sessions use on this project, asked for admission (HS2-Y3N3PH). */
+  admissionTools?: readonly string[];
   admissionError?: string;
   toolCapacity?: OrchestrationToolCapacity;
   toolCapacityError?: string;
@@ -115,10 +117,20 @@ export interface OrchestrationSettingsDependencies {
 }
 
 const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
-/** A detail part's failure in words: the gate's refusal and an unreachable machine say so plainly. */
+/**
+ * A detail part's failure in words, by the refusal's code (HS2-Y3N3PH). Adding a project is the
+ * consent to read it (HS2-XHQ1EH), so a read is refused only by the policy's limits, an unreachable
+ * project, or a person's pending answer; none of them is "not allowed yet".
+ */
+const REFUSALS: Readonly<Record<string, string>> = {
+  policy_denied: 'The policy does not allow it for this project.',
+  target_unavailable: 'This project cannot be reached now.',
+  permission_required: 'It waits for a person to answer a permission request.',
+  permission_denied: 'A person denied it.',
+};
 const readFailure = (reason: unknown) => {
   if (reason instanceof ApiHttpError && reason.status === 403)
-    return `This project has not allowed it yet (${reason.code ?? 'denied'}).`;
+    return REFUSALS[reason.code ?? ''] ?? `It was refused (${reason.code ?? 'forbidden'}).`;
   if (reason instanceof ApiHttpError && reason.status === 502)
     return `Its machine did not answer (${reason.code ?? 'unreachable'}).`;
   return messageOf(reason);
@@ -379,7 +391,16 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
             .flatMap((entry) => entry.resources.map((resource) => resource.namespace)),
         ),
       ],
-      tools = (policy?.tools ?? []).map((tool) => tool.tool);
+      // HS2-Y3N3PH: only the tools the policy lets sessions use here; the policy's limits refuse
+      // admission for any other, which is not something to ask about.
+      configured = new Set((policy?.tools ?? []).map((tool) => tool.tool)),
+      tools = [
+        ...new Set(
+          (policy?.targets?.find((entry) => entry.target_id === targetId)?.tools ?? [])
+            .map((scope) => scope.tool)
+            .filter((tool) => configured.has(tool)),
+        ),
+      ];
     putDetail(projectId, targetId, { loading: !details.value[detailKey(projectId, targetId)]?.resolution });
     const part = async <T>(
       read: () => Promise<T>,
@@ -415,8 +436,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       ),
       part(
         () => Promise.all(tools.map((tool) => api.orchestrationAdmission(projectId, targetId, tool))),
-        (admissions) => ({ admissions, admissionError: undefined }),
-        (message) => ({ admissions: [], admissionError: message }),
+        (admissions) => ({ admissions, admissionTools: tools, admissionError: undefined }),
+        (message) => ({ admissions: [], admissionTools: tools, admissionError: message }),
       ),
       part(
         () => api.orchestrationToolCapacity(projectId),

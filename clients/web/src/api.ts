@@ -1188,10 +1188,20 @@ export interface OrchestrationSession {
 }
 /** The checked-in throughput policy (HS2-YCJDEB). The settings form edits limits only; every other
  * member round-trips unchanged. */
+/** One project's entry in the policy (docs/26 §26.8); members the client does not read round-trip. */
+export interface OrchestrationTargetPolicy {
+  target_id: string;
+  enabled?: boolean;
+  tools?: { tool: string; models?: string[] }[];
+  max_sessions?: number;
+  machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
+  speculation?: boolean;
+  [key: string]: unknown;
+}
 export interface OrchestrationPolicyBody {
   machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
   tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
-  targets?: unknown[];
+  targets?: OrchestrationTargetPolicy[];
   wind_down?: { idle_minutes?: number; keep_warm?: number };
   speculation?: { allowed?: boolean; max_depth?: number; risk_weight?: number; opt_out_tag?: string };
   placement?: {

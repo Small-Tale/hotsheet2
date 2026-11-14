@@ -143,6 +143,9 @@ export function OrchestrationProjectDetail({
               {detail.admissions.map((admission) => (
                 <ValueTableRow label={`${toolLabel(admission.tool)} Admission`} value={admissionValue(admission)} />
               ))}
+              {detail.admissionTools?.length === 0 && !detail.admissionError ? (
+                <ValueTableRow label="Admission" value="No AI tool is allowed here yet" />
+              ) : null}
             </ValueTable>
           ) : detail?.capacityError ? (
             unreadable('Capacity', detail.capacityError)
