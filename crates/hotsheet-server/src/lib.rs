@@ -47,6 +47,7 @@ pub mod source_revision;
 pub mod stuck_causes;
 pub mod sync_ai;
 pub mod sync_loop;
+mod target_store_watch;
 #[cfg(unix)]
 pub mod terminal_broker;
 #[cfg(not(unix))]
@@ -423,6 +424,9 @@ pub struct AppState {
     codex_session_watches: Arc<
         Mutex<std::collections::HashMap<String, routes::terminals::codex_watch::CodexSessionWatch>>,
     >,
+    /// HS2-G5FYP6: watches on the tickets of followed checkouts' linked Git stores that
+    /// this server does not host, kept while run followers' target feeds ask.
+    target_store_watches: Arc<target_store_watch::TargetStoreWatches>,
     /// The `CODEX_HOME` a Codex session that reported none runs under; `None` is the user's
     /// default home (hermetic tests point it at an empty directory).
     default_codex_home: Option<Arc<std::path::PathBuf>>,
@@ -674,6 +678,7 @@ impl AppState {
             claude_usage_follows: Arc::default(),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             codex_session_watches: Arc::default(),
+            target_store_watches: Arc::default(),
             default_codex_home: None,
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),

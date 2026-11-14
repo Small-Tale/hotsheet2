@@ -76,6 +76,37 @@ pub(crate) fn target_events(state: &AppState) -> Arc<dyn TargetEvents> {
 
 struct ServerEvents(AppState);
 
+/// Watch the linked Git stores of `checkout` that this server does not host.
+fn follow_unhosted_stores(state: &AppState, checkout: &hotsheet_ticketing::checkouts::Checkout) {
+    let hosted = state.host.locations();
+    let is_hosted = |connection_id: &str, root: &std::path::Path| {
+        hosted.iter().any(|(id, hosted_root)| {
+            id == connection_id
+                || std::fs::canonicalize(hosted_root).is_ok_and(|hosted_root| hosted_root == root)
+        })
+    };
+    let mut unhosted = Vec::new();
+    for source in checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider == "git")
+    {
+        let root = std::path::PathBuf::from(&source.locator);
+        if is_hosted(&source.connection_id, &root) {
+            // Hosted now: its own store watcher reports it.
+            state.target_store_watches.forget(&source.connection_id);
+        } else {
+            unhosted.push(crate::target_store_watch::UnhostedStore {
+                connection_id: source.connection_id.clone(),
+                root,
+            });
+        }
+    }
+    state
+        .target_store_watches
+        .follow(unhosted, &state.event_log, &state.events);
+}
+
 impl TargetEvents for ServerEvents {
     fn poll(
         &self,
@@ -96,9 +127,20 @@ impl TargetEvents for ServerEvents {
         let ticket_change = |event: &crate::ChangeEvent| {
             matches!(
                 event.kind.as_str(),
-                "created" | "updated" | "deleted" | "changed" | "claimed" | "released" | "moved"
+                "created"
+                    | "updated"
+                    | "deleted"
+                    | "changed"
+                    | "claimed"
+                    | "released"
+                    | "moved"
+                    | crate::target_store_watch::TARGET_STORE_CHANGE_KIND
             ) && sources.contains(event.store.as_str())
         };
+        // HS2-G5FYP6: a linked Git store this server does not host has no store watcher;
+        // keep a light watch on its tickets while followers ask, so a write made there
+        // outside the server (a headless CLI) reaches the feed too.
+        follow_unhosted_stores(state, checkout);
         // HS2-257Q2Z: a session an orchestrator started in this checkout ended or
         // finished a turn.
         let session_change = |event: &crate::ChangeEvent| {

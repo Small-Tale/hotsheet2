@@ -884,10 +884,14 @@ run is not contacted at all, and a run a person took over is still followed.
 A change written straight to a target store, such as by a headless `hotsheet-cli` in the
 session's checkout rather than through a server route, reaches the feed through that
 store's file watcher, so it is seen while the hosting server hosts the store (a project
-open in a client, or its configured stores) (HS2-BDNJ5S). A linked Git store the server
-does not host has no watcher: a write there reaches a follower only when it next
-reconciles (on connect, after a failure or an `overflow`). Covering such stores is
-HS2-G5FYP6.
+open in a client, or its configured stores) (HS2-BDNJ5S). A linked Git store of the
+followed checkout that the server does not host is not hosted for the feed, because an
+index, a native stream and a polling bridge per store cost too much under load. Instead
+the feed keeps one file watcher on that store's `tickets` directory, from a follower's
+first request until no follower has asked for ten minutes. Each changed ticket file is
+recorded in the change log as a `target_store_changed` event that carries only the
+ticket id and is read only by the feed, so cursors and replay work as they do for hosted
+stores (HS2-G5FYP6).
 
 **Planned tickets without a run (HS2-TMA4YA).** A target is also followed while an
 unfinished plan step names one of its tickets: a prerequisite, or the step's own
@@ -3270,8 +3274,9 @@ wound down after its idle time.
 Removing a step from the plan leaves its run queued and its session busy until a
 person cancels the run (HS2-YFPZFP). A target with no live dispatcher or integrator
 never assigns the ticket; the loop reports that and, after a bounded wait, claims it
-for the session (HS2-T16SK0, §26.24). Whether ticket writes made outside the hosting
-server reach its change feed is HS2-BDNJ5S.
+for the session (HS2-T16SK0, §26.24). Ticket writes made outside the hosting
+server reach its change feed, from hosted and unhosted linked stores alike (HS2-BDNJ5S,
+HS2-G5FYP6).
 
 ### Not wired
 

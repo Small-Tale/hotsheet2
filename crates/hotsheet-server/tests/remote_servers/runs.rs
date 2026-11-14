@@ -821,8 +821,8 @@ async fn feed_names(
 /// change feed. A change written straight to a store this server hosts (a headless CLI in
 /// the session's checkout, not a server route) reaches the feed through the store's file
 /// watcher: a claim, a release and a completion each do. A linked store of the same
-/// checkout that the server does not host has no watcher, so a write there does not
-/// reach the feed (HS2-BDNJ5S documents it; HS2-G5FYP6 follows it up).
+/// checkout that the server does not host is watched for the feed instead of hosted, so a
+/// write there reaches it too, and the server still does not host it (HS2-G5FYP6).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
     let root = tempfile::tempdir().unwrap();
@@ -892,9 +892,18 @@ async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
         "the completion written outside the server never reached the feed"
     );
     cursor = next;
-    // A store the server does not host has no watcher: its claim does not reach the feed.
-    // The bound only limits how long the absence is checked.
+    // A store the server does not host reaches the feed through the feed's own watch on
+    // its tickets, which the requests above started.
     ops::claim_with_eta(&other, &elsewhere.id, &now, lease, "cli-worker", None, None).unwrap();
-    let (seen, _) = feed_names(&router, &feed, cursor, 2_000, &elsewhere.id.to_string()).await;
-    assert!(!seen, "an unhosted store reported a change");
+    let (seen, _) = feed_names(&router, &feed, cursor, 30_000, &elsewhere.id.to_string()).await;
+    assert!(
+        seen,
+        "the claim in an unhosted linked store never reached the feed"
+    );
+    let (status, stores) = api(router.clone(), "GET", "/stores", Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{stores}");
+    assert!(
+        !stores.to_string().contains("LNK"),
+        "the feed hosted the linked store: {stores}"
+    );
 }
