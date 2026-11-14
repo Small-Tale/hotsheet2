@@ -198,3 +198,65 @@ fn hs2_w27n1d_set_request_is_strict() {
         assert!(serde_json::from_value::<SetProjectType>(body).is_err());
     }
 }
+
+/// HS2-J3ZF27: the type in effect for every stored value with and without a
+/// declaration. A stored value wins; absence reads as Orchestration only for a project
+/// that declared targets before Project Type existed.
+#[test]
+fn hs2_j3zf27_effective_type_table() {
+    use ProjectType::{Orchestration as O, Software as S};
+    let cases: [(Option<serde_json::Value>, bool, Result<ProjectType, &str>); 10] = [
+        (None, false, Ok(S)),
+        (None, true, Ok(O)),
+        (Some(json!(null)), false, Ok(S)),
+        (Some(json!(null)), true, Ok(O)),
+        (Some(json!("software")), false, Ok(S)),
+        (Some(json!("software")), true, Ok(S)),
+        (Some(json!("orchestration")), false, Ok(O)),
+        (Some(json!("orchestration")), true, Ok(O)),
+        (Some(json!("library")), true, Err("unknown project type")),
+        (Some(json!(2)), true, Err("project type must be a string")),
+    ];
+    for (value, declared, expected) in cases {
+        match (ProjectType::effective(value.as_ref(), declared), expected) {
+            (Ok(found), Ok(wanted)) => {
+                assert_eq!(found, wanted, "{value:?} declared={declared}");
+                assert_eq!(found.orchestrates(), wanted == O);
+            }
+            (Err(OrchestrationError::Invalid(found)), Err(wanted)) => assert_eq!(found, wanted),
+            (other, wanted) => panic!("{value:?} declared={declared}: {other:?} != {wanted:?}"),
+        }
+    }
+}
+
+/// HS2-J3ZF27: walking switches through the effective type: a legacy declared project
+/// orchestrates, an explicit switch back to Software stops it, and switching forward
+/// again resumes it, with nothing dropped on the way.
+#[test]
+fn hs2_j3zf27_switch_sequences_through_the_effective_type() {
+    let read = |stored: Option<ProjectType>, declared: bool| {
+        ProjectType::effective(stored.map(ProjectType::setting_value).as_ref(), declared).unwrap()
+    };
+    // Legacy: declared, nothing stored.
+    let mut stored = None;
+    let mut project = state(read(stored, true), true, 2);
+    assert!(project.current.orchestrates());
+    // Back to Software (confirmed): written explicitly, so it no longer orchestrates.
+    let change = apply(&mut project, ProjectType::Software, true).unwrap();
+    assert!(change.write_setting);
+    stored = Some(project.current);
+    assert!(!read(stored, true).orchestrates());
+    // Repeated: still Software, nothing written.
+    assert!(
+        !apply(&mut project, ProjectType::Software, true)
+            .unwrap()
+            .write_setting
+    );
+    // Forward again: orchestrates with the same projects.
+    apply(&mut project, ProjectType::Orchestration, false).unwrap();
+    stored = Some(project.current);
+    assert!(read(stored, true).orchestrates());
+    assert_eq!(project.active_projects, 2);
+    // A fresh project with nothing declared and nothing stored is Software.
+    assert!(!read(None, false).orchestrates());
+}

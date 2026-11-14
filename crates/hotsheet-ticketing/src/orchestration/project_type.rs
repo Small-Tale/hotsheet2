@@ -56,6 +56,22 @@ impl ProjectType {
         }
     }
 
+    /// HS2-J3ZF27: the type in effect. A stored value wins. Without one, a project
+    /// that already has a target declaration declared it before Project Type existed
+    /// and stays an orchestration project; any other project is Software.
+    pub fn effective(value: Option<&Value>, declared: bool) -> Result<Self, OrchestrationError> {
+        match value {
+            None | Some(Value::Null) if declared => Ok(Self::Orchestration),
+            _ => Self::from_setting(value),
+        }
+    }
+
+    /// HS2-J3ZF27: a Software project has no orchestration: nothing is placed or
+    /// dispatched for it, whatever its kept policy says.
+    pub fn orchestrates(self) -> bool {
+        self == Self::Orchestration
+    }
+
     pub fn setting_value(self) -> Value {
         Value::String(self.code().into())
     }

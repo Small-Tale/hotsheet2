@@ -292,7 +292,8 @@ impl OrchestrationRuntime {
         std::fs::read_to_string(self.home.join(WAKE_DIRECTORY).join("token")).ok()
     }
 
-    /// Owning checkouts whose policy enables automatic placement.
+    /// Owning checkouts whose policy enables automatic placement. A Software project
+    /// is never one, whatever its kept policy says (HS2-J3ZF27).
     pub fn scheduler_owners(&self) -> Vec<String> {
         self.checkouts
             .list()
@@ -303,6 +304,7 @@ impl OrchestrationRuntime {
                     .ok()
                     .and_then(|view| view.policy)
                     .is_some_and(|policy| policy.placement.automatic)
+                    && self.orchestrating(&checkout.id).unwrap_or(false)
             })
             .map(|checkout| checkout.id)
             .collect()
@@ -817,7 +819,10 @@ impl OrchestrationRuntime {
         Ok(ScheduleView {
             now_ms,
             enabled: true,
-            mode: if gathered.policy.placement.automatic && actor.is_some() {
+            mode: if gathered.policy.placement.automatic
+                && actor.is_some()
+                && self.orchestrating(owner_id)?
+            {
                 DecisionMode::Applied
             } else {
                 DecisionMode::DryRun
@@ -1079,7 +1084,10 @@ impl OrchestrationRuntime {
             });
         };
         let actor_id = actor.and_then(|actor| actor.id.clone());
-        let mode = match (gathered.policy.placement.automatic && !dry_run, &actor_id) {
+        // HS2-J3ZF27: a Software project's pass is a dry run whatever its policy says.
+        let applies =
+            gathered.policy.placement.automatic && !dry_run && self.orchestrating(owner_id)?;
+        let mode = match (applies, &actor_id) {
             (true, Some(_)) => DecisionMode::Applied,
             (true, None) => {
                 return Err(OrchestrationError::Invalid(
@@ -1388,6 +1396,10 @@ impl OrchestrationRuntime {
     }
 
     fn scheduler_actor(&self, owner_id: &str) -> Result<Option<MutationActor>, OrchestrationError> {
+        // HS2-J3ZF27: a Software project has no loop.
+        if !self.orchestrating(owner_id)? {
+            return Ok(None);
+        }
         Ok(self
             .policy(owner_id)?
             .policy

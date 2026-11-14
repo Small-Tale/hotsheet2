@@ -178,6 +178,8 @@ impl OrchestrationRuntime {
         let empty = PolicyBody::default();
         let policy = body.as_ref().unwrap_or(&empty);
         let rules = self.permission_ledger().rules(owner_id)?;
+        // HS2-J3ZF27: a Software project acts on nothing, whatever the policy says.
+        let orchestrating = self.orchestrating(owner_id)?;
         let mut targets = Vec::new();
         for declaration in manifest
             .targets
@@ -220,7 +222,9 @@ impl OrchestrationRuntime {
                             .map(|account| account.account.clone()),
                         ..SessionLoad::default()
                     });
-                    let verdict = if body.is_none() && action != TargetAction::SessionsManage {
+                    let verdict = if !orchestrating && !action.observes() {
+                        PolicyVerdict::Denied(PolicyDenial::ProjectSoftware)
+                    } else if body.is_none() && action != TargetAction::SessionsManage {
                         // Without a policy, explicit actions have no limits; a person
                         // is asked for them.
                         PolicyVerdict::Allowed
@@ -305,6 +309,11 @@ impl OrchestrationRuntime {
         request: &AccessRequest,
         target_id: &str,
     ) -> PolicyAnswer {
+        // HS2-J3ZF27: a Software project has no orchestration, whatever its kept
+        // policy says. A type that cannot be read refuses too.
+        if !self.orchestrating(owner_id).unwrap_or(false) {
+            return PolicyAnswer::Denied(PolicyDenial::ProjectSoftware);
+        }
         let policy = match self.policy(owner_id) {
             Ok(view) => view.policy,
             Err(_) => return PolicyAnswer::Denied(PolicyDenial::NoPolicy),

@@ -109,7 +109,7 @@ impl OrchestrationRuntime {
             .map_err(settings_error)?;
         let manifest = self.flow(owner)?.declarations()?;
         Ok(TypeState {
-            current: ProjectType::from_setting(stored.as_ref())?,
+            current: ProjectType::effective(stored.as_ref(), manifest.enabled)?,
             declared: manifest.enabled,
             active_projects: manifest
                 .targets
@@ -126,6 +126,14 @@ impl OrchestrationRuntime {
             active_projects: state.active_projects,
             changed,
         }
+    }
+
+    /// HS2-J3ZF27: whether the owner orchestrates now. A Software project has no
+    /// orchestration: the scheduler places nothing and acting actions are refused,
+    /// whatever its kept policy says. An unknown owner or unreadable type does not.
+    pub(super) fn orchestrating(&self, owner_id: &str) -> Result<bool, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        Ok(self.type_state(&owner)?.current.orchestrates())
     }
 
     /// The project's type and how many projects its declaration holds. Reads two
@@ -172,6 +180,11 @@ impl OrchestrationRuntime {
                 .map_err(settings_error)?;
         }
         let changed = change.write_setting || change.create_declaration;
+        if change.write_setting {
+            // HS2-J3ZF27: a running loop learns at once that it stops (to Software)
+            // or that a kept automatic policy applies again.
+            Self::scheduler_wake_at(&self.home);
+        }
         if changed {
             self.audit_record(
                 owner_id,

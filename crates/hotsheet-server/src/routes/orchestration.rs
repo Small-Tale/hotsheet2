@@ -427,7 +427,16 @@ fn scheduled_owner(method: &Method, path: &str) -> Option<String> {
     let path = path.split_once('?').map_or(path, |(path, _)| path);
     let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     match (method.as_str(), parts.as_slice()) {
-        ("PUT", ["checkouts", owner, "orchestration", "policy"])
+        // HS2-J3ZF27: a switch back to Orchestration resumes a kept automatic policy.
+        (
+            "PUT",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "policy" | "project-type",
+            ],
+        )
         | ("POST", ["checkouts", owner, "orchestration", "scheduler", _]) => {
             Some((*owner).to_owned())
         }

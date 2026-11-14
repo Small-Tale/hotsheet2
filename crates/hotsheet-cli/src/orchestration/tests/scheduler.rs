@@ -1497,3 +1497,144 @@ fn hs2_dg0ypa_an_adopted_start_is_logged_and_audited_and_not_remembered() {
         )]
     );
 }
+
+/// HS2-J3ZF27: a Software project has no orchestration. Its kept automatic policy
+/// places nothing, the loop ends, every acting action is refused by the gate with a
+/// typed detail, while observation and winding down stay allowed; switching back to
+/// Orchestration resumes placement from the same policy.
+#[test]
+fn hs2_j3zf27_a_software_project_places_and_dispatches_nothing() {
+    use hotsheet_ticketing::orchestration::{
+        AccessRequest, DenialReason, ProjectType, SessionRequest, SetProjectType, TargetRef,
+    };
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let owner = s.owner();
+    s.ready("First", &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
+    let switch = |kind: ProjectType, tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .set_project_type(
+                &owner,
+                SetProjectType {
+                    project_type: kind,
+                    keep_projects: true,
+                },
+                Some(&human()),
+                tx,
+            )
+            .unwrap()
+    };
+    // A project that declared targets before Project Type existed orchestrates.
+    assert_eq!(
+        s.m.runtime.project_type(&owner).unwrap().project_type,
+        ProjectType::Orchestration
+    );
+    assert_eq!(s.m.runtime.scheduler_owners(), std::slice::from_ref(&owner));
+
+    // Back to Software, keeping the projects and the automatic policy.
+    let mut state = SchedulerFollowState::default();
+    let view = switch(ProjectType::Software, &mut tx);
+    assert!(view.changed && view.active_projects == 1);
+    assert!(s.m.runtime.scheduler_owners().is_empty());
+    // The loop ends at once, without a pass; repeated steps stay ended.
+    for _ in 0..2 {
+        assert_eq!(
+            s.m.runtime
+                .scheduler_follow_step(&owner, &mut state, 0, &mut tx),
+            SchedulerStep::default()
+        );
+    }
+    // A manual tick and a plan are dry runs: nothing starts.
+    for _ in 0..2 {
+        let tick = s.tick(&mut tx);
+        assert_eq!(tick.view.mode, DecisionMode::DryRun);
+        assert!(tick.outcomes.is_empty());
+    }
+    let planned =
+        s.m.runtime
+            .scheduler_plan(&owner, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(planned.mode, DecisionMode::DryRun);
+    assert!(s.sessions.calls().is_empty());
+
+    // Acting actions are refused by the gate, even a person's own, and audited.
+    let target = TargetRef {
+        owner_checkout_id: owner.clone(),
+        target_id: id(1),
+    };
+    for (actor, operation) in [(worker(), "op-ai"), (human(), "op-person")] {
+        let refused = s.m.runtime.authorize(
+            &target,
+            Some(&actor),
+            ActionRequest {
+                operation_id: Some(operation.into()),
+                ..ActionRequest::new(TargetAction::WorkStart)
+            },
+            &mut tx,
+        );
+        assert!(matches!(
+            refused,
+            Err(OrchestrationError::Denied(DenialReason::PolicyDenied))
+        ));
+    }
+    assert_eq!(
+        s.audited("work_start")
+            .into_iter()
+            .map(|(outcome, reason, _)| (outcome, reason))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                AuditOutcome::Denied,
+                Some("policy_project_software".to_owned())
+            );
+            2
+        ]
+    );
+    // The side-effect-free check says why; the dry run agrees.
+    let start = SessionRequest {
+        tool: "codex".into(),
+        model: None,
+        running: 0,
+        starting: true,
+    };
+    let check = |session: Option<SessionRequest>, action, tx: &mut Transaction<'_>| {
+        let mut request = AccessRequest::new("worker-1".to_owned(), action);
+        request.session = session;
+        s.m.runtime.access(&target, &request, false, tx).unwrap()
+    };
+    let asked = check(Some(start.clone()), TargetAction::SessionsManage, &mut tx);
+    assert_eq!(
+        (asked.allowed, asked.detail.as_deref()),
+        (false, Some("policy_project_software"))
+    );
+    // Observation and winding down stay allowed: running work stays as it is.
+    assert!(check(None, TargetAction::TicketsRead, &mut tx).allowed);
+    let stop = SessionRequest {
+        starting: false,
+        ..start
+    };
+    assert!(check(Some(stop), TargetAction::SessionsManage, &mut tx).allowed);
+    let dry =
+        s.m.runtime
+            .dry_run_policy(&owner, serde_json::from_value(json!({})).unwrap())
+            .unwrap();
+    let details: Vec<_> = dry.targets[0]
+        .actions
+        .iter()
+        .map(|action| (action.action, action.policy_detail))
+        .collect();
+    for (action, detail) in details {
+        let expected = (!action.observes()).then_some("policy_project_software");
+        assert_eq!(detail, expected, "{action:?}");
+    }
+
+    // Forward again: the kept policy places at once.
+    switch(ProjectType::Orchestration, &mut tx);
+    assert_eq!(s.m.runtime.scheduler_owners(), std::slice::from_ref(&owner));
+    let resumed =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!((resumed.active, resumed.trigger), (true, Some("start")));
+    assert_eq!(s.sessions.calls().len(), 1);
+}

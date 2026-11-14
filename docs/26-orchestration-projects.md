@@ -49,7 +49,7 @@
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
 > the OpenAPI contract describes them. Project Type and the Orchestration settings
 > category with its projects, project detail and limits-only policy ship in the web client
-> (§26.27, HS2-W27N1D).
+> (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27).
 
 ## 26.1 Boundary and existing foundations
 
@@ -619,7 +619,9 @@ person is asked, so a request is never filed for an action the limits refuse.
   `policy_target_disabled`, `policy_tool_not_permitted`, `policy_model_not_permitted`,
   `policy_load_unknown`, `policy_target_cap`, `policy_machine_cap`,
   `policy_tool_cap`, `policy_account_not_permitted`, `policy_account_cap`,
-  `policy_speculation_not_allowed`. The audit entry records the detail.
+  `policy_speculation_not_allowed`, and `policy_project_software` for every acting
+  action of a project whose type is Software (§26.27, HS2-J3ZF27). The audit entry
+  records the detail.
 - **Caps.** A session start states the current load (sessions on the target, on its
   machine, on the tool and on the account). A start without it is denied, and each
   cap denies exactly at its bound. Stopping or winding down needs no headroom.
@@ -4012,7 +4014,9 @@ Propose Plan is HS2-HCW7MD.
 ### Project Type
 
 `project_type` is a shared, checked-in project setting (`.hotsheet2/settings.json`,
-`Scope::Shared`): `software` (the default when absent) or `orchestration`. A value this
+`Scope::Shared`): `software` or `orchestration`. When it is absent the project is
+Software, unless it already has a target declaration: such a project declared targets
+before Project Type existed and reads as Orchestration (HS2-J3ZF27). A value this
 version does not know is refused rather than read as Software. Switching is one decision
 table in the core (`plan_type_change`), and every client calls the same runtime workflow:
 
@@ -4027,7 +4031,18 @@ Back to Software keeps the declaration, this machine's bindings and the policy, 
 later switch to Orchestration finds every project where it was. The web client asks
 first, with the shared confirmation, and the General hint then says how many projects
 stay. Each change is audited as `project_type_set` with the new type as its reason.
-The scheduler does not read the type yet (HS2-J3ZF27).
+
+**A Software project orchestrates nothing (HS2-J3ZF27).** Whatever its kept policy
+says, the server runs no scheduling loop for it, and `scheduler_tick` and
+`scheduler_plan` are dry runs that place nothing. Every acting action on its targets
+(run dispatch, session start, ticket writes, validation, deployments, building ahead),
+including a person's own, is refused by the policy step of `authorize` as
+`policy_denied` with the detail `policy_project_software`, audited like any denial;
+`access` and the policy dry run report the same detail. Reading and following its
+projects stay allowed, and so does reducing activity: sessions and runs already going
+keep going until a person, or `session_stop` and `run_cancel`, winds them down. A
+switch wakes the scheduler, and a switch back to Orchestration starts the loop again
+when the kept policy places automatically.
 
 ### Adding and removing a project
 

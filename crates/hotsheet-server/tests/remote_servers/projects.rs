@@ -226,6 +226,51 @@ async fn hs2_w27n1d_cli_http_and_mcp_share_project_type_and_projects() {
         (&back["project_type"], &back["active_projects"]),
         (&json!("software"), &json!(1))
     );
+    // HS2-J3ZF27: a Software project keeps its projects but acts on none of them.
+    // Every client reads the same typed refusal; reading stays allowed.
+    let refused =
+        json!({"allowed":false,"reason":"policy_denied","detail":"policy_project_software"});
+    assert_eq!(
+        call(
+            json!({"action":"access_check","checkout":owner.id,"target_id":api_target,
+            "for_actor":"worker-1","target_action":"work_start","operation_id":"op-1"})
+        ),
+        refused
+    );
+    let (status, checked) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets/{api_target}/access"),
+        json!({"actor_id":"worker-1","action":"work_start","operation_id":"op-1"}),
+        true,
+    )
+    .await;
+    assert_eq!((status, checked), (StatusCode::OK, refused.clone()));
+    let checked = cli_named(
+        &home,
+        &human,
+        &[
+            "permission",
+            "check",
+            &api_target,
+            "--project",
+            &owner.id,
+            "--actor",
+            "worker-1",
+            "--action",
+            "work_start",
+        ],
+    );
+    assert_eq!(checked, refused);
+    let (_, read) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets/{api_target}/access"),
+        json!({"actor_id":"worker-1","action":"tickets_read"}),
+        true,
+    )
+    .await;
+    assert_eq!(read["basis"], "observation");
     let _ = stop.send(());
     tokio::time::timeout(std::time::Duration::from_secs(10), task)
         .await

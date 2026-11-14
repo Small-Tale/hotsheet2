@@ -370,6 +370,8 @@ pub enum PolicyDenial {
     AccountNotPermitted,
     AccountCap,
     SpeculationNotAllowed,
+    /// HS2-J3ZF27: the owning project's type is Software, so it orchestrates nothing.
+    ProjectSoftware,
 }
 
 impl PolicyDenial {
@@ -387,6 +389,7 @@ impl PolicyDenial {
             Self::AccountNotPermitted => "policy_account_not_permitted",
             Self::AccountCap => "policy_account_cap",
             Self::SpeculationNotAllowed => "policy_speculation_not_allowed",
+            Self::ProjectSoftware => "policy_project_software",
         }
     }
 }

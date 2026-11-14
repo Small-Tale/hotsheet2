@@ -2949,6 +2949,14 @@ production persistence defect.
   project added by another client arrives through the change stream, the detail, Apply
   Policy, Stop Orchestrating…, and the confirmed switch back that keeps a project. A
   second test captures 1440, 1100 and 390 in both schemes, wide to narrow to wide.
+- HS2-J3ZF27: `project_type_tests.rs # hs2_j3zf27` tables the effective type (a stored
+  value wins; absent reads as Orchestration only with a declaration) and walks switches
+  through it; `tests/scheduler.rs # hs2_j3zf27` keeps an automatic policy on a Software
+  project and checks that the loop ends, ticks and plans are dry runs, acting actions
+  (an AI's and a person's) are refused and audited as `policy_project_software`,
+  `access` and the dry run agree, reading and winding down stay allowed, and a switch
+  back places again; `remote_servers/projects.rs` reads the same refusal through HTTP,
+  the CLI and MCP.
 - Not covered: Show in Drawer for a remote project's session (HS2-6E32N4).
 
 ### Orchestration progress and cost summary (HS2-S13719)
