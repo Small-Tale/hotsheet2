@@ -1143,7 +1143,11 @@ local grant and device management on the admin grant;
 `{dev-server,project-bridge,terminal-ws-bridge,local-host}.ts` enforce remote
 mode before proxying or local bearer injection. App Settings → Devices is
 `components/remote-devices-settings{,-interactions}.tsx`, `features/remote-devices.ts`
-and `remote-devices-model.ts`. See [04](04-core-server-cli.md) §4.6.1 and
+and `remote-devices-model.ts`. App Settings → Projects (HS2-R806FZ) is
+`components/registered-projects-settings{,-interactions}.tsx`,
+`features/registered-projects.ts`, `registered-projects-model.ts`, and the host-only
+`/__hotsheet/registered-projects` routes in `dev-server.ts` over
+`project-bridge.ts` `listRegisteredProjects`/`removeRegisteredProject`. See [04](04-core-server-cli.md) §4.6.1 and
 [08](08-distributed-and-remote.md) §8.2.2.
 Project Settings → General (Project Type) and Settings → Orchestration (HS2-W27N1D,
 [26](26-orchestration-projects.md) §26.27) are `components/project-general-settings.tsx`,

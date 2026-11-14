@@ -49,6 +49,8 @@ export interface SettingsSurfaceDependencies {
   notificationSettings?: () => Props['notifications'];
   /** App Settings → Devices (HS2-DXM0YN). */
   remoteDevices?: () => Props['devices'];
+  /** App Settings → Projects (HS2-R806FZ). */
+  registeredProjects?: () => Props['projects'];
   developmentStrategy?: (projectId: string) => Props['developmentStrategy'];
   /** Project Settings → General: Project Type (HS2-W27N1D). */
   projectGeneral?: (projectId: string) => Props['projectGeneral'];
@@ -116,6 +118,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     terminalLimitDeviceDefaults,
     notificationSettings,
     remoteDevices,
+    registeredProjects,
     developmentStrategy,
     projectGeneral,
     orchestration,
@@ -208,6 +211,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
         }}
         notifications={notificationSettings?.()}
         devices={remoteDevices?.()}
+        projects={registeredProjects?.()}
         terminalMemory={{
           limits: terminalLimits?.value,
           deviceDefaults: terminalLimitDeviceDefaults?.(),

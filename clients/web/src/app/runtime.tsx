@@ -158,6 +158,7 @@ import {
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
+import { createRegisteredProjects } from '../features/registered-projects';
 import { createRemoteDevices } from '../features/remote-devices';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
@@ -1674,6 +1675,15 @@ export async function startHotSheetWebClient() {
   effect(() => {
     if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
     else remoteDevices.stop();
+  });
+  // App Settings → Projects (HS2-R806FZ): the list loads each time the category opens; nothing polls.
+  const registeredProjects = createRegisteredProjects();
+  let registeredProjectsShown = false;
+  effect(() => {
+    const shown = selectedSettingsCategory.value === 'projects' && Boolean(project());
+    if (shown && !registeredProjectsShown) registeredProjects.start();
+    else if (!shown && registeredProjectsShown) registeredProjects.stop();
+    registeredProjectsShown = shown;
   });
   let notificationSettingsShown = false;
   effect(() => {
@@ -5136,6 +5146,12 @@ export async function startHotSheetWebClient() {
       message: remoteDevices.message.value,
       busy: remoteDevices.busy.value,
     }),
+    registeredProjects: () => ({
+      state: registeredProjects.state.value,
+      list: registeredProjects.list.value,
+      message: registeredProjects.message.value,
+      busy: registeredProjects.busy.value,
+    }),
     permissionAutomation,
     permissionRules,
     permissionRulesDialogFor,
@@ -6535,6 +6551,7 @@ export async function startHotSheetWebClient() {
     notificationSettings,
     remoteDevices,
     orchestrationSettings: orchestrationSurface.settings,
+    registeredProjects,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,

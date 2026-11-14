@@ -22,6 +22,7 @@ import {
 import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import type { RegisteredProject } from './registered-projects-model';
 import {
   discoverRemoteProjects,
   type PrivateRemoteConnection,
@@ -1833,6 +1834,51 @@ export async function listServerCheckouts(
     }),
   );
   return checkouts.filter((_, index) => available[index]);
+}
+
+/** Every project registered with the bootstrap server, with whether its folder exists, for
+ * App Settings → Projects (HS2-R806FZ). Unlike {@link listServerCheckouts}, which feeds the
+ * picker, it keeps a missing folder so the person can see and remove it. */
+export async function listRegisteredProjects(
+  ensure: (store: string) => Promise<InstanceInfo> = ensureServer,
+  request: (target: SessionTarget, path: string) => Promise<unknown> = (target, path) =>
+    serverRequest(target, path, (value) => value),
+  resolveStore: () => Promise<string> = bootstrapStore,
+): Promise<RegisteredProject[]> {
+  const store = await resolveStore();
+  const instance = await ensure(store);
+  const checkouts = parseCheckouts(
+    await request({ url: instance.url, secret: instance.secret, serverStore: store }, '/checkouts'),
+  );
+  return Promise.all(
+    checkouts.map(async (checkout) => {
+      let available = false;
+      try {
+        available = (await stat(checkout.root)).isDirectory();
+      } catch {
+        // A deleted, unmounted, or unreadable folder is reported as missing.
+      }
+      return { id: checkout.id, alias: checkout.alias, root: checkout.root, available };
+    }),
+  );
+}
+
+/** Unregister one project through the server's removal workflow (HS2-X4RZ73). It never deletes
+ * files; the server refuses while a window has the project open, and that reason is thrown. */
+export async function removeRegisteredProject(
+  id: string,
+  ensure: (store: string) => Promise<InstanceInfo> = ensureServer,
+  request: (target: SessionTarget, path: string, method: 'DELETE') => Promise<unknown> = (target, path, method) =>
+    serverRequest(target, path, (value) => value, { method }),
+  resolveStore: () => Promise<string> = bootstrapStore,
+): Promise<void> {
+  const store = await resolveStore();
+  const instance = await ensure(store);
+  await request(
+    { url: instance.url, secret: instance.secret, serverStore: store },
+    `/checkouts/${encodeURIComponent(id)}`,
+    'DELETE',
+  );
 }
 
 /** The browser-facing host must opt in before it can serve remote clients. Its backend

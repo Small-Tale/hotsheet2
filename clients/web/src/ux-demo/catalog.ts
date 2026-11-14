@@ -379,6 +379,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('orchestration-settings', ['list-action-row', 'orchestration-policy-settings']),
       cataloged('orchestration-policy-settings'),
       cataloged('orchestration-project-detail', ['list-action-row']),
+      cataloged('registered-projects-settings', ['list-action-row']),
       cataloged('permission-rules-settings'),
     ],
   },

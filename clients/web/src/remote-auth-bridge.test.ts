@@ -346,7 +346,14 @@ describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () =>
       '/__hotsheet/remote-auth/me',
     ])
       expect(remoteRouteKind(path), path).toBe('session');
-    for (const path of ['/__hotsheet/folders/choose', '/__hotsheet/projects/open', '/__hotsheet/projects/setup-git'])
+    for (const path of [
+      '/__hotsheet/folders/choose',
+      '/__hotsheet/projects/open',
+      '/__hotsheet/projects/setup-git',
+      // HS2-R806FZ: listing and removing registered projects needs the local grant.
+      '/__hotsheet/registered-projects',
+      '/__hotsheet/registered-projects/web-1',
+    ])
       expect(remoteRouteKind(path), path).toBe('host');
   });
 

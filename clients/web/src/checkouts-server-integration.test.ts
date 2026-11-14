@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Checkout, ProviderConnection, SourceDetach } from './api';
 import { createDevApp } from './dev-server';
 import { createLocalGitTicketStore, listServerCheckouts, openLocalProject } from './project-bridge';
+import { parseRegisteredProjects, REGISTERED_PROJECTS_PATH } from './registered-projects-model';
 import { parseProviderAccount } from './server-response-parsers';
 
 /**
@@ -120,6 +121,35 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     const afterDeletion = await createDevApp().request('/__hotsheet/checkouts');
     expect(afterDeletion.status).toBe(200);
     expect((await afterDeletion.json()) as Checkout[]).not.toContainEqual(expect.objectContaining({ id: session.id }));
+  }, 120_000);
+
+  it('lists registered projects with missing folders and removes one through the real server (HS2-R806FZ)', async () => {
+    const projectRoot = await mkdtemp(join(workspace, 'registered-'));
+    const session = await openLocalProject(projectRoot, await createLocalGitTicketStore(projectRoot));
+    const app = createDevApp();
+    const listed = async () => {
+      const response = await app.request(REGISTERED_PROJECTS_PATH);
+      expect(response.status).toBe(200);
+      return parseRegisteredProjects(await response.json());
+    };
+    expect((await listed()).find((project) => project.id === session.id)).toMatchObject({ available: true });
+
+    // A deleted folder stays listed here, marked missing, unlike the picker route.
+    await rm(projectRoot, { recursive: true, force: true });
+    expect((await listed()).find((project) => project.id === session.id)).toMatchObject({ available: false });
+    const picker = (await (await app.request('/__hotsheet/checkouts')).json()) as Checkout[];
+    expect(picker.some((checkout) => checkout.id === session.id)).toBe(false);
+
+    const removed = await app.request(`${REGISTERED_PROJECTS_PATH}/${encodeURIComponent(session.id)}`, {
+      method: 'DELETE',
+    });
+    expect(removed.status).toBe(200);
+    expect((await listed()).some((project) => project.id === session.id)).toBe(false);
+    // Removing again is the server's idempotent no-op.
+    const again = await app.request(`${REGISTERED_PROJECTS_PATH}/${encodeURIComponent(session.id)}`, {
+      method: 'DELETE',
+    });
+    expect(again.status).toBe(200);
   }, 120_000);
 
   it('keeps ticket sources with their project and lists machine-wide accounts (HS2-SM9PM8)', async () => {

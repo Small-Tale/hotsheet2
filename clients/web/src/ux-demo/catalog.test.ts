@@ -216,6 +216,7 @@ describe('UX demo catalog', () => {
       'orchestration-settings',
       'orchestration-policy-settings',
       'orchestration-project-detail',
+      'registered-projects-settings',
       'permission-rules-settings',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');

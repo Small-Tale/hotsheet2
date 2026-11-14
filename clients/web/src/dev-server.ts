@@ -22,6 +22,7 @@ import {
   connectGitTicketStoreRemote,
   createLocalGitTicketStore,
   gitTicketStoreConnectionId,
+  listRegisteredProjects,
   listServerCheckouts,
   migrateHs1Project,
   openLocalProject,
@@ -32,11 +33,13 @@ import {
   remoteBrowserAuthRequired,
   remoteCsrfCookie,
   removeImportedHs1Data,
+  removeRegisteredProject,
   revealCorruptTicket,
   type UnhealthyServerRecovery,
   unhealthyServerRecovery,
   UnregisteredRemoteProjectError,
 } from './project-bridge';
+import { REGISTERED_PROJECTS_PATH, type RegisteredProject } from './registered-projects-model';
 import {
   beginRemotePairing,
   discoverRemoteProjects,
@@ -122,6 +125,10 @@ export function createDevApp(
   openRemote: (root: string) => Promise<unknown> = openRegisteredProject,
   checkRemoteSession: (headers: Headers) => Promise<Response> = (headers) =>
     browserAuthRequest('/remote-auth/me', new Request('http://bridge.invalid/remote-auth/me', { headers })),
+  registeredProjects: {
+    list: () => Promise<RegisteredProject[]>;
+    remove: (id: string) => Promise<void>;
+  } = { list: listRegisteredProjects, remove: removeRegisteredProject },
 ): Hono {
   const app = new Hono();
   app.use('/__hotsheet/*', async (context, next) => {
@@ -201,6 +208,26 @@ export function createDevApp(
         { error: error instanceof Error ? error.message : 'Could not list the projects open on the Hot Sheet server.' },
         502,
       );
+    }
+  });
+  // App Settings → Projects (HS2-R806FZ): every registered project, with missing folders kept, and
+  // removal through the server's workflow. Host-only (local grant), like the other machine routes.
+  app.get(REGISTERED_PROJECTS_PATH, async (context) => {
+    try {
+      return context.json(await registeredProjects.list());
+    } catch (error) {
+      return context.json(
+        { error: error instanceof Error ? error.message : 'Could not list the projects registered on this computer.' },
+        502,
+      );
+    }
+  });
+  app.delete(`${REGISTERED_PROJECTS_PATH}/:id`, async (context) => {
+    try {
+      await registeredProjects.remove(context.req.param('id'));
+      return context.json({ removed: true });
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not remove the project.' }, 409);
     }
   });
   // Remote browsers open only checkouts the host already registered; the local route below can set up any
