@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseOrchestrationPolicy, parseOrchestrationTimeline } from './orchestration-timeline';
+import { parseOrchestrationTimeline } from './orchestration-timeline';
 import { demoTimeline } from './ux-demo/orchestration-fixtures';
 
 describe('orchestration timeline response contract (HS2-J89JC7)', () => {
@@ -31,18 +31,5 @@ describe('orchestration timeline response contract (HS2-J89JC7)', () => {
     ).toThrow();
     expect(drifted((value) => ((value.kick_off as Record<string, unknown>).can_start = 'yes'))).toThrow();
     expect(() => parseOrchestrationTimeline([])).toThrow();
-  });
-
-  it('reads the stored policy with or without a body', () => {
-    expect(parseOrchestrationPolicy({ enabled: false, revision: null, policy: null })).toEqual({
-      enabled: false,
-      revision: null,
-      policy: null,
-    });
-    expect(
-      parseOrchestrationPolicy({ enabled: true, revision: 'r1', policy: { placement: { automatic: false } } }).revision,
-    ).toBe('r1');
-    expect(() => parseOrchestrationPolicy({ enabled: true, revision: 7, policy: null })).toThrow();
-    expect(() => parseOrchestrationPolicy({ enabled: true, revision: 'r1', policy: [] })).toThrow();
   });
 });

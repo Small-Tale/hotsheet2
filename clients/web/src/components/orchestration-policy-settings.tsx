@@ -1,0 +1,173 @@
+import { Button } from '@kerfjs/ui/button';
+import { rem } from '@kerfjs/ui/css-values';
+import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
+import { Row } from '@kerfjs/ui/row';
+import { Switch } from '@kerfjs/ui/switch';
+import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
+
+import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
+import type { PolicyDraft } from '../orchestration-settings-model';
+
+export interface OrchestrationPolicySettingsProps {
+  /** Absent while the policy is read for the first time. */
+  draft?: PolicyDraft;
+  saving?: boolean;
+  /** The tool's display name, such as Claude for `claude`. */
+  toolLabel?: (tool: string) => string;
+}
+
+/**
+ * The policy part of Settings → Orchestration (docs/26 §26.8), limits only (HS2-XHQ1EH): automatic
+ * placement, machine defaults, tool caps, wind-down and build-ahead. What the orchestrator may do in a
+ * project is not listed here; it asks through the permission prompt. Controls carry their draft field
+ * in `name`; the delegated `change` handler updates the draft and Apply Policy stores it.
+ */
+export function OrchestrationPolicySettings({
+  draft,
+  saving = false,
+  toolLabel = (tool) => tool,
+}: OrchestrationPolicySettingsProps) {
+  const disabled = saving || !draft;
+  return (
+    <section aria-label="Policy" data-component="orchestration-policy-settings">
+      <List gap="l">
+        <List gap="xs">
+          <Text variant="h2" size="large" flush>
+            Policy
+          </Text>
+          <Text tone="quiet" flush>
+            The orchestrator starts, refills and winds down AI sessions inside these limits. The policy is checked in
+            with the project.
+          </Text>
+        </List>
+        <Switch
+          name="automatic"
+          label="Place sessions automatically"
+          hint="Off: the orchestrator plans where sessions would run and starts none."
+          checked={draft?.automatic ?? false}
+          disabled={disabled}
+        />
+        <List gap="m">
+          <Text variant="h3" size="medium" flush>
+            Machine Defaults
+          </Text>
+          <Grid minColumnWidth={rem(14)} gap="m">
+            <TextField
+              name="machine.max_sessions"
+              label="Sessions per Machine"
+              type="number"
+              inputMode="numeric"
+              value={draft?.machine.max_sessions ?? ''}
+              disabled={disabled}
+            />
+            <TextField
+              name="machine.min_free_ram_mb"
+              label="Free Memory Floor (MB)"
+              type="number"
+              inputMode="numeric"
+              value={draft?.machine.min_free_ram_mb ?? ''}
+              disabled={disabled}
+            />
+            <TextField
+              name="machine.max_cpu_percent"
+              label="CPU Ceiling (%)"
+              type="number"
+              inputMode="numeric"
+              value={draft?.machine.max_cpu_percent ?? ''}
+              disabled={disabled}
+            />
+            <TextField
+              name="machine.min_free_disk_mb"
+              label="Free Disk Floor (MB)"
+              type="number"
+              inputMode="numeric"
+              value={draft?.machine.min_free_disk_mb ?? ''}
+              disabled={disabled}
+            />
+          </Grid>
+        </List>
+        <List gap="m">
+          <List gap="xs">
+            <Text variant="h3" size="medium" flush>
+              Tools
+            </Text>
+            <Text tone="quiet" size="compact" flush>
+              Leave Sessions empty for a tool the orchestrator should not start.
+            </Text>
+          </List>
+          {draft && draft.tools.length > 0 ? (
+            <FramedList label="Tools">
+              {draft.tools.map((tool) => (
+                <FramedListRow>
+                  <Row gap="m" wrap vAlign="bottom">
+                    <Text weight="strong">{toolLabel(tool.tool)}</Text>
+                    <TextField
+                      name={`tool.${tool.tool}.max_sessions`}
+                      label="Sessions"
+                      type="number"
+                      inputMode="numeric"
+                      value={tool.max_sessions}
+                      size="compact"
+                      disabled={disabled}
+                    />
+                    <TextField
+                      name={`tool.${tool.tool}.weight`}
+                      label="Weight"
+                      type="number"
+                      inputMode="numeric"
+                      value={tool.weight}
+                      size="compact"
+                      disabled={disabled}
+                    />
+                  </Row>
+                </FramedListRow>
+              ))}
+            </FramedList>
+          ) : (
+            <Text tone="quiet" size="compact" flush>
+              {draft ? 'No AI tools are set up on this computer.' : 'Loading tools…'}
+            </Text>
+          )}
+        </List>
+        <List gap="m">
+          <Text variant="h3" size="medium" flush>
+            Wind-Down and Build-Ahead
+          </Text>
+          <Grid minColumnWidth={rem(14)} gap="m">
+            <TextField
+              name="idle_minutes"
+              label="Wind Down After Idle (Minutes)"
+              type="number"
+              inputMode="numeric"
+              value={draft?.idle_minutes ?? ''}
+              disabled={disabled}
+            />
+            <TextField
+              name="keep_warm"
+              label="Idle Sessions Kept per Project"
+              type="number"
+              inputMode="numeric"
+              value={draft?.keep_warm ?? ''}
+              disabled={disabled}
+            />
+          </Grid>
+          <Switch
+            name="build_ahead"
+            label="Build ahead on a prerequisite whose CI is pending"
+            hint="Off: the orchestrator asks on the goal ticket before building ahead. Tickets tagged speculate:never are never built ahead."
+            checked={draft?.build_ahead ?? false}
+            disabled={disabled}
+          />
+        </List>
+        <Row gap="xs">
+          <Button emphasis="primary" action={ACTIONS.applyPolicy.value} disabled={disabled} loading={saving}>
+            Apply Policy
+          </Button>
+        </Row>
+      </List>
+    </section>
+  );
+}

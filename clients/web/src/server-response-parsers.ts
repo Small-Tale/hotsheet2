@@ -50,16 +50,29 @@ import type {
   NotifierDescriptor,
   NotifierList,
   NotifierSettingField,
+  OrchestrationAdmission,
+  OrchestrationBinding,
+  OrchestrationCapacity,
   OrchestrationLink,
+  OrchestrationManifest,
+  OrchestrationPolicyView,
+  OrchestrationProjectView,
+  OrchestrationResolution,
+  OrchestrationSession,
+  OrchestrationTargetDeclaration,
+  OrchestrationToolCapacity,
+  OrchestrationToolCapacityRow,
   PermissionRequest,
   PhaseReport,
   PollResponse,
   ProjectTicketRef,
+  ProjectTypeView,
   ProviderAccount,
   ProviderConnection,
   ProviderDescriptor,
   ProviderOutboxOperation,
   QueuedProviderResult,
+  RemovedOrchestrationProject,
   RepositoryFile,
   RepositoryPage,
   RepositorySizeEntry,
@@ -1569,4 +1582,144 @@ export const parsePollResponse = shape<PollResponse>('change poll', {
   cursor: isNumber,
   events: listOf((event) => isRecord(event) && isString(event.kind)),
   overflow: isBoolean,
+});
+
+/* ---- Project Type and Settings → Orchestration (HS2-W27N1D) ------------------------------- */
+
+const oneOf =
+  (...values: readonly string[]): Check =>
+  (field) =>
+    typeof field === 'string' && values.includes(field);
+export const parseProjectTypeView = shape<ProjectTypeView>('project type', {
+  project_type: oneOf('software', 'orchestration'),
+  declared: isBoolean,
+  active_projects: isNumber,
+  changed: isBoolean,
+});
+const orchestrationDeclaration = shape<OrchestrationTargetDeclaration>(
+  'orchestration target',
+  { target_id: isString, state: oneOf('active', 'removed'), label: isString },
+  {},
+  { expected_repository_identity: isString },
+);
+export const parseOrchestrationManifest = shape<OrchestrationManifest>('orchestration targets', {
+  enabled: isBoolean,
+  revision: isNullableString,
+  targets: listOf(orchestrationDeclaration.check),
+});
+const orchestrationDestination: Check = (field) =>
+  isRecord(field) &&
+  isString(field.checkout_id) &&
+  isString(field.checkout_authority) &&
+  ((field.kind === 'local' && isString(field.server_id)) ||
+    (field.kind === 'remote' && isString(field.registration_id) && isRecord(field.identity)));
+export const parseOrchestrationBinding = shape<OrchestrationBinding>('orchestration binding', {
+  revision: isNumber,
+  destination: (field) => field === null || orchestrationDestination(field),
+  checked_at_ms: isNullableNumber,
+  confirmed_at_ms: isNullableNumber,
+  last_failure: isNullableString,
+  stale: isBoolean,
+});
+export const parseOrchestrationResolution = shape<OrchestrationResolution>('orchestration resolution', {
+  declaration: orchestrationDeclaration.check,
+  binding: parseOrchestrationBinding.check,
+  state: oneOf(
+    'unbound',
+    'connecting',
+    'reachable',
+    'unreachable',
+    'unauthorized',
+    'source_missing',
+    'identity_changed',
+  ),
+  reason: isNullableString,
+  stale: isBoolean,
+  usable: isBoolean,
+});
+export const parseOrchestrationProjectView = shape<OrchestrationProjectView>('orchestration project', {
+  target_id: isString,
+  label: isString,
+  added: isBoolean,
+  resolution: parseOrchestrationResolution.check,
+});
+export const parseRemovedOrchestrationProject = shape<RemovedOrchestrationProject>('removed project', {
+  target_id: isString,
+  unbound: isBoolean,
+  removed: isBoolean,
+});
+const measured =
+  (fields: readonly string[]): Check =>
+  (field) =>
+    isRecord(field) && fields.every((name) => isNullableNumber(field[name]));
+export const parseOrchestrationCapacity = shape<OrchestrationCapacity>('target capacity', {
+  sampled_at_ms: isNullableNumber,
+  memory: measured(['free_mb', 'total_mb']),
+  cpu: measured(['load_percent', 'logical_cpus']),
+  disk: measured(['free_mb', 'total_mb']),
+  tools: (field) =>
+    field === null ||
+    listOf((tool) => isRecord(tool) && isString(tool.tool) && isBoolean(tool.installed) && isBoolean(tool.configured))(
+      field,
+    ),
+  sessions: (field) =>
+    field === null ||
+    listOf((session) => isRecord(session) && isString(session.session_id) && isBoolean(session.busy))(field),
+  claims: (field) =>
+    field === null ||
+    listOf(
+      (claim) =>
+        isRecord(claim) && isString(claim.namespace) && isString(claim.resource) && isNumber(claim.expires_at_ms),
+    )(field),
+  claim_namespaces: isStringArray,
+});
+export const parseOrchestrationAdmission = shape<OrchestrationAdmission>('admission decision', {
+  outcome: oneOf('accepted', 'reduced', 'refused'),
+  tool: isString,
+  requested: isNumber,
+  admitted: isNumber,
+  reason: isNullableString,
+});
+const toolCapacityRow = shape<OrchestrationToolCapacityRow>(
+  'tool capacity row',
+  {
+    tool: isString,
+    state: oneOf('available', 'limited', 'degraded', 'unknown'),
+    verified: isBoolean,
+    max_sessions: isNumber,
+    weight: isNumber,
+  },
+  {},
+  { account: isString, until_ms: isNumber, budget_cents_per_day: isNumber, spent_cents_today: isNumber },
+);
+export const parseOrchestrationToolCapacity = shape<OrchestrationToolCapacity>('tool capacity', {
+  enabled: isBoolean,
+  now_ms: isNumber,
+  tools: listOf(toolCapacityRow.check),
+});
+export const parseOrchestrationSession = shape<OrchestrationSession>(
+  'orchestration session',
+  {
+    session_id: isString,
+    target_id: isString,
+    tool: isString,
+    state: oneOf('requested', 'running', 'stopped', 'failed', 'lost'),
+    paused: isBoolean,
+    created_at_ms: isNumber,
+    updated_at_ms: isNumber,
+  },
+  {},
+  {
+    role: oneOf('worker', 'dispatcher', 'integrator'),
+    owner: oneOf('orchestrator', 'human'),
+    model: isString,
+    run_id: isString,
+    label: isString,
+    hosted: (field) => isRecord(field) && isString(field.server_id) && isString(field.session_id),
+  },
+);
+export const parseOrchestrationPolicyView = shape<OrchestrationPolicyView>('orchestration policy', {
+  enabled: isBoolean,
+  revision: isNullableString,
+  policy: (field) => field === null || isObject(field),
 });

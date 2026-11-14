@@ -67,6 +67,8 @@ export interface SidebarSurfaceDependencies {
   projectConversationUnread: (projectId: string) => number;
   project: () => Project | undefined;
   settingsCategory: () => SettingsCategory;
+  /** The project is an Orchestration project, so Settings lists its Orchestration category (HS2-W27N1D). */
+  settingsOrchestration?: () => boolean;
   projectPermissionHistory: (projectId: string) => ReadonlyArray<{ resolvedAt: number }>;
   projectPendingPermissions: (projectId: string) => readonly unknown[];
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
@@ -153,7 +155,12 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
   }
   function sidebarSurfaceProps(statsSelected = false): SidebarSurfaceProps {
     const current = project()!;
-    if (!statsSelected && viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
+    if (!statsSelected && viewMode.value === 'settings')
+      return {
+        kind: 'settings',
+        selected: settingsCategory(),
+        orchestration: dependencies.settingsOrchestration?.() ?? false,
+      };
     if (!statsSelected && viewMode.value === 'notifications') {
       const history = projectPermissionHistory(current.id),
         notices = clientNotifications.items(current.id),

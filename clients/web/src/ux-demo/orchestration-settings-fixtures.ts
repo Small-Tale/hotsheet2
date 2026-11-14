@@ -1,0 +1,317 @@
+/**
+ * Synthetic fixtures and an in-memory orchestration API for the Project Type and Orchestration
+ * settings demos (HS2-W27N1D). The production controller runs over it: no network request, no timer.
+ * Names and machines are invented; no customer content.
+ */
+import type {
+  OrchestrationBinding,
+  OrchestrationCapacity,
+  OrchestrationManifest,
+  OrchestrationPolicyView,
+  OrchestrationSession,
+  OrchestrationToolCapacity,
+  ProjectType,
+} from '../api';
+import { ApiHttpError } from '../api';
+import { createOrchestrationSettings, type OrchestrationApi } from '../features/orchestration-settings';
+
+export const DEMO_OWNER = 'launch-0000000000ab';
+export const DEMO_NOW = 1_794_000_000_000;
+export const DEMO_REMOTE = '01JSYNTHREMTE0000000000001';
+const SERVER = '01JSYNTHSERVER000000000001';
+export const DEMO_TARGETS = {
+  api: '01JSYNTHTARGET000000000001',
+  web: '01JSYNTHTARGET000000000002',
+  docs: '01JSYNTHTARGET000000000003',
+} as const;
+
+export const DEMO_OPEN_PROJECTS = [
+  { id: DEMO_OWNER, name: 'Launch' },
+  { id: `remote:${DEMO_REMOTE}:api-0000000000ab`, name: 'API' },
+  { id: 'web-0000000000ab', name: 'Web' },
+  { id: 'docs-0000000000ab', name: 'Docs' },
+  { id: `remote:${DEMO_REMOTE}:mobile-0000000000ab`, name: 'Mobile' },
+] as const;
+
+export const DEMO_REMOTE_LABELS = { [DEMO_REMOTE]: 'Build Host' };
+
+export const demoTime = (ms: number) => {
+  const minutes = Math.round((DEMO_NOW - ms) / 60_000);
+  return minutes <= 0
+    ? 'now'
+    : minutes < 60
+      ? `${String(minutes)} min ago`
+      : `${String(Math.round(minutes / 60))} h ago`;
+};
+
+export const demoToolLabel = (tool: string) => ({ claude: 'Claude', codex: 'Codex' })[tool] ?? tool;
+
+export function demoBinding(target: keyof typeof DEMO_TARGETS): OrchestrationBinding {
+  const checkout = `${target}-0000000000ab`;
+  return {
+    revision: 1,
+    destination:
+      target === 'api'
+        ? {
+            kind: 'remote',
+            registration_id: DEMO_REMOTE,
+            identity: { server_id: SERVER },
+            checkout_id: checkout,
+            checkout_authority: 'a'.repeat(64),
+          }
+        : { kind: 'local', server_id: SERVER, checkout_id: checkout, checkout_authority: 'b'.repeat(64) },
+    checked_at_ms: DEMO_NOW - 120_000,
+    confirmed_at_ms: DEMO_NOW - 120_000,
+    last_failure: null,
+    stale: true,
+  };
+}
+
+export const demoCapacity: OrchestrationCapacity = {
+  sampled_at_ms: DEMO_NOW,
+  memory: { free_mb: 9_216, total_mb: 32_768 },
+  cpu: { load_percent: 38, logical_cpus: 12 },
+  disk: { free_mb: 210_000, total_mb: 512_000 },
+  tools: [
+    { tool: 'claude', installed: true, configured: true },
+    { tool: 'codex', installed: true, configured: true },
+  ],
+  sessions: [{ session_id: 'synthetic-terminal-1', tool: 'claude', busy: true }],
+  claims: [{ namespace: 'vm', resource: 'macos-vm', expires_at_ms: DEMO_NOW + 900_000 }],
+  claim_namespaces: ['vm'],
+};
+
+export const demoToolCapacity: OrchestrationToolCapacity = {
+  enabled: true,
+  now_ms: DEMO_NOW,
+  tools: [
+    { tool: 'claude', state: 'available', verified: true, max_sessions: 2, weight: 50 },
+    { tool: 'codex', state: 'limited', until_ms: DEMO_NOW + 3_600_000, verified: true, max_sessions: 3, weight: 60 },
+  ],
+};
+
+export const demoSessions: OrchestrationSession[] = [
+  {
+    session_id: '01JSYNTHSESSION00000000001',
+    target_id: DEMO_TARGETS.web,
+    role: 'worker',
+    tool: 'claude',
+    state: 'running',
+    owner: 'orchestrator',
+    paused: false,
+    hosted: { server_id: SERVER, session_id: 'synthetic-terminal-1', worker_id: 'claude-synthetic' },
+    label: 'Claude · Launch run',
+    created_at_ms: DEMO_NOW - 1_800_000,
+    updated_at_ms: DEMO_NOW - 60_000,
+  },
+  {
+    session_id: '01JSYNTHSESSION00000000002',
+    target_id: DEMO_TARGETS.web,
+    role: 'integrator',
+    tool: 'codex',
+    state: 'running',
+    owner: 'human',
+    paused: true,
+    created_at_ms: DEMO_NOW - 7_200_000,
+    updated_at_ms: DEMO_NOW - 600_000,
+  },
+];
+
+function fixtureManifest(): OrchestrationManifest {
+  return {
+    enabled: true,
+    revision: '01JSYNTHREVISION0000000001',
+    targets: [
+      { target_id: DEMO_TARGETS.api, state: 'active', label: 'API' },
+      { target_id: DEMO_TARGETS.web, state: 'active', label: 'Web' },
+      { target_id: DEMO_TARGETS.docs, state: 'active', label: 'Docs' },
+    ],
+  };
+}
+
+function fixturePolicy(): OrchestrationPolicyView {
+  return {
+    enabled: true,
+    revision: '01JSYNTHREVISION0000000002',
+    policy: {
+      machine: { max_sessions: 2, min_free_ram_mb: 2048, max_cpu_percent: 90, min_free_disk_mb: 5120 },
+      tools: [
+        { tool: 'codex', max_sessions: 3, weight: 60 },
+        { tool: 'claude', max_sessions: 2, weight: 50 },
+      ],
+      targets: [],
+      wind_down: { idle_minutes: 15, keep_warm: 0 },
+      speculation: { allowed: false },
+      placement: {
+        automatic: true,
+        actor: 'synthetic-person',
+        resources: [{ target_id: DEMO_TARGETS.web, resources: [{ namespace: 'vm', resource: 'macos-vm' }] }],
+      },
+    },
+  };
+}
+
+/** An in-memory orchestration project. `empty` starts it with no projects added. */
+export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean } = {}) {
+  let projectType: ProjectType = 'orchestration';
+  let manifest = empty ? { ...fixtureManifest(), targets: [] } : fixtureManifest();
+  let bindings: Record<string, OrchestrationBinding> = empty
+    ? {}
+    : {
+        [DEMO_TARGETS.api]: demoBinding('api'),
+        [DEMO_TARGETS.web]: demoBinding('web'),
+        [DEMO_TARGETS.docs]: demoBinding('docs'),
+      };
+  let policy = fixturePolicy();
+  let sessions = demoSessions.map((session) => ({ ...session }));
+  let counter = 10;
+  const active = () => manifest.targets.filter((target) => target.state === 'active').length;
+  const typeView = (changed = false) => ({
+    project_type: projectType,
+    declared: true,
+    active_projects: active(),
+    changed,
+  });
+  const resolution = (target: string) => {
+    const declaration = manifest.targets.find((item) => item.target_id === target)!,
+      unreachable = target === DEMO_TARGETS.docs;
+    return {
+      declaration,
+      binding: bindings[target],
+      state: unreachable ? ('unreachable' as const) : ('reachable' as const),
+      reason: unreachable ? 'unreachable' : null,
+      stale: false,
+      usable: !unreachable,
+    };
+  };
+  const api: OrchestrationApi = {
+    projectType: () => Promise.resolve(typeView()),
+    setProjectType: (_owner, next) => {
+      const changed = next !== projectType;
+      projectType = next;
+      return Promise.resolve(typeView(changed));
+    },
+    orchestrationTargets: () => Promise.resolve(structuredClone(manifest)),
+    orchestrationBinding: (_owner, target) =>
+      Promise.resolve(
+        bindings[target] ?? {
+          revision: 0,
+          destination: null,
+          checked_at_ms: null,
+          confirmed_at_ms: null,
+          last_failure: null,
+          stale: true,
+        },
+      ),
+    orchestrationResolve: (_owner, target) => Promise.resolve(resolution(target)),
+    addOrchestrationProject: (_owner, request) => {
+      const existing = Object.entries(bindings).find(
+        ([, binding]) => binding.destination?.checkout_id === request.destination.checkout_id,
+      );
+      if (existing)
+        return Promise.resolve({
+          target_id: existing[0],
+          label: request.label,
+          added: false,
+          resolution: resolution(existing[0]),
+        });
+      counter += 1;
+      const id = `01JSYNTHTARGET0000000000${String(counter)}`;
+      manifest = {
+        ...manifest,
+        targets: [...manifest.targets, { target_id: id, state: 'active', label: request.label }],
+      };
+      bindings = {
+        ...bindings,
+        [id]: {
+          ...demoBinding('web'),
+          destination:
+            request.destination.kind === 'remote'
+              ? {
+                  kind: 'remote',
+                  registration_id: request.destination.registration_id,
+                  identity: { server_id: SERVER },
+                  checkout_id: request.destination.checkout_id,
+                  checkout_authority: 'c'.repeat(64),
+                }
+              : {
+                  kind: 'local',
+                  server_id: SERVER,
+                  checkout_id: request.destination.checkout_id,
+                  checkout_authority: 'c'.repeat(64),
+                },
+        },
+      };
+      return Promise.resolve({ target_id: id, label: request.label, added: true, resolution: resolution(id) });
+    },
+    removeOrchestrationProject: (_owner, target) => {
+      manifest = {
+        ...manifest,
+        targets: manifest.targets.map((item) => (item.target_id === target ? { ...item, state: 'removed' } : item)),
+      };
+      bindings = Object.fromEntries(Object.entries(bindings).filter(([id]) => id !== target));
+      return Promise.resolve({ target_id: target, unbound: true, removed: true });
+    },
+    orchestrationCapacity: (_owner, target) =>
+      target === DEMO_TARGETS.docs
+        ? Promise.reject(new ApiHttpError('orchestration observation failed: unreachable', 502, 'unreachable'))
+        : Promise.resolve(
+            target === DEMO_TARGETS.web ? demoCapacity : { ...demoCapacity, claims: null, claim_namespaces: [] },
+          ),
+    orchestrationAdmission: (_owner, _target, tool) =>
+      Promise.resolve(
+        tool === 'codex'
+          ? { outcome: 'reduced', tool, requested: 2, admitted: 1, reason: 'session_cap_reached' }
+          : { outcome: 'accepted', tool, requested: 1, admitted: 1, reason: null },
+      ),
+    orchestrationToolCapacity: () => Promise.resolve(demoToolCapacity),
+    orchestrationSessions: () => Promise.resolve(sessions.map((session) => ({ ...session }))),
+    stopOrchestrationSession: (_owner, id, force) => {
+      const session = sessions.find((item) => item.session_id === id)!;
+      if (!force && session.role === 'worker')
+        return Promise.reject(new ApiHttpError('orchestration session refused the request', 409, 'session_not_safe'));
+      sessions = sessions.filter((item) => item.session_id !== id);
+      return Promise.resolve({ ...session, state: 'stopped' });
+    },
+    takeOverOrchestrationSession: (_owner, id) => {
+      sessions = sessions.map((item) => (item.session_id === id ? { ...item, owner: 'human' } : item));
+      return Promise.resolve(sessions.find((item) => item.session_id === id)!);
+    },
+    orchestrationPolicy: () => Promise.resolve(structuredClone(policy)),
+    setOrchestrationPolicy: (_owner, _revision, body) => {
+      policy = { enabled: true, revision: `01JSYNTHREVISION00000000${String((counter += 1))}`, policy: body };
+      return Promise.resolve(structuredClone(policy));
+    },
+  };
+  return { api };
+}
+
+/** The production controller over an in-memory project, with deterministic confirmations. */
+export function createDemoOrchestrationSettings(options: { empty?: boolean } = {}) {
+  let demo = createDemoOrchestrationApi(options);
+  const settings = createOrchestrationSettings({
+    api: () => demo.api,
+    openProjects: () => DEMO_OPEN_PROJECTS,
+    confirm: () => Promise.resolve(true),
+    openProjectPicker: () => undefined,
+    openFlowBusy: () => false,
+    activateProject: () => undefined,
+    showTerminal: () => true,
+    hasTerminal: (_project, terminal) => terminal === 'synthetic-terminal-1',
+    knownTools: () => ['claude', 'codex'],
+    showInspector: () => undefined,
+    defer: (run) => {
+      run();
+    },
+  });
+  settings.remoteLabels.value = DEMO_REMOTE_LABELS;
+  return {
+    settings,
+    reset: async () => {
+      demo = createDemoOrchestrationApi(options);
+      settings.closeDetail(DEMO_OWNER);
+      await settings.loadType(DEMO_OWNER);
+      await settings.loadSettings(DEMO_OWNER);
+    },
+  };
+}

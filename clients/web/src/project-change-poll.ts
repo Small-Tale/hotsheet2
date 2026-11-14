@@ -60,6 +60,18 @@ export const containsRepositorySizeChange = (response: PollResponse, checkoutId:
 export const containsTicketStoreSyncChange = (response: PollResponse, checkoutId: string): boolean =>
   response.events.some((event) => event.kind === 'ticket_store_sync' && event.id === checkoutId);
 
+/**
+ * The project's orchestration settings changed, or a session an orchestrator started changed
+ * (HS2-W27N1D). Session events are tagged with the hosting checkout, so any one is enough to read the
+ * project's sessions again.
+ */
+export const containsOrchestrationChange = (response: PollResponse, checkoutId: string): boolean =>
+  response.overflow ||
+  response.events.some(
+    (event) =>
+      (event.kind === 'orchestration_changed' && event.id === checkoutId) || event.kind === 'orchestration_session',
+  );
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     const timeout = globalThis.setTimeout(resolve, milliseconds);

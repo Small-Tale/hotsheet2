@@ -138,6 +138,10 @@ import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createNotificationSettings } from '../features/notification-settings';
 import {
+  createOrchestrationSettingsSurface,
+  type OrchestrationSettingsSurface,
+} from '../features/orchestration-settings-surface';
+import {
   createOrchestrationViewController,
   createServerPlanner,
   orchestrationPersonId,
@@ -1733,7 +1737,9 @@ export async function startHotSheetWebClient() {
       ...projectRestoreFailures.value.map((item) => item.root),
     ]),
   ];
-  const settingsCategory = () => selectedSettingsCategory.value;
+  // HS2-W27N1D: Orchestration shows only for an Orchestration project; its surface is created below.
+  const orchestrationSurfaceRef: { current?: OrchestrationSettingsSurface } = {};
+  const settingsCategory = () => orchestrationSurfaceRef.current?.settingsCategory() ?? selectedSettingsCategory.value;
   let developmentRequestKey = '';
   const developmentReadVersions = new Map<string, number>();
   function invalidateDevelopmentReads(id: string): number {
@@ -3354,8 +3360,10 @@ export async function startHotSheetWebClient() {
     confirm: confirmation.request,
     showToast,
     openTicket: openTicketLinkMatch,
-    // HS2-W27N1D adds the Orchestration settings category; until then this opens Settings.
+    // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
+    orchestrationProject: (id) => orchestrationSurfaceRef.current?.orchestrationProject(id),
     openOrchestrationSettings: () => {
+      selectedSettingsCategory.value = 'orchestration';
       viewMode.value = 'settings';
       persistWorkspacePreferences();
     },
@@ -4416,6 +4424,7 @@ export async function startHotSheetWebClient() {
     onActivity: announcerController.onActivity,
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
+    orchestrationChanged: (target) => orchestrationSurfaceRef.current?.changed(target),
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
@@ -4936,6 +4945,7 @@ export async function startHotSheetWebClient() {
       ...(terminalDrawerChatsByProject.value[projectId] ?? []).map((chat) => chat.connectionId),
     ]);
   const { sidebarSurfaceProps } = createSidebarSurface({
+    settingsOrchestration: () => Boolean(orchestrationSurfaceRef.current?.orchestrationProject(project()?.id)),
     searchScope,
     viewMode,
     notificationView,
@@ -4986,8 +4996,42 @@ export async function startHotSheetWebClient() {
     },
   });
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
+  // Project Settings → General → Project Type and Settings → Orchestration (HS2-W27N1D).
+  const orchestrationSurface = createOrchestrationSettingsSurface({
+    projects,
+    project,
+    viewMode,
+    selectedSettingsCategory,
+    confirm: confirmation.request,
+    openProjectPicker: () => {
+      openProjectPicker('form');
+    },
+    openFlowBusy: () =>
+      projectSourceChoiceOpen.value ||
+      projectDialogOpen.value ||
+      desktopRemoteDialogOpen.value ||
+      remoteProjectDialogOpen.value ||
+      desktopRemoteBusy.value ||
+      loading.value,
+    selectProjectTab,
+    showSettings: () => {
+      if (viewMode.value !== 'settings') switchWorkspaceView('settings');
+    },
+    openTerminalInProject,
+    hasTerminal: (key) => Boolean(terminalSession(key)),
+    aiTools: () => aiTools.value,
+    toolLabel: aiToolLabel,
+    showInspector: () => {
+      setInspectorVisible(true);
+    },
+    remoteServerLabels: async () =>
+      Object.fromEntries((await listDesktopRemoteServers()).map((server) => [server.id, server.label])),
+  });
+  orchestrationSurfaceRef.current = orchestrationSurface;
   const { settingsWorkspace } = createSettingsSurface({
     settingsCategory: () => settingsCategory(),
+    projectGeneral: (projectId) => orchestrationSurface.projectGeneral(projectId),
+    orchestration: (current) => orchestrationSurface.orchestration(current),
     developmentStrategy: (projectId) => {
       const current = projects.value.find((item) => item.id === projectId),
         gitSources =
@@ -5669,6 +5713,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,
     announcerTrigger: announcerController.trigger,
     announcerPanel: announcerController.panel,
@@ -6488,6 +6533,7 @@ export async function startHotSheetWebClient() {
     terminalLimitsSettings,
     notificationSettings,
     remoteDevices,
+    orchestrationSettings: orchestrationSurface.settings,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,

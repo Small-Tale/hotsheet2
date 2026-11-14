@@ -463,12 +463,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         return;
       }
       const placement = { ...(stored.policy.placement ?? {}), automatic };
-      await client.setOrchestrationPolicy(
-        current.id,
-        stored.revision,
-        { ...stored.policy, placement },
-        dependencies.personId(),
-      );
+      await client.setOrchestrationPolicy(current.id, stored.revision, { ...stored.policy, placement });
       dependencies.showToast(automatic ? 'Orchestration started.' : 'Orchestration paused. Running work continues.');
     } catch (reason) {
       dependencies.showToast(`${automatic ? 'Start' : 'Pause'} failed: ${message(reason)}`);

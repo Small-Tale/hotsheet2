@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::Ctx;
 use super::orchestration_capacity::{self as capacity, Planned};
 use super::orchestration_planning as planning;
+use super::orchestration_projects as projects;
 use super::orchestration_readiness as readiness;
 use super::orchestration_scheduler as scheduler;
 use super::orchestration_sessions as sessions;
@@ -26,6 +27,10 @@ pub(crate) struct OrchestrationArgs {
 }
 #[derive(Subcommand)]
 enum OrchestrationCmd {
+    /// HS2-W27N1D: show or switch the project type (software or orchestration).
+    ProjectType(projects::ProjectTypeArgs),
+    /// HS2-W27N1D: add an open project (declare and bind in one step) or remove one.
+    Project(projects::ProjectArgs),
     /// List, declare, rename, remove, bind, unbind, resolve and inspect project targets.
     Target(TargetArgs),
     /// List, issue, revoke and check delegated authority over one bound target.
@@ -1229,6 +1234,8 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             Planned::Request(owner_id, request) => (owner_id, request),
             Planned::Done => return Ok(()),
         },
+        OrchestrationCmd::ProjectType(arguments) => projects::project_type_route(arguments)?,
+        OrchestrationCmd::Project(arguments) => projects::project_route(arguments)?,
         OrchestrationCmd::Target(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = route(&owner_id, arguments.command)?;

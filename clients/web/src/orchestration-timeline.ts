@@ -231,21 +231,6 @@ export function parseOrchestrationTimeline(value: unknown): OrchestrationTimelin
   return view as unknown as OrchestrationTimeline;
 }
 
-/** The stored orchestration policy (HS2-YCJDEB): absent `policy` when the project has none. */
-export interface OrchestrationPolicyView {
-  enabled: boolean;
-  revision: string | null;
-  policy: (Record<string, unknown> & { placement?: Record<string, unknown> }) | null;
-}
-
-export function parseOrchestrationPolicy(value: unknown): OrchestrationPolicyView {
-  const view = record(value);
-  if (typeof view.enabled !== 'boolean') fail();
-  if (view.revision !== null && typeof view.revision !== 'string') fail();
-  if (view.policy !== null) record(view.policy);
-  return view as unknown as OrchestrationPolicyView;
-}
-
 /** An orchestration answer the inspector reads a few members of (gates, run events, control results). */
 export function parseOrchestrationRecord(value: unknown): Record<string, unknown> {
   return record(value);

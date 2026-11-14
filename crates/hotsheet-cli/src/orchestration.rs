@@ -11,6 +11,7 @@ mod joining;
 mod observer;
 mod planning;
 mod policy;
+mod projects;
 mod provisional;
 mod readiness;
 mod reconcile_sources;
@@ -45,6 +46,7 @@ pub use planning::{
     GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
+pub use projects::{AddProject, ProjectView, RemoveProject, RemovedProject};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
 };

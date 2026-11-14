@@ -384,6 +384,11 @@ fn ensure_scheduler(state: &AppState, owner: &str) {
             // like any other unfinished run's, so a claim or a completion there is
             // learned from the target's change feed.
             if step.trigger.is_some() {
+                // HS2-W27N1D: a pass may have started or wound down sessions; clients
+                // showing this owner's orchestration read it again.
+                if !step.failed {
+                    note_orchestration_change(&state, &owner);
+                }
                 let (state, owner) = (state.clone(), owner.clone());
                 let _ =
                     tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner))
@@ -498,6 +503,71 @@ fn watched_owner(method: &Method, path: &str) -> Option<String> {
         _ => None,
     }
 }
+/// HS2-W27N1D: the change-event kind that tells clients an orchestration project's
+/// settings changed: its type, its projects and bindings, its policy or its sessions.
+/// `store` and `id` are the owning checkout. Identifiers only; a client reads again.
+pub(crate) const ORCHESTRATION_CHANGE_KIND: &str = "orchestration_changed";
+
+/// The owner of a request that changes what Settings → Orchestration shows. Reads,
+/// including the reads sent as POST (capacity, admission, validate, dry run), are not.
+fn changed_owner(method: &Method, path: &str) -> Option<String> {
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let owner = match (method.as_str(), parts.as_slice()) {
+        (
+            "PUT",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "project-type" | "policy" | "targets",
+            ],
+        )
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "projects" | "targets" | "sessions",
+            ],
+        )
+        | ("DELETE", ["checkouts", owner, "orchestration", "projects", _])
+        | ("PATCH" | "DELETE", ["checkouts", owner, "orchestration", "targets", _])
+        | ("PUT" | "DELETE", ["checkouts", owner, "orchestration", "targets", _, "binding"])
+        | ("POST", ["checkouts", owner, "orchestration", "session-sync"])
+        | (
+            "POST",
+            [
+                "checkouts",
+                owner,
+                "orchestration",
+                "sessions",
+                _,
+                "stop" | "takeover" | "sync",
+            ],
+        ) => owner,
+        _ => return None,
+    };
+    Some((*owner).to_owned())
+}
+
+/// HS2-W27N1D: tell every client following the owner that its orchestration changed.
+pub(crate) fn note_orchestration_change(state: &AppState, owner: &str) {
+    state.emit(crate::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: owner.to_owned(),
+        kind: ORCHESTRATION_CHANGE_KIND.into(),
+        id: owner.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+}
+
 fn error(error: OrchestrationError) -> ApiError {
     ApiError::new(
         StatusCode::from_u16(error_status(&error)).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
@@ -519,7 +589,11 @@ async fn execute(
     }
     let follow = watched.map(|owner| (state.clone(), owner));
     let scheduled = scheduled_owner(&method, &path).map(|owner| (state.clone(), owner));
+    let changed = changed_owner(&method, &path).map(|owner| (state.clone(), owner));
     let result = execute_blocking(state, method, path, body).await;
+    if let (Ok(_), Some((state, owner))) = (&result, changed) {
+        note_orchestration_change(&state, &owner);
+    }
     // HS2-ECWG50: a policy that now enables automatic placement gets its loop.
     if let (Ok(_), Some((state, owner))) = (&result, scheduled) {
         let _ =

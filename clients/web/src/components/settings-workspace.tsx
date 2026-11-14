@@ -25,7 +25,9 @@ import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-setting
 import { HostDiskSettings, type HostDiskSettingsProps } from './host-disk-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
+import { OrchestrationSettings, type OrchestrationSettingsProps } from './orchestration-settings';
 import { PermissionRulesSettings, type PermissionRulesSettingsProps } from './permission-rules-settings';
+import { ProjectGeneralSettings, type ProjectGeneralSettingsProps } from './project-general-settings';
 import { RemoteDevicesSettings, type RemoteDevicesSettingsProps } from './remote-devices-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import { StandbySettings, type StandbySettingsProps } from './standby-settings';
@@ -41,6 +43,10 @@ import { type TrashRetentionDraft, TrashSettings } from './trash-settings';
 
 export interface SettingsWorkspaceProps {
   category: SettingsCategory;
+  /** Project Settings → General: Project Type (HS2-W27N1D). */
+  projectGeneral?: ProjectGeneralSettingsProps;
+  /** Project Settings → Orchestration, for an Orchestration project (HS2-W27N1D). */
+  orchestration?: OrchestrationSettingsProps;
   sources: TicketSourcesSettingsProps;
   accounts: AccountsSettingsProps;
   ai: { tools: readonly AiToolDescriptor[]; selection: AiToolDefaults; loading: boolean; message: string };
@@ -84,6 +90,8 @@ export interface SettingsWorkspaceProps {
 
 export function SettingsWorkspace({
   category,
+  projectGeneral = {},
+  orchestration = {},
   sources,
   accounts,
   ai,
@@ -111,6 +119,8 @@ export function SettingsWorkspace({
         <GuidanceSettings {...guidance} />
       ) : (
         <List contentWidth="wide" inset="document">
+          {category === 'project-general' && <ProjectGeneralSettings {...projectGeneral} />}
+          {category === 'orchestration' && <OrchestrationSettings {...orchestration} />}
           {category === 'sources' && <TicketSourcesSettings {...sources} />}
           {category === 'accounts' && <AccountsSettings {...accounts} />}
           {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}

@@ -24,6 +24,7 @@ mod gates;
 mod job_monitor;
 mod planning;
 mod policy;
+mod projects;
 mod provisional;
 mod readiness;
 mod reconcile_sources;

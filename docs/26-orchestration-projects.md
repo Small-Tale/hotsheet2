@@ -41,8 +41,9 @@
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
-> the OpenAPI contract describes them. Orchestration settings remain design work under
-> HS2-W27N1D.
+> the OpenAPI contract describes them. Project Type and the Orchestration settings
+> category with its projects, project detail and limits-only policy ship in the web client
+> (§26.27, HS2-W27N1D).
 
 ## 26.1 Boundary and existing foundations
 
@@ -3869,3 +3870,115 @@ hotsheet-cli ... orchestration timeline --project <owner> [--after <version> --w
 | `/checkouts/{owner}/orchestration/timeline` | GET the timeline; `after` and `wait_ms` wait for a change; machine-local |
 
 MCP `hotsheet_targets` adds `timeline` (with `version` and `wait_ms`).
+
+## 26.27 Project Type and the Orchestration settings (HS2-W27N1D)
+
+Signed off on HS2-HSMH2Q (Design v3, the maintainer's answers): a project becomes an
+orchestration project by its **Project Type**, chooses the projects it orchestrates in
+**Settings → Orchestration**, and opens each one's detail from its row. The Orchestration
+view and the ticket row's orchestration line are HS2-J89JC7; the planning session behind
+Propose Plan is HS2-HCW7MD.
+
+### Project Type
+
+`project_type` is a shared, checked-in project setting (`.hotsheet2/settings.json`,
+`Scope::Shared`): `software` (the default when absent) or `orchestration`. A value this
+version does not know is refused rather than read as Software. Switching is one decision
+table in the core (`plan_type_change`), and every client calls the same runtime workflow:
+
+| From          | To            | Projects added | Result                                                                                   |
+| ------------- | ------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| any           | same type     | any            | No change; an Orchestration project whose declaration is missing gets it back.           |
+| Software      | Orchestration | any            | The setting changes; the empty target declaration is created on first use.               |
+| Orchestration | Software      | none           | The setting changes.                                                                     |
+| Orchestration | Software      | one or more    | Refused unless `keep_projects` is true; then the setting changes and nothing is dropped. |
+
+Back to Software keeps the declaration, this machine's bindings and the policy, so a
+later switch to Orchestration finds every project where it was. The web client asks
+first, with the shared confirmation, and the General hint then says how many projects
+stay. Each change is audited as `project_type_set` with the new type as its reason.
+The scheduler does not read the type yet (HS2-J3ZF27).
+
+### Adding and removing a project
+
+Adding a project declares a target (§26.2) and binds it to an open checkout on this
+machine or on a reviewed remote registration in one step: the checkout is inspected
+first, so an unreachable or unknown one adds nothing; then the target is declared and
+bound with the fresh candidate. Adding is a person's consent to let the orchestration
+project read and follow that project (HS2-XHQ1EH): an AI actor is refused, no grant is
+written, and whatever the orchestrator later does there still passes the authorization
+gate. The project type must be Orchestration and a project cannot orchestrate itself.
+It is idempotent: a project already bound to the same checkout (same kind, remote
+registration and checkout) is returned with `added: false`, and a caller-kept
+`target_id` binds that declared target after an attempt whose bind failed. Audited as
+`project_add`.
+
+Removing a project removes this machine's binding, then tombstones the declaration, so
+its id is never reused. It only reduces what the orchestrator can reach, so any actor
+may do it; sessions already running there keep running until stopped. Repeating it
+changes nothing. Audited as `project_remove`.
+
+### Settings → Orchestration
+
+Project Settings gains a project-scoped **General** category first (Project Type) and,
+for an Orchestration project only, **Orchestration** right after it. The navigator's
+category list and `SettingsCategory` carry both; Orchestration falls back to General when
+the type changes to Software while it shows.
+
+- **Projects.** One row per active declaration with its name, where it is bound (local
+  on this computer, or remote on the reviewed server's name), and a connection badge from
+  the cached binding. Its "…" menu has Show Project Tab (enabled while that project's tab
+  is open) and Stop Orchestrating…. An empty project shows _No projects yet._
+- **+ Add Project.** The other open projects first, local and remote with their machine,
+  checked when already added; then **Open Another Project…**, which runs the regular
+  open-project flow (HS2-BT4KN6). The project it opens appears in its own tab, is added,
+  and the orchestration project's settings show again. A cancelled flow adds nothing.
+- **Detail.** Selecting a row opens its detail in the inspector. Each part is its own read
+  through an existing route, so a part the gate refuses says so in place and hides
+  nothing else: binding and connection (a fresh `resolve` first, because the reads after
+  it check the same binding), capacity and admission per policy tool, AI tool capacity,
+  held resources (the namespaces the policy's `placement.resources` names for this
+  project), and the orchestrator's active sessions there with **Show in Drawer** (while
+  that project's tab shows the session's terminal), **Take Over…** and **Stop** (at a safe
+  point; mid-turn asks first and then stops with `force`). **Stop Orchestrating…** removes
+  the project after the shared confirmation. The app names its person `hotsheet-app` for
+  reads and session actions that need an identified actor; until HS2-XHQ1EH makes adding
+  the consent to read, a capacity read without a grant says the project has not allowed
+  it yet (HS2-Y3N3PH). Show in Drawer for a remote project's session is unverified
+  (HS2-6E32N4).
+- **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
+  caps and weights (an empty Sessions field leaves the tool out), wind-down and
+  build-ahead, saved with **Apply Policy** at the stored revision. The form never shows
+  the policy's `targets[].actions` or `approval.required_for` (HS2-XHQ1EH removes them);
+  every member it does not show is written back unchanged. Accounts, budgets and
+  per-project limits stay headless (HS2-7WF6JD).
+
+A project opened from another server cannot add projects here: the add binds on the
+serving machine. The category says so and disables + Add Project (HS2-92FJXM).
+
+### Live updates
+
+The server publishes an `orchestration_changed` change event, `store` and `id` the owning
+checkout, after every successful owner request that changes what these settings show
+(type, declaration, binding, project add or remove, policy, session start, stop, takeover
+or sync) and after each scheduling pass that acted. The web client reads the shown
+category again on that event, on any `orchestration_session` event, and on a stream
+resync; it never polls. A change written by a CLI process without the server announces
+nothing until the next of those (HS2-SHHGC6).
+
+### Headless surface
+
+```sh
+hotsheet-cli -C <host-source> orchestration project-type --project <owner> [--set software|orchestration [--keep-projects]]
+hotsheet-cli --actor-role human -C <host-source> orchestration project add <checkout-id> --project <owner> [--registration-id <id>] [--label <name>] [--target-id <ULID>]
+hotsheet-cli -C <host-source> orchestration project remove <target-id> --project <owner>
+```
+
+| Route                                                | Methods and purpose                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/project-type`      | GET the type, declaration and active project count; PUT switch the type |
+| `/checkouts/{owner}/orchestration/projects`          | POST add a project (declare and bind); machine-local                    |
+| `/checkouts/{owner}/orchestration/projects/{target}` | DELETE remove a project (unbind and tombstone); machine-local           |
+
+MCP `hotsheet_targets` adds `project_type` and `project_type_set` (with `keep_projects`).
+Adding a project is a person's act and has no MCP action.

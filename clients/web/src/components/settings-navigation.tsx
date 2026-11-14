@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   TerminalSquare,
+  Workflow,
   X,
 } from 'lucide';
 
@@ -28,6 +29,8 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type SettingsCategory =
+  | 'project-general'
+  | 'orchestration'
   | 'sources'
   | 'ai'
   | 'guidance'
@@ -44,8 +47,14 @@ export type SettingsCategory =
   | 'devices'
   | 'keyboard';
 
-/** Project-scoped settings, followed by app-scoped (device-local) settings. */
+/**
+ * Project-scoped settings, followed by app-scoped (device-local) settings. The project-scoped General
+ * comes first and holds Project Type; Orchestration follows it only for an Orchestration project
+ * (HS2-W27N1D).
+ */
 const projectCategories = [
+  { id: 'project-general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
+  { id: 'orchestration', label: 'Orchestration', icon: Workflow, iconName: 'workflow' },
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
   { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
   { id: 'guidance', label: 'Project guidance', icon: BookOpen, iconName: 'book-open' },
@@ -88,6 +97,12 @@ export type SettingsStorage =
  * here when you add the control.
  */
 export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage[]> = {
+  'project-general': [{ control: 'Project type', server: '/checkouts/{project}/orchestration/project-type' }],
+  orchestration: [
+    { control: 'Projects this project orchestrates', server: '/checkouts/{project}/orchestration/projects' },
+    { control: 'Declared projects', server: '/checkouts/{project}/orchestration/targets' },
+    { control: 'Throughput policy limits', server: '/checkouts/{project}/orchestration/policy' },
+  ],
   sources: [
     { control: 'Linked sources list', server: '/providers' },
     { control: 'Own, edit, disable, and remove a source', server: '/provider-connections' },
@@ -136,8 +151,20 @@ export function settingsCategoryTitle(category: SettingsCategory): string {
   return category === 'keyboard' ? 'Keyboard Shortcuts' : item.label;
 }
 
+/** Whether a project category shows for this project: Orchestration only for an Orchestration project. */
+export function settingsCategoryShown(category: SettingsCategory, orchestration: boolean): boolean {
+  return category !== 'orchestration' || orchestration;
+}
+
 /** The settings navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
-export function settingsNavigationPanel({ selected }: { selected: SettingsCategory }): SidebarPanelParts {
+export function settingsNavigationPanel({
+  selected,
+  orchestration = false,
+}: {
+  selected: SettingsCategory;
+  /** The project's type is Orchestration, so its Orchestration category shows (HS2-W27N1D). */
+  orchestration?: boolean;
+}): SidebarPanelParts {
   const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][], actions?: SafeHtml) => (
     <section>
       <ListHeader label={heading} />
@@ -176,7 +203,11 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
     toggle: { action: 'toggle-project-sidebar', name: 'Settings Sidebar' },
     content: (
       <List gap="m" controlInsets="tb">
-        {renderGroup('Project Settings', projectCategories, projectActions)}
+        {renderGroup(
+          'Project Settings',
+          projectCategories.filter((item) => settingsCategoryShown(item.id, orchestration)),
+          projectActions,
+        )}
         {renderGroup('App Settings', appCategories)}
       </List>
     ),
@@ -186,14 +217,16 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
 
 export function SettingsNavigation({
   selected,
+  orchestration = false,
   collapseControl = false,
 }: {
   selected: SettingsCategory;
+  orchestration?: boolean;
   collapseControl?: boolean;
 }) {
   return (
     <SidebarPane
-      parts={settingsNavigationPanel({ selected })}
+      parts={settingsNavigationPanel({ selected, orchestration })}
       className="settings-navigation"
       collapseControl={collapseControl}
     />

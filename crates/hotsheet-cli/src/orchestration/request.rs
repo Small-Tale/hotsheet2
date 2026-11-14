@@ -14,6 +14,9 @@ pub fn is_path(path: &str) -> bool {
         ["checkouts", _, "orchestration", "targets", ..]
             | ["checkouts", _, "orchestration", "inspect" | "audit"]
             | ["checkouts", _, "orchestration", "policy"]
+            // HS2-W27N1D: the project type and the projects an orchestration project adds.
+            | ["checkouts", _, "orchestration", "project-type" | "projects"]
+            | ["checkouts", _, "orchestration", "projects", _]
             | [
                 "checkouts",
                 _,
@@ -97,6 +100,10 @@ pub fn is_machine_path(path: &str) -> bool {
             "grants",
             _
         ] | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            // HS2-W27N1D: adding binds on this machine and removing unbinds here. The
+            // project type is a checked-in setting and stays ordinary project data.
+            | ["checkouts", _, "orchestration", "projects"]
+            | ["checkouts", _, "orchestration", "projects", _]
             // HS2-YCJDEB: a dry run reads this machine's grants; approvals live here.
             | ["checkouts", _, "orchestration", "policy", "dry-run"]
             | ["checkouts", _, "orchestration", "approvals"]
@@ -983,6 +990,27 @@ impl OrchestrationRuntime {
                 ],
             ) => value(self.tool_select(owner, decode(body)?, tx)?),
             ("GET", ["checkouts", owner, "orchestration", "policy"]) => value(self.policy(owner)?),
+            // HS2-W27N1D
+            ("GET", ["checkouts", owner, "orchestration", "project-type"]) => {
+                value(self.project_type(owner)?)
+            }
+            ("PUT", ["checkouts", owner, "orchestration", "project-type"]) => {
+                let actor = actor(body)?;
+                value(self.set_project_type(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "projects"]) => {
+                let actor = actor(body)?;
+                value(self.add_project(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            ("DELETE", ["checkouts", owner, "orchestration", "projects", id]) => {
+                let actor = actor(body)?;
+                let request: super::RemoveProject = if body.is_null() {
+                    super::RemoveProject::default()
+                } else {
+                    decode(body)?
+                };
+                value(self.remove_project(&reference(owner, id)?, request, actor.as_ref(), tx)?)
+            }
             ("PUT", ["checkouts", owner, "orchestration", "policy"]) => {
                 let actor = actor(body)?;
                 let request: SetPolicy = decode(body)?;
