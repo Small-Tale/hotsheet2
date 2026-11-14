@@ -84,23 +84,18 @@ async fn hs2_j89jc7_http_mcp_and_cli_read_the_same_timeline_and_wait_by_version(
         true,
     )
     .await;
-    let expires = u64::try_from(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    )
-    .unwrap()
-        + 3_600_000;
-    api(
+    // HS2-XHQ1EH: binding is the consent to read; dispatching asks a person unless a
+    // remembered rule allows starting work there.
+    let (status, _) = api(
         router.clone(),
         "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
-        json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
-            "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
+        &format!("{base}/permission-rules"),
+        json!({"action":"work_start","target_id":TARGET,
+            "actor":{"role":"human","id":"maintainer"}}),
         true,
     )
     .await;
+    assert_eq!(status, StatusCode::OK);
     let (_, declared) = api(router.clone(), "GET", &timeline, Value::Null, true).await;
     assert_eq!(declared["phase"], "no_plan");
     assert_eq!(declared["targets"][0]["label"], "Self");
