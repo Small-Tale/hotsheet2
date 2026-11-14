@@ -822,6 +822,13 @@ enum PermissionCmd {
     },
     /// Forget one remembered rule; later actions with its key ask again.
     Forget { rule_id: String },
+    /// HS2-JWV5S1: show the retired grant and approval files on this machine with
+    /// their counts. With `--remove`, a person removes them and the counts removed are
+    /// printed; running it again removes nothing. Neither file is ever authority.
+    Retired {
+        #[arg(long)]
+        remove: bool,
+    },
     /// Report what an action on a target would need now, against the cached binding.
     /// Files nothing and is not authority.
     Check {
@@ -881,6 +888,11 @@ fn permission_route(
             "DELETE",
             format!("{prefix}/permission-rules/{rule_id}"),
             json!({}),
+        ),
+        PermissionCmd::Retired { remove } => (
+            if remove { "DELETE" } else { "GET" },
+            format!("{prefix}/retired-permissions"),
+            if remove { json!({}) } else { Value::Null },
         ),
         PermissionCmd::Check {
             target_id,

@@ -68,6 +68,14 @@ pub struct PermissionList {
     pub retired: RetiredAuthority,
 }
 
+/// HS2-JWV5S1: what removing the retired files removed, and what is left (nothing,
+/// unless another process wrote one back meanwhile).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RetiredRemoved {
+    pub removed: RetiredAuthority,
+    pub remaining: RetiredAuthority,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnswerPermission {
@@ -301,6 +309,59 @@ impl OrchestrationRuntime {
                 .collect(),
             decisions: ledger.decisions(owner_id)?,
             retired: retired_authority(&self.home),
+        })
+    }
+
+    /// HS2-JWV5S1: the retired grant and approval files on this machine, with their
+    /// counts. Never read as authority.
+    pub fn retired_permissions(
+        &self,
+        owner_id: &str,
+    ) -> Result<RetiredAuthority, OrchestrationError> {
+        self.owner(owner_id)?;
+        Ok(retired_authority(&self.home))
+    }
+
+    /// HS2-JWV5S1: remove the retired grant and approval files from this machine and
+    /// answer what was removed. A person's act: an `ai` or `system` actor is refused.
+    /// Idempotent: once they are gone it removes nothing and audits nothing.
+    pub fn retired_permissions_remove(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<RetiredRemoved, OrchestrationError> {
+        self.owner(owner_id)?;
+        if !access::is_person(actor) {
+            return Err(OrchestrationError::Forbidden(
+                "only a person removes the retired grant and approval files",
+            ));
+        }
+        let removed = hotsheet_ticketing::orchestration::remove_retired_authority(&self.home)?;
+        for (present, reason) in [
+            (removed.grants_file, "grants_file"),
+            (removed.approvals_file, "approvals_file"),
+        ] {
+            if present {
+                self.audit_record(
+                    owner_id,
+                    AuditRecord {
+                        at_ms: tx.clock.now_ms(),
+                        actor_role: access::role_code(actor),
+                        actor_id: actor.and_then(|actor| actor.id.clone()),
+                        target_id: None,
+                        action: "retired_remove".into(),
+                        operation_id: None,
+                        outcome: AuditOutcome::Revoked,
+                        reason: Some(reason.into()),
+                        permission_id: None,
+                    },
+                )?;
+            }
+        }
+        Ok(RetiredRemoved {
+            removed,
+            remaining: retired_authority(&self.home),
         })
     }
 

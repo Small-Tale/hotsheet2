@@ -2117,6 +2117,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/permission-rules/{rule}",
             axum::routing::delete(routes::orchestration::write),
         )
+        // HS2-JWV5S1: the retired grant and approval files (machine-local).
+        .route(
+            "/checkouts/{owner}/orchestration/retired-permissions",
+            get(routes::orchestration::read).delete(routes::orchestration::write),
+        )
         // HS2-AZ15GA: orchestrating-side ticket operations (machine-local) and the hosted
         // half a local or remote orchestrator reaches (ordinary authenticated data).
         .route(

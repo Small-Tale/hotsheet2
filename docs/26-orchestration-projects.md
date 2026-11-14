@@ -3,7 +3,10 @@
 > **Status: Partial (HS2-4J6V46, HS2-XHQ1EH, HS2-YCJDEB).** Shared declarations,
 > reviewed machine bindings, permission requests answered through the permission
 > bridge with remembered rules and the audit journal (§26.7, HS2-XHQ1EH; the client
-> card and Settings rule row, §26.28), the throughput policy of limits (§26.8),
+> card and Settings rule row, §26.28; requests filed or answered headlessly reach
+> clients live, HS2-E16FWJ; goal-ticket decisions listed with the answer that decided
+> them, HS2-0RAZ1J; retired grant and approval files removed by a person, HS2-JWV5S1),
+> the throughput policy of limits (§26.8),
 > structured ticket links with target ticket operations (§26.3, HS2-AZ15GA) and a
 > gated, bounded list and search of a target's open tickets (§26.3, HS2-D85G19),
 > dispatch runs with status and events (§26.9, HS2-EBHDSB, HS2-7QHWHJ), target
@@ -480,6 +483,15 @@ are never read as authority. `permission list` and `policy validate` report them
 (`retired`) so a person can remove them; nothing deletes them automatically. The
 grant and approval routes, CLI commands and MCP actions are gone.
 
+`permission retired` (HS2-JWV5S1) shows both files with their counts, and `permission
+retired --remove` deletes them and prints the counts it removed, with the route `GET`
+and `DELETE /checkouts/{owner}/orchestration/retired-permissions`. Removing is a
+person's act: an `ai` or `system` actor is refused with 403 `forbidden` and nothing is
+removed. It is idempotent: once they are gone it removes nothing and audits nothing;
+each file it removes is audited as `retired_remove` (`revoked`, with `grants_file` or
+`approvals_file` as the reason). It touches no other file. The MCP tool keeps only the
+read view (`permission_list` reports `retired`).
+
 ### Authorization
 
 `authorize(target, actor, action)` requires an identified actor, resolves the target
@@ -525,6 +537,7 @@ hotsheet-cli --actor-role human -C <configured-host-source> orchestration permis
 hotsheet-cli --actor-role human -C <configured-host-source> orchestration permission remember <target-id> \
   --project <owner-checkout-id> --action session_start --tool codex
 hotsheet-cli -C <configured-host-source> orchestration permission forget <rule-id> --project <owner-checkout-id>
+hotsheet-cli --actor-role human -C <configured-host-source> orchestration permission retired --project <owner-checkout-id> [--remove]
 hotsheet-cli -C <configured-host-source> orchestration permission check <target-id> --project <owner-checkout-id> \
   --actor <worker-id> --action sessions_manage --tool codex --starting --target-sessions 0 --machine-sessions 0 --tool-sessions 0
 hotsheet-cli -C <configured-host-source> orchestration audit --project <owner-checkout-id> --after <seq> --limit 100
@@ -541,6 +554,7 @@ accepts `--operation-id`, `--model`, `--target-sessions`, `--machine-sessions`,
 | `/checkouts/{owner}/orchestration/permissions/{request}`   | POST `{answer}`: `allow_once`, `always_allow` or `deny`                      |
 | `/checkouts/{owner}/orchestration/permission-rules`        | POST `{target_id, action, tool?}` remember a rule ahead of a request         |
 | `/checkouts/{owner}/orchestration/permission-rules/{rule}` | DELETE forget a rule                                                         |
+| `/checkouts/{owner}/orchestration/retired-permissions`     | GET the retired files with counts; DELETE a person removes them              |
 | `/checkouts/{owner}/orchestration/targets/{target}/access` | POST side-effect-free check against the cached binding                       |
 | `/checkouts/{owner}/orchestration/audit`                   | GET journal page, `?after=<seq>&limit=<n>`                                   |
 

@@ -248,6 +248,28 @@ impl RetiredAuthority {
     }
 }
 
+/// HS2-JWV5S1: remove the retired grant and approval files from this machine. Answers
+/// what was there, counted as [`retired_authority`] reports it, so a caller can show
+/// the counts it removed. Idempotent: with nothing left it removes nothing and answers
+/// an empty report. Neither file is read as authority before or after.
+pub fn remove_retired_authority(home: &Path) -> Result<RetiredAuthority, OrchestrationError> {
+    let found = retired_authority(home);
+    for (present, name) in [
+        (found.grants_file, RETIRED_GRANTS_FILE),
+        (found.approvals_file, RETIRED_APPROVALS_FILE),
+    ] {
+        if !present {
+            continue;
+        }
+        match std::fs::remove_file(home.join(name)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(OrchestrationError::Storage(error)),
+        }
+    }
+    Ok(found)
+}
+
 /// Report the retired grant and approval files. A count is given when the file still
 /// parses as the old shape; nothing in it is trusted.
 pub fn retired_authority(home: &Path) -> RetiredAuthority {

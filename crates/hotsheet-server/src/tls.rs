@@ -393,6 +393,8 @@ mod tests {
             "/checkouts/owner/orchestration/permissions/id",
             "/checkouts/owner/orchestration/permission-rules",
             "/checkouts/owner/orchestration/permission-rules/id",
+            // HS2-JWV5S1: and so are the retired files.
+            "/checkouts/owner/orchestration/retired-permissions",
             // HS2-AZ15GA: orchestrating uses this machine's gate.
             "/checkouts/owner/orchestration/tickets/create",
             "/checkouts/owner/orchestration/tickets/links",

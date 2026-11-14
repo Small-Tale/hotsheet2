@@ -927,3 +927,133 @@ async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
     assert_eq!(next_permission_event(&mut events, quiet).await, None);
     fixture.host.begin_stopping();
 }
+
+/// HS2-JWV5S1: the retired grant and approval files are shown with their counts and
+/// removed by a person through the real service and the owned CLI; an AI is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_jwv5s1_a_person_removes_the_retired_files_through_http_and_the_cli() {
+    let fixture = self_target().await;
+    let home = fixture.root_path.join("home");
+    let source = fixture.root_path.join("store");
+    let router = fixture.router.clone();
+    let path = format!("{}/retired-permissions", fixture.base);
+    let write_retired = || {
+        std::fs::write(
+            home.join("orchestration-grants.json"),
+            br#"{"schema_version":1,"grants":[{},{},{}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            home.join("orchestration-approvals.json"),
+            br#"{"schema_version":1,"approvals":[{}]}"#,
+        )
+        .unwrap();
+    };
+    write_retired();
+    // The bearer is required for both methods.
+    for method in ["GET", "DELETE"] {
+        assert_eq!(
+            api(router.clone(), method, &path, json!({}), false).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    let (status, shown) = api(router.clone(), "GET", &path, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{shown}");
+    assert_eq!(shown["grants"], 3);
+    assert_eq!(shown["approvals"], 1);
+    // An AI cannot remove them.
+    let (status, refused) = api(
+        router.clone(),
+        "DELETE",
+        &path,
+        json!({"actor":{"role":"ai","id":"worker-1"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
+    assert!(home.join("orchestration-grants.json").exists());
+    let (status, removed) = api(
+        router.clone(),
+        "DELETE",
+        &path,
+        json!({"actor":{"role":"human","id":"maintainer"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    assert_eq!(removed["removed"]["grants"], 3);
+    assert_eq!(removed["removed"]["approvals"], 1);
+    assert_eq!(removed["remaining"]["grants_file"], false);
+    assert!(!home.join("orchestration-grants.json").exists());
+    // Again: idempotent.
+    let (status, again) = api(
+        router.clone(),
+        "DELETE",
+        &path,
+        json!({"actor":{"role":"human","id":"maintainer"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(again["removed"]["grants_file"], false);
+    // Headless: the CLI shows the counts, then a person removes them.
+    write_retired();
+    let prefix = |role: &'static str| {
+        [
+            "--actor-role",
+            role,
+            "--actor-id",
+            "someone",
+            "-C",
+            source.to_str().unwrap(),
+            "orchestration",
+        ]
+        .map(str::to_owned)
+    };
+    let human = prefix("human");
+    let human: Vec<&str> = human.iter().map(String::as_str).collect();
+    let ai = prefix("ai");
+    let ai: Vec<&str> = ai.iter().map(String::as_str).collect();
+    let shown = cli_named(
+        &home,
+        &human,
+        &["permission", "retired", "--project", &fixture.checkout_id],
+    );
+    assert_eq!(shown["grants"], 3);
+    assert!(home.join("orchestration-grants.json").exists());
+    assert!(
+        cli_failure(
+            &home,
+            &ai,
+            &[
+                "permission",
+                "retired",
+                "--remove",
+                "--project",
+                &fixture.checkout_id
+            ]
+        )
+        .contains("forbidden")
+    );
+    let removed = cli_named(
+        &home,
+        &human,
+        &[
+            "permission",
+            "retired",
+            "--remove",
+            "--project",
+            &fixture.checkout_id,
+        ],
+    );
+    assert_eq!(removed["removed"]["grants"], 3);
+    assert!(!home.join("orchestration-approvals.json").exists());
+    // The permission list no longer reports them.
+    let listed = cli_named(
+        &home,
+        &human,
+        &["permission", "list", "--project", &fixture.checkout_id],
+    );
+    assert_eq!(listed["retired"]["grants_file"], false);
+    assert_eq!(listed["retired"]["approvals_file"], false);
+}

@@ -66,7 +66,7 @@ pub use permissions::{
     MAX_PERMISSION_RULES, PERMISSION_ALLOWED_MS, PERMISSION_PENDING_MS, PermissionAction,
     PermissionAnswer, PermissionAsk, PermissionKey, PermissionLedger, PermissionRequest,
     PermissionRule, PermissionState, RETIRED_APPROVALS_FILE, RETIRED_GRANTS_FILE, RetiredAuthority,
-    retired_authority,
+    remove_retired_authority, retired_authority,
 };
 pub use planning::{
     PlannerFacts, PlanningState, ProposeDecision, current_planner, decide_propose, planning_state,

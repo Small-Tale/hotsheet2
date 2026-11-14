@@ -3589,6 +3589,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrchestrationTargetLines'
+  /checkouts/{owner}/orchestration/retired-permissions:
+    description: Machine-local retired grant and approval files (HS2-JWV5S1). Never authority.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: getOrchestrationRetiredPermissions
+      description: The retired files on this machine with their counts. Reads nothing as authority.
+      responses:
+        '200':
+          description: What is on this machine.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRetiredAuthority'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    delete:
+      operationId: removeOrchestrationRetiredPermissions
+      description:
+        A person removes the retired files and gets the counts removed. Idempotent. An ai or system actor is refused
+        with 403 forbidden.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: What was removed and what is left.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationRetiredRemoved'
         default:
           description:
             Stable content-free error code; authentication/device-role/locality denial may return a fixed text
@@ -3608,6 +3654,9 @@ paths:
         in: path
         required: true
         description: The target checkout.
+      - name: owner
+        in: path
+        required: true
         schema:
           type: string
           minLength: 1
@@ -23932,6 +23981,18 @@ components:
               type: integer
               minimum: 0
           additionalProperties: false
+      additionalProperties: false
+    OrchestrationRetiredRemoved:
+      description: HS2-JWV5S1. The retired files removed, counted as found, and what is left.
+      type: object
+      required:
+        - removed
+        - remaining
+      properties:
+        removed:
+          $ref: '#/components/schemas/OrchestrationRetiredAuthority'
+        remaining:
+          $ref: '#/components/schemas/OrchestrationRetiredAuthority'
       additionalProperties: false
     RemoteIdentity:
       type: object

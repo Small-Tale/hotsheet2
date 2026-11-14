@@ -29,6 +29,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "permissions", _]
             | ["checkouts", _, "orchestration", "permission-rules"]
             | ["checkouts", _, "orchestration", "permission-rules", _]
+            // HS2-JWV5S1: the retired grant and approval files.
+            | ["checkouts", _, "orchestration", "retired-permissions"]
             // HS2-AZ15GA: orchestrating-side ticket operations and the hosted half.
             | ["checkouts", _, "orchestration", "tickets", _]
             | ["checkouts", _, "target-tickets"]
@@ -112,6 +114,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "permissions", _]
             | ["checkouts", _, "orchestration", "permission-rules"]
             | ["checkouts", _, "orchestration", "permission-rules", _]
+            // HS2-JWV5S1: so are the retired files.
+            | ["checkouts", _, "orchestration", "retired-permissions"]
             // HS2-AZ15GA: orchestrating uses this machine's gate and bindings. The
             // hosted `target-tickets` routes stay ordinary authenticated project data,
             // because a remote orchestrator must reach them.
@@ -1072,6 +1076,12 @@ impl OrchestrationRuntime {
                 let actor = actor(body)?;
                 let request: super::RememberPermission = decode(body)?;
                 value(self.permission_remember(owner, request, actor.as_ref(), tx)?)
+            }
+            ("GET", ["checkouts", owner, "orchestration", "retired-permissions"]) => {
+                value(self.retired_permissions(owner)?)
+            }
+            ("DELETE", ["checkouts", owner, "orchestration", "retired-permissions"]) => {
+                value(self.retired_permissions_remove(owner, actor(body)?.as_ref(), tx)?)
             }
             ("DELETE", ["checkouts", owner, "orchestration", "permission-rules", id]) => {
                 value(self.permission_forget(owner, id, actor(body)?.as_ref(), tx)?)

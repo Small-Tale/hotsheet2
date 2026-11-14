@@ -784,3 +784,36 @@ fn hs2_xhq1eh_a_person_remembers_a_rule_ahead_and_each_time_requests_ignore_rule
     let now = f.clock.0.get();
     assert!(f.ledger.get(OWNER, &id, now).unwrap().each_time);
 }
+
+/// HS2-JWV5S1: removing the retired files reports what was there and is idempotent.
+#[test]
+fn hs2_jwv5s1_removing_retired_files_reports_what_was_there() {
+    let home = tempfile::tempdir().unwrap();
+    let empty = remove_retired_authority(home.path()).unwrap();
+    assert!(!empty.found());
+    std::fs::write(
+        home.path().join(RETIRED_GRANTS_FILE),
+        br#"{"schema_version":1,"grants":[{}]}"#,
+    )
+    .unwrap();
+    let removed = remove_retired_authority(home.path()).unwrap();
+    assert_eq!(
+        removed,
+        RetiredAuthority {
+            grants_file: true,
+            grants: Some(1),
+            approvals_file: false,
+            approvals: None,
+        }
+    );
+    assert!(!home.path().join(RETIRED_GRANTS_FILE).exists());
+    assert!(!retired_authority(home.path()).found());
+    assert!(!remove_retired_authority(home.path()).unwrap().found());
+    // The ledger is never touched.
+    let ledger = home.path().join("orchestration-permissions.json");
+    std::fs::write(&ledger, b"{}").unwrap();
+    std::fs::write(home.path().join(RETIRED_APPROVALS_FILE), b"[").unwrap();
+    let removed = remove_retired_authority(home.path()).unwrap();
+    assert!(removed.approvals_file && removed.approvals.is_none());
+    assert!(ledger.exists());
+}

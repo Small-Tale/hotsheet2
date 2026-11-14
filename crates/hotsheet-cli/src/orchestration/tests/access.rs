@@ -906,6 +906,125 @@ fn hs2_xhq1eh_retired_grants_are_reported_and_never_trusted() {
     assert_eq!(request.state, PermissionState::Pending);
 }
 
+/// HS2-JWV5S1: a person removes the retired grant and approval files after seeing
+/// their counts. An AI or system actor is refused and nothing is removed; removing
+/// again finds nothing and audits nothing; files written back later are found and
+/// removed again (empty, then refilled). The files never become authority.
+#[test]
+fn hs2_jwv5s1_a_person_removes_the_retired_files_once() {
+    let f = fixture();
+    let mut rng = Rng(500);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_local(&f, &mut tx);
+    let path = format!(
+        "/checkouts/{}/orchestration/retired-permissions",
+        f.owner.id
+    );
+    let write_retired = || {
+        std::fs::write(
+            f.home.join("orchestration-grants.json"),
+            br#"{"schema_version":1,"grants":[{},{}]}"#,
+        )
+        .unwrap();
+        std::fs::write(f.home.join("orchestration-approvals.json"), b"not json").unwrap();
+    };
+    // Nothing to remove: an empty report, nothing audited.
+    let empty = f
+        .runtime
+        .retired_permissions_remove(&f.owner.id, Some(&human()), &mut tx)
+        .unwrap();
+    assert!(!empty.removed.found() && !empty.remaining.found());
+    write_retired();
+    // Shown with their counts; an unreadable file is found without a count.
+    let shown = f
+        .runtime
+        .request("GET", &path, &Value::Null, &mut tx)
+        .unwrap();
+    assert_eq!(
+        shown,
+        json!({"grants_file": true, "grants": 2, "approvals_file": true})
+    );
+    for actor in [ai("worker-1"), system("scheduler")] {
+        assert!(matches!(
+            f.runtime
+                .retired_permissions_remove(&f.owner.id, Some(&actor), &mut tx),
+            Err(OrchestrationError::Forbidden(_))
+        ));
+    }
+    assert!(matches!(
+        f.runtime
+            .retired_permissions_remove(&f.owner.id, None, &mut tx),
+        Err(OrchestrationError::Forbidden(_))
+    ));
+    assert!(f.home.join("orchestration-grants.json").exists());
+    // A person removes them through the router, with the counts removed.
+    let removed = f
+        .runtime
+        .request(
+            "DELETE",
+            &path,
+            &json!({"actor": {"role": "human", "id": "maintainer"}}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(removed["removed"]["grants"], 2);
+    assert_eq!(removed["removed"]["approvals_file"], true);
+    assert_eq!(
+        removed["remaining"],
+        json!({"grants_file": false, "approvals_file": false})
+    );
+    assert!(!f.home.join("orchestration-grants.json").exists());
+    assert!(!f.home.join("orchestration-approvals.json").exists());
+    let audited = || {
+        f.runtime
+            .audit(&f.owner.id, 0, 500)
+            .unwrap()
+            .entries
+            .into_iter()
+            .filter(|entry| entry.record.action == "retired_remove")
+            .map(|entry| (entry.record.outcome, entry.record.reason))
+            .collect::<Vec<_>>()
+    };
+    let expected = vec![
+        (AuditOutcome::Revoked, Some("grants_file".to_owned())),
+        (AuditOutcome::Revoked, Some("approvals_file".to_owned())),
+    ];
+    assert_eq!(audited(), expected);
+    // Repeated: nothing found, nothing audited.
+    let again = f
+        .runtime
+        .retired_permissions_remove(&f.owner.id, Some(&human()), &mut tx)
+        .unwrap();
+    assert!(!again.removed.found());
+    assert_eq!(audited().len(), 2);
+    // Refilled by an old process: found and removed again.
+    write_retired();
+    assert!(
+        f.runtime
+            .permission_list(&f.owner.id, &mut tx)
+            .unwrap()
+            .retired
+            .found()
+    );
+    let refilled = f
+        .runtime
+        .retired_permissions_remove(&f.owner.id, Some(&human()), &mut tx)
+        .unwrap();
+    assert_eq!(refilled.removed.grants, Some(2));
+    assert_eq!(audited().len(), 4);
+    // An unknown owner is refused before anything is touched.
+    write_retired();
+    assert!(
+        f.runtime
+            .retired_permissions_remove("unknown-owner", Some(&human()), &mut tx)
+            .is_err()
+    );
+    assert!(f.home.join("orchestration-grants.json").exists());
+}
+
 /// The next `rounds` resolutions of the target are each interrupted by one complete
 /// concurrent resolve, as a follower's would be.
 fn race(f: &Fixture, rounds: usize) {
