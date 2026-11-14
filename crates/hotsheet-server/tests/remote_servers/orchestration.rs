@@ -57,6 +57,58 @@ pub(super) fn shared_runtime(
     )
     .unwrap()
 }
+/// HS2-XHQ1EH: what a person sets up in place of a retired grant body
+/// (`{actions, session_scope?, actor}`): a remembered rule for each action that
+/// would ask, and a session start for each tool. Reads and observation need none.
+/// `target_path` is `.../orchestration/targets/{target}`; answers the last reply.
+pub(super) async fn remember_rules(
+    router: axum::Router,
+    target_path: &str,
+    grant: Value,
+) -> (StatusCode, Value) {
+    let (base, target) = target_path.rsplit_once("/targets/").unwrap();
+    let tools: Vec<String> = grant["session_scope"]["tools"]
+        .as_array()
+        .map(|tools| {
+            tools
+                .iter()
+                .map(|tool| tool["tool"].as_str().unwrap().to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    let person = grant
+        .get("actor")
+        .cloned()
+        .unwrap_or_else(|| json!({"role":"human","id":"maintainer"}));
+    let mut last = (StatusCode::OK, Value::Null);
+    for action in grant["actions"].as_array().unwrap() {
+        let bodies: Vec<Value> = match action.as_str().unwrap() {
+            "tickets_read" | "gates_observe" => Vec::new(),
+            "sessions_manage" => tools
+                .iter()
+                .map(|tool| json!({"action":"session_start","tool":tool}))
+                .collect(),
+            other => vec![json!({"action":other})],
+        };
+        for mut body in bodies {
+            body["target_id"] = json!(target);
+            body["actor"] = person.clone();
+            last = api(
+                router.clone(),
+                "POST",
+                &format!("{base}/permission-rules"),
+                body,
+                true,
+            )
+            .await;
+            if last.0 != StatusCode::OK {
+                return last;
+            }
+        }
+    }
+    last
+}
+
 pub(super) async fn api(
     router: axum::Router,
     method: &str,

@@ -90,6 +90,15 @@ function operationLabel(item: PermissionItem): string {
   return `Wants permission to use ${item.tool}`;
 }
 
+/** HS2-XHQ1EH: the orchestrator's request names the orchestrator and the target project. */
+function orchestratorDetails(item: PermissionItem): string | undefined {
+  const ask = item.orchestrator;
+  if (!ask) return undefined;
+  const parts = [`Target project: ${ask.target_label}`];
+  if (ask.tool) parts.push(`Tool: ${ask.tool}${ask.model ? ` (${ask.model})` : ''}`);
+  return parts.join(' · ');
+}
+
 function historyLabel(item: PermissionHistoryItem): string {
   if (item.decision === 'external') return 'Decision made outside Hot Sheet';
   const prefix = item.automatic ? 'Automatically ' : '';
@@ -136,8 +145,10 @@ export function PermissionRequestCard({
   const alwaysSupported = !history && item.always_allow_supported === true;
   const preview = history ? undefined : rememberedPermissionPreview(item.key);
   const previewScope = preview?.scope;
-  const ruleOwner =
-    item.project === `checkout:${item.projectId}`
+  const orchestrator = item.orchestrator;
+  const ruleOwner = orchestrator
+    ? `Orchestration project: ${orchestrator.owner_label}`
+    : item.project === `checkout:${item.projectId}`
       ? `Code project: ${item.projectName} · ${item.projectRoot ?? 'path unavailable'}`
       : item.project
         ? `Legacy ticket-source request: ${item.project}`
@@ -146,7 +157,9 @@ export function PermissionRequestCard({
     ? `${item.tool}: ${historyLabel(item)}`
     : reviewAlreadyAllowed
       ? `${item.tool}: this request was allowed`
-      : operationLabel(item);
+      : orchestrator
+        ? `Orchestrator: ${item.action}`
+        : operationLabel(item);
   const timestamp = history ? item.resolvedAt : item.receivedAt;
   const stateIcon = history
     ? item.decision === 'allow'
@@ -184,7 +197,55 @@ export function PermissionRequestCard({
               : '--wa-color-brand-fill-loud',
           );
 
-  const decisions = history ? undefined : previewScope ? (
+  const decisions = history ? undefined : previewScope && orchestrator ? (
+    <div class="permission-request-card__confirmation" role="group" aria-label="Confirm remembered permission">
+      <strong>Review the rule to remember</strong>
+      <dl>
+        <dt>Requester</dt>
+        <dd>Orchestrator</dd>
+        <dt>Action</dt>
+        <dd>{item.action}</dd>
+        <dt>Target project</dt>
+        <dd>{orchestrator.target_label}</dd>
+        {orchestrator.tool && (
+          <>
+            <dt>Tool</dt>
+            <dd>{orchestrator.tool}</dd>
+          </>
+        )}
+        <dt>Rule owner</dt>
+        <dd>{ruleOwner}</dd>
+        <dt>Applies to</dt>
+        <dd>{`The orchestrator of ${orchestrator.owner_label}, in ${orchestrator.target_label}`}</dd>
+        <dt>Lifetime</dt>
+        <dd>Persistent, until revoked</dd>
+      </dl>
+      <div class="permission-request-card__confirmation-actions">
+        <Button
+          emphasis="plain"
+          size="compact"
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelRememberedPermission.value}
+          rootAttributes={{ 'data-request-key': item.key }}
+        >
+          Back
+        </Button>
+        <Button
+          emphasis="primary"
+          size="compact"
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
+          disabled={state === 'resolving'}
+          rootAttributes={{
+            'data-decision': 'allow',
+            'data-scope': 'always',
+            'data-request-key': item.key,
+            'data-rule-confirmed': 'true',
+          }}
+        >
+          Confirm Always Allow
+        </Button>
+      </div>
+    </div>
+  ) : previewScope ? (
     <div class="permission-request-card__confirmation" role="group" aria-label="Confirm remembered permission">
       <strong>Review the rule to remember</strong>
       {reviewAlreadyAllowed && (
@@ -332,23 +393,26 @@ export function PermissionRequestCard({
         </span>
         <div
           class="permission-request-card__allows"
-          data-allow-count={alwaysSupported ? '3' : '2'}
+          data-allow-count={String((alwaysSupported ? 2 : 1) + (orchestrator ? 0 : 1))}
           role="group"
           aria-label="Allow duration"
         >
-          <span class="permission-request-card__decision">
-            <Button
-              emphasis="secondary"
-              size="compact"
-              fill
-              action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
-              disabled={state === 'resolving'}
-              title="Allow this exact request again in this AI session without asking, until it ends"
-              rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
-            >
-              Allow This AI Session
-            </Button>
-          </span>
+          {/* HS2-XHQ1EH: an orchestrator request belongs to no AI session. */}
+          {!orchestrator && (
+            <span class="permission-request-card__decision">
+              <Button
+                emphasis="secondary"
+                size="compact"
+                fill
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
+                disabled={state === 'resolving'}
+                title="Allow this exact request again in this AI session without asking, until it ends"
+                rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
+              >
+                Allow This AI Session
+              </Button>
+            </span>
+          )}
           {alwaysSupported && (
             <span class="permission-request-card__decision">
               <Button
@@ -453,7 +517,7 @@ export function PermissionRequestCard({
       projectName={item.projectName}
       time={relativeTime(timestamp)}
       summary={{ icon: stateIcon, iconName, label: statusLabel, color: summaryColor }}
-      details={{ text: item.action, bounded: true }}
+      details={{ text: orchestratorDetails(item) ?? item.action, bounded: true }}
       endActions={decisions}
     >
       <>

@@ -41,6 +41,76 @@ mod watch;
 fn id(n: u128) -> String {
     ulid::Ulid::from(n).to_string()
 }
+
+/// HS2-XHQ1EH: a person remembers a rule for every action in `actions` that would
+/// otherwise ask (as Always Allow would), so the orchestrator's actor acts on target
+/// `target_id` without a permission request. Reads and observation need nothing;
+/// `sessions_manage` remembers a session start for each of `tools`.
+fn allow_on(
+    runtime: &OrchestrationRuntime,
+    owner: &str,
+    target_id: &str,
+    actions: &[hotsheet_ticketing::orchestration::TargetAction],
+    tools: &[&str],
+    tx: &mut Transaction<'_>,
+) {
+    use hotsheet_ticketing::orchestration::{PermissionAction as P, TargetAction as A};
+    let person =
+        hotsheet_ticketing::actor::MutationActor::parse("human", Some("maintainer".into()))
+            .unwrap();
+    for action in actions {
+        let wanted: Vec<(P, Option<String>)> = match action {
+            A::TicketsRead | A::GatesObserve => Vec::new(),
+            A::TicketsWrite => vec![(P::TicketsWrite, None)],
+            A::WorkStart => vec![(P::WorkStart, None)],
+            A::ValidationRun => vec![(P::ValidationRun, None)],
+            A::DeploymentsRun => vec![(P::DeploymentsRun, None)],
+            A::SessionsManage => tools
+                .iter()
+                .map(|tool| (P::SessionStart, Some((*tool).to_owned())))
+                .collect(),
+        };
+        for (action, tool) in wanted {
+            runtime
+                .permission_remember(
+                    owner,
+                    RememberPermission {
+                        target_id: target_id.into(),
+                        action,
+                        tool,
+                    },
+                    Some(&person),
+                    tx,
+                )
+                .unwrap();
+        }
+    }
+}
+
+/// HS2-XHQ1EH: the request id of a permission request the gate filed.
+fn permission_request(result: Result<impl Sized, OrchestrationError>) -> String {
+    match result {
+        Err(OrchestrationError::PermissionRequired { request_id }) => request_id,
+        Err(other) => panic!("expected permission_required, got {other}"),
+        Ok(_) => panic!("expected permission_required, got authority"),
+    }
+}
+
+/// HS2-XHQ1EH: a person answers one permission request.
+fn answer(
+    runtime: &OrchestrationRuntime,
+    owner: &str,
+    request_id: &str,
+    answer: hotsheet_ticketing::orchestration::PermissionAnswer,
+    tx: &mut Transaction<'_>,
+) {
+    let person =
+        hotsheet_ticketing::actor::MutationActor::parse("human", Some("maintainer".into()))
+            .unwrap();
+    runtime
+        .permission_answer(owner, request_id, answer, Some(&person), tx)
+        .unwrap();
+}
 struct Clock;
 impl hotsheet_ticketing::Clock for Clock {
     fn now_ms(&self) -> u64 {

@@ -1448,6 +1448,26 @@ longer than client-side automation windows: an ignored or otherwise hidden popup
 not advance a client's visible-presentation countdown and must not disappear after the
 old five-minute transport timeout.
 
+**Orchestrator requests (HS2-XHQ1EH).** An orchestration project's orchestrator is
+a requester kind of its own, `orchestrator`, beside the AI connections. When it wants
+to act on a target project and no remembered rule allows it, the orchestration
+runtime files the request in its machine-local ledger and the server enqueues it in
+this bridge with no blocking waiter: nothing waits on the answer, so it has no
+safe-deny timeout of its own (an unanswered request lapses after a day in the
+ledger). The request carries the orchestration project, the target project, the
+action and, for a session start, the tool, by identifiers and labels only. Clients
+show it as the ordinary card, headed `Orchestrator:` and the action, with Allow Once,
+Always Allow and Deny; there is no Allow This AI Session, no chat answer and no
+pattern review. `POST /permissions/{id}` routes the answer to the runtime, which
+records it, remembers an Always Allow as a rule keyed (orchestration project, target
+project, action, tool), wakes the scheduler, and settles the card with the ordinary
+`permission_resolved` event. Those rules live in the orchestration ledger rather than
+the encrypted vault; `GET /permissions/rules` merges them in, `DELETE
+/permissions/rules` forgets one, and editing one is refused with 400. Pending
+orchestrator requests are brought in line with the ledger whenever a client reads
+`GET /permissions`, so one filed by a headless CLI appears then.
+See [26](26-orchestration-projects.md) §26.7 and §26.25.
+
 **Rule reach, origin, and lifetime (HS2-J6009Z).** These are separate concepts.
 The bridge matches a rule's project, tool, and exact action or reviewed pattern;
 connection-scoped rules additionally match the raising connection. Both driven agents

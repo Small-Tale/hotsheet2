@@ -9,7 +9,7 @@ use hotsheet_ticketing::orchestration::{GateState, TargetAction};
 use serde_json::json;
 
 use super::gates::{judge, sha, with_run};
-use super::tickets::{human, worker};
+use super::tickets::worker;
 use super::*;
 
 /// Holds the monitor slot the way a running monitor does, and counts starts.
@@ -70,10 +70,10 @@ fn hs2_vvhvf0_a_link_starts_the_monitor_once_and_only_for_a_gate_that_waits() {
     m.runtime = m.runtime.clone().with_job_monitor(monitor.clone());
     let (a, b, owner) = (sha('a'), sha('b'), m.owner.id.clone());
     assert!(m.runtime.gate_owners().is_empty());
-    // A link nobody may make starts nothing.
+    // A link no identified actor makes starts nothing.
     assert!(
         m.runtime
-            .gate_link(&owner, &run, github(&a), Some(&human()), &mut tx)
+            .gate_link(&owner, &run, github(&a), None, &mut tx)
             .is_err()
     );
     assert_eq!(monitor.starts(), 0);
@@ -222,15 +222,10 @@ fn hs2_vvhvf0_a_follower_and_a_sync_restart_a_missing_monitor_and_back_off_a_fai
     monitor.stop();
     assert_eq!(step(&mut follow, &mut tx).watching, Some(true));
     assert_eq!(monitor.starts(), 9);
-    // A follower whose linking actor lost the grant observes nothing and starts nothing.
+    // A follower whose target can no longer be resolved observes nothing and starts
+    // nothing.
     monitor.stop();
-    let grant = m.runtime.grants(&m.reference(1), &mut tx).unwrap()[0]
-        .grant
-        .grant_id
-        .clone();
-    m.runtime
-        .revoke(&m.reference(1), &grant, Some(&human()), &mut tx)
-        .unwrap();
+    super::tickets::unbind(&m, 1, &mut tx);
     let mut denied = GateFollowState::default();
     let left = step(&mut denied, &mut tx);
     assert_eq!(

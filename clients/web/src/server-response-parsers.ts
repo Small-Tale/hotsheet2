@@ -1268,6 +1268,14 @@ export const parsePermissionRequest = shape<PermissionRequest>(
     agent: isString,
     always_allow_supported: isBoolean,
     suggestions: listOf(parsePermissionSecretSuggestion.check),
+    // HS2-XHQ1EH: the orchestrator requester kind and what it concerns.
+    requester: (field) => field === 'orchestrator',
+    orchestrator: (field) =>
+      isRecord(field) &&
+      typeof field.request_id === 'string' &&
+      typeof field.owner_label === 'string' &&
+      typeof field.target_label === 'string' &&
+      typeof field.action === 'string',
   },
 );
 
@@ -1304,6 +1312,13 @@ export const parsePermissionRule = shape<PermissionRule>(
       (field as Record<string, unknown>).version === 1 &&
       ((field as Record<string, unknown>).kind === 'template' || (field as Record<string, unknown>).kind === 'regex') &&
       typeof (field as Record<string, unknown>).expression === 'string',
+    // HS2-XHQ1EH: a remembered orchestrator rule's key.
+    orchestrator: (field) =>
+      isRecord(field) &&
+      typeof field.rule_id === 'string' &&
+      typeof field.owner_label === 'string' &&
+      typeof field.target_label === 'string' &&
+      typeof field.action === 'string',
   },
 );
 

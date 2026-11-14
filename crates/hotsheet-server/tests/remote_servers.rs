@@ -488,12 +488,12 @@ mod e2e_failures;
 mod e2e_loop;
 #[path = "remote_servers/gates.rs"]
 mod gates;
-#[path = "remote_servers/grants.rs"]
-mod grants;
 #[path = "remote_servers/job_monitor.rs"]
 mod job_monitor;
 #[path = "remote_servers/orchestration.rs"]
 mod orchestration;
+#[path = "remote_servers/permissions.rs"]
+mod permissions;
 #[path = "remote_servers/policy.rs"]
 mod policy;
 #[path = "remote_servers/provisional.rs"]

@@ -220,7 +220,7 @@ fn contention(view: &ScheduleView) -> Vec<(String, &'static str, Option<String>,
 fn hs2_2fg91x_two_tickets_need_one_resource_one_starts_the_other_after_release() {
     tx!(tx);
     let s = setup(true, &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     let (first_ticket, first) = s.ready_needing("First", &[VM], &mut tx);
     let (_, second) = s.ready_needing("Second", &[VM], &mut tx);
 
@@ -332,7 +332,7 @@ fn hs2_2fg91x_a_release_wakes_the_follower_through_the_claim_service_wait() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let owner = s.owner();
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     // Someone else holds the resource on the real local backend.
     let grant = acquire(&s.m.home, VM);
     let (_, waits) = s.ready_needing("Waits", &[VM], &mut tx);
@@ -390,7 +390,7 @@ fn hs2_2fg91x_an_expiry_is_a_named_retry_time_and_a_renewal_moves_it() {
     let mut s = setup(true, &mut tx);
     let owner = s.owner();
     let source = s.scripted();
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     source.hold(VM, 5_000);
     let (_, waits) = s.ready_needing("Waits", &[VM], &mut tx);
     let mut state = SchedulerFollowState::default();
@@ -452,7 +452,7 @@ fn hs2_2fg91x_an_unreachable_backend_that_fails_closed_defers_the_work() {
     tx!(tx);
     let mut s = setup(true, &mut tx);
     let source = s.scripted();
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     *source.unreachable.lock().unwrap() = Some(OfflinePolicy::FailClosed);
     let (_, needs) = s.ready_needing("Needs the VM", &[VM], &mut tx);
     let (_, plain) = s.ready("Needs nothing", &mut tx);
@@ -523,34 +523,14 @@ fn hs2_2fg91x_an_unreachable_backend_that_fails_closed_defers_the_work() {
 
     // The backend answers again and the backoff has passed: the work is placed.
     *source.unreachable.lock().unwrap() = None;
-    for (actions, session_scope) in [
-        (
-            vec![TargetAction::TicketsRead, TargetAction::GatesObserve],
-            None,
-        ),
-        (
-            vec![TargetAction::SessionsManage],
-            Some(SessionScope {
-                tools: vec![scope("codex"), scope("claude")],
-                max_concurrency: 4,
-            }),
-        ),
-    ] {
-        s.m.runtime
-            .grant(
-                &s.m.reference(1),
-                CreateGrant {
-                    grant_id: None,
-                    actor_id: "worker-1".into(),
-                    actions,
-                    session_scope,
-                    expires_at_ms: 10_000_000,
-                },
-                Some(&human()),
-                &mut tx,
-            )
-            .unwrap();
-    }
+    allow_on(
+        &s.m.runtime,
+        &s.m.owner.id,
+        &id(1),
+        &[TargetAction::SessionsManage],
+        &["codex", "claude"],
+        &mut tx,
+    );
     let clock = At(until);
     let mut rng = Rng(700);
     let mut later = Transaction {
@@ -579,7 +559,7 @@ fn hs2_2fg91x_an_unreachable_backend_that_allows_provisional_claims_starts_one()
     tx!(tx);
     let mut s = setup(true, &mut tx);
     let source = s.scripted();
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     *source.unreachable.lock().unwrap() = Some(OfflinePolicy::Provisional);
     let (first_ticket, first) = s.ready_needing("First", &[VM], &mut tx);
     let (_, second) = s.ready_needing("Second", &[VM], &mut tx);
@@ -636,7 +616,7 @@ fn hs2_2fg91x_an_unreachable_backend_that_allows_provisional_claims_starts_one()
 fn hs2_2fg91x_the_local_backend_fails_closed_when_its_state_cannot_be_read() {
     tx!(tx);
     let s = setup(true, &mut tx);
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     let grant = acquire(&s.m.home, VM);
     s.ready_needing("Needs the VM", &[VM], &mut tx);
     let state = s.m.home.join("resource-claims/namespaces/vm/state.json");
@@ -665,7 +645,7 @@ fn hs2_2fg91x_the_local_backend_fails_closed_when_its_state_cannot_be_read() {
 fn hs2_2fg91x_the_policy_requires_a_resource_of_every_piece_of_work_on_a_target() {
     tx!(tx);
     let s = setup(true, &mut tx);
-    let mut body = policy(true, Vec::new());
+    let mut body = policy(true);
     body.placement.resources = vec![TargetResources {
         target_id: id(1),
         resources: vec![need(VM)],
@@ -785,19 +765,13 @@ fn hs2_2fg91x_requirements_are_validated_where_they_are_declared() {
 
     // The policy's requirements are refused with a stable code each.
     let problems = |resources: Value| {
-        let mut body = serde_json::to_value(policy(false, Vec::new())).unwrap();
+        let mut body = serde_json::to_value(policy(false)).unwrap();
         body["placement"]["resources"] = resources;
         let Ok(body) = serde_json::from_value::<PolicyBody>(body) else {
             return vec!["unreadable_body".to_owned()];
         };
         s.m.runtime
-            .validate_policy(
-                &owner,
-                PolicyProposal {
-                    policy: Some(body),
-                    actor_id: None,
-                },
-            )
+            .validate_policy(&owner, PolicyProposal { policy: Some(body) })
             .unwrap()
             .problems
             .into_iter()
@@ -862,7 +836,7 @@ fn hs2_2fg91x_requirements_are_validated_where_they_are_declared() {
 fn hs2_2fg91x_a_namespace_one_read_has_no_room_for_is_unknown_not_free() {
     tx!(tx);
     let s = setup(true, &mut tx);
-    let mut body = policy(false, Vec::new());
+    let mut body = policy(false);
     body.targets[0].max_sessions = 4;
     set_policy(&s.m, body, &mut tx);
     // Nine namespaces across three steps; one capacity read lists eight.
@@ -999,44 +973,20 @@ fn remote(tx: &mut Transaction<'_>) -> Remote {
             .unwrap()
             .usable
     );
-    for (actions, session_scope) in [
-        (
-            vec![
-                TargetAction::TicketsRead,
-                TargetAction::GatesObserve,
-                TargetAction::WorkStart,
-            ],
-            None,
-        ),
-        (
-            vec![TargetAction::SessionsManage],
-            Some(SessionScope {
-                tools: vec![scope("codex"), scope("claude")],
-                max_concurrency: 4,
-            }),
-        ),
-    ] {
-        runtime
-            .grant(
-                &target,
-                CreateGrant {
-                    grant_id: None,
-                    actor_id: "worker-1".into(),
-                    actions,
-                    session_scope,
-                    expires_at_ms: 10_000,
-                },
-                Some(&human()),
-                tx,
-            )
-            .unwrap();
-    }
+    allow_on(
+        &runtime,
+        &target.owner_checkout_id,
+        &target.target_id,
+        &[TargetAction::WorkStart, TargetAction::SessionsManage],
+        &["codex", "claude"],
+        tx,
+    );
     runtime
         .set_policy(
             &owner.id,
             SetPolicy {
                 expected_revision: None,
-                policy: policy(true, Vec::new()),
+                policy: policy(true),
             },
             Some(&human()),
             tx,

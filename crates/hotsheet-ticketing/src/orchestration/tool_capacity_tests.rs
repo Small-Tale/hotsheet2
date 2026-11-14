@@ -629,7 +629,7 @@ fn policy(tools: Vec<ToolPolicy>, scopes: &[(&str, &[&str])]) -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: target_id(),
             enabled: true,
-            actions: vec![TargetAction::SessionsManage],
+            actions: None,
             tools: scopes
                 .iter()
                 .map(|(tool, models)| ToolScope {
@@ -954,11 +954,6 @@ fn hs2_ahg7hw_selection_respects_caps_accounts_models_and_the_target() {
         ask(&disabled, &target_id()).denied,
         Some("policy_target_disabled")
     );
-    let mut read_only = body.clone();
-    read_only.targets[0].actions = vec![TargetAction::TicketsRead];
-    let denied = ask(&read_only, &target_id());
-    assert_eq!(denied.denied, Some("policy_action_not_permitted"));
-    assert!(denied.candidates.is_empty() && denied.excluded.is_empty());
     // A target tool the policy never configured is excluded, not guessed at.
     let mut dangling = body.clone();
     dangling.tools.remove(1);

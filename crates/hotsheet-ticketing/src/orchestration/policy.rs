@@ -1,10 +1,12 @@
 //! HS2-YCJDEB: the orchestration throughput policy.
 //!
-//! A versioned, checked-in statement of what the orchestrator may want to do on its
-//! own: permitted targets and actions, tools and models, concurrency caps, resource
-//! floors, wind-down rules, decisions that need a person, and speculation settings.
-//! A grant (HS2-SBQ3T8) says what it is authorized to do; both must allow an action.
-//! Integer units only (megabytes, percent, cents).
+//! A versioned, checked-in statement of the orchestrator's limits: targets it may
+//! place sessions on, tools and models, concurrency caps, resource floors, wind-down
+//! rules, build-ahead (speculation) and placement. Since HS2-XHQ1EH it holds limits
+//! only: what the orchestrator may do on a target is asked of a person through the
+//! permission bridge, and the retired `targets[].actions` and `approval` sections are
+//! read, ignored and reported by `validate`. Integer units only (megabytes, percent,
+//! cents).
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -20,6 +22,7 @@ pub const MAX_POLICY_TOOLS: usize = 16;
 pub const MAX_POLICY_ACCOUNTS: usize = 16;
 pub const MAX_POLICY_SESSIONS: u32 = 64;
 pub const MAX_SPECULATION_DEPTH: u32 = 8;
+pub const MAX_POLICY_MODELS: usize = 32;
 const MAX_POLICY_BYTES: usize = 1024 * 1024;
 
 /// Limits one machine that hosts a target enforces before a session starts there.
@@ -94,14 +97,27 @@ fn default_weight() -> u32 {
     50
 }
 
+/// One AI tool sessions on a target may use. No models means any model of the tool.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolScope {
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetPolicy {
     pub target_id: String,
-    /// A disabled entry keeps its settings but permits nothing.
+    /// A disabled entry keeps its settings but the orchestrator acts on nothing there.
+    /// Reducing activity (stopping and winding down) is never limited by it.
     #[serde(default = "enabled")]
     pub enabled: bool,
-    pub actions: Vec<TargetAction>,
+    /// HS2-XHQ1EH: retired. A file that still lists actions reads with them ignored,
+    /// `validate` reports them, and they are never written again.
+    #[serde(default, skip_serializing)]
+    pub actions: Option<serde_json::Value>,
     /// Tools (and optionally models) sessions on this target may use.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolScope>,
@@ -142,50 +158,6 @@ impl Default for WindDown {
             keep_warm: 0,
         }
     }
-}
-
-/// A decision the orchestrator must ask a person about before acting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ApprovalGate {
-    TicketsWrite,
-    WorkStart,
-    ValidationRun,
-    SessionStart,
-    SessionStop,
-    /// Starting a target's integrator or dispatcher rather than a worker.
-    RoleSessionStart,
-    /// Dispatching work on top of a prerequisite whose gate is still pending.
-    ProvisionalDispatch,
-    /// HS2-5JBYPV: running a target's deploy script. A production deployment asks a
-    /// person whether or not the policy lists this.
-    Deployment,
-    /// HS2-42TARA: dispatching work the plan says is not ready. Always asked of a
-    /// person for the exact operation; listing it in a policy changes nothing.
-    ReadinessOverride,
-}
-
-impl ApprovalGate {
-    pub fn code(self) -> &'static str {
-        match self {
-            Self::TicketsWrite => "tickets_write",
-            Self::WorkStart => "work_start",
-            Self::ValidationRun => "validation_run",
-            Self::SessionStart => "session_start",
-            Self::SessionStop => "session_stop",
-            Self::RoleSessionStart => "role_session_start",
-            Self::ProvisionalDispatch => "provisional_dispatch",
-            Self::Deployment => "deployment",
-            Self::ReadinessOverride => "readiness_override",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ApprovalPolicy {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub required_for: Vec<ApprovalGate>,
 }
 
 /// HS2-2SJPCH / HS2-JSF985 consume these; this ticket only stores and validates them.
@@ -316,8 +288,10 @@ pub struct PolicyBody {
     pub targets: Vec<TargetPolicy>,
     #[serde(default)]
     pub wind_down: WindDown,
-    #[serde(default)]
-    pub approval: ApprovalPolicy,
+    /// HS2-XHQ1EH: retired. A file that still has an `approval` section reads with it
+    /// ignored, `validate` reports it, and it is never written again.
+    #[serde(default, skip_serializing)]
+    pub approval: Option<serde_json::Value>,
     #[serde(default)]
     pub speculation: Speculation,
     /// HS2-ECWG50: left out of the file while it holds only defaults.
@@ -386,7 +360,6 @@ pub enum PolicyDenial {
     NoPolicy,
     TargetNotPermitted,
     TargetDisabled,
-    ActionNotPermitted,
     ToolNotPermitted,
     ModelNotPermitted,
     /// A start cannot be checked against caps without the current load.
@@ -405,7 +378,6 @@ impl PolicyDenial {
             Self::NoPolicy => "policy_absent",
             Self::TargetNotPermitted => "policy_target_not_permitted",
             Self::TargetDisabled => "policy_target_disabled",
-            Self::ActionNotPermitted => "policy_action_not_permitted",
             Self::ToolNotPermitted => "policy_tool_not_permitted",
             Self::ModelNotPermitted => "policy_model_not_permitted",
             Self::LoadUnknown => "policy_load_unknown",
@@ -422,8 +394,16 @@ impl PolicyDenial {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyVerdict {
     Allowed,
-    ApprovalRequired(ApprovalGate),
     Denied(PolicyDenial),
+}
+
+/// HS2-XHQ1EH: a retired field an older policy file still holds. It is ignored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IgnoredField {
+    pub code: &'static str,
+    pub field: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
 }
 
 impl PolicyBody {
@@ -547,25 +527,6 @@ impl PolicyBody {
                     id,
                 );
             }
-            let unique: BTreeSet<_> = target.actions.iter().collect();
-            if unique.len() != target.actions.len() {
-                report("duplicate_action", "action is listed twice", id);
-            }
-            let manages = target.actions.contains(&TargetAction::SessionsManage);
-            if manages && target.tools.is_empty() {
-                report(
-                    "sessions_without_tools",
-                    "sessions_manage needs at least one tool",
-                    id,
-                );
-            }
-            if !manages && !target.tools.is_empty() {
-                report(
-                    "tools_without_sessions",
-                    "target tools need the sessions_manage action",
-                    id,
-                );
-            }
             if target.tools.len() > MAX_POLICY_TOOLS {
                 report("too_many_tools", "at most 16 tools", id);
             }
@@ -583,7 +544,7 @@ impl PolicyBody {
                 }
                 let models: BTreeSet<_> = scope.models.iter().collect();
                 if models.len() != scope.models.len()
-                    || scope.models.len() > MAX_GRANT_MODELS
+                    || scope.models.len() > MAX_POLICY_MODELS
                     || scope
                         .models
                         .iter()
@@ -615,18 +576,6 @@ impl PolicyBody {
         }
         if self.wind_down.keep_warm > MAX_POLICY_SESSIONS {
             report("invalid_keep_warm", "keep warm must be 0 to 64", None);
-        }
-        let gates: BTreeSet<_> = self.approval.required_for.iter().collect();
-        if gates.len() != self.approval.required_for.len() {
-            report("duplicate_approval", "approval gate is listed twice", None);
-        }
-        // HS2-42TARA: an override of readiness is asked per operation, never by policy.
-        if gates.contains(&ApprovalGate::ReadinessOverride) {
-            report(
-                "approval_not_configurable",
-                "a readiness override always asks a person",
-                None,
-            );
         }
         if !(1..=MAX_SPECULATION_DEPTH).contains(&self.speculation.max_depth) {
             report(
@@ -714,65 +663,77 @@ impl PolicyBody {
         found
     }
 
-    /// Whether the policy permits one action now. Pure; the caller supplies the load.
+    /// HS2-XHQ1EH: retired fields this policy still holds; each is ignored.
+    pub fn ignored_fields(&self) -> Vec<IgnoredField> {
+        let mut found = Vec::new();
+        if self.approval.is_some() {
+            found.push(IgnoredField {
+                code: "approval_ignored",
+                field: "approval",
+                subject: None,
+            });
+        }
+        for target in self
+            .targets
+            .iter()
+            .filter(|target| target.actions.is_some())
+        {
+            found.push(IgnoredField {
+                code: "target_actions_ignored",
+                field: "targets[].actions",
+                subject: Some(target.target_id.clone()),
+            });
+        }
+        found
+    }
+
+    /// The same policy without its retired fields, as it is stored and compared.
+    pub fn without_retired(mut self) -> Self {
+        self.approval = None;
+        for target in &mut self.targets {
+            target.actions = None;
+        }
+        self
+    }
+
+    /// Whether the policy's limits permit one action now. Pure; the caller supplies
+    /// the load. HS2-XHQ1EH: the policy holds limits only, so it never asks a person.
+    /// Observation and reducing activity are never limited here; the caller does not
+    /// ask about them. A session start needs the target listed with the tool; other
+    /// acting actions are limited only by a target the policy lists as disabled and by
+    /// the build-ahead switch.
     pub fn evaluate(&self, question: &PolicyQuestion<'_>) -> PolicyVerdict {
         use PolicyDenial as D;
-        let Some(target) = self.target(question.target_id) else {
-            return PolicyVerdict::Denied(D::TargetNotPermitted);
-        };
-        if !target.enabled {
+        let target = self.target(question.target_id);
+        if target.is_some_and(|target| !target.enabled) {
             return PolicyVerdict::Denied(D::TargetDisabled);
-        }
-        if !target.actions.contains(&question.action) {
-            return PolicyVerdict::Denied(D::ActionNotPermitted);
         }
         if question.provisional && !self.speculation_allowed(question.target_id) {
             return PolicyVerdict::Denied(D::SpeculationNotAllowed);
         }
-        let mut starting = false;
-        if question.action == TargetAction::SessionsManage {
-            let Some(session) = question.session else {
-                return PolicyVerdict::Denied(D::ToolNotPermitted);
-            };
-            let Some(scope) = target.tools.iter().find(|tool| tool.tool == session.tool) else {
-                return PolicyVerdict::Denied(D::ToolNotPermitted);
-            };
-            if !scope.models.is_empty()
-                && !session
-                    .model
-                    .as_ref()
-                    .is_some_and(|model| scope.models.contains(model))
-            {
-                return PolicyVerdict::Denied(D::ModelNotPermitted);
-            }
-            starting = session.starting;
-            if starting {
-                if let Err(denial) = self.check_caps(target, &session.tool, question.load) {
-                    return PolicyVerdict::Denied(denial);
-                }
-            }
+        if question.action != TargetAction::SessionsManage {
+            return PolicyVerdict::Allowed;
         }
-        let gate = match question.action {
-            TargetAction::TicketsRead | TargetAction::GatesObserve => None,
-            TargetAction::TicketsWrite => Some(ApprovalGate::TicketsWrite),
-            TargetAction::WorkStart => Some(ApprovalGate::WorkStart),
-            TargetAction::ValidationRun => Some(ApprovalGate::ValidationRun),
-            TargetAction::SessionsManage if !starting => Some(ApprovalGate::SessionStop),
-            TargetAction::SessionsManage if question.role_session => {
-                Some(ApprovalGate::RoleSessionStart)
-            }
-            TargetAction::SessionsManage => Some(ApprovalGate::SessionStart),
-            TargetAction::DeploymentsRun => Some(ApprovalGate::Deployment),
+        let Some(target) = target else {
+            return PolicyVerdict::Denied(D::TargetNotPermitted);
         };
-        // A provisional dispatch asks under its own gate first, then its action's.
-        for gate in question
-            .provisional
-            .then_some(ApprovalGate::ProvisionalDispatch)
-            .into_iter()
-            .chain(gate)
+        let Some(session) = question.session else {
+            return PolicyVerdict::Denied(D::ToolNotPermitted);
+        };
+        let Some(scope) = target.tools.iter().find(|tool| tool.tool == session.tool) else {
+            return PolicyVerdict::Denied(D::ToolNotPermitted);
+        };
+        if !scope.models.is_empty()
+            && !session
+                .model
+                .as_ref()
+                .is_some_and(|model| scope.models.contains(model))
         {
-            if self.approval.required_for.contains(&gate) {
-                return PolicyVerdict::ApprovalRequired(gate);
+            return PolicyVerdict::Denied(D::ModelNotPermitted);
+        }
+        if session.starting {
+            if let Err(denial) = self.check_caps(target, &session.tool, question.load) {
+                return PolicyVerdict::Denied(denial);
             }
         }
         PolicyVerdict::Allowed
@@ -897,6 +858,10 @@ impl PolicyStore {
         declared: Option<&BTreeSet<String>>,
         tx: &mut Transaction<'_>,
     ) -> Result<PolicyView, OrchestrationError> {
+        let request = SetPolicy {
+            policy: request.policy.without_retired(),
+            ..request
+        };
         if let Some(problem) = request.policy.problems(declared).first() {
             return Err(OrchestrationError::Invalid(problem.message));
         }
@@ -907,7 +872,10 @@ impl PolicyStore {
         {
             return Err(OrchestrationError::Conflict);
         }
-        if let Some(previous) = previous.as_ref().filter(|doc| doc.body == request.policy) {
+        if let Some(previous) = previous
+            .as_ref()
+            .filter(|doc| doc.body.clone().without_retired() == request.policy)
+        {
             return Ok(PolicyView {
                 enabled: true,
                 revision: Some(previous.revision.clone()),

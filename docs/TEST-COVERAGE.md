@@ -2121,8 +2121,8 @@ on the visible right edge and captures the resulting scrolled terminal.
 | mcp-startup-presence-redirects | docs/05-ai-tool-plugins.md | Project-open and presence reject 3xx before trusting the body or following Location while preserving startup, timeout and trusted registry relocation (HS2-081PXN) | `crates/hotsheet-mcp/src/presence/redirect_tests.rs`; `crates/hotsheet-mcp/src/presence.rs` | `crates/hotsheet-mcp/tests/startup_presence_redirects.rs`; `crates/hotsheet-mcp/tests/portable_project_config.rs`; `crates/hotsheet-mcp/tests/registry_presence.rs` | — | double-covered |
 | remote-registry-foundation | docs/08-distributed-and-remote.md; docs/26-orchestration-projects.md | Versioned machine-local pairing, explicit trust/revision review, opaque credentials, stale-safe discovery and headless CLI/service/MCP parity (HS2-1Y45MZ) | `crates/hotsheet-ticketing/src/remote_servers/tests.rs`; `crates/hotsheet-cli/src/remote_servers/tests.rs`; `crates/hotsheet-mcp/src/remote_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers.rs` | docs/manual-test-plan.md # Remote registry foundation | double-covered |
 | orchestration-target-bindings | docs/26-orchestration-projects.md; docs/08-distributed-and-remote.md | Shared retained-id CAS declarations, explicit reviewed machine bindings, strict optional MCP IDs, composed hint set/clear CAS, inspect/no-grant metadata and headless parity (HS2-4J6V46) | `crates/hotsheet-ticketing/src/orchestration/`; `crates/hotsheet-cli/src/orchestration/tests.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-cli/tests/cli.rs # HS2-4J6V46`; `crates/hotsheet-server/tests/remote_servers/orchestration.rs` | docs/manual-test-plan.md # Orchestration target declarations and bindings | planned |
-| orchestration-grants-audit | docs/26-orchestration-projects.md | Machine-local grants scoped to target, actor, action, expiry and session tool/model/concurrency; destination-pinned and inert after rebind; person-only issue and revoke; fail-closed fresh authorization; bounded append-only audit journal with cursor replay; machine-local CLI/HTTP/MCP parity (HS2-SBQ3T8) | `crates/hotsheet-ticketing/src/orchestration/grant_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/audit_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/access.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/grants.rs`; `clients/web/tests/contracts.spec.ts` | docs/manual-test-plan.md # Orchestration grants and audit | double-covered |
-| orchestration-throughput-policy | docs/26-orchestration-projects.md; docs/05-ai-tool-plugins.md | Versioned checked-in policy with revision CAS and defaults; every malformed or conflicting policy reported; targets, actions, tools, models, concurrency caps at each bound, speculation settings; single-use approvals for gated decisions; policy and grant must both allow; side-effect-free dry-run; person-only set and approve; CLI/HTTP/MCP parity (HS2-YCJDEB) | `crates/hotsheet-ticketing/src/orchestration/policy_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/approval_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/policy.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/policy.rs`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace policy editor | double-covered |
+| orchestration-permissions-audit | docs/26-orchestration-projects.md; docs/05-ai-tool-plugins.md | Adding a project is consent to read it; acting actions on a target ask a person through the permission bridge (`orchestrator` requester, no waiter) unless a remembered rule allows it; Allow Once used only when the action happens; Always Allow remembers a rule keyed (orchestration project, target, action, tool) and answers waiting requests; Deny final; production deployments and command validation steps ask every time; reducing activity and own records never ask; judgment calls as decision notes on the goal ticket; retired grant and approval files reported, never trusted; bounded append-only audit journal with cursor replay; client card and Settings rule row; machine-local CLI/HTTP/MCP parity (HS2-XHQ1EH, HS2-SBQ3T8) | `crates/hotsheet-ticketing/src/orchestration/permission_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/audit_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/access.rs`; `crates/hotsheet-aitools/src/permission.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs`; `clients/web/src/components/permission-components.test.ts` | `crates/hotsheet-server/tests/remote_servers/permissions.rs`; `clients/web/tests/orchestrator-permission.spec.ts`; `clients/web/tests/contracts.spec.ts` | docs/manual-test-plan.md # Orchestration permission requests and audit | double-covered |
+| orchestration-throughput-policy | docs/26-orchestration-projects.md; docs/05-ai-tool-plugins.md | Versioned checked-in policy with revision CAS and defaults; every malformed or conflicting policy reported; targets, tools, models, concurrency caps at each bound, speculation settings; limits only, with the retired `targets[].actions` and `approval` read, ignored and reported (HS2-XHQ1EH); side-effect-free dry-run reporting whether each action needs permission; person-only set; CLI/HTTP/MCP parity (HS2-YCJDEB) | `crates/hotsheet-ticketing/src/orchestration/policy_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/policy.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/policy.rs`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace policy editor | double-covered |
 | orchestration-target-tickets | docs/26-orchestration-projects.md; docs/17-ticket-file-format.md; docs/19-format-compatibility.md | Additive `orchestration_links` ticket field with format round-trip, subject-keyed three-way merge and idempotent upsert; create, read, update, link, unlink and resolve of target tickets through the grant gate; idempotent recoverable create with provenance; target source authority and content-free refusal codes; local in-process and remote mTLS destinations; CLI/HTTP/MCP parity (HS2-AZ15GA) | `crates/hotsheet-model/src/orchestration_link.rs`; `crates/hotsheet-model/src/format.rs # hs2_az15ga`; `crates/hotsheet-ticketing/src/merge.rs # hs2_az15ga`; `crates/hotsheet-ticketing/src/ops.rs # hs2_az15ga`; `crates/hotsheet-cli/src/orchestration/tests/tickets.rs`; `clients/web/src/server-response-parsers.test.ts # HS2-AZ15GA` | `crates/hotsheet-server/tests/remote_servers/target_tickets.rs`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace flows; docs/manual-test-plan.md # Orchestration target tickets | double-covered |
 | orchestration-dispatch-runs | docs/26-orchestration-projects.md | Durable run records with a full state-transition matrix; direct exact claim and dispatcher queueing on the target's own claim and lease; duplicate, busy-worker and already-claimed dispatches; renew, cancel (including an unreachable target, and a gate denial answered as the denial with nothing recorded, HS2-WC3W2G) and sync through human takeover to completion; approval asked once per dispatch; local and remote destinations; CLI/HTTP/MCP parity (HS2-EBHDSB) | `crates/hotsheet-ticketing/src/orchestration/run_tests.rs`; `crates/hotsheet-cli/src/orchestration/tests/runs.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/runs.rs`; `crates/hotsheet-server/tests/remote_servers/e2e_failures.rs # hs2_2ey9dp_cancelling`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace | double-covered |
 | orchestration-run-events | docs/26-orchestration-projects.md | Per-run last confirmed target state with staleness and reachability; a bounded run event stream with arrival ordering, keyed de-duplication, filtered cursor replay, gap reporting and a bounded wait instead of polling; following a target's change feed with handshake, overflow catch-up, cursor kept through an outage, bounded backoff and no requests while idle (HS2-7QHWHJ); hosted session changes on the same feed, a target followed while the owner has a session there, and the owner's scheduler woken by them (HS2-257Q2Z) | `crates/hotsheet-ticketing/src/orchestration/run_event_tests.rs`; `crates/hotsheet-ticketing/src/orchestration/run_tests.rs # hs2_7qhwhj`; `crates/hotsheet-cli/src/orchestration/tests/watch.rs`; `crates/hotsheet-mcp/src/orchestration_tools.rs`; `crates/hotsheet-server/src/tls.rs` | `crates/hotsheet-server/tests/remote_servers/runs.rs # hs2_7qhwhj`; `crates/hotsheet-server/tests/remote_servers/e2e_failures.rs # hs2_2ey9dp_a_remote_session_freed`; `clients/web/tests/contracts.spec.ts` | HS2-HSMH2Q # workspace run view; HS2-42B2FD # general cross-server views | double-covered |
@@ -2961,8 +2961,8 @@ production persistence defect.
   launched. It covers: one start per step and its session kept by later passes; a
   repeated operation id and an unconfirmed start repeated under its own id; the
   larger of the decided and the recorded load at the gate, both ways; a refused start
-  backed off and then replaced; approvals for a start and a stop used under the
-  scheduler's operation ids; an idle session wound down only at a safe point (mid
+  backed off and then replaced; a permission request for a start answered under the
+  scheduler's operation id, and a stop that never asks; an idle session wound down only at a safe point (mid
   turn, uncommitted work, then committed), with the idle time restarting after work;
   takeover here and at the host, never wound down and still counted; a crash replaced
   twice over and not replaced once the work is gone; an unreachable host concluding
@@ -3448,10 +3448,10 @@ production persistence defect.
   approval edges, the rollup of every pair of states, request validation, a damaged
   or newer file, bounded history and capacity.
 - `tests/gates.rs` drives the runtime with a scripted adapter whose wait blocks on a
-  condition variable: link, sync, events once per change, grants and denial, an
+  condition variable: link, sync, events once per change, an
   adapter that cannot start, the repository rule, a sync and a follower woken by the
-  change and idle without gates, a revoked grant, and deployments (no passed gate,
-  no grant, production approval, denial, withdrawal with a superseded CI gate, a
+  change and idle without gates, and deployments (no passed gate, a remembered rule,
+  a production deployment that asks every time, denial, withdrawal with a superseded CI gate, a
   policy that asks first, a scripted executor's typed result). One test uses the real
   GitHub Actions adapter over a Job store and judges the watch Job the way the
   monitor does.
@@ -3542,7 +3542,7 @@ production persistence defect.
   round-trip, old files reading empty, the three-way merge (union, further relation,
   one-sided removal) and an upsert that never duplicates or moves backwards.
 - `tests/tickets.rs` drives the runtime: an idempotent linked create with provenance,
-  a create interrupted after each step, every operation behind the grant, target
+  a create interrupted after each step, every acting operation behind a permission, target
   error codes, an external source that refuses without being rerouted, a remote
   destination through a transport fake that runs the peer's real runtime, and hosted
   request validation.
@@ -3554,33 +3554,48 @@ production persistence defect.
 
 - `policy_tests.rs` covers absent read, set, no-op and revision authority; the
   version-1 shape with defaults and refusal of newer, foreign or no-longer-valid
-  files; 29 malformed or conflicting policies with all problems reported; permitted
-  targets, actions, tools and models; every concurrency cap at its bound; approval
-  gates and speculation settings.
-- `approval_tests.rs` walks pending, approved-once, denied, lapsed and repeated
-  requests, exact-operation matching and capacity.
-- `tests/policy.rs` drives the gate: no policy, policy allows and grant does not,
-  grant allows and policy does not, caps, a corrupt policy, the approval lifecycle
-  with its audit entries, and set, validate and dry-run against two fixture targets.
+  files; malformed or conflicting policies with all problems reported; permitted
+  targets, tools and models; every concurrency cap at its bound; speculation
+  settings; and (HS2-XHQ1EH) the retired `targets[].actions` and `approval` read,
+  reported as ignored and dropped by `set`.
+- `tests/policy.rs` drives the gate: no policy, limits that deny before anyone is
+  asked, caps, a corrupt policy, and set, validate and dry-run (with `permission`
+  `not_needed`, `remembered` or `asks`) against two fixture targets.
 - `remote_servers/policy.rs` uses the owned CLI process, the real authenticated
   service and the stdio MCP tool, including idempotent setup and show-edit-set.
 
-### Orchestration grants and audit (HS2-SBQ3T8)
+### Orchestration permission requests and audit (HS2-XHQ1EH, HS2-SBQ3T8)
 
-- `grant_tests.rs` walks grant state (active, expired, revoked, destination changed)
-  against every scope dimension, idempotent create and revoke, a revoked grant that a
-  retry cannot revive, session tool/model/concurrency limits, invalid requests that
-  write nothing, capacity that prunes only inert grants, and corrupt or newer files
-  that fail closed without being overwritten.
+- `permission_tests.rs` pins which actions ask, the transition matrix from every
+  request state (pending, allowed, denied, used, lapsed), asking again filing
+  nothing, Allow Once used only when the action happens, lapses, deny finality and
+  out-of-order answers, Always Allow remembering a rule and answering waiting
+  requests (then forget and refill), a side-effect-free peek, capacity, a corrupt or
+  newer ledger that is never trusted, retired grant and approval files reported and
+  never read, decisions recorded once per operation, and each-time requests that
+  ignore rules.
 - `audit_tests.rs` covers an absent journal, ordered appends with cursor paging,
   empty-then-refill, rotation with a reported gap, a torn final line, rejected free
   text, eight concurrent writers and symlinked storage.
 - `tests/access.rs` drives the shared runtime for a local and a remote destination:
-  no authority from a binding alone, an AI actor refused, lost access denied while a
-  grant is still active, the exact audit sequence, and revocation for an orphaned owner.
-- `remote_servers/grants.rs` uses the real authenticated service, the owned CLI
-  process and the stdio MCP tool against one machine home; `tls.rs` pins the
-  off-machine refusal for every device role.
+  reading freely after consent, acting that asks once per operation, a person's own
+  act, remembered rules, policy limits that deny before asking, reducing activity
+  that never asks, the exact audit sequence, retired grants never trusted, and
+  forgetting a rule for an orphaned owner. The scheduler, session, gate, validation,
+  readiness and provisional tests cover each acting path asking and resuming.
+- `crates/hotsheet-aitools/src/permission.rs` pins orchestrator requests as
+  detached (no waiter) and idempotent in the bridge.
+- `remote_servers/permissions.rs` uses the real authenticated service, the owned CLI
+  process and the stdio MCP tool against one machine home: a request filed by an AI
+  call, shown in `GET /permissions`, answered Always Allow through `POST
+/permissions/{id}`, listed and forgotten through `/permissions/rules`, and a
+  headless remember, answer and forget; `tls.rs` pins the off-machine refusal for
+  every device role.
+- `permission-components.test.ts` renders the orchestrator card (no Allow This AI
+  Session, the review naming the orchestrator and target) and the Settings rule row.
+  `orchestrator-permission.spec.ts` drives the real app and server at 1440, 1100 and
+  390 px (and wide to narrow to wide) through a request, Always Allow and the
+  Settings row, on Chromium and WebKit.
 
 ### Orchestration target declarations and bindings (HS2-4J6V46)
 
@@ -3602,7 +3617,7 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   cached cleanup and origin denial, HTTP bearer/role/loopback checks, bounded
   metadata transport redirects/limits/identity confirmation, synthetic real TLS
   CLI inspect/bind and actual project/path/server MCP stdio compositions.
-- UI, grants, ticket proxying and dispatch are outside this headless model.
+- UI, permissions, ticket proxying and dispatch are outside this headless model.
 
 ### Hot Sheet design-review adapter skill (HS2-C679CZ)
 

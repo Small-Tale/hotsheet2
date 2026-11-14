@@ -1,6 +1,6 @@
 //! Shared transport adapters select a route only; all transitions live in core.
 use hotsheet_ticketing::actor::MutationActor;
-use hotsheet_ticketing::orchestration::{AccessRequest, CreateGrant, SetPolicy};
+use hotsheet_ticketing::orchestration::{AccessRequest, SetPolicy};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -20,8 +20,11 @@ pub fn is_path(path: &str) -> bool {
                 "policy",
                 "validate" | "dry-run"
             ]
-            | ["checkouts", _, "orchestration", "approvals"]
-            | ["checkouts", _, "orchestration", "approvals", _]
+            // HS2-XHQ1EH: permission requests and remembered rules.
+            | ["checkouts", _, "orchestration", "permissions"]
+            | ["checkouts", _, "orchestration", "permissions", _]
+            | ["checkouts", _, "orchestration", "permission-rules"]
+            | ["checkouts", _, "orchestration", "permission-rules", _]
             // HS2-AZ15GA: orchestrating-side ticket operations and the hosted half.
             | ["checkouts", _, "orchestration", "tickets", _]
             | ["checkouts", _, "target-tickets"]
@@ -79,24 +82,19 @@ pub fn is_machine_path(path: &str) -> bool {
             "orchestration",
             "targets",
             _,
-            // HS2-J8PRTV: capacity and admission pass this machine's grants and
+            // HS2-J8PRTV: capacity and admission pass this machine's gate and
             // policy. The hosted `target-capacity` and `target-admission` routes stay
             // ordinary authenticated data so a remote orchestrator can reach them.
-            "binding" | "resolve" | "grants" | "access" | "capacity" | "admission"
-        ] | [
-            "checkouts",
-            _,
-            "orchestration",
-            "targets",
-            _,
-            "grants",
-            _
+            "binding" | "resolve" | "access" | "capacity" | "admission"
         ] | ["checkouts", _, "orchestration", "inspect" | "audit"]
-            // HS2-YCJDEB: a dry run reads this machine's grants; approvals live here.
+            // HS2-YCJDEB: a dry run reads this machine's bindings and remembered rules.
             | ["checkouts", _, "orchestration", "policy", "dry-run"]
-            | ["checkouts", _, "orchestration", "approvals"]
-            | ["checkouts", _, "orchestration", "approvals", _]
-            // HS2-AZ15GA: orchestrating uses this machine's grants and bindings. The
+            // HS2-XHQ1EH: permission requests and remembered rules are this machine's.
+            | ["checkouts", _, "orchestration", "permissions"]
+            | ["checkouts", _, "orchestration", "permissions", _]
+            | ["checkouts", _, "orchestration", "permission-rules"]
+            | ["checkouts", _, "orchestration", "permission-rules", _]
+            // HS2-AZ15GA: orchestrating uses this machine's gate and bindings. The
             // hosted `target-tickets` routes stay ordinary authenticated project data,
             // because a remote orchestrator must reach them.
             | ["checkouts", _, "orchestration", "tickets", _]
@@ -122,13 +120,13 @@ pub fn is_machine_path(path: &str) -> bool {
                 "signals" | "select"
             ]
             // HS2-WN0MXZ: step definitions and results are this machine's, and a run
-            // passes its grants. The hosted `target-validations` route stays ordinary
+            // passes its gate. The hosted `target-validations` route stays ordinary
             // authenticated data so a remote orchestrator can reach it.
             | ["checkouts", _, "orchestration", "validations", _]
             // HS2-42TARA: the plan and what it is computed from are this machine's.
             | ["checkouts", _, "orchestration", "readiness", _]
             // HS2-GDJXGZ: session records are this machine's and a start passes its
-            // grants. The hosted `target-sessions` route stays ordinary authenticated
+            // gate. The hosted `target-sessions` route stays ordinary authenticated
             // data so a remote orchestrator can reach it.
             | ["checkouts", _, "orchestration", "sessions"]
             | ["checkouts", _, "orchestration", "sessions", _]
@@ -467,29 +465,10 @@ impl OrchestrationRuntime {
                     "resolve",
                 ],
             ) => value(self.resolve(&reference(owner, id)?, tx)?),
-            ("GET", ["checkouts", owner, "orchestration", "targets", id, "grants"]) => {
-                value(self.grants(&reference(owner, id)?, tx)?)
-            }
-            ("POST", ["checkouts", owner, "orchestration", "targets", id, "grants"]) => {
-                let actor = actor(body)?;
-                let request: CreateGrant = decode(body)?;
-                value(self.grant(&reference(owner, id)?, request, actor.as_ref(), tx)?)
-            }
-            (
-                "DELETE",
-                [
-                    "checkouts",
-                    owner,
-                    "orchestration",
-                    "targets",
-                    id,
-                    "grants",
-                    grant,
-                ],
-            ) => value(self.revoke(&reference(owner, id)?, grant, actor(body)?.as_ref(), tx)?),
             ("POST", ["checkouts", owner, "orchestration", "targets", id, "access"]) => {
+                let person_acts = access::is_person(actor(body)?.as_ref());
                 let request: AccessRequest = decode(body)?;
-                value(self.access(&reference(owner, id)?, &request, tx)?)
+                value(self.access(&reference(owner, id)?, &request, person_acts, tx)?)
             }
             // HS2-AZ15GA hosted half: provider-neutral ticket operations on one source
             // of a checkout this machine hosts.
@@ -954,18 +933,24 @@ impl OrchestrationRuntime {
                 value(self.validate_policy(owner, decode(body)?)?)
             }
             ("POST", ["checkouts", owner, "orchestration", "policy", "dry-run"]) => {
-                value(self.dry_run_policy(owner, decode(body)?, tx)?)
+                value(self.dry_run_policy(owner, decode(body)?)?)
             }
-            ("GET", ["checkouts", owner, "orchestration", "approvals"]) => {
-                value(self.approvals(owner, tx)?)
+            // HS2-XHQ1EH
+            ("GET", ["checkouts", owner, "orchestration", "permissions"]) => {
+                value(self.permission_list(owner, tx)?)
             }
-            ("POST", ["checkouts", owner, "orchestration", "approvals", id]) => {
+            ("POST", ["checkouts", owner, "orchestration", "permissions", id]) => {
                 let actor = actor(body)?;
-                let approve = match body.get("approve") {
-                    Some(Value::Bool(approve)) => *approve,
-                    _ => return Err(OrchestrationError::Invalid("approve must be a boolean")),
-                };
-                value(self.decide_approval(owner, id, approve, actor.as_ref(), tx)?)
+                let request: super::AnswerPermission = decode(body)?;
+                value(self.permission_answer(owner, id, request.answer, actor.as_ref(), tx)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "permission-rules"]) => {
+                let actor = actor(body)?;
+                let request: super::RememberPermission = decode(body)?;
+                value(self.permission_remember(owner, request, actor.as_ref(), tx)?)
+            }
+            ("DELETE", ["checkouts", owner, "orchestration", "permission-rules", id]) => {
+                value(self.permission_forget(owner, id, actor(body)?.as_ref(), tx)?)
             }
             ("GET", ["checkouts", owner, "orchestration", "audit"]) => value(self.audit(
                 owner,

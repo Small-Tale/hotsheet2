@@ -2,16 +2,15 @@
 //! destination and a remote one. Scripted probes and synthetic identities only.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionStore, ApprovalGate,
-    ApprovalPolicy, AuditOutcome, CapacityField, CapacitySnapshot, CpuCapacity, CreateGrant,
-    DenialReason, DiskCapacity, HostObservation, MachineLimits, MemoryCapacity, PolicyBody,
-    SessionFootprint, SessionScope, SetPolicy, TargetAction, TargetOpError, TargetPolicy,
-    ToolAvailability, ToolPolicy, ToolScope,
+    AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionStore, AuditOutcome,
+    CapacityField, CapacitySnapshot, CpuCapacity, DiskCapacity, HostObservation, MachineLimits,
+    MemoryCapacity, PolicyBody, SessionFootprint, SetPolicy, TargetAction, TargetOpError,
+    TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
 use super::tickets::{
-    Machine, RemotePeer, bind_and_grant, human, machine, op, unsupported, worker,
+    Machine, RemotePeer, bind_and_allow, human, machine, op, unsupported, worker,
 };
 use super::*;
 
@@ -85,7 +84,7 @@ fn scope(tool: &str) -> ToolScope {
     }
 }
 /// Machine default 4 sessions; target 1 overrides the RAM floor to 3000 MB.
-fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
+fn policy() -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
             max_sessions: 4,
@@ -102,7 +101,7 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: id(1),
             enabled: true,
-            actions: vec![TargetAction::GatesObserve, TargetAction::SessionsManage],
+            actions: None,
             tools: vec![scope("codex"), scope("claude")],
             max_sessions: 2,
             machine: Some(MachineLimits {
@@ -112,7 +111,6 @@ fn policy(required_for: Vec<ApprovalGate>) -> PolicyBody {
             }),
             speculation: None,
         }],
-        approval: ApprovalPolicy { required_for },
         ..PolicyBody::default()
     }
 }
@@ -135,35 +133,19 @@ fn set_policy(
         )
         .unwrap();
 }
-/// `worker-1` may manage codex sessions on `target`, and nothing else by this grant.
+/// A person remembers codex session starts on `target` (HS2-XHQ1EH).
 fn grant_sessions(runtime: &OrchestrationRuntime, target: &TargetRef, tx: &mut Transaction<'_>) {
-    runtime
-        .grant(
-            target,
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::SessionsManage],
-                session_scope: Some(SessionScope {
-                    tools: vec![scope("codex")],
-                    max_concurrency: 4,
-                }),
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            tx,
-        )
-        .unwrap();
+    allow_on(
+        runtime,
+        &target.owner_checkout_id,
+        &target.target_id,
+        &[TargetAction::SessionsManage],
+        &["codex"],
+        tx,
+    );
 }
 fn ask(tool: &str, sessions: u32) -> TargetAdmission {
     serde_json::from_value(json!({"tool": tool, "sessions": sessions})).unwrap()
-}
-fn denied<T>(result: Result<T, OrchestrationError>) -> DenialReason {
-    match result {
-        Err(OrchestrationError::Denied(reason)) => reason,
-        Err(other) => panic!("expected a denial, got {other}"),
-        Ok(_) => panic!("expected a denial"),
-    }
 }
 fn answer(decision: &AdmissionDecision) -> (AdmissionOutcome, u32, Option<AdmissionReason>) {
     (decision.outcome, decision.admitted, decision.reason)
@@ -179,10 +161,10 @@ fn hs2_j8prtv_local_target_capacity_and_admission_pass_the_gate_and_the_targets_
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::GatesObserve], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::GatesObserve], &mut tx);
     let target = m.reference(1);
     grant_sessions(&m.runtime, &target, &mut tx);
-    set_policy(&m.runtime, &m.owner.id, policy(Vec::new()), &mut tx);
+    set_policy(&m.runtime, &m.owner.id, policy(), &mut tx);
     // Setup asked the probe nothing: a snapshot exists only because a request wants one.
     assert_eq!(probe.asked.load(Ordering::SeqCst), 0);
 
@@ -327,24 +309,19 @@ fn hs2_j8prtv_local_target_capacity_and_admission_pass_the_gate_and_the_targets_
     );
     local.update(|config| config.max_sessions = None).unwrap();
 
-    // A tool the machine lacks is the target's refusal; a tool the grant does not
-    // cover never reaches the target at all.
-    set_policy(&m.runtime, &m.owner.id, policy(Vec::new()), &mut tx);
+    // HS2-XHQ1EH: the question starts nothing, so it asks no one, whoever asks.
+    set_policy(&m.runtime, &m.owner.id, policy(), &mut tx);
     let asked = probe.asked.load(Ordering::SeqCst);
-    assert_eq!(
-        denied(admit(&m, "claude", 1, &mut tx)),
-        DenialReason::ToolNotGranted
-    );
-    assert_eq!(
-        denied(m.runtime.target_admission(
+    m.runtime
+        .target_admission(
             &target,
             ask("codex", 1),
             Some(&MutationActor::parse("ai", Some("stranger".into())).unwrap()),
-            &mut tx
-        )),
-        DenialReason::NoGrant
-    );
-    assert_eq!(probe.asked.load(Ordering::SeqCst), asked);
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(probe.asked.load(Ordering::SeqCst), asked + 1);
+    // A tool the machine lacks is the target's refusal.
     probe.set(|observation| observation.tools = Some(Vec::new()));
     assert_eq!(
         answer(&admit(&m, "codex", 1, &mut tx).unwrap()),
@@ -381,35 +358,43 @@ fn hs2_j8prtv_local_target_capacity_and_admission_pass_the_gate_and_the_targets_
     );
     std::fs::remove_file(m.home.join("orchestration-admission.json")).unwrap();
 
-    // The question starts nothing, so a start that needs approval is not asked here.
+    // The question starts nothing, so no permission request is filed for it.
     probe.set(|observation| *observation = roomy());
-    set_policy(
-        &m.runtime,
-        &m.owner.id,
-        policy(vec![ApprovalGate::SessionStart, ApprovalGate::SessionStop]),
-        &mut tx,
-    );
+    let stranger = MutationActor::parse("ai", Some("stranger".into())).unwrap();
     assert_eq!(
-        answer(&admit(&m, "codex", 1, &mut tx).unwrap()),
+        answer(
+            &m.runtime
+                .target_admission(&target, ask("codex", 1), Some(&stranger), &mut tx)
+                .unwrap()
+        ),
         (Accepted, 1, None)
     );
     assert!(
         m.runtime
-            .approvals(&m.owner.id, &mut tx)
+            .permission_list(&m.owner.id, &mut tx)
             .unwrap()
+            .requests
             .is_empty()
     );
-    // Without the policy's gates_observe or a grant for it, capacity is denied.
-    let mut narrowed = policy(Vec::new());
-    narrowed.targets[0].actions = vec![TargetAction::SessionsManage];
-    set_policy(&m.runtime, &m.owner.id, narrowed, &mut tx);
-    assert_eq!(
-        denied(
-            m.runtime
-                .target_capacity(&target, &[], Some(&worker()), &mut tx)
-        ),
-        DenialReason::PolicyDenied
-    );
+    // The policy still bounds the question: a tool it does not list for the target
+    // is refused before the target is asked, and the refusal is audited.
+    let asked = probe.asked.load(Ordering::SeqCst);
+    assert!(matches!(
+        m.runtime
+            .target_admission(&target, ask("unlisted-tool", 1), Some(&stranger), &mut tx),
+        Err(OrchestrationError::Denied(
+            hotsheet_ticketing::orchestration::DenialReason::PolicyDenied
+        ))
+    ));
+    assert_eq!(probe.asked.load(Ordering::SeqCst), asked);
+    assert_eq!(m.last_audit().1, AuditOutcome::Failed);
+    // Observing capacity is consented to: a target the policy disables is still read.
+    let mut disabled = policy();
+    disabled.targets[0].enabled = false;
+    set_policy(&m.runtime, &m.owner.id, disabled, &mut tx);
+    m.runtime
+        .target_capacity(&target, &[], Some(&worker()), &mut tx)
+        .unwrap();
     assert!(matches!(
         m.runtime.target_capacity(&target, &[], None, &mut tx),
         Err(OrchestrationError::Invalid(_))
@@ -425,9 +410,9 @@ fn hs2_j8prtv_orchestration_capacity_routes_and_hosted_routes() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[TargetAction::GatesObserve], &mut tx);
+    bind_and_allow(&m, 1, &[TargetAction::GatesObserve], &mut tx);
     grant_sessions(&m.runtime, &m.reference(1), &mut tx);
-    set_policy(&m.runtime, &m.owner.id, policy(Vec::new()), &mut tx);
+    set_policy(&m.runtime, &m.owner.id, policy(), &mut tx);
     let owner = &m.owner.id;
     let hosted = format!("/checkouts/{}", m.target.id);
     let targets = format!("/checkouts/{owner}/orchestration/targets/{}", id(1));
@@ -578,15 +563,15 @@ fn hs2_j8prtv_orchestration_capacity_routes_and_hosted_routes() {
             .request("GET", &format!("{targets}/capacity"), &Value::Null, &mut tx),
         Err(OrchestrationError::Invalid(_))
     ));
-    assert!(matches!(
-        m.runtime.request(
+    // Reading is consented to for any identified actor.
+    m.runtime
+        .request(
             "GET",
             &format!("{targets}/capacity?actor_id=stranger"),
             &Value::Null,
-            &mut tx
-        ),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
-    ));
+            &mut tx,
+        )
+        .unwrap();
     let admitted = m
         .runtime
         .request(
@@ -711,22 +696,8 @@ fn hs2_j8prtv_remote_target_answers_from_its_own_machine_over_the_reviewed_trans
             .unwrap()
             .usable
     );
-    runtime
-        .grant(
-            &target,
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::GatesObserve],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     grant_sessions(&runtime, &target, &mut tx);
-    set_policy(&runtime, &owner.id, policy(Vec::new()), &mut tx);
+    set_policy(&runtime, &owner.id, policy(), &mut tx);
     let calls = || {
         std::mem::take(
             &mut *peer

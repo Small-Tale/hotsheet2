@@ -33,6 +33,8 @@ use sha2::{Digest, Sha256};
 const LEGACY_FINGERPRINT_PREFIX: &str = "sha256:v1:";
 const ACTION_FINGERPRINT_PREFIX: &str = "hmac-sha256:v2:";
 pub type ActionKey = [u8; 32];
+/// HS2-XHQ1EH: the tool name of an orchestrator permission request.
+pub const ORCHESTRATOR_TOOL: &str = "Orchestrator";
 
 /// Describe common Bash operations with fixed words only. This must never copy an
 /// argument, path, environment assignment, or arbitrary command into a rule file.
@@ -261,6 +263,34 @@ pub struct Request {
     /// Asking agent, when the transport identifies it (distinct from tool name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// HS2-XHQ1EH: set for the `orchestrator` requester kind. Such a request has no
+    /// waiter: its answer is recorded by the orchestration runtime, never by a rule
+    /// of this bridge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orchestrator: Option<OrchestratorAsk>,
+}
+
+/// HS2-XHQ1EH: what an orchestrator permission request concerns, by identifiers and
+/// labels only. The orchestration runtime owns its state and remembered rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrchestratorAsk {
+    /// The orchestration runtime's request id, stable across server restarts.
+    pub request_id: String,
+    pub owner_checkout_id: String,
+    pub owner_label: String,
+    pub target_id: String,
+    pub target_label: String,
+    /// `tickets_write`, `work_start`, `session_start`, `validation_run`,
+    /// `deployments_run` or `provisional_dispatch`.
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub operation_id: String,
+    /// No remembered rule can answer it, so Always Allow is not offered.
+    #[serde(default)]
+    pub each_time: bool,
 }
 
 /// The transport's identity and action before a pending id is assigned.
@@ -383,6 +413,23 @@ pub struct RuleInfo {
     pub description: Option<String>,
     pub decision: Decision,
     pub scope: Scope,
+    /// HS2-XHQ1EH: set for a remembered orchestrator rule, which the orchestration
+    /// runtime stores and Settings → Permissions lists beside this bridge's rules.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orchestrator: Option<OrchestratorRule>,
+}
+
+/// HS2-XHQ1EH: a remembered orchestrator rule's key, by identifiers and labels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrchestratorRule {
+    pub rule_id: String,
+    pub owner_checkout_id: String,
+    pub owner_label: String,
+    pub target_id: String,
+    pub target_label: String,
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
 }
 
 impl std::fmt::Debug for RuleInfo {
@@ -426,6 +473,7 @@ impl From<&Rule> for RuleInfo {
             } else {
                 Scope::Session
             },
+            orchestrator: None,
         }
     }
 }
@@ -589,8 +637,57 @@ impl PermissionBridge {
             tool,
             action,
             agent,
+            orchestrator: None,
         });
         Outcome::Pending(id)
+    }
+
+    /// HS2-XHQ1EH: queue an orchestrator request. No rule of this bridge answers it,
+    /// and nothing waits on it. `None` when one with the same orchestrator request id
+    /// is already pending, so showing it again is idempotent.
+    pub fn push_orchestrator(
+        &mut self,
+        project: String,
+        connection: String,
+        action: String,
+        ask: OrchestratorAsk,
+    ) -> Option<Request> {
+        if self.queue.iter().any(|queued| {
+            queued
+                .orchestrator
+                .as_ref()
+                .is_some_and(|queued| queued.request_id == ask.request_id)
+        }) {
+            return None;
+        }
+        self.next_id += 1;
+        let request = Request {
+            id: self.next_id,
+            project,
+            connection,
+            tool: ORCHESTRATOR_TOOL.into(),
+            action,
+            agent: Some(ORCHESTRATOR_TOOL.into()),
+            orchestrator: Some(ask),
+        };
+        self.queue.push_back(request.clone());
+        Some(request)
+    }
+
+    /// HS2-XHQ1EH: remove a pending orchestrator request, by bridge id or by the
+    /// orchestration runtime's request id. It installs no rule and wakes no waiter.
+    pub fn take_orchestrator(
+        &mut self,
+        id: Option<u64>,
+        request_id: Option<&str>,
+    ) -> Option<Request> {
+        let position = self.queue.iter().position(|queued| {
+            queued.orchestrator.as_ref().is_some_and(|ask| {
+                id.is_some_and(|id| queued.id == id)
+                    || request_id.is_some_and(|request_id| ask.request_id == request_id)
+            })
+        })?;
+        self.queue.remove(position)
     }
 
     /// The pending requests, oldest first (FIFO order — what the UI renders).
@@ -1062,6 +1159,7 @@ impl SharedPermissionBridge {
                 tool,
                 action,
                 agent: None,
+                orchestrator: None,
             });
         }
         // Wait for the answer. If `resolve` already ran (before we started waiting), the
@@ -1220,11 +1318,12 @@ impl SharedPermissionBridge {
             tool,
             action,
             agent,
+            orchestrator: None,
         };
         if let Some(f) = self.on_pending.lock_or_recover().as_ref() {
             f(&request);
         }
-        Enqueued::Pending(request)
+        Enqueued::Pending(Box::new(request))
     }
 
     /// Settle a timed-out ask: win the race to abandon it, or honor a human answer that
@@ -1254,6 +1353,37 @@ impl SharedPermissionBridge {
     fn wake_waiters(&self) {
         self.cvar.notify_all();
         self.async_notify.notify_waiters();
+    }
+
+    /// HS2-XHQ1EH: show an orchestrator request (firing the pending observer) unless
+    /// it is already shown. Returns the queued request when this call queued it.
+    pub fn enqueue_orchestrator(
+        &self,
+        project: String,
+        connection: String,
+        action: String,
+        ask: OrchestratorAsk,
+    ) -> Option<Request> {
+        let request = self
+            .inner
+            .lock_or_recover()
+            .push_orchestrator(project, connection, action, ask)?;
+        if let Some(f) = self.on_pending.lock_or_recover().as_ref() {
+            f(&request);
+        }
+        Some(request)
+    }
+
+    /// HS2-XHQ1EH: stop showing an orchestrator request that was answered. Wakes no
+    /// waiter, because none exists, and leaves no result behind.
+    pub fn settle_orchestrator(
+        &self,
+        id: Option<u64>,
+        request_id: Option<&str>,
+    ) -> Option<Request> {
+        self.inner
+            .lock_or_recover()
+            .take_orchestrator(id, request_id)
     }
 
     /// The pending requests (for the server to push over the WS to clients).
@@ -1649,7 +1779,7 @@ impl SharedPermissionBridge {
 /// Whether an ask was answered by a rule or is now queued for a human.
 enum Enqueued {
     Answered(Decision),
-    Pending(Request),
+    Pending(Box<Request>),
 }
 
 /// An in-flight async ask. Dropped unsettled (its caller went away), it withdraws the
@@ -1916,6 +2046,92 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn orchestrator_ask(request_id: &str) -> OrchestratorAsk {
+        OrchestratorAsk {
+            request_id: request_id.into(),
+            owner_checkout_id: "launch".into(),
+            owner_label: "Launch".into(),
+            target_id: "01ARZ3NDEKTSV4RRFFQ69G5FAZ".into(),
+            target_label: "API".into(),
+            action: "session_start".into(),
+            tool: Some("codex".into()),
+            model: None,
+            operation_id: "sched-start-step".into(),
+            each_time: false,
+        }
+    }
+
+    /// HS2-XHQ1EH: an orchestrator request is shown once per runtime request id, no
+    /// rule of the bridge answers it, and settling it wakes nothing and leaves nothing.
+    #[test]
+    fn hs2_xhq1eh_orchestrator_requests_are_detached_and_idempotent() {
+        let shared = SharedPermissionBridge::default();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed = seen.clone();
+        shared.set_on_pending(move |request| {
+            observed.lock().unwrap().push(request.id);
+        });
+        // A project-wide rule for the same tool and action never answers it.
+        shared.add_rules([Rule {
+            project: "checkout:launch".into(),
+            tool: ORCHESTRATOR_TOOL.into(),
+            action: "Start a codex session in API".into(),
+            exact_action: Some("Start a codex session in API".into()),
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist: false,
+            connection: None,
+        }]);
+        let raise = |id: &str| {
+            shared.enqueue_orchestrator(
+                "checkout:launch".into(),
+                "orchestrator:launch".into(),
+                "Start a codex session in API".into(),
+                orchestrator_ask(id),
+            )
+        };
+        let first = raise("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        assert_eq!(first.tool, ORCHESTRATOR_TOOL);
+        assert_eq!(first.agent.as_deref(), Some(ORCHESTRATOR_TOOL));
+        // Raising the same runtime request again shows nothing new.
+        assert!(raise("01ARZ3NDEKTSV4RRFFQ69G5FB0").is_none());
+        let second = raise("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        assert_eq!(*seen.lock().unwrap(), [first.id, second.id]);
+        assert_eq!(shared.pending().len(), 2);
+        // Settled by bridge id or by runtime request id, out of order; once only.
+        assert_eq!(
+            shared
+                .settle_orchestrator(None, Some("01ARZ3NDEKTSV4RRFFQ69G5FB1"))
+                .map(|request| request.id),
+            Some(second.id)
+        );
+        assert!(
+            shared
+                .settle_orchestrator(None, Some("01ARZ3NDEKTSV4RRFFQ69G5FB1"))
+                .is_none()
+        );
+        assert_eq!(
+            shared
+                .settle_orchestrator(Some(first.id), None)
+                .map(|request| request.id),
+            Some(first.id)
+        );
+        assert!(shared.pending().is_empty());
+        assert!(shared.results.lock().unwrap().is_empty());
+        // An ordinary request's id is never taken as an orchestrator's.
+        let Outcome::Pending(tool_id) = shared.inner.lock().unwrap().request_for_project(
+            "checkout:launch",
+            "chat",
+            "Bash",
+            "ls",
+        ) else {
+            panic!("pending");
+        };
+        assert!(shared.settle_orchestrator(Some(tool_id), None).is_none());
+        assert_eq!(shared.pending().len(), 1);
+    }
 
     #[test]
     fn existing_vault_loader_never_recreates_a_missing_file() {

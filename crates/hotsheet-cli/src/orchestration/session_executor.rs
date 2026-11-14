@@ -168,7 +168,7 @@ impl OrchestrationRuntime {
         let mut seen = Vec::new();
         for record in self.session_list(owner_id, true)? {
             // One request to the session's host. A host that cannot be asked, or a
-            // grant that no longer covers the read, leaves the record as it is: the
+            // gate that no longer allows the read, leaves the record as it is: the
             // session still counts, and nothing about it reads as idle or safe.
             let view = reader.as_ref().and_then(|actor| {
                 self.session_safe_point(owner_id, &record.session_id, Some(actor), tx)
@@ -253,8 +253,16 @@ impl OrchestrationRuntime {
             return StartOutcome::Unavailable;
         };
         let owner_id = request.owner_id.as_str();
-        let refused = |error: &OrchestrationError| StartOutcome::Refused {
-            reason: error.code().into(),
+        // HS2-XHQ1EH: a permission request is a wait for a person, not a refusal.
+        let refused = |error: &OrchestrationError| match error {
+            OrchestrationError::PermissionRequired { request_id } => {
+                StartOutcome::PermissionRequired {
+                    request_id: request_id.clone(),
+                }
+            }
+            _ => StartOutcome::Refused {
+                reason: error.code().into(),
+            },
         };
         let records = match self.session_list(owner_id, false) {
             Ok(records) => records,

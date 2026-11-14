@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use hotsheet_model::{OrchestrationLink, OrchestrationRelation as Relation, Ticket};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, CreateGrant, DenialReason, TargetAction, TargetOpError,
+    AuditOutcome, DenialReason, PermissionAnswer, TargetAction, TargetOpError,
 };
 use hotsheet_ticketing::remote_servers::TargetReply;
 use hotsheet_ticketing::{FsStore, NewTicket, ProviderError, StoreMetadata, ops};
@@ -200,8 +200,9 @@ pub(super) fn unsupported(connection: &str) -> ProviderError {
     }
 }
 
-/// Declare target `n`, bind it to the local target checkout and grant `actions`.
-pub(super) fn bind_and_grant(
+/// Declare target `n`, bind it to the local target checkout and remember a rule for
+/// each of `actions` that would ask a person (HS2-XHQ1EH).
+pub(super) fn bind_and_allow(
     m: &Machine,
     n: u128,
     actions: &[TargetAction],
@@ -246,22 +247,52 @@ pub(super) fn bind_and_grant(
             .unwrap()
             .usable
     );
-    if !actions.is_empty() {
+    allow_on(&m.runtime, &m.owner.id, &id(n), actions, &[], tx);
+}
+
+/// HS2-XHQ1EH: unbind target `n` (what makes it unusable now that no grant can be
+/// withdrawn), and bind it again to the same local checkout.
+pub(super) fn unbind(m: &Machine, n: u128, tx: &mut Transaction<'_>) {
+    let binding = OrchestrationRuntime::binding_at(&m.home, &m.reference(n)).unwrap();
+    OrchestrationRuntime::unbind_at(
+        &m.home,
+        hotsheet_ticketing::orchestration::UnbindTarget {
+            target: m.reference(n),
+            expected_binding_revision: binding.revision,
+            previous_destination: binding.destination,
+        },
+        tx,
+    )
+    .unwrap();
+}
+pub(super) fn rebind(m: &Machine, n: u128, tx: &mut Transaction<'_>) {
+    let binding = OrchestrationRuntime::binding_at(&m.home, &m.reference(n)).unwrap();
+    let projection = m.runtime.checkout_projection(&m.target.id).unwrap();
+    let manifest = m
+        .runtime
+        .declarations(&m.owner.id)
+        .unwrap()
+        .revision
+        .unwrap();
+    assert!(
         m.runtime
-            .grant(
-                &m.reference(n),
-                CreateGrant {
-                    grant_id: None,
-                    actor_id: "worker-1".into(),
-                    actions: actions.to_vec(),
-                    session_scope: None,
-                    expires_at_ms: 10_000,
+            .bind(
+                BindTarget {
+                    target: m.reference(n),
+                    expected_manifest_revision: manifest,
+                    expected_binding_revision: binding.revision,
+                    previous_destination: None,
+                    destination: TargetDestination::Local {
+                        server_id: projection.server_id,
+                        checkout_id: projection.checkout_id,
+                        checkout_authority: projection.checkout_authority,
+                    },
                 },
-                Some(&human()),
-                tx,
+                tx
             )
-            .unwrap();
-    }
+            .unwrap()
+            .usable
+    );
 }
 
 fn create_request(
@@ -298,7 +329,7 @@ fn hs2_az15ga_create_is_idempotent_linked_and_carries_provenance() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::TicketsWrite],
@@ -444,7 +475,7 @@ fn hs2_az15ga_an_interrupted_create_resumes_without_a_duplicate() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::TicketsWrite],
@@ -538,14 +569,14 @@ fn hs2_az15ga_an_interrupted_create_resumes_without_a_duplicate() {
 }
 
 #[test]
-fn hs2_az15ga_every_operation_passes_the_grant_and_reports_target_errors() {
+fn hs2_az15ga_every_operation_passes_the_gate_and_reports_target_errors() {
     let m = machine(10, false, unsupported);
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(&m, 1, &[], &mut tx);
+    bind_and_allow(&m, 1, &[], &mut tx);
     let ticket = m.orchestration_ticket("Coordinate");
     let existing = ops::create(
         &m.target_store,
@@ -586,11 +617,24 @@ fn hs2_az15ga_every_operation_passes_the_grant_and_reports_target_errors() {
             tx,
         )
     };
-    // Bound but not granted: nothing is read, written or linked.
-    assert!(matches!(
-        read(&m, &existing.id.to_string(), &mut tx),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
+    // HS2-XHQ1EH: bound is consented to. An AI's write asks a person and writes
+    // nothing until one answers.
+    let asked = permission_request(m.runtime.target_ticket_create(
+        &m.owner.id,
+        create_request(&m, &ticket, "op-1", "Refused"),
+        Some(&worker()),
+        &mut tx,
     ));
+    assert!(m.links(&ticket).is_empty());
+    assert_eq!(m.target_store.list_tickets().unwrap().len(), 1);
+    // A denial is final for that operation.
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &asked,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
     assert!(matches!(
         m.runtime.target_ticket_create(
             &m.owner.id,
@@ -598,25 +642,10 @@ fn hs2_az15ga_every_operation_passes_the_grant_and_reports_target_errors() {
             Some(&worker()),
             &mut tx
         ),
-        Err(OrchestrationError::Denied(DenialReason::NoGrant))
+        Err(OrchestrationError::Denied(DenialReason::PermissionDenied))
     ));
-    assert!(m.links(&ticket).is_empty());
     assert_eq!(m.target_store.list_tickets().unwrap().len(), 1);
-    // Read-only authority reads and links but cannot write.
-    m.runtime
-        .grant(
-            &m.reference(1),
-            CreateGrant {
-                grant_id: Some(id(70)),
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // Reading and linking never ask; writing still does.
     let seen = read(&m, &existing.slug, &mut tx).unwrap();
     assert_eq!(seen["title"], "Already in the target");
     assert_eq!(seen["native_id"], existing.id.to_string());
@@ -627,7 +656,7 @@ fn hs2_az15ga_every_operation_passes_the_grant_and_reports_target_errors() {
             json!({"title":"Nope"}),
             &mut tx
         ),
-        Err(OrchestrationError::Denied(DenialReason::ActionNotGranted))
+        Err(OrchestrationError::PermissionRequired { .. })
     ));
     assert_eq!(
         m.target_store.read_ticket(&existing.id).unwrap().title,
@@ -744,24 +773,15 @@ fn hs2_az15ga_every_operation_passes_the_grant_and_reports_target_errors() {
         )),
         TargetOpError::NotFound
     );
-    // With write authority, an update goes through the target's own provider.
-    m.runtime
-        .revoke(&m.reference(1), &id(70), Some(&human()), &mut tx)
-        .unwrap();
-    m.runtime
-        .grant(
-            &m.reference(1),
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead, TargetAction::TicketsWrite],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // With a remembered rule, an update goes through the target's own provider.
+    allow_on(
+        &m.runtime,
+        &m.owner.id,
+        &id(1),
+        &[TargetAction::TicketsWrite],
+        &[],
+        &mut tx,
+    );
     let updated = update(
         &m,
         &existing.id.to_string(),
@@ -887,7 +907,7 @@ fn hs2_az15ga_an_external_source_stays_authoritative_and_is_never_rerouted() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::TicketsWrite],
@@ -1156,20 +1176,14 @@ fn hs2_az15ga_remote_destination_uses_the_reviewed_transport_and_peer_codes() {
             .unwrap()
             .usable
     );
-    runtime
-        .grant(
-            &target,
-            CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead, TargetAction::TicketsWrite],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    allow_on(
+        &runtime,
+        &owner.id,
+        &id(1),
+        &[TargetAction::TicketsWrite],
+        &[],
+        &mut tx,
+    );
     let ticket = ops::create(
         &owner_store,
         ulid::Ulid::new(),

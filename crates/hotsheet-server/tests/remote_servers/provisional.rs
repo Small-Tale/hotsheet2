@@ -151,17 +151,25 @@ async fn hs2_jsf985_http_stdio_mcp_and_cli_share_provisional_work_across_two_tar
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{bound}");
-        let (status, granted) = api(
+        let (status, granted) = super::orchestration::remember_rules(
             router.clone(),
-            "POST",
-            &format!("{base}/targets/{target}/grants"),
+            &format!("{base}/targets/{target}"),
             json!({"actor_id":"scheduler-1",
                 "actions":["tickets_read","work_start","gates_observe"],
                 "expires_at_ms":expires,"actor":human}),
-            true,
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{granted}");
+        // HS2-XHQ1EH: building ahead is its own remembered decision.
+        let (status, remembered) = api(
+            router.clone(),
+            "POST",
+            &format!("{base}/permission-rules"),
+            json!({"target_id":target,"action":"provisional_dispatch","actor":human}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{remembered}");
     }
     let post = |path: String, mut body: Value| {
         let router = router.clone();

@@ -40,12 +40,17 @@ fn runtime(
         state: state.clone(),
         runtime: handle,
     });
+    // HS2-XHQ1EH: waiting permission requests are shown in this server's bridge.
+    let prompt = Arc::new(crate::routes::orchestration_permissions::BridgePrompt {
+        state: state.clone(),
+    });
     if let Some(runtime) = &state.orchestration_runtime {
         // HS2-95SWQ4: an injected runtime keeps the executor it was given.
         return Ok(Arc::new(
             OrchestrationRuntime::clone(runtime)
                 .with_capacity_probe(probe)
-                .with_session_host(sessions),
+                .with_session_host(sessions)
+                .with_permission_prompt(prompt),
         ));
     }
     OrchestrationRuntime::live(
@@ -58,6 +63,7 @@ fn runtime(
             .with_target_events(target_events(state))
             .with_capacity_probe(probe)
             .with_session_host(sessions)
+            .with_permission_prompt(prompt)
     })
     .map(Arc::new)
 }
@@ -322,7 +328,7 @@ fn ensure_gate_follower(state: &AppState, owner: &str) {
             if !step.active {
                 break;
             }
-            // A step that neither waited nor learned anything (a denied grant, an
+            // A step that neither waited nor learned anything (a denied gate, an
             // adapter that cannot wait) backs off instead of spinning.
             if step.changed.is_empty() && started.elapsed() < std::time::Duration::from_millis(250)
             {
@@ -454,6 +460,8 @@ impl AppState {
                 for owner in shared.scheduler_owners() {
                     ensure_scheduler_blocking(&state, &owner);
                 }
+                // HS2-XHQ1EH: permission requests still waiting show again.
+                shared.show_waiting_permissions(crate::routes::permissions::now_ms());
             })
             .await;
         });
@@ -496,12 +504,18 @@ fn watched_owner(method: &Method, path: &str) -> Option<String> {
         _ => None,
     }
 }
-fn error(error: OrchestrationError) -> ApiError {
-    ApiError::new(
+/// The API error for a runtime refusal. HS2-XHQ1EH: a refusal a person can answer
+/// carries the record to answer, `request_id` or `note_id`.
+pub(crate) fn orchestration_error(error: OrchestrationError) -> ApiError {
+    let api = ApiError::new(
         StatusCode::from_u16(error_status(&error)).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
         error.to_string(),
     )
-    .with_code(error.code())
+    .with_code(error.code());
+    match error.answer_reference() {
+        Some((field, id)) => api.with_field(field, id),
+        None => api,
+    }
 }
 async fn execute(
     state: AppState,
@@ -567,7 +581,7 @@ async fn execute_blocking(
     .await
     .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "target task failed"))?
     .map(Json)
-    .map_err(error)
+    .map_err(orchestration_error)
 }
 pub(crate) async fn read(
     State(state): State<AppState>,

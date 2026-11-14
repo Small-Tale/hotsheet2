@@ -279,7 +279,7 @@ impl OrchestrationRuntime {
                     operation_id: None,
                     outcome: AuditOutcome::Changed,
                     reason: Some(status.state.code().into()),
-                    grant_id: None,
+                    permission_id: None,
                 },
             )?;
         }

@@ -7,9 +7,9 @@
 use hotsheet_resource_claims::Namespace;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AdmissionDecision, AdmissionRequest, AdmissionStore, CapacitySnapshot, HeldClaim,
-    HostObservation, MAX_CLAIM_NAMESPACES, OfflinePolicy, SessionRequest, TargetAction,
-    TargetSpeculation, decide_admission,
+    AccessRequest, AdmissionDecision, AdmissionRequest, AdmissionStore, CapacitySnapshot,
+    DenialReason, HeldClaim, HostObservation, MAX_CLAIM_NAMESPACES, OfflinePolicy, SessionRequest,
+    TargetAction, TargetSpeculation, decide_admission,
 };
 use serde::Deserialize;
 
@@ -232,7 +232,7 @@ impl OrchestrationRuntime {
     /// Ask the target's machine whether sessions of a tool may start there now. The
     /// question starts nothing: it passes the gate as `sessions_manage` for that tool
     /// and model, and the policy's machine limits for the target travel with it. The
-    /// start itself still passes the gate with its load and any approval.
+    /// start itself still passes the gate with its load and any permission request.
     pub fn target_admission(
         &self,
         target: &TargetRef,
@@ -247,21 +247,32 @@ impl OrchestrationRuntime {
             limits: None,
         };
         hosted.validate()?;
+        let question = SessionRequest {
+            tool: hosted.tool.clone(),
+            model: hosted.model.clone(),
+            running: 0,
+            starting: false,
+        };
         let authorized = self.authorize(
             target,
             actor,
             ActionRequest {
-                session: Some(SessionRequest {
-                    tool: hosted.tool.clone(),
-                    model: hosted.model.clone(),
-                    running: 0,
-                    starting: false,
-                }),
+                session: Some(question.clone()),
                 ..ActionRequest::new(TargetAction::SessionsManage).continuing()
             },
             tx,
         )?;
         let outcome = (|| {
+            // HS2-XHQ1EH: the question starts nothing, so the gate neither asks nor
+            // limits it; the policy must still list the tool and model on the target.
+            let mut asked =
+                AccessRequest::new(authorized.actor_id.clone(), TargetAction::SessionsManage);
+            asked.session = Some(question);
+            if let super::policy::PolicyAnswer::Denied(_) =
+                self.policy_answer(&target.owner_checkout_id, &asked, &target.target_id)
+            {
+                return Err(OrchestrationError::Denied(DenialReason::PolicyDenied));
+            }
             // The gate just evaluated this policy; one that vanished since is a conflict.
             let policy = self
                 .policy(&target.owner_checkout_id)?

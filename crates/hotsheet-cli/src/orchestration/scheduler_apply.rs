@@ -1,8 +1,10 @@
-//! HS2-ECWG50: applying one placement. Inside the policy the scheduler acts and logs;
-//! outside it, the gate files the approval a policy asks for and nothing is done.
+//! HS2-ECWG50: applying one placement. Inside the policy's limits the scheduler acts
+//! and logs. HS2-XHQ1EH: a start no remembered rule allows files a permission request
+//! and nothing is done; the person's answer wakes the scheduler. A wind-down only
+//! reduces activity, so it never asks.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AccessRequest, AuditOutcome, AuditRecord, GrantRegistry, Placement, PlacementAction,
+    AccessRequest, AuditOutcome, AuditRecord, DenialReason, Placement, PlacementAction,
     PlacementOutcome, PlacementReason, SessionLoad, SessionRequest, TargetAction,
 };
 
@@ -19,33 +21,48 @@ fn stop_operation(session_id: &str, tick_id: &str) -> String {
 }
 
 impl OrchestrationRuntime {
-    /// Whether the gate allows a session action now, without consuming an approval.
-    /// When it does not, the action is passed through `authorize`, which files the
-    /// approval a policy asks for and audits the denial. `Ok` means go ahead.
+    /// Whether the gate allows a session action now, without filing or using a
+    /// permission request. When it does not, the action is passed through
+    /// `authorize`, which files the request (shown through the permission bridge)
+    /// and audits the denial. `Ok` means go ahead; the action itself passes the gate
+    /// again and uses an Allow Once answer only once it happened. The error's detail
+    /// names the policy limit or the permission request a person must answer. `Ok`
+    /// carries the Allow Once request that allowed it, to use once the act happened.
     fn scheduler_gate(
         &self,
         target: &TargetRef,
         actor: Option<&MutationActor>,
         request: AccessRequest,
         tx: &mut Transaction<'_>,
-    ) -> Result<(), (String, Option<String>)> {
+    ) -> Result<Option<String>, (String, Option<String>)> {
         let decision = self
-            .access(target, &request, tx)
+            .access(target, &request, access::is_person(actor), tx)
             .map_err(|error| (error.code().to_owned(), None))?;
         if decision.allowed {
-            return Ok(());
+            return Ok(decision
+                .request_id
+                .filter(|_| decision.basis.as_deref() == Some("allowed_once")));
         }
         let action = ActionRequest {
             session: request.session,
             operation_id: request.operation_id,
             load: request.load,
             provisional: request.provisional,
+            role_session: request.role_session,
             ..ActionRequest::new(request.action)
         };
         match self.authorize(target, actor, action, tx) {
             // A person answered between the two reads: the action is authorized.
-            Ok(_) => Ok(()),
-            Err(error) => Err((error.code().to_owned(), decision.detail)),
+            Ok(authorized) => Ok(authorized
+                .permission_id
+                .filter(|_| authorized.basis == "allowed_once")),
+            Err(error) => Err((
+                error.code().to_owned(),
+                error
+                    .answer_reference()
+                    .map(|(_, id)| id.to_owned())
+                    .or(decision.detail),
+            )),
         }
     }
 
@@ -73,41 +90,23 @@ impl OrchestrationRuntime {
                     AuditOutcome::Failed
                 },
                 reason: Some(outcome.outcome.clone()),
-                grant_id: None,
+                permission_id: None,
             },
         );
     }
 
-    /// HS2-JSF985: a session was started for provisional work. The approval a policy
-    /// asked for is used by this one start, and the work is recorded with the gates
-    /// it rests on, so their results reach it. Best effort: the session runs either
-    /// way, and a dispatch of the same step records it if this could not.
-    #[allow(clippy::too_many_arguments)] // HS2-JSF985: one start with the pass's context
+    /// HS2-JSF985: a session was started for provisional work. The work is recorded
+    /// with the gates it rests on, so their results reach it. Best effort: the
+    /// session runs either way, and a dispatch of the same step records it if this
+    /// could not.
     fn scheduler_started_provisional(
         &self,
         owner_id: &str,
-        target: &TargetRef,
         outcome: &DecisionOutcome,
         standing: &hotsheet_ticketing::orchestration::ProvisionalStanding,
         actor_id: &str,
-        gathered: &Gathered,
         tx: &mut Transaction<'_>,
     ) {
-        use hotsheet_ticketing::orchestration::{ApprovalGate, ApprovalRegistry};
-        if gathered
-            .policy
-            .approval
-            .required_for
-            .contains(&ApprovalGate::ProvisionalDispatch)
-        {
-            let _ = ApprovalRegistry::new(&self.home).consume_or_request(
-                target,
-                actor_id,
-                ApprovalGate::ProvisionalDispatch,
-                &outcome.operation_id,
-                tx,
-            );
-        }
         let Some(step) = outcome
             .step_id
             .as_deref()
@@ -174,18 +173,21 @@ impl OrchestrationRuntime {
                 }),
                 operation_id: Some(operation_id.clone()),
                 load: Some(load.clone()),
-                // HS2-JSF985: the policy's speculation switch and, when it lists
-                // one, its `provisional_dispatch` approval apply to this start.
+                // HS2-JSF985: the policy's speculation switch applies to this start,
+                // and building ahead asks under `provisional_dispatch` (HS2-XHQ1EH).
                 provisional: placement.provisional,
                 role_session: false,
             },
             tx,
         );
-        if let Err((code, detail)) = gate {
-            outcome.outcome = code;
-            outcome.detail = detail;
-            return outcome;
-        }
+        let allowed_once = match gate {
+            Ok(allowed_once) => allowed_once,
+            Err((code, detail)) => {
+                outcome.outcome = code;
+                outcome.detail = detail;
+                return outcome;
+            }
+        };
         if gathered.executor != "available" {
             outcome.outcome = format!("executor_{}", gathered.executor);
             return outcome;
@@ -226,10 +228,12 @@ impl OrchestrationRuntime {
                 outcome.session_id = Some(session_id);
                 outcome.run_id = run_id;
                 applied.push((placement.target_id.clone(), PlacementOutcome::Started));
+                // HS2-XHQ1EH: the start happened, so an Allow Once answer is used.
+                if let Some(request_id) = &allowed_once {
+                    let _ = self.permission_ledger().used(request_id, tx);
+                }
                 if let Some(standing) = &provisional {
-                    self.scheduler_started_provisional(
-                        owner_id, &target, &outcome, standing, actor_id, gathered, tx,
-                    );
+                    self.scheduler_started_provisional(owner_id, &outcome, standing, actor_id, tx);
                 }
                 true
             }
@@ -248,6 +252,15 @@ impl OrchestrationRuntime {
                 ));
                 outcome.detail = Some(reason);
                 false
+            }
+            // HS2-XHQ1EH: the step's run (`sched-run-<step>`) or the start waits for a
+            // person, recorded like a start the scheduler's own gate turned into a
+            // request: the outcome code and the request id to answer. No backoff; the
+            // answer wakes the scheduler.
+            StartOutcome::PermissionRequired { request_id } => {
+                outcome.outcome = DenialReason::PermissionRequired.code().into();
+                outcome.detail = Some(request_id);
+                return outcome;
             }
             StartOutcome::Unavailable => {
                 outcome.outcome = "executor_unavailable".into();
@@ -351,11 +364,13 @@ impl OrchestrationRuntime {
             owner_checkout_id: owner_id.into(),
             target_id: placement.target_id.clone(),
         };
-        if placement.reason == PlacementReason::PolicyNotPermitted {
-            // The policy's own gate denies everything on a target or tool it no
-            // longer permits, and stopping that session is what the policy asks
-            // for. The grant still has to allow managing it.
-            let request = AccessRequest {
+        // HS2-48H57C: winding down only reduces activity. It never asks, and a policy
+        // that no longer permits the target or tool does not deny it; it passes the
+        // same gate as any other wind-down for its identified actor and audit entry.
+        let gate = self.scheduler_gate(
+            &target,
+            actor,
+            AccessRequest {
                 actor_id: actor_id.into(),
                 action: TargetAction::SessionsManage,
                 session: Some(SessionRequest {
@@ -368,54 +383,13 @@ impl OrchestrationRuntime {
                 load: None,
                 provisional: false,
                 role_session: false,
-            };
-            let granted = Self::binding_at(&self.home, &target).and_then(|binding| {
-                GrantRegistry::new(&self.home).decide(
-                    &target,
-                    binding.destination.as_ref(),
-                    &request,
-                    tx.clock.now_ms(),
-                )
-            });
-            match granted {
-                Ok(decision) if decision.allowed => {}
-                Ok(decision) => {
-                    outcome.outcome = decision
-                        .reason
-                        .map_or("denied", |reason| reason.code())
-                        .into();
-                    return outcome;
-                }
-                Err(error) => {
-                    outcome.outcome = error.code().into();
-                    return outcome;
-                }
-            }
-        } else {
-            let gate = self.scheduler_gate(
-                &target,
-                actor,
-                AccessRequest {
-                    actor_id: actor_id.into(),
-                    action: TargetAction::SessionsManage,
-                    session: Some(SessionRequest {
-                        tool: placement.tool.clone(),
-                        model: placement.model.clone(),
-                        running: placement.inputs.target_sessions,
-                        starting: false,
-                    }),
-                    operation_id: Some(operation_id.clone()),
-                    load: None,
-                    provisional: false,
-                    role_session: false,
-                },
-                tx,
-            );
-            if let Err((code, detail)) = gate {
-                outcome.outcome = code;
-                outcome.detail = detail;
-                return outcome;
-            }
+            },
+            tx,
+        );
+        if let Err((code, detail)) = gate {
+            outcome.outcome = code;
+            outcome.detail = detail;
+            return outcome;
         }
         if gathered.executor != "available" {
             outcome.outcome = format!("executor_{}", gathered.executor);

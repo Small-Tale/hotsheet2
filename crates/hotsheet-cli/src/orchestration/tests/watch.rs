@@ -8,7 +8,7 @@ use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
 
 use super::tickets::{
-    Machine, NOW, RemotePeer, bind_and_grant, human, machine, machine_with, op, unsupported, worker,
+    Machine, NOW, RemotePeer, bind_and_allow, human, machine, machine_with, op, unsupported, worker,
 };
 use super::*;
 
@@ -182,7 +182,7 @@ fn hs2_7qhwhj_a_watch_is_idle_without_runs_and_syncs_only_changed_tickets() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -311,7 +311,7 @@ fn hs2_7qhwhj_an_outage_marks_runs_stale_once_and_reconnect_replays_from_the_cur
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -466,7 +466,7 @@ fn hs2_7qhwhj_events_replay_by_cursor_and_wait_for_the_next_one_without_polling(
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -675,20 +675,14 @@ fn hs2_7qhwhj_a_remote_target_is_followed_through_the_reviewed_transport() {
             &mut tx,
         )
         .unwrap();
-    runtime
-        .grant(
-            &target,
-            hotsheet_ticketing::orchestration::CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead, TargetAction::WorkStart],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    allow_on(
+        &runtime,
+        &target.owner_checkout_id,
+        &target.target_id,
+        &[TargetAction::WorkStart],
+        &[],
+        &mut tx,
+    );
     let orchestration = ops::create(
         &owner_store,
         ulid::Ulid::new(),
@@ -792,7 +786,7 @@ fn hs2_wbredm_the_follower_reconciles_every_run_on_connect_and_on_reconnect() {
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -921,7 +915,7 @@ fn hs2_257q2z_a_target_with_only_a_session_is_followed_and_its_changes_wake_the_
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -1012,7 +1006,7 @@ fn hs2_257q2z_a_session_working_an_unfinished_run_learns_ticket_changes_from_the
         clock: &Clock,
         rng: &mut rng,
     };
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[TargetAction::TicketsRead, TargetAction::WorkStart],
@@ -1033,12 +1027,16 @@ fn hs2_257q2z_a_session_working_an_unfinished_run_learns_ticket_changes_from_the
         .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
     assert_eq!(synced.synced, std::slice::from_ref(&run_id));
     assert!(!synced.woke_scheduler);
+    // HS2-XHQ1EH: reading sessions is consented to, so a run's sync also reads the
+    // run's sessions from their host. No host here knows a scripted session, so it
+    // reads as lost; each later step follows a fresh one.
+    hosted_session(&m, &id(902), Some(run_id.clone()), &mut tx);
     // Its turn end has no run event, so it still wakes the loop.
-    feed.session(&id(901));
+    feed.session(&id(902));
     let turn = m
         .runtime
         .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
-    assert!(turn.woke_scheduler && turn.synced.is_empty());
+    assert!(turn.woke_scheduler && turn.synced.is_empty(), "{turn:?}");
     // The run finishes: the session works no unfinished run, so a ticket change wakes.
     complete(&m, &ticket);
     feed.push(&m.target_connection(), &ticket);
@@ -1050,6 +1048,7 @@ fn hs2_257q2z_a_session_working_an_unfinished_run_learns_ticket_changes_from_the
         m.runtime.run(&m.owner.id, &run_id).unwrap().state,
         RunState::Completed
     );
+    hosted_session(&m, &id(903), None, &mut tx);
     let other = target_ticket(&m, "Next");
     feed.push(&m.target_connection(), &other);
     let free = m

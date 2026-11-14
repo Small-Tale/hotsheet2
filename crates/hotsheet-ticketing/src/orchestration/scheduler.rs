@@ -25,8 +25,7 @@ use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
     OrchestrationError, PolicyBody, PolicyDenial, ResourceContention, ResourceState,
-    SelectionRequest, SessionCount, SignalSupport, TargetAction, UnreadableClaims,
-    decide_admission, select,
+    SelectionRequest, SessionCount, SignalSupport, UnreadableClaims, decide_admission, select,
 };
 
 /// One priority band, in points. Every other term is expressed against it.
@@ -717,9 +716,6 @@ fn session_denial(policy: &PolicyBody, session: &ScheduledSession) -> Option<Pol
     };
     if !target.enabled {
         return Some(PolicyDenial::TargetDisabled);
-    }
-    if !target.actions.contains(&TargetAction::SessionsManage) {
-        return Some(PolicyDenial::ActionNotPermitted);
     }
     let Some(scope) = target.tools.iter().find(|scope| scope.tool == session.tool) else {
         return Some(PolicyDenial::ToolNotPermitted);

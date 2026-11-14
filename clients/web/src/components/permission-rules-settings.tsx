@@ -117,6 +117,8 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
 
 /** HS2-7T5GPN: only the checkout namespace proves code-project ownership. */
 function ruleOwner(rule: PermissionRule, owner?: PermissionRulesSettingsProps['owner']) {
+  // HS2-XHQ1EH: a remembered orchestrator rule names the project it acts in.
+  if (rule.orchestrator) return `Target project: ${rule.orchestrator.target_label}`;
   if (owner && rule.project === `checkout:${owner.id}`) return `Code project: ${owner.name} · ${owner.root}`;
   if (rule.project.startsWith('checkout:')) return `Code project identity unavailable (${rule.project})`;
   return `Legacy ticket-source answer: ${rule.project}`;
@@ -127,6 +129,7 @@ function ruleLabel(rule: PermissionRule, owner?: PermissionRulesSettingsProps['o
 }
 
 function reachLabel(rule: PermissionRule) {
+  if (rule.orchestrator) return `The orchestrator of ${rule.orchestrator.owner_label}`;
   return rule.scope === 'chat' ? 'This AI session only' : 'All AI sessions';
 }
 
@@ -177,7 +180,8 @@ export function PermissionRulesSettings({
         label: 'Edit Match',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRuleEditor.value,
         icon: <LucideIcon icon={Pencil} name="pencil" />,
-        disabled: !rule.exact_action,
+        // HS2-XHQ1EH: an orchestrator rule matches its key exactly; it is kept or deleted.
+        disabled: !rule.exact_action || Boolean(rule.orchestrator),
         attributes,
       },
       { kind: 'divider' },
@@ -286,7 +290,11 @@ export function PermissionRulesSettings({
     const selectedRules = ordered.filter((rule) => selected.has(permissionRuleKey(rule)));
     const copyable = selectedRules.some((rule) => rule.exact_action);
     const singleKey =
-      selectedRules.length === 1 && selectedRules[0].exact_action ? permissionRuleKey(selectedRules[0]) : undefined;
+      selectedRules.length === 1 && selectedRules[0].exact_action && !selectedRules[0].orchestrator
+        ? permissionRuleKey(selectedRules[0])
+        : undefined;
+    // HS2-XHQ1EH: an orchestrator rule's answer and lifetime are fixed; it can only be deleted.
+    const changeable = !selectedRules.some((rule) => rule.orchestrator);
     const attributes = { 'data-permission-selection-surface': surface };
     const items: PopupMenuEntry[] = [
       {
@@ -308,12 +316,14 @@ export function PermissionRulesSettings({
         label: 'Allow Selected',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
         icon: <LucideIcon icon={ShieldCheck} name="shield-check" />,
+        disabled: !changeable,
         attributes: { ...attributes, 'data-decision': 'allow' },
       },
       {
         label: 'Deny Selected',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value,
         icon: <LucideIcon icon={ShieldX} name="shield-x" />,
+        disabled: !changeable,
         attributes: { ...attributes, 'data-decision': 'deny' },
       },
       { kind: 'divider' },
@@ -321,12 +331,14 @@ export function PermissionRulesSettings({
         label: 'Remember Until Hot Sheet Restarts',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
         icon: <LucideIcon icon={Clock3} name="clock-3" />,
+        disabled: !changeable,
         attributes: { ...attributes, 'data-scope': 'session' },
       },
       {
         label: 'Set Selected to Persistent',
         action: NOTIFICATIONS_AND_LINKS_ACTIONS.changeSelectedPermissionRuleScope.value,
         icon: <LucideIcon icon={Pin} name="pin" />,
+        disabled: !changeable,
         attributes: { ...attributes, 'data-scope': 'always' },
       },
       { kind: 'divider' },

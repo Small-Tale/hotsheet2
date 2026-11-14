@@ -417,6 +417,9 @@ pub(crate) async fn discard_checkout_legacy_permissions(
 /// `GET /permissions` — the requests a driven tool is currently blocked on, for a client
 /// to render + answer. Each carries the raising connection + the `(tool, action)` asked.
 pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionInfo>> {
+    // HS2-XHQ1EH: show orchestrator requests filed headlessly or before this server
+    // started, and settle ones answered elsewhere.
+    crate::routes::orchestration_permissions::sync_waiting(&state).await;
     let rule_projects = state.permission_rule_paths.lock_or_recover().clone();
     Json(
         state
@@ -426,6 +429,22 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
             .map(|request| {
                 let suggestions =
                     hotsheet_aitools::suggest_secret_spans(&request.tool, &request.action);
+                if let Some(orchestrator) = request.orchestrator {
+                    // HS2-XHQ1EH: the orchestration runtime remembers its own rules;
+                    // a request asked each time offers no Always Allow.
+                    return PermissionInfo {
+                        id: request.id,
+                        project: request.project,
+                        connection: request.connection,
+                        tool: request.tool,
+                        action: request.action,
+                        agent: request.agent,
+                        always_allow_supported: !orchestrator.each_time,
+                        suggestions: Vec::new(),
+                        requester: Some("orchestrator"),
+                        orchestrator: Some(orchestrator),
+                    };
+                }
                 PermissionInfo {
                     id: request.id,
                     project: request.project.clone(),
@@ -433,6 +452,8 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
                     tool: request.tool,
                     action: request.action,
                     agent: request.agent,
+                    requester: None,
+                    orchestrator: None,
                     always_allow_supported: !state
                         .permission_rules_loading
                         .load(std::sync::atomic::Ordering::Acquire)
@@ -469,6 +490,12 @@ pub(crate) struct PermissionInfo {
     agent: Option<String>,
     always_allow_supported: bool,
     suggestions: Vec<hotsheet_aitools::PermissionSecretSuggestion>,
+    /// HS2-XHQ1EH: `orchestrator` for an orchestration project's request; absent for
+    /// an AI tool's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requester: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    orchestrator: Option<hotsheet_aitools::OrchestratorAsk>,
 }
 
 /// Body for `POST /permissions/ask`: who's asking + what.

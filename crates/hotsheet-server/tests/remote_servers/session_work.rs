@@ -210,7 +210,7 @@ impl World {
             router,
             base,
         };
-        world.bind_and_grant(actions).await;
+        world.bind_and_allow(actions).await;
         world
     }
 
@@ -249,7 +249,7 @@ impl World {
         stored.1
     }
 
-    /// Start a session of the fake tool as the granted actor.
+    /// Start a session of the fake tool as the actor a person remembered rules for.
     pub(super) async fn start(&self, operation: &str) -> (StatusCode, Value) {
         self.call(
             "POST",
@@ -288,7 +288,7 @@ impl World {
         .unwrap()
     }
 
-    async fn bind_and_grant(&self, actions: &[&str]) {
+    async fn bind_and_allow(&self, actions: &[&str]) {
         let person = json!({"role":"human","id":"maintainer"});
         let added = self
             .call(
@@ -317,16 +317,19 @@ impl World {
             )
             .await;
         assert_eq!(bound.0, StatusCode::OK, "{}", bound.1);
-        let granted = self
-            .call(
-                "POST",
-                &format!("/targets/{TARGET}/grants"),
-                json!({"actor_id":"scheduler-1","actions":actions,
-                    "session_scope":{"tools":[{"tool":REPORT_TOOL}],"max_concurrency":2},
-                    "expires_at_ms":now_ms() + 3_600_000,"actor":person}),
-            )
-            .await;
-        assert_eq!(granted.0, StatusCode::OK, "{}", granted.1);
+        // HS2-XHQ1EH: a person remembers a rule for each act the loop needs.
+        for action in actions {
+            let body = match *action {
+                "tickets_read" | "gates_observe" => continue,
+                "sessions_manage" => json!({"action":"session_start","tool":REPORT_TOOL}),
+                other => json!({"action":other}),
+            };
+            let mut body = body;
+            body["target_id"] = json!(TARGET);
+            body["actor"] = person.clone();
+            let remembered = self.call("POST", "/permission-rules", body).await;
+            assert_eq!(remembered.0, StatusCode::OK, "{}", remembered.1);
+        }
     }
 }
 

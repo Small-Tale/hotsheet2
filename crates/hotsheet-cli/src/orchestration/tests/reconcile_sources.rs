@@ -166,15 +166,13 @@ fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
     );
     // The shipped case: approved, and no executor exists to run it. Verified means
     // exactly that this machine's records show nothing was executed.
-    m.runtime
-        .decide_approval(
-            &owner,
-            &waiting.approval_id.unwrap(),
-            true,
-            Some(&super::tickets::human()),
-            &mut tx,
-        )
-        .unwrap();
+    answer(
+        &m.runtime,
+        &owner,
+        &waiting.request_id.unwrap(),
+        hotsheet_ticketing::orchestration::PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     let approved = m
         .runtime
         .gate_deploy(
@@ -439,22 +437,8 @@ fn hs2_g5h9fq_reconciliation_reads_the_validation_attempts_of_a_run() {
     );
     m.runtime.bind(rebind, &mut tx).unwrap();
     // Past its deadline and still unknown to its host: recorded `deadline_passed`. The
-    // host is still asked, so the grant must outlive the deadline.
+    // host is still asked; a remembered rule never expires.
     let deadline = unconfirmed.deadline_ms.unwrap();
-    m.runtime
-        .grant(
-            &m.reference(1),
-            hotsheet_ticketing::orchestration::CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::ValidationRun],
-                session_scope: None,
-                expires_at_ms: deadline + 60_000,
-            },
-            Some(&super::tickets::human()),
-            &mut tx,
-        )
-        .unwrap();
     let late = super::job_monitor::At(std::sync::atomic::AtomicU64::new(deadline));
     let mut later = Transaction {
         clock: &late,

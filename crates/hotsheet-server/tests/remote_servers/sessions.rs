@@ -242,25 +242,20 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
                 &inspected["destination"].to_string(),
             ],
         );
+        // HS2-XHQ1EH: a person remembers session starts of the target's tool.
         cli_named(
             &home,
             &human,
             &[
-                "grant",
-                "add",
+                "permission",
+                "remember",
                 target,
                 "--project",
                 &owner.id,
-                "--actor",
-                "scheduler-1",
                 "--action",
-                "sessions_manage",
+                "session_start",
                 "--tool",
                 tool,
-                "--max-concurrency",
-                "4",
-                "--expires-in",
-                "1h",
             ],
         );
     }
@@ -371,7 +366,8 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
             BUSY_TOOL,
         ],
     );
-    assert!(wrong_tool.contains("tool_not_granted"), "{wrong_tool}");
+    // HS2-XHQ1EH: the policy's limits name the tools of a target.
+    assert!(wrong_tool.contains("policy_denied"), "{wrong_tool}");
     let stranger = [
         "--actor-role",
         "ai",
@@ -390,10 +386,10 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
             "--operation-id",
             "op-s",
             "--tool",
-            IDLE_TOOL,
+            BUSY_TOOL,
         ],
     );
-    assert!(ungranted.contains("no_grant"), "{ungranted}");
+    assert!(ungranted.contains("policy_denied"), "{ungranted}");
     assert_eq!(drawer(&peer_router).await.len(), 2);
     assert_eq!(
         session(&scheduler, &["list", "--active"])
@@ -671,14 +667,12 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         )
         .await;
         assert_eq!(bound.0, StatusCode::OK, "{}", bound.1);
-        let granted = api(
+        let granted = super::orchestration::remember_rules(
             router.clone(),
-            "POST",
-            &format!("{target}/grants"),
+            &target.to_string(),
             json!({"actor_id":"scheduler-1","actions":["sessions_manage"],
                 "session_scope":{"tools":[{"tool":tool}],"max_concurrency":4},
                 "expires_at_ms":expires,"actor":person}),
-            true,
         )
         .await;
         assert_eq!(granted.0, StatusCode::OK, "{}", granted.1);
@@ -750,13 +744,13 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         router.clone(),
         "POST",
         &format!("{base}/sessions"),
-        json!({"target_id":TARGET_A,"operation_id":"op-x","tool":IDLE_TOOL,
+        json!({"target_id":TARGET_A,"operation_id":"op-x","tool":BUSY_TOOL,
             "actor":{"role":"ai","id":"stranger"}}),
         true,
     )
     .await;
     assert_eq!(ungranted.0, StatusCode::FORBIDDEN);
-    assert_eq!(ungranted.1["code"], "no_grant");
+    assert_eq!(ungranted.1["code"], "policy_denied");
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -818,10 +812,10 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         "running"
     );
     for arguments in [
-        // Not granted, a tool the target's policy does not list, and acts this tool
-        // does not offer at all.
+        // No identified actor, a tool the target's policy does not list, and acts this
+        // tool does not offer at all.
         json!({"action":"session_start","checkout":checkout.id,"target_id":TARGET_A,
-            "operation_id":"x","tool":IDLE_TOOL,"actor_role":"ai","actor_id":"stranger"}),
+            "operation_id":"x","tool":IDLE_TOOL}),
         json!({"action":"session_start","checkout":checkout.id,"target_id":TARGET_A,
             "operation_id":"y","tool":BUSY_TOOL,"actor_role":"ai","actor_id":"scheduler-1"}),
         json!({"action":"session_takeover","checkout":checkout.id,"session_id":session_id,

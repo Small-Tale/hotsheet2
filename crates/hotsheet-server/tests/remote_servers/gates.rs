@@ -121,14 +121,12 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
         + 3_600_000;
     let human = json!({"role":"human","id":"maintainer"});
     let ai = json!({"role":"ai","id":"scheduler-1"});
-    let (status, _) = api(
+    let (status, _) = super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1",
             "actions":["tickets_read","work_start","gates_observe","deployments_run"],
             "expires_at_ms":expires,"actor":human}),
-        true,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -187,10 +185,9 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     // A link without authority, with a short commit, or for an unknown run is refused.
     for (body, expected, code) in [
         (
-            json!({"commit":a,"repository":"example/widgets",
-                "actor":{"role":"ai","id":"someone-else"}}),
-            StatusCode::FORBIDDEN,
-            "no_grant",
+            json!({"commit":a,"repository":"example/widgets"}),
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
         ),
         (
             json!({"commit":"abc1234","repository":"example/widgets","actor":ai}),
@@ -357,15 +354,17 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     assert_eq!(waiting["gate"]["state"], "awaiting_approval");
     assert_eq!(waiting["gate"]["commit"], a);
     assert_eq!(waiting["gate"]["deployment"]["requires_gate_id"], gate_id);
-    let approval_id = waiting["approval_id"].as_str().unwrap().to_owned();
-    assert_eq!(call(request.clone())["approval_id"], approval_id);
-    let approvals = call(json!({"action":"approval_list"}));
-    assert_eq!(approvals.as_array().unwrap().len(), 1);
-    assert_eq!(approvals[0]["gate"], "deployment");
+    let approval_id = waiting["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(call(request.clone())["request_id"], approval_id);
+    let listed = call(json!({"action":"permission_list"}));
+    let requests = listed["requests"].as_array().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["action"], "deployments_run");
+    assert_eq!(requests[0]["each_time"], true);
     // The governed session cannot answer for itself; a person can.
-    let approval_path = format!("{base}/approvals/{approval_id}");
+    let approval_path = format!("{base}/permissions/{approval_id}");
     for (actor, expected) in [(&ai, StatusCode::FORBIDDEN), (&human, StatusCode::OK)] {
-        let body = json!({"approve":true,"actor":actor});
+        let body = json!({"answer":"allow_once","actor":actor});
         assert_eq!(
             api(router.clone(), "POST", &approval_path, body, true)
                 .await
@@ -382,7 +381,7 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     );
     assert_eq!(call(request)["gate"]["state"], "unknown");
     assert_eq!(
-        call(json!({"action":"approval_list"}))
+        call(json!({"action":"permission_list"}))["requests"]
             .as_array()
             .unwrap()
             .len(),
@@ -398,7 +397,7 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
         json!({"action":"gate_show","checkout":checkout.id,"gate_id":TARGET}),
         json!({"action":"gate_list","checkout":checkout.id,"commit":"main"}),
         json!({"action":"gate_link","checkout":checkout.id,"run_id":run_id,"commit":a,
-            "repository":"example/widgets","actor_role":"ai","actor_id":"someone-else"}),
+            "repository":"example/widgets"}),
         json!({"action":"deployment_request","checkout":checkout.id,"run_id":run_id,
             "environment":"beta","script":"../deploy.sh","operation_id":"deploy-beta",
             "actor_role":"ai","actor_id":"scheduler-1"}),
@@ -528,7 +527,7 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     for expected in [
         ("gates_observe", "succeeded"),
         ("deployments_run", "denied"),
-        ("deployment", "approved"),
+        ("permission_answer", "approved"),
         ("deployments_run", "succeeded"),
     ] {
         assert!(

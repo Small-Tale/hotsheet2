@@ -34,11 +34,11 @@ fn scope(name: &str, models: &[&str]) -> ToolScope {
         models: models.iter().map(|model| (*model).into()).collect(),
     }
 }
-fn target(value: u128, actions: &[TargetAction], tools: Vec<ToolScope>) -> TargetPolicy {
+fn target(value: u128, tools: Vec<ToolScope>) -> TargetPolicy {
     TargetPolicy {
         target_id: id(value),
         enabled: true,
-        actions: actions.to_vec(),
+        actions: None,
         tools,
         max_sessions: 2,
         machine: None,
@@ -55,7 +55,6 @@ fn policy() -> PolicyBody {
         tools: vec![tool("claude", 2), tool("codex", 2)],
         targets: vec![target(
             1,
-            &TargetAction::ALL,
             vec![scope("claude", &["model-a"]), scope("codex", &[])],
         )],
         ..PolicyBody::default()
@@ -233,7 +232,8 @@ fn hs2_ycjdeb_version_shape_fills_defaults_and_refuses_newer_or_foreign_files() 
     assert_eq!(minimal.speculation.max_depth, 1);
     assert_eq!(minimal.speculation.risk_weight, 50);
     assert_eq!(minimal.speculation.opt_out_tag, "speculate:never");
-    assert!(minimal.approval.required_for.is_empty());
+    assert!(minimal.approval.is_none());
+    assert!(minimal.ignored_fields().is_empty());
     assert!(minimal.problems(None).is_empty());
     let cases: [(String, bool); 5] = [
         (
@@ -353,26 +353,7 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
         ),
         (
             "duplicate_target",
-            Box::new(|p| {
-                p.targets
-                    .push(target(1, &[TargetAction::TicketsRead], Vec::new()))
-            }),
-        ),
-        (
-            "duplicate_action",
-            Box::new(|p| p.targets[0].actions.push(TargetAction::TicketsRead)),
-        ),
-        (
-            "sessions_without_tools",
-            Box::new(|p| p.targets[0].tools.clear()),
-        ),
-        (
-            "tools_without_sessions",
-            Box::new(|p| {
-                p.targets[0]
-                    .actions
-                    .retain(|a| *a != TargetAction::SessionsManage)
-            }),
+            Box::new(|p| p.targets.push(target(1, Vec::new()))),
         ),
         (
             "unconfigured_tool",
@@ -406,12 +387,6 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
         (
             "invalid_keep_warm",
             Box::new(|p| p.wind_down.keep_warm = 65),
-        ),
-        (
-            "duplicate_approval",
-            Box::new(|p| {
-                p.approval.required_for = vec![ApprovalGate::WorkStart, ApprovalGate::WorkStart];
-            }),
         ),
         (
             "invalid_speculation_depth",
@@ -490,38 +465,45 @@ fn hs2_ycjdeb_malformed_and_conflicting_policies_report_every_problem() {
 }
 
 #[test]
-fn hs2_ycjdeb_permits_only_listed_enabled_targets_actions_tools_and_models() {
+fn hs2_xhq1eh_limits_only_sessions_need_a_listed_target_and_tool() {
     use PolicyDenial as D;
     use PolicyVerdict as V;
     let body = policy();
     let load = SessionLoad::default();
+    // HS2-XHQ1EH: the policy holds limits only. Acting actions other than a session
+    // start are not limited on an enabled or unlisted target; a person is asked
+    // through the permission bridge instead.
     for action in [
         TargetAction::TicketsRead,
         TargetAction::TicketsWrite,
         TargetAction::WorkStart,
         TargetAction::GatesObserve,
         TargetAction::ValidationRun,
+        TargetAction::DeploymentsRun,
     ] {
         assert_eq!(body.evaluate(&ask(action, None, None)), V::Allowed);
+        let unlisted = PolicyQuestion {
+            target_id: "00000000000000000000000002",
+            ..ask(action, None, None)
+        };
+        assert_eq!(body.evaluate(&unlisted), V::Allowed);
     }
+    // A session start needs the target listed: its tools and caps are the limits.
+    let codex = start("codex", None);
     let unlisted = PolicyQuestion {
         target_id: "00000000000000000000000002",
-        ..ask(TargetAction::TicketsRead, None, None)
+        ..ask(TargetAction::SessionsManage, Some(&codex), Some(&load))
     };
     assert_eq!(body.evaluate(&unlisted), V::Denied(D::TargetNotPermitted));
+    // A disabled target limits every acting action.
     let mut disabled = policy();
     disabled.targets[0].enabled = false;
-    assert_eq!(
-        disabled.evaluate(&ask(TargetAction::TicketsRead, None, None)),
-        V::Denied(D::TargetDisabled)
-    );
-    let mut read_only = policy();
-    read_only.targets[0].actions = vec![TargetAction::TicketsRead];
-    read_only.targets[0].tools.clear();
-    assert_eq!(
-        read_only.evaluate(&ask(TargetAction::TicketsWrite, None, None)),
-        V::Denied(D::ActionNotPermitted)
-    );
+    for action in [TargetAction::TicketsWrite, TargetAction::WorkStart] {
+        assert_eq!(
+            disabled.evaluate(&ask(action, None, None)),
+            V::Denied(D::TargetDisabled)
+        );
+    }
     let sessions = |session: Option<&SessionRequest>, load: Option<&SessionLoad>| {
         body.evaluate(&ask(TargetAction::SessionsManage, session, load))
     };
@@ -561,6 +543,99 @@ fn hs2_ycjdeb_permits_only_listed_enabled_targets_actions_tools_and_models() {
         ..start("codex", None)
     };
     assert_eq!(sessions(Some(&stop), None), V::Allowed);
+}
+
+#[test]
+fn hs2_xhq1eh_retired_actions_and_approval_read_ignored_and_reported() {
+    let root = tempfile::tempdir().unwrap();
+    let store = PolicyStore::new(root.path());
+    let directory = root.path().join(".hotsheet2");
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("orchestration-policy.json");
+    let old = serde_json::json!({
+        "schema_version": 1,
+        "revision": id(9),
+        "policy": {
+            "tools": [{"tool": "codex", "max_sessions": 1}],
+            "targets": [{
+                "target_id": id(1),
+                "actions": ["tickets_read", "sessions_manage"],
+                "tools": [{"tool": "codex"}]
+            }],
+            "approval": {"required_for": ["work_start", "session_start"]}
+        }
+    });
+    std::fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+    let body = store.read().unwrap().policy.unwrap();
+    assert!(body.problems(None).is_empty());
+    assert_eq!(
+        body.ignored_fields(),
+        [
+            IgnoredField {
+                code: "approval_ignored",
+                field: "approval",
+                subject: None
+            },
+            IgnoredField {
+                code: "target_actions_ignored",
+                field: "targets[].actions",
+                subject: Some(id(1))
+            }
+        ]
+    );
+    // Ignored means ignored: the old approval list asks nobody here.
+    let load = SessionLoad::default();
+    let codex = start("codex", None);
+    assert_eq!(
+        body.evaluate(&PolicyQuestion {
+            target_id: &id(1),
+            ..ask(TargetAction::SessionsManage, Some(&codex), Some(&load))
+        }),
+        PolicyVerdict::Allowed
+    );
+    // Writing the same limits back drops the retired fields from the file.
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let view = store
+        .set(
+            SetPolicy {
+                expected_revision: Some(id(9)),
+                policy: body.clone(),
+            },
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    // Content equal but for the retired fields is a no-op on the limits, yet the file
+    // still held them, so nothing about the limits changed.
+    assert_eq!(view.revision.as_deref(), Some(id(9).as_str()));
+    let mut changed = body.without_retired();
+    changed.wind_down.idle_minutes = 20;
+    store
+        .set(
+            SetPolicy {
+                expected_revision: Some(id(9)),
+                policy: changed,
+            },
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("required_for") && !text.contains("\"actions\""));
+    assert!(
+        store
+            .read()
+            .unwrap()
+            .policy
+            .unwrap()
+            .ignored_fields()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -650,77 +725,10 @@ fn hs2_ycjdeb_each_concurrency_cap_denies_exactly_at_its_bound() {
 }
 
 #[test]
-fn hs2_ycjdeb_approval_gates_and_speculation_settings() {
+fn hs2_ycjdeb_speculation_settings() {
     use PolicyVerdict as V;
-    let load = SessionLoad::default();
-    let codex = start("codex", None);
-    let stop = SessionRequest {
-        starting: false,
-        ..start("codex", None)
-    };
-    let all = [
-        ApprovalGate::TicketsWrite,
-        ApprovalGate::WorkStart,
-        ApprovalGate::ValidationRun,
-        ApprovalGate::SessionStart,
-        ApprovalGate::SessionStop,
-        ApprovalGate::RoleSessionStart,
-        ApprovalGate::ProvisionalDispatch,
-    ];
-    let mut body = policy();
-    body.approval.required_for = all.to_vec();
-    // Reading and observing never wait for a person.
-    assert_eq!(
-        body.evaluate(&ask(TargetAction::TicketsRead, None, None)),
-        V::Allowed
-    );
-    assert_eq!(
-        body.evaluate(&ask(TargetAction::GatesObserve, None, None)),
-        V::Allowed
-    );
-    let gate = |question: PolicyQuestion<'_>| body.evaluate(&question);
-    assert_eq!(
-        gate(ask(TargetAction::TicketsWrite, None, None)),
-        V::ApprovalRequired(ApprovalGate::TicketsWrite)
-    );
-    assert_eq!(
-        gate(ask(TargetAction::WorkStart, None, None)),
-        V::ApprovalRequired(ApprovalGate::WorkStart)
-    );
-    assert_eq!(
-        gate(ask(TargetAction::ValidationRun, None, None)),
-        V::ApprovalRequired(ApprovalGate::ValidationRun)
-    );
-    assert_eq!(
-        gate(ask(TargetAction::SessionsManage, Some(&codex), Some(&load))),
-        V::ApprovalRequired(ApprovalGate::SessionStart)
-    );
-    assert_eq!(
-        gate(ask(TargetAction::SessionsManage, Some(&stop), None)),
-        V::ApprovalRequired(ApprovalGate::SessionStop)
-    );
-    assert_eq!(
-        gate(PolicyQuestion {
-            role_session: true,
-            ..ask(TargetAction::SessionsManage, Some(&codex), Some(&load))
-        }),
-        V::ApprovalRequired(ApprovalGate::RoleSessionStart)
-    );
-    // A cap denial outranks an approval: nobody is asked about an impossible start.
-    assert_eq!(
-        gate(ask(TargetAction::SessionsManage, Some(&codex), None)),
-        V::Denied(PolicyDenial::LoadUnknown)
-    );
-    // A role session start is not covered by the ordinary session-start gate.
-    body.approval.required_for = vec![ApprovalGate::SessionStart];
-    assert_eq!(
-        body.evaluate(&PolicyQuestion {
-            role_session: true,
-            ..ask(TargetAction::SessionsManage, Some(&codex), Some(&load))
-        }),
-        V::Allowed
-    );
-    // Speculation: off by default, switchable per target, gated on its own.
+    // Speculation: off by default and switchable per target. It is a limit; whether
+    // a person is asked is the permission bridge's business (HS2-XHQ1EH).
     let provisional = |body: &PolicyBody| {
         body.evaluate(&PolicyQuestion {
             provisional: true,
@@ -743,14 +751,4 @@ fn hs2_ycjdeb_approval_gates_and_speculation_settings() {
         provisional(&body),
         V::Denied(PolicyDenial::SpeculationNotAllowed)
     );
-    body.targets[0].speculation = None;
-    body.approval.required_for = vec![ApprovalGate::WorkStart, ApprovalGate::ProvisionalDispatch];
-    assert_eq!(
-        provisional(&body),
-        V::ApprovalRequired(ApprovalGate::ProvisionalDispatch)
-    );
-    // Wire spellings are the stable codes used in audit entries and output.
-    for gate in all {
-        assert_eq!(serde_json::to_value(gate).unwrap(), gate.code());
-    }
 }

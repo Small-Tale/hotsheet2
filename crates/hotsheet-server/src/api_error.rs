@@ -16,6 +16,9 @@ pub struct ApiError {
     pub(crate) message: String,
     /// Stable machine-readable code for errors an automated caller should branch on.
     code: Option<&'static str>,
+    /// HS2-XHQ1EH: one identifier field an automated caller acts on, such as the
+    /// `request_id` of a permission request to answer.
+    field: Option<(&'static str, String)>,
 }
 
 impl ApiError {
@@ -24,11 +27,17 @@ impl ApiError {
             status,
             message: message.into(),
             code: None,
+            field: None,
         }
     }
     /// Attach a stable machine-readable `code` an automated caller can branch on.
     pub(crate) fn with_code(mut self, code: &'static str) -> Self {
         self.code = Some(code);
+        self
+    }
+    /// Attach one identifier field, such as `request_id`, beside `code`.
+    pub(crate) fn with_field(mut self, name: &'static str, value: impl Into<String>) -> Self {
+        self.field = Some((name, value.into()));
         self
     }
     pub(crate) fn not_found(id: &str) -> Self {
@@ -60,6 +69,9 @@ impl IntoResponse for ApiError {
         if let Some(code) = self.code {
             body["code"] = serde_json::Value::from(code);
         }
+        if let Some((name, value)) = self.field {
+            body[name] = serde_json::Value::from(value);
+        }
         (self.status, Json(body)).into_response()
     }
 }
@@ -72,6 +84,7 @@ impl From<hotsheet_ticketing::actor::RuleViolation> for ApiError {
             status: StatusCode::UNPROCESSABLE_ENTITY,
             message: violation.message,
             code: Some(violation.code),
+            field: None,
         }
     }
 }

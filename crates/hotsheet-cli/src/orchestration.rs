@@ -5,10 +5,12 @@ mod access;
 mod assignment;
 mod cancel_hold;
 mod capacity;
+mod decisions;
 mod gates;
 mod job_monitor;
 mod joining;
 mod observer;
+mod permissions;
 mod policy;
 mod provisional;
 mod readiness;
@@ -39,6 +41,10 @@ pub use gates::{
 };
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
+pub use permissions::{
+    AnswerPermission, NoPrompt, PermissionList, PermissionPrompt, PromptRequest,
+    RememberPermission, Remembered, RuleView, permission_summary,
+};
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
@@ -131,6 +137,8 @@ pub struct OrchestrationRuntime {
     session_executor: Arc<dyn SessionExecutor>,
     /// HS2-2FG91X: this machine's live resource claims, for the hosted half.
     claims: Arc<dyn ClaimSource>,
+    /// HS2-XHQ1EH: where waiting permission requests are shown to people.
+    prompt: Arc<dyn PermissionPrompt>,
 }
 
 impl OrchestrationRuntime {
@@ -164,6 +172,7 @@ impl OrchestrationRuntime {
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),
             claims: Arc::new(MachineClaims::new(&home)),
+            prompt: Arc::new(NoPrompt),
             home,
             checkouts,
             providers,
@@ -454,7 +463,10 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
         OrchestrationError::Observation(_) => 502,
         OrchestrationError::Corrupt => 500,
         OrchestrationError::Storage(_) => 503,
-        OrchestrationError::Denied(_) | OrchestrationError::Forbidden(_) => 403,
+        OrchestrationError::Denied(_)
+        | OrchestrationError::Forbidden(_)
+        | OrchestrationError::PermissionRequired { .. }
+        | OrchestrationError::DecisionRequired { .. } => 403,
         OrchestrationError::Run(hotsheet_ticketing::orchestration::RunError::NotFound) => 404,
         OrchestrationError::Run(_) => 409,
         OrchestrationError::Validation(

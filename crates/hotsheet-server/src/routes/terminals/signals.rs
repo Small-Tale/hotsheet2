@@ -1219,6 +1219,33 @@ pub(crate) async fn resolve_permission(
     Path(id): Path<u64>,
     Json(body): Json<PermissionAnswer>,
 ) -> Result<Json<PermissionResolved>, ApiError> {
+    // HS2-XHQ1EH: an orchestrator request has no waiter and no bridge rule; its answer
+    // goes to the orchestration runtime.
+    if let Some(request) =
+        crate::routes::orchestration_permissions::pending_orchestrator(&state, id)
+    {
+        if body.description.is_some() || body.pattern.is_some() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "an orchestrator request has no rule to review",
+            ));
+        }
+        let (connection, persisted, also_resolved) =
+            crate::routes::orchestration_permissions::resolve(
+                &state,
+                request,
+                body.decision,
+                body.scope,
+                body.continue_review,
+            )
+            .await?;
+        return Ok(Json(PermissionResolved {
+            connection,
+            decision: body.decision,
+            persisted,
+            also_resolved,
+        }));
+    }
     if body.continue_review
         && (body.decision != hotsheet_aitools::PermissionDecision::Allow
             || body.scope != hotsheet_aitools::PermissionScope::Once)
@@ -1513,6 +1540,16 @@ pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
 pub(crate) async fn list_permission_rules(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<hotsheet_aitools::PermissionRuleInfo>>, ApiError> {
+    let mut rules = bridge_permission_rules(&state)?;
+    // HS2-XHQ1EH: remembered orchestrator rules are listed with the other rules.
+    rules.extend(crate::routes::orchestration_permissions::rules(&state).await);
+    Ok(Json(rules))
+}
+
+fn bridge_permission_rules(
+    state: &AppState,
+) -> Result<Vec<hotsheet_aitools::PermissionRuleInfo>, ApiError> {
+    let state = state.clone();
     if state
         .permission_rules_loading
         .load(std::sync::atomic::Ordering::Acquire)
@@ -1588,14 +1625,12 @@ pub(crate) async fn list_permission_rules(
             ));
         }
     }
-    Ok(Json(
-        state
-            .permissions
-            .rules()
-            .into_iter()
-            .filter(|rule| !rule.project.is_empty())
-            .collect(),
-    ))
+    Ok(state
+        .permissions
+        .rules()
+        .into_iter()
+        .filter(|rule| !rule.project.is_empty())
+        .collect())
 }
 
 /// Body for `DELETE /permissions/rules`: the exact remembered slot to forget.
@@ -1637,6 +1672,14 @@ pub(crate) async fn update_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<UpdatePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
+    // HS2-XHQ1EH: a remembered orchestrator rule is kept or forgotten, nothing else.
+    if body.tool == hotsheet_aitools::ORCHESTRATOR_TOOL && body.action.starts_with("orchestrator:")
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "an orchestrator rule can only be forgotten",
+        ));
+    }
     if state
         .permission_rules_loading
         .load(std::sync::atomic::Ordering::Acquire)
@@ -1737,6 +1780,13 @@ pub(crate) async fn revoke_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<RevokePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
+    // HS2-XHQ1EH: the orchestration runtime stores orchestrator rules.
+    if body.tool == hotsheet_aitools::ORCHESTRATOR_TOOL && body.action.starts_with("orchestrator:")
+    {
+        crate::routes::orchestration_permissions::forget(&state, &body.project, &body.action)
+            .await?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
     if state
         .permission_rules_loading
         .load(std::sync::atomic::Ordering::Acquire)

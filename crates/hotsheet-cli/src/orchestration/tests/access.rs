@@ -1,9 +1,10 @@
-//! HS2-SBQ3T8: grants, the authorization gate and the audit journal through the
-//! shared runtime, for local and remote destinations. Synthetic identities only.
+//! HS2-XHQ1EH (HS2-SBQ3T8 before it): the authorization gate, permission requests,
+//! remembered rules and the audit journal through the shared runtime, for local and
+//! remote destinations. Synthetic identities only.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, CreateGrant, DenialReason, GrantState, PolicyBody, SessionLoad, SessionRequest,
-    SessionScope, SetPolicy, TargetAction, TargetPolicy, ToolPolicy, ToolScope,
+    AuditOutcome, DenialReason, PermissionAction, PermissionAnswer, PermissionState, PolicyBody,
+    SessionLoad, SessionRequest, SetPolicy, TargetAction, TargetPolicy, ToolPolicy, ToolScope,
 };
 use serde_json::{Value, json};
 
@@ -15,14 +16,8 @@ fn human() -> MutationActor {
 fn ai(id: &str) -> MutationActor {
     MutationActor::parse("ai", Some(id.into())).unwrap()
 }
-fn create(actions: &[TargetAction]) -> CreateGrant {
-    CreateGrant {
-        grant_id: None,
-        actor_id: "worker-1".into(),
-        actions: actions.to_vec(),
-        session_scope: None,
-        expires_at_ms: 10_000,
-    }
+fn system(id: &str) -> MutationActor {
+    MutationActor::parse("system", Some(id.into())).unwrap()
 }
 fn act(
     action: TargetAction,
@@ -36,6 +31,9 @@ fn act(
         operation_id,
         ..ActionRequest::new(action)
     }
+}
+fn op(id: &str) -> Option<String> {
+    Some(id.into())
 }
 fn bind_local(f: &Fixture, tx: &mut Transaction<'_>) -> TargetDestination {
     let revision = declaration(f, tx);
@@ -75,123 +73,238 @@ fn outcomes(f: &Fixture) -> Vec<(String, AuditOutcome, Option<String>)> {
         })
         .collect()
 }
+fn codex_policy() -> PolicyBody {
+    PolicyBody {
+        tools: vec![ToolPolicy {
+            tool: "codex".into(),
+            max_sessions: 2,
+            weight: 50,
+            accounts: Vec::new(),
+        }],
+        targets: vec![TargetPolicy {
+            target_id: id(1),
+            enabled: true,
+            actions: None,
+            tools: vec![ToolScope {
+                tool: "codex".into(),
+                models: Vec::new(),
+            }],
+            max_sessions: 2,
+            machine: None,
+            speculation: None,
+        }],
+        ..PolicyBody::default()
+    }
+}
+fn start() -> SessionRequest {
+    SessionRequest {
+        tool: "codex".into(),
+        model: None,
+        running: 0,
+        starting: true,
+    }
+}
+fn stop() -> SessionRequest {
+    SessionRequest {
+        starting: false,
+        ..start()
+    }
+}
+
+/// Records what the gate shows and settles, as the server's bridge prompt would.
+#[derive(Default)]
+struct Shown {
+    raised: Mutex<Vec<String>>,
+    settled: Mutex<Vec<(String, String)>>,
+}
+impl PermissionPrompt for Shown {
+    fn raise(&self, request: &PromptRequest) {
+        self.raised
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(format!(
+                "{}|{}",
+                request.request.request_id, request.summary
+            ));
+    }
+    fn settle(&self, request_id: &str, decision: &str) {
+        self.settled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((request_id.into(), decision.into()));
+    }
+}
 
 #[test]
-fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
-    let f = fixture();
+fn hs2_xhq1eh_consent_reads_freely_and_acting_asks_a_person_once_per_operation() {
+    let mut f = fixture();
+    let shown = Arc::new(Shown::default());
+    f.runtime = f.runtime.clone().with_permission_prompt(shown.clone());
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
     let target = reference(&f);
-    // Unbound: nothing can be granted and nothing is authorized.
+    // Declared but unbound: nothing is consented to yet, and nothing is asked.
     declaration(&f, &mut tx);
-    assert!(matches!(
-        f.runtime.grant(
-            &target,
-            create(&[TargetAction::TicketsWrite]),
-            Some(&human()),
-            &mut tx
-        ),
-        Err(OrchestrationError::Denied(DenialReason::TargetUnavailable))
-    ));
     assert_eq!(
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-1".into())),
+            act(TargetAction::TicketsWrite, None, op("op-1")),
             &mut tx
         )),
         DenialReason::TargetUnavailable
     );
     std::fs::remove_file(Path::new(&f.owner.root).join(".hotsheet2/orchestration.json")).unwrap();
     bind_local(&f, &mut tx);
-    // Binding alone authorizes nothing.
+    // Adding and binding the project is the consent to read and follow it.
+    for action in [TargetAction::TicketsRead, TargetAction::GatesObserve] {
+        let authorized = f
+            .runtime
+            .authorize(
+                &target,
+                Some(&ai("worker-1")),
+                act(action, None, None),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(authorized.basis, "observation");
+        assert!(authorized.resolution.usable);
+    }
+    // Acting asks a person: one request per operation, however often it is asked,
+    // and nothing waits for the answer.
+    let first = permission_request(f.runtime.authorize(
+        &target,
+        Some(&ai("worker-1")),
+        act(TargetAction::TicketsWrite, None, op("op-2")),
+        &mut tx,
+    ));
+    let again = permission_request(f.runtime.authorize(
+        &target,
+        Some(&system("scheduler")),
+        act(TargetAction::TicketsWrite, None, op("op-2")),
+        &mut tx,
+    ));
+    assert_eq!(first, again);
+    // Shown on each ask (the bridge keeps one card per request id), with the words.
+    let raised = shown.raised.lock().unwrap().clone();
+    assert_eq!(raised.len(), 2);
     assert_eq!(
-        denied(f.runtime.authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-2".into())),
-            &mut tx
-        )),
-        DenialReason::NoGrant
+        raised[0],
+        format!("{first}|Create or change tickets in Synthetic target")
     );
-    // The governed AI cannot give itself authority, nor withdraw someone's.
+    // An acting request without an operation id cannot be asked about.
     assert!(matches!(
-        f.runtime.grant(
+        f.runtime.authorize(
             &target,
-            create(&[TargetAction::TicketsWrite]),
             Some(&ai("worker-1")),
+            act(TargetAction::TicketsWrite, None, None),
             &mut tx
         ),
-        Err(OrchestrationError::Forbidden(_))
+        Err(OrchestrationError::Invalid(_))
     ));
-    let granted = f
+    // A person's own act needs no further approval.
+    let person = f
         .runtime
-        .grant(
+        .authorize(
             &target,
-            create(&[TargetAction::TicketsWrite]),
             Some(&human()),
+            act(TargetAction::TicketsWrite, None, op("op-3")),
             &mut tx,
         )
         .unwrap();
-    assert_eq!(granted.state, GrantState::Active);
-    assert_eq!(granted.grant.created_by.as_deref(), Some("maintainer"));
+    assert_eq!(person.basis, "person");
+    // The governed AI cannot answer for itself.
     assert!(matches!(
-        f.runtime.revoke(
-            &target,
-            &granted.grant.grant_id,
+        f.runtime.permission_answer(
+            &f.owner.id,
+            &first,
+            PermissionAnswer::AllowOnce,
             Some(&ai("worker-1")),
             &mut tx
         ),
         Err(OrchestrationError::Forbidden(_))
     ));
-    let authorized = f
+    answer(
+        &f.runtime,
+        &f.owner.id,
+        &first,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    assert_eq!(
+        shown.settled.lock().unwrap().clone(),
+        [(first.clone(), "allow:once".to_owned())]
+    );
+    // HS2-8NJVXC / HS2-RTX8RJ: Allow Once is used only when the action happened.
+    let allowed = f
         .runtime
         .authorize(
             &target,
             Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-3".into())),
+            act(TargetAction::TicketsWrite, None, op("op-2")),
             &mut tx,
         )
         .unwrap();
-    assert_eq!(authorized.grant_id, granted.grant.grant_id);
-    assert!(authorized.resolution.usable);
+    assert_eq!(allowed.basis, "allowed_once");
+    assert_eq!(allowed.permission_id.as_deref(), Some(first.as_str()));
     f.runtime
-        .record_outcome(&target, &authorized, true, None, &mut tx)
+        .record_outcome(&target, &allowed, false, Some("target_conflict"), &mut tx)
         .unwrap();
+    let retried = f
+        .runtime
+        .authorize(
+            &target,
+            Some(&ai("worker-1")),
+            act(TargetAction::TicketsWrite, None, op("op-2")),
+            &mut tx,
+        )
+        .unwrap();
+    f.runtime
+        .record_outcome(&target, &retried, true, None, &mut tx)
+        .unwrap();
+    // Used up: the same operation asks again.
+    let next = permission_request(f.runtime.authorize(
+        &target,
+        Some(&ai("worker-1")),
+        act(TargetAction::TicketsWrite, None, op("op-2")),
+        &mut tx,
+    ));
+    assert_ne!(next, first);
+    // Deny is final for its operation.
+    answer(
+        &f.runtime,
+        &f.owner.id,
+        &next,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
+    for _ in 0..2 {
+        assert_eq!(
+            denied(f.runtime.authorize(
+                &target,
+                Some(&ai("worker-1")),
+                act(TargetAction::TicketsWrite, None, op("op-2")),
+                &mut tx
+            )),
+            DenialReason::PermissionDenied
+        );
+    }
     // An unidentified caller is an invalid request, not an anonymous allowance.
     for actor in [None, Some(MutationActor::parse("ai", None).unwrap())] {
         assert!(matches!(
             f.runtime.authorize(
                 &target,
                 actor.as_ref(),
-                act(TargetAction::TicketsWrite, None, None),
+                act(TargetAction::TicketsRead, None, None),
                 &mut tx
             ),
             Err(OrchestrationError::Invalid(_))
         ));
     }
-    assert_eq!(
-        denied(f.runtime.authorize(
-            &target,
-            Some(&ai("worker-2")),
-            act(TargetAction::TicketsWrite, None, None),
-            &mut tx
-        )),
-        DenialReason::NoGrant
-    );
-    assert_eq!(
-        denied(f.runtime.authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::WorkStart, None, None),
-            &mut tx
-        )),
-        DenialReason::ActionNotGranted
-    );
-    // Lost access: a valid grant does not survive an unusable target.
+    // Lost access: nothing survives an unusable target, not even a read.
     f.runtime
         .providers
         .set_disabled("synthetic-source", true)
@@ -200,7 +313,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         denied(f.runtime.authorize(
             &target,
             Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-4".into())),
+            act(TargetAction::TicketsRead, None, None),
             &mut tx
         )),
         DenialReason::TargetUnavailable
@@ -209,28 +322,6 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
         .providers
         .set_disabled("synthetic-source", false)
         .unwrap();
-    f.runtime
-        .authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-5".into())),
-            &mut tx,
-        )
-        .unwrap();
-    let revoked = f
-        .runtime
-        .revoke(&target, &granted.grant.grant_id, Some(&human()), &mut tx)
-        .unwrap();
-    assert_eq!(revoked.revoked_by.as_deref(), Some("maintainer"));
-    assert_eq!(
-        denied(f.runtime.authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::TicketsWrite, None, Some("op-6".into())),
-            &mut tx
-        )),
-        DenialReason::Revoked
-    );
     let log = outcomes(&f);
     let expected: Vec<(&str, AuditOutcome, Option<&str>)> = vec![
         (
@@ -238,24 +329,57 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
             AuditOutcome::Denied,
             Some("target_unavailable"),
         ),
-        ("tickets_write", AuditOutcome::Denied, Some("no_grant")),
-        ("grant_create", AuditOutcome::Granted, None),
-        ("tickets_write", AuditOutcome::Allowed, None),
-        ("tickets_write", AuditOutcome::Succeeded, None),
-        ("tickets_write", AuditOutcome::Denied, Some("no_grant")),
+        ("tickets_read", AuditOutcome::Allowed, Some("observation")),
+        ("gates_observe", AuditOutcome::Allowed, Some("observation")),
         (
-            "work_start",
+            "tickets_write",
             AuditOutcome::Denied,
-            Some("action_not_granted"),
+            Some("permission_required"),
         ),
         (
             "tickets_write",
             AuditOutcome::Denied,
+            Some("permission_required"),
+        ),
+        ("tickets_write", AuditOutcome::Allowed, Some("person")),
+        (
+            "permission_answer",
+            AuditOutcome::Approved,
+            Some("tickets_write"),
+        ),
+        ("tickets_write", AuditOutcome::Allowed, Some("allowed_once")),
+        (
+            "tickets_write",
+            AuditOutcome::Failed,
+            Some("target_conflict"),
+        ),
+        ("tickets_write", AuditOutcome::Allowed, Some("allowed_once")),
+        ("tickets_write", AuditOutcome::Succeeded, None),
+        (
+            "tickets_write",
+            AuditOutcome::Denied,
+            Some("permission_required"),
+        ),
+        (
+            "permission_answer",
+            AuditOutcome::Rejected,
+            Some("tickets_write"),
+        ),
+        (
+            "tickets_write",
+            AuditOutcome::Denied,
+            Some("permission_denied"),
+        ),
+        (
+            "tickets_write",
+            AuditOutcome::Denied,
+            Some("permission_denied"),
+        ),
+        (
+            "tickets_read",
+            AuditOutcome::Denied,
             Some("target_unavailable"),
         ),
-        ("tickets_write", AuditOutcome::Allowed, None),
-        ("grant_revoke", AuditOutcome::Revoked, None),
-        ("tickets_write", AuditOutcome::Denied, Some("grant_revoked")),
     ];
     assert_eq!(
         log.iter()
@@ -269,7 +393,7 @@ fn hs2_sbq3t8_local_target_authority_is_granted_audited_and_fails_closed() {
 }
 
 #[test]
-fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
+fn hs2_xhq1eh_remembered_rules_policy_limits_and_reducing_activity_on_a_remote_target() {
     let f = fixture();
     let mut rng = Rng(100);
     let mut tx = Transaction {
@@ -279,108 +403,164 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
     let target = reference(&f);
     let revision = declaration(&f, &mut tx);
     let remote = register(&f);
-    let bound = f
-        .runtime
-        .bind(request(&f, revision.clone(), remote.clone()), &mut tx)
-        .unwrap();
-    assert!(bound.usable);
-    let mut scoped = create(&[TargetAction::SessionsManage, TargetAction::WorkStart]);
-    scoped.session_scope = Some(SessionScope {
-        tools: vec![ToolScope {
-            tool: "codex".into(),
-            models: Vec::new(),
-        }],
-        max_concurrency: 1,
-    });
-    let granted = f
-        .runtime
-        .grant(&target, scoped, Some(&human()), &mut tx)
-        .unwrap();
-    // HS2-YCJDEB: session management also needs a policy that permits it.
+    assert!(
+        f.runtime
+            .bind(request(&f, revision, remote), &mut tx)
+            .unwrap()
+            .usable
+    );
+    // HS2-YCJDEB: without a policy no session starts, and no person is asked about it.
+    assert_eq!(
+        denied(f.runtime.authorize(
+            &target,
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(start()), op("start-0")),
+            &mut tx
+        )),
+        DenialReason::PolicyDenied
+    );
+    assert!(
+        f.runtime
+            .permission_list(&f.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
     f.runtime
         .set_policy(
             &f.owner.id,
             SetPolicy {
                 expected_revision: None,
-                policy: PolicyBody {
-                    tools: vec![ToolPolicy {
-                        tool: "codex".into(),
-                        max_sessions: 2,
-                        weight: 50,
-                        accounts: Vec::new(),
-                    }],
-                    targets: vec![TargetPolicy {
-                        target_id: id(1),
-                        enabled: true,
-                        actions: vec![TargetAction::SessionsManage, TargetAction::WorkStart],
-                        tools: vec![ToolScope {
-                            tool: "codex".into(),
-                            models: Vec::new(),
-                        }],
-                        max_sessions: 2,
-                        machine: None,
-                        speculation: None,
-                    }],
-                    ..PolicyBody::default()
-                },
+                policy: codex_policy(),
             },
             Some(&human()),
             &mut tx,
         )
         .unwrap();
-    let start = |running| SessionRequest {
-        tool: "codex".into(),
-        model: None,
-        running,
-        starting: true,
-    };
+    // Always Allow: the waiting start is allowed and the key stops asking.
+    let waiting = permission_request(f.runtime.authorize(
+        &target,
+        Some(&system("scheduler")),
+        act(TargetAction::SessionsManage, Some(start()), op("start-1")),
+        &mut tx,
+    ));
+    answer(
+        &f.runtime,
+        &f.owner.id,
+        &waiting,
+        PermissionAnswer::AlwaysAllow,
+        &mut tx,
+    );
     let calls = f.peer.calls.load(Ordering::SeqCst);
-    f.runtime
+    let remembered = f
+        .runtime
         .authorize(
             &target,
-            Some(&ai("worker-1")),
-            act(
-                TargetAction::SessionsManage,
-                Some(start(0)),
-                Some("op-1".into()),
-            ),
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(start()), op("start-2")),
             &mut tx,
         )
         .unwrap();
+    assert_eq!(remembered.basis, "remembered_rule");
     // Authority was confirmed against the peer, not a cached observation.
     assert!(f.peer.calls.load(Ordering::SeqCst) > calls);
+    // A tool the policy does not list is refused before anyone is asked.
+    let claude = SessionRequest {
+        tool: "claude".into(),
+        ..start()
+    };
     assert_eq!(
         denied(f.runtime.authorize(
             &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::SessionsManage, Some(start(1)), None),
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(claude), op("start-3")),
             &mut tx
         )),
-        DenialReason::ConcurrencyExceeded
+        DenialReason::PolicyDenied
     );
     // The dry check agrees without contacting the peer or reading a secret.
     let (calls, gets) = (
         f.peer.calls.load(Ordering::SeqCst),
         f.secrets.gets.load(Ordering::SeqCst),
     );
+    let prefix = format!(
+        "/checkouts/{}/orchestration/targets/{}/access",
+        f.owner.id,
+        id(1)
+    );
     let decision = f
         .runtime
         .request(
             "POST",
-            &format!(
-                "/checkouts/{}/orchestration/targets/{}/access",
-                f.owner.id,
-                id(1)
-            ),
-            &json!({"actor_id":"worker-1","action":"work_start"}),
+            &prefix,
+            &json!({"actor_id":"scheduler","action":"sessions_manage",
+                "session":{"tool":"codex","starting":true},
+                "load":{"target_sessions":0,"machine_sessions":0,"tool_sessions":0}}),
             &mut tx,
         )
         .unwrap();
     assert_eq!(decision["allowed"], true);
-    assert_eq!(decision["grant_id"], granted.grant.grant_id);
+    assert_eq!(decision["basis"], "remembered_rule");
+    let decision = f
+        .runtime
+        .request(
+            "POST",
+            &prefix,
+            &json!({"actor_id":"scheduler","action":"work_start","operation_id":"op-9"}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        decision,
+        json!({"allowed":false,"reason":"permission_required"})
+    );
+    // The check filed nothing.
+    assert_eq!(
+        f.runtime
+            .permission_list(&f.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .len(),
+        1
+    );
     assert_eq!(f.peer.calls.load(Ordering::SeqCst), calls);
     assert_eq!(f.secrets.gets.load(Ordering::SeqCst), gets);
-    // Lost remote credentials: fail closed even though the grant is still active.
+    // HS2-48H57C: stopping only reduces activity. A policy that disables the target
+    // does not deny it, and it never asks.
+    let mut disabled = codex_policy();
+    disabled.targets[0].enabled = false;
+    let stored = f.runtime.policy(&f.owner.id).unwrap().revision;
+    f.runtime
+        .set_policy(
+            &f.owner.id,
+            SetPolicy {
+                expected_revision: stored,
+                policy: disabled,
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let stopped = f
+        .runtime
+        .authorize(
+            &target,
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(stop()), op("stop-1")),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(stopped.basis, "reduces_activity");
+    assert_eq!(
+        denied(f.runtime.authorize(
+            &target,
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(start()), op("start-4")),
+            &mut tx
+        )),
+        DenialReason::PolicyDenied
+    );
+    // Lost remote credentials: fail closed, remembered rule or not.
     let saved = std::mem::take(
         &mut *f
             .secrets
@@ -391,8 +571,8 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
     assert_eq!(
         denied(f.runtime.authorize(
             &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::WorkStart, None, None),
+            Some(&system("scheduler")),
+            act(TargetAction::SessionsManage, Some(stop()), op("stop-2")),
             &mut tx
         )),
         DenialReason::TargetUnavailable
@@ -401,58 +581,47 @@ fn hs2_sbq3t8_remote_grant_follows_its_reviewed_destination_only() {
         .values
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = saved;
-    f.runtime
-        .authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::WorkStart, None, None),
-            &mut tx,
-        )
-        .unwrap();
-    // Reviewing the target onto a different destination leaves the grant behind.
-    let projection = f.runtime.checkout_projection(&f.target.id).unwrap();
-    let local = TargetDestination::Local {
-        server_id: projection.server_id,
-        checkout_id: projection.checkout_id,
-        checkout_authority: projection.checkout_authority,
-    };
-    let current = f
+    // Forgetting the rule withdraws it: the key asks again.
+    let rules = f
         .runtime
-        .resolve(&target, &mut tx)
+        .permission_list(&f.owner.id, &mut tx)
         .unwrap()
-        .binding
-        .revision;
-    let rebound = f
-        .runtime
-        .bind(
-            BindTarget {
-                target: target.clone(),
-                expected_manifest_revision: revision,
-                expected_binding_revision: current,
-                previous_destination: Some(remote),
-                destination: local,
-            },
+        .rules;
+    assert_eq!(rules.len(), 1);
+    assert_eq!(
+        rules[0].summary,
+        "Start a codex session in Synthetic target"
+    );
+    f.runtime
+        .permission_forget(
+            &f.owner.id,
+            &rules[0].rule.rule_id,
+            Some(&ai("worker-1")),
             &mut tx,
         )
         .unwrap();
-    assert!(rebound.usable);
-    assert_eq!(
-        denied(f.runtime.authorize(
-            &target,
-            Some(&ai("worker-1")),
-            act(TargetAction::WorkStart, None, None),
-            &mut tx
-        )),
-        DenialReason::DestinationChanged
-    );
-    assert_eq!(
-        f.runtime.grants(&target, &mut tx).unwrap()[0].state,
-        GrantState::DestinationChanged
-    );
+    let stored = f.runtime.policy(&f.owner.id).unwrap().revision;
+    f.runtime
+        .set_policy(
+            &f.owner.id,
+            SetPolicy {
+                expected_revision: stored,
+                policy: codex_policy(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    permission_request(f.runtime.authorize(
+        &target,
+        Some(&system("scheduler")),
+        act(TargetAction::SessionsManage, Some(start()), op("start-5")),
+        &mut tx,
+    ));
 }
 
 #[test]
-fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
+fn hs2_xhq1eh_routes_carry_the_actor_and_forgetting_works_for_an_orphaned_owner() {
     let f = fixture();
     let mut rng = Rng(100);
     let mut tx = Transaction {
@@ -460,14 +629,13 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         rng: &mut rng,
     };
     bind_local(&f, &mut tx);
-    let prefix = format!("/checkouts/{}/orchestration/targets/{}", f.owner.id, id(1));
-    let body = json!({"actor_id":"worker-1","actions":["tickets_read"],"expires_at_ms":10_000,
-        "grant_id":id(55)});
+    let base = format!("/checkouts/{}/orchestration", f.owner.id);
+    let body = json!({"target_id":id(1),"action":"work_start"});
     let mut by_ai = body.clone();
     by_ai["actor"] = json!({"role":"ai","id":"worker-1"});
     let refused = f
         .runtime
-        .request("POST", &format!("{prefix}/grants"), &by_ai, &mut tx)
+        .request("POST", &format!("{base}/permission-rules"), &by_ai, &mut tx)
         .unwrap_err();
     assert_eq!(refused.code(), "forbidden");
     assert_eq!(error_status(&refused), 403);
@@ -476,44 +644,116 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         bad["actor"] = invalid;
         assert!(matches!(
             f.runtime
-                .request("POST", &format!("{prefix}/grants"), &bad, &mut tx),
+                .request("POST", &format!("{base}/permission-rules"), &bad, &mut tx),
             Err(OrchestrationError::Invalid(_))
         ));
     }
+    // A rule for an undeclared target is refused; a tool on a non-session key too.
+    let mut undeclared = body.clone();
+    undeclared["target_id"] = json!(id(2));
+    assert!(matches!(
+        f.runtime.request(
+            "POST",
+            &format!("{base}/permission-rules"),
+            &undeclared,
+            &mut tx
+        ),
+        Err(OrchestrationError::NotFound)
+    ));
+    let mut tooled = body.clone();
+    tooled["tool"] = json!("codex");
+    assert!(matches!(
+        f.runtime.request(
+            "POST",
+            &format!("{base}/permission-rules"),
+            &tooled,
+            &mut tx
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
     let mut by_human = body.clone();
     by_human["actor"] = json!({"role":"human","id":"maintainer"});
     let created = f
         .runtime
-        .request("POST", &format!("{prefix}/grants"), &by_human, &mut tx)
-        .unwrap();
-    assert_eq!(created["state"], "active");
-    assert_eq!(created["created_by"], "maintainer");
-    // A retry with the retained id is a no-op and is not audited twice. An unspecified
-    // actor is not assumed to be an AI.
-    let retried = f
-        .runtime
-        .request("POST", &format!("{prefix}/grants"), &body, &mut tx)
-        .unwrap();
-    assert_eq!(retried["grant_id"], created["grant_id"]);
-    let listed = f
-        .runtime
-        .request("GET", &format!("{prefix}/grants"), &Value::Null, &mut tx)
-        .unwrap();
-    assert_eq!(listed.as_array().unwrap().len(), 1);
-    let denied = f
-        .runtime
         .request(
             "POST",
-            &format!("{prefix}/access"),
-            &json!({"actor_id":"worker-1","action":"tickets_write"}),
+            &format!("{base}/permission-rules"),
+            &by_human,
             &mut tx,
         )
         .unwrap();
+    assert_eq!(created["created"], true);
+    assert_eq!(created["created_by"], "maintainer");
     assert_eq!(
-        denied,
-        json!({"allowed":false,"reason":"action_not_granted"})
+        created["summary"],
+        "Start work on a ticket in Synthetic target"
     );
-    let audit = format!("/checkouts/{}/orchestration/audit", f.owner.id);
+    // A repeat is a no-op and is not audited twice. An unspecified actor is not
+    // assumed to be an AI.
+    let retried = f
+        .runtime
+        .request("POST", &format!("{base}/permission-rules"), &body, &mut tx)
+        .unwrap();
+    assert_eq!(retried["rule_id"], created["rule_id"]);
+    assert_eq!(retried["created"], false);
+    // A waiting request is answered through its route.
+    let waiting = permission_request(f.runtime.authorize(
+        &reference(&f),
+        Some(&ai("worker-1")),
+        act(TargetAction::ValidationRun, None, op("validate-1")),
+        &mut tx,
+    ));
+    let listed = f
+        .runtime
+        .request("GET", &format!("{base}/permissions"), &Value::Null, &mut tx)
+        .unwrap();
+    assert_eq!(listed["requests"][0]["request_id"], waiting.as_str());
+    assert_eq!(listed["requests"][0]["state"], "pending");
+    assert_eq!(listed["requests"][0]["action"], "validation_run");
+    assert_eq!(listed["requests"][0]["target_label"], "Synthetic target");
+    assert_eq!(listed["rules"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["retired"]["grants_file"], false);
+    let refused = f
+        .runtime
+        .request(
+            "POST",
+            &format!("{base}/permissions/{waiting}"),
+            &json!({"answer":"allow_once","actor":{"role":"ai","id":"worker-1"}}),
+            &mut tx,
+        )
+        .unwrap_err();
+    assert_eq!(refused.code(), "forbidden");
+    assert!(matches!(
+        f.runtime.request(
+            "POST",
+            &format!("{base}/permissions/{waiting}"),
+            &json!({"answer":"sometimes"}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    let answered = f
+        .runtime
+        .request(
+            "POST",
+            &format!("{base}/permissions/{waiting}"),
+            &json!({"answer":"deny","actor":{"role":"human","id":"maintainer"}}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(answered["request"]["state"], "denied");
+    assert_eq!(answered["changed"], true);
+    // Answering differently later is a conflict.
+    assert!(matches!(
+        f.runtime.request(
+            "POST",
+            &format!("{base}/permissions/{waiting}"),
+            &json!({"answer":"allow_once"}),
+            &mut tx
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+    let audit = format!("{base}/audit");
     let page = f
         .runtime
         .request(
@@ -524,9 +764,9 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         )
         .unwrap();
     assert_eq!(page["entries"].as_array().unwrap().len(), 1);
-    assert_eq!(page["entries"][0]["action"], "grant_create");
+    assert_eq!(page["entries"][0]["action"], "permission_remember");
     assert_eq!(page["entries"][0]["actor_role"], "human");
-    assert_eq!(page["more"], false);
+    assert_eq!(page["more"], true);
     for bad in ["?after=x", "?limit=-1", "?after=1&after=2"] {
         assert!(matches!(
             f.runtime
@@ -534,10 +774,13 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
             Err(OrchestrationError::Invalid(_))
         ));
     }
+    let rule = created["rule_id"].as_str().unwrap().to_owned();
     for path in [
-        format!("{prefix}/grants"),
-        format!("{prefix}/grants/{}", id(55)),
-        format!("{prefix}/access"),
+        format!("{base}/permissions"),
+        format!("{base}/permissions/{waiting}"),
+        format!("{base}/permission-rules"),
+        format!("{base}/permission-rules/{rule}"),
+        format!("{base}/targets/{}/access", id(1)),
         audit.clone(),
         format!("{audit}?after=3"),
     ] {
@@ -545,8 +788,15 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         assert!(is_machine_path(&path), "{path}");
         assert!(!is_cleanup_request("DELETE", &path), "{path}");
     }
-    // The owner's registration, manifest and provider configuration are gone; authority
-    // can still be withdrawn and the journal still read.
+    // The retired grant and approval routes are gone.
+    for path in [
+        format!("{base}/targets/{}/grants", id(1)),
+        format!("{base}/approvals"),
+    ] {
+        assert!(!is_machine_path(&path), "{path}");
+    }
+    // The owner's registration, manifest and provider configuration are gone; a rule
+    // can still be forgotten and the journal still read.
     std::fs::remove_file(f.runtime.checkouts.path()).unwrap();
     std::fs::write(
         Path::new(&f.owner.root).join(".hotsheet2/orchestration.json"),
@@ -554,26 +804,35 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
     )
     .unwrap();
     std::fs::write(f.runtime.providers.path(), b"corrupt").unwrap();
-    let revoked = f
+    // Forgetting needs an identified actor.
+    assert!(matches!(
+        f.runtime.request(
+            "DELETE",
+            &format!("{base}/permission-rules/{rule}"),
+            &json!({}),
+            &mut tx,
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    let forgotten = f
         .runtime
         .request(
             "DELETE",
-            &format!("{prefix}/grants/{}", id(55)),
+            &format!("{base}/permission-rules/{rule}"),
             &json!({"actor":{"role":"human","id":"maintainer"}}),
             &mut tx,
         )
         .unwrap();
-    assert_eq!(revoked["revoked_by"], "maintainer");
-    let again = f
-        .runtime
-        .request(
+    assert_eq!(forgotten["rule_id"], rule.as_str());
+    assert!(matches!(
+        f.runtime.request(
             "DELETE",
-            &format!("{prefix}/grants/{}", id(55)),
-            &json!({}),
+            &format!("{base}/permission-rules/{rule}"),
+            &json!({"actor":{"role":"ai","id":"worker-1"}}),
             &mut tx,
-        )
-        .unwrap();
-    assert_eq!(again, revoked);
+        ),
+        Err(OrchestrationError::NotFound)
+    ));
     let page = f
         .runtime
         .request("GET", &audit, &Value::Null, &mut tx)
@@ -584,7 +843,67 @@ fn hs2_sbq3t8_routes_carry_the_actor_and_revoke_works_for_an_orphaned_owner() {
         .iter()
         .map(|entry| entry["action"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(actions, ["grant_create", "grant_revoke"]);
+    assert_eq!(
+        actions,
+        [
+            "permission_remember",
+            "validation_run",
+            "permission_answer",
+            "permission_forget"
+        ]
+    );
+}
+
+#[test]
+fn hs2_xhq1eh_retired_grants_are_reported_and_never_trusted() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_local(&f, &mut tx);
+    // A grant file from before this model, naming this exact actor and action.
+    std::fs::write(
+        f.home.join("orchestration-grants.json"),
+        serde_json::to_vec(&json!({"schema_version":1,"grants":[{
+            "grant_id": id(70), "target": reference(&f), "actor_id": "worker-1",
+            "actions": ["work_start"], "destination_key": "0".repeat(64),
+            "created_at_ms": 1, "expires_at_ms": u64::MAX }]}))
+        .unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        f.home.join("orchestration-approvals.json"),
+        br#"{"schema_version":1,"approvals":[]}"#,
+    )
+    .unwrap();
+    // It is not authority: the actor still asks.
+    permission_request(f.runtime.authorize(
+        &reference(&f),
+        Some(&ai("worker-1")),
+        act(TargetAction::WorkStart, None, op("op-1")),
+        &mut tx,
+    ));
+    let listed = f.runtime.permission_list(&f.owner.id, &mut tx).unwrap();
+    assert!(listed.retired.found());
+    assert_eq!(listed.retired.grants, Some(1));
+    assert_eq!(listed.retired.approvals, Some(0));
+    let validation = f
+        .runtime
+        .request(
+            "POST",
+            &format!("/checkouts/{}/orchestration/policy/validate", f.owner.id),
+            &json!({"policy":{}}),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(validation["retired"]["grants_file"], true);
+    // The files are left alone.
+    assert!(f.home.join("orchestration-grants.json").exists());
+    let request = &listed.requests[0].request;
+    assert_eq!(request.key.action, PermissionAction::WorkStart);
+    assert_eq!(request.state, PermissionState::Pending);
 }
 
 /// The next `rounds` resolutions of the target are each interrupted by one complete
@@ -629,14 +948,6 @@ fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve(
             .unwrap()
             .usable
     );
-    f.runtime
-        .grant(
-            &reference(&f),
-            create(&[TargetAction::GatesObserve]),
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     // Without the retry this is the plain conflict a caller of resolve sees.
     race(&f, 1);
     assert!(matches!(
@@ -668,58 +979,5 @@ fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve(
             &mut tx,
         )),
         DenialReason::TargetUnavailable
-    );
-}
-
-/// HS2-YZBCX5: a person issues a grant while a follower resolves the same target. The
-/// grant reads again instead of answering `conflict`; a race that never ends still
-/// refuses and issues nothing.
-#[test]
-fn hs2_yzbcx5_a_grant_reads_again_after_losing_a_race_to_a_follower() {
-    let f = fixture();
-    let mut rng = Rng(200);
-    let mut tx = Transaction {
-        clock: &Clock,
-        rng: &mut rng,
-    };
-    let revision = declaration(&f, &mut tx);
-    let destination = register(&f);
-    assert!(
-        f.runtime
-            .bind(request(&f, revision, destination), &mut tx)
-            .unwrap()
-            .usable
-    );
-    let allowed = super::super::access::RESOLVE_ATTEMPTS;
-    for rounds in [1, allowed] {
-        race(&f, rounds);
-        let issued = f
-            .runtime
-            .grant(
-                &reference(&f),
-                create(&[TargetAction::GatesObserve]),
-                Some(&human()),
-                &mut tx,
-            )
-            .unwrap();
-        assert!(matches!(
-            issued.state,
-            hotsheet_ticketing::orchestration::GrantState::Active
-        ));
-    }
-    let before = f.runtime.grants(&reference(&f), &mut tx).unwrap().len();
-    race(&f, allowed + 1);
-    assert!(matches!(
-        f.runtime.grant(
-            &reference(&f),
-            create(&[TargetAction::GatesObserve]),
-            Some(&human()),
-            &mut tx,
-        ),
-        Err(OrchestrationError::Conflict)
-    ));
-    assert_eq!(
-        f.runtime.grants(&reference(&f), &mut tx).unwrap().len(),
-        before
     );
 }

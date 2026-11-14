@@ -76,7 +76,7 @@ const decisions: Decision[] = [
   {
     time: '14:06',
     title: 'Not placed: TA-47',
-    detail: 'approval_required · session_start · 1 of 2 sessions on Workstation 1',
+    detail: 'permission_required · session_start · 1 of 2 sessions on Workstation 1',
     outcome: 'Approval filed',
     tone: 'warning',
   },

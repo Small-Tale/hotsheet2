@@ -4,19 +4,18 @@
 use hotsheet_model::Ticket;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, CpuCapacity, CreateGrant,
-    DecisionKind, DecisionMode, DiskCapacity, GateKind, HostObservation, LimitSignal,
-    MachineLimits, MemoryCapacity, PlacementAction, PlacementPolicy, PolicyBody, RunEvent,
-    RunEventJournal, RunEventKind, RunEventSource, ScheduledSession, SchedulerStore,
-    SessionActivity, SessionScope, SetPolicy, SignalKind, TargetAction, TargetPolicy,
-    ToolAvailability, ToolPolicy, ToolScope,
+    AuditOutcome, CpuCapacity, DecisionKind, DecisionMode, DiskCapacity, GateKind, HostObservation,
+    LimitSignal, MachineLimits, MemoryCapacity, PermissionAction, PermissionAnswer,
+    PermissionState, PlacementAction, PlacementPolicy, PolicyBody, RunEvent, RunEventJournal,
+    RunEventKind, RunEventSource, ScheduledSession, SchedulerStore, SessionActivity, SetPolicy,
+    SignalKind, TargetAction, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
 use std::time::Duration;
 
 use super::gates::{CI, Scripted as ScriptedGates, link, sha};
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 /// A probe whose answer the test sets, counting how often the runtime asked.
@@ -83,14 +82,8 @@ fn scope(tool: &str) -> ToolScope {
         models: Vec::new(),
     }
 }
-const ACTIONS: [TargetAction; 4] = [
-    TargetAction::TicketsRead,
-    TargetAction::GatesObserve,
-    TargetAction::SessionsManage,
-    TargetAction::WorkStart,
-];
 /// Target 1 takes two sessions of `codex` (preferred) or `claude`.
-fn policy(automatic: bool, required_for: Vec<ApprovalGate>) -> PolicyBody {
+fn policy(automatic: bool) -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
             max_sessions: 4,
@@ -107,13 +100,12 @@ fn policy(automatic: bool, required_for: Vec<ApprovalGate>) -> PolicyBody {
         targets: vec![TargetPolicy {
             target_id: id(1),
             enabled: true,
-            actions: ACTIONS.to_vec(),
+            actions: None,
             tools: vec![scope("codex"), scope("claude")],
             max_sessions: 2,
             machine: None,
             speculation: None,
         }],
-        approval: ApprovalPolicy { required_for },
         placement: PlacementPolicy {
             automatic,
             actor: Some("worker-1".into()),
@@ -144,8 +136,9 @@ struct Setup {
     orchestration: Ticket,
 }
 
-/// A bound target with a roomy machine, a recording executor, and `worker-1` granted
-/// to read tickets, observe gates, start work and (when `sessions`) manage sessions.
+/// A bound target with a roomy machine, a recording executor, and rules a person
+/// remembered: dispatch, and (when `grant_sessions`) codex and claude session starts
+/// (HS2-XHQ1EH).
 fn setup(grant_sessions: bool, tx: &mut Transaction<'_>) -> Setup {
     let mut m = machine(10, false, unsupported);
     let probe = Arc::new(Probe::default());
@@ -156,7 +149,7 @@ fn setup(grant_sessions: bool, tx: &mut Transaction<'_>) -> Setup {
         .clone()
         .with_capacity_probe(probe.clone())
         .with_session_executor(sessions.clone());
-    bind_and_grant(
+    bind_and_allow(
         &m,
         1,
         &[
@@ -167,23 +160,14 @@ fn setup(grant_sessions: bool, tx: &mut Transaction<'_>) -> Setup {
         tx,
     );
     if grant_sessions {
-        m.runtime
-            .grant(
-                &m.reference(1),
-                CreateGrant {
-                    grant_id: None,
-                    actor_id: "worker-1".into(),
-                    actions: vec![TargetAction::SessionsManage],
-                    session_scope: Some(SessionScope {
-                        tools: vec![scope("codex"), scope("claude")],
-                        max_concurrency: 4,
-                    }),
-                    expires_at_ms: 10_000,
-                },
-                Some(&human()),
-                tx,
-            )
-            .unwrap();
+        allow_on(
+            &m.runtime,
+            &m.owner.id,
+            &id(1),
+            &[TargetAction::SessionsManage],
+            &["codex", "claude"],
+            tx,
+        );
     }
     let orchestration = m.orchestration_ticket("Coordinate");
     Setup {
@@ -360,7 +344,7 @@ fn hs2_ecwg50_a_policy_without_automatic_placement_only_plans_and_logs() {
     let (_, first) = s.ready("First", &mut tx);
     let (_, second) = s.ready("Second", &mut tx);
     let (_, third) = s.ready("Third", &mut tx);
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     let owner = s.owner();
     assert!(s.m.runtime.scheduler_owners().is_empty());
 
@@ -478,7 +462,7 @@ fn hs2_ecwg50_a_policy_without_automatic_placement_only_plans_and_logs() {
         );
     }
     // An explicit dry run of an automatic policy applies nothing either.
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     assert_eq!(s.m.runtime.scheduler_owners(), std::slice::from_ref(&owner));
     let dry =
         s.m.runtime
@@ -504,7 +488,7 @@ fn hs2_ecwg50_automatic_placement_starts_sessions_through_the_executor_once() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let (_, first) = s.ready("First", &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
 
     let tick = s.tick(&mut tx);
     assert_eq!(tick.view.mode, DecisionMode::Applied);
@@ -582,43 +566,50 @@ fn hs2_ecwg50_automatic_placement_starts_sessions_through_the_executor_once() {
 }
 
 #[test]
-fn hs2_ecwg50_outside_the_policy_an_approval_is_filed_and_nothing_is_done() {
+fn hs2_xhq1eh_a_start_no_rule_allows_files_a_permission_request_and_nothing_is_done() {
     tx!(tx);
-    let s = setup(true, &mut tx);
+    // HS2-XHQ1EH: no session start is remembered.
+    let s = setup(false, &mut tx);
     let (_, first) = s.ready("First", &mut tx);
-    set_policy(
-        &s.m,
-        policy(true, vec![ApprovalGate::SessionStart]),
-        &mut tx,
-    );
+    set_policy(&s.m, policy(true), &mut tx);
     let owner = s.owner();
+    let requests = |tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .permission_list(&owner, tx)
+            .unwrap()
+            .requests
+            .into_iter()
+            .map(|view| view.request)
+            .collect::<Vec<_>>()
+    };
 
-    // The policy asks a person before a session starts: asked once, however often.
+    // A person is asked before a session starts: asked once, however often.
     for _ in 0..3 {
         let tick = s.tick(&mut tx);
-        assert_eq!(
-            outcomes(&tick),
-            [("approval_required", Some("session_start"))]
-        );
+        assert_eq!(tick.outcomes.len(), 1);
+        assert_eq!(tick.outcomes[0].outcome, "permission_required");
     }
     assert!(s.sessions.calls().is_empty());
     assert!(s.memory().is_empty());
-    let approvals = s.m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(approvals.len(), 1);
+    let asked = requests(&mut tx);
+    assert_eq!(asked.len(), 1);
     assert_eq!(
         (
-            approvals[0].gate,
-            approvals[0].state,
-            approvals[0].operation_id.clone(),
-            approvals[0].actor_id.as_str()
+            asked[0].key.action,
+            asked[0].key.tool.as_deref(),
+            asked[0].state,
+            asked[0].operation_id.clone(),
+            asked[0].actor_id.as_str()
         ),
         (
-            ApprovalGate::SessionStart,
-            ApprovalState::Pending,
+            PermissionAction::SessionStart,
+            Some("codex"),
+            PermissionState::Pending,
             format!("sched-start-{first}"),
             "worker-1"
         )
     );
+    // The decision log names the request to answer.
     assert_eq!(
         s.log()
             .iter()
@@ -627,80 +618,68 @@ fn hs2_ecwg50_outside_the_policy_an_approval_is_filed_and_nothing_is_done() {
             .collect::<Vec<_>>(),
         vec![
             (
-                Some("approval_required".into()),
-                Some("session_start".into())
+                Some("permission_required".into()),
+                Some(asked[0].request_id.clone())
             );
             3
         ]
     );
 
-    // A person approves: the next pass hands the start to the executor, whose own
-    // gate uses the approval. The scheduler does not consume it.
-    s.m.runtime
-        .decide_approval(
-            &owner,
-            &approvals[0].approval_id,
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // A person allows it once: the next pass hands the start to the executor. The
+    // recording executor starts nothing through the gate, so the scheduler uses the
+    // answer itself once the start is reported.
+    answer(
+        &s.m.runtime,
+        &owner,
+        &asked[0].request_id,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     assert_eq!(outcomes(&s.tick(&mut tx)), [("started", None)]);
     assert_eq!(s.sessions.calls().len(), 1);
-    assert_eq!(
-        s.m.runtime.approvals(&owner, &mut tx).unwrap()[0].state,
-        ApprovalState::Approved
-    );
+    assert_eq!(requests(&mut tx)[0].state, PermissionState::Used);
 }
 
 #[test]
-fn hs2_ecwg50_a_denied_approval_and_a_missing_grant_are_typed_outcomes() {
+fn hs2_xhq1eh_a_denied_start_is_a_typed_outcome_and_never_started() {
     tx!(tx);
-    // No `sessions_manage` grant: the gate denies, and no approval is filed for it.
     let s = setup(false, &mut tx);
     s.ready("First", &mut tx);
-    set_policy(
-        &s.m,
-        policy(true, vec![ApprovalGate::SessionStart]),
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    s.tick(&mut tx);
+    let asked =
+        s.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .remove(0)
+            .request;
+    answer(
+        &s.m.runtime,
+        &owner,
+        &asked.request_id,
+        PermissionAnswer::Deny,
         &mut tx,
     );
-    let owner = s.owner();
-    let tick = s.tick(&mut tx);
-    assert_eq!(outcomes(&tick), [("action_not_granted", None)]);
+    for _ in 0..2 {
+        let tick = s.tick(&mut tx);
+        assert_eq!(tick.outcomes.len(), 1);
+        assert_eq!(tick.outcomes[0].outcome, "permission_denied");
+    }
     assert!(s.sessions.calls().is_empty());
-    assert!(s.m.runtime.approvals(&owner, &mut tx).unwrap().is_empty());
+    assert_eq!(
+        s.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .len(),
+        1
+    );
     assert_eq!(
         s.audited("sessions_manage").last().unwrap().0,
         AuditOutcome::Denied
     );
-
-    // A person says no: that operation is never started.
-    let s = setup(true, &mut tx);
-    s.ready("First", &mut tx);
-    set_policy(
-        &s.m,
-        policy(true, vec![ApprovalGate::SessionStart]),
-        &mut tx,
-    );
-    let owner = s.owner();
-    s.tick(&mut tx);
-    let approval = s.m.runtime.approvals(&owner, &mut tx).unwrap().remove(0);
-    s.m.runtime
-        .decide_approval(
-            &owner,
-            &approval.approval_id,
-            false,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    for _ in 0..2 {
-        let tick = s.tick(&mut tx);
-        assert_eq!(tick.outcomes.len(), 1);
-        assert_ne!(tick.outcomes[0].outcome, "started");
-    }
-    assert!(s.sessions.calls().is_empty());
-    assert_eq!(s.m.runtime.approvals(&owner, &mut tx).unwrap().len(), 1);
 }
 
 #[test]
@@ -712,7 +691,7 @@ fn hs2_ecwg50_without_an_executor_the_outcome_is_typed_and_logged() {
             .clone()
             .with_session_executor(Arc::new(ExecutorUnavailable));
     s.ready("First", &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     for _ in 0..2 {
         let tick = s.tick(&mut tx);
         assert_eq!(tick.view.inputs.executor, "unavailable");
@@ -748,7 +727,7 @@ fn hs2_ecwg50_a_refused_start_backs_off_and_leaves_the_target_alone() {
     tx!(tx);
     let s = setup(true, &mut tx);
     s.ready("First", &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     *s.sessions.refuse_starts.lock().unwrap() = Some("below_ram_floor".into());
 
     let tick = s.tick(&mut tx);
@@ -790,7 +769,7 @@ fn hs2_ecwg50_a_machine_without_room_is_reported_and_backed_off() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let (_, first) = s.ready("First", &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     let owner = s.owner();
     // 2500 MB free against a 2048 MB floor and a 1024 MB session.
     s.probe
@@ -847,7 +826,7 @@ fn hs2_ecwg50_explain_answers_for_every_standing_a_ticket_can_have() {
     let (first_ticket, first) = s.ready("First", &mut tx);
     let (second_ticket, second) = s.ready("Second", &mut tx);
     let (third_ticket, third) = s.ready("Third", &mut tx);
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     let owner = s.owner();
     let ask = |body: Value, tx: &mut Transaction<'_>| {
         s.m.runtime.scheduler_explain(
@@ -969,7 +948,7 @@ fn hs2_ecwg50_a_tool_limit_moves_the_next_start_to_another_tool_and_wakes_follow
     tx!(tx);
     let s = setup(true, &mut tx);
     s.ready("First", &mut tx);
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     let owner = s.owner();
     let tool = |tx: &mut Transaction<'_>| {
         let plan =
@@ -1025,7 +1004,7 @@ fn hs2_ecwg50_sessions_are_wound_down_through_the_gate_at_a_safe_point() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let owner = s.owner();
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     // Three idle sessions on a target whose cap is two; one a person took over.
     let mut taken = owned("taken", &owner, SessionActivity::Idle);
     taken.human_takeover = true;
@@ -1064,7 +1043,7 @@ fn hs2_ecwg50_sessions_are_wound_down_through_the_gate_at_a_safe_point() {
 
     // The policy stops permitting the target: the remaining owned session is asked
     // to stop on the strength of the grant, and the taken-over one is left alone.
-    let mut disabled = policy(true, Vec::new());
+    let mut disabled = policy(true);
     disabled.targets[0].enabled = false;
     set_policy(&s.m, disabled, &mut tx);
     let tick = s.tick(&mut tx);
@@ -1103,12 +1082,15 @@ fn hs2_ecwg50_sessions_are_wound_down_through_the_gate_at_a_safe_point() {
     }
 }
 
+/// HS2-48H57C, HS2-XHQ1EH: a wind-down only reduces activity. It never asks a person,
+/// and a policy that no longer permits the target does not deny it, whatever is
+/// remembered.
 #[test]
-fn hs2_ecwg50_a_wind_down_the_policy_wants_approved_waits_for_a_person() {
+fn hs2_xhq1eh_a_wind_down_never_asks_and_is_never_denied_by_the_policy() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let owner = s.owner();
-    let mut body = policy(true, vec![ApprovalGate::SessionStop]);
+    let mut body = policy(true);
     body.targets[0].max_sessions = 1;
     set_policy(&s.m, body, &mut tx);
     *s.sessions.sessions.lock().unwrap() = vec![
@@ -1116,26 +1098,23 @@ fn hs2_ecwg50_a_wind_down_the_policy_wants_approved_waits_for_a_person() {
         owned("b", &owner, SessionActivity::Idle),
     ];
     let tick = s.tick(&mut tx);
-    assert_eq!(
-        outcomes(&tick),
-        [("approval_required", Some("session_stop"))]
-    );
-    assert!(s.sessions.calls().is_empty());
-    let approvals = s.m.runtime.approvals(&owner, &mut tx).unwrap();
-    assert_eq!(
-        (approvals[0].gate, approvals[0].operation_id.as_str()),
-        (ApprovalGate::SessionStop, "sched-stop-a")
-    );
-    // A grant that does not cover session management: the policy path cannot
-    // stop a session either.
+    assert_eq!(tick.outcomes[0].outcome, "wind_down_requested");
+    assert!(!s.sessions.calls().is_empty());
+    // Nothing remembered for session starts, and the target disabled: still stopped.
     let s = setup(false, &mut tx);
     let owner = s.owner();
-    let mut disabled = policy(true, Vec::new());
+    let mut disabled = policy(true);
     disabled.targets[0].enabled = false;
     set_policy(&s.m, disabled, &mut tx);
     *s.sessions.sessions.lock().unwrap() = vec![owned("a", &owner, SessionActivity::Idle)];
-    assert_eq!(outcomes(&s.tick(&mut tx)), [("action_not_granted", None)]);
-    assert!(s.sessions.calls().is_empty());
+    assert_eq!(s.tick(&mut tx).outcomes[0].outcome, "wind_down_requested");
+    assert!(
+        s.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1145,7 +1124,7 @@ fn hs2_ecwg50_a_session_whose_run_waits_on_ci_is_free_capacity() {
     let ci = ScriptedGates::new(CI, GateKind::Ci);
     s.m.runtime = s.m.runtime.clone().with_gate_provider(ci);
     let owner = s.owner();
-    let mut body = policy(false, Vec::new());
+    let mut body = policy(false);
     body.targets[0].max_sessions = 1;
     set_policy(&s.m, body, &mut tx);
     // A run on one ticket, integrated at a commit whose CI gate is pending.
@@ -1229,12 +1208,12 @@ fn hs2_ecwg50_the_follower_runs_a_pass_on_events_and_never_on_its_own() {
     };
     // No policy, then a policy without automatic placement: there is no loop.
     assert_eq!(step(&mut state, 0, &mut tx), SchedulerStep::default());
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     assert!(!step(&mut state, 0, &mut tx).active);
     assert!(s.log().is_empty() && s.sessions.calls().is_empty());
 
     // Enabled: the first step is a pass, acting as the policy's actor.
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     let started = step(&mut state, 0, &mut tx);
     assert_eq!(
         (started.active, started.trigger, started.failed),
@@ -1313,10 +1292,10 @@ fn hs2_ecwg50_the_follower_runs_a_pass_on_events_and_never_on_its_own() {
     // Automatic placement is turned off: the change wakes the follower, which ends
     // without a pass.
     let logged = s.log().len();
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     assert_eq!(step(&mut state, 0, &mut tx), SchedulerStep::default());
     assert_eq!(s.log().len(), logged);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     assert_eq!(step(&mut state, 0, &mut tx).trigger, Some("signal"));
 
     // An executor that fails marks the step, so the host backs off.
@@ -1341,7 +1320,7 @@ fn hs2_ecwg50_scheduler_routes_share_the_runtime_and_validate_their_bodies() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let (_, first) = s.ready("First", &mut tx);
-    set_policy(&s.m, policy(false, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(false), &mut tx);
     let owner = s.owner();
     let base = format!("/checkouts/{owner}/orchestration/scheduler");
     let actor = json!({"role": "ai", "id": "worker-1"});
@@ -1397,7 +1376,7 @@ fn hs2_dg0ypa_an_adopted_start_is_logged_and_audited_and_not_remembered() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let (_, first) = s.ready("First", &mut tx);
-    set_policy(&s.m, policy(true, Vec::new()), &mut tx);
+    set_policy(&s.m, policy(true), &mut tx);
     *s.sessions
         .adopt_starts
         .lock()

@@ -102,14 +102,12 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
         "validation_run",
         "sessions_manage"
     ]);
-    let granted = api(
+    let granted = super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":actions,
             "session_scope":{"tools":[{"tool":IDLE_TOOL}],"max_concurrency":4},
             "expires_at_ms":expires,"actor":person}),
-        true,
     )
     .await;
     assert_eq!(granted.0, StatusCode::OK, "{}", granted.1);

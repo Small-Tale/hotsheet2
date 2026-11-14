@@ -190,25 +190,25 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         "--timeout-seconds",
         "30",
     ];
-    // Without a validation grant nothing is defined or run.
-    assert!(fail(&worker, &define_smoke).contains("no_grant"));
-    cli_named(
-        &home,
-        &human,
-        &[
-            "grant",
-            "add",
+    // HS2-XHQ1EH: defining a step changes only the orchestration project's own
+    // record and asks nobody; running one asks unless a rule is remembered.
+    // HS2-XHQ1EH: a person remembers the rules the orchestrator needs.
+    {
+        let (action, tool) = ("validation_run", None::<&str>);
+        let mut arguments = vec![
+            "permission",
+            "remember",
             TARGET,
             "--project",
             &owner.id,
-            "--actor",
-            "scheduler-1",
             "--action",
-            "validation_run",
-            "--expires-in",
-            "1h",
-        ],
-    );
+            action,
+        ];
+        if let Some(tool) = tool {
+            arguments.extend(["--tool", tool]);
+        }
+        cli_named(&home, &human, &arguments);
+    }
     let defined = ok(&worker, &define_smoke);
     assert_eq!(defined["state"], "unverified");
     assert_eq!(defined["reason"], "not_run");
@@ -316,22 +316,36 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         &["--operation-id", "op-val-3"],
     ]
     .concat();
-    assert!(fail(&worker, &custom).contains("approval_required"));
+    // A command the orchestration project chose asks a person for each operation,
+    // whatever is remembered.
+    assert!(fail(&worker, &custom).contains("permission_required"));
     assert!(!peer_project.join("custom-runs").exists());
-    let pending = cli_named(&home, &human, &["approval", "list", "--project", &owner.id]);
-    let pending = pending.as_array().unwrap();
+    let listed = cli_named(
+        &home,
+        &human,
+        &["permission", "list", "--project", &owner.id],
+    );
+    let pending: Vec<&Value> = listed["requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|request| request["state"] == "pending")
+        .collect();
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0]["gate"], "validation_run");
+    assert_eq!(pending[0]["action"], "validation_run");
     assert_eq!(pending[0]["operation_id"], "op-val-3");
+    assert_eq!(pending[0]["each_time"], true);
     cli_named(
         &home,
         &human,
         &[
-            "approval",
-            "approve",
-            pending[0]["approval_id"].as_str().unwrap(),
+            "permission",
+            "answer",
+            pending[0]["request_id"].as_str().unwrap(),
             "--project",
             &owner.id,
+            "--answer",
+            "allow_once",
         ],
     );
     let approved = ok(&worker, &custom);
@@ -491,13 +505,11 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         .unwrap()
         .as_millis() as u64
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["validation_run"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     // The validation routes need the bearer like everything else.
@@ -627,7 +639,8 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         1
     );
     for arguments in [
-        // No step object, no target, an unknown step, another actor, an unknown action.
+        // No step object, no target, an unknown step, no identified actor, an unknown
+        // action.
         json!({"action":"validation_define","checkout":checkout.id,"target_id":TARGET,"ticket":of,
             "actor_role":"ai","actor_id":"scheduler-1"}),
         json!({"action":"validation_define","checkout":checkout.id,"ticket":of,
@@ -635,7 +648,7 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
             "actor_role":"ai","actor_id":"scheduler-1"}),
         json!({"action":"validation_evidence","checkout":checkout.id,"ticket":of,"step_id":"gated"}),
         json!({"action":"validation_run","checkout":checkout.id,"ticket":of,"step_id":"smoke",
-            "operation_id":"op-other","actor_role":"ai","actor_id":"someone-else"}),
+            "operation_id":"op-other"}),
         json!({"action":"validation_explode","checkout":checkout.id}),
     ] {
         mcp_rejected(&home, &backend, "hotsheet_targets", arguments);

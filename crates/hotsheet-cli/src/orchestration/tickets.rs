@@ -249,7 +249,7 @@ pub struct UpdateTargetTicket {
     pub target: TargetTicket,
     #[serde(default)]
     pub expected_token: Option<String>,
-    /// Identifies this change in the audit journal and for an approval.
+    /// Identifies this change in the audit journal and for a permission request.
     #[serde(default)]
     pub operation_id: Option<String>,
     #[serde(flatten)]

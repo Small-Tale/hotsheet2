@@ -9,13 +9,13 @@ use std::time::Duration;
 use hotsheet_jobs::{Acquire, ActiveStatus, FinalStatus, JobStore, Outcome};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, Coverage, CreateGrant, DenialReason,
-    Gate, GateError, GateEvidence, GateFilter, GateKind, GateReading, GateState, PolicyBody, Run,
-    RunEventKind, RunEventSource, SetPolicy, TargetAction, TargetPolicy,
+    AuditOutcome, Coverage, Gate, GateError, GateEvidence, GateFilter, GateKind, GateReading,
+    GateState, PermissionAction, PermissionAnswer, PermissionState, Run, RunEventKind,
+    RunEventSource, TargetAction,
 };
 use serde_json::json;
 
-use super::tickets::{Machine, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 
 pub(super) const CI: &str = "scripted-ci";
@@ -121,12 +121,13 @@ pub(super) fn verdict(
         at_ms: 150,
     })
 }
-/// A machine with a dispatched run on its target, and the actions granted to `worker-1`.
+/// A machine with a dispatched run on its target, and a remembered rule for each of
+/// the acting `actions` (HS2-XHQ1EH).
 pub(super) fn with_run(actions: &[TargetAction], tx: &mut Transaction<'_>) -> (Machine, String) {
     let m = machine(10, false, unsupported);
     let mut granted = vec![TargetAction::TicketsRead, TargetAction::WorkStart];
     granted.extend_from_slice(actions);
-    bind_and_grant(&m, 1, &granted, tx);
+    bind_and_allow(&m, 1, &granted, tx);
     let orchestration = m.orchestration_ticket("Coordinate");
     let target = hotsheet_ticketing::ops::create(
         &m.target_store,
@@ -429,36 +430,27 @@ fn hs2_5jbypv_a_linked_ci_gate_follows_typed_readings_and_publishes_gate_events(
 }
 
 #[test]
-fn hs2_5jbypv_gates_need_a_grant_a_repository_and_an_adapter_that_starts() {
+fn hs2_5jbypv_gates_need_an_actor_a_repository_and_an_adapter_that_starts() {
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    // No gates_observe grant: nothing is linked and nothing is started.
+    // HS2-XHQ1EH: observing gates needs no rule, but an unidentified caller links
+    // nothing and starts nothing.
     let (mut m, run) = with_run(&[], &mut tx);
     let ci = Scripted::new(CI, GateKind::Ci);
     m.runtime = m.runtime.clone().with_gate_provider(ci.clone());
     let (a, owner) = (sha('a'), m.owner.id.clone());
-    for actor in [Some(worker()), None] {
-        let result = m
-            .runtime
-            .gate_link(&owner, &run, link(&a, CI), actor.as_ref(), &mut tx);
-        assert!(matches!(
-            result,
-            Err(OrchestrationError::Denied(DenialReason::ActionNotGranted)
-                | OrchestrationError::Invalid(_))
-        ));
-    }
     assert!(matches!(
-        m.runtime.gate_sync(
-            &owner,
-            &run,
-            &SyncGates::default(),
-            Some(&worker()),
-            &mut tx
-        ),
-        Err(OrchestrationError::Denied(_))
+        m.runtime
+            .gate_link(&owner, &run, link(&a, CI), None, &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    assert!(matches!(
+        m.runtime
+            .gate_sync(&owner, &run, &SyncGates::default(), None, &mut tx),
+        Err(OrchestrationError::Invalid(_))
     ));
     assert!(ci.starts().is_empty());
     assert!(
@@ -468,21 +460,7 @@ fn hs2_5jbypv_gates_need_a_grant_a_repository_and_an_adapter_that_starts() {
             .gates
             .is_empty()
     );
-    // A second grant allows it.
-    m.runtime
-        .grant(
-            &m.reference(1),
-            CreateGrant {
-                grant_id: None,
-                actor_id: "observer-1".into(),
-                actions: vec![TargetAction::GatesObserve],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    // Any identified actor may observe: adding the project consented to it.
     let observer = MutationActor::parse("ai", Some("observer-1".into())).unwrap();
     // The target declares no repository, so the link must name one.
     let unnamed: LinkGate = serde_json::from_value(json!({"commit": a, "provider": CI})).unwrap();
@@ -708,17 +686,24 @@ fn hs2_5jbypv_a_sync_and_a_follower_wait_on_the_adapter_and_never_spin() {
             .gate_follow_step(&owner, &mut follow, 0, &mut tx)
             .active
     );
-    // A follower acts under the linking actor's grant. Once that is revoked, a fresh
-    // follower leaves the gate as it stands.
+    // A follower acts through the gate as the linking actor. Once the target is
+    // unbound, a fresh follower leaves the gate as it stands.
     m.runtime
         .gate_link(&owner, &run, link(&b, CI), Some(&worker()), &mut tx)
         .unwrap();
-    let grant = m.runtime.grants(&m.reference(1), &mut tx).unwrap()[0]
-        .grant
-        .grant_id
-        .clone();
+    let binding = m.runtime.resolve(&m.reference(1), &mut tx).unwrap().binding;
     m.runtime
-        .revoke(&m.reference(1), &grant, Some(&human()), &mut tx)
+        .request(
+            "DELETE",
+            &format!(
+                "/checkouts/{}/orchestration/targets/{}/binding",
+                owner,
+                id(1)
+            ),
+            &json!({"target":m.reference(1),"expected_binding_revision":binding.revision,
+                "previous_destination":binding.destination}),
+            &mut tx,
+        )
         .unwrap();
     ci.set(&b, verdict(CI, GateState::Passed, 5, &b, Coverage::Exact));
     let mut fresh = GateFollowState::default();
@@ -731,7 +716,7 @@ fn hs2_5jbypv_a_sync_and_a_follower_wait_on_the_adapter_and_never_spin() {
 }
 
 #[test]
-fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_production() {
+fn hs2_5jbypv_a_deployment_needs_a_passed_gate_and_a_person_for_production() {
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
@@ -748,8 +733,9 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
         m.runtime
             .gate_deploy(&owner, &run, body, Some(&worker()), tx)
     };
-    let approvals =
-        |m: &Machine, tx: &mut Transaction<'_>| m.runtime.approvals(&owner, tx).unwrap();
+    let approvals = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime.permission_list(&owner, tx).unwrap().requests
+    };
     // No CI gate, a pending one and a failed one all refuse, and ask nobody.
     assert_eq!(
         gate_error(request(&m, deploy("deploy-1", true), &mut tx)),
@@ -791,26 +777,10 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
             Err(OrchestrationError::Invalid(_))
         ));
     }
-    // An actor without `deployments_run` is denied and nothing is recorded.
-    let stranger = MutationActor::parse("ai", Some("worker-2".into())).unwrap();
-    assert!(matches!(
-        m.runtime.gate_deploy(
-            &owner,
-            &run,
-            deploy("deploy-0", false),
-            Some(&stranger),
-            &mut tx
-        ),
-        Err(OrchestrationError::Denied(_))
-    ));
-    assert_eq!(
-        m.runtime.run_gate_state(&owner, &run).unwrap().deployment,
-        None
-    );
-    // A non-production deployment the policy does not gate is authorized at once. No
+    // A non-production deployment a remembered rule allows is authorized at once. No
     // adapter runs deployments here, and the gate says so instead of pretending.
     let beta = request(&m, deploy("deploy-1", false), &mut tx).unwrap();
-    assert!(beta.created && beta.approval_id.is_none());
+    assert!(beta.created && beta.request_id.is_none());
     let scope = beta.gate.deployment.clone().unwrap();
     assert_eq!(
         (
@@ -843,34 +813,36 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
         Err(OrchestrationError::Conflict)
     ));
     assert!(approvals(&m, &mut tx).is_empty());
-    // Production always waits for a person, with no policy file at all.
+    // Production always asks a person, whatever rule is remembered.
     let waiting = request(&m, deploy("deploy-prod", true), &mut tx).unwrap();
     assert_eq!(waiting.gate.state, GateState::AwaitingApproval);
-    let approval_id = waiting.approval_id.clone().unwrap();
+    let approval_id = waiting.request_id.clone().unwrap();
     assert_eq!(
         m.last_audit(),
         (
             "deployments_run".into(),
             AuditOutcome::Denied,
-            Some("deployment".into())
+            Some("permission_required".into())
         )
     );
     // Asking again files nothing new and starts nothing.
     let still = request(&m, deploy("deploy-prod", true), &mut tx).unwrap();
     assert!(!still.created);
-    assert_eq!(still.approval_id.as_deref(), Some(approval_id.as_str()));
+    assert_eq!(still.request_id.as_deref(), Some(approval_id.as_str()));
     let filed = approvals(&m, &mut tx);
     assert_eq!(filed.len(), 1);
     assert_eq!(
         (
-            filed[0].gate,
-            filed[0].state,
-            filed[0].operation_id.as_str()
+            filed[0].request.key.action,
+            filed[0].request.state,
+            filed[0].request.operation_id.as_str(),
+            filed[0].request.each_time,
         ),
         (
-            ApprovalGate::Deployment,
-            ApprovalState::Pending,
-            "deploy-prod"
+            PermissionAction::DeploymentsRun,
+            PermissionState::Pending,
+            "deploy-prod",
+            true
         )
     );
     let summary = m.runtime.run_gate_state(&owner, &run).unwrap();
@@ -881,14 +853,34 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
     );
     // The governed session cannot answer for itself; a person can.
     assert!(matches!(
-        m.runtime
-            .decide_approval(&owner, &approval_id, true, Some(&worker()), &mut tx),
+        m.runtime.permission_answer(
+            &owner,
+            &approval_id,
+            PermissionAnswer::AllowOnce,
+            Some(&worker()),
+            &mut tx
+        ),
         Err(OrchestrationError::Forbidden(_))
     ));
-    m.runtime
-        .decide_approval(&owner, &approval_id, true, Some(&human()), &mut tx)
-        .unwrap();
-    // The approval alone moves nothing; the repeated request consumes it.
+    // It cannot be remembered.
+    assert!(matches!(
+        m.runtime.permission_answer(
+            &owner,
+            &approval_id,
+            PermissionAnswer::AlwaysAllow,
+            Some(&human()),
+            &mut tx
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    answer(
+        &m.runtime,
+        &owner,
+        &approval_id,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    // The answer alone moves nothing; the repeated request uses it.
     assert_eq!(
         m.runtime.gate(&owner, &waiting.gate.gate_id).unwrap().state,
         GateState::AwaitingApproval
@@ -898,7 +890,10 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
         (approved.gate.state, approved.gate.reason.as_deref()),
         (GateState::Unknown, Some("deployment_executor_unavailable"))
     );
-    assert_eq!(approvals(&m, &mut tx)[0].state, ApprovalState::Consumed);
+    assert_eq!(
+        approvals(&m, &mut tx)[0].request.state,
+        PermissionState::Used
+    );
     // Answered: a repeat asks nobody again.
     request(&m, deploy("deploy-prod", true), &mut tx).unwrap();
     assert_eq!(approvals(&m, &mut tx).len(), 1);
@@ -909,22 +904,20 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
         m.runtime.gate(&owner, &waiting.gate.gate_id).unwrap().state,
         GateState::Superseded
     );
-    m.runtime
-        .decide_approval(
-            &owner,
-            &refused.approval_id.unwrap(),
-            false,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
+    answer(
+        &m.runtime,
+        &owner,
+        &refused.request_id.unwrap(),
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
     for _ in 0..2 {
         let denied = request(&m, deploy("deploy-prod-2", true), &mut tx).unwrap();
         assert_eq!(
             (denied.gate.state, denied.gate.reason.as_deref()),
-            (GateState::Failed, Some("approval_denied"))
+            (GateState::Failed, Some("permission_denied"))
         );
-        assert!(denied.approval_id.is_none());
+        assert!(denied.request_id.is_none());
     }
     assert_eq!(approvals(&m, &mut tx).len(), 2);
     // The run moves to commit b while a production request waits: the request is
@@ -961,16 +954,14 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_a_grant_and_a_person_for_producti
 }
 
 #[test]
-fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_the_policy_can_ask_first() {
+fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_a_person_is_asked_first() {
     let mut rng = Rng(100);
     let mut tx = Transaction {
         clock: &Clock,
         rng: &mut rng,
     };
-    let (mut m, run) = with_run(
-        &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
-        &mut tx,
-    );
+    // HS2-XHQ1EH: no deployment rule is remembered, so a person is asked first.
+    let (mut m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
     let ci = Scripted::new(CI, GateKind::Ci);
     let executor = Scripted::new(TARGET_SCRIPT_PROVIDER, GateKind::Deployment);
     m.runtime = m
@@ -979,38 +970,6 @@ fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_the_policy_can_a
         .with_gate_provider(ci.clone())
         .with_gate_provider(executor.clone());
     let (a, owner) = (sha('a'), m.owner.id.clone());
-    // The policy asks a person before any deployment, production or not.
-    let actions = vec![
-        TargetAction::TicketsRead,
-        TargetAction::WorkStart,
-        TargetAction::GatesObserve,
-        TargetAction::DeploymentsRun,
-    ];
-    m.runtime
-        .set_policy(
-            &owner,
-            SetPolicy {
-                expected_revision: None,
-                policy: PolicyBody {
-                    targets: vec![TargetPolicy {
-                        target_id: id(1),
-                        enabled: true,
-                        actions,
-                        tools: Vec::new(),
-                        max_sessions: 1,
-                        machine: None,
-                        speculation: None,
-                    }],
-                    approval: ApprovalPolicy {
-                        required_for: vec![ApprovalGate::Deployment],
-                    },
-                    ..PolicyBody::default()
-                },
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     m.runtime
         .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
         .unwrap();
@@ -1042,16 +1001,15 @@ fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_the_policy_can_a
     );
     assert!(sync(&m, &mut tx).changed.is_empty());
     executor.readings.lock().unwrap().clear();
-    m.runtime
-        .decide_approval(
-            &owner,
-            &waiting.approval_id.unwrap(),
-            true,
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
-    // Approved: the adapter is started exactly once, however often the request repeats.
+    // Always Allow, so later deployments to this target ask nobody.
+    answer(
+        &m.runtime,
+        &owner,
+        &waiting.request_id.unwrap(),
+        PermissionAnswer::AlwaysAllow,
+        &mut tx,
+    );
+    // Allowed: the adapter is started exactly once, however often the request repeats.
     let running = request(&m, &mut tx);
     assert_eq!(running.gate.state, GateState::Pending);
     request(&m, &mut tx);

@@ -95,13 +95,11 @@ async fn hs2_s13719_http_mcp_and_cli_read_the_same_progress_and_cost_summary() {
     )
     .unwrap()
         + 3_600_000;
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1","actions":["tickets_read","work_start"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

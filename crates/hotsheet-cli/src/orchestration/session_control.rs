@@ -67,6 +67,12 @@ pub enum StartOutcome {
     Refused {
         reason: String,
     },
+    /// HS2-XHQ1EH: the start or its step's run waits for a person's answer to this
+    /// orchestration permission request. Nothing started and the target is not
+    /// backed off: the answer wakes the scheduler.
+    PermissionRequired {
+        request_id: String,
+    },
     Unavailable,
 }
 

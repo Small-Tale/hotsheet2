@@ -209,14 +209,12 @@ async fn hs2_vvhvf0_a_server_starts_the_job_monitor_for_its_gates_and_again_afte
         .as_millis() as u64
         + 3_600_000;
     let ai = json!({"role":"ai","id":"scheduler-1"});
-    api(
+    super::orchestration::remember_rules(
         router.clone(),
-        "POST",
-        &format!("{base}/targets/{TARGET}/grants"),
+        &format!("{base}/targets/{TARGET}"),
         json!({"actor_id":"scheduler-1",
             "actions":["tickets_read","tickets_write","work_start","gates_observe"],
             "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
-        true,
     )
     .await;
     let (status, run) = api(

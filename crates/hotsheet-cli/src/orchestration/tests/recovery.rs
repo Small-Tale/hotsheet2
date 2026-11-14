@@ -9,7 +9,7 @@ use hotsheet_ticketing::orchestration::{
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use serde_json::{Value, json};
 
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, op, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, op, unsupported, worker};
 use super::*;
 
 const LEASE: &str = "2030-01-01T00:00:00Z";
@@ -190,7 +190,7 @@ fn run_error(result: Result<RunView, OrchestrationError>) -> RunError {
     }
 }
 fn granted(m: &Machine, tx: &mut Transaction<'_>) {
-    bind_and_grant(
+    bind_and_allow(
         m,
         1,
         &[
@@ -587,22 +587,21 @@ fn hs2_wbredm_an_unreachable_target_is_named_unverified_and_a_pending_cancel_wai
         ]
     );
     assert!(m.runtime.run_owners().unwrap().is_empty());
-    // An actor without a grant learns nothing about the target, and the answer says so
-    // rather than failing.
+    // A target that cannot be resolved teaches nothing, and the answer says so rather
+    // than failing.
     let other = target_ticket(&m, "Second");
     let run = dispatch(&m, &orchestration, &other, "op-2", "worker-b", &mut tx);
-    let stranger =
-        hotsheet_ticketing::actor::MutationActor::parse("ai", Some("stranger".into())).unwrap();
+    lose_target(&m, &mut tx);
     let denied = m
         .runtime
-        .run_reconcile(&m.owner.id, &run.run_id, Some(&stranger), &mut tx)
+        .run_reconcile(&m.owner.id, &run.run_id, Some(&worker()), &mut tx)
         .unwrap();
     assert_eq!(disposition(&denied), Disposition::HoldUnverified);
     assert_eq!(
         finding(&denied, ExternalSource::TargetReachability),
         (
             Verification::Unverifiable,
-            Some(DenialReason::NoGrant.code().into())
+            Some(DenialReason::TargetUnavailable.code().into())
         )
     );
     assert!(matches!(
@@ -1192,20 +1191,6 @@ fn hs2_wbredm_a_resolution_raced_by_another_is_retried_rather_than_denied() {
             .usable
     );
     let target = super::reference(&f);
-    f.runtime
-        .grant(
-            &target,
-            hotsheet_ticketing::orchestration::CreateGrant {
-                grant_id: None,
-                actor_id: "worker-1".into(),
-                actions: vec![TargetAction::TicketsRead],
-                session_scope: None,
-                expires_at_ms: 10_000,
-            },
-            Some(&human()),
-            &mut tx,
-        )
-        .unwrap();
     let raced = Arc::new(AtomicUsize::new(0));
     // Another resolution of the same target lands between this one's read of the
     // binding and its write: the first attempt conflicts.

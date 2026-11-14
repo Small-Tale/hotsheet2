@@ -224,23 +224,27 @@ async fn one_remote_step(
     (step, ticket, b)
 }
 
-/// HS2-2EY9DP priority 3: a person revokes the scheduler's grant on B while its
-/// session works there, and later a replacement grant expires. Each denial is the
-/// typed code, the loop neither starts nor stops anything on B without authority, and
-/// a new grant lets the run finish.
+/// HS2-2EY9DP priority 3, HS2-XHQ1EH: a person unbinds B while its session works
+/// there, withdrawing this machine's consent. Each denial is the typed code, and the
+/// loop neither starts nor stops anything on B. Bound again, the run is read without
+/// asking anyone, even with every remembered rule forgotten, and finishes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
 async fn hs2_2ey9dp_lost_access_mid_run_stops_the_orchestrator_acting_on_the_target() {
     let mut fleet = Fleet::new().await;
     let (step, ticket, b) = one_remote_step(&mut fleet, "Synthetic change under revocation").await;
     let before = starts(&fleet).await.len();
 
-    // 1. Revoked.
-    let grant = fleet.grants[TARGET_B].clone();
-    fleet
+    // 1. Unbound: the consent this machine gave is withdrawn.
+    let binding = fleet
+        .ok("GET", &format!("/targets/{TARGET_B}/binding"), Value::Null)
+        .await;
+    let unbound = fleet
         .ok(
             "DELETE",
-            &format!("/targets/{TARGET_B}/grants/{grant}"),
-            json!({"actor":Fleet::person()}),
+            &format!("/targets/{TARGET_B}/binding"),
+            json!({"target":{"owner_checkout_id":fleet.owner.id,"target_id":TARGET_B},
+                "expected_binding_revision":binding["revision"],
+                "previous_destination":binding["destination"],"actor":Fleet::person()}),
         )
         .await;
     let (status, denied) = fleet
@@ -251,7 +255,7 @@ async fn hs2_2ey9dp_lost_access_mid_run_stops_the_orchestrator_acting_on_the_tar
         )
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{denied}");
-    assert_eq!(denied["code"], "grant_revoked", "{denied}");
+    assert_eq!(denied["code"], "target_unavailable", "{denied}");
     // The loop's next pass neither starts a replacement nor stops the session it can
     // no longer read: it keeps it, busy and not safe, for a person to decide.
     let tick = fleet
@@ -273,32 +277,6 @@ async fn hs2_2ey9dp_lost_access_mid_run_stops_the_orchestrator_acting_on_the_tar
         .ok("GET", &format!("/runs/{}", b.run_id), Value::Null)
         .await;
     assert_eq!(shown["state"], "dispatched", "{shown}");
-
-    // 2. A replacement grant that expires before the work is done.
-    let expires = super::session_work::now_ms() + 2_000;
-    fleet.grant(TARGET_B, expires).await;
-    let synced = fleet
-        .ok(
-            "POST",
-            &format!("/runs/{}/sync", b.run_id),
-            json!({"actor":Fleet::ai()}),
-        )
-        .await;
-    assert_eq!(synced["state"], "dispatched", "{synced}");
-    // Waiting for a known deadline, not polling for a state.
-    tokio::time::sleep(Duration::from_millis(
-        expires.saturating_sub(super::session_work::now_ms()) + 200,
-    ))
-    .await;
-    let (status, denied) = fleet
-        .call(
-            "POST",
-            &format!("/runs/{}/sync", b.run_id),
-            json!({"actor":Fleet::ai()}),
-        )
-        .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "{denied}");
-    assert_eq!(denied["code"], "grant_expired", "{denied}");
     let audit = fleet
         .ok("GET", "/audit?after=0&limit=500", Value::Null)
         .await;
@@ -309,14 +287,54 @@ async fn hs2_2ey9dp_lost_access_mid_run_stops_the_orchestrator_acting_on_the_tar
         .filter(|entry| entry["outcome"] == "denied")
         .map(|entry| entry["reason"].as_str().unwrap_or_default().to_owned())
         .collect();
-    assert!(reasons.contains(&"grant_revoked".to_owned()), "{reasons:?}");
-    assert!(reasons.contains(&"grant_expired".to_owned()), "{reasons:?}");
+    assert!(
+        reasons.contains(&"target_unavailable".to_owned()),
+        "{reasons:?}"
+    );
 
-    // 3. The work is finished on the peer meanwhile; a new grant lets the run see it.
-    fleet.finish(Side::Peer, &ticket, &b.worker).await;
-    fleet
-        .grant(TARGET_B, super::session_work::now_ms() + 3_600_000)
+    // 2. Bound again by a person, and every remembered rule on B forgotten: reading
+    // the run never asks, so the run is followed as before.
+    let candidate = fleet
+        .ok(
+            "POST",
+            "/inspect",
+            json!({"destination":{"kind":"remote","registration_id":ID,
+                "checkout_id":fleet.b_checkout.id}}),
+        )
         .await;
+    let revision = fleet.ok("GET", "/targets", Value::Null).await["revision"].clone();
+    let rebound = fleet
+        .ok(
+            "PUT",
+            &format!("/targets/{TARGET_B}/binding"),
+            json!({"target":{"owner_checkout_id":fleet.owner.id,"target_id":TARGET_B},
+                "expected_manifest_revision":revision,
+                "expected_binding_revision":unbound["revision"],
+                "previous_destination":null,"destination":candidate["destination"],
+                "actor":Fleet::person()}),
+        )
+        .await;
+    assert_eq!(rebound["usable"], true, "{rebound}");
+    for rule in fleet.rules[TARGET_B].clone() {
+        fleet
+            .ok(
+                "DELETE",
+                &format!("/permission-rules/{rule}"),
+                json!({"actor":Fleet::person()}),
+            )
+            .await;
+    }
+    let synced = fleet
+        .ok(
+            "POST",
+            &format!("/runs/{}/sync", b.run_id),
+            json!({"actor":Fleet::ai()}),
+        )
+        .await;
+    assert_eq!(synced["state"], "dispatched", "{synced}");
+
+    // 3. The work is finished on the peer meanwhile; the run sees it.
+    fleet.finish(Side::Peer, &ticket, &b.worker).await;
     let synced = fleet
         .ok(
             "POST",
@@ -425,28 +443,12 @@ async fn hs2_2ey9dp_cancelling_a_remote_run_lets_go_without_touching_the_workers
         )
         .await;
     let cancel = format!("/runs/{}/cancel", redispatched["run_id"].as_str().unwrap());
-    // HS2-WC3W2G: the person holds no grant of their own, so the gate denies telling
-    // the target. The answer is that denial, and the run records nothing.
-    let (status, refused) = fleet
+    // HS2-WC3W2G, HS2-XHQ1EH: cancelling only reduces activity, so a person's cancel
+    // is never refused by the gate: the mark is withdrawn on the peer.
+    let (status, answer) = fleet
         .call("POST", &cancel, json!({"actor":Fleet::person()}))
         .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
-    assert_eq!(refused["code"], "no_grant", "{refused}");
-    let still = fleet
-        .ok("GET", &cancel.replace("/cancel", ""), Value::Null)
-        .await;
-    assert_eq!(still["state"], "queued", "{still}");
-    assert_eq!(still["cancel_requested"], false, "{still}");
-    assert!(peer_ticket().up_next);
-    // The run's own actor cancels it, unless the loop already carried out the
-    // pending cancel with its own authority.
-    let (status, answer) = fleet
-        .call("POST", &cancel, json!({"actor":Fleet::ai()}))
-        .await;
-    assert!(
-        status == StatusCode::OK || answer["code"] == "run_not_active",
-        "{status} {answer}"
-    );
+    assert_eq!(status, StatusCode::OK, "{answer}");
     let withdrawn = fleet
         .ok(
             "GET",
@@ -775,11 +777,7 @@ async fn hs2_2ey9dp_a_refusing_peer_and_a_limited_tool_are_waited_out_and_failed
     let mut fleet = Fleet::new().await;
     // Target B may run either tool; the Codex-like one is preferred by weight.
     fleet
-        .grant_tools(
-            TARGET_B,
-            &[super::e2e::TOOL_B, super::e2e::TOOL_A],
-            super::session_work::now_ms() + 3_600_000,
-        )
+        .remember_tools(TARGET_B, &[super::e2e::TOOL_B, super::e2e::TOOL_A])
         .await;
     let policy = json!({
         "tools":[{"tool":super::e2e::TOOL_A,"max_sessions":4,"weight":10},

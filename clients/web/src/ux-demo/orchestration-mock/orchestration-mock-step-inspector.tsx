@@ -162,7 +162,7 @@ function NotRunning({ step, scenario }: { step: MockStep; scenario: MockScenario
             label="Answer"
             value={
               approval
-                ? 'Not placed · approval_required'
+                ? 'Not placed · permission_required'
                 : resource
                   ? 'Not placed · resource_held'
                   : step.level === 'confirmed'

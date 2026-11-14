@@ -1,6 +1,7 @@
 //! HS2-4J6V46: headless target operations, with cleanup before host config access.
-//! HS2-SBQ3T8 adds grants, access checks and the audit journal on the same runtime;
-//! HS2-YCJDEB the throughput policy and approvals; HS2-AZ15GA target tickets;
+//! HS2-SBQ3T8 adds access checks and the audit journal on the same runtime;
+//! HS2-YCJDEB the throughput policy; HS2-XHQ1EH permission requests and remembered
+//! rules in place of grants and approvals; HS2-AZ15GA target tickets;
 //! HS2-EBHDSB dispatch runs; HS2-AHG7HW tool capacity; HS2-J8PRTV target capacity and
 //! admission; HS2-WN0MXZ validation steps; HS2-5JBYPV CI and deployment gates of runs;
 //! HS2-GDJXGZ orchestrator-owned sessions.
@@ -27,8 +28,6 @@ pub(crate) struct OrchestrationArgs {
 enum OrchestrationCmd {
     /// List, declare, rename, remove, bind, unbind, resolve and inspect project targets.
     Target(TargetArgs),
-    /// List, issue, revoke and check delegated authority over one bound target.
-    Grant(GrantArgs),
     /// Create, read, update and link tickets in a declared target.
     Ticket(TicketArgs),
     /// Dispatch work to an exact target ticket and supervise the run.
@@ -40,8 +39,9 @@ enum OrchestrationCmd {
     Gate(GateArgs),
     /// Show, set, validate and dry-run the checked-in throughput policy.
     Policy(PolicyArgs),
-    /// List and answer decisions the policy will not take without a person.
-    Approval(ApprovalArgs),
+    /// HS2-XHQ1EH: list and answer the orchestrator's permission requests, forget a
+    /// remembered rule, and check what an action would need.
+    Permission(PermissionArgs),
     /// Show observed AI tool capacity, report a limit signal, and select a tool.
     ToolCapacity(ToolCapacityArgs),
     /// Read the capacity of the machine that hosts a target or a local checkout.
@@ -95,7 +95,7 @@ struct GateArgs {
 enum GateCmd {
     /// Tie the CI gate of the integrated target commit to a run and start watching it.
     /// Repeating it returns the same gate, and watches again after a failed or stopped
-    /// watch; another commit supersedes the older link. Needs a gates_observe grant.
+    /// watch; another commit supersedes the older link. Observing never asks a person.
     Link {
         run_id: String,
         /// The integrated target commit: all 40 hex characters.
@@ -141,9 +141,10 @@ enum GateCmd {
         wait_seconds: u64,
     },
     /// Ask for a deployment of the commit the run's CI gate passed, through the
-    /// target's checked-in script. Needs a deployments_run grant. With --production a
-    /// person is always asked first: answer with `orchestration approval approve`, then
-    /// repeat this command with the same --operation-id.
+    /// target's checked-in script. Asks a person through a permission request unless a
+    /// remembered rule allows it; with --production a person is always asked. Answer
+    /// with `orchestration permission answer`, then repeat this command with the same
+    /// --operation-id.
     Deploy {
         run_id: String,
         #[arg(long)]
@@ -281,9 +282,9 @@ enum RunCmd {
         /// Lease length for a direct claim, 5 to 240 (default 30).
         #[arg(long)]
         lease_minutes: Option<u32>,
-        /// HS2-42TARA: ask a person to let this operation start although its plan
-        /// step is not ready. The request waits as `approval_required` until someone
-        /// approves it with `approval approve`; repeat the command afterwards.
+        /// HS2-42TARA: start this operation although its plan step is not ready. A
+        /// person's own override goes ahead; an AI's waits as `decision_required` on a
+        /// decision note on the goal ticket (HS2-XHQ1EH); repeat it after the answer.
         #[arg(long)]
         override_readiness: bool,
     },
@@ -701,31 +702,142 @@ enum PolicyCmd {
         #[arg(long)]
         file: Option<String>,
     },
-    /// What a policy would let the orchestrator do per declared target, and whether
-    /// an actor's grants agree. Writes nothing and contacts no target.
+    /// What a policy's limits would let the orchestrator do per declared target, and
+    /// whether a person would be asked or a remembered rule answers. Writes nothing
+    /// and contacts no target.
     DryRun {
         #[arg(long)]
         file: Option<String>,
-        #[arg(long)]
-        actor: Option<String>,
     },
 }
 #[derive(Args)]
-struct ApprovalArgs {
+struct PermissionArgs {
     /// Registered owning checkout id.
     #[arg(long, global = true)]
     project: Option<String>,
     #[command(subcommand)]
-    command: ApprovalCmd,
+    command: PermissionCmd,
 }
 #[derive(Subcommand)]
-enum ApprovalCmd {
-    /// Requests for this project with their state.
+enum PermissionCmd {
+    /// This project's permission requests with their state, its remembered rules, and
+    /// any retired grant or approval files on this machine.
     List,
-    /// Allow one pending request; the approval is used once, within an hour.
-    Approve { approval_id: String },
-    /// Refuse one pending request.
-    Deny { approval_id: String },
+    /// Answer one waiting request as a person: allow_once (used once, when the action
+    /// happens), always_allow (also remembers a rule for its target, action and tool)
+    /// or deny (final for that operation). An AI actor is refused.
+    Answer {
+        request_id: String,
+        #[arg(long, value_parser = ["allow_once", "always_allow", "deny"])]
+        answer: String,
+    },
+    /// Remember a rule ahead of any request, as Always Allow would: actions of this
+    /// kind on the target (and, for session_start, with this tool) stop asking. A
+    /// person runs this; an AI actor is refused. Idempotent.
+    Remember {
+        target_id: String,
+        /// tickets_write, work_start, session_start, validation_run, deployments_run
+        /// or provisional_dispatch.
+        #[arg(long)]
+        action: String,
+        /// The AI tool, for session_start only.
+        #[arg(long)]
+        tool: Option<String>,
+    },
+    /// Forget one remembered rule; later actions with its key ask again.
+    Forget { rule_id: String },
+    /// Report what an action on a target would need now, against the cached binding.
+    /// Files nothing and is not authority.
+    Check {
+        target_id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        action: String,
+        /// The exact operation, to report its permission request.
+        #[arg(long)]
+        operation_id: Option<String>,
+        #[arg(long)]
+        tool: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        /// The check concerns starting one more session.
+        #[arg(long)]
+        starting: bool,
+        /// HS2-YCJDEB policy caps: orchestrator sessions already on the target.
+        #[arg(long, default_value_t = 0)]
+        target_sessions: u32,
+        /// Orchestrator sessions already on the target's machine.
+        #[arg(long, default_value_t = 0)]
+        machine_sessions: u32,
+        /// Orchestrator sessions already using the tool.
+        #[arg(long, default_value_t = 0)]
+        tool_sessions: u32,
+        /// The tool account the session would run under.
+        #[arg(long)]
+        account: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        account_sessions: u32,
+    },
+}
+fn permission_route(
+    project: &str,
+    command: PermissionCmd,
+) -> Result<(&'static str, String, Value)> {
+    let prefix = format!("/checkouts/{project}/orchestration");
+    Ok(match command {
+        PermissionCmd::List => ("GET", format!("{prefix}/permissions"), Value::Null),
+        PermissionCmd::Answer { request_id, answer } => (
+            "POST",
+            format!("{prefix}/permissions/{request_id}"),
+            json!({ "answer": answer }),
+        ),
+        PermissionCmd::Remember {
+            target_id,
+            action,
+            tool,
+        } => (
+            "POST",
+            format!("{prefix}/permission-rules"),
+            json!({ "target_id": target_id, "action": action, "tool": tool }),
+        ),
+        PermissionCmd::Forget { rule_id } => (
+            "DELETE",
+            format!("{prefix}/permission-rules/{rule_id}"),
+            json!({}),
+        ),
+        PermissionCmd::Check {
+            target_id,
+            actor,
+            action,
+            operation_id,
+            tool,
+            model,
+            starting,
+            target_sessions,
+            machine_sessions,
+            tool_sessions,
+            account,
+            account_sessions,
+        } => {
+            // A session check always states its load; zeros mean an idle machine.
+            let load = tool.as_ref().map(|_| {
+                json!({"target_sessions":target_sessions,"machine_sessions":machine_sessions,
+                    "tool_sessions":tool_sessions,"account":account,"account_sessions":account_sessions})
+            });
+            let session = match tool {
+                Some(tool) => json!({"tool":tool,"model":model,"starting":starting}),
+                None if model.is_some() || starting => bail!("--model and --starting need --tool"),
+                None => Value::Null,
+            };
+            (
+                "POST",
+                format!("{prefix}/targets/{target_id}/access"),
+                json!({"actor_id":actor,"action":action,"operation_id":operation_id,
+                    "session":session,"load":load}),
+            )
+        }
+    })
 }
 #[derive(Args)]
 struct ToolCapacityArgs {
@@ -854,189 +966,6 @@ fn policy_file(path: &str) -> Result<Value> {
         value = policy;
     }
     Ok(value)
-}
-#[derive(Args)]
-struct GrantArgs {
-    /// Registered owning checkout id, never a source/store id or label.
-    #[arg(long, global = true)]
-    project: Option<String>,
-    #[command(subcommand)]
-    command: GrantCmd,
-}
-#[derive(Subcommand)]
-enum GrantCmd {
-    /// Retained grants for a target with their state against this machine's binding.
-    List { target_id: String },
-    /// Issue a grant for one actor. A person runs this; an AI actor is refused.
-    Add {
-        target_id: String,
-        /// Retain an id across retries; omission mints one.
-        #[arg(long)]
-        grant_id: Option<String>,
-        /// The actor id the grant covers (a worker id, account, or tool name).
-        #[arg(long)]
-        actor: String,
-        /// tickets_read, tickets_write, work_start, gates_observe, validation_run,
-        /// sessions_manage, deployments_run. Repeatable.
-        #[arg(long = "action", required = true)]
-        actions: Vec<String>,
-        /// Lifetime such as 30m, 8h or 14d (at most 90d).
-        #[arg(long, conflicts_with = "expires_at_ms")]
-        expires_in: Option<String>,
-        /// Absolute expiry in Unix milliseconds; use it to retry with a retained id.
-        #[arg(long)]
-        expires_at_ms: Option<u64>,
-        /// For sessions_manage: `tool` or `tool:model,model`. Repeatable.
-        #[arg(long = "tool")]
-        tools: Vec<String>,
-        /// For sessions_manage: most sessions this actor may run on the target.
-        #[arg(long)]
-        max_concurrency: Option<u32>,
-    },
-    /// Withdraw a grant; idempotent, and works for an unreachable or unbound target.
-    Revoke { target_id: String, grant_id: String },
-    /// Report whether the cached binding and grants would allow an action. Not authority.
-    Check {
-        target_id: String,
-        #[arg(long)]
-        actor: String,
-        #[arg(long)]
-        action: String,
-        #[arg(long)]
-        tool: Option<String>,
-        #[arg(long)]
-        model: Option<String>,
-        /// Sessions this actor already runs on the target.
-        #[arg(long, default_value_t = 0)]
-        running: u32,
-        /// The check concerns starting one more session.
-        #[arg(long)]
-        starting: bool,
-        /// HS2-YCJDEB policy caps: orchestrator sessions already on the target.
-        #[arg(long, default_value_t = 0)]
-        target_sessions: u32,
-        /// Orchestrator sessions already on the target's machine.
-        #[arg(long, default_value_t = 0)]
-        machine_sessions: u32,
-        /// Orchestrator sessions already using the tool.
-        #[arg(long, default_value_t = 0)]
-        tool_sessions: u32,
-        /// The tool account the session would run under.
-        #[arg(long)]
-        account: Option<String>,
-        #[arg(long, default_value_t = 0)]
-        account_sessions: u32,
-    },
-}
-/// `30m`, `8h`, `14d`, or bare seconds.
-fn lifetime_ms(value: &str) -> Result<u64> {
-    let value = value.trim();
-    let (digits, unit) = match value.char_indices().find(|(_, c)| !c.is_ascii_digit()) {
-        Some((index, _)) => value.split_at(index),
-        None => (value, "s"),
-    };
-    let scale: u64 = match unit {
-        "s" => 1_000,
-        "m" => 60_000,
-        "h" => 3_600_000,
-        "d" => 86_400_000,
-        _ => bail!("lifetime must look like 30m, 8h or 14d"),
-    };
-    digits
-        .parse::<u64>()
-        .ok()
-        .and_then(|count| count.checked_mul(scale))
-        .filter(|ms| *ms > 0)
-        .ok_or_else(|| anyhow::anyhow!("lifetime must look like 30m, 8h or 14d"))
-}
-fn grant_route(project: &str, command: GrantCmd) -> Result<(&'static str, String, Value)> {
-    let prefix = |id: &str| format!("/checkouts/{project}/orchestration/targets/{id}");
-    Ok(match command {
-        GrantCmd::List { target_id } => {
-            ("GET", format!("{}/grants", prefix(&target_id)), Value::Null)
-        }
-        GrantCmd::Add {
-            target_id,
-            grant_id,
-            actor,
-            actions,
-            expires_in,
-            expires_at_ms,
-            tools,
-            max_concurrency,
-        } => {
-            let expires_at_ms = match (expires_in, expires_at_ms) {
-                (Some(lifetime), None) => {
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|time| u64::try_from(time.as_millis()).unwrap_or(u64::MAX))
-                        .unwrap_or(0);
-                    now.saturating_add(lifetime_ms(&lifetime)?)
-                }
-                (None, Some(at)) => at,
-                _ => bail!("pass exactly one of --expires-in or --expires-at-ms"),
-            };
-            let session_scope = match (tools.is_empty(), max_concurrency) {
-                (true, None) => Value::Null,
-                (false, Some(max_concurrency)) => json!({
-                    "max_concurrency": max_concurrency,
-                    "tools": tools.iter().map(|tool| match tool.split_once(':') {
-                        Some((tool, models)) => json!({"tool":tool,"models":models.split(',').collect::<Vec<_>>()}),
-                        None => json!({"tool":tool}),
-                    }).collect::<Vec<_>>(),
-                }),
-                _ => bail!("a session scope needs both --tool and --max-concurrency"),
-            };
-            (
-                "POST",
-                format!("{}/grants", prefix(&target_id)),
-                json!({"grant_id":grant_id,"actor_id":actor,"actions":actions,
-                    "session_scope":session_scope,"expires_at_ms":expires_at_ms}),
-            )
-        }
-        GrantCmd::Revoke {
-            target_id,
-            grant_id,
-        } => (
-            "DELETE",
-            format!("{}/grants/{grant_id}", prefix(&target_id)),
-            json!({}),
-        ),
-        GrantCmd::Check {
-            target_id,
-            actor,
-            action,
-            tool,
-            model,
-            running,
-            starting,
-            target_sessions,
-            machine_sessions,
-            tool_sessions,
-            account,
-            account_sessions,
-        } => {
-            // A session check always states its load; zeros mean an idle machine.
-            let load = tool.as_ref().map(|_| {
-                json!({"target_sessions":target_sessions,"machine_sessions":machine_sessions,
-                    "tool_sessions":tool_sessions,"account":account,"account_sessions":account_sessions})
-            });
-            let session = match tool {
-                Some(tool) => {
-                    json!({"tool":tool,"model":model,"running":running,"starting":starting})
-                }
-                None if model.is_some() || starting || running > 0 => {
-                    bail!("--model, --running and --starting need --tool")
-                }
-                None => Value::Null,
-            };
-            (
-                "POST",
-                format!("{}/access", prefix(&target_id)),
-                json!({"actor_id":actor,"action":action,"session":session,"load":load}),
-            )
-        }
-    })
 }
 #[derive(Args)]
 struct TargetArgs {
@@ -1215,11 +1144,6 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let request = route(&owner_id, arguments.command)?;
             (owner_id, request)
         }
-        OrchestrationCmd::Grant(arguments) => {
-            let owner_id = required(arguments.project.clone())?;
-            let request = grant_route(&owner_id, arguments.command)?;
-            (owner_id, request)
-        }
         OrchestrationCmd::Ticket(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let request = ticket_route(&owner_id, arguments.command);
@@ -1268,10 +1192,9 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Policy(arguments) => {
             let owner_id = required(arguments.project.clone())?;
             let prefix = format!("/checkouts/{owner_id}/orchestration/policy");
-            let proposal = |file: Option<String>, actor: Option<String>| -> Result<Value> {
+            let proposal = |file: Option<String>| -> Result<Value> {
                 Ok(json!({
                     "policy": file.as_deref().map(policy_file).transpose()?,
-                    "actor_id": actor,
                 }))
             };
             let request = match arguments.command {
@@ -1287,30 +1210,17 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                         "read_revision": expected_revision.is_none()}),
                 ),
                 PolicyCmd::Validate { file } => {
-                    ("POST", format!("{prefix}/validate"), proposal(file, None)?)
+                    ("POST", format!("{prefix}/validate"), proposal(file)?)
                 }
-                PolicyCmd::DryRun { file, actor } => {
-                    ("POST", format!("{prefix}/dry-run"), proposal(file, actor)?)
+                PolicyCmd::DryRun { file } => {
+                    ("POST", format!("{prefix}/dry-run"), proposal(file)?)
                 }
             };
             (owner_id, request)
         }
-        OrchestrationCmd::Approval(arguments) => {
+        OrchestrationCmd::Permission(arguments) => {
             let owner_id = required(arguments.project.clone())?;
-            let prefix = format!("/checkouts/{owner_id}/orchestration/approvals");
-            let request = match arguments.command {
-                ApprovalCmd::List => ("GET", prefix, Value::Null),
-                ApprovalCmd::Approve { approval_id } => (
-                    "POST",
-                    format!("{prefix}/{approval_id}"),
-                    json!({"approve": true}),
-                ),
-                ApprovalCmd::Deny { approval_id } => (
-                    "POST",
-                    format!("{prefix}/{approval_id}"),
-                    json!({"approve": false}),
-                ),
-            };
+            let request = permission_route(&owner_id, arguments.command)?;
             (owner_id, request)
         }
         OrchestrationCmd::Audit {

@@ -1061,20 +1061,26 @@ remote server; external providers are covered only by refusal paths. Not yet run
 3. Disable the connection on the target machine and confirm the next operation is
    refused without contacting the provider.
 
-## Orchestration grants and audit (HS2-SBQ3T8)
+## Orchestration permission requests and audit (HS2-XHQ1EH)
 
-Use disposable machine homes and synthetic projects only. No rendered interface is
-added by this ticket. The automated CLI/HTTP/MCP flows pass; this checklist covers
-what needs two real paired machines and has not been run.
+Use disposable machine homes and synthetic projects only. The automated CLI, HTTP,
+MCP and browser flows pass; this checklist covers what needs two real paired
+machines or a desktop notification and has not been run.
 
-1. Bind a target to a paired remote checkout, issue a `tickets_read` grant, and
-   confirm `grant check` allows it. Revoke the pairing on the remote machine and
-   confirm the next authorized action is denied with `target_unavailable` while
-   `grant list` still shows the grant.
-2. From a second machine, request the grant, access and audit routes of the first
-   with a read-write device certificate and confirm each is refused.
-3. In a session launched by Hot Sheet, run `orchestration grant add` and confirm
-   `forbidden`; run `grant list` and `audit` and confirm they work.
+1. Bind a target to a paired remote checkout and confirm reads work without any
+   permission. Have an AI session create a target ticket: confirm the permission
+   card appears in the desktop app (and as a system notification when the window is
+   hidden), names the orchestrator and the target project, and offers no Allow This
+   AI Session. Answer Allow Once and confirm the same call then succeeds once.
+2. Answer Always Allow on a second request and confirm Settings → Permissions lists
+   the rule with the target project and the orchestrator; revoke it there and
+   confirm the next action asks again.
+3. Revoke the pairing on the remote machine and confirm the next action is denied
+   with `target_unavailable`.
+4. From a second machine, request the permission, access and audit routes of the
+   first with a read-write device certificate and confirm each is refused.
+5. In a session launched by Hot Sheet, run `orchestration permission answer` and
+   confirm `forbidden`; run `permission list` and `audit` and confirm they work.
 
 ## Orchestration target declarations and bindings (HS2-4J6V46)
 
@@ -1237,9 +1243,9 @@ GitHub repository; never a customer project.
    works B: `run status` shows `unreachable` and `stale`; reconnect and confirm the run
    catches up. Restart this machine's server while B is worked: no second session
    starts on either machine.
-4. **Lost access.** Revoke the grant for B as a person: `run sync` answers
-   `grant_revoked`, and nothing starts or stops on B. Grant again and let B finish;
-   confirm both sessions are wound down after `idle_minutes`.
+4. **Lost access.** Unbind B as a person: `run sync` answers `target_unavailable`,
+   and nothing starts or stops on B. Bind it again and let B finish; confirm both
+   sessions are wound down after `idle_minutes`.
 5. **Windows host.** On a Windows target, confirm the session starts in the target
    checkout (its PTY and process handling differ, HS2-2R32SD) and that capacity
    reports `null` memory and CPU (§26.10) without blocking admission when the owner

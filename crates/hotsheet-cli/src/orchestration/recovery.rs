@@ -113,7 +113,7 @@ impl OrchestrationRuntime {
                 operation_id: Some(run.operation_id.clone()),
                 outcome: AuditOutcome::Succeeded,
                 reason,
-                grant_id: None,
+                permission_id: None,
             },
         )
     }

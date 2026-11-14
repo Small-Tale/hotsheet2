@@ -5,19 +5,18 @@
 //! dependent B. Synthetic tickets and identities only; no AI tool is started.
 use hotsheet_model::{NoteKind, Ticket};
 use hotsheet_ticketing::orchestration::{
-    ApprovalGate, ApprovalPolicy, ApprovalState, AuditOutcome, BindTarget, Coverage, CpuCapacity,
-    CreateGrant, DeclarationState, DiskCapacity, GateKind, GateRegistry, GateState,
-    HostObservation, MachineLimits, MemoryCapacity, PlacementPolicy, PolicyBody, ReadinessError,
-    ReadinessLevel, ReplaceTargets, RunEventKind, SessionScope, SetPolicy, Speculation,
-    TargetAction, TargetDeclaration, TargetDestination, TargetPolicy, ToolAvailability, ToolPolicy,
-    ToolScope,
+    AuditOutcome, BindTarget, Coverage, CpuCapacity, DeclarationState, DiskCapacity, GateKind,
+    GateRegistry, GateState, HostObservation, MachineLimits, MemoryCapacity, PermissionAction,
+    PermissionAnswer, PermissionState, PlacementPolicy, PolicyBody, ReadinessError, ReadinessLevel,
+    ReplaceTargets, RunEventKind, SetPolicy, Speculation, TargetAction, TargetDeclaration,
+    TargetDestination, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
 };
 use hotsheet_ticketing::provisional::{GateResult, SpeculationPolicy};
 use hotsheet_ticketing::{FsStore, NewTicket, Settings, StoreMetadata, TicketPatch, ops};
 use serde_json::{Value, json};
 
 use super::gates::{CI, Scripted, link, sha, verdict};
-use super::tickets::{Machine, NOW, bind_and_grant, human, machine, unsupported, worker};
+use super::tickets::{Machine, NOW, bind_and_allow, human, machine, unsupported, worker};
 use super::*;
 use crate::coordination::speculation::{Recovery, SpeculationState};
 
@@ -83,7 +82,8 @@ struct Opt {
     allowed: bool,
     automatic: bool,
     max_depth: u32,
-    required_for: Vec<ApprovalGate>,
+    /// HS2-XHQ1EH: remember no `provisional_dispatch` rule, so a person is asked.
+    ask_ahead: bool,
     /// `targets[].speculation` for targets 1 and 2.
     overrides: [Option<bool>; 2],
     /// `targets[].max_sessions` for target 2.
@@ -112,16 +112,13 @@ impl Opt {
                 .map(|n| TargetPolicy {
                     target_id: id(n),
                     enabled: true,
-                    actions: ACTIONS.to_vec(),
+                    actions: None,
                     tools: vec![scope()],
                     max_sessions: if n == 2 { self.cap.max(1) } else { 2 },
                     machine: None,
                     speculation: self.overrides[usize::try_from(n - 1).unwrap()],
                 })
                 .into(),
-            approval: ApprovalPolicy {
-                required_for: self.required_for.clone(),
-            },
             speculation: Speculation {
                 allowed: self.allowed,
                 max_depth: self.max_depth.max(1),
@@ -401,7 +398,7 @@ fn two(opt: Option<&Opt>, tx: &mut Transaction<'_>) -> Two {
         .with_capacity_probe(probe.clone())
         .with_session_executor(sessions.clone())
         .with_gate_provider(ci.clone());
-    bind_and_grant(&m, 1, &ACTIONS[..2], tx);
+    bind_and_allow(&m, 1, &ACTIONS[..2], tx);
     // A second project with its own ticket store, bound as target 2.
     let project = m._root.path().join("second");
     std::fs::create_dir(&project).unwrap();
@@ -452,34 +449,30 @@ fn two(opt: Option<&Opt>, tx: &mut Transaction<'_>) -> Two {
             .usable
     );
     for n in [1, 2] {
-        let grant = |actions: Vec<TargetAction>, session_scope, tx: &mut Transaction<'_>| {
+        allow_on(
+            &m.runtime,
+            &m.owner.id,
+            &id(n),
+            &[TargetAction::WorkStart, TargetAction::SessionsManage],
+            &["codex"],
+            tx,
+        );
+        // HS2-XHQ1EH: building ahead is its own decision, remembered unless the test
+        // wants a person asked.
+        if !opt.is_some_and(|opt| opt.ask_ahead) {
             m.runtime
-                .grant(
-                    &m.reference(n),
-                    CreateGrant {
-                        grant_id: None,
-                        actor_id: "worker-1".into(),
-                        actions,
-                        session_scope,
-                        expires_at_ms: 10_000,
+                .permission_remember(
+                    &m.owner.id,
+                    RememberPermission {
+                        target_id: id(n),
+                        action: PermissionAction::ProvisionalDispatch,
+                        tool: None,
                     },
                     Some(&human()),
                     tx,
                 )
                 .unwrap();
-        };
-        if n == 2 {
-            grant(ACTIONS[..2].to_vec(), None, tx);
         }
-        grant(vec![TargetAction::WorkStart], None, tx);
-        grant(
-            vec![TargetAction::SessionsManage],
-            Some(SessionScope {
-                tools: vec![scope()],
-                max_concurrency: 4,
-            }),
-            tx,
-        );
     }
     own_policy(&m.target.root, true, 1);
     own_policy(&second.root, true, 1);
@@ -1434,52 +1427,52 @@ fn hs2_jsf985_the_scheduler_places_provisional_work_only_under_automatic_placeme
 }
 
 #[test]
-fn hs2_jsf985_a_policy_can_ask_a_person_before_each_provisional_dispatch() {
+fn hs2_xhq1eh_a_person_is_asked_before_building_ahead_unless_remembered() {
     tx!(tx);
     let opt = Opt {
         automatic: true,
-        required_for: vec![ApprovalGate::ProvisionalDispatch],
+        ask_ahead: true,
         ..Opt::on()
     };
     let pending = |t: &Two, tx: &mut Transaction<'_>| {
         t.m.runtime
-            .approvals(&t.owner(), tx)
+            .permission_list(&t.owner(), tx)
             .unwrap()
+            .requests
             .into_iter()
-            .filter(|approval| approval.gate == ApprovalGate::ProvisionalDispatch)
-            .map(|approval| (approval.approval_id, approval.operation_id, approval.state))
+            .map(|view| view.request)
+            .filter(|request| request.key.action == PermissionAction::ProvisionalDispatch)
+            .map(|request| (request.request_id, request.operation_id, request.state))
             .collect::<Vec<_>>()
     };
-    // A dispatch asks once, however often it is repeated, and proceeds once approved.
+    // A dispatch asks once, however often it is repeated, and proceeds once allowed.
     let t = two(Some(&opt), &mut tx);
     for _ in 0..2 {
-        assert!(matches!(
-            t.dispatch_b(&mut tx),
-            Err(OrchestrationError::Denied(
-                hotsheet_ticketing::orchestration::DenialReason::ApprovalRequired
-            ))
-        ));
+        permission_request(t.dispatch_b(&mut tx));
     }
     let asked = pending(&t, &mut tx);
     assert_eq!(asked.len(), 1);
     assert_eq!(
         (asked[0].1.as_str(), asked[0].2),
-        ("op-b", ApprovalState::Pending)
+        ("op-b", PermissionState::Pending)
     );
     assert!(t.status().work.is_empty());
-    t.m.runtime
-        .decide_approval(&t.owner(), &asked[0].0, true, Some(&human()), &mut tx)
-        .unwrap();
+    answer(
+        &t.m.runtime,
+        &t.owner(),
+        &asked[0].0,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     t.dispatch_b(&mut tx).unwrap();
-    assert_eq!(pending(&t, &mut tx)[0].2, ApprovalState::Consumed);
+    // Used once the run was recorded.
+    assert_eq!(pending(&t, &mut tx)[0].2, PermissionState::Used);
     assert_eq!(t.only().operation_id, "op-b");
     assert_eq!(
         t.audited("provisional_dispatch"),
         [
-            (AuditOutcome::Denied, Some("approval_required".into())),
-            (AuditOutcome::Denied, Some("approval_required".into())),
-            // The person's answer is audited under the gate it was asked for.
-            (AuditOutcome::Approved, None),
+            (AuditOutcome::Denied, Some("permission_required".into())),
+            (AuditOutcome::Denied, Some("permission_required".into())),
             (AuditOutcome::Allowed, Some("provisional".into())),
         ]
     );
@@ -1488,31 +1481,41 @@ fn hs2_jsf985_a_policy_can_ask_a_person_before_each_provisional_dispatch() {
     let denied = two(Some(&opt), &mut tx);
     assert!(denied.dispatch_b(&mut tx).is_err());
     let asked = pending(&denied, &mut tx);
-    denied
-        .m
-        .runtime
-        .decide_approval(&denied.owner(), &asked[0].0, false, Some(&human()), &mut tx)
-        .unwrap();
+    answer(
+        &denied.m.runtime,
+        &denied.owner(),
+        &asked[0].0,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
     assert_eq!(
         refusal(denied.dispatch_b(&mut tx)),
         ReadinessError::ProvisionalRefused
     );
     assert!(denied.status().work.is_empty());
 
-    // The scheduler's start waits the same way, and the approval is used by it.
+    // The scheduler's start waits the same way, and the answer is used by it.
     let s = two(Some(&opt), &mut tx);
     let tick = s.tick(&mut tx);
-    assert_eq!(tick.outcomes[0].outcome, "approval_required");
+    assert_eq!(tick.outcomes[0].outcome, "permission_required");
     assert!(s.sessions.calls().is_empty() && s.status().work.is_empty());
     let asked = pending(&s, &mut tx);
     assert_eq!(asked.len(), 1);
+    assert_eq!(
+        tick.outcomes[0].detail.as_deref(),
+        Some(asked[0].0.as_str())
+    );
     assert_eq!(asked[0].1, format!("sched-start-{}", s.step_b));
-    s.m.runtime
-        .decide_approval(&s.owner(), &asked[0].0, true, Some(&human()), &mut tx)
-        .unwrap();
+    answer(
+        &s.m.runtime,
+        &s.owner(),
+        &asked[0].0,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
     let tick = s.tick(&mut tx);
     assert_eq!(tick.outcomes[0].outcome, "started");
-    assert_eq!(pending(&s, &mut tx)[0].2, ApprovalState::Consumed);
+    assert_eq!(pending(&s, &mut tx)[0].2, PermissionState::Used);
     assert_eq!(s.only().state, SpeculationState::Provisional);
 }
 

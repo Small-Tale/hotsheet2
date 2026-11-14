@@ -16,7 +16,7 @@ pub const MAX_TARGET_SOURCES: usize = 64;
 pub const MAX_PROJECTION_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetRef {
     pub owner_checkout_id: String,

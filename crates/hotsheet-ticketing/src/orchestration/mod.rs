@@ -1,16 +1,16 @@
 //! HS2-4J6V46: shared target declarations and reviewed machine-local bindings.
 //! Network, provider metadata, clock and randomness remain injected boundaries.
 
-mod approvals;
+mod actions;
 mod assignment;
 mod audit;
 mod bindings;
 mod capacity;
 pub(crate) mod contract;
 mod gates;
-mod grants;
 mod joining;
 mod manifest;
+mod permissions;
 mod policy;
 mod provisional;
 mod readiness;
@@ -29,10 +29,7 @@ mod tool_capacity;
 mod validation;
 mod workflow;
 
-pub use approvals::{
-    APPROVAL_PENDING_MS, APPROVAL_VALID_MS, Approval, ApprovalRegistry, ApprovalState,
-    MAX_APPROVALS,
-};
+pub use actions::{AccessDecision, AccessRequest, DenialReason, SessionRequest, TargetAction};
 pub use assignment::{
     AssignmentDecision, AssignmentInput, AssignmentState, DEFAULT_DISPATCHER_WAIT_MINUTES,
     decide_assignment,
@@ -55,21 +52,22 @@ pub use gates::{
     GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, GateTransition,
     Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, summarize, valid_commit, valid_script,
 };
-pub use grants::{
-    AccessDecision, AccessRequest, CreateGrant, DenialReason, Grant, GrantRegistry, GrantState,
-    GrantView, MAX_GRANT_CONCURRENCY, MAX_GRANT_LIFETIME_MS, MAX_GRANT_MODELS, MAX_GRANT_TOOLS,
-    MAX_GRANTS, MAX_GRANTS_PER_TARGET, SessionRequest, SessionScope, TargetAction, ToolScope,
-    destination_key,
-};
 pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
 };
 pub use manifest::ManifestStore;
+pub use permissions::{
+    Answered, Asked, DecisionAsked, MAX_DECISIONS, MAX_PERMISSION_REQUESTS, MAX_PERMISSION_RULES,
+    PERMISSION_ALLOWED_MS, PERMISSION_PENDING_MS, PermissionAction, PermissionAnswer,
+    PermissionAsk, PermissionKey, PermissionLedger, PermissionRequest, PermissionRule,
+    PermissionState, RETIRED_APPROVALS_FILE, RETIRED_GRANTS_FILE, RetiredAuthority,
+    retired_authority,
+};
 pub use policy::{
-    AccountPolicy, ApprovalGate, ApprovalPolicy, MAX_POLICY_ACCOUNTS, MAX_POLICY_SESSIONS,
+    AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS, MAX_POLICY_SESSIONS,
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, PlacementPolicy, PolicyBody,
     PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore, PolicyVerdict, PolicyView,
-    SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy, WindDown,
+    SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy, ToolScope, WindDown,
 };
 pub use provisional::{
     ProvisionalBasis, ProvisionalStanding, ProvisionalStore, SpeculationInputs, gate_observation,
@@ -172,9 +170,18 @@ pub enum OrchestrationError {
     Observation(TargetFailure),
     #[error("orchestration storage is unavailable")]
     Storage(#[source] std::io::Error),
-    /// HS2-SBQ3T8: no grant (or policy) authorizes this actor's action on the target.
+    /// HS2-XHQ1EH: the target is unavailable, the policy's limits refuse the action,
+    /// or a person denied it.
     #[error("orchestration action is not authorized: {}", .0.code())]
     Denied(DenialReason),
+    /// HS2-XHQ1EH: a person has not answered the permission request yet. Nothing
+    /// waits for the answer; the answer wakes the scheduler.
+    #[error("orchestration action waits for permission request {request_id}")]
+    PermissionRequired { request_id: String },
+    /// HS2-XHQ1EH: a judgment call waits on a person's answer to the `FEEDBACK
+    /// NEEDED` note on the orchestration ticket.
+    #[error("orchestration action waits for a decision on note {note_id}")]
+    DecisionRequired { note_id: String },
     /// HS2-SBQ3T8: the caller may never perform this operation, whatever is granted.
     #[error("orchestration operation is forbidden: {0}")]
     Forbidden(&'static str),
@@ -219,6 +226,8 @@ impl OrchestrationError {
             Self::Observation(failure) => failure.code(),
             Self::Storage(_) => "storage_unavailable",
             Self::Denied(reason) => reason.code(),
+            Self::PermissionRequired { .. } => DenialReason::PermissionRequired.code(),
+            Self::DecisionRequired { .. } => DenialReason::DecisionRequired.code(),
             Self::Forbidden(_) => "forbidden",
             Self::TargetOperation(error) => error.code(),
             Self::Run(error) => error.code(),
@@ -226,6 +235,16 @@ impl OrchestrationError {
             Self::Gate(error) => error.code(),
             Self::Readiness(error) => error.code(),
             Self::Session(error) => error.code(),
+        }
+    }
+
+    /// HS2-XHQ1EH: the record a person answers to let a refused action go ahead:
+    /// `("request_id", id)` for a permission request, `("note_id", id)` for a decision.
+    pub fn answer_reference(&self) -> Option<(&'static str, &str)> {
+        match self {
+            Self::PermissionRequired { request_id } => Some(("request_id", request_id)),
+            Self::DecisionRequired { note_id } => Some(("note_id", note_id)),
+            _ => None,
         }
     }
 }
@@ -303,8 +322,6 @@ impl Transaction<'_> {
 }
 
 #[cfg(test)]
-mod approval_tests;
-#[cfg(test)]
 mod assignment_tests;
 #[cfg(test)]
 mod audit_tests;
@@ -315,9 +332,9 @@ mod capacity_tests;
 #[cfg(test)]
 mod gate_tests;
 #[cfg(test)]
-mod grant_tests;
-#[cfg(test)]
 mod joining_tests;
+#[cfg(test)]
+mod permission_tests;
 #[cfg(test)]
 mod policy_tests;
 #[cfg(test)]

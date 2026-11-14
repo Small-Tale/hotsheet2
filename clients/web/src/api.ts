@@ -4,7 +4,12 @@ import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
-import type { PermissionAutomation, PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
+import type {
+  OrchestratorAsk,
+  PermissionAutomation,
+  PermissionPattern,
+  PermissionSecretSuggestion,
+} from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
 import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -1090,6 +1095,9 @@ export interface PermissionRequest {
   agent?: string;
   always_allow_supported?: boolean;
   suggestions?: PermissionSecretSuggestion[];
+  /** HS2-XHQ1EH: `orchestrator` for an orchestration project's request. */
+  requester?: 'orchestrator';
+  orchestrator?: OrchestratorAsk;
 }
 export interface AiModelDescriptor {
   id: string;
