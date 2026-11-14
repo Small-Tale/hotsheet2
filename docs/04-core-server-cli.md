@@ -558,7 +558,9 @@ on Windows fails explicitly. Windows credential-cache routes remain available.
 `generation: "hs2"`, `api_version`, ticket prefix, and store schema. An HS2 MCP HTTP
 backend that receives 401/403 probes this marker so it can distinguish a bad HS2 secret
 from an HS1/wrong-service endpoint instead of giving generic credential advice
-(HS2-8H8BQM).
+(HS2-8H8BQM). A 403 whose JSON body carries a `code` (such as `permission_required`
+with its `request_id`) is a refusal, not an authentication failure: the backend passes
+it through whole and probes nothing (HS2-APSPVP).
 
 `/health` also reports the primary store's healthy `tickets` count and its unparseable
 `corrupt` files (HS2-PRVPCQ). That listing parses every ticket file, so it never runs on

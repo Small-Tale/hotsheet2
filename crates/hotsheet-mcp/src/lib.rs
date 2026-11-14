@@ -4206,11 +4206,21 @@ impl HttpBackend {
             }
             Err(ureq::Error::Status(code, resp)) => {
                 let text = resp.into_string().unwrap_or_default();
-                let fallback = serde_json::from_str::<Value>(&text)
-                    .ok()
+                let body = serde_json::from_str::<Value>(&text).ok();
+                // HS2-APSPVP: a coded 403 (`permission_required` with its `request_id`,
+                // `decision_required`, `policy_denied`) is a refusal the caller acts on,
+                // not a wrong secret; it passes through whole.
+                let coded = code == 403
+                    && body
+                        .as_ref()
+                        .is_some_and(|v| v.get("code").and_then(Value::as_str).is_some());
+                let fallback = body
+                    .as_ref()
                     .and_then(|v| v.get("error").and_then(Value::as_str).map(String::from))
-                    .unwrap_or(text);
-                let message = if matches!(code, 401 | 403) {
+                    .unwrap_or_else(|| text.clone());
+                let message = if coded {
+                    text
+                } else if matches!(code, 401 | 403) {
                     let health = self
                         .agent
                         .get(&format!("{}/health", self.base))
@@ -4448,6 +4458,42 @@ mod tests {
         assert_eq!(err.status, Some(403));
         assert!(err.message.contains("Hot Sheet 2 server"));
         assert!(err.message.contains("store prefix ACME, schema 1"));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn hs2_apspvp_a_coded_403_is_a_refusal_not_a_wrong_secret() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // One response only: a coded refusal must not probe /health.
+        let server = std::thread::spawn(move || {
+            let body = r#"{"error":"a person must allow this","code":"permission_required","request_id":"01SYNTHETICREQUEST000000000"}"#;
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        });
+
+        let backend = HttpBackend::new(format!("http://{addr}"), "synthetic-secret");
+        let error = backend
+            .send(
+                "POST",
+                "/checkouts/synthetic/orchestration/runs",
+                &json!({}),
+            )
+            .unwrap_err();
+        assert_eq!(error.status, Some(403));
+        let refusal: Value = serde_json::from_str(&error.message).unwrap();
+        assert_eq!(refusal["code"], "permission_required");
+        assert_eq!(refusal["request_id"], "01SYNTHETICREQUEST000000000");
+        assert!(!error.message.contains("update --secret"));
         server.join().unwrap();
     }
 
