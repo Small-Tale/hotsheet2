@@ -5015,6 +5015,13 @@ test('centers search controls on the first line while the query wraps', async ({
   await search.fill(
     'This intentionally long ordinary search query wraps across multiple lines while its peer controls stay aligned with the first line of editable text, even inside the narrower catalog detail pane used by the shared UX demo shell',
   );
+  // HS2-H3TBE9: the field grows to its wrapped height a few frames after the text lands (the
+  // toolbar group's width settles and the search field re-renders from its model first); a
+  // probe read 44 px for up to three frames after the insert. Wait on the wrapped height
+  // itself, then measure the settled layout.
+  await expect
+    .poll(async () => (await geometry()).group.height)
+    .toBeGreaterThan(blank.group.height + blank.search.lineHeight);
   const wrapped = await centered(false),
     wrappedBox = await group.boundingBox();
   expect(wrapped.group.height).toBeGreaterThan(blank.group.height + wrapped.search.lineHeight);
