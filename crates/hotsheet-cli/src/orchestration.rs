@@ -215,7 +215,11 @@ impl OrchestrationRuntime {
             external: Arc::new(tickets::LiveExternalProviders { home: home.clone() }),
             target_events: None,
             capacity: Arc::new(UnknownCapacity),
-            gate_providers: vec![Arc::new(GithubActionsGates::new(&home))],
+            gate_providers: vec![
+                Arc::new(GithubActionsGates::new(&home)),
+                // HS2-TPAHYA: GitLab CI pipelines, through the same watch Jobs.
+                Arc::new(GithubActionsGates::gitlab(&home)),
+            ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),
             claims: Arc::new(MachineClaims::new(&home)),

@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use hotsheet_jobs::{
-    CiTarget, CiWatchOptions, GITHUB_ACTIONS_KIND, JobStore, MonitorSlot, SlotState, TicketLink,
-    ensure_ci_watch, gate_state, rewatch_ci,
+    CiProvider, CiTarget, CiWatchOptions, GITHUB_ACTIONS_KIND, JobStore, MonitorSlot, SlotState,
+    TicketLink, ensure_ci_watch, gate_state, rewatch_ci,
 };
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
@@ -82,8 +82,11 @@ pub trait GateProvider: Send + Sync {
     }
 }
 
-/// The GitHub Actions gate of a commit, read from its watch Job (HS2-3R9V0R).
+/// The CI gate of a commit, read from its watch Job (HS2-3R9V0R): GitHub Actions, or
+/// HS2-TPAHYA GitLab CI ([`GithubActionsGates::gitlab`]). One adapter per provider.
 pub struct GithubActionsGates {
+    /// HS2-TPAHYA: the provider whose watch Jobs this adapter reads.
+    ci: CiProvider,
     home: PathBuf,
     store: JobStore,
     /// The Job store waiter, kept between follower steps (HS2-N1QDZW).
@@ -94,7 +97,17 @@ pub struct GithubActionsGates {
 
 impl GithubActionsGates {
     pub fn new(home: &Path) -> Self {
+        Self::for_provider(home, CiProvider::GithubActions)
+    }
+
+    /// HS2-TPAHYA: the GitLab CI adapter.
+    pub fn gitlab(home: &Path) -> Self {
+        Self::for_provider(home, CiProvider::GitlabCi)
+    }
+
+    fn for_provider(home: &Path, ci: CiProvider) -> Self {
         Self {
+            ci,
             home: home.into(),
             store: JobStore::at(home),
             waiter: hotsheet_jobs::KeptWaiter::default(),
@@ -110,7 +123,7 @@ impl GithubActionsGates {
     }
 
     fn watch(&self, gate: &Gate, ticket: Option<TicketLink>, again: bool) -> Result<(), GateError> {
-        let target = Self::target(gate)?;
+        let target = self.target(gate)?;
         let options = CiWatchOptions {
             ticket,
             can_cancel: false,
@@ -121,9 +134,13 @@ impl GithubActionsGates {
             .map_err(|_| GateError::ProviderUnavailable)
     }
 
-    fn target(gate: &Gate) -> Result<CiTarget, GateError> {
+    fn target(&self, gate: &Gate) -> Result<CiTarget, GateError> {
         let scope = gate.ci.as_ref().ok_or(GateError::ProviderUnsupported)?;
-        CiTarget::new(
+        let new = match self.ci {
+            CiProvider::GithubActions => CiTarget::new,
+            CiProvider::GitlabCi => CiTarget::gitlab,
+        };
+        new(
             &scope.repository,
             &gate.commit,
             &scope.workflow,
@@ -136,7 +153,7 @@ impl GithubActionsGates {
 
 impl GateProvider for GithubActionsGates {
     fn provider(&self) -> &'static str {
-        GITHUB_ACTIONS_KIND
+        self.ci.kind()
     }
 
     fn kind(&self) -> GateKind {
@@ -160,13 +177,13 @@ impl GateProvider for GithubActionsGates {
 
     fn read(&self, gate: &Gate) -> Result<GateReading, GateError> {
         use hotsheet_jobs::GateState as Ci;
-        let target = Self::target(gate)?;
+        let target = self.target(gate)?;
         let reading = gate_state(&self.store, &gate.owner_checkout_id, &target)
             .map_err(|_| GateError::ProviderUnavailable)?;
         let evidence = |run: &hotsheet_jobs::CiRun| {
             let commit = run.head_sha.to_ascii_lowercase();
             GateEvidence {
-                provider: GITHUB_ACTIONS_KIND.into(),
+                provider: self.ci.kind().into(),
                 reference: run.id.to_string(),
                 order: run.id,
                 attempt: run.attempt,
@@ -354,6 +371,24 @@ fn followed(gate: &Gate) -> bool {
     gate.awaits_provider()
 }
 
+/// HS2-TPAHYA: the project path of a declared repository identity on a host other than
+/// GitHub (GitLab.com or a self-managed GitLab), `group/[subgroup/…]project`.
+pub(super) fn gitlab_project(identity: &str) -> Option<String> {
+    let (host, path) = match identity.split_once("://") {
+        Some((_, rest)) => rest.split_once('/')?,
+        // The scp-like form: git@host:group/project
+        None => identity.split_once(':')?,
+    };
+    let host = host.rsplit('@').next()?.split(':').next()?;
+    if host.is_empty() || host.eq_ignore_ascii_case("github.com") {
+        return None;
+    }
+    let path = path.trim_end_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    (path.split('/').count() >= 2 && path.split('/').all(|segment| !segment.is_empty()))
+        .then(|| path.to_owned())
+}
+
 /// `owner/name` of a declared GitHub repository identity, or `None` for another host.
 pub(super) fn github_repository(identity: &str) -> Option<String> {
     let (_, rest) = identity.split_once("://")?;
@@ -385,8 +420,11 @@ impl OrchestrationRuntime {
     /// the watches it creates. Without this the adapter only reports whether one runs.
     #[must_use]
     pub fn with_job_monitor(self, monitor: Arc<dyn JobMonitor>) -> Self {
-        let adapter = GithubActionsGates::new(&self.home).with_monitor(monitor);
-        self.with_gate_provider(Arc::new(adapter))
+        let github = GithubActionsGates::new(&self.home).with_monitor(monitor.clone());
+        // HS2-TPAHYA: the same monitor observes GitLab CI watches.
+        let gitlab = GithubActionsGates::gitlab(&self.home).with_monitor(monitor);
+        self.with_gate_provider(Arc::new(github))
+            .with_gate_provider(Arc::new(gitlab))
     }
 
     /// HS2-VVHVF0: owning checkouts with a gate that still waits on a provider: what a
@@ -545,11 +583,24 @@ impl OrchestrationRuntime {
 
     /// The repository a CI gate of this target looks in. A target that declares a
     /// GitHub repository is only ever gated by that repository.
+    #[cfg(test)]
     pub(super) fn gate_repository(
         &self,
         owner_id: &str,
         target_id: &str,
         requested: Option<String>,
+    ) -> Result<String, OrchestrationError> {
+        self.gate_repository_for(owner_id, target_id, requested, CiProvider::GithubActions)
+    }
+
+    /// HS2-TPAHYA: the same for a provider: a GitLab gate takes the project path a
+    /// declared non-GitHub identity names.
+    pub(super) fn gate_repository_for(
+        &self,
+        owner_id: &str,
+        target_id: &str,
+        requested: Option<String>,
+        ci: CiProvider,
     ) -> Result<String, OrchestrationError> {
         let declared = self
             .declarations(owner_id)?
@@ -557,7 +608,10 @@ impl OrchestrationRuntime {
             .into_iter()
             .find(|target| target.target_id == target_id)
             .and_then(|target| target.expected_repository_identity)
-            .and_then(|identity| github_repository(&identity));
+            .and_then(|identity| match ci {
+                CiProvider::GithubActions => github_repository(&identity),
+                CiProvider::GitlabCi => gitlab_project(&identity),
+            });
         match (requested, declared) {
             (Some(requested), Some(declared)) if !requested.eq_ignore_ascii_case(&declared) => {
                 Err(OrchestrationError::Gate(GateError::RepositoryMismatch))
@@ -565,7 +619,7 @@ impl OrchestrationRuntime {
             (Some(requested), _) => Ok(requested),
             (None, Some(declared)) => Ok(declared),
             (None, None) => Err(OrchestrationError::Invalid(
-                "repository is required: the target declares no GitHub repository",
+                "repository is required: the target declares no repository on that provider",
             )),
         }
     }
@@ -599,8 +653,14 @@ impl OrchestrationRuntime {
             let provider = self
                 .gate_provider(&name, GateKind::Ci)
                 .ok_or(OrchestrationError::Gate(GateError::ProviderUnsupported))?;
+            // HS2-TPAHYA: each CI provider names its repository and pipeline its way.
+            let ci = CiProvider::from_kind(&name).unwrap_or_default();
             let repository =
-                self.gate_repository(owner_id, &run.target.target_id, request.repository)?;
+                self.gate_repository_for(owner_id, &run.target.target_id, request.repository, ci)?;
+            let default_workflow = match ci {
+                CiProvider::GithubActions => "CI",
+                CiProvider::GitlabCi => "*",
+            };
             let linked = self.gate_registry().link(
                 owner_id,
                 NewGate {
@@ -611,7 +671,7 @@ impl OrchestrationRuntime {
                     commit,
                     ci: Some(CiScope {
                         repository,
-                        workflow: request.workflow.unwrap_or_else(|| "CI".into()),
+                        workflow: request.workflow.unwrap_or_else(|| default_workflow.into()),
                         branch: request.branch.unwrap_or_else(|| "main".into()),
                         artifact: request.artifact,
                     }),

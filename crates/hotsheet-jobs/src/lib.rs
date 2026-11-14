@@ -30,6 +30,7 @@ mod error;
 mod feed;
 mod fixture;
 mod github;
+mod gitlab;
 mod lock;
 mod model;
 mod monitor;
@@ -52,9 +53,10 @@ pub use feed::{
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
-    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiTarget, GITHUB_ACTIONS_KIND,
-    GithubActionsSource, GithubApi, RunFloor, repo_from_remote,
+    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiProvider, CiTarget, GITHUB_ACTIONS_KIND,
+    GITLAB_CI_KIND, GithubActionsSource, GithubApi, RunFloor, repo_from_remote,
 };
+pub use gitlab::GitlabCiSource;
 pub use model::{
     ActiveStatus, Capabilities, Eta, EtaSource, ExternalRef, FeedState, FinalStatus, Job, JobKind,
     Lease, LeaseToken, Liveness, Outcome, ProducerFamily, RECORD_VERSION, Status, TicketLink,

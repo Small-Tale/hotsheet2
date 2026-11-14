@@ -1542,3 +1542,93 @@ fn hs2_tqg6at_a_ci_gate_names_the_artifact_its_evidence_records() {
         .unwrap();
     assert_eq!(hosted["reason"], "not_watched");
 }
+
+#[test]
+fn hs2_tpahya_a_gitlab_ci_gate_is_watched_and_read_like_github() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let linked = m
+        .runtime
+        .gate_link(
+            &owner,
+            &run,
+            serde_json::from_value(json!({"commit": a, "provider": "gitlab-ci",
+                "repository": "acme/platform/widgets"}))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(linked.gate.provider, "gitlab-ci");
+    let scope = linked.gate.ci.clone().unwrap();
+    assert_eq!(
+        (scope.repository.as_str(), scope.workflow.as_str()),
+        ("acme/platform/widgets", "*")
+    );
+    // One watch Job of the GitLab kind, observed by the same machine monitor.
+    let jobs = JobStore::at(&m.home).list(&owner).unwrap().jobs;
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].kind.name, "gitlab-ci");
+    assert_eq!(jobs[0].external.as_ref().unwrap().system, "gitlab-ci");
+    judge(
+        &m.home,
+        &owner,
+        linked.gate.watch_ref.as_deref().unwrap(),
+        "green",
+        &a,
+        91,
+    );
+    let green = m
+        .runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates { wait_ms: 0 },
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(green.summary.ci, GateState::Passed);
+    let evidence = green.summary.gates[0].evidence.clone().unwrap();
+    assert_eq!(
+        (
+            evidence.provider.as_str(),
+            evidence.reference.as_str(),
+            evidence.coverage
+        ),
+        ("gitlab-ci", "91", Coverage::Exact)
+    );
+    // A project path GitLab cannot address is refused by the adapter.
+    let odd: LinkGate = serde_json::from_value(
+        json!({"commit": sha('b'), "provider": "gitlab-ci", "repository": "widgets"}),
+    )
+    .unwrap();
+    assert_eq!(
+        gate_error(
+            m.runtime
+                .gate_link(&owner, &run, odd, Some(&worker()), &mut tx)
+        ),
+        GateError::ProviderUnsupported
+    );
+    // A declared identity on a GitLab host names the project.
+    assert_eq!(
+        super::super::gates::gitlab_project(
+            "https://gitlab.example.test/acme/platform/widgets.git"
+        )
+        .as_deref(),
+        Some("acme/platform/widgets")
+    );
+    assert_eq!(
+        super::super::gates::gitlab_project("git@gitlab.com:acme/widgets.git").as_deref(),
+        Some("acme/widgets")
+    );
+    assert_eq!(
+        super::super::gates::gitlab_project("https://github.com/acme/widgets"),
+        None
+    );
+}

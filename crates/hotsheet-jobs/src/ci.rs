@@ -9,7 +9,7 @@
 use std::time::{Duration, Instant};
 
 use crate::error::JobError;
-use crate::github::{CiTarget, GITHUB_ACTIONS_KIND, RunFloor};
+use crate::github::{CiProvider, CiTarget, RunFloor};
 use crate::model::{Capabilities, Job, JobKind, ProducerFamily, Status, TicketLink};
 use crate::signal::KeptWaiter;
 use crate::store::{JobStore, NewJob};
@@ -89,7 +89,7 @@ pub struct CiOutcome {
 }
 
 fn watches(job: &Job, target: &CiTarget) -> bool {
-    job.kind.name == GITHUB_ACTIONS_KIND
+    job.kind.name == target.provider.kind()
         && job
             .external
             .as_ref()
@@ -108,7 +108,7 @@ fn new_job(
         checkout_id: checkout_id.to_owned(),
         kind: JobKind {
             family: ProducerFamily::Watch,
-            name: GITHUB_ACTIONS_KIND.to_owned(),
+            name: target.provider.kind().to_owned(),
         },
         job_key: target.job_key(),
         title: format!(
@@ -272,7 +272,7 @@ pub fn wait_for_gate_change(
 /// The outcome record of a finished CI watch Job; `None` for any other Job or one that
 /// has not finished.
 pub fn ci_outcome(job: &Job) -> Option<CiOutcome> {
-    if job.kind.name != GITHUB_ACTIONS_KIND || !job.status.is_finished() {
+    if CiProvider::from_kind(&job.kind.name).is_none() || !job.status.is_finished() {
         return None;
     }
     let (target, _) = job.external.as_ref().and_then(CiTarget::parse)?;

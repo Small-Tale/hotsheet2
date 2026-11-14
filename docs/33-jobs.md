@@ -333,6 +333,30 @@ id and the store revision), `wait_for_gate_change`, `JobStore::wait_for_change`,
 `ci_outcome`, and `ensure_monitor_running`. A caller that creates a watch must
 make sure the monitor runs; the CLI does, and other callers are HS2-DVJTQN.
 
+## 33.11 GitLab CI watch as shipped (HS2-TPAHYA)
+
+A `gitlab-ci` watch Job follows one commit's CI gate exactly as §33.9 describes for
+GitHub Actions, through the same machine monitor and the same CI gate API
+(`ensure_ci_watch`, `gate_state`, `gate_of`); `CiTarget` carries the provider, and the
+Job kind and external system are `gitlab-ci`.
+
+- **Target.** The project's full path (two to twenty segments), the commit, a pipeline
+  `name` or `*` for any, and the branch. The external reference has the same parts
+  as GitHub's.
+- **Provider calls** (relative to `/api/v4`): the branch's push pipelines, newest first
+  (`projects/:path/pipelines?ref=&source=push`, conditional by ETag); the pipeline's
+  jobs as steps (`stage: name`); ancestry by `repository/merge_base` of the commit and
+  a pipeline head (the head covers the commit when the merge base is the commit),
+  cached, at most five per poll; cancel by `POST .../pipelines/:id/cancel`, only for
+  the commit's own unfinished pipeline.
+- **Verdicts.** `success` is green; `failed` red; `canceled` cancelled; `skipped` and
+  `manual` are no verdict; the rest wait or run. A retried pipeline keeps its id, so
+  a rewatch ignores a judged pipeline by id. Outcome refs have the same keys as
+  GitHub's, with `run_attempt` 1; no artifact digest exists to record.
+- **Credentials.** `GITLAB_TOKEN`, sent as `PRIVATE-TOKEN`, kept in memory only. The
+  API root is `HOTSHEET_GITLAB_API_URL` (default `https://gitlab.com/api/v4`), HTTPS
+  except loopback HTTP for tests. Reading a `glab` sign-in is HS2-RTEQ7R.
+
 ## 33.10 File watchers and change waiters (HS2-N1QDZW)
 
 Every wait in the command-line runtime that wakes on a file change starts its

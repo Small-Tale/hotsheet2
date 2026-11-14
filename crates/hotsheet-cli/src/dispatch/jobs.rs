@@ -517,6 +517,10 @@ fn monitor(home: &Path, args: MonitorArgs) -> Result<()> {
 
 fn register_sources(monitor: &mut Monitor, home: &Path) {
     monitor.register(Box::new(GithubActionsSource::new(UreqGithubApi::new(home))));
+    // HS2-TPAHYA: GitLab CI pipelines, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::GitlabCiSource::new(
+        super::job_gitlab::UreqGitlabApi::new(),
+    )));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.
     #[cfg(debug_assertions)]

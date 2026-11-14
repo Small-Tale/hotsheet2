@@ -1701,10 +1701,16 @@ code. Every field is an identifier, a count or a code.
 
 A `GateProvider` adapter serves one provider name and one kind. It starts a watch or
 an execution idempotently, answers the current reading from records it keeps itself,
-and offers a cursor with a blocking wait that is woken by the change. One adapter
-ships: `github-actions`, the watch Job of [33](33-jobs.md) (HS2-3R9V0R). The Job
-monitor observes GitHub; this machine reads the Job store and waits on its file
-changes. Other CI providers are HS2-TPAHYA.
+and offers a cursor with a blocking wait that is woken by the change. Two CI adapters
+ship, each the watch Job of [33](33-jobs.md): `github-actions` (HS2-3R9V0R) and
+`gitlab-ci` (HS2-TPAHYA, §33.11). The machine's one Job monitor observes the
+provider; this machine reads the Job store and waits on its file changes, so no
+client polls. A `gitlab-ci` gate takes the project's full path as `repository`
+(`group/[subgroup/…]project`, or the path a declared non-GitHub identity names) and
+a pipeline `name` as `workflow`, by default `*` (any push pipeline of the branch);
+the same coverage rules apply. GitLab's API exposes no artifact digest, so a GitLab
+verdict records no artifact. Watching a GitLab gate on the target's own server is
+HS2-2222QP; other providers are HS2-17HVNP.
 
 ### Coverage
 

@@ -24,14 +24,44 @@ const MAX_COMPARES_PER_POLL: usize = 5;
 const MIN_DURATIONS: usize = 3;
 const MAX_DURATIONS: usize = 10;
 
+/// HS2-TPAHYA: the Job kind name and the `external.system` of a GitLab CI watch.
+pub const GITLAB_CI_KIND: &str = "gitlab-ci";
+
+/// HS2-TPAHYA: which CI provider a watch observes.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum CiProvider {
+    #[default]
+    GithubActions,
+    GitlabCi,
+}
+
+impl CiProvider {
+    /// The Job kind name and external system of its watch.
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::GithubActions => GITHUB_ACTIONS_KIND,
+            Self::GitlabCi => GITLAB_CI_KIND,
+        }
+    }
+
+    pub fn from_kind(kind: &str) -> Option<Self> {
+        [Self::GithubActions, Self::GitlabCi]
+            .into_iter()
+            .find(|provider| provider.kind() == kind)
+    }
+}
+
 /// The commit whose CI gate is watched, and where to look for it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CiTarget {
-    /// `owner/name`.
+    /// HS2-TPAHYA: the provider that runs the CI.
+    pub provider: CiProvider,
+    /// `owner/name`; for GitLab the project's full path, `group/[subgroup/…]project`.
     pub repo: String,
     /// Full 40-character commit SHA, lowercase.
     pub sha: String,
-    /// The workflow's name as GitHub shows it, for example `CI`.
+    /// The workflow's name as GitHub shows it, for example `CI`. For GitLab the
+    /// pipeline's `name`, or `*` for any push pipeline of the branch.
     pub workflow: String,
     /// The shipping branch whose push runs count.
     pub branch: String,
@@ -71,19 +101,39 @@ impl CiTarget {
         branch: &str,
     ) -> Result<Self, crate::JobError> {
         let invalid = |field| crate::JobError::Invalid(field);
-        let part = |value: &str| {
-            !value.is_empty()
-                && value.len() <= 100
-                && value != "."
-                && value != ".."
-                && value
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
-        };
         match repo.split_once('/') {
             Some((owner, name)) if part(owner) && part(name) => {}
             _ => return Err(invalid("ci.repo")),
         }
+        Self::checked(CiProvider::GithubActions, repo, sha, workflow, branch)
+    }
+
+    /// HS2-TPAHYA: a GitLab CI target. `project` is the project's full path, two to
+    /// twenty segments. `workflow` is a pipeline name, or `*` for any push pipeline.
+    pub fn gitlab(
+        project: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let segments: Vec<&str> = project.split('/').collect();
+        if !(2..=20).contains(&segments.len())
+            || project.len() > 255
+            || !segments.iter().all(|s| part(s))
+        {
+            return Err(crate::JobError::Invalid("ci.repo"));
+        }
+        Self::checked(CiProvider::GitlabCi, project, sha, workflow, branch)
+    }
+
+    fn checked(
+        provider: CiProvider,
+        repo: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let invalid = |field| crate::JobError::Invalid(field);
         if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(invalid("ci.sha"));
         }
@@ -104,6 +154,7 @@ impl CiTarget {
             return Err(invalid("ci.workflow"));
         }
         Ok(Self {
+            provider,
             repo: repo.to_owned(),
             sha: sha.to_ascii_lowercase(),
             workflow: workflow.to_owned(),
@@ -132,8 +183,11 @@ impl CiTarget {
     /// Groups runs of one workflow on one branch for the history ETA.
     pub fn job_key(&self) -> String {
         format!(
-            "{GITHUB_ACTIONS_KIND}:{}:{}:{}",
-            self.repo, self.branch, self.workflow
+            "{}:{}:{}:{}",
+            self.provider.kind(),
+            self.repo,
+            self.branch,
+            self.workflow
         )
     }
 
@@ -157,16 +211,14 @@ impl CiTarget {
         }
         let id = parts.into_iter().map(escape).collect::<Vec<_>>().join("|");
         ExternalRef {
-            system: GITHUB_ACTIONS_KIND.to_owned(),
+            system: self.provider.kind().to_owned(),
             id,
         }
     }
 
     /// Read a target back from a Job's external operation.
     pub fn parse(external: &ExternalRef) -> Option<(Self, Option<RunFloor>)> {
-        if external.system != GITHUB_ACTIONS_KIND {
-            return None;
-        }
+        let provider = CiProvider::from_kind(&external.system)?;
         let parts: Vec<String> = external.id.split('|').map(unescape).collect();
         let (sha, floor, repo, branch, workflow, artifact) = match parts.as_slice() {
             [sha, floor, repo, branch, workflow] => (sha, floor, repo, branch, workflow, None),
@@ -185,16 +237,30 @@ impl CiTarget {
                 })
             }
         };
-        let target = Self::new(repo, sha, workflow, branch)
-            .ok()?
-            .with_artifact(artifact)
-            .ok()?;
+        let target = match provider {
+            CiProvider::GithubActions => Self::new(repo, sha, workflow, branch),
+            CiProvider::GitlabCi => Self::gitlab(repo, sha, workflow, branch),
+        }
+        .ok()?
+        .with_artifact(artifact)
+        .ok()?;
         Some((target, floor))
     }
 
     pub(crate) fn short_sha(&self) -> &str {
         &self.sha[..7]
     }
+}
+
+/// One segment of a repository or project path.
+fn part(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value != "."
+        && value != ".."
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
 }
 
 fn escape(part: &str) -> String {
@@ -559,7 +625,7 @@ impl<A: GithubApi> GithubActionsSource<A> {
     }
 }
 
-fn transient(response: &ApiResponse) -> WatchError {
+pub(crate) fn transient(response: &ApiResponse) -> WatchError {
     WatchError::Transient {
         retry_after_ms: response.retry_after_ms,
     }
@@ -939,7 +1005,7 @@ fn estimate_finish(runs: &[Run], current: &Run, now_ms: u64) -> Option<u64> {
 }
 
 /// Provider text made safe for a bounded single-line record field.
-fn clean(text: &str, max: usize) -> String {
+pub(crate) fn clean(text: &str, max: usize) -> String {
     let line: String = text
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
@@ -955,7 +1021,7 @@ fn clean(text: &str, max: usize) -> String {
     }
 }
 
-fn query_value(value: &str) -> String {
+pub(crate) fn query_value(value: &str) -> String {
     value
         .bytes()
         .map(|b| {
@@ -970,7 +1036,7 @@ fn query_value(value: &str) -> String {
 
 /// `2026-11-01T10:00:00Z` as milliseconds since the Unix epoch. GitHub's REST API
 /// answers in this one UTC form.
-fn parse_timestamp_ms(text: &str) -> Option<u64> {
+pub(crate) fn parse_timestamp_ms(text: &str) -> Option<u64> {
     let bytes = text.as_bytes();
     if bytes.len() != 20
         || bytes[4] != b'-'

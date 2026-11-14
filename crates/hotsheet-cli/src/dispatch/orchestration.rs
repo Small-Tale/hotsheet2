@@ -159,7 +159,7 @@ enum GateCmd {
         /// The shipping branch whose runs count (default main).
         #[arg(long)]
         branch: Option<String>,
-        /// The CI provider adapter (default github-actions).
+        /// The CI provider adapter: github-actions (default) or gitlab-ci (HS2-TPAHYA).
         #[arg(long)]
         provider: Option<String>,
         /// HS2-TQG6AT: the artifact whose digest a passed verdict records, by name;
