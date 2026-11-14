@@ -330,14 +330,13 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
         )
         .unwrap();
     }
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    while child.0.as_mut().unwrap().try_wait().unwrap().is_none() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "owned MCP fixture timed out"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    // HS2-E76Z9V: the reply is the condition. A first run dispatch makes about 40 Git
+    // process spawns (each claim is committed), so under a loaded gate one call can take
+    // longer than any fixed bound that fits an idle machine; a fixed 15 s bound failed
+    // there. Waiting for the exit also drains both pipes, so a chatty child cannot block
+    // on a full pipe. A genuine hang is still ended by nextest's slow-timeout
+    // (HS2-TT8E7S, `.config/nextest.toml`); `OwnedChild` kills the child if the request
+    // cannot be written.
     let output = child.0.take().unwrap().wait_with_output().unwrap();
     assert!(
         output.status.success(),
