@@ -18,6 +18,10 @@ const lines = (version: string, orchestrated = true, state = waiting.state): Orc
 });
 const ticket = { connection_id: waiting.target.connection_id, native_id: waiting.target.native_id };
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const now = (run: () => void) => {
+  run();
+  return () => undefined;
+};
 
 /** A server double: answers queue in order; a read with nothing queued stays open until stopped. */
 function server(answers: Array<OrchestrationTargetLines | Error>) {
@@ -44,7 +48,7 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
   it('reads once and holds no request open for a project nothing orchestrates', async () => {
     const fake = server([lines('v0', false)]);
     const shown = signal<Project | undefined>(project('api'));
-    const controller = createOrchestrationTargetLines({ shown, client: fake.client });
+    const controller = createOrchestrationTargetLines({ shown, client: fake.client, afterPaint: now });
     await settle();
     expect(fake.asked).toEqual([{ checkout: 'api', after: undefined }]);
     expect(controller.lineFor('api', ticket)).toBeUndefined();
@@ -54,7 +58,7 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
   it('long polls an orchestrated project by version and shows each change on the ticket it names', async () => {
     const fake = server([lines('v1'), lines('v2', true, 'running')]);
     const shown = signal<Project | undefined>(project('api'));
-    const controller = createOrchestrationTargetLines({ shown, client: fake.client });
+    const controller = createOrchestrationTargetLines({ shown, client: fake.client, afterPaint: now });
     await settle();
     await settle();
     expect(fake.asked.map((read) => read.after)).toEqual([undefined, 'v1', 'v2']);
@@ -62,10 +66,10 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
     expect(controller.lineFor('api', ticket)).toMatchObject({ state: undefined, goal: waiting.goal_slug });
     expect(controller.lineFor('other', ticket)).toBeUndefined();
     expect(controller.lineFor('api', { ...ticket, native_id: 'nope' })).toBeUndefined();
-    // Leaving the ticket views stops the open read and clears the lines; showing them again reads anew.
+    // Leaving the ticket views stops the open read; the lines last read stay for the next cached paint.
     shown.value = undefined;
     expect(fake.open.at(-1)?.aborted).toBe(true);
-    expect(controller.lineFor('api', ticket)).toBeUndefined();
+    expect(controller.lineFor('api', ticket)).toMatchObject({ goal: waiting.goal_slug });
     controller.dispose();
   });
 
@@ -82,6 +86,7 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
     const controller = createOrchestrationTargetLines({
       shown,
       client: fake.client,
+      afterPaint: now,
       delay: (ms) => {
         delays.push(ms);
         return Promise.resolve();
@@ -93,8 +98,35 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
     expect(controller.lineFor('api', ticket)?.state).toBe('Waits for permission');
     shown.value = project('web');
     expect(fake.asked.at(-1)).toEqual({ checkout: 'web', after: undefined });
-    expect(controller.lineFor('api', ticket)).toBeUndefined();
+    // The other project's lines stay cached for switching back; they never show for this one.
+    expect(controller.lineFor('api', ticket)?.state).toBe('Waits for permission');
+    expect(controller.lineFor('web', ticket)).toBeUndefined();
     controller.dispose();
     expect(fake.open.every((abort) => abort.aborted)).toBe(true);
+  });
+
+  it('reads only after the paint, and a switch before then reads nothing for the old project (HS2-8YHY6V)', async () => {
+    const fake = server([lines('b1', false)]);
+    const scheduled: Array<{ run: () => void; cancelled: boolean }> = [];
+    const shown = signal<Project | undefined>(project('api'));
+    const controller = createOrchestrationTargetLines({
+      shown,
+      client: fake.client,
+      afterPaint: (run) => {
+        const entry = { run, cancelled: false };
+        scheduled.push(entry);
+        return () => {
+          entry.cancelled = true;
+        };
+      },
+    });
+    expect(fake.asked).toEqual([]);
+    shown.value = project('web');
+    expect(scheduled.map((entry) => entry.cancelled)).toEqual([true, false]);
+    expect(fake.asked).toEqual([]);
+    scheduled[1].run();
+    await settle();
+    expect(fake.asked).toEqual([{ checkout: 'web', after: undefined }]);
+    controller.dispose();
   });
 });

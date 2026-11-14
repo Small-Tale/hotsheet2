@@ -4436,12 +4436,14 @@ still waits to the deadline, so a reader that keeps asking never spins.
 
 ### The client
 
-The web client reads the lines once when a project's List or Columns shows. While the
-answer says `orchestrated`, a cursor long poll keeps them current with bounded backoff
+The web client reads the lines once when a project's List or Columns shows, after the
+next paint, so a warm project switch paints its cached tickets first (HS2-8YHY6V). While
+the answer says `orchestrated`, a cursor long poll keeps them current with bounded backoff
 on failure; a project nothing orchestrates holds no request open and is read again
 when its ticket views show again (for example after adding it in the orchestration
-project's settings and returning to its tab). Leaving the ticket views stops the read
-and clears the lines.
+project's settings and returning to its tab). Leaving the ticket views stops the read;
+the lines last read stay in memory, so returning to the project paints them with its
+cached tickets until the next read replaces them.
 
 A target opened from a remote server, or bound remotely by an orchestration project on
 another machine, has no line yet (HS2-3D8D6V).
