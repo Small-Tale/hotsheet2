@@ -320,8 +320,27 @@ pub(crate) fn continue_unfinished(store_path: &Path, kind: IntegrationInProgress
             if paths.len() == 1 { "" } else { "s" }
         ));
     }
-    if state.join("stopped-sha").exists() {
-        return stalled(default_reason);
+    // HS2-Z2AT6H: a pick that stopped while Hot Sheet continued its own replay, and whose
+    // conflict was then resolved and staged, needs no further judgment unless markers remain.
+    // A rebase a person stopped and resolved without a recorded Hot Sheet attempt stays
+    // theirs to finish (HS2-QR1K8R).
+    let stopped = state.join("stopped-sha").exists();
+    if stopped {
+        let ours = crate::sync_health::read_record(store_path)
+            .and_then(|record| record.continue_attempts)
+            .is_some_and(|(head, _)| head == orig_head);
+        if !ours {
+            return stalled(default_reason);
+        }
+        let marked = staged_conflict_markers(store_path);
+        if !marked.is_empty() {
+            return stalled(format!(
+                "a rebase in the store stopped with conflict markers still staged in {} file{}; \
+                 sync will not start another until it is finished or aborted",
+                marked.len(),
+                if marked.len() == 1 { "" } else { "s" }
+            ));
+        }
     }
     let attempt = crate::sync_health::note_continue_attempt(store_path, &orig_head);
     if attempt > MAX_CONTINUE_ATTEMPTS {
@@ -340,7 +359,13 @@ pub(crate) fn continue_unfinished(store_path: &Path, kind: IntegrationInProgress
             ));
         }
     };
-    crate::sync::commit_pending(store_path);
+    if stopped {
+        // Stage writes made during the stop; `--continue` commits them with the stopped
+        // pick under its own message, where a separate commit would replace that message.
+        let _ = git_ok(store_path, &["add", "-A"]);
+    } else {
+        crate::sync::commit_pending(store_path);
+    }
     let run = git_run(
         store_path,
         &["-c", "core.editor=true", "rebase", "--continue"],
@@ -368,6 +393,24 @@ pub(crate) fn continue_unfinished(store_path: &Path, kind: IntegrationInProgress
         "the unfinished rebase could not be continued automatically ({detail}); a backup ref \
          {backup_ref} keeps its commits"
     ))
+}
+
+/// Staged paths whose index content still holds a Git conflict marker line (HS2-Z2AT6H).
+fn staged_conflict_markers(store_path: &Path) -> Vec<String> {
+    let Some(names) = git_stdout(store_path, &["diff", "--cached", "--name-only", "-z"]) else {
+        return Vec::new();
+    };
+    names
+        .split('\0')
+        .filter(|name| !name.is_empty())
+        .filter(|name| {
+            git_stdout(store_path, &["show", &format!(":{name}")]).is_some_and(|body| {
+                body.lines()
+                    .any(|line| line.starts_with("<<<<<<< ") || line.starts_with(">>>>>>> "))
+            })
+        })
+        .map(str::to_string)
+        .collect()
 }
 
 #[cfg(test)]

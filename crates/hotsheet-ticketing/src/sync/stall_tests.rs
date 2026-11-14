@@ -820,3 +820,88 @@ fn hs2_qr1k8r_stress_writes_racing_replays_never_stall_or_lose_a_write() {
         );
     }
 }
+
+/// HS2-Z2AT6H: a pick that stopped at a conflict which was then resolved and staged
+/// ("all conflicts fixed: run git rebase --continue"), with a ticket write staged beside it,
+/// leaves `CHERRY_PICK_HEAD` and `stopped-sha` but nothing to decide. The next cycle
+/// continues it in either replay mode, keeps both the resolution and the write, and
+/// publishes; autocommits resume afterwards.
+#[cfg(unix)]
+#[test]
+fn hs2_z2at6h_a_resolved_stopped_pick_with_staged_writes_is_continued() {
+    for mode in both_modes() {
+        let (_dir, root, peer) = remote_with_two_clones();
+        let store = FsStore::init(&root, &StoreMetadata::new("HS"))
+            .unwrap()
+            .with_deferred_push();
+        assert!(store.autocommit("init store").unwrap());
+        let _ = sync_once(&root);
+        ok(&peer, &["pull", "--quiet"]);
+        diverge(&root, &peer, 1);
+        write_after_first_pick(&root, "new-ticket.md", "a different body");
+        assert_eq!(sync_once_with(&root, live()), SyncReport::RebaseInProgress);
+        assert_eq!(unmerged_paths(&root), ["new-ticket.md"]);
+        // The conflict is resolved and staged, and a ticket write is staged beside it.
+        std::fs::write(root.join("new-ticket.md"), "resolved body\n").unwrap();
+        std::fs::write(root.join("written.md"), "written during the stopped pick\n").unwrap();
+        ok(&root, &["add", "new-ticket.md", "written.md"]);
+        assert!(root.join(".git/rebase-merge/stopped-sha").exists());
+        assert!(unmerged_paths(&root).is_empty());
+        // The autocommit of the incident cannot commit a partial pick.
+        assert!(!store.autocommit("everything").unwrap());
+
+        assert_eq!(
+            sync_once_with(&root, mode),
+            SyncReport::Synced {
+                pulled: false,
+                pushed: true
+            },
+            "{mode:?}"
+        );
+        assert!(
+            attached(&root) && !unfinished(&root) && clean(&root),
+            "{mode:?}"
+        );
+        // One backup from the continue that stopped, one from the continue that finished.
+        assert_eq!(backup_refs(&root).len(), 2, "{mode:?}");
+        assert_eq!(health(&root).state, SyncState::Synced);
+        // Autocommit works again.
+        std::fs::write(root.join("after.md"), "after\n").unwrap();
+        assert!(store.autocommit("after").unwrap());
+        ok(&peer, &["pull", "--quiet"]);
+        assert_eq!(read(&peer, "new-ticket.md"), "resolved body\n");
+        assert_eq!(
+            read(&peer, "written.md"),
+            "written during the stopped pick\n"
+        );
+        assert_eq!(read(&peer, "seed.md"), "local edit 1\n");
+    }
+}
+
+/// A stopped pick whose staged result still holds conflict markers needs a decision: it
+/// is never continued, so the markers are never committed.
+#[cfg(unix)]
+#[test]
+fn hs2_z2at6h_a_stopped_pick_with_staged_conflict_markers_still_stalls() {
+    let (_dir, root, peer) = remote_with_two_clones();
+    let store = FsStore::init(&root, &StoreMetadata::new("HS"))
+        .unwrap()
+        .with_deferred_push();
+    assert!(store.autocommit("init store").unwrap());
+    let _ = sync_once(&root);
+    ok(&peer, &["pull", "--quiet"]);
+    diverge(&root, &peer, 1);
+    write_after_first_pick(&root, "new-ticket.md", "a different body");
+    assert_eq!(sync_once_with(&root, live()), SyncReport::RebaseInProgress);
+    // Staging the file as Git left it marks it resolved but keeps the markers.
+    assert!(read(&root, "new-ticket.md").contains("<<<<<<< "));
+    ok(&root, &["add", "new-ticket.md"]);
+    assert!(unmerged_paths(&root).is_empty());
+    let stopped_at = head(&root);
+    for mode in both_modes() {
+        assert_eq!(sync_once_with(&root, mode), SyncReport::RebaseInProgress);
+    }
+    assert_eq!(head(&root), stopped_at);
+    let reason = health(&root).reason.unwrap();
+    assert!(reason.contains("conflict markers"), "{reason}");
+}
