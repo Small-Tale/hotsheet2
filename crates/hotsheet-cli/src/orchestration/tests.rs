@@ -21,6 +21,7 @@ use super::*;
 mod access;
 mod capacity;
 mod gates;
+mod hosted_gates;
 mod job_monitor;
 mod planning;
 mod policy;

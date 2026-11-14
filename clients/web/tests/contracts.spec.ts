@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(316); // HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(317); // HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(316); // HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(317); // HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -1002,6 +1002,78 @@ test('HS2-WN0MXZ real hosted validation responses match the OpenAPI contract', a
     const tooLong = await send('GET', `${hosted}?execution_id=${execution}&wait_ms=8001`);
     expect(tooLong.status).toBe(400);
     matches(validations, 'get', 'default', tooLong.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-WDQZ37 real hosted target gate responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const gates = '/checkouts/{checkout}/target-gates';
+    const hosted = `/checkouts/${server.checkoutId}/target-gates`;
+    const watch = { commit: 'a'.repeat(40), repository: 'example/widgets', workflow: 'CI', branch: 'main' };
+    const query = `commit=${watch.commit}&repository=example%2Fwidgets&workflow=CI&branch=main`;
+
+    // Nothing is watched yet; reading starts nothing.
+    const before = await send('GET', `${hosted}?${query}`);
+    expect(before.status).toBe(200);
+    matches(gates, 'get', '200', before.body);
+    expect(before.body).toMatchObject({ state: 'unknown', reason: 'not_watched' });
+    // Watching starts the Job here (no monitor runs in a test build) and is idempotent.
+    const started = await send('POST', hosted, watch);
+    expect(started.status).toBe(200);
+    matches(gates, 'post', '200', started.body);
+    expect(started.body.state).toBe('pending');
+    expect(typeof started.body.watch_ref).toBe('string');
+    const again = await send('POST', hosted, watch);
+    expect(again.body.watch_ref).toBe(started.body.watch_ref);
+    // An older cursor is answered at once; the current one waits for a change.
+    const replayed = await send('GET', `${hosted}?${query}&after=0&wait_ms=8000`);
+    matches(gates, 'get', '200', replayed.body);
+    expect(replayed.body.watch_ref).toBe(started.body.watch_ref);
+    const cursor = replayed.body.cursor as number;
+    const asked = Date.now();
+    const waited = await send('GET', `${hosted}?${query}&after=${cursor}&wait_ms=300`);
+    expect(Date.now() - asked).toBeGreaterThanOrEqual(250);
+    matches(gates, 'get', '200', waited.body);
+    expect(waited.body.cursor).toBe(cursor);
+
+    const tooLong = await send('GET', `${hosted}?${query}&wait_ms=8001`);
+    expect(tooLong.status).toBe(400);
+    matches(gates, 'get', 'default', tooLong.body);
+    const missing = await send('GET', `${hosted}?commit=${watch.commit}`);
+    expect(missing.status).toBe(400);
+    matches(gates, 'get', 'default', missing.body);
+    const odd = await send('POST', hosted, { ...watch, repository: 'not a repository' });
+    expect(odd.status).toBe(422);
+    matches(gates, 'post', 'default', odd.body);
   } finally {
     await server.stop();
   }

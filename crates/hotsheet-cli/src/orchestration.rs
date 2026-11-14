@@ -8,6 +8,7 @@ mod capacity;
 mod capacity_watch;
 mod decisions;
 mod gates;
+mod hosted_gates;
 mod job_monitor;
 mod joining;
 mod observer;
@@ -50,6 +51,7 @@ pub use gates::{
     GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
 };
+pub use hosted_gates::{HostedGate, HostedGateWatch, MAX_HOSTED_GATE_WAIT_MS};
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
 pub use permissions::{

@@ -2307,6 +2307,11 @@ pub fn app(state: AppState) -> Router {
                 // HS2-17ABM2: stop an execution.
                 .delete(routes::orchestration::write),
         )
+        // HS2-WDQZ37: a target's CI gate watched here for a remote orchestrator.
+        .route(
+            "/checkouts/{checkout}/target-gates",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
         // HS2-YYNW9F: the test profiles a hosted checkout offers, checked.
         .route(
             "/checkouts/{checkout}/target-validation-profiles",

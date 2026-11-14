@@ -74,6 +74,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "validations", _]
             | ["checkouts", _, "target-validations"]
             | ["checkouts", _, "target-validation-profiles"]
+            // HS2-WDQZ37: a target's CI gate watched on the machine that hosts it.
+            | ["checkouts", _, "target-gates"]
             // HS2-ZCR3Y7: kept step output, machine-local.
             | ["checkouts", _, "target-validation-output", _]
             // HS2-42TARA: the plan of prerequisites and its readiness.
@@ -610,6 +612,34 @@ impl OrchestrationRuntime {
             // HS2-WN0MXZ hosted half: run a validation step where the target lives.
             ("POST", ["checkouts", checkout, "target-validations"]) => {
                 value(self.hosted_validation_start(checkout, decode(body)?, tx)?)
+            }
+            // HS2-WDQZ37 hosted half: watch a CI gate here, and long-poll its reading.
+            ("POST", ["checkouts", checkout, "target-gates"]) => {
+                value(self.hosted_gate_watch(checkout, decode(body)?)?)
+            }
+            ("GET", ["checkouts", checkout, "target-gates"]) => {
+                let text = |key| {
+                    query_text(path, key)?.ok_or(OrchestrationError::Invalid(
+                        "commit, repository, workflow and branch are required",
+                    ))
+                };
+                let watch = HostedGateWatch {
+                    commit: text("commit")?,
+                    repository: text("repository")?,
+                    workflow: text("workflow")?,
+                    branch: text("branch")?,
+                    again: false,
+                };
+                let after = match query_text(path, "after")? {
+                    Some(_) => Some(query_number(path, "after", 0)?),
+                    None => None,
+                };
+                value(self.hosted_gate(
+                    checkout,
+                    &watch,
+                    after,
+                    query_number(path, "wait_ms", 0)?,
+                )?)
             }
             // HS2-YYNW9F: the profiles this checkout offers, checked.
             ("GET", ["checkouts", checkout, "target-validation-output", digest]) => {

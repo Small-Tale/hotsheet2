@@ -16,11 +16,14 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     ArtifactRef, CiScope, Coverage, DenialReason, DeploymentScope, Gate, GateError, GateEvidence,
     GateFilter, GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, NewGate,
-    Run, RunEvent, RunEventKind, RunEventSource, TargetAction, summarize, valid_commit,
-    valid_script,
+    Run, RunEvent, RunEventKind, RunEventSource, TargetAction, TargetDestination, summarize,
+    valid_commit, valid_script,
 };
 use serde::{Deserialize, Serialize};
 
+use super::hosted_gates::{
+    HostedRefresh, MAX_HOSTED_GATE_WAIT_MS, hosted_did_not_wait, peer_unsupported,
+};
 use super::job_monitor::JobMonitor;
 use super::tickets::identifier;
 use super::*;
@@ -67,6 +70,13 @@ pub trait GateProvider: Send + Sync {
     fn ensure_watching(&self) -> Option<bool> {
         self.watching()
     }
+    /// HS2-WDQZ37: start watching (idempotently, like [`Self::start`]) for a gate an
+    /// orchestrating machine linked elsewhere, in a checkout this machine hosts. There
+    /// is no run here, so nothing is tied to a ticket. Unsupported by default.
+    fn host(&self, gate: &Gate, again: bool) -> Result<(), GateError> {
+        let _ = (gate, again);
+        Err(GateError::ProviderUnsupported)
+    }
 }
 
 /// The GitHub Actions gate of a commit, read from its watch Job (HS2-3R9V0R).
@@ -96,6 +106,18 @@ impl GithubActionsGates {
         self
     }
 
+    fn watch(&self, gate: &Gate, ticket: Option<TicketLink>, again: bool) -> Result<(), GateError> {
+        let target = Self::target(gate)?;
+        let options = CiWatchOptions {
+            ticket,
+            can_cancel: false,
+        };
+        let watch = if again { rewatch_ci } else { ensure_ci_watch };
+        watch(&self.store, &gate.owner_checkout_id, &target, &options)
+            .map(|_| ())
+            .map_err(|_| GateError::ProviderUnavailable)
+    }
+
     fn target(gate: &Gate) -> Result<CiTarget, GateError> {
         let scope = gate.ci.as_ref().ok_or(GateError::ProviderUnsupported)?;
         CiTarget::new(
@@ -118,18 +140,18 @@ impl GateProvider for GithubActionsGates {
     }
 
     fn start(&self, gate: &Gate, run: &Run, again: bool) -> Result<(), GateError> {
-        let target = Self::target(gate)?;
-        let options = CiWatchOptions {
-            ticket: Some(TicketLink {
+        self.watch(
+            gate,
+            Some(TicketLink {
                 connection_id: run.ticket.connection_id.clone(),
                 native_id: run.ticket.native_id.clone(),
             }),
-            can_cancel: false,
-        };
-        let watch = if again { rewatch_ci } else { ensure_ci_watch };
-        watch(&self.store, &gate.owner_checkout_id, &target, &options)
-            .map(|_| ())
-            .map_err(|_| GateError::ProviderUnavailable)
+            again,
+        )
+    }
+
+    fn host(&self, gate: &Gate, again: bool) -> Result<(), GateError> {
+        self.watch(gate, None, again)
     }
 
     fn read(&self, gate: &Gate) -> Result<GateReading, GateError> {
@@ -299,6 +321,9 @@ pub struct RunGates {
 #[derive(Default)]
 pub struct GateFollowState {
     authorized: BTreeMap<String, (bool, u64)>,
+    /// HS2-WDQZ37: targets on another machine, as last authorized: their CI gates are
+    /// read from, and waited on at, the hosting machine.
+    remote: BTreeMap<String, TargetDestination>,
     /// HS2-VVHVF0: the delay after the last failed observer start, and when the next
     /// start may be tried.
     observer_retry: Option<(u64, u64)>,
@@ -435,6 +460,17 @@ impl OrchestrationRuntime {
             // An adapter that cannot answer says nothing about the commit.
             Err(error) => GateReading::new(GateState::Unknown).reason(error.code()),
         };
+        self.gate_record(gate, reading, tx)
+    }
+
+    /// Record one adapter reading of a gate, here or on the hosting machine
+    /// (HS2-WDQZ37), and publish a change.
+    pub(super) fn gate_record(
+        &self,
+        gate: Gate,
+        reading: GateReading,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(Gate, bool), OrchestrationError> {
         let (after, outcome) =
             self.gate_registry()
                 .apply(&gate.owner_checkout_id, &gate.gate_id, reading, tx)?;
@@ -584,15 +620,33 @@ impl OrchestrationRuntime {
             }
             let again = !linked.created
                 && matches!(linked.gate.state, GateState::Failed | GateState::Unknown);
-            let started = provider.start(&linked.gate, &run, again);
-            let (gate, _) = self.gate_refresh(linked.gate, tx)?;
-            started.map_err(OrchestrationError::Gate)?;
-            // HS2-VVHVF0: a gate that still waits needs an observer; a settled one
-            // starts nothing.
-            let watching = if followed(&gate) {
-                provider.ensure_watching()
-            } else {
-                provider.watching()
+            // HS2-WDQZ37: a target on another machine is watched there, with that
+            // machine's provider credentials.
+            let hosted =
+                Self::hosted_gate_destination(&authorized, &linked.gate).map(|destination| {
+                    self.hosted_gate_call(destination, &linked.gate, Some(again), None, 0, tx)
+                });
+            let (gate, watching) = match hosted {
+                Some(Ok(reply)) => {
+                    let (gate, _) = self.gate_record_hosted(linked.gate, &reply, tx)?;
+                    (gate, reply.watching)
+                }
+                Some(Err(error)) if !peer_unsupported(&error) => return Err(error),
+                // This machine hosts the target, or the peer has no such route yet:
+                // this machine's adapter, as before.
+                _ => {
+                    let started = provider.start(&linked.gate, &run, again);
+                    let (gate, _) = self.gate_refresh(linked.gate, tx)?;
+                    started.map_err(OrchestrationError::Gate)?;
+                    // HS2-VVHVF0: a gate that still waits needs an observer; a settled
+                    // one starts nothing.
+                    let watching = if followed(&gate) {
+                        provider.ensure_watching()
+                    } else {
+                        provider.watching()
+                    };
+                    (gate, watching)
+                }
             };
             Ok(GateView {
                 gate,
@@ -636,36 +690,105 @@ impl OrchestrationRuntime {
         };
         let outcome = (|| {
             let mut changed = Vec::new();
-            let mut refresh = |tx: &mut Transaction<'_>| -> Result<_, OrchestrationError> {
+            // HS2-WDQZ37: a CI gate of a target on another machine is read from, and
+            // waited on at, that machine.
+            let remote = |gate: &Gate| Self::hosted_gate_destination(&authorized, gate);
+            let refresh = |tx: &mut Transaction<'_>| -> Result<_, OrchestrationError> {
                 let gates = self.gate_registry().list(owner_id, &filter)?;
+                let mut moved = Vec::new();
+                let mut local = Vec::new();
+                let mut hosted_wait: Option<(String, u64, Option<bool>)> = None;
+                for gate in gates {
+                    if let Some(destination) = remote(&gate) {
+                        match self.gate_refresh_hosted(gate.clone(), destination, None, 0, tx) {
+                            Ok(HostedRefresh {
+                                gate,
+                                changed,
+                                cursor,
+                                watching,
+                            }) => {
+                                if changed {
+                                    moved.push(gate.gate_id.clone());
+                                }
+                                if let (true, None, Some(cursor)) =
+                                    (followed(&gate), &hosted_wait, cursor)
+                                {
+                                    hosted_wait = Some((gate.gate_id, cursor, watching));
+                                }
+                                continue;
+                            }
+                            // A peer without the route: this machine's adapter.
+                            Err(error) if peer_unsupported(&error) => {}
+                            // Unreachable or refusing: the gate stays as it stands.
+                            Err(_) => continue,
+                        }
+                    }
+                    local.push(gate);
+                }
                 // Before reading: a change in between is then seen by the wait.
-                let waits_on = gates
+                let waits_on = local
                     .iter()
                     .filter(|gate| followed(gate))
                     .find_map(|gate| self.gate_provider(&gate.provider, gate.kind))
                     .map(|provider| (provider.clone(), provider.cursor(owner_id)));
-                let before = changed.len();
-                for gate in gates {
-                    let (gate, moved) = self.gate_refresh(gate, tx)?;
-                    if moved {
-                        changed.push(gate.gate_id);
+                for gate in local {
+                    let (gate, changed) = self.gate_refresh(gate, tx)?;
+                    if changed {
+                        moved.push(gate.gate_id);
                     }
                 }
-                Ok((waits_on, changed.len() != before))
+                Ok((waits_on, hosted_wait, moved))
             };
-            let (waits_on, moved) = refresh(tx)?;
+            let (waits_on, hosted_wait, moved) = refresh(tx)?;
+            let nothing_moved = moved.is_empty();
+            changed.extend(moved);
             // HS2-VVHVF0: a gate that waits is observed before anyone waits on it.
-            let watching = waits_on
+            let local_watching = waits_on
                 .as_ref()
                 .and_then(|(provider, _)| provider.ensure_watching());
-            if let (Some((provider, cursor)), false, true) = (waits_on, moved, request.wait_ms > 0)
-            {
-                provider.wait(
-                    owner_id,
-                    cursor,
-                    Duration::from_millis(request.wait_ms.min(MAX_GATE_WAIT_MS)),
-                );
-                refresh(tx)?;
+            let watching = match (local_watching, hosted_wait.as_ref().and_then(|w| w.2)) {
+                (Some(here), Some(there)) => Some(here && there),
+                (here, there) => here.or(there),
+            };
+            if nothing_moved && request.wait_ms > 0 {
+                let waited = match (&hosted_wait, waits_on) {
+                    // HS2-WDQZ37: the hosting machine's long poll on its own records.
+                    (Some((gate_id, cursor, _)), _) => {
+                        let gate = self.gate(owner_id, gate_id)?;
+                        if let Some(destination) = remote(&gate) {
+                            let wait_ms = request.wait_ms.min(MAX_HOSTED_GATE_WAIT_MS);
+                            if let Ok(done) = self.gate_refresh_hosted(
+                                gate,
+                                destination,
+                                Some(*cursor),
+                                wait_ms,
+                                tx,
+                            ) {
+                                if done.changed {
+                                    changed.push(done.gate.gate_id);
+                                }
+                            }
+                        }
+                        true
+                    }
+                    (None, Some((provider, cursor))) => {
+                        provider.wait(
+                            owner_id,
+                            cursor,
+                            Duration::from_millis(request.wait_ms.min(MAX_GATE_WAIT_MS)),
+                        );
+                        true
+                    }
+                    (None, None) => false,
+                };
+                if waited {
+                    let (_, _, moved) = refresh(tx)?;
+                    for gate_id in moved {
+                        if !changed.contains(&gate_id) {
+                            changed.push(gate_id);
+                        }
+                    }
+                }
             }
             Ok(RunGates {
                 run_id: run.run_id.clone(),
@@ -702,15 +825,21 @@ impl OrchestrationRuntime {
             step.active = !gates.is_empty();
             if gates.is_empty() {
                 state.authorized.clear();
+                state.remote.clear();
                 state.observer_retry = None;
                 return step;
             }
+            // Before reading: a change in between is then seen by the wait.
             let waits_on = gates
                 .iter()
                 .find_map(|gate| self.gate_provider(&gate.provider, gate.kind))
                 .map(|provider| (provider.clone(), provider.cursor(owner_id)));
             let now_ms = tx.clock.now_ms();
-            let mut observed: Vec<Arc<dyn GateProvider>> = Vec::new();
+            let mut local = Vec::new();
+            // HS2-WDQZ37: the first hosted gate that still waits, to long-poll its host.
+            let mut hosted_wait: Option<(String, u64, TargetDestination)> = None;
+            let mut hosted_watching: Option<bool> = None;
+            let mut hosted_failed = false;
             for gate in gates {
                 let fresh = state
                     .authorized
@@ -718,20 +847,34 @@ impl OrchestrationRuntime {
                     .filter(|(_, at)| now_ms.saturating_sub(*at) < REAUTHORIZE_MS)
                     .map(|(allowed, _)| *allowed);
                 let allowed = fresh.unwrap_or_else(|| {
-                    let allowed = gate
+                    let authorized = gate
                         .linked_by
                         .clone()
                         .and_then(|id| MutationActor::parse("system", Some(id)).ok())
                         .zip(Self::target_ref(owner_id, &gate.target_id).ok())
-                        .is_some_and(|(actor, target)| {
+                        .and_then(|(actor, target)| {
                             self.authorize(
                                 &target,
                                 Some(&actor),
                                 ActionRequest::new(TargetAction::GatesObserve),
                                 tx,
                             )
-                            .is_ok()
+                            .ok()
                         });
+                    match authorized
+                        .as_ref()
+                        .and_then(|authorized| Self::destination(authorized).ok())
+                    {
+                        Some(destination @ TargetDestination::Remote { .. }) => {
+                            state
+                                .remote
+                                .insert(gate.target_id.clone(), destination.clone());
+                        }
+                        _ => {
+                            state.remote.remove(&gate.target_id);
+                        }
+                    }
+                    let allowed = authorized.is_some();
                     state
                         .authorized
                         .insert(gate.target_id.clone(), (allowed, now_ms));
@@ -740,6 +883,44 @@ impl OrchestrationRuntime {
                 if !allowed {
                     continue;
                 }
+                let destination = state
+                    .remote
+                    .get(&gate.target_id)
+                    .filter(|_| {
+                        gate.kind == GateKind::Ci
+                            && gate.provider == GITHUB_ACTIONS_KIND
+                            && gate.ci.is_some()
+                    })
+                    .cloned();
+                if let Some(destination) = destination {
+                    match self.gate_refresh_hosted(gate.clone(), &destination, None, 0, tx) {
+                        Ok(done) => {
+                            if done.changed {
+                                step.changed.push(done.gate.gate_id.clone());
+                            }
+                            if let Some(watching) = done.watching.filter(|_| followed(&done.gate)) {
+                                hosted_watching = Some(hosted_watching.unwrap_or(true) && watching);
+                            }
+                            if let (true, None, Some(cursor)) =
+                                (followed(&done.gate), &hosted_wait, done.cursor)
+                            {
+                                hosted_wait = Some((done.gate.gate_id, cursor, destination));
+                            }
+                            continue;
+                        }
+                        // A peer without the route: this machine's adapter, as before.
+                        Err(error) if peer_unsupported(&error) => {}
+                        // Unreachable or refusing: the gate stays as it stands.
+                        Err(_) => {
+                            hosted_failed = true;
+                            continue;
+                        }
+                    }
+                }
+                local.push(gate);
+            }
+            let mut observed: Vec<Arc<dyn GateProvider>> = Vec::new();
+            for gate in local {
                 if let Some(provider) = self.gate_provider(&gate.provider, gate.kind) {
                     if !observed.iter().any(|other| Arc::ptr_eq(other, provider)) {
                         observed.push(provider.clone());
@@ -766,19 +947,65 @@ impl OrchestrationRuntime {
                 state.observer_retry =
                     (step.watching == Some(false)).then_some((delay, now_ms.saturating_add(delay)));
             }
+            // HS2-WDQZ37: what the hosting machines said about their own observers.
+            if round == 0 {
+                if let Some(there) = hosted_watching {
+                    step.watching = Some(step.watching.unwrap_or(true) && there);
+                }
+            }
             if round == 1 || !step.changed.is_empty() || wait_ms == 0 {
                 break;
             }
-            let Some((provider, cursor)) = &waits_on else {
-                break;
-            };
-            provider.wait(
-                owner_id,
-                *cursor,
-                Duration::from_millis(wait_ms.min(MAX_GATE_WAIT_MS)),
-            );
+            // HS2-WDQZ37: a hosted gate waits on its host's long poll. A host that
+            // cannot be reached, or answers at once with nothing new, did not wait:
+            // the rest of the wait is spent here instead of asking again at once.
+            if let Some((gate_id, cursor, destination)) = hosted_wait {
+                let wait = wait_ms.min(MAX_HOSTED_GATE_WAIT_MS);
+                let asked = std::time::Instant::now();
+                let answer = self.gate(owner_id, &gate_id).map(|gate| {
+                    self.gate_refresh_hosted(gate, &destination, Some(cursor), wait, tx)
+                });
+                match answer {
+                    Ok(Ok(done)) if done.changed => step.changed.push(done.gate.gate_id),
+                    Ok(Ok(done)) if done.cursor != Some(cursor) => {}
+                    _ if hosted_did_not_wait(asked, wait) => {
+                        let rest = Duration::from_millis(wait).saturating_sub(asked.elapsed());
+                        self.gate_back_off(owner_id, waits_on.as_ref(), rest);
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            match &waits_on {
+                Some((provider, cursor)) => provider.wait(
+                    owner_id,
+                    *cursor,
+                    Duration::from_millis(wait_ms.min(MAX_GATE_WAIT_MS)),
+                ),
+                None if hosted_failed => {
+                    let rest = Duration::from_millis(wait_ms.min(MAX_HOSTED_GATE_WAIT_MS));
+                    self.gate_back_off(owner_id, None, rest);
+                    break;
+                }
+                None => break,
+            }
         }
         step
+    }
+
+    /// HS2-WDQZ37: a bounded back-off after a host did not wait: on this machine's
+    /// adapter records when there are any (so a local change still ends it), or else
+    /// for the time alone. Issues no request.
+    fn gate_back_off(
+        &self,
+        owner_id: &str,
+        local: Option<&(Arc<dyn GateProvider>, u64)>,
+        rest: Duration,
+    ) {
+        match local {
+            Some((provider, cursor)) => provider.wait(owner_id, *cursor, rest),
+            None => std::thread::sleep(rest),
+        }
     }
 
     // ---- Deployments ----

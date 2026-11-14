@@ -1722,10 +1722,11 @@ minutes. A
 headless caller uses `gate sync --wait-seconds`, which waits the same way. Nothing
 polls on a timer. Reads answer from this machine's records and contact nothing.
 
-The watch runs on the orchestrating machine with that machine's GitHub credentials;
-watching on the target's own server is HS2-WDQZ37. A watch only advances while the
-machine's Job monitor ([33](33-jobs.md)) runs, so whoever links or follows a gate makes
-sure of it (HS2-VVHVF0):
+For a target on this machine, the watch runs here with this machine's GitHub
+credentials. For a target bound to another machine, it runs on that machine (see
+"Watched where the target lives" below). A watch only advances while the machine's Job
+monitor ([33](33-jobs.md)) runs, so whoever links or follows a gate makes sure of it
+(HS2-VVHVF0):
 
 - `gate link` through the CLI, the server or MCP starts the detached monitor when no
   monitor holds the machine's slot and the gate still waits. A settled gate starts
@@ -1775,6 +1776,37 @@ No deployment adapter ships. This repository has no hosted deployment
 `deployment_executor_unavailable`: allowed, and not run. Running the target's script
 on the target's server with target-scoped credentials, after verifying that it is
 tracked at the gated commit, is HS2-G3VAK4.
+
+### Watched where the target lives (HS2-WDQZ37)
+
+The target's server is authoritative for its own CI evidence (§26.1). When a run's
+target is bound to another machine, a `github-actions` CI gate is watched there, with
+that machine's provider credentials and its Job monitor; the orchestrating machine
+holds no provider credentials for it and keeps only the typed readings it is answered.
+
+- **Hosted half.** `POST /checkouts/{checkout}/target-gates` with `{commit,
+repository, workflow, branch, again}` starts or finds the watch Job in the hosting
+  machine's Job store (idempotent, like a local link; it is tied to no ticket there)
+  and answers `{state, reason, evidence, watch_ref, cursor, watching}`.
+  `GET /checkouts/{checkout}/target-gates?commit=&repository=&workflow=&branch=&after=&wait_ms=`
+  reads it: with `after` equal to the current cursor (the host's Job store revision)
+  it parks until the host's watch records change or at most 8 seconds pass
+  (`MAX_HOSTED_GATE_WAIT_MS`, under the transport's read timeout); an older cursor is
+  answered at once, so a reconnect misses nothing. Neither starts anything but the
+  watch and its observer. Both are ordinary authenticated project data: they only
+  observe, and the orchestrating machine passed its own gate (`gates_observe`) first.
+- **Orchestrating half.** `gate link` asks the host to watch; `gate sync` and the gate
+  follower read through the hosted route and wait on the host's long poll instead of
+  the local Job store. A reading is recorded exactly as a local adapter reading is
+  (same transitions, events and first-seen time). A host that answers `not_watched`
+  (a gate linked before the host watched it) is asked to watch it.
+- **Fallbacks.** A peer without the route (an older server) leaves the gate to this
+  machine's adapter, as before. A peer that cannot be reached or refuses leaves the
+  gate as it stands: a sync returns it unchanged, and the follower spends the rest
+  of its wait on this machine's records instead of asking again at once. A host that
+  answers a wait at once with nothing new is treated the same way.
+- Deployment gates are unchanged: their execution on the target's server is
+  HS2-G3VAK4.
 
 ### Artifact identity (HS2-3YC577)
 
@@ -3390,7 +3422,8 @@ hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
 No orchestrating route was added: `readiness/define`, the policy body, the capacity
 snapshot and the scheduler responses carry the new members, and MCP
 `hotsheet_targets` `readiness_define` takes `resources`. The hosted
-`/checkouts/{checkout}/target-resource-wait` (HS2-G1PKK2) is machine-to-machine
+`/checkouts/{checkout}/target-resource-wait` (HS2-G1PKK2), like the hosted
+`/checkouts/{checkout}/target-gates` of §26.13 (HS2-WDQZ37), is machine-to-machine
 plumbing of the scheduling loop and is ordinary authenticated project data; a person
 or tool waits on the same backend with `hotsheet-cli resource show <ns>/<res> --wait`
 or the `resource-claims` routes.

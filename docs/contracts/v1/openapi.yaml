@@ -3590,6 +3590,104 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-gates:
+    description:
+      The hosted half of a remote target's CI gate (HS2-WDQZ37). The machine that hosts the target watches the gate's
+      commit with its own provider credentials and Job monitor; a remote orchestrator starts the watch and follows it
+      with a cursor. Observing only; ordinary authenticated project data under the caller's device role.
+    post:
+      operationId: watchHostedTargetGate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedGateWatch'
+      responses:
+        '200':
+          description: The watch, started or found, with the reading and cursor at that moment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedGate'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    get:
+      operationId: readHostedTargetGate
+      description:
+        A long poll. With `after` equal to the current cursor, parks until this machine's watch records change or the
+        wait ends, at most 8 seconds; an older cursor is answered at once. Starts no watch.
+      parameters:
+        - name: commit
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{40}$
+        - name: repository
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 201
+        - name: workflow
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+        - name: branch
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+        - name: after
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: wait_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
+            default: 0
+      responses:
+        '200':
+          description: The reading and the cursor it was taken at.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedGate'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
   /checkouts/{checkout}/target-resource-wait:
     description:
       A long poll on this machine's own claim backend for a remote orchestrator's scheduling loop (HS2-G1PKK2). Parks
@@ -21168,47 +21266,7 @@ components:
           description: A stable code, never free text.
           type: string
         evidence:
-          description: What the provider adapter observed; present on a verdict.
-          type: object
-          required:
-            - provider
-            - reference
-            - order
-            - attempt
-            - commit
-            - coverage
-            - at_ms
-          properties:
-            provider:
-              type: string
-            reference:
-              description: The provider's own id of the CI run or deployment execution.
-              type: string
-            order:
-              type: integer
-              minimum: 0
-            attempt:
-              type: integer
-              minimum: 0
-            commit:
-              description: The commit the provider built or deployed.
-              type: string
-              pattern: ^[0-9a-f]{40}$
-            coverage:
-              description:
-                '`exact` when that is the gate commit; `ancestor` when the provider built a descendant on the shipping
-                branch that contains it.'
-              enum:
-                - exact
-                - ancestor
-            artifact:
-              $ref: '#/components/schemas/OrchestrationGateArtifact'
-            exit_code:
-              type: integer
-            at_ms:
-              type: integer
-              minimum: 0
-          additionalProperties: false
+          $ref: '#/components/schemas/OrchestrationGateEvidence'
         watch_ref:
           description: The adapter's own handle of the watch or execution, for example a Job id.
           type: string
@@ -21243,6 +21301,48 @@ components:
               reason:
                 type: string
             additionalProperties: false
+      additionalProperties: false
+    OrchestrationGateEvidence:
+      description: What the provider adapter observed; present on a verdict.
+      type: object
+      required:
+        - provider
+        - reference
+        - order
+        - attempt
+        - commit
+        - coverage
+        - at_ms
+      properties:
+        provider:
+          type: string
+        reference:
+          description: The provider's own id of the CI run or deployment execution.
+          type: string
+        order:
+          type: integer
+          minimum: 0
+        attempt:
+          type: integer
+          minimum: 0
+        commit:
+          description: The commit the provider built or deployed.
+          type: string
+          pattern: ^[0-9a-f]{40}$
+        coverage:
+          description:
+            '`exact` when that is the gate commit; `ancestor` when the provider built a descendant on the shipping
+            branch that contains it.'
+          enum:
+            - exact
+            - ancestor
+        artifact:
+          $ref: '#/components/schemas/OrchestrationGateArtifact'
+        exit_code:
+          type: integer
+        at_ms:
+          type: integer
+          minimum: 0
       additionalProperties: false
     OrchestrationGateView:
       description: The answer to a gate link or a deployment request.
@@ -24604,6 +24704,56 @@ components:
           maximum: 4194304
         content_base64:
           type: string
+      additionalProperties: false
+    HostedGateWatch:
+      description: Which CI gate a hosting machine watches (HS2-WDQZ37).
+      type: object
+      required:
+        - commit
+        - repository
+        - workflow
+        - branch
+      properties:
+        commit:
+          type: string
+          pattern: ^[0-9a-fA-F]{40}$
+        repository:
+          description: '`owner/name`.'
+          type: string
+        workflow:
+          type: string
+        branch:
+          type: string
+        again:
+          description: Watch again after a failed verdict or a stopped watch.
+          type: boolean
+      additionalProperties: false
+    HostedGate:
+      description:
+        What the hosting machine's adapter reads for one CI gate (HS2-WDQZ37), with the cursor to wait from next.
+        Identifiers, codes and counts only.
+      type: object
+      required:
+        - state
+        - cursor
+      properties:
+        state:
+          $ref: '#/components/schemas/OrchestrationGateState'
+        reason:
+          description: A stable code, never free text.
+          type: string
+        evidence:
+          $ref: '#/components/schemas/OrchestrationGateEvidence'
+        watch_ref:
+          description: The hosting machine's own watch Job id.
+          type: string
+        cursor:
+          description: The host's record revision the reading was taken at; pass it as `after`.
+          type: integer
+          minimum: 0
+        watching:
+          description: Whether something observes the provider on the hosting machine.
+          type: boolean
       additionalProperties: false
     RemoteIdentity:
       type: object
