@@ -581,7 +581,8 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ai-feedback-dialog', 1],
     ['manual-model-dialog', 1],
     ['connection-details-dialog', 1],
-    ['notification-card', 6],
+    // HS2-DBQSWB adds the targeted card a Show Request link focuses.
+    ['notification-card', 7],
     ['corrupt-ticket-inspector', 3],
     ['halted-session-popup', 1],
     ['content-transition', 2],
@@ -1108,7 +1109,17 @@ test('demos every NotificationCard elevation, footer layout, and details appeara
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/ux-demo?component=notification-card');
   const cards = page.locator('article.notification-card');
-  await expect(cards).toHaveCount(7);
+  // Four elevations, the stacked footer, the prose and bounded details pair, and HS2-DBQSWB's targeted card.
+  await expect(cards).toHaveCount(8);
+  // HS2-DBQSWB: only the targeted card takes focus, from its visible trigger, never as a Tab stop, and
+  // shows the focus ring while it has it.
+  const targeted = page.locator('article.notification-card[data-targeted="true"]');
+  await expect(targeted).toHaveCount(1);
+  await expect(targeted).toHaveAttribute('tabindex', '-1');
+  await expect(page.locator('article.notification-card[tabindex]')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Show Request' }).click();
+  await expect(targeted).toBeFocused();
+  expect(await targeted.evaluate((node) => getComputedStyle(node).outlineStyle)).not.toBe('none');
   for (const elevation of ['popup', 'popup-contained', 'list', 'flat'])
     await expect(page.locator(`article.notification-card[data-elevation="${elevation}"]`).first()).toBeVisible();
   await expect(page.locator('article.notification-card[data-footer-layout="stack"]')).toHaveCount(1);
