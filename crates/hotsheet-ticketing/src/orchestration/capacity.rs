@@ -216,7 +216,11 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
         "o{:?};p{:?}",
         snapshot.claims_offline, snapshot.speculation
     );
-    // FNV-1a: stable across processes and versions, unlike the std hasher.
+    fnv(&text)
+}
+
+/// FNV-1a: stable across processes and versions, unlike the std hasher.
+fn fnv(text: &str) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in text.bytes() {
         hash ^= u64::from(byte);
@@ -266,6 +270,20 @@ impl CapacitySnapshot {
         self.version = None;
         self.version = Some(capacity_version(&self));
         self
+    }
+
+    /// HS2-AWB7BX: stamp the snapshot with a version that also changes when the
+    /// machine owner's own admission limits change, since those decide room as much
+    /// as the measurements do. The default (no limits) gives [`Self::with_version`].
+    #[must_use]
+    pub fn with_admission_version(self, admission: &AdmissionConfig) -> Self {
+        let mut stamped = self.with_version();
+        if *admission != AdmissionConfig::default() {
+            let limits = serde_json::to_string(admission).unwrap_or_default();
+            let base = stamped.version.take().unwrap_or_default();
+            stamped.version = Some(fnv(&format!("{base};a{limits}")));
+        }
+        stamped
     }
 
     /// HS2-JSF985: say what the hosted project's own speculation setting is.

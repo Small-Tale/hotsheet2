@@ -1625,6 +1625,21 @@ impl SchedulerStore {
         Ok(true)
     }
 
+    /// HS2-AWB7BX: forget every capacity refusal of the owner, after a change of its
+    /// own policy limits that can give a machine room. True when anything changed.
+    pub fn lift_capacity_refusals(&self, owner_id: &str) -> Result<bool, OrchestrationError> {
+        let targets: Vec<String> = self
+            .memory(owner_id)?
+            .into_iter()
+            .map(|entry| entry.target_id)
+            .collect();
+        let mut lifted = false;
+        for target in targets {
+            lifted |= self.lift_capacity_refusal(owner_id, &target)?;
+        }
+        Ok(lifted)
+    }
+
     /// Fold one pass into the owner's memory. Nothing applied writes nothing.
     pub fn record(
         &self,

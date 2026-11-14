@@ -959,7 +959,9 @@ is not a change: free and total memory in 1 GiB steps, CPU load in 20 % steps, d
 4 GiB steps, and exactly which sessions run (with their tool and checkout, not whether
 one is mid-turn), which tools are installed and configured, which claims are held (not
 their expiry), the offline policy and the speculation setting. The sampling time is
-never part of it, so the same capacity gives the same version after a restart.
+never part of it, so the same capacity gives the same version after a restart. The
+machine owner's own admission limits (`admission set`) are part of it too, because they
+decide room as much as the measurements do (HS2-AWB7BX).
 
 A read that names the version it has (`after`) and a `wait_ms` is a genuine long poll:
 the host samples again every three seconds (one shared reading, so waiting subscribers
@@ -2665,7 +2667,8 @@ refusal backoff stays the fallback wherever no event can arrive: a one-shot `pla
 answers without waiting, a gate refusal, or after 24 hours. The follow then ends, wakes
 the loop once so the retry time applies again, and the target is not followed again
 until a read sees a version. The pass that first records a refusal still sets its retry
-time, because the follow starts after it. Identical capacity reads are recorded once per
+time, because the follow starts after it. A change of the owner's policy lifts every
+capacity refusal of the owner too, since new limits can give a machine room. Identical capacity reads are recorded once per
 target and 10-minute window (HS2-SV4SMY, §26.7).
 
 ### Headless surface

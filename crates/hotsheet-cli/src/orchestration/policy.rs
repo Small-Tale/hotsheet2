@@ -8,8 +8,8 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AccessRequest, AuditOutcome, AuditRecord, DeclarationState, IgnoredField, PermissionAction,
     PermissionKey, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
-    PolicyVerdict, PolicyView, RetiredAuthority, SessionLoad, SessionRequest, SetPolicy,
-    TargetAction, retired_authority,
+    PolicyVerdict, PolicyView, RetiredAuthority, SchedulerStore, SessionLoad, SessionRequest,
+    SetPolicy, TargetAction, retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -114,6 +114,9 @@ impl OrchestrationRuntime {
         let view = store.set(request, Some(&self.declared(owner_id)?), tx)?;
         if view.revision != before {
             // HS2-ECWG50: a scheduler following this machine plans under the new policy.
+            // HS2-AWB7BX: new limits may give a machine room, so its capacity refusals
+            // are asked again rather than waited out.
+            let _ = SchedulerStore::new(&self.home).lift_capacity_refusals(owner_id);
             Self::scheduler_wake_at(&self.home);
             self.audit_record(
                 owner_id,

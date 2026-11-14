@@ -217,7 +217,13 @@ impl OrchestrationRuntime {
                 max_depth: policy.max_depth,
             }),
         )
-        .with_version())
+        // HS2-AWB7BX: the owner's own admission limits are part of the room.
+        .with_admission_version(
+            &AdmissionStore::new(&self.home)
+                .read()
+                .map(|view| view.admission)
+                .unwrap_or_default(),
+        ))
     }
 
     /// HS2-P5GTSW hosted half: this machine's capacity once its version differs from

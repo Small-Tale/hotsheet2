@@ -1855,3 +1855,32 @@ fn hs2_awb7bx_the_store_lifts_a_capacity_refusal_once() {
     assert!(store.memory(owner).unwrap().is_empty());
     assert!(!store.lift_capacity_refusal(owner, &target(1)).unwrap());
 }
+
+#[test]
+fn hs2_awb7bx_a_policy_change_lifts_every_capacity_refusal_of_the_owner() {
+    let home = tempfile::tempdir().unwrap();
+    let store = SchedulerStore::new(home.path());
+    let owner = "owner-0123456789ab";
+    assert!(!store.lift_capacity_refusals(owner).unwrap());
+    store
+        .record(
+            owner,
+            &[
+                (
+                    target(1),
+                    PlacementOutcome::Refused("session_cap_reached".into()),
+                ),
+                (
+                    target(2),
+                    PlacementOutcome::Refused("session_start_failed".into()),
+                ),
+            ],
+            T0,
+        )
+        .unwrap();
+    assert!(store.lift_capacity_refusals(owner).unwrap());
+    let left = store.memory(owner).unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].target_id, target(2));
+    assert!(!store.lift_capacity_refusals(owner).unwrap());
+}

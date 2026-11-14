@@ -727,3 +727,27 @@ fn hs2_p5gtsw_the_capacity_version_changes_with_room_not_with_jitter() {
     let read: CapacitySnapshot = serde_json::from_value(older).unwrap();
     assert_eq!(read.version, None);
 }
+
+/// HS2-AWB7BX: the machine owner's own admission limits are part of the version.
+#[test]
+fn hs2_awb7bx_admission_limits_change_the_capacity_version() {
+    let plain = healthy().with_version().version;
+    assert_eq!(
+        healthy()
+            .with_admission_version(&AdmissionConfig::default())
+            .version,
+        plain
+    );
+    let closed = AdmissionConfig {
+        max_sessions: Some(0),
+        ..AdmissionConfig::default()
+    };
+    let open = AdmissionConfig {
+        max_sessions: Some(4),
+        ..AdmissionConfig::default()
+    };
+    let with = |config: &AdmissionConfig| healthy().with_admission_version(config).version;
+    assert_ne!(with(&closed), plain);
+    assert_ne!(with(&closed), with(&open));
+    assert_eq!(with(&closed), with(&closed));
+}
