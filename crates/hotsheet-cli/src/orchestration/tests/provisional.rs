@@ -2013,3 +2013,88 @@ fn hs2_eryqdv_a_targets_parked_rule_travels_with_the_work_and_holds_it() {
     assert_eq!(confirmed.state, SpeculationState::Confirmed);
     assert!(!confirmed.held);
 }
+
+/// HS2-2K0DM8: reopening work whose run is still active is a judgment call: the
+/// orchestration ticket gets one `FEEDBACK NEEDED` note naming the run and the
+/// commands for each choice, and nothing is done to the run. Work whose run has ended
+/// gets no such note. Without a session on at-risk work, nothing is told.
+#[test]
+fn hs2_2k0dm8_reopened_work_with_a_live_run_asks_on_the_goal_ticket() {
+    tx!(tx);
+    let t = two(Some(&Opt::on()), &mut tx);
+    let owner = t.owner();
+    let run_b = t.dispatch_b(&mut tx).unwrap().run.run_id;
+    // A red gate and a fix: the work is rebased, but no session works it, so nothing
+    // is told and nothing fails.
+    t.ci_says(&t.run_a, &sha('a'), GateState::Failed, 1, &mut tx);
+    t.m.runtime
+        .run_cancel(&owner, &t.run_a, Some(&worker()), &mut tx)
+        .unwrap();
+    let a = t.a.clone();
+    let fix_run = t.dispatch(1, &a, "op-a-fix", &mut tx).unwrap().run.run_id;
+    t.link(&fix_run, &sha('f'), &mut tx);
+    t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+    assert!(
+        t.events(&t.step_b)
+            .iter()
+            .any(|(state, _)| state == "rebased")
+    );
+    // A person reopens it while its run is active.
+    let asked = |t: &Two| -> Vec<String> {
+        t.m.owner_store
+            .read_ticket(&t.orchestration.id)
+            .unwrap()
+            .notes
+            .into_iter()
+            // A `FEEDBACK NEEDED` note is stored as a feedback request.
+            .filter(|note| {
+                note.kind == NoteKind::FeedbackNeeded && note.text.starts_with("FEEDBACK NEEDED")
+            })
+            .map(|note| note.text)
+            .collect()
+    };
+    t.m.runtime
+        .readiness_reopen(
+            &owner,
+            &ReopenProvisional {
+                step_id: t.step_b.clone(),
+                reason: "fix_invalidates".into(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    let notes = asked(&t);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    for part in [
+        "CHOICE",
+        run_b.as_str(),
+        "run cancel",
+        "run handoff",
+        t.step_b.as_str(),
+    ] {
+        assert!(notes[0].contains(part), "{part}: {}", notes[0]);
+    }
+    // Nothing was done to the run.
+    assert!(
+        !t.m.runtime
+            .run_status(&owner, &run_b)
+            .unwrap()
+            .run
+            .state
+            .is_terminal()
+    );
+    // Reopening again asks nothing more.
+    t.m.runtime
+        .readiness_reopen(
+            &owner,
+            &ReopenProvisional {
+                step_id: t.step_b.clone(),
+                reason: "fix_invalidates".into(),
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(asked(&t).len(), 1);
+}

@@ -122,7 +122,7 @@ impl OrchestrationRuntime {
             let _ = self.session_tell(
                 owner_id,
                 &session_id,
-                Some(RequestKind::Cancelled),
+                Some((RequestKind::Cancelled, None)),
                 actor,
                 tx,
             );

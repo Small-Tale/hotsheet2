@@ -1019,6 +1019,9 @@ pub enum RequestKind {
     Claimed,
     /// HS2-HV9ED3: a person cancelled the ticket's run: stop working it and let go.
     Cancelled,
+    /// HS2-2K0DM8: the base gate the run's provisional work rests on failed and its fix
+    /// is the request's `commit`: rebase onto it and rerun the affected gates.
+    Rebase,
 }
 
 impl RequestKind {
@@ -1027,6 +1030,7 @@ impl RequestKind {
             Self::Assigned => "assigned",
             Self::Claimed => "claimed",
             Self::Cancelled => "cancelled",
+            Self::Rebase => "rebase",
         }
     }
 }
@@ -1040,6 +1044,9 @@ pub struct HostedRequest {
     /// The ticket's canonical id.
     pub ticket: String,
     pub kind: RequestKind,
+    /// HS2-2K0DM8: the commit a `rebase` request names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     pub requested_at_ms: u64,
     #[serde(default, skip_serializing_if = "RoleDelivery::is_unasked")]
     pub delivery: RoleDelivery,
@@ -1501,21 +1508,27 @@ impl HostedSessionRegistry {
         operation_id: &str,
         ticket: &str,
         kind: RequestKind,
+        commit: Option<&str>,
         now_ms: u64,
     ) -> Result<Option<HostedSession>, OrchestrationError> {
         valid_identifier(ticket)?;
+        if let Some(commit) = commit {
+            valid_identifier(commit)?;
+        }
         self.change(checkout_id, operation_id, |session| {
             if session.ended_at_ms.is_some() {
                 return;
             }
-            let same = session
-                .request
-                .as_ref()
-                .is_some_and(|request| request.ticket == ticket && request.kind == kind);
+            let same = session.request.as_ref().is_some_and(|request| {
+                request.ticket == ticket
+                    && request.kind == kind
+                    && request.commit.as_deref() == commit
+            });
             if !same {
                 session.request = Some(HostedRequest {
                     ticket: ticket.into(),
                     kind,
+                    commit: commit.map(Into::into),
                     requested_at_ms: now_ms,
                     delivery: RoleDelivery::default(),
                 });

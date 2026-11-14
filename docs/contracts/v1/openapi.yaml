@@ -3007,6 +3007,10 @@ paths:
                   maxLength: 160
                 kind:
                   $ref: '#/components/schemas/OrchestrationSessionRequestKind'
+                commit:
+                  description: HS2-2K0DM8. The fix commit a `rebase` request names.
+                  type: string
+                  maxLength: 160
                 actor:
                   $ref: '#/components/schemas/OrchestrationActor'
               additionalProperties: false
@@ -22340,6 +22344,9 @@ components:
                   type: string
                 kind:
                   $ref: '#/components/schemas/OrchestrationSessionRequestKind'
+                commit:
+                  description: HS2-2K0DM8. The fix commit a `rebase` request names.
+                  type: string
                 requested_at_ms:
                   type: integer
                   minimum: 0
@@ -23907,11 +23914,13 @@ components:
       description:
         Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's run;
         `claimed` - no dispatcher is live, so the ticket is claimed under its worker id; `cancelled` - a person
-        cancelled the ticket's run (HS2-HV9ED3).
+        cancelled the ticket's run (HS2-HV9ED3); `rebase` - the base gate of its provisional work failed, and
+        `commit` is the fix to rebase onto (HS2-2K0DM8).
       enum:
         - assigned
         - claimed
         - cancelled
+        - rebase
     PlanningOperation:
       description:
         Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one `goal`

@@ -1373,7 +1373,7 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
     registry.mark_started(HOSTED, "op-1").unwrap();
     let request = |ticket: &str, kind, now| {
         registry
-            .request(HOSTED, "op-1", ticket, kind, now)
+            .request(HOSTED, "op-1", ticket, kind, None, now)
             .unwrap()
             .unwrap()
             .request
@@ -1420,30 +1420,65 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
     );
     let next = request(&id(701), RequestKind::Assigned, 80);
     assert_eq!((next.ticket.clone(), next.requested_at_ms), (id(701), 80));
+    // HS2-2K0DM8: a rebase request names its fix commit; the same commit again is the
+    // same request, a newer commit a new one.
+    let rebase = |commit: &str, now| {
+        registry
+            .request(
+                HOSTED,
+                "op-1",
+                &id(701),
+                RequestKind::Rebase,
+                Some(commit),
+                now,
+            )
+            .unwrap()
+            .unwrap()
+            .request
+            .unwrap()
+    };
+    let fix = "f".repeat(40);
+    let told = rebase(&fix, 81);
+    assert_eq!(
+        (told.kind, told.commit.as_deref(), told.requested_at_ms),
+        (RequestKind::Rebase, Some(fix.as_str()), 81)
+    );
+    assert_eq!(rebase(&fix, 82).requested_at_ms, 81);
+    assert_eq!(rebase(&"e".repeat(40), 83).requested_at_ms, 83);
+    // The run's own request again replaces it.
+    assert_eq!(request(&id(701), RequestKind::Assigned, 84).commit, None);
+    assert_eq!(RequestKind::Rebase.code(), "rebase");
     // Pending past its window, counted from the request, reads failed.
     attempt(PushAttempt::NotReady, 90);
     let pending = attempt(PushAttempt::NotReady, 100);
     assert_eq!(pending.at(100), Some(RolePrompt::Pending));
     assert_eq!(
-        pending.at(80 + ROLE_PROMPT_WINDOW_MS),
+        pending.at(84 + ROLE_PROMPT_WINDOW_MS),
         Some(RolePrompt::Failed)
     );
     // An ended session keeps what it had; a bad ticket id is refused; an unknown
     // operation is none.
     registry.end(HOSTED, "op-1", "wound_down", 110).unwrap();
     let ended = registry
-        .request(HOSTED, "op-1", &id(702), RequestKind::Assigned, 120)
+        .request(HOSTED, "op-1", &id(702), RequestKind::Assigned, None, 120)
         .unwrap()
         .unwrap();
     assert_eq!(ended.request.unwrap().ticket, id(701));
     assert!(
         registry
-            .request(HOSTED, "op-1", "not a ticket", RequestKind::Assigned, 120)
+            .request(
+                HOSTED,
+                "op-1",
+                "not a ticket",
+                RequestKind::Assigned,
+                None,
+                120
+            )
             .is_err()
     );
     assert_eq!(
         registry
-            .request(HOSTED, "op-x", &id(700), RequestKind::Assigned, 120)
+            .request(HOSTED, "op-x", &id(700), RequestKind::Assigned, None, 120)
             .unwrap(),
         None
     );

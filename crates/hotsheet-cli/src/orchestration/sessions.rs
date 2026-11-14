@@ -240,7 +240,12 @@ pub fn planner_prompt_text(
 
 /// HS2-R7QH35: the message that tells a running session which exact ticket its new
 /// run is for. `ticket` is the slug where the host can read it.
-pub fn request_prompt_text(kind: RequestKind, worker_id: &str, ticket: &str) -> String {
+pub fn request_prompt_text(
+    kind: RequestKind,
+    worker_id: &str,
+    ticket: &str,
+    commit: Option<&str>,
+) -> String {
     match kind {
         RequestKind::Assigned => format!(
             "Hot Sheet orchestration gave this session new work: the ticket `{ticket}`. Request it from the dispatcher with the `hotsheet-worker` skill, as the worker `{worker_id}`."
@@ -250,6 +255,10 @@ pub fn request_prompt_text(kind: RequestKind, worker_id: &str, ticket: &str) -> 
         ),
         RequestKind::Cancelled => format!(
             "A person cancelled the orchestration run for the ticket `{ticket}`. Stop working it: commit or set aside what you have, release your claim on it as the worker `{worker_id}`, and finish your turn. Hot Sheet will wind this session down."
+        ),
+        RequestKind::Rebase => format!(
+            "Your work on the ticket `{ticket}` was started ahead of a prerequisite's CI gate, which failed. Its fix is the commit `{}`. Rebase your work onto that commit, rerun the gates the change affects, and keep the work off the shipping branch until they pass. Continue as the worker `{worker_id}`.",
+            commit.unwrap_or("unknown")
         ),
     }
 }
@@ -509,6 +518,9 @@ pub struct HostedSessionRequest {
     /// The ticket's canonical id in the target checkout.
     pub ticket: String,
     pub kind: RequestKind,
+    /// HS2-2K0DM8: the fix commit a `rebase` request names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<MutationActor>,
 }
@@ -1304,7 +1316,7 @@ impl OrchestrationRuntime {
         let attempt = self.sessions.join_role(
             checkout,
             &session.session_id,
-            &request_prompt_text(request.kind, &worker, &label),
+            &request_prompt_text(request.kind, &worker, &label, request.commit.as_deref()),
         );
         Ok(self
             .hosted_sessions_registry()
@@ -1350,6 +1362,7 @@ impl OrchestrationRuntime {
             &request.operation_id,
             &request.ticket,
             request.kind,
+            request.commit.as_deref(),
             now_ms,
         )?
         else {
@@ -2243,16 +2256,41 @@ impl OrchestrationRuntime {
         self.session_tell(owner_id, session_id, None, actor, tx)
     }
 
+    /// HS2-2K0DM8: tell the session working at-risk provisional work that the base
+    /// gate's fix is `commit`: rebase onto it and rerun the affected gates. Like every
+    /// tell it passes the gate as `sessions_manage` continuing: it supervises a run
+    /// already started, asks nobody, and a person's session is never sent anything.
+    pub fn session_tell_rebase(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        commit: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        self.session_tell(
+            owner_id,
+            session_id,
+            Some((RequestKind::Rebase, Some(commit.to_owned()))),
+            actor,
+            tx,
+        )
+    }
+
     /// [`Self::session_tell_ticket`], or with `RequestKind::Cancelled` the message
     /// that a person cancelled the session's run (HS2-HV9ED3), which is finished.
     pub(super) fn session_tell(
         &self,
         owner_id: &str,
         session_id: &str,
-        cancelled: Option<RequestKind>,
+        told: Option<(RequestKind, Option<String>)>,
         actor: Option<&MutationActor>,
         tx: &mut Transaction<'_>,
     ) -> Result<SessionView, OrchestrationError> {
+        let (cancelled, commit) = match told {
+            Some((kind, commit)) => (Some(kind), commit),
+            None => (None, None),
+        };
         let session = self.session(owner_id, session_id)?;
         if session.state != SessionState::Running {
             return Err(OrchestrationError::Session(SessionError::NotActive));
@@ -2278,6 +2316,8 @@ impl OrchestrationRuntime {
             .map(|hosted| hosted.worker_id.as_str());
         let kind = if told_cancel {
             RequestKind::Cancelled
+        } else if cancelled == Some(RequestKind::Rebase) {
+            RequestKind::Rebase
         } else if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
             && run.worker_id.as_deref() == worker
         {
@@ -2291,6 +2331,7 @@ impl OrchestrationRuntime {
                 operation_id: session.operation_id.clone(),
                 ticket: run.target.native_id.clone(),
                 kind,
+                commit: commit.clone().filter(|_| kind == RequestKind::Rebase),
                 actor: actor.cloned(),
             })
             .map_err(|_| OrchestrationError::Corrupt)?;
@@ -2320,7 +2361,14 @@ impl OrchestrationRuntime {
                         kind: RunEventKind::Session,
                         source: RunEventSource::Orchestrator,
                         state: None,
-                        dedupe: Some(format!("{session_id}-{run_id}-{}-{reason}", kind.code())),
+                        dedupe: Some(format!(
+                            "{session_id}-{run_id}-{}-{reason}{}",
+                            kind.code(),
+                            commit
+                                .as_deref()
+                                .map(|commit| format!("-{commit}"))
+                                .unwrap_or_default()
+                        )),
                         reason: Some(reason),
                         actor_id: actor.and_then(|actor| actor.id.clone()),
                         gate_id: None,

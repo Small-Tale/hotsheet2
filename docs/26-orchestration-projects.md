@@ -3802,10 +3802,34 @@ The workspace view of provisional state is HS2-0D60T8.
   failing ticket. Across targets the note goes on the orchestration ticket: nothing
   is written to a target for this.
 
+### Acting on at-risk and reopened work (HS2-2K0DM8)
+
+What the orchestrator does next stays within policy. A judgment call is asked on the
+orchestration ticket, and the person answers with the run's existing controls.
+
+- **At-risk work still on its branch** that a fix rebased (`rebased` event): the
+  orchestrator-owned session working its run is told to rebase onto the fix commit
+  and rerun the affected gates (session request kind `rebase`, with `commit`). Like
+  every tell it passes the gate as `sessions_manage` continuing, asks nobody, and is
+  never sent to a person's session. Each fix commit is told once per piece of work;
+  a tell that could not be delivered is retried by the next reconciliation. Work
+  already on its target's shipping branch is re-verified by the next covering run
+  and gets no tell.
+- **Reopened work whose run is still active** is a judgment call, so nothing is done
+  to the run. The orchestration ticket gets one `FEEDBACK NEEDED` note with a
+  `CHOICE`:
+  - cancel the run (`run cancel`), then dispatch the step again once its
+    prerequisites are confirmed; that start is a new record on confirmed state;
+  - hand it off (`run handoff`);
+  - keep it.
+
+  A person's cancel holds the step as §26.24 describes, so it is dispatched again
+  only by that person's next dispatch. Reopened work whose run has ended asks nothing.
+
 ### Not built
 
-- Nothing acts on at-risk or reopened work: the run is left as it is, and the step
-  is not dispatched again by itself after the fix (HS2-2K0DM8).
+- Automatic re-dispatch after a reopen: a person's cancel holds the step, and the
+  orchestrator never cancels a reopened run on its own.
 
 ### Headless surface
 

@@ -2076,6 +2076,89 @@ fn hs2_r7qh35_a_session_given_a_claim_is_told_to_work_it() {
     assert!(told[0].contains(&worker_id), "{told:?}");
 }
 
+/// HS2-2K0DM8: a session working at-risk provisional work is told the fix commit to
+/// rebase onto, once per fix; a new fix is told again, and a person's session never.
+#[test]
+fn hs2_2k0dm8_a_session_is_told_to_rebase_onto_the_fix_once_per_commit() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("First", &mut tx);
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    let terminal = f.terminal(&session);
+    let run = f.run_of(&step);
+    let fix = "f".repeat(40);
+    let told =
+        f.m.runtime
+            .session_tell_rebase(
+                &f.owner(),
+                &session.session_id,
+                &fix,
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert!(told.request_prompt.is_some());
+    let pushed = f.requests(&terminal);
+    assert_eq!(pushed.len(), 1, "{pushed:?}");
+    assert!(
+        pushed[0].contains(&fix) && pushed[0].contains("Rebase"),
+        "{pushed:?}"
+    );
+    assert!(
+        pushed[0].contains(&format!("`{}`", f.slug(&run))),
+        "{pushed:?}"
+    );
+    // The same fix again is the same request: nothing more is pushed.
+    f.m.runtime
+        .session_tell_rebase(
+            &f.owner(),
+            &session.session_id,
+            &fix,
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(f.requests(&terminal).len(), 1);
+    // A newer fix is a new request.
+    let newer = "e".repeat(40);
+    f.m.runtime
+        .session_tell_rebase(
+            &f.owner(),
+            &session.session_id,
+            &newer,
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let pushed = f.requests(&terminal);
+    assert_eq!(pushed.len(), 2);
+    assert!(pushed[1].contains(&newer));
+    // A person's session is never sent anything.
+    f.m.runtime
+        .session_takeover(
+            &f.owner(),
+            &session.session_id,
+            TakeoverSession { pause: false },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(
+        f.m.runtime
+            .session_tell_rebase(
+                &f.owner(),
+                &session.session_id,
+                &fix,
+                Some(&worker()),
+                &mut tx
+            )
+            .unwrap_err()
+            .code(),
+        "session_human_owned"
+    );
+}
+
 impl Placed {
     /// HS2-3REXQ7: the target ticket of a step, as its session's worker works it:
     /// claimed under `worker` in `phase`, and the run synced from the target.

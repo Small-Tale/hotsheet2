@@ -32,7 +32,8 @@ use serde::{Deserialize, Serialize};
 use super::tickets::timestamp;
 use super::*;
 use crate::coordination::speculation::{
-    PendingGate, Rebase, Recovery, SpeculationLedger, SpeculationState, SpeculativeRecord,
+    PendingGate, Rebase, Recovery, SpeculationEventKind, SpeculationLedger, SpeculationState,
+    SpeculativeRecord,
 };
 
 const MAX_REASON_BYTES: usize = 64;
@@ -47,6 +48,9 @@ struct WorkRecord {
     operation_id: String,
     recorded_at_ms: u64,
     bases: Vec<ProvisionalBasis>,
+    /// HS2-2K0DM8: the fix commit the working session was last told to rebase onto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    told_rebase: Option<String>,
 }
 
 /// A target's own speculation setting as its machine last reported it.
@@ -391,6 +395,131 @@ impl OrchestrationRuntime {
         .is_ok()
     }
 
+    /// HS2-2K0DM8: reopened work whose run is still active is a judgment call: whether
+    /// to stop that run, keep it or hand it off is a person's decision, so the
+    /// orchestrator asks on the orchestration ticket with a `FEEDBACK NEEDED` note and
+    /// acts on nothing. The answer is given with the run's own controls; once the run
+    /// is cancelled and the prerequisites are confirmed, the step is dispatched again
+    /// from confirmed state, as any ready step is.
+    fn provisional_reopen_decision(
+        &self,
+        owner_id: &str,
+        ticket: &RunTicket,
+        work: &ProvisionalWork,
+        tx: &mut Transaction<'_>,
+    ) {
+        let Some(run) = self
+            .run_list(owner_id, false)
+            .unwrap_or_default()
+            .into_iter()
+            .find(|run| run.operation_id == work.operation_id && !run.state.is_terminal())
+        else {
+            return;
+        };
+        let orchestration = OrchestrationTicket {
+            connection_id: ticket.connection_id.clone(),
+            native_id: ticket.native_id.clone(),
+        };
+        let Ok((store, id, _)) = self.orchestration_store(owner_id, &orchestration) else {
+            return;
+        };
+        let text = format!(
+            "FEEDBACK NEEDED: provisional work of plan step `{step}` (operation `{operation}`) \
+             was reopened, and its run `{run}` on target `{target}` is still active.\n\n\
+             CHOICE: What should happen to that run?\n\
+             - **Cancel it and redo the step (recommended).** `hotsheet-cli orchestration run \
+             cancel {run} --project {owner_id}`. Once its prerequisites are confirmed, \
+             dispatch the step again (`run dispatch`); that start is a new record on \
+             confirmed state.\n\
+             - **Hand it off.** `hotsheet-cli orchestration run handoff {run} --project \
+             {owner_id}`: a person takes the work over on the target.\n\
+             - **Keep it.** Nothing more is done; the work continues on the reopened base.",
+            step = work.step_id,
+            operation = work.operation_id,
+            run = run.run_id,
+            target = run.target.target_id,
+        );
+        let _ = ops::add_note(
+            &store,
+            &id,
+            hotsheet_ticketing::mint_ulid(tx.clock, tx.rng),
+            timestamp(tx),
+            NoteKind::Regular,
+            text,
+        );
+    }
+
+    /// HS2-2K0DM8: tell the session working at-risk work, still on its branch, that its
+    /// failed base gate was repaired: rebase onto the fix. Each fix commit is told once
+    /// per piece of work; a tell that cannot be delivered is tried again by the next
+    /// reconciliation.
+    fn provisional_tell_rebase(&self, owner_id: &str, tx: &mut Transaction<'_>) {
+        let Ok(Some(document)) = self.provisional_store().read::<Document>(owner_id) else {
+            return;
+        };
+        let owed: Vec<(String, String, String)> = document
+            .work
+            .iter()
+            .filter_map(|(assignment, work)| {
+                let record = document.ledger.records.get(assignment)?;
+                if !live(record.state) {
+                    return None;
+                }
+                let fix = record
+                    .events
+                    .iter()
+                    .rev()
+                    .find(|event| event.kind == SpeculationEventKind::Rebased)?
+                    .gate_commit
+                    .clone()?;
+                // Work already on its target's shipping branch is re-verified by the
+                // next covering run; only work on its branch is rebased.
+                let on_branch = record
+                    .risks
+                    .last()
+                    .is_none_or(|risk| risk.recovery == Recovery::RebaseOntoFix);
+                (on_branch && work.told_rebase.as_deref() != Some(fix.as_str()))
+                    .then(|| (assignment.clone(), work.operation_id.clone(), fix))
+            })
+            .collect();
+        if owed.is_empty() {
+            return;
+        }
+        let runs = self.run_list(owner_id, false).unwrap_or_default();
+        let sessions = self.session_list(owner_id, true).unwrap_or_default();
+        for (assignment, operation_id, fix) in owed {
+            let Some(run) = runs
+                .iter()
+                .find(|run| run.operation_id == operation_id && !run.state.is_terminal())
+            else {
+                continue;
+            };
+            let Some(session) = sessions.iter().find(|session| {
+                session.run_id.as_deref() == Some(run.run_id.as_str())
+                    && session.state == hotsheet_ticketing::orchestration::SessionState::Running
+                    && session.owner != hotsheet_ticketing::orchestration::SessionOwner::Human
+            }) else {
+                continue;
+            };
+            let actor = super::watch::supervisor(run);
+            if self
+                .session_tell_rebase(owner_id, &session.session_id, &fix, actor.as_ref(), tx)
+                .is_ok()
+            {
+                let _ = self
+                    .provisional_store()
+                    .update::<Document, _>(owner_id, |document| {
+                        let changed = document.work.get_mut(&assignment).is_some_and(|work| {
+                            let fresh = work.told_rebase.as_deref() != Some(fix.as_str());
+                            work.told_rebase = Some(fix.clone());
+                            fresh
+                        });
+                        Ok(((), changed))
+                    });
+            }
+        }
+    }
+
     /// HS2-ERYQDV: whether a step's live provisional work is under a `parked` rule.
     fn provisional_parked(&self, owner_id: &str, step_id: &str) -> bool {
         self.provisional_store()
@@ -634,6 +763,7 @@ impl OrchestrationRuntime {
                             operation_id: operation_id.into(),
                             recorded_at_ms: now_ms,
                             bases: standing.bases.clone(),
+                            told_rebase: None,
                         },
                     );
                     Ok(((assignment, true), true))
@@ -808,6 +938,8 @@ impl OrchestrationRuntime {
     ) -> Result<usize, OrchestrationError> {
         let count = self.provisional_apply(owner_id, tx.clock.now_ms())?;
         self.provisional_notes(owner_id, tx)?;
+        // HS2-2K0DM8: sessions on at-risk work learn of the fix.
+        self.provisional_tell_rebase(owner_id, tx);
         Ok(count)
     }
 
@@ -1258,6 +1390,7 @@ impl OrchestrationRuntime {
                 ),
                 tx,
             );
+            self.provisional_reopen_decision(owner_id, &step.ticket, &row, tx);
         }
         Ok(row)
     }
