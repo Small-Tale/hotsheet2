@@ -7,7 +7,17 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { classifyPath, collect, execute, main, parseCheckScript, plan, stageGroup } from './gate-plan.mjs';
+import {
+  classifyPath,
+  collect,
+  execute,
+  main,
+  parseCheckScript,
+  plan,
+  ROOT_POLICY_TESTS,
+  ROOT_TOOLING_TESTS,
+  stageGroup,
+} from './gate-plan.mjs';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 
 const realCheck = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'check-full.sh'), 'utf8');
@@ -284,4 +294,28 @@ test('HS2-FCCRCK execute mode never touches the root-gate tree cache', (t) => {
     encoding: 'utf8',
   }).trim();
   assert.throws(() => readFileSync(join(repo, cache, git('rev-parse', 'HEAD^{tree}'))));
+});
+
+// HS2-E6NFF6: CI hand-lists root `node --test` files; a file missing there (main-integration-window,
+// HS2-Z8189B) stayed green in CI while the local gate failed it.
+test('HS2-E6NFF6 CI runs every root policy and tooling test the local gate runs', () => {
+  const workflow = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', '.github/workflows/ci.yml'),
+    'utf8',
+  );
+  const ciTests = new Set();
+  for (const line of workflow.split('\n'))
+    if (/node --test /.test(line))
+      for (const match of line.matchAll(/scripts\/([\w-]+)\.test\.mjs/g)) ciTests.add(match[1]);
+  const missing = [...ROOT_POLICY_TESTS, ...ROOT_TOOLING_TESTS].filter((name) => !ciTests.has(name));
+  assert.deepEqual(
+    missing,
+    [],
+    `root tests the local gate runs but .github/workflows/ci.yml does not: ${missing.join(', ')}`,
+  );
+  const unknown = [...ciTests].filter(
+    (name) =>
+      !ROOT_POLICY_TESTS.includes(name) && !ROOT_TOOLING_TESTS.includes(name) && name !== 'verify-playwright-shards',
+  );
+  assert.deepEqual(unknown, [], `root tests CI runs that no local gate list classifies: ${unknown.join(', ')}`);
 });

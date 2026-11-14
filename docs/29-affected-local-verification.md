@@ -200,6 +200,9 @@ Root Node tests are two declared stage lists. The cross-package policy list
 stays mandatory. The script-local tooling list is selected when the full fallback
 applies. Its tests read `scripts/` and configuration inputs already classified as
 full-fallback paths; a new or changed test list is unclassified until reviewed.
+CI's root test steps hand-list the same files, and `scripts/gate-plan.test.mjs`
+fails when a file in either list is missing from `.github/workflows/ci.yml` or CI
+runs a root test that neither list classifies (HS2-E6NFF6).
 `scripts/`, hooks, CI, package manifests and locks, toolchains, formatter code,
 shared guidance generators, and unknown paths still select every stage. The
 planner tests mutate positive and negative paths, and exact-input receipt tests
