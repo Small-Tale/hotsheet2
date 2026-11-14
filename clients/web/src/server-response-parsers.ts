@@ -1423,6 +1423,14 @@ const terminalOptional: Record<string, Check> = {
   last_hook_report: isObject,
   mcp_connected: isBoolean,
   feedback_primary: isBoolean,
+  // HS2-6MNMVB: the hosted orchestrator session behind the tab.
+  orchestrator: (value) =>
+    isRecord(value) &&
+    isString(value.checkout_id) &&
+    isString(value.operation_id) &&
+    isString(value.project) &&
+    (value.owner === 'orchestrator' || value.owner === 'human') &&
+    isBoolean(value.paused),
 };
 
 export const parseTerminalInfo = shape<TerminalInfo>(

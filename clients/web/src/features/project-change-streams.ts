@@ -506,6 +506,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                   event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
                   event.kind === 'terminal_hook_report' ||
+                  // HS2-6MNMVB: an orchestrator session here was taken over, paused or stopped.
+                  event.kind === 'terminal_orchestrator' ||
                   event.kind === 'mcp_presence' ||
                   event.kind === 'permission_asked',
               )

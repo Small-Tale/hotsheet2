@@ -10,8 +10,9 @@ pub(super) struct SessionArgs {
     /// Registered owning checkout id.
     #[arg(long, global = true)]
     project: Option<String>,
-    /// A checkout this machine hosts, for `list`: the sessions orchestrators started
-    /// on it, as this machine's own terminal host sees them.
+    /// A checkout this machine hosts: `list` shows the sessions orchestrators started
+    /// on it, as this machine's own terminal host sees them, and `takeover`, `pause`
+    /// and `stop` act on one of them by its hosted operation id (HS2-6MNMVB).
     #[arg(long, global = true, conflicts_with = "project")]
     checkout: Option<String>,
     #[command(subcommand)]
@@ -68,7 +69,8 @@ enum SessionCmd {
     /// session push (HS2-R7QH35). A tool that is not ready gets it when it becomes so.
     Request { session_id: String },
     /// Stop a session. An orchestrator stops only its own sessions at a safe point;
-    /// --force is a person's request (pass --actor-role human).
+    /// --force is a person's request (pass --actor-role human). With --checkout, the
+    /// argument is the hosted operation id and this machine checks the safe point.
     Stop {
         session_id: String,
         /// Stop even when the session is not at a safe point.
@@ -76,21 +78,42 @@ enum SessionCmd {
         force: bool,
     },
     /// Take a session over (a person's action; pass --actor-role human). The
-    /// orchestrator treats it as human-owned from then on.
+    /// orchestrator treats it as human-owned from then on. With --checkout, the
+    /// argument is the hosted operation id, recorded at this machine.
     Takeover { session_id: String },
     /// Take a session over and pause it: it keeps running and gets nothing new.
+    /// With --checkout, the argument is the hosted operation id.
     Pause { session_id: String },
 }
 
 /// The owning (or hosted) checkout id and the request for the shared runtime.
 pub(super) fn route(arguments: SessionArgs) -> Result<(String, (&'static str, String, Value))> {
     if let Some(checkout) = arguments.checkout {
-        let SessionCmd::List { safe_point, .. } = arguments.command else {
-            bail!("--checkout applies to `session list` only");
+        // HS2-6MNMVB: the hosting machine's own half, by hosted operation id.
+        let path = format!("/checkouts/{checkout}/target-sessions");
+        let request = match arguments.command {
+            SessionCmd::List { safe_point, .. } => {
+                let query = if safe_point { "?safe_point=true" } else { "" };
+                ("GET", format!("{path}{query}"), Value::Null)
+            }
+            SessionCmd::Takeover { session_id } => (
+                "PATCH",
+                path,
+                json!({"operation_id": session_id, "pause": false}),
+            ),
+            SessionCmd::Pause { session_id } => (
+                "PATCH",
+                path,
+                json!({"operation_id": session_id, "pause": true}),
+            ),
+            SessionCmd::Stop { session_id, force } => (
+                "DELETE",
+                path,
+                json!({"operation_id": session_id, "force": force}),
+            ),
+            _ => bail!("--checkout applies to `session list`, `takeover`, `pause` and `stop` only"),
         };
-        let query = if safe_point { "?safe_point=true" } else { "" };
-        let path = format!("/checkouts/{checkout}/target-sessions{query}");
-        return Ok((checkout, ("GET", path, Value::Null)));
+        return Ok((checkout, request));
     }
     let project = arguments
         .project
@@ -282,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn hs2_gdjxgz_the_hosted_listing_is_the_only_command_without_an_owning_project() {
+    fn hs2_gdjxgz_hosted_commands_need_no_owning_project_and_the_rest_do() {
         let hosted = request(&["list", "--checkout", "hosted-1"]).unwrap();
         assert_eq!(
             hosted,
@@ -301,14 +324,50 @@ mod tests {
             "/checkouts/hosted-1/target-sessions?safe_point=true"
         );
         for refused in [
-            &["stop", SESSION, "--checkout", "hosted-1"][..],
-            &["sync", "--checkout", "hosted-1"],
+            &["sync", "--checkout", "hosted-1"][..],
+            &["show", SESSION, "--checkout", "hosted-1"],
+            &["safe-point", SESSION, "--checkout", "hosted-1"],
             &["list"],
             &["show", SESSION],
             &["list", "--checkout", "hosted-1", "--project", "owner-1"],
             &["start", "--project", "owner-1", "--tool", "codex"],
         ] {
             assert!(request(refused).is_err(), "{refused:?}");
+        }
+    }
+
+    /// HS2-6MNMVB: a person at the hosting machine takes over, pauses or stops a
+    /// session by its hosted operation id.
+    #[test]
+    fn hs2_6mnmvb_the_hosting_machine_takes_over_pauses_and_stops_by_operation() {
+        let path = "/checkouts/hosted-1/target-sessions".to_owned();
+        for (arguments, method, body) in [
+            (
+                &["takeover", "sched-op", "--checkout", "hosted-1"][..],
+                "PATCH",
+                json!({"operation_id": "sched-op", "pause": false}),
+            ),
+            (
+                &["pause", "sched-op", "--checkout", "hosted-1"],
+                "PATCH",
+                json!({"operation_id": "sched-op", "pause": true}),
+            ),
+            (
+                &["stop", "sched-op", "--checkout", "hosted-1"],
+                "DELETE",
+                json!({"operation_id": "sched-op", "force": false}),
+            ),
+            (
+                &["stop", "sched-op", "--checkout", "hosted-1", "--force"],
+                "DELETE",
+                json!({"operation_id": "sched-op", "force": true}),
+            ),
+        ] {
+            assert_eq!(
+                request(arguments).unwrap(),
+                ("hosted-1".into(), (method, path.clone(), body)),
+                "{arguments:?}"
+            );
         }
     }
 }

@@ -1394,6 +1394,17 @@ impl HostedSessionRegistry {
         })
     }
 
+    /// HS2-6MNMVB: every started session of this machine that has not ended, for the
+    /// drawer's terminal listing.
+    pub fn running(&self) -> Result<Vec<HostedSession>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .sessions
+            .into_iter()
+            .filter(|session| session.started && session.ended_at_ms.is_none())
+            .collect())
+    }
+
     /// HS2-2DPGDY: the started session with this terminal id, on any checkout of this
     /// machine, for the host's readiness events.
     pub fn by_session(

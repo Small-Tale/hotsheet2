@@ -2346,8 +2346,22 @@ machine, which keeps its own record of who owns each session.
   syncs the session, or from the host's refusal of a wind-down.
 
 Pausing changes ownership only; the tool is not interrupted. Whether a person can hand
-a session back is an open decision (HS2-KR28FS). A host-side command and drawer
-control for takeover are HS2-6MNMVB.
+a session back is an open decision (HS2-KR28FS).
+
+**At the hosting machine (HS2-6MNMVB).** A person there acts on a session by its hosted
+operation id, with no orchestration project of their own:
+`orchestration session takeover|pause|stop <operation-id> --checkout <checkout-id>`
+(`stop` respects the safe point unless `--force`), which calls the hosted
+`target-sessions` route. `GET /terminals` names the hosted session behind each such
+terminal (`orchestrator`: checkout, operation id, project label, owner, paused), and
+the drawer tab's context menu offers **Take Over from Orchestrator** and **Take Over
+and Pause** while the orchestrator owns it. A takeover, pause or stop through the
+server publishes `terminal_orchestrator`, so every client refetches its terminals and
+stops offering the takeover. The orchestrator learns of it on its next sync or from
+the host's refusal of a wind-down. Typing into the terminal does not take it over;
+whether it should is HS2-8BY9Y1. A headless CLI's host-side takeover is not announced
+yet (HS2-DX1PQB), and closing the tab is not yet recorded as a person's stop
+(HS2-HVKS7M).
 
 ### Crashes
 
@@ -2399,6 +2413,8 @@ hotsheet-cli ... orchestration session request <session-id> --project <owner>
 hotsheet-cli --actor-role human ... orchestration session stop <session-id> --project <owner> --force
 hotsheet-cli --actor-role human ... orchestration session takeover|pause <session-id> --project <owner>
 hotsheet-cli ... orchestration session list --checkout <checkout-id> [--safe-point] # this machine
+hotsheet-cli --actor-role human ... orchestration session takeover|pause <operation-id> --checkout <checkout-id>
+hotsheet-cli --actor-role human ... orchestration session stop <operation-id> --checkout <checkout-id> [--force]
 ```
 
 | Route                                                                                 | Methods and purpose                                                                                   |

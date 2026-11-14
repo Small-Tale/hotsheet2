@@ -69,7 +69,22 @@ fn with_terminal_names(
     let mut last_reports = state.terminal_ai_last_reports.lock_or_recover();
     let mcp = state.mcp_presence.lock_or_recover().clone();
     let primaries = crate::routes::feedback_session::feedback_primaries(state, live);
+    // HS2-6MNMVB: sessions orchestrators started here, so the drawer can offer takeover.
+    let hosted =
+        hotsheet_ticketing::orchestration::HostedSessionRegistry::new(state.machine_home())
+            .running()
+            .unwrap_or_default();
     for info in &mut infos {
+        info.orchestrator = hosted
+            .iter()
+            .find(|session| session.session_id == info.id)
+            .map(|session| super::TerminalOrchestrator {
+                checkout_id: session.checkout_id.clone(),
+                operation_id: session.operation_id.clone(),
+                project: session.origin.project.clone(),
+                owner: session.owner,
+                paused: session.paused,
+            });
         if !info.alive {
             last_reports.remove(&info.id);
         }

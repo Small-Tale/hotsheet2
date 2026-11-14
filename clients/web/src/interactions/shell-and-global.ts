@@ -11,7 +11,7 @@ import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } 
 import { createCommandHold } from '../command-hold';
 import { type DismissibleContextMenu, wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
-import { type AppTabKind } from '../components/project-tab-context-menu';
+import { type AppTabMenuState } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
 import { type TerminalEditMenuState } from '../components/terminal-clipboard-dialogs';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
@@ -124,9 +124,7 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly ticketContextMenu: Signal<
     { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string } | undefined
   >;
-  readonly appTabContextMenu: Signal<
-    { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
-  >;
+  readonly appTabContextMenu: Signal<AppTabMenuState | undefined>;
   readonly terminalContextMenu: Signal<{ key: string; x: number; y: number } | undefined>;
   /** Long-press terminal edit menu (HS2-KKP8YJ). */
   readonly terminalEditMenu: Signal<TerminalEditMenuState | undefined>;

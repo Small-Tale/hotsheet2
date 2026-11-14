@@ -2,7 +2,7 @@ import { batch, type Signal } from 'kerfjs';
 
 import { type AiToolDefaults, Api, ApiHttpError, type CommandDefinition, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
-import type { AppTabKind } from '../components/project-tab-context-menu';
+import type { AppTabMenuState } from '../components/project-tab-context-menu';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import {
   drawerInputFocusRequestStillOwned,
@@ -38,9 +38,7 @@ export interface TerminalDrawerDependencies {
   terminalDashboardMessage: Signal<string>;
   terminalVisibility: Signal<TerminalVisibilityState>;
   terminalContextMenu: Signal<{ key: string; x: number; y: number } | undefined>;
-  appTabContextMenu: Signal<
-    { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
-  >;
+  appTabContextMenu: Signal<AppTabMenuState | undefined>;
   error: Signal<string>;
   showToast: (message: string) => void;
   project: () => Project | undefined;
@@ -478,6 +476,27 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   async function closeTerminalIds(ids: readonly string[]) {
     await closeDrawerTabIds(ids);
   }
+  /**
+   * HS2-6MNMVB: a person at this machine takes over (and optionally pauses) the orchestrator
+   * session in one of this project's terminals, through the hosted target-sessions route. From
+   * then on the orchestrator leaves it alone. The drawer reads the new owner from the server.
+   */
+  async function takeOverHostedSession(terminalId: string, pause: boolean) {
+    const current = project(),
+      orchestrator = terminalGroups.value
+        .find((group) => group.projectId === current?.id)
+        ?.sessions.find((item) => item.id === terminalId)?.orchestrator;
+    if (!current || orchestrator?.owner !== 'orchestrator') return;
+    try {
+      await new Api(current.apiPath).takeOverHostedSession(orchestrator.checkout_id, orchestrator.operation_id, pause);
+      showToast(
+        pause ? 'Taken over and paused. The orchestrator leaves it alone.' : 'Taken over from the orchestrator.',
+      );
+    } catch (reason) {
+      showToast(`Could not take over the session. ${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+    await refreshTerminalDashboard();
+  }
   function closeDrawerAIChat(id: string) {
     void closeDrawerTabIds([id]);
   }
@@ -525,6 +544,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     closeTerminalIds,
     closeDrawerAIChat,
     messageTerminalSession,
+    takeOverHostedSession,
   };
 }
 

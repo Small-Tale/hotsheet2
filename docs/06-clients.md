@@ -3744,6 +3744,9 @@ the close button before the label and optional leading/trailing state icons. Rig
 project, terminal, and AI-chat tabs offer Close Tab, Close Other Tabs, directional close,
 and Close All Tabs. Drawer close ranges use the complete remembered mixed order, so each
 action closes both terminal and AI-chat targets; terminal tabs additionally offer Rename.
+The tab of a session an orchestrator started on this machine also offers Take Over from
+Orchestrator and Take Over and Pause while the orchestrator owns it (HS2-6MNMVB,
+[26](26-orchestration-projects.md) §26.16).
 Human-readable defaults replace generated
 ids. A rename is server state (HS2-89FPV1): `PUT /terminals/{id}/name` stores it in the
 project's machine-local settings (`terminal.names`, `Scope::Local`), `GET /terminals` reports it

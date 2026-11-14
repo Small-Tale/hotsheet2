@@ -86,7 +86,7 @@ import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
-import { type AppTabKind } from '../components/project-tab-context-menu';
+import { type AppTabMenuState } from '../components/project-tab-context-menu';
 import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
@@ -769,9 +769,7 @@ export async function startHotSheetWebClient() {
     { x: number; y: number; ticketSlug: string; hideUpNext?: boolean; group?: string; groupScope?: string } | undefined
   >(undefined);
   const ticketCloseDialog = signal<TicketCloseDialogState | undefined>(undefined);
-  const appTabContextMenu = signal<
-    { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
-  >(undefined);
+  const appTabContextMenu = signal<AppTabMenuState | undefined>(undefined);
   const bulkTicketDialog = signal<BulkTicketDialogState | undefined>(undefined);
   let bulkTicketSlugs: string[] = [];
 
@@ -2730,6 +2728,7 @@ export async function startHotSheetWebClient() {
     closeDrawerTabIds,
     closeTerminalIds,
     closeDrawerAIChat,
+    takeOverHostedSession,
   } = terminalDrawer;
   const {
     requestProjectClose,
@@ -6463,6 +6462,7 @@ export async function startHotSheetWebClient() {
     closeAllProjectResources,
     closeTerminalIds,
     closeDrawerAIChat,
+    takeOverHostedSession,
     appTabContextMenu,
     terminalGroups,
     terminalRename,

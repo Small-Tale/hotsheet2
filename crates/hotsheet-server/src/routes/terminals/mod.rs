@@ -575,6 +575,23 @@ pub(crate) struct TerminalInfo {
     /// delivery goes here when no claim names a session (HS2-DB2FQ2). Absent otherwise.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub(crate) feedback_primary: bool,
+    /// HS2-6MNMVB: an orchestrator started this terminal's session on this machine;
+    /// names the hosted operation a person takes over or pauses. Absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) orchestrator: Option<TerminalOrchestrator>,
+}
+
+/// HS2-6MNMVB: the orchestrator-owned session in a terminal, by identifiers and labels.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct TerminalOrchestrator {
+    /// The checkout the session runs in, for `/checkouts/{checkout}/target-sessions`.
+    pub(crate) checkout_id: String,
+    pub(crate) operation_id: String,
+    /// The orchestration project's label.
+    pub(crate) project: String,
+    /// `orchestrator`, or `human` once a person took it over.
+    pub(crate) owner: hotsheet_ticketing::orchestration::SessionOwner,
+    pub(crate) paused: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -875,6 +892,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         last_hook_report: None,
         mcp_connected: false,
         feedback_primary: false,
+        orchestrator: None,
     }
 }
 
@@ -898,6 +916,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         last_hook_report: None,
         mcp_connected: false,
         feedback_primary: false,
+        orchestrator: None,
     }
 }
 

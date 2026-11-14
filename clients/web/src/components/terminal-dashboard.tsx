@@ -30,7 +30,7 @@ import {
   X,
 } from 'lucide';
 
-import type { TerminalAiConnection, TerminalHalt } from '../api';
+import type { TerminalAiConnection, TerminalHalt, TerminalOrchestrator } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
@@ -80,6 +80,8 @@ export interface TerminalDashboardSession {
   aiConnection?: AiConnectionState;
   /** The server advertises session push for this live terminal connection. */
   canMessage?: boolean;
+  /** HS2-6MNMVB: an orchestrator started this session here; a person may take it over. */
+  orchestrator?: TerminalOrchestrator;
   scrollback: string;
 }
 

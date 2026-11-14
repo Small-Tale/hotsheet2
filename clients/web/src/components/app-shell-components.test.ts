@@ -731,6 +731,21 @@ describe('application shell components', () => {
     expect(chat).toContain('data-chat-id="chat"');
     expect(chat).toContain('data-action="terminal-tab-context-action"');
     expect(chat).not.toContain('Rename…');
+    // HS2-6MNMVB: an orchestrator-started terminal offers a person's takeover until it is theirs.
+    for (const tab of [terminal, project, chat]) expect(tab).not.toContain('Take Over');
+    const orchestrated = String(
+      AppTabContextMenu({ kind: 'terminal', id: 'term', x: 10, y: 20, orchestrator: { owner: 'orchestrator' } }),
+    );
+    expect(orchestrated).toContain('data-tab-action="orchestrator-takeover"');
+    expect(orchestrated).toContain('Take Over from Orchestrator');
+    expect(orchestrated).toContain('data-tab-action="orchestrator-pause"');
+    expect(orchestrated).toContain('Take Over and Pause');
+    expect(orchestrated.indexOf('Rename…')).toBeLessThan(orchestrated.indexOf('Take Over from Orchestrator'));
+    const theirs = String(
+      AppTabContextMenu({ kind: 'terminal', id: 'term', x: 10, y: 20, orchestrator: { owner: 'human' } }),
+    );
+    expect(theirs).not.toContain('Take Over');
+    expect(theirs).toContain('Rename…');
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

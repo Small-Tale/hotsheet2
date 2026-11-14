@@ -5,7 +5,7 @@ import { createScope } from 'kerfjs/scope';
 import { type AiToolDefaults } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
-import { type AppTabKind } from '../components/project-tab-context-menu';
+import { type AppTabKind, type AppTabMenuState } from '../components/project-tab-context-menu';
 import {
   type TerminalCopyState,
   type TerminalEditMenuState,
@@ -144,9 +144,7 @@ export interface TerminalInteractionsDependencies {
   readonly closeAllProjectResources: () => Promise<void>;
   readonly closeTerminalIds: (ids: readonly string[]) => Promise<void>;
   readonly closeDrawerAIChat: (id: string) => void;
-  readonly appTabContextMenu: Signal<
-    { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
-  >;
+  readonly appTabContextMenu: Signal<AppTabMenuState | undefined>;
   readonly projects: Signal<Project[]>;
   readonly currentDrawerTabIds: (projectId: string) => string[];
   readonly project: () => Project | undefined;
@@ -154,6 +152,8 @@ export interface TerminalInteractionsDependencies {
   readonly terminalRename: Signal<TerminalRenameTarget | undefined>;
   readonly closeDrawerTabIds: (ids: readonly string[]) => Promise<void>;
   readonly saveTerminalName: (projectId: string, terminalId: string, name: string) => void;
+  /** HS2-6MNMVB: a person takes over (and optionally pauses) a terminal's orchestrator session. */
+  readonly takeOverHostedSession: (terminalId: string, pause: boolean) => Promise<void>;
   /** Clear a terminal's saved name so its tab shows the derived default again (HS2-2Q7KTX). */
   readonly resetTerminalName: (projectId: string, terminalId: string) => void;
   /** The terminal drawer's Kerf-managed search field model (HS2-TWZSZF). */
@@ -221,6 +221,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     saveTerminalName,
     resetTerminalName,
     terminalSearchModel,
+    takeOverHostedSession,
   } = dependencies;
   // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
   // popovers; keep them in the top layer as Kerf renders them.
@@ -933,13 +934,21 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
             : kind === 'ai-chat'
               ? data(target).chatId!
               : data(target).terminalId!;
+      // HS2-6MNMVB: an orchestrator-started terminal offers a person's takeover.
+      const orchestrator =
+        kind === 'terminal'
+          ? terminalGroups.value
+              .find((group) => group.projectId === project()?.id)
+              ?.sessions.find((session) => session.id === id)?.orchestrator
+          : undefined;
       appTabContextMenu.value = {
         kind,
         id,
         direction: pointer.altKey ? 'left' : 'right',
+        ...(orchestrator ? { orchestrator: { owner: orchestrator.owner } } : {}),
         ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
           width: 256,
-          height: 202,
+          height: orchestrator?.owner === 'orchestrator' ? 266 : 202,
         }),
       };
     }),
@@ -955,6 +964,11 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         const ordered =
             menu.kind === 'project' ? projects.value.map((item) => item.id) : currentDrawerTabIds(project()?.id ?? ''),
           action = data(target).tabAction;
+        if ((action === 'orchestrator-takeover' || action === 'orchestrator-pause') && menu.kind === 'terminal') {
+          appTabContextMenu.value = undefined;
+          void takeOverHostedSession(menu.id, action === 'orchestrator-pause');
+          return;
+        }
         if (action === 'rename' && menu.kind === 'terminal') {
           const group = terminalGroups.value.find((item) => item.projectId === project()?.id),
             session = group?.sessions.find((item) => item.id === menu.id);

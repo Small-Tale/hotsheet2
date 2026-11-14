@@ -617,7 +617,20 @@ async fn execute(
     // a CLI process writes without this server is announced too.
     let settings = super::orchestration_settings_watch::settings_owner(&method, &path)
         .map(|owner| (state.clone(), owner));
+    // HS2-6MNMVB: a takeover, pause or stop of a hosted session changes what this
+    // machine's drawer offers for its terminal.
+    let hosted_control = matches!(method.as_str(), "PATCH" | "DELETE")
+        && path.trim_end_matches('/').ends_with("/target-sessions")
+        && path.starts_with("/checkouts/");
+    let announcer = state.clone();
     let result = execute_blocking(state, method, path, body).await;
+    if let (true, Ok(Json(reply))) = (hosted_control, &result) {
+        let terminal = reply
+            .pointer("/session/session/session_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        announce_terminal_orchestrator(&announcer, terminal);
+    }
     if let (Ok(_), Some((state, owner))) = (&result, settings) {
         let _ = tokio::task::spawn_blocking(move || {
             super::orchestration_settings_watch::ensure_settings_watcher(&state, &owner);
@@ -642,6 +655,23 @@ async fn execute(
         let _ = tokio::task::spawn_blocking(move || ensure_watchers_blocking(&state, &owner)).await;
     }
     result
+}
+
+/// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted
+/// here; every client refetches its terminals so the drawer shows the new owner.
+fn announce_terminal_orchestrator(state: &AppState, terminal_id: &str) {
+    state.emit(crate::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_orchestrator".into(),
+        id: terminal_id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 /// `ensure_watchers` reads run records and spawns tasks; it runs off the async threads

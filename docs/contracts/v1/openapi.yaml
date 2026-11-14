@@ -30102,6 +30102,31 @@ components:
             This live terminal's AI session is its project's primary session for proactive
             feedback delivery (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
+        orchestrator:
+          description: >-
+            HS2-6MNMVB. An orchestrator started this terminal's session on this machine; names the hosted
+            operation a person takes over, pauses or stops through target-sessions. Absent otherwise.
+          type: object
+          required:
+            - checkout_id
+            - operation_id
+            - project
+            - owner
+            - paused
+          properties:
+            checkout_id:
+              type: string
+            operation_id:
+              type: string
+            project:
+              type: string
+            owner:
+              enum:
+                - orchestrator
+                - human
+            paused:
+              type: boolean
+          additionalProperties: false
       additionalProperties: false
     TerminalRead:
       type: object

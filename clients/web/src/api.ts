@@ -1386,6 +1386,18 @@ export interface TerminalInfo {
   /** This live terminal's AI session is its project's primary: proactive feedback delivery goes
    * here when no claim names a session (HS2-DB2FQ2). Absent otherwise. */
   feedback_primary?: boolean;
+  /** HS2-6MNMVB: an orchestrator started this terminal's session on this machine. */
+  orchestrator?: TerminalOrchestrator;
+}
+/** HS2-6MNMVB: the hosted orchestrator session in a terminal, which a person may take over. */
+export interface TerminalOrchestrator {
+  checkout_id: string;
+  operation_id: string;
+  /** The orchestration project's label. */
+  project: string;
+  /** `human` once a person took it over; the orchestrator then leaves it alone. */
+  owner: 'orchestrator' | 'human';
+  paused: boolean;
 }
 /** An AI session's `SessionStart` hook report (`POST /terminals/{id}/ai-connection`). */
 export interface TerminalAiConnection {
@@ -2946,6 +2958,16 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/sessions/${encodeURIComponent(session)}/stop`,
       { method: 'POST', body: JSON.stringify({ force, actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR } }) },
     );
+  /** HS2-6MNMVB: a person at the hosting machine takes over (or pauses) a hosted session. */
+  takeOverHostedSession = (checkout: string, operationId: string, pause: boolean) =>
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/target-sessions`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        operation_id: operationId,
+        pause,
+        actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR },
+      }),
+    });
   takeOverOrchestrationSession = (owner: string, session: string) =>
     this.parsed(
       parseOrchestrationSession,

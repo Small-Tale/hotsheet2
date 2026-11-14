@@ -32,7 +32,7 @@ import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectSourceChoiceDialog } from '../components/project-source-choice-dialog';
 import type { ProjectStripMode } from '../components/project-strip-actions';
-import { type AppTabKind } from '../components/project-tab-context-menu';
+import { type AppTabMenuState } from '../components/project-tab-context-menu';
 import type { ExternalProviderKind, GithubAuthState } from '../components/provider-setup-form';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import {
@@ -94,9 +94,7 @@ export interface HotSheetAppDependencies {
   /** The shared in-app confirmation (HS2-6S1346). */
   confirmation: ConfirmationWorkflow;
   appRoot: HTMLElement;
-  appTabContextMenu: Signal<
-    { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
-  >;
+  appTabContextMenu: Signal<AppTabMenuState | undefined>;
   attachmentMenuSurfaceProps: ({
     insideGallery,
     readerScope,

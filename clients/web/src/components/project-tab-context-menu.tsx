@@ -1,22 +1,35 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
-import { ArrowLeft, ArrowRight, CircleX, type IconNode, Pencil, Trash2, X } from 'lucide';
+import { ArrowLeft, ArrowRight, CircleX, Hand, type IconNode, Pause, Pencil, Trash2, X } from 'lucide';
 
+import type { TerminalOrchestrator } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
 
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
+/** An open tab context menu: where, which tab, and what the tab's terminal runs. */
+export interface AppTabMenuState {
+  x: number;
+  y: number;
+  kind: AppTabKind;
+  id: string;
+  direction: 'left' | 'right';
+  /** HS2-6MNMVB: the orchestrator session in a terminal tab, when one started it here. */
+  orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
+}
 export function AppTabContextMenu({
   kind,
   id,
   x,
   y,
   direction = 'right',
+  orchestrator,
 }: {
   kind: AppTabKind;
   id: string;
   x: number;
   y: number;
   direction?: 'left' | 'right';
+  orchestrator?: Pick<TerminalOrchestrator, 'owner'>;
 }) {
   const directional =
     direction === 'left'
@@ -24,6 +37,14 @@ export function AppTabContextMenu({
       : { id: 'close-right', label: 'Close Tabs to the Right', icon: ArrowRight, iconName: 'arrow-right' };
   const actions: ReadonlyArray<{ id: string; label: string; icon: IconNode; iconName: string; danger?: boolean }> = [
     ...(kind === 'terminal' ? [{ id: 'rename', label: 'Rename…', icon: Pencil, iconName: 'pencil' }] : []),
+    // HS2-6MNMVB: a person takes an orchestrator-started session over at this machine; once it is
+    // theirs the orchestrator leaves it alone, and these are no longer offered.
+    ...(kind === 'terminal' && orchestrator?.owner === 'orchestrator'
+      ? [
+          { id: 'orchestrator-takeover', label: 'Take Over from Orchestrator', icon: Hand, iconName: 'hand' },
+          { id: 'orchestrator-pause', label: 'Take Over and Pause', icon: Pause, iconName: 'pause' },
+        ]
+      : []),
     { id: 'close', label: 'Close Tab', icon: X, iconName: 'x' },
     { id: 'close-others', label: 'Close Other Tabs', icon: CircleX, iconName: 'circle-x' },
     directional,

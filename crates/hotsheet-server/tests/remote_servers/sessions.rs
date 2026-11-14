@@ -885,13 +885,80 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     assert_eq!(live[0]["safe_point"]["safe"], true);
     assert_eq!(hosted_view["roles"]["integrator_live"], false);
     let cli_id = cli_started["session_id"].as_str().unwrap();
-    let cli_stopped = cli_named(
+    // HS2-6MNMVB: the drawer listing names the hosted operation behind the tab, and a
+    // person at this machine takes the session over by it; an AI cannot.
+    let orchestrated = tab(&drawer(&router).await, &cli_terminal)["orchestrator"].clone();
+    assert_eq!(orchestrated["operation_id"], "cli-op", "{orchestrated}");
+    assert_eq!(orchestrated["checkout_id"], checkout.id.as_str());
+    assert_eq!(orchestrated["owner"], "orchestrator");
+    assert_eq!(orchestrated["paused"], false);
+    let host_side = |role: &'static str| {
+        [
+            "--actor-role",
+            role,
+            "--actor-id",
+            if role == "human" {
+                "maintainer"
+            } else {
+                "scheduler-1"
+            },
+            "-C",
+            store_arg,
+            "orchestration",
+            "session",
+        ]
+    };
+    let refused = cli_failure(
+        &home,
+        &host_side("ai"),
+        &["takeover", "cli-op", "--checkout", &checkout.id],
+    );
+    assert!(refused.contains("forbidden"), "{refused}");
+    assert_eq!(
+        tab(&drawer(&router).await, &cli_terminal)["orchestrator"]["owner"],
+        "orchestrator"
+    );
+    let paused = cli_named(
+        &home,
+        &host_side("human"),
+        &["pause", "cli-op", "--checkout", &checkout.id],
+    );
+    assert_eq!(paused["session"]["session"]["owner"], "human", "{paused}");
+    assert_eq!(paused["session"]["session"]["paused"], true);
+    // Taking over again keeps it the person's; the drawer shows both.
+    cli_named(
+        &home,
+        &host_side("human"),
+        &["takeover", "cli-op", "--checkout", &checkout.id],
+    );
+    let owned = tab(&drawer(&router).await, &cli_terminal)["orchestrator"].clone();
+    assert_eq!(
+        (owned["owner"].clone(), owned["paused"].clone()),
+        (json!("human"), json!(true))
+    );
+    // The orchestrator can no longer wind it down; the hosting machine refuses.
+    let wind_down = cli_failure(
         &home,
         &headless,
         &["stop", cli_id, "--project", &checkout.id],
     );
-    assert_eq!(cli_stopped["state"], "stopped");
+    assert!(wind_down.contains("session_human_owned"), "{wind_down}");
+    assert_eq!(drawer(&router).await.len(), 1);
+    // A person stops it at this machine by its operation id.
+    let host_stopped = cli_named(
+        &home,
+        &host_side("human"),
+        &["stop", "cli-op", "--checkout", &checkout.id],
+    );
+    assert_eq!(host_stopped["stopped"], true, "{host_stopped}");
+    assert_eq!(host_stopped["reason"], "person_stopped");
     assert!(drawer(&router).await.is_empty());
+    let cli_synced = cli_named(
+        &home,
+        &headless,
+        &["sync", cli_id, "--project", &checkout.id],
+    );
+    assert_ne!(cli_synced["state"], "running", "{cli_synced}");
 
     // With the server gone no terminal host answers: a start fails closed and the
     // failed session is recorded, never a running one.
