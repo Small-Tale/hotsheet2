@@ -9,6 +9,7 @@
 //! An execution outlives one request: the transport allows about ten seconds, a step
 //! up to an hour. A request starts the execution and waits a bounded time; repeating it
 //! with the same operation id waits again. Nothing polls on a timer between requests.
+use std::ffi::OsString;
 use std::io::Read;
 use std::path::Path;
 use std::process::Stdio;
@@ -218,8 +219,72 @@ fn stop(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
+/// HS2-W02PTA: the host variables a step sees, by exact name. Enough for a build to
+/// find its tools, its home and its temporary directory and to behave predictably;
+/// nothing on it names a credential. Every other variable the hosting process holds
+/// (`HOTSHEET_*`, provider tokens, cloud credentials, bearer secrets) is withheld.
+const STEP_ENVIRONMENT: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "LANG",
+    "TZ",
+    // Windows needs these to start most programs at all.
+    "SystemRoot",
+    "windir",
+    "ComSpec",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+];
+
+/// HS2-W02PTA: the variable a step reads to name its own execution.
+pub const STEP_EXECUTION_VARIABLE: &str = "HOTSHEET_VALIDATION_EXECUTION_ID";
+
+/// HS2-W02PTA: the environment of one step, from the hosting process's own: the
+/// allowlisted variables (and the locale's `LC_*`), then the step's identifiers. A
+/// profile declares no environment of its own; its checked-in program sets what it
+/// needs. Names compare exactly, except on Windows where they are case-insensitive.
+pub fn validation_environment(
+    host: impl IntoIterator<Item = (OsString, OsString)>,
+    execution_id: &str,
+) -> Vec<(OsString, OsString)> {
+    let allowed = |name: &str| {
+        name.starts_with("LC_")
+            || STEP_ENVIRONMENT.iter().any(|allowed| {
+                if cfg!(windows) {
+                    allowed.eq_ignore_ascii_case(name)
+                } else {
+                    *allowed == name
+                }
+            })
+    };
+    let mut environment: Vec<(OsString, OsString)> = host
+        .into_iter()
+        .filter(|(name, _)| name.to_str().is_some_and(allowed))
+        .collect();
+    environment.sort();
+    environment.push((STEP_EXECUTION_VARIABLE.into(), execution_id.into()));
+    environment.push(("CI".into(), "true".into()));
+    environment
+}
+
 /// Run one command in `root` and report how it ended. Blocks until it has. Setting
-/// `cancel` stops it; a step that already ended by itself keeps its own end.
+/// `cancel` stops it; a step that already ended by itself keeps its own end. The step
+/// sees only [`validation_environment`] (HS2-W02PTA).
+#[allow(clippy::too_many_arguments)] // HS2-W02PTA: one step's whole launch; grouped by the caller.
 pub(super) fn execute(
     root: &Path,
     program: &str,
@@ -228,6 +293,7 @@ pub(super) fn execute(
     output_limit: u64,
     started_at_ms: u64,
     cancel: &AtomicBool,
+    execution_id: &str,
 ) -> ExecutionOutcome {
     let started = Instant::now();
     // A relative program with a directory part is the checkout's own script; a bare
@@ -240,6 +306,8 @@ pub(super) fn execute(
     };
     let mut command = hotsheet_ticketing::git::launch(&resolved);
     command
+        .env_clear()
+        .envs(validation_environment(std::env::vars_os(), execution_id))
         .args(args)
         .current_dir(root)
         .stdin(Stdio::null())
@@ -421,6 +489,7 @@ impl OrchestrationRuntime {
                     )),
                     Some((program, args, timeout_seconds)) => {
                         let running = execution.clone();
+                        let step_execution = request.execution_id.clone();
                         let timeout = Duration::from_secs(u64::from(timeout_seconds));
                         std::thread::spawn(move || {
                             running.finish(execute(
@@ -431,6 +500,7 @@ impl OrchestrationRuntime {
                                 MAX_VALIDATION_OUTPUT_BYTES,
                                 started_at_ms,
                                 &running.cancel,
+                                &step_execution,
                             ));
                         });
                     }

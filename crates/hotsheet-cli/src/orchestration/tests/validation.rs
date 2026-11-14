@@ -17,7 +17,7 @@ use super::tickets::{
     Machine, NOW, RemotePeer, bind_and_allow, human, machine, unsupported, worker,
 };
 use super::*;
-use crate::orchestration::validation::execute;
+use crate::orchestration::validation::{STEP_EXECUTION_VARIABLE, execute, validation_environment};
 
 /// SHA-256 of the two bytes `ok`.
 const OK_SHA256: &str = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
@@ -1133,6 +1133,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
             limit,
             7,
             &AtomicBool::new(false),
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         )
     };
     let small = sh("printf ok; printf problem >&2; exit 2", 1024);
@@ -1170,6 +1171,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         1024,
         7,
         &AtomicBool::new(false),
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     );
     assert_eq!(family.end, ExecutionEnd::TimedOut);
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
@@ -1177,6 +1179,93 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         family.stdout.unwrap().bytes,
         0,
         "the stream ended: nothing still holds it"
+    );
+}
+
+/// HS2-W02PTA: a step sees an allowlist of the host's variables plus its own
+/// identifiers; credentials and Hot Sheet's own variables never reach it.
+#[test]
+fn hs2_w02pta_a_step_sees_only_the_reviewed_environment() {
+    let host = |pairs: &[(&str, &str)]| {
+        pairs
+            .iter()
+            .map(|(name, value)| {
+                (
+                    std::ffi::OsString::from(name),
+                    std::ffi::OsString::from(value),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let names = |environment: &[(std::ffi::OsString, std::ffi::OsString)]| {
+        environment
+            .iter()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    };
+    // Empty host: only the step's own identifiers.
+    let empty = validation_environment(Vec::new(), "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+    assert_eq!(names(&empty), [STEP_EXECUTION_VARIABLE, "CI"]);
+    assert_eq!(empty[0].1, "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+    // (variable, passed?)
+    let table = [
+        ("PATH", true),
+        ("HOME", true),
+        ("TMPDIR", true),
+        ("LANG", true),
+        ("LC_ALL", true),
+        ("LC_CTYPE", true),
+        ("TZ", true),
+        ("HOTSHEET_HOME", false),
+        ("HOTSHEET_SECRET", false),
+        ("HOTSHEET_SERVER_URL", false),
+        ("HOTSHEET_WORKER_ID", false),
+        ("GH_TOKEN", false),
+        ("GITHUB_TOKEN", false),
+        ("ANTHROPIC_API_KEY", false),
+        ("OPENAI_API_KEY", false),
+        ("AWS_SECRET_ACCESS_KEY", false),
+        ("SSH_AUTH_SOCK", false),
+        ("NPM_TOKEN", false),
+        ("CI", false),
+        ("PATHS", false),
+        ("XLC_ALL", false),
+    ];
+    let pairs: Vec<(&str, &str)> = table.iter().map(|(name, _)| (*name, "synthetic")).collect();
+    let environment = validation_environment(host(&pairs), "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+    let kept = names(&environment);
+    for (name, passed) in table {
+        if name == "CI" {
+            continue;
+        }
+        assert_eq!(kept.contains(&name.to_owned()), passed, "{name}");
+    }
+    // The host's own CI is not passed through; the step's is always `true`, once.
+    assert_eq!(kept.iter().filter(|name| *name == "CI").count(), 1);
+    assert_eq!(environment.last().unwrap().1, "true");
+    // A real step: the test process's HOTSHEET_HOME (set for every test) is withheld,
+    // PATH and the execution id are there.
+    assert!(std::env::var_os("HOTSHEET_HOME").is_some());
+    let root = tempfile::tempdir().unwrap();
+    let probe = execute(
+        root.path(),
+        "/bin/sh",
+        &[
+            "-c".into(),
+            "test -z \"${HOTSHEET_HOME+x}\" || exit 3; test -n \"$PATH\" || exit 4; \
+             test \"$HOTSHEET_VALIDATION_EXECUTION_ID\" = 01ARZ3NDEKTSV4RRFFQ69G5FAV || exit 5; \
+             test \"$CI\" = true || exit 6"
+                .into(),
+        ],
+        std::time::Duration::from_secs(20),
+        1024,
+        7,
+        &AtomicBool::new(false),
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    );
+    assert_eq!(
+        (probe.end, probe.exit_code),
+        (ExecutionEnd::Exited, Some(0))
     );
 }
 

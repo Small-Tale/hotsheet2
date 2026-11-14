@@ -1455,7 +1455,21 @@ The step runs on the machine that hosts the target, in the target checkout, reac
 like every hosted half: in process for a local destination and over the reviewed
 remote registration for a remote one. On Unix the step gets its own process group
 and the whole group is stopped at the timeout. Windows process handling is
-HS2-2R32SD, and the environment a step inherits is HS2-W02PTA.
+HS2-2R32SD.
+
+**Environment (HS2-W02PTA).** A step does not inherit the hosting process's
+environment. It sees an allowlist of that process's variables, enough to find its
+tools and behave predictably (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`,
+`LANG`, `LC_*`, `TZ`, and on Windows `SystemRoot`, `windir`, `ComSpec`, `PATHEXT`,
+`TEMP`, `TMP`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`,
+`ProgramFiles*`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`), plus
+`HOTSHEET_VALIDATION_EXECUTION_ID` (its execution id) and `CI=true`. Everything else
+is withheld: Hot Sheet's own `HOTSHEET_*` variables, the bearer and provider tokens a
+server or CLI holds, cloud and package-registry credentials, `SSH_AUTH_SOCK`. A
+profile declares no environment of its own; the checked-in program it runs sets
+what it needs (for example `env NAME=value command`). A step still runs as the
+hosting user, so files that user can read stay readable; the allowlist governs
+variables only.
 
 The remote transport allows a request about ten seconds and a step up to an hour,
 so an execution outlives one request. A `run` request starts the attempt and waits

@@ -115,7 +115,8 @@ pub use tool_capacity::{
 pub use validation::{
     CancelValidation, DefineValidation, HostedExecutionState, HostedValidation,
     HostedValidationCancel, HostedValidationStart, ListValidations, MAX_VALIDATION_OUTPUT_BYTES,
-    MAX_VALIDATION_WAIT_MS, RunValidation, TargetProfiles, ValidationRunView, ValidationStepRef,
+    MAX_VALIDATION_WAIT_MS, RunValidation, STEP_EXECUTION_VARIABLE, TargetProfiles,
+    ValidationRunView, ValidationStepRef, validation_environment,
 };
 pub use watch::{
     MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,
