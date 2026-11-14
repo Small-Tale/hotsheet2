@@ -65,6 +65,15 @@ enum OrchestrationCmd {
     /// HS2-HCW7MD: Propose Plan: start the project's planning AI session, which proposes
     /// the dry-run plan from the open goal tickets, or show where planning stands.
     Plan(planning::PlanArgs),
+    /// HS2-M7EV18: the detached runner of one hosted validation step. Started by the
+    /// hosting process; not for direct use.
+    #[command(hide = true)]
+    StepRunner {
+        #[arg(long)]
+        checkout: String,
+        #[arg(long)]
+        execution: String,
+    },
     /// Read this machine's audit journal of orchestration decisions for one project.
     Audit {
         /// Registered owning checkout id.
@@ -1220,6 +1229,14 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
     let mut ensure_monitor = false;
     let mut monitor_off = false;
     let (owner_id, (method, path, mut body)) = match arguments.command {
+        OrchestrationCmd::StepRunner {
+            checkout,
+            execution,
+        } => {
+            let home = hotsheet_plugins::hotsheet_home();
+            return hotsheet_cli::orchestration::run_validation_step(&home, &checkout, &execution)
+                .map_err(|error| anyhow::anyhow!(error.code()));
+        }
         OrchestrationCmd::Capacity(arguments) => match capacity::capacity(arguments)? {
             Planned::Request(owner_id, request) => (owner_id, request),
             Planned::Done => return Ok(()),

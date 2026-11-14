@@ -95,6 +95,8 @@ struct Execution {
     done: Condvar,
     /// HS2-17ABM2: set by a cancel; the step's own thread stops it.
     cancel: Arc<AtomicBool>,
+    /// HS2-M7EV18: its detached runner ended without recording an end.
+    lost: AtomicBool,
 }
 
 impl Execution {
@@ -114,10 +116,28 @@ impl Execution {
         let (guard, _) = self
             .done
             .wait_timeout_while(guard, Duration::from_millis(wait_ms), |outcome| {
-                outcome.is_none()
+                outcome.is_none() && !self.lost.load(Ordering::SeqCst)
             })
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         guard.clone()
+    }
+
+    /// The reply after waiting at most `wait_ms`: `unknown` once its runner was lost.
+    fn reply(&self, execution_id: &str, wait_ms: u64) -> HostedValidation {
+        match self.wait(wait_ms) {
+            None if self.lost.load(Ordering::SeqCst) => unknown_reply(execution_id),
+            outcome => hosted_reply(execution_id, outcome),
+        }
+    }
+
+    /// HS2-M7EV18: the runner is gone and recorded no end.
+    fn lose(&self) {
+        let _guard = self
+            .outcome
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.lost.store(true, Ordering::SeqCst);
+        self.done.notify_all();
     }
 
     fn finish(&self, outcome: ExecutionOutcome) {
@@ -153,6 +173,7 @@ fn new_execution(key: String) -> Arc<Execution> {
         outcome: Mutex::new(None),
         done: Condvar::new(),
         cancel: Arc::new(AtomicBool::new(false)),
+        lost: AtomicBool::new(false),
     })
 }
 
@@ -490,6 +511,128 @@ fn execution_id(value: &str) -> Result<(), OrchestrationError> {
 }
 
 impl OrchestrationRuntime {
+    /// HS2-M7EV18: start a step's detached runner and follow it from this process: a
+    /// collector thread waits (on file changes) for the runner's recorded end, or
+    /// marks the execution lost when the runner is gone without one, and passes a
+    /// cancel on to it.
+    fn launch_detached(
+        &self,
+        checkout_id: &str,
+        spec: super::validation_runner::StepSpec,
+        execution: &Arc<Execution>,
+    ) {
+        let registry = self.hosted_validation_registry();
+        let execution_id = spec.execution_id.clone();
+        let exited = match super::validation_runner::launch(&self.home, &spec) {
+            Ok(launched) => {
+                if let Some(runner) = launched.identity {
+                    let _ = registry.launched(checkout_id, &execution_id, runner);
+                }
+                launched.exited
+            }
+            Err(_) => {
+                let outcome = ended(
+                    ExecutionEnd::LaunchFailed,
+                    spec.started_at_ms,
+                    Instant::now(),
+                );
+                let _ = registry.finish(
+                    checkout_id,
+                    &execution_id,
+                    spec.started_at_ms,
+                    outcome.clone(),
+                );
+                execution.finish(outcome);
+                return;
+            }
+        };
+        let (home, checkout_id, running) =
+            (self.home.clone(), checkout_id.to_owned(), execution.clone());
+        std::thread::spawn(move || {
+            let directory = super::validation_runner::steps_dir(&home, &checkout_id);
+            let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).ok();
+            let registry = HostedValidationRegistry::new(&home);
+            let mut asked_to_stop = false;
+            loop {
+                if !asked_to_stop && running.cancel.load(Ordering::SeqCst) {
+                    super::validation_runner::request_cancel(&home, &checkout_id, &execution_id);
+                    asked_to_stop = true;
+                }
+                match registry.record(&checkout_id, &execution_id) {
+                    Ok(Some(record)) => {
+                        if let Some(outcome) = record.outcome {
+                            running.finish(outcome);
+                            return;
+                        }
+                        // This process reaps its runner, so it knows when it ended; a
+                        // runner that ended without recording an end lost the step.
+                        if exited.load(Ordering::SeqCst) {
+                            let ended = registry
+                                .record(&checkout_id, &execution_id)
+                                .ok()
+                                .flatten()
+                                .and_then(|record| record.outcome);
+                            match ended {
+                                Some(outcome) => running.finish(outcome),
+                                None => running.lose(),
+                            }
+                            return;
+                        }
+                    }
+                    Ok(None) | Err(_) => {
+                        running.lose();
+                        return;
+                    }
+                }
+                // A local wait on this machine's own files; no request is made.
+                match &waiter {
+                    Some(waiter) => {
+                        waiter.wait(Duration::from_secs(1));
+                    }
+                    None => std::thread::sleep(Duration::from_secs(1)),
+                }
+            }
+        });
+    }
+
+    /// HS2-M7EV18: the reply for an execution this process does not hold: its recorded
+    /// end, `running` while a detached runner of another process still runs it
+    /// (waiting at most `wait_ms` for its end), or `unknown`.
+    fn detached_reply(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+        wait_ms: u64,
+    ) -> HostedValidation {
+        let directory = super::validation_runner::steps_dir(&self.home, checkout_id);
+        let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).ok();
+        let registry = self.hosted_validation_registry();
+        let deadline = Instant::now() + Duration::from_millis(wait_ms);
+        loop {
+            match registry.record(checkout_id, execution_id) {
+                Ok(Some(record)) => {
+                    if let Some(outcome) = record.outcome {
+                        return hosted_reply(execution_id, Some(outcome));
+                    }
+                    if !super::validation_runner::runner_alive(&record) {
+                        return unknown_reply(execution_id);
+                    }
+                }
+                Ok(None) | Err(_) => return unknown_reply(execution_id),
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return hosted_reply(execution_id, None);
+            }
+            match &waiter {
+                Some(waiter) => {
+                    waiter.wait(left);
+                }
+                None => std::thread::sleep(left.min(Duration::from_secs(1))),
+            }
+        }
+    }
+
     /// HS2-7BTV98: what this machine recorded about the executions it accepted.
     fn hosted_validation_registry(&self) -> HostedValidationRegistry {
         HostedValidationRegistry::new(&self.home)
@@ -561,7 +704,13 @@ impl OrchestrationRuntime {
                         return Ok(hosted_reply(&request.execution_id, Some(outcome)));
                     }
                     HostedValidationKnown::Accepted => {
-                        return Ok(unknown_reply(&request.execution_id));
+                        // HS2-M7EV18: a detached runner may still run it.
+                        drop(known);
+                        return Ok(self.detached_reply(
+                            &checkout.id,
+                            &request.execution_id,
+                            wait_ms,
+                        ));
                     }
                 }
                 let execution = new_execution(key);
@@ -580,6 +729,23 @@ impl OrchestrationRuntime {
                             outcome.clone(),
                         );
                         execution.finish(outcome);
+                    }
+                    Some((program, args, timeout_seconds)) if self.detached_validation => {
+                        self.launch_detached(
+                            &checkout.id,
+                            super::validation_runner::StepSpec {
+                                checkout_id: checkout.id.clone(),
+                                execution_id: request.execution_id.clone(),
+                                root: root.clone(),
+                                program,
+                                args,
+                                timeout_seconds,
+                                started_at_ms,
+                                output_limit: MAX_VALIDATION_OUTPUT_BYTES,
+                                retain: Some(self.validation_output_dir(&checkout.id)),
+                            },
+                            &execution,
+                        );
                     }
                     Some((program, args, timeout_seconds)) => {
                         let running = execution.clone();
@@ -623,7 +789,7 @@ impl OrchestrationRuntime {
                 execution
             }
         };
-        Ok(hosted_reply(&request.execution_id, execution.wait(wait_ms)))
+        Ok(execution.reply(&request.execution_id, wait_ms))
     }
 
     /// The state of an execution this host process started, waiting a bounded time for
@@ -644,14 +810,10 @@ impl OrchestrationRuntime {
             .find(|execution| execution.key == key)
             .cloned();
         Ok(match execution {
-            Some(execution) => hosted_reply(id, execution.wait(wait_ms)),
+            Some(execution) => execution.reply(id, wait_ms),
             // HS2-7BTV98: not in this process; what the machine recorded decides.
-            None => match self.hosted_validation_registry().known(checkout_id, id)? {
-                HostedValidationKnown::Finished(outcome) => hosted_reply(id, Some(outcome)),
-                HostedValidationKnown::Unknown | HostedValidationKnown::Accepted => {
-                    unknown_reply(id)
-                }
-            },
+            // HS2-M7EV18: a detached runner of another process may still run it.
+            None => self.detached_reply(checkout_id, id, wait_ms),
         })
     }
 
@@ -687,6 +849,25 @@ impl OrchestrationRuntime {
             match known.iter().find(|execution| execution.key == key) {
                 Some(execution) => execution.clone(),
                 None => {
+                    // HS2-M7EV18: a detached runner of another process that still runs
+                    // it is asked to stop it, and records the end itself.
+                    let registry = self.hosted_validation_registry();
+                    if registry
+                        .record(checkout_id, &request.execution_id)?
+                        .is_some_and(|record| super::validation_runner::runner_alive(&record))
+                    {
+                        drop(known);
+                        super::validation_runner::request_cancel(
+                            &self.home,
+                            checkout_id,
+                            &request.execution_id,
+                        );
+                        return Ok(self.detached_reply(
+                            checkout_id,
+                            &request.execution_id,
+                            wait_ms,
+                        ));
+                    }
                     // HS2-7BTV98: a finished execution of a process that is gone keeps
                     // its own end; an id never seen is remembered as cancelled, on disk
                     // too. HS2-HTS89S: one that was running in a process that is gone is
@@ -717,7 +898,15 @@ impl OrchestrationRuntime {
             }
         };
         execution.cancel.store(true, Ordering::SeqCst);
-        Ok(hosted_reply(&request.execution_id, execution.wait(wait_ms)))
+        // HS2-M7EV18: a step in a detached runner is stopped by its runner.
+        if self.detached_validation {
+            super::validation_runner::request_cancel(
+                &self.home,
+                checkout_id,
+                &request.execution_id,
+            );
+        }
+        Ok(execution.reply(&request.execution_id, wait_ms))
     }
 }
 

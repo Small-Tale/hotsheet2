@@ -52,6 +52,19 @@ pub(super) fn process_started(pid: u32) -> Option<u64> {
     }
 }
 
+/// The start time of a process this one just spawned. A loaded machine can answer
+/// nothing for a child that is still being set up, so it is asked a few more times
+/// over a fraction of a second (a local read of its own child, no request).
+pub(super) fn spawned_started(pid: u32) -> Option<u64> {
+    for _ in 0..50 {
+        if let Some(started) = process_started(pid) {
+            return Some(started);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    None
+}
+
 /// The identity of a step just launched by this process.
 pub(super) fn step_process(pid: u32) -> Option<StepProcess> {
     if !cfg!(unix) {
@@ -60,7 +73,7 @@ pub(super) fn step_process(pid: u32) -> Option<StepProcess> {
     let host_pid = std::process::id();
     Some(StepProcess {
         pid,
-        started: process_started(pid)?,
+        started: spawned_started(pid)?,
         host_pid,
         host_started: process_started(host_pid)?,
     })

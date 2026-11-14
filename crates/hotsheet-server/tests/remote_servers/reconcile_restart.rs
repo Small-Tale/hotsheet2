@@ -41,12 +41,14 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
         .with_plugin_dirs(vec![plugins.clone()]);
     let project = root.path().join("project");
     git_project(&project);
-    // The project's own validation profile: a step that takes longer than its host.
+    // The project's own validation profile: a step that takes longer than its host, and
+    // ends when the test releases it.
     std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
     std::fs::write(
         project.join(".hotsheet2/validation-profiles.json"),
         json!({"schema_version": 1, "profiles": [
-            {"name": "slow", "program": "/bin/sh", "args": ["-c", "sleep 4"]}]})
+            {"name": "slow", "program": "/bin/sh", "args": ["-c",
+                "while [ ! -f release ]; do sleep 0.05; done"]}]})
         .to_string(),
     )
     .unwrap();
@@ -202,8 +204,9 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
     assert_eq!(session["state"], "running");
     let session_id = session["session_id"].as_str().unwrap().to_owned();
     let terminal = session["hosted"]["session_id"].as_str().unwrap().to_owned();
-    // A validation step of the run, started by a headless CLI that hosts it in its own
-    // process and exits without waiting: that host is gone once the command returns.
+    // A validation step of the run, started by a headless CLI that exits without
+    // waiting: that host is gone once the command returns. HS2-M7EV18: the step runs in
+    // its own detached runner, so it outlives that host and both servers.
     let store_arg = source.to_str().unwrap();
     let worker = [
         "--actor-role",
@@ -322,8 +325,9 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
             // The watch Job is still pending: the same watch the gate names.
             {"source":"ci_run","verification":"verified"},
             {"source":"deployment","verification":"verified","reason":"no_deployment"},
-            // Its host process is gone: recorded as lost, never run again.
-            {"source":"validation","verification":"verified","reason":"execution_lost"},
+            // Its host process is gone, but its detached runner still runs it
+            // (HS2-M7EV18): still running, never run again.
+            {"source":"validation","verification":"verified"},
             // The terminal died with the old server while the run waits on CI: no work
             // was lost with it.
             {"source":"session","verification":"verified","reason":"waiting_on_gate"},
@@ -335,10 +339,11 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
         hotsheet_ticketing::orchestration::RunState::Dispatched
     );
     // The records say the same thing.
-    let (shared_check, owner) = (shared.clone(), checkout.id.clone());
+    let (shared_check, owner, records) = (shared.clone(), checkout.id.clone(), home.clone());
+    let expected_result = result_id.clone();
     let (session_state, validation, gate) = tokio::task::spawn_blocking(move || {
         let session = shared_check.session(&owner, &session_id).unwrap();
-        let validation = hotsheet_ticketing::orchestration::ValidationRegistry::new(&home)
+        let validation = hotsheet_ticketing::orchestration::ValidationRegistry::new(&records)
             .steps(&owner, None, 0)
             .unwrap()
             .into_iter()
@@ -351,8 +356,30 @@ async fn hs2_75q254_a_restarted_server_reconciles_ci_validation_and_session_trut
     .await
     .unwrap();
     assert_eq!(session_state.code(), "lost");
-    assert_eq!(validation.state.code(), "unverified");
-    assert_eq!(validation.reason.as_deref(), Some("execution_lost"));
+    assert_eq!(validation.state.code(), "running");
+    assert!(validation.host_started);
     assert_eq!(gate.state.code(), "pending");
+    // The step ends after both servers it outlived; the same request collects its
+    // result from the runner's record.
+    std::fs::write(project.join("release"), "").unwrap();
+    let collected = cli_named(
+        &home,
+        &worker,
+        &[
+            "run",
+            "--project",
+            &checkout.id,
+            "--ticket",
+            &orchestration.slug,
+            "--step",
+            "slow",
+            "--operation-id",
+            "validate-restart",
+            "--run",
+            &run_id,
+        ],
+    );
+    assert_eq!(collected["result"]["state"], "passed", "{collected}");
+    assert_eq!(collected["result"]["result_id"], expected_result.as_str());
     second.begin_stopping();
 }

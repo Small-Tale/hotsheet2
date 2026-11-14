@@ -39,6 +39,7 @@ mod timeline;
 mod tool_capacity;
 mod validation;
 mod validation_output;
+mod validation_runner;
 mod watch;
 pub use access::{ActionRequest, Authorized};
 pub use assignment::{Assignment, CLAIMED_FOR_SESSION};
@@ -127,6 +128,7 @@ pub use validation_output::{
     MAX_RETAINED_COPIES, MAX_RETAINED_STREAM_BYTES, MAX_RETAINED_TOTAL_BYTES, RETAINED_OUTPUT_TTL,
     RetainedOutput, VALIDATION_OUTPUT_DIRECTORY, read_retained,
 };
+pub use validation_runner::{VALIDATION_STEPS_DIRECTORY, run_validation_step};
 pub use watch::{
     HostedSpeculation, MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent,
     TargetTicketEvent, WatchState, WatchStep,
@@ -178,6 +180,8 @@ pub struct OrchestrationRuntime {
     capacity_resample: std::time::Duration,
     /// HS2-J7N3PQ: how a deadline timer waits until its instant (tests skip the wait).
     timer_sleep: Arc<dyn Fn(std::time::Duration) + Send + Sync>,
+    /// HS2-M7EV18: hosted validation steps run in detached runner processes.
+    detached_validation: bool,
 }
 
 impl OrchestrationRuntime {
@@ -214,6 +218,7 @@ impl OrchestrationRuntime {
             prompt: Arc::new(NoPrompt),
             capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
             timer_sleep: Arc::new(std::thread::sleep),
+            detached_validation: false,
             home,
             checkouts,
             providers,
@@ -221,6 +226,16 @@ impl OrchestrationRuntime {
             transport,
             server_id,
         })
+    }
+
+    /// HS2-M7EV18: run hosted validation steps in detached runners, so a step finishes
+    /// and is collected after this process restarts. Only where a runner's liveness can
+    /// be checked by its start time (Linux, macOS); elsewhere steps keep running in the
+    /// hosting process.
+    #[must_use]
+    pub fn with_detached_validation(mut self) -> Self {
+        self.detached_validation = cfg!(any(target_os = "linux", target_os = "macos"));
+        self
     }
 
     /// HS2-AZ15GA: replace how external ticket sources are opened (tests, embedders).
@@ -347,6 +362,8 @@ impl OrchestrationRuntime {
                 .with_session_host(Arc::new(LocalServerSessions::new(home)))
                 // HS2-95SWQ4: the scheduler places the sessions this runtime owns.
                 .with_session_executor(Arc::new(OwnedSessions))
+                // HS2-M7EV18: a hosted validation step outlives this process.
+                .with_detached_validation()
         })
         // HS2-VVHVF0: a watch this runtime creates is observed without a CLI call.
         .map(|runtime| match DetachedJobMonitor::automatic() {

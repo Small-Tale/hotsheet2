@@ -43,6 +43,8 @@ mod timeline;
 mod tool_capacity;
 #[cfg(unix)]
 mod validation;
+#[cfg(unix)]
+mod validation_runner;
 mod watch;
 // HS2-T2KS8G: which wire types accept fields a newer peer adds.
 mod wire_compat;

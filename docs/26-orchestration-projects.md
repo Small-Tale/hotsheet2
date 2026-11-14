@@ -1542,10 +1542,25 @@ at most `wait_ms` (8,000) for it:
   finished execution is answered from that record, so its result is still collected;
   one that was running when the process died answers `unknown` (the attempt becomes
   `unverified`, `execution_lost`) and a start of it that arrives later runs nothing;
-  an id cancelled before it ran stays cancelled. A step still runs inside the hosting
-  process, so a headless CLI that hosts a local target must stay until the step
-  ends, which is why `validation run` waits by default. Running a step as a detached
-  Job is HS2-M7EV18.
+  an id cancelled before it ran stays cancelled.
+- A step runs in a detached runner process, so it finishes and is collected after
+  the hosting process restarts (HS2-M7EV18). The host writes the step's launch to a
+  private spec file under `${HOTSHEET_HOME}/orchestration-validation-steps/` and starts
+  `hotsheet-cli orchestration step-runner` in its own process group (process-journal
+  purpose `validation_step`). The runner claims the spec once, by an atomic rename, so a
+  second runner of the same id runs nothing; it runs the step and records its end in
+  the registry above, which is the runner's outcome file. Any host process answers
+  from that record: `running` while the runner (named by pid and start time) still
+  runs, the recorded end when it has one, and `unknown` (`execution_lost`) when the
+  runner is gone without one. A cancel from any host process leaves a marker the
+  runner waits on with a file watcher and records `cancelled` itself. A headless CLI
+  host may therefore exit while a step runs; `validation run` still waits by default
+  so its caller sees the result. The runner is used where its liveness can be
+  checked by start time (Linux, macOS); elsewhere a step runs inside the hosting
+  process as before. A `hotsheet-jobs` owned Job was evaluated and not used: the Job
+  store has no owned-process runner, and a second record would duplicate the
+  registry's never-run-twice guarantee. Showing runners among the machine's Jobs is
+  HS2-BWAPSX.
 - A step runs as its own process group. While it runs, the record names that group
   and the hosting process, each by pid and start time (HS2-HTS89S). When a later
   host process starts serving (the server at start-up, a CLI host on its first

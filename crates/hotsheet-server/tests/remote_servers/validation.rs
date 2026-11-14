@@ -780,7 +780,7 @@ async fn hs2_zcr3y7_kept_output_is_read_by_digest_on_the_hosting_machine() {
         .register(&project, None, None, vec![source.clone()])
         .unwrap();
     let router = app(host);
-    let (status, started) = api(
+    let (status, mut started) = api(
         router.clone(),
         "POST",
         &format!("/checkouts/{}/target-validations", checkout.id),
@@ -791,7 +791,29 @@ async fn hs2_zcr3y7_kept_output_is_read_by_digest_on_the_hosting_machine() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{started}");
-    assert_eq!(started["outcome"]["stdout"]["sha256"], OK_SHA256);
+    // HS2-M7EV18: the step runs in a detached runner; a loaded machine may start it
+    // after the first bounded wait, so the same execution is waited on again.
+    for _ in 0..6 {
+        if started["state"] != "running" {
+            break;
+        }
+        started = api(
+            router.clone(),
+            "GET",
+            &format!(
+                "/checkouts/{}/target-validations?execution_id=01ARZ3NDEKTSV4RRFFQ69G5FAV&wait_ms=8000",
+                checkout.id
+            ),
+            Value::Null,
+            true,
+        )
+        .await
+        .1;
+    }
+    assert_eq!(
+        started["outcome"]["stdout"]["sha256"], OK_SHA256,
+        "{started}"
+    );
     assert!(!started.to_string().contains("\"ok\""));
     let path = format!(
         "/checkouts/{}/target-validation-output/{OK_SHA256}",

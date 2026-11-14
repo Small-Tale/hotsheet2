@@ -39,6 +39,8 @@ pub enum Purpose {
     Rulesync,
     /// The detached watch-Job monitor started by `hotsheet-cli job watch start` (HS2-5TC1GQ).
     JobMonitor,
+    /// HS2-M7EV18: the detached runner of one hosted validation step.
+    ValidationStep,
 }
 
 /// The observed end of one child; a crash leaves this absent rather than inventing an exit.
@@ -188,6 +190,11 @@ impl TrackedChild {
             };
             let _ = self.journal.finish(&id, reason);
         }
+    }
+
+    /// The child's process id.
+    pub fn id(&self) -> u32 {
+        self.child.id()
     }
 
     pub fn wait(&mut self) -> io::Result<ExitStatus> {
