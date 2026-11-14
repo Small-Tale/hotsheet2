@@ -30,6 +30,12 @@ import {
   requireCurrentRemoteBinding,
 } from './remote-projects/host';
 import { remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
+import {
+  remoteTerminalItem,
+  remoteTerminalLaunchCwd,
+  remoteTerminalList,
+  type RemoteTerminalScope,
+} from './remote-projects/terminals';
 import { remoteRequest } from './remote-projects/transport';
 import { developmentRepositoryRoot } from './repository-root';
 import {
@@ -98,6 +104,8 @@ interface SessionTarget {
     bindingRevision: number;
     checkoutId: string;
     connection: PrivateRemoteConnection;
+    /** The checkout's root on the remote host, read once for terminal launch and ownership. */
+    root?: string;
   };
 }
 interface CorruptDiagnostic {
@@ -1965,6 +1973,67 @@ async function refreshChangeStoreMembership(target: SessionTarget): Promise<void
   );
 }
 
+/** The remote checkout's root on its own host, cached on the session (HS2-PPHJMZ). Only the
+ * trusted bridge holds it; the browser keeps addressing the project by composite id. */
+async function remoteCheckoutRoot(projectId: string, target: SessionTarget): Promise<string | undefined> {
+  if (!target.remote) return undefined;
+  if (target.remote.root !== undefined) return target.remote.root;
+  const path = `/checkouts/${encodeURIComponent(projectId)}`;
+  const response = await proxyProjectRequest(projectId, path, new Request(`http://bridge.invalid${path}`));
+  if (!response.ok) return undefined;
+  const checkout = (await response.json().catch(() => undefined)) as unknown;
+  const root = isRecord(checkout) && typeof checkout.root === 'string' && checkout.root ? checkout.root : undefined;
+  if (root !== undefined && sessions.get(projectId) === target) target.remote.root = root;
+  return root;
+}
+
+/** Every open tab on the same reviewed server, with its remote root, for terminal ownership. */
+async function remoteTerminalScopes(target: SessionTarget): Promise<RemoteTerminalScope[]> {
+  const bindingId = target.remote?.bindingId;
+  const peers = [...sessions.entries()].filter(([, session]) => session.remote?.bindingId === bindingId);
+  const roots = await Promise.all(peers.map(([id, session]) => remoteCheckoutRoot(id, session).catch(() => undefined)));
+  return peers.flatMap(([id], index) => {
+    const root = roots[index];
+    return root === undefined ? [] : [{ id, root }];
+  });
+}
+
+function remoteTerminalLaunchBody(body: ArrayBuffer | undefined, projectId: string, root: string): ArrayBuffer {
+  const text = body ? Buffer.from(body).toString('utf8') : '';
+  const value: unknown = text.trim() ? JSON.parse(text) : {};
+  if (!isRecord(value)) throw new Error('Terminal launch must be a JSON object.');
+  const encoded = Buffer.from(
+    JSON.stringify({ ...value, cwd: remoteTerminalLaunchCwd(value.cwd, projectId, root) }),
+    'utf8',
+  );
+  return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+}
+
+/** A remote host lists all of its terminals; a tab sees only the ones it owns (HS2-JJKVJJ). */
+async function remoteTerminalResponse(
+  response: Response,
+  projectId: string,
+  target: SessionTarget,
+  list: boolean,
+): Promise<Response> {
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return new Response(text, { status: response.status, headers: response.headers });
+  }
+  const scopes = await remoteTerminalScopes(target);
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.delete('content-encoding');
+  headers.set('content-type', 'application/json');
+  return new Response(
+    JSON.stringify(list ? remoteTerminalList(value, projectId, scopes) : remoteTerminalItem(value, projectId, scopes)),
+    { status: response.status, headers },
+  );
+}
+
 export async function proxyProjectRequest(
   projectId: string,
   path: string,
@@ -2000,6 +2069,23 @@ export async function proxyProjectRequest(
         headers.set('x-hotsheet-csrf', credentials.session_csrf);
       }
       const [pathname, query] = path.split('?', 2);
+      const terminalPath = pathname === '/terminals' || /^\/terminals\/[^/]+$/.test(pathname);
+      // Terminal answers are rewritten for ownership, so they must arrive uncompressed (HS2-JJKVJJ).
+      if (terminalPath) headers.delete('accept-encoding');
+      let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
+      if (pathname === '/terminals' && request.method === 'POST') {
+        const root = await remoteCheckoutRoot(projectId, target);
+        if (root === undefined)
+          return Response.json({ error: 'Could not read the remote project directory.' }, { status: 503 });
+        try {
+          body = remoteTerminalLaunchBody(body, projectId, root);
+        } catch (error) {
+          return Response.json(
+            { error: error instanceof Error ? error.message : 'Invalid terminal launch.' },
+            { status: 400 },
+          );
+        }
+      }
       let nativePath = path;
       if (pathname.startsWith('/checkouts/')) {
         const match = /^\/checkouts\/([^/]+)(.*)$/.exec(pathname);
@@ -2013,12 +2099,19 @@ export async function proxyProjectRequest(
         {
           method: request.method,
           headers,
-          body: request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer(),
+          body,
           redirect: 'manual',
           ...(signal ? { signal } : {}),
         },
         credentials,
       );
+      if (terminalPath && response.ok && request.method !== 'HEAD' && request.method !== 'DELETE')
+        return await remoteTerminalResponse(
+          response,
+          projectId,
+          target,
+          pathname === '/terminals' && request.method === 'GET',
+        );
       return new Response(response.body, { status: response.status, headers: response.headers });
     } catch {
       return Response.json({ error: 'Remote server is unavailable or its approval changed.' }, { status: 503 });
@@ -2154,9 +2247,15 @@ export function authenticatedServerUrl(origin: string, path: string, secret: str
 export async function projectTerminalWebSocketUrl(projectId: string, terminalId: string): Promise<string | undefined> {
   const target = sessions.get(projectId);
   if (!target) return undefined;
-  // Remote terminal transport remains deferred by docs/08 §8.2; ticket data and its
-  // change stream are the first cross-server desktop scope (HS2-BT4KN6).
-  if (target.remote) return undefined;
+  if (target.remote) {
+    // A remote tab attaches to its own reviewed server's PTY (HS2-PPHJMZ). The upgrade carries that
+    // server's private session, Origin and CSRF from projectRemoteWebSocketOptions; the server
+    // requires a read-write session and ends the stream when the session is revoked.
+    await requireCurrentRemoteBinding(target.remote.connection);
+    const url = new URL(`/terminals/${encodeURIComponent(terminalId)}/attach`, target.url);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.toString();
+  }
   await refreshSupervisedTarget(target);
   if (remoteBrowserAuthRequired()) {
     const bootstrap = await ensureServer(await bootstrapStore());

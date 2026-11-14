@@ -28,6 +28,24 @@ describe('terminalProjectOwner', () => {
     ).toBe('child');
   });
 
+  it('HS2-JJKVJJ keeps a bridge-presented remote terminal in its own tab beside local and other remote tabs', () => {
+    const left = 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:app-1',
+      sibling = 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:app-10',
+      right = 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAW:app-1',
+      open = [
+        { id: 'local', root: '/work/app' },
+        { id: left, root: left },
+        { id: sibling, root: sibling },
+        { id: right, root: right },
+      ];
+    // The bridge presents an owned remote terminal's launch directory as its tab id; its cwd stays
+    // the remote host's path, which may coincide with a local root.
+    expect(terminalProjectOwner(open, left) ?? terminalProjectOwner(open, '/work/app')).toBe(left);
+    expect(terminalProjectOwner(open, sibling)).toBe(sibling);
+    expect(terminalProjectOwner(open, right)).toBe(right);
+    expect(terminalProjectOwner(open, '/work/app')).toBe('local');
+  });
+
   it('keeps cwd-less legacy terminals only when ownership is unambiguous', () => {
     expect(terminalProjectOwner([projects[0]], undefined)).toBe('hotsheet');
     expect(terminalProjectOwner(projects, undefined)).toBeUndefined();

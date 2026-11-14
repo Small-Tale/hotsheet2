@@ -1956,8 +1956,12 @@ Sessions expire after 30 days absolute or 24 hours idle; active-use timestamps
 persist at most once per minute. The browser host checks same-origin writes,
 and the server requires the matching Origin and CSRF token; WebSocket upgrades
 require the approved Origin, with terminal input requiring write role and CSRF.
+Every terminal attach, including a desktop bridge's attach to a remote project's
+PTY, is input-capable and so needs the read-write role and CSRF; REST terminal
+mutations need the same (HS2-PPHJMZ).
 Revocation, logout and rotation invalidate the old session immediately; open
-sync and terminal streams recheck within one second. Reloads and server restarts
+sync and terminal streams recheck within one second; ending a terminal stream also
+stops its output writer, so a revoked viewer receives nothing further. Reloads and server restarts
 recover a still-valid cookie from the durable catalog. No bearer or session
 token is placed in a URL, browser storage, telemetry or logs.
 

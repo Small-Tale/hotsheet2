@@ -85,6 +85,18 @@ pub(crate) async fn attach_terminal(
     })
 }
 
+/// A spawned attach task that is aborted when its owner is dropped. A remote attach races its
+/// loop against [`remote_session_ended`]; cancelling the loop must also stop the tasks it
+/// spawned, or the detached writer keeps the viewer's socket open and streaming PTY output to a
+/// revoked session (HS2-PPHJMZ).
+struct AttachTask<T>(tokio::task::JoinHandle<T>);
+
+impl<T> Drop for AttachTask<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 async fn remote_session_ended(state: AppState, headers: HeaderMap) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
     loop {
@@ -336,13 +348,13 @@ async fn terminal_attach_loop(
     let (sink, mut inbound) = socket.split();
     let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
     let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
-    let pump = tokio::spawn(pump_viewer_output::<Outbound>(
+    let pump = AttachTask(tokio::spawn(pump_viewer_output::<Outbound>(
         term.clone(),
         rx,
         size_rx,
         frames_tx,
-    ));
-    let notification_pump = tokio::spawn(async move {
+    )));
+    let notification_pump = AttachTask(tokio::spawn(async move {
         let mut scanner = hotsheet_terminals::OscScanner::new();
         loop {
             match notification_rx.recv().await {
@@ -357,12 +369,14 @@ async fn terminal_attach_loop(
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
-    });
-    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx, replay));
+    }));
+    let mut writer = AttachTask(tokio::spawn(write_viewer(
+        sink, frames_rx, control_rx, replay,
+    )));
 
     loop {
         tokio::select! {
-            _ = &mut writer => break, // the terminal ended or the viewer stopped accepting output
+            _ = &mut writer.0 => break, // the terminal ended or the viewer stopped accepting output
             message = inbound.next() => match message {
                 // Input is queued for the terminal's writer thread, so a child that is not
                 // reading stdin never parks this worker or stops control frames (HS2-FERD7N).
@@ -405,9 +419,7 @@ async fn terminal_attach_loop(
             },
         }
     }
-    pump.abort();
-    notification_pump.abort();
-    writer.abort();
+    drop((pump, notification_pump, writer));
 
     // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
     if let Some(v) = my_viewer {
@@ -508,12 +520,19 @@ async fn broker_attach_loop(
     let (sink, mut inbound) = socket.split();
     let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
     let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
-    let pump = tokio::spawn(pump_broker_output(broker_out, frames_tx, state, id.clone()));
-    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx, replay));
+    let pump = AttachTask(tokio::spawn(pump_broker_output(
+        broker_out,
+        frames_tx,
+        state,
+        id.clone(),
+    )));
+    let mut writer = AttachTask(tokio::spawn(write_viewer(
+        sink, frames_rx, control_rx, replay,
+    )));
 
     loop {
         tokio::select! {
-            _ = &mut writer => break, // the terminal ended or the viewer stopped accepting output
+            _ = &mut writer.0 => break, // the terminal ended or the viewer stopped accepting output
             message = inbound.next() => match message {
                 Some(Ok(Message::Binary(b))) => {
                     // Base64 once the broker proved it speaks it (HS2-9R751Y).
@@ -561,8 +580,7 @@ async fn broker_attach_loop(
     }
     // Ending the pump drops the broker connection, so the broker self-heals the size claim;
     // ending the writer drops the WebSocket to the viewer.
-    pump.abort();
-    writer.abort();
+    drop((pump, writer));
 }
 
 #[cfg(test)]

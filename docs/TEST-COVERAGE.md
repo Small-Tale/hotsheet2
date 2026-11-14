@@ -48,6 +48,21 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-PPHJMZ / HS2-JJKVJJ (remote terminals): `hotsheet-server/tests/remote_terminals.rs`
+runs a real off-box listener, in process and through the detached broker: a read-only
+session lists but cannot open or attach, a read-write session needs CSRF for both,
+input echoes through the attached PTY, and revoking the session ends the live stream
+and refuses a reattach. `clients/web/src/remote-projects/terminals.test.ts` covers the
+launch-directory translation and per-server ownership (most specific checkout, legacy
+composite launches, no lone-tab claim of a stray terminal);
+`remote-projects/transport.test.ts` drives the bridge against two synthetic servers:
+each tab attaches with its own session, a reconnect re-resolves, removing one binding
+closes only its terminal streams, a revoked registry entry is refused before any
+upgrade, a launch reaches the server with the checkout root, another tab's id is
+refused, and two checkouts on one server and equal checkout ids on two servers list
+disjoint terminals. Unit and integration only; the remote drawer browser E2E is HS2-NHB2XF.
+No customer content was copied into fixtures.
+
 HS2-85W6BE / HS2-DXM0YN: `hotsheet-server/src/remote_auth.rs` tests the 15-minute
 boundary, admin and local grants through approve, redeem, reopen and change, reject,
 a pre-grant catalog, the change cursor (visible changes only) and the long-poll wait.

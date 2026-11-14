@@ -222,8 +222,23 @@ machine registry, not browser storage. Tabs include the server label and use
 composite ids so identical checkout ids on different hosts remain independent.
 The desktop bridge routes REST and change WebSockets to each tab's reviewed
 server; removing or reviewing one binding closes only its sessions. The phone
-browser continues to list projects from its single connected host. Remote PTY
-display and control remain deferred by [08](08-distributed-and-remote.md) §8.2.
+browser continues to list projects from its single connected host.
+**Remote terminals (HS2-PPHJMZ, HS2-JJKVJJ).** A remote tab's terminal drawer
+attaches to that server's PTYs: the bridge upgrades `/terminals/{id}/attach` on the
+reviewed server with that server's private session, Origin and CSRF proof (and its
+CA and client certificate), and closes the stream when the binding is removed or
+changes. A launch runs in the remote checkout's own directory: the bridge reads that
+checkout's root once from the remote `GET /checkouts/{id}` and substitutes it for
+the composite id the drawer sends, refusing another tab's id. A server lists all
+of its terminals, so the bridge shows a tab only the terminals whose launch
+directory (else reported directory) lies in its checkout, choosing the most
+specific open checkout on that server, and presents their launch directory as the
+tab's composite id for the client's ownership rule. Two tabs on one server, and
+equal checkout ids on two servers, therefore never share a terminal. Creating,
+typing into or attaching a remote terminal needs the host owner's **read-write**
+approval of the desktop's session ([08](08-distributed-and-remote.md) §8.2.3);
+remote AI chats and their project mapping are tracked by HS2-TCJQHX, and the
+read-only drawer explanation by HS2-NHB2XF.
 On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The
