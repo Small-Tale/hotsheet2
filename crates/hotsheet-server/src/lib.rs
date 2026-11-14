@@ -2195,6 +2195,11 @@ pub fn app(state: AppState) -> Router {
                 .post(routes::orchestration::write)
                 .patch(routes::orchestration::write),
         )
+        // HS2-G1PKK2: a long poll on the hosting machine's resource wait.
+        .route(
+            "/checkouts/{checkout}/target-resource-wait",
+            get(routes::orchestration::read),
+        )
         // HS2-D85G19: one bounded page of a hosted source's open tickets.
         .route(
             "/checkouts/{checkout}/target-tickets/list",

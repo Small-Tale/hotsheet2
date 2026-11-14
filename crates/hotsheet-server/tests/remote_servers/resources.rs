@@ -533,3 +533,91 @@ async fn hs2_2fg91x_server_loop_defers_held_work_and_wakes_on_release() {
         .unwrap()
         .unwrap();
 }
+
+/// HS2-G1PKK2: the hosted resource wait a remote orchestrator long-polls is a genuine
+/// long poll on this machine's own claim backend: it parks until a release and answers
+/// at once, and a short wait on a held resource answers held.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_g1pkk2_hosted_resource_wait_parks_until_a_release_on_a_live_service() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+            .register(&project, None, None, vec![source.clone()])
+            .unwrap();
+    let router = app(host);
+    let wait = format!(
+        "/checkouts/{}/target-resource-wait?namespace=vm&resource=macos-vm",
+        checkout.id
+    );
+    let api = super::orchestration::api;
+    assert_eq!(
+        api(router.clone(), "GET", &wait, Value::Null, false)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, free) = api(router.clone(), "GET", &wait, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{free}");
+    assert_eq!(free, json!({"free": true}));
+    // A session holds the VM through the server's own claim route.
+    let (status, grant) = api(
+        router.clone(),
+        "POST",
+        &format!("/resource-claims/{VM}/acquire"),
+        json!({"duration_ms": 1_800_000}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{grant}");
+    let token = grant["renewal_token"].as_str().unwrap().to_owned();
+    let (_, held) = api(
+        router.clone(),
+        "GET",
+        &format!("{wait}&wait_ms=100"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(held, json!({"free": false}));
+    // A full-length wait parks; the release answers it long before its bound.
+    let parked = tokio::spawn(api(
+        router.clone(),
+        "GET",
+        format!("{wait}&wait_ms=8000").leak(),
+        Value::Null,
+        true,
+    ));
+    let began = std::time::Instant::now();
+    tokio::task::yield_now().await;
+    let (status, released) = api(
+        router.clone(),
+        "POST",
+        &format!("/resource-claims/{VM}/release"),
+        json!({"renewal_token": token}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{released}");
+    let (status, answer) = parked.await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(answer, json!({"free": true}));
+    assert!(began.elapsed() < std::time::Duration::from_secs(7));
+    // Malformed requests are typed.
+    let (status, _) = api(
+        router,
+        "GET",
+        &format!(
+            "/checkouts/{}/target-resource-wait?namespace=vm",
+            checkout.id
+        ),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

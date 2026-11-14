@@ -1494,7 +1494,7 @@ impl OrchestrationRuntime {
                     Ok(view) => {
                         // HS2-2FG91X: a release wakes this loop; an expiry is the
                         // retry time below.
-                        self.watch_releases(&view.view.schedule);
+                        self.watch_releases(owner_id, &actor, &view.view.schedule);
                         state.retry_at_ms = view.view.schedule.retry_at_ms;
                         step.failed = view.view.inputs.executor == "failed";
                     }

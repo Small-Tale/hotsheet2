@@ -63,7 +63,10 @@ pub use readiness::{
 };
 pub use recovery::{CorrectRun, HandoffRun, PauseRun, ReconcileFailure, ReconcileSummary};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};
-pub use resources::{ClaimSource, ClaimsUnreachable, MAX_CLAIM_WATCHES, MachineClaims};
+pub use resources::{
+    ClaimSource, ClaimsUnreachable, MAX_CLAIM_WATCHES, MAX_RESOURCE_WAIT_MS, MachineClaims,
+    RemoteRelease, ResourceWait,
+};
 pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
     RunStatus, RunView,

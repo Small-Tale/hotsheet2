@@ -62,6 +62,8 @@ pub fn is_path(path: &str) -> bool {
             ]
             // HS2-J8PRTV: the hosted capacity snapshot and admission answer.
             | ["checkouts", _, "target-capacity" | "target-admission"]
+            // HS2-G1PKK2: a long poll on the hosting machine's resource wait.
+            | ["checkouts", _, "target-resource-wait"]
             // HS2-WN0MXZ: validation steps (orchestrating) and the hosted execution.
             | ["checkouts", _, "orchestration", "validations", _]
             | ["checkouts", _, "target-validations"]
@@ -254,7 +256,7 @@ fn checked_target(target: &TargetRef, owner: &str, id: &str) -> Result<(), Orche
     Ok(())
 }
 
-struct Clock;
+pub(super) struct Clock;
 impl hotsheet_ticketing::Clock for Clock {
     fn now_ms(&self) -> u64 {
         std::time::SystemTime::now()
@@ -263,7 +265,7 @@ impl hotsheet_ticketing::Clock for Clock {
             .unwrap_or(0)
     }
 }
-struct Rng;
+pub(super) struct Rng;
 impl hotsheet_ticketing::Rng for Rng {
     fn next_u128(&mut self) -> u128 {
         ulid::Ulid::new().into()
@@ -535,6 +537,19 @@ impl OrchestrationRuntime {
             }
             ("PATCH", ["checkouts", checkout, "target-tickets"]) => {
                 value(self.hosted_ticket_update(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-G1PKK2 hosted half: wait on this machine's claim backend.
+            ("GET", ["checkouts", checkout, "target-resource-wait"]) => {
+                let namespace = query_text(path, "namespace")?
+                    .ok_or(OrchestrationError::Invalid("namespace is required"))?;
+                let resource = query_text(path, "resource")?
+                    .ok_or(OrchestrationError::Invalid("resource is required"))?;
+                value(self.hosted_resource_wait(
+                    checkout,
+                    &namespace,
+                    &resource,
+                    query_number(path, "wait_ms", 0)?,
+                )?)
             }
             // HS2-7QHWHJ hosted half: ticket changes after a cursor, with a bounded wait.
             ("GET", ["checkouts", checkout, "target-events"]) => {

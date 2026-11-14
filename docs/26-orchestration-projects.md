@@ -28,7 +28,8 @@
 > `placement.automatic`; a session on another server wakes it through the target
 > feed, HS2-257Q2Z) and dispatches the run of each step it places (HS2-YC2P7K),
 > resource requirements of plan steps and targets with scheduling around held
-> resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads),
+> resource claims (§26.20, HS2-2FG91X; the session claims, the scheduler only reads;
+> a release on another machine wakes the loop through that machine's wait, HS2-G1PKK2),
 > the read-only progress and cost summary of runs across targets (§26.21, HS2-S13719;
 > cost is read for targets on this machine only),
 > one live session per run, adopted rather than doubled (§26.24, HS2-DG0YPA),
@@ -2927,8 +2928,22 @@ others. A claim is over at its expiry, so work may be placed at that instant.
   at a time. When the wait ends, the scheduler's wake marker is written and the
   loop runs a pass. The wait is the backend's release signal (§36.6), not a poll,
   and a resource is waited on once however many passes defer work for it.
-- **Another machine.** A claim on another machine's backend has no wait from here
-  yet (HS2-G1PKK2): the loop looks again at its expiry or at the next event.
+- **Another machine (HS2-G1PKK2).** For a `held` resource on the machine of a remote
+  target, the loop waits with that machine's own wait. It finds the owner's target
+  bound to that server, passes the gate as `gates_observe` (it never asks; again
+  after 10 minutes), and long-polls the hosted
+  `GET /checkouts/{checkout}/target-resource-wait?namespace=&resource=&wait_ms=` over
+  the reviewed target transport. That route waits on the hosting machine's claim
+  backend with the same wait primitive for at most 8 seconds (`MAX_RESOURCE_WAIT_MS`,
+  under the transport's read timeout) and answers `{free}`. Free (a release, or the
+  lease lapsing) writes the wake marker; still held (renewed, or nothing happened)
+  asks again at once. The watch ends without a wake when the peer cannot be asked
+  (unreachable, a revoked registration, an older peer without the route), the gate
+  refuses, a held answer comes back long before the wait asked for (a backend that
+  cannot wait, so nothing spins), or after 24 hours. Then the expiry is still the
+  retry time, and the next pass arms the watch again. Remote watches count against
+  the same 16 and are keyed by server, so a resource of the same name on this
+  machine is another watch.
 
 A one-shot `plan`, `explain` or `tick` waits on nothing.
 
@@ -2986,9 +3001,13 @@ hotsheet-cli ... orchestration scheduler plan --project <owner>
 hotsheet-cli ... orchestration scheduler explain <step-id> --project <owner>
 ```
 
-No route was added: `readiness/define`, the policy body, the capacity snapshot and
-the scheduler responses carry the new members, and MCP `hotsheet_targets`
-`readiness_define` takes `resources`.
+No orchestrating route was added: `readiness/define`, the policy body, the capacity
+snapshot and the scheduler responses carry the new members, and MCP
+`hotsheet_targets` `readiness_define` takes `resources`. The hosted
+`/checkouts/{checkout}/target-resource-wait` (HS2-G1PKK2) is machine-to-machine
+plumbing of the scheduling loop and is ordinary authenticated project data; a person
+or tool waits on the same backend with `hotsheet-cli resource show <ns>/<res> --wait`
+or the `resource-claims` routes.
 
 ## 26.21 Progress and cost summary (HS2-S13719)
 

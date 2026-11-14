@@ -1086,8 +1086,8 @@ fn hs2_2fg91x_a_resource_on_another_machine_is_read_from_that_machines_backend()
             )
         )]
     );
-    // A following loop waits on nothing here for a claim on another machine: the
-    // expiry it was told is when it looks again.
+    // A following loop waits on the peer's own backend for a claim there
+    // (HS2-G1PKK2); the expiry it was told is still when it looks again.
     let mut state = SchedulerFollowState::default();
     let followed = r
         .runtime
@@ -1096,7 +1096,10 @@ fn hs2_2fg91x_a_resource_on_another_machine_is_read_from_that_machines_backend()
         (followed.trigger, followed.retry_at_ms),
         (Some("start"), Some(held.claim.expires_at_ms))
     );
-    assert!(r.runtime.claim_watches().is_empty());
+    assert_eq!(
+        r.runtime.claim_watches(),
+        [("vm".to_owned(), "macos-vm".to_owned())]
+    );
     assert!(r.sessions.calls().is_empty());
 
     // Released on the peer while the same name is held on the controller's own
@@ -1117,4 +1120,346 @@ fn hs2_2fg91x_a_resource_on_another_machine_is_read_from_that_machines_backend()
         (0, 1)
     );
     release(&r.home, &local);
+}
+
+/// HS2-G1PKK2: remote work that needs the peer's VM, which the peer holds now.
+fn remote_waiting(lease: Duration, tx: &mut Transaction<'_>) -> (Remote, Grant, String) {
+    let r = remote(tx);
+    let ticket = ops::create(
+        &r.peer.hosted.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "Remote work".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let step = r
+        .runtime
+        .readiness_define(
+            &r.owner.id,
+            serde_json::from_value(json!({
+                "ticket": {"native_id": r.orchestration.slug},
+                "target_id": id(1), "connection_id": r.peer.hosted.target_connection(),
+                "native_id": ticket.slug, "resources": [need(VM)],
+            }))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+        .unwrap()
+        .readiness
+        .step
+        .step_id;
+    let held = ClaimService::new(&r.peer.hosted.home)
+        .acquire(
+            &ResourceRef::parse(VM).unwrap(),
+            lease,
+            None,
+            &BTreeMap::new(),
+        )
+        .unwrap();
+    (r, held, step)
+}
+
+fn wait_calls(r: &Remote) -> usize {
+    r.peer
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, path)| path.contains("/target-resource-wait?"))
+        .count()
+}
+
+/// Wait on state, never a fixed delay: until `done` or the bound passes.
+fn until(bound: Duration, mut done: impl FnMut() -> bool) -> bool {
+    let began = std::time::Instant::now();
+    while began.elapsed() < bound {
+        if done() {
+            return true;
+        }
+        std::thread::yield_now();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    done()
+}
+
+/// Follow steps until one is triggered, within `bound`.
+fn follow_until_triggered(
+    r: &Remote,
+    state: &mut SchedulerFollowState,
+    bound: Duration,
+    tx: &mut Transaction<'_>,
+) -> Option<&'static str> {
+    let began = std::time::Instant::now();
+    let mut trigger = None;
+    while trigger.is_none() && began.elapsed() < bound {
+        trigger = r
+            .runtime
+            .scheduler_follow_step(&r.owner.id, state, 1_000, tx)
+            .trigger;
+    }
+    trigger
+}
+
+#[test]
+fn hs2_g1pkk2_a_release_on_another_machine_wakes_the_follower() {
+    tx!(tx);
+    let (r, held, step) = remote_waiting(Duration::from_secs(30 * 60), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let first = r
+        .runtime
+        .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx);
+    assert_eq!(first.trigger, Some("start"));
+    assert!(r.sessions.calls().is_empty());
+    // The watch long-polls the peer's own wait over the reviewed transport.
+    assert!(until(Duration::from_secs(5), || wait_calls(&r) >= 1));
+    let path = r
+        .peer
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, path)| path.contains("/target-resource-wait?"))
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        path,
+        (
+            "GET".to_owned(),
+            format!(
+                "/checkouts/{}/target-resource-wait?namespace=vm&resource=macos-vm&wait_ms={MAX_RESOURCE_WAIT_MS}",
+                r.peer.hosted.target.id
+            )
+        )
+    );
+    // Another pass that defers the same work arms no second watch.
+    OrchestrationRuntime::scheduler_wake_at(&r.home);
+    assert_eq!(
+        r.runtime
+            .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx)
+            .trigger,
+        Some("signal")
+    );
+    assert_eq!(r.runtime.claim_watches().len(), 1);
+    // The holder releases on the peer: the peer's wait answers, the follower wakes
+    // and the work starts, long before the claim's expiry.
+    release(&r.peer.hosted.home, &held);
+    assert_eq!(
+        follow_until_triggered(&r, &mut state, Duration::from_secs(20), &mut tx),
+        Some("signal")
+    );
+    let [SessionCall::Start(request)] = &r.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    assert_eq!(request.steps, [step]);
+    assert!(until(Duration::from_secs(5), || r
+        .runtime
+        .claim_watches()
+        .is_empty()));
+}
+
+#[test]
+fn hs2_g1pkk2_an_expiry_on_another_machine_wakes_the_follower() {
+    tx!(tx);
+    // Nobody releases; the lease lapses on the peer's clock.
+    let (r, _held, step) = remote_waiting(Duration::from_millis(1_500), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    assert_eq!(
+        r.runtime
+            .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx)
+            .trigger,
+        Some("start")
+    );
+    assert!(r.sessions.calls().is_empty());
+    // The test's own clock never reaches the expiry, so only the peer's wait can
+    // wake the loop.
+    assert_eq!(
+        follow_until_triggered(&r, &mut state, Duration::from_secs(20), &mut tx),
+        Some("signal")
+    );
+    let [SessionCall::Start(request)] = &r.sessions.calls()[..] else {
+        panic!("one start");
+    };
+    assert_eq!(request.steps, [step]);
+}
+
+#[test]
+fn hs2_g1pkk2_a_renewal_on_another_machine_keeps_the_watch_waiting() {
+    tx!(tx);
+    let (r, held, _) = remote_waiting(Duration::from_millis(1_500), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    r.runtime
+        .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx);
+    assert!(until(Duration::from_secs(5), || wait_calls(&r) >= 1));
+    // The holder renews before the lease lapses.
+    ClaimService::new(&r.peer.hosted.home)
+        .renew(&held.renewal_token, Duration::from_secs(30 * 60), None)
+        .unwrap();
+    // Past the old expiry nothing wakes the loop and the watch still waits.
+    let quiet = std::time::Instant::now();
+    while quiet.elapsed() < Duration::from_millis(2_500) {
+        assert_eq!(
+            r.runtime
+                .scheduler_follow_step(&r.owner.id, &mut state, 500, &mut tx)
+                .trigger,
+            None
+        );
+    }
+    assert_eq!(r.runtime.claim_watches().len(), 1);
+    assert!(r.sessions.calls().is_empty());
+    release(&r.peer.hosted.home, &held);
+    assert_eq!(
+        follow_until_triggered(&r, &mut state, Duration::from_secs(20), &mut tx),
+        Some("signal")
+    );
+    assert_eq!(r.sessions.calls().len(), 1);
+}
+
+#[test]
+fn hs2_g1pkk2_an_unreachable_peer_ends_the_watch_without_a_wake() {
+    tx!(tx);
+    let (r, held, _) = remote_waiting(Duration::from_secs(30 * 60), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    r.runtime
+        .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx);
+    assert!(until(Duration::from_secs(5), || wait_calls(&r) >= 1));
+    // The peer stops answering. The wait in flight ends held; the next request
+    // fails, and the watch ends without waking anyone or asking again.
+    *r.peer.status_override.lock().unwrap() = Some(503);
+    assert!(until(
+        Duration::from_millis(MAX_RESOURCE_WAIT_MS + 10_000),
+        || r.runtime.claim_watches().is_empty()
+    ));
+    let asked = wait_calls(&r);
+    assert_eq!(asked, 2);
+    assert_eq!(
+        r.runtime
+            .scheduler_follow_step(&r.owner.id, &mut state, 0, &mut tx)
+            .trigger,
+        None
+    );
+    assert!(r.sessions.calls().is_empty());
+    *r.peer.status_override.lock().unwrap() = None;
+    release(&r.peer.hosted.home, &held);
+}
+
+#[test]
+fn hs2_g1pkk2_a_follow_ends_on_deadline_refusal_or_a_peer_that_does_not_wait() {
+    tx!(tx);
+    let (r, held, _) = remote_waiting(Duration::from_secs(30 * 60), &mut tx);
+    let target = TargetRef {
+        owner_checkout_id: r.owner.id.clone(),
+        target_id: id(1),
+    };
+    let follow = |target: &TargetRef, deadline: std::time::Instant, tx: &mut Transaction<'_>| {
+        r.runtime
+            .follow_remote_release(&r.owner.id, target, &worker(), &need(VM), deadline, tx)
+    };
+    let soon = || std::time::Instant::now() + Duration::from_secs(30);
+    // A deadline already passed asks nothing.
+    let before = wait_calls(&r);
+    assert_eq!(
+        follow(&target, std::time::Instant::now(), &mut tx),
+        RemoteRelease::Ended("deadline".into())
+    );
+    assert_eq!(wait_calls(&r), before);
+    // An undeclared target is refused by the gate before the peer is asked.
+    let undeclared = TargetRef {
+        owner_checkout_id: r.owner.id.clone(),
+        target_id: id(7),
+    };
+    assert!(matches!(
+        follow(&undeclared, soon(), &mut tx),
+        RemoteRelease::Ended(code) if code != "deadline"
+    ));
+    assert_eq!(wait_calls(&r), before);
+    // Free: the follow answers released and writes the scheduler's wake marker.
+    release(&r.peer.hosted.home, &held);
+    let marker = r.home.join("orchestration-scheduler-wake").join("token");
+    let _ = std::fs::remove_file(&marker);
+    assert_eq!(follow(&target, soon(), &mut tx), RemoteRelease::Released);
+    assert!(marker.is_file());
+    assert_eq!(wait_calls(&r), before + 1);
+    // A peer whose backend cannot wait answers held at once: the follow ends rather
+    // than asking again in a tight loop.
+    let state = find_state(&r.peer.hosted.home).expect("the peer's claim state");
+    acquire(&r.peer.hosted.home, VM);
+    std::fs::write(&state, b"{").unwrap();
+    assert_eq!(
+        follow(&target, soon(), &mut tx),
+        RemoteRelease::Ended("peer_did_not_wait".into())
+    );
+    assert_eq!(wait_calls(&r), before + 2);
+}
+
+/// The local backend's state file of the `vm` namespace under a machine home.
+fn find_state(dir: &Path) -> Option<PathBuf> {
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_state(&path) {
+                return Some(found);
+            }
+        } else if path.ends_with("namespaces/vm/state.json") {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[test]
+fn hs2_g1pkk2_the_hosted_wait_answers_from_this_machines_backend() {
+    let m = machine(10, false, unsupported);
+    let base = format!("/checkouts/{}/target-resource-wait", m.target.id);
+    let wait = |query: &str| {
+        m.runtime
+            .request_now("GET", &format!("{base}{query}"), &Value::Null)
+    };
+    // Nothing held: free at once.
+    assert_eq!(
+        wait("?namespace=vm&resource=macos-vm&wait_ms=0").unwrap(),
+        json!({"free": true})
+    );
+    // Held: still held when a short wait ends; free once released.
+    let grant = acquire(&m.home, VM);
+    assert_eq!(
+        wait("?namespace=vm&resource=macos-vm&wait_ms=50").unwrap(),
+        json!({"free": false})
+    );
+    release(&m.home, &grant);
+    assert_eq!(
+        wait("?namespace=vm&resource=macos-vm&wait_ms=50").unwrap(),
+        json!({"free": true})
+    );
+    for query in [
+        "",
+        "?namespace=vm",
+        "?resource=macos-vm",
+        "?namespace=Not%20One&resource=macos-vm",
+        "?namespace=vm&resource=macos-vm&wait_ms=x",
+        "?namespace=vm&namespace=vm&resource=macos-vm",
+    ] {
+        assert!(
+            matches!(wait(query), Err(OrchestrationError::Invalid(_))),
+            "{query}"
+        );
+    }
+    // A checkout this machine does not host is not found.
+    assert!(
+        m.runtime
+            .request_now(
+                "GET",
+                "/checkouts/elsewhere-0123456789ab/target-resource-wait?namespace=vm&resource=macos-vm",
+                &Value::Null,
+            )
+            .is_err()
+    );
+    // Ordinary authenticated project data, not machine-fenced, so a remote
+    // orchestrator can reach it.
+    assert!(is_path(&base));
+    assert!(!is_machine_path(&base));
 }

@@ -3518,6 +3518,66 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-resource-wait:
+    description:
+      A long poll on this machine's own claim backend for a remote orchestrator's scheduling loop (HS2-G1PKK2). Parks
+      until the resource is free (released or lapsed) or the wait ends, at most 8 seconds. Ordinary authenticated
+      project data under the caller's device role.
+    get:
+      operationId: waitHostedTargetResource
+      parameters:
+        - name: namespace
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+        - name: resource
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+        - name: wait_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
+            default: 0
+      responses:
+        '200':
+          description: Whether the resource was free when the wait ended.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - free
+                properties:
+                  free:
+                    type: boolean
+                additionalProperties: false
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
