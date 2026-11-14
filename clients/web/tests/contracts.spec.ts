@@ -872,7 +872,8 @@ test('HS2-GDJXGZ real orchestration session and hosted target session responses 
     const unknown = await send('DELETE', hosted, { operation_id: 'contract-op', actor: person });
     expect(unknown.status).toBe(200);
     matches(hostedPath, 'delete', '200', unknown.body);
-    expect(unknown.body).toEqual({ stopped: false, reason: 'session_not_found' });
+    // HS2-WHR4GS: the stop fences the operation so a late start launches nothing.
+    expect(unknown.body).toEqual({ stopped: false, reason: 'session_not_found', fenced: true });
     const nobody = await send('PATCH', hosted, { operation_id: 'contract-op', pause: true, actor: person });
     expect(nobody.status).toBe(200);
     matches(hostedPath, 'patch', '200', nobody.body);

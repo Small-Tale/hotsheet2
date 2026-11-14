@@ -36,7 +36,8 @@
 > claimed for its session (§26.24, HS2-T16SK0), a placed session that never joins
 > its role wound down and replaced a bounded number of times (§26.24, HS2-NPTKS8),
 > and a refilled session told its exact ticket through its host's session push
-> (§26.24, HS2-R7QH35),
+> (§26.24, HS2-R7QH35), and a withdrawn unconfirmed start fenced on its host so a
+> late start launches nothing (§26.24, HS2-WHR4GS),
 > Propose Plan, which starts the orchestration project's planning AI session to
 > propose the dry-run plan from its goal tickets (§26.25, HS2-HCW7MD),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
@@ -3675,8 +3676,40 @@ The new session works the same run: a scheduler run is dispatched once per step
 (§26.19). A session its host confirmed is never ended this way: a changed choice for
 it is still refused. The race the five-minute bound guarded against remains in a
 shorter window: a start request still in transit that reaches the host after the stop
-would launch under an operation the orchestrator ended. Fencing a withdrawn operation
-on its host is HS2-WHR4GS.
+would launch under an operation the orchestrator ended; the host now fences it
+(HS2-WHR4GS, below).
+
+### A withdrawn start stays withdrawn (HS2-WHR4GS)
+
+A stop that withdraws an operation its host never launched fences that operation on
+the host, so a start for it that arrives later launches nothing. The fence is the
+host's own record, kept by the hosted half of §26.16 (`HostedSessionRegistry`):
+
+| The stop finds                        | The host                                           | The stop answers                                |
+| ------------------------------------- | -------------------------------------------------- | ----------------------------------------------- |
+| No record of the operation            | Fences it                                          | `stopped: false`, `session_not_found`, `fenced` |
+| A reservation it never launched       | Releases it and fences it                          | `stopped: true`, `fenced`                       |
+| A launched session (running or ended) | Fences nothing; stops it at a safe point as before | as before                                       |
+
+- **A fenced start** is refused before anything is reserved: `outcome: refused` with
+  the session code `session_withdrawn`, however often it arrives.
+- **A stop during a start.** When the stop releases a reservation while its start is
+  launching, the start finds its record gone once the tool is up, stops the terminal it
+  just launched and answers `session_withdrawn`. Nothing runs untracked either way.
+- **Bounds.** A fence lasts 15 minutes (`WITHDRAWN_FENCE_MS`), longer than any one
+  request and than the five-minute rule for an unconfirmed start; a clock that went
+  back keeps it. At most 1,024 fences are kept, the oldest dropped first. Fencing again
+  restarts the time.
+- **Storage.** `${HOTSHEET_HOME}/orchestration-withdrawn-sessions.json` (private,
+  version 1), written under the hosted sessions file's lock and separate from it, so a
+  binary without the fence still reads the sessions file. A damaged fence file refuses
+  starts rather than letting one through.
+- **Older hosts.** `fenced` is additive and absent from a host without the fence. The
+  orchestrator ends the start as `never_started` either way; against an older host the
+  race of HS2-7VV79Q remains.
+
+The orchestrator never reuses a withdrawn operation id: the new choice starts under
+`<op>.<n>`, so a fence never holds back live work.
 
 ## 26.25 Proposing the plan from goal tickets (HS2-HCW7MD)
 

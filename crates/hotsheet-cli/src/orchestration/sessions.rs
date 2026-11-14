@@ -14,7 +14,7 @@ use hotsheet_ticketing::orchestration::{
     Observed, OrchestratedSession, RunEvent, RunEventKind, RunEventSource, SafePoint,
     SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin, SessionOwner,
     SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
-    TargetAction, TargetDestination, TargetOpError, decide_safe_point, decide_stop,
+    TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_safe_point, decide_stop,
 };
 pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
 use serde::{Deserialize, Serialize};
@@ -547,6 +547,10 @@ pub struct HostedStopReply {
     pub safe_point: Option<SafePoint>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<HostedSessionView>,
+    /// HS2-WHR4GS: the host fenced the operation, so a start of it arriving later
+    /// launches nothing. Absent from a host without the fence.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fenced: bool,
 }
 
 /// A person takes a hosted session over, optionally pausing it.
@@ -969,7 +973,19 @@ impl OrchestrationRuntime {
             ));
         }
         let registry = self.hosted_sessions_registry();
-        let (reserved, _) = registry.reserve(&checkout.id, &request.session, tx)?;
+        let withdrawn = || HostedStartReply {
+            outcome: HostedStartOutcome::Refused,
+            reason: Some(SessionError::Withdrawn.code().into()),
+            session: None,
+            role_prompt: None,
+            tool_setup: None,
+        };
+        let (reserved, _) = match registry.reserve(&checkout.id, &request.session, tx) {
+            Ok(reserved) => reserved,
+            // HS2-WHR4GS: a stop withdrew this operation before its start arrived.
+            Err(OrchestrationError::Session(SessionError::Withdrawn)) => return Ok(withdrawn()),
+            Err(error) => return Err(error),
+        };
         let live = self.sessions.sessions(&checkout);
         if reserved.started {
             let session = self.note_lost(reserved, live.as_deref(), tx.clock.now_ms())?;
@@ -1080,7 +1096,16 @@ impl OrchestrationRuntime {
             }
             Err(SessionHostError::Refused) => return refuse(SessionError::StartFailed.code()),
         };
-        registry.mark_started(&checkout.id, &reserved.operation_id)?;
+        if registry
+            .mark_started(&checkout.id, &reserved.operation_id)?
+            .is_none()
+        {
+            // HS2-WHR4GS: a stop withdrew the reservation while the tool was launching.
+            // The stop was told nothing runs, so the terminal just launched is stopped
+            // again rather than left running untracked.
+            let _ = self.sessions.stop(&checkout, &reserved.session_id);
+            return Ok(withdrawn());
+        }
         // HS2-2DPGDY: the prompt went with the launch, or it is pushed now; a tool
         // that is not ready yet is tried again on its readiness events.
         let attempt = (!launched.prompt_at_launch).then(|| {
@@ -1294,32 +1319,50 @@ impl OrchestrationRuntime {
             reason: Some(reason.into()),
             safe_point,
             session,
-        };
-        let Some(session) = registry.get(&checkout.id, &request.operation_id)? else {
-            return Ok(refused(SessionError::NotFound.code(), None, None));
+            fenced: false,
         };
         let human = is_human(request.actor.as_ref());
         let stop = StopRequest {
             force: request.force,
             human,
         };
-        if !session.started {
-            // Reserved and never launched: there is nothing to interrupt.
-            let nothing_runs = decide_safe_point(&SafePointFacts {
-                alive: Some(false),
-                ..SafePointFacts::default()
-            });
-            if let Err(error) = decide_stop(session.owner, stop, &nothing_runs) {
-                return Ok(refused(error.code(), None, None));
+        let recorded = registry.get(&checkout.id, &request.operation_id)?;
+        let session = match recorded {
+            Some(session) if session.started => session,
+            unlaunched => {
+                if let Some(session) = &unlaunched {
+                    // Reserved and never launched: there is nothing to interrupt.
+                    let nothing_runs = decide_safe_point(&SafePointFacts {
+                        alive: Some(false),
+                        ..SafePointFacts::default()
+                    });
+                    if let Err(error) = decide_stop(session.owner, stop, &nothing_runs) {
+                        return Ok(refused(error.code(), None, None));
+                    }
+                }
+                // HS2-WHR4GS: released or unknown, the operation is fenced, so a start
+                // still on its way launches nothing. One that launched meanwhile is
+                // stopped like any launched session.
+                match registry.withdraw(&checkout.id, &request.operation_id, tx.clock.now_ms())? {
+                    Withdrawal::Unknown => {
+                        return Ok(HostedStopReply {
+                            fenced: true,
+                            ..refused(SessionError::NotFound.code(), None, None)
+                        });
+                    }
+                    Withdrawal::Released => {
+                        return Ok(HostedStopReply {
+                            stopped: true,
+                            reason: None,
+                            safe_point: None,
+                            session: None,
+                            fenced: true,
+                        });
+                    }
+                    Withdrawal::Launched(session) => *session,
+                }
             }
-            registry.release(&checkout.id, &request.operation_id)?;
-            return Ok(HostedStopReply {
-                stopped: true,
-                reason: None,
-                safe_point: None,
-                session: None,
-            });
-        }
+        };
         let live = self.sessions.sessions(&checkout);
         let session = self.note_lost(session, live.as_deref(), tx.clock.now_ms())?;
         let view = self.hosted_view(&checkout, session.clone(), live.as_deref(), true, tx);
@@ -1329,6 +1372,7 @@ impl OrchestrationRuntime {
                 reason: session.end_reason.clone(),
                 safe_point: None,
                 session: Some(view),
+                fenced: false,
             });
         }
         let safe_point = view.safe_point.clone().unwrap_or_else(|| {
@@ -1365,6 +1409,7 @@ impl OrchestrationRuntime {
             reason: ended.end_reason.clone(),
             safe_point: Some(safe_point),
             session: Some(self.hosted_view(&checkout, ended, None, false, tx)),
+            fenced: false,
         })
     }
 

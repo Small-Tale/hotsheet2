@@ -37,6 +37,31 @@ pub(super) struct ScriptedHost {
     pub(super) setup_failing: AtomicBool,
     /// How many launches had happened when each setup was asked for.
     prepared_before: Mutex<Vec<usize>>,
+    /// HS2-WHR4GS: runs once when the next setup is asked for, after the start
+    /// reserved its terminal and before it launches: a stop that arrives meanwhile.
+    pub(super) before_launch: OnceHook,
+}
+
+/// HS2-WHR4GS: a hook a test arms to run once.
+#[derive(Default)]
+pub(super) struct OnceHook(Mutex<Option<Box<dyn FnOnce() + Send>>>);
+impl OnceHook {
+    pub(super) fn arm(&self, hook: impl FnOnce() + Send + 'static) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Box::new(hook));
+    }
+    fn fire(&self) {
+        let hook = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
 }
 impl ScriptedHost {
     fn live(&self) -> std::sync::MutexGuard<'_, Vec<HostSessionState>> {
@@ -77,6 +102,7 @@ impl ScriptedHost {
 }
 impl SessionHost for ScriptedHost {
     fn prepare(&self, checkout: &Checkout, tool: &str) -> Result<ToolSetup, SessionHostError> {
+        self.before_launch.fire();
         if self.down.load(Ordering::SeqCst) {
             return Err(SessionHostError::Unavailable);
         }
@@ -2277,4 +2303,197 @@ fn hs2_dg0ypa_a_second_start_for_a_held_run_is_refused_until_its_holder_is_gone(
         .unwrap()
         .session;
     assert_eq!(holder(&mut tx), Some(third.session_id));
+}
+
+/// HS2-WHR4GS: the late start that HS2-7VV79Q's immediate `never_started` left open.
+fn late_start(f: &Fixture, operation: &str) -> hotsheet_ticketing::orchestration::NewHostedSession {
+    hotsheet_ticketing::orchestration::NewHostedSession {
+        operation_id: operation.into(),
+        tool: "codex".into(),
+        model: None,
+        effort: None,
+        role: SessionRole::Worker,
+        origin: hotsheet_ticketing::orchestration::SessionOrigin {
+            owner_checkout_id: f.m.owner.id.clone(),
+            project: f.m.owner.alias.clone(),
+            run_id: None,
+            ticket: None,
+        },
+    }
+}
+
+fn hosted_start(f: &Fixture, operation: &str, tx: &mut Transaction<'_>) -> HostedStartReply {
+    f.m.runtime
+        .hosted_session_start(
+            &f.m.target.id,
+            HostedSessionStart {
+                session: late_start(f, operation),
+                limits: None,
+                actor: None,
+            },
+            tx,
+        )
+        .unwrap()
+}
+
+fn hosted_stop(f: &Fixture, operation: &str, tx: &mut Transaction<'_>) -> HostedStopReply {
+    f.m.runtime
+        .hosted_session_stop(
+            &f.m.target.id,
+            HostedSessionStop {
+                operation_id: operation.into(),
+                force: false,
+                actor: Some(worker()),
+            },
+            tx,
+        )
+        .unwrap()
+}
+
+#[test]
+fn hs2_whr4gs_a_start_that_arrives_after_its_stop_launches_nothing() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let owner = f.m.owner.id.clone();
+    f.git(&["init", "-q"]);
+    // The orchestrator recorded a start its host never answered.
+    let admission = f.m.home.join("orchestration-admission.json");
+    std::fs::write(&admission, b"{").unwrap();
+    assert!(f.start("op-1", 1, "codex", json!({}), &mut tx).is_err());
+    std::fs::remove_file(&admission).unwrap();
+    let pending = f.m.runtime.session_list(&owner, true).unwrap();
+    assert_eq!(pending[0].state, SessionState::Requested);
+    // Its stop finds no record on the host, which fences the operation, and the
+    // orchestrator ends it as never started.
+    let ended = f
+        .stop(&pending[0].session_id, false, &worker(), &mut tx)
+        .unwrap();
+    assert_eq!(
+        ended.session.history.last().unwrap().reason.as_deref(),
+        Some("never_started")
+    );
+    let fences = HostedSessionRegistry::new(&f.m.home)
+        .withdrawn(hotsheet_ticketing::Clock::now_ms(&Clock))
+        .unwrap();
+    assert_eq!(fences.len(), 1);
+    assert_eq!(fences[0].operation_id, "op-1");
+    // The original start request, still in transit, reaches the host now: refused,
+    // nothing launched, nothing reserved. Repeated, out of order, it stays refused.
+    for _ in 0..2 {
+        let late = hosted_start(&f, "op-1", &mut tx);
+        assert_eq!(late.outcome, HostedStartOutcome::Refused);
+        assert_eq!(late.reason.as_deref(), Some("session_withdrawn"));
+        assert!(late.session.is_none());
+    }
+    assert!(f.host.launches().is_empty());
+    assert!(
+        HostedSessionRegistry::new(&f.m.home)
+            .get(&f.m.target.id, "op-1")
+            .unwrap()
+            .is_none()
+    );
+    // The orchestrator's own record keeps answering with the stopped session.
+    assert_eq!(
+        f.started("op-1", 1, "codex", &mut tx).session.state,
+        SessionState::Stopped
+    );
+    // Another operation starts normally on the same host.
+    assert_eq!(
+        f.started("op-2", 1, "codex", &mut tx).session.state,
+        SessionState::Running
+    );
+    assert_eq!(f.host.launches().len(), 1);
+}
+
+#[test]
+fn hs2_whr4gs_a_stop_while_the_start_launches_stops_the_launched_terminal() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    // Interleaved: the start reserved its terminal; the stop arrives before the launch
+    // and is told nothing runs.
+    let home = f.m.home.clone();
+    let checkout = f.m.target.id.clone();
+    let answer = Arc::new(Mutex::new(None));
+    let seen = answer.clone();
+    f.host.before_launch.arm(move || {
+        let withdrawal = HostedSessionRegistry::new(&home)
+            .withdraw(&checkout, "op-1", hotsheet_ticketing::Clock::now_ms(&Clock))
+            .unwrap();
+        *seen
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(withdrawal);
+    });
+    let reply = hosted_start(&f, "op-1", &mut tx);
+    assert_eq!(
+        *answer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        Some(hotsheet_ticketing::orchestration::Withdrawal::Released)
+    );
+    // The launch happened, found its reservation gone and was stopped again: nothing
+    // runs untracked, and the start says why.
+    assert_eq!(reply.outcome, HostedStartOutcome::Refused);
+    assert_eq!(reply.reason.as_deref(), Some("session_withdrawn"));
+    assert_eq!(f.host.launches().len(), 1);
+    assert_eq!(f.host.stops.load(Ordering::SeqCst), 1);
+    assert_eq!(f.host.sessions(&f.m.target), Some(Vec::new()));
+    // A repeat of that start is refused before anything launches.
+    assert_eq!(
+        hosted_start(&f, "op-1", &mut tx).reason.as_deref(),
+        Some("session_withdrawn")
+    );
+    assert_eq!(f.host.launches().len(), 1);
+}
+
+#[test]
+fn hs2_whr4gs_hosted_stop_sequences_fence_only_what_never_launched() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    f.git(&["init", "-q"]);
+    let registry = HostedSessionRegistry::new(&f.m.home);
+    // Unknown: refused as not found, fenced, and the reply says so; repeated alike.
+    for _ in 0..2 {
+        let reply = hosted_stop(&f, "op-unknown", &mut tx);
+        assert!(!reply.stopped && reply.fenced);
+        assert_eq!(reply.reason.as_deref(), Some("session_not_found"));
+    }
+    // Launched: stopped at its safe point and never fenced, so its own operation id
+    // still answers with the same, now ended, session.
+    let started = hosted_start(&f, "op-live", &mut tx);
+    assert_eq!(started.outcome, HostedStartOutcome::Started);
+    let stopped = hosted_stop(&f, "op-live", &mut tx);
+    assert!(stopped.stopped && !stopped.fenced, "{stopped:?}");
+    assert_eq!(stopped.reason.as_deref(), Some("wound_down"));
+    let again = hosted_stop(&f, "op-live", &mut tx);
+    assert!(again.stopped && !again.fenced);
+    assert_eq!(
+        hosted_start(&f, "op-live", &mut tx).outcome,
+        HostedStartOutcome::Existing
+    );
+    let fenced: Vec<_> = registry
+        .withdrawn(hotsheet_ticketing::Clock::now_ms(&Clock))
+        .unwrap()
+        .into_iter()
+        .map(|fence| fence.operation_id)
+        .collect();
+    assert_eq!(fenced, ["op-unknown"]);
+    // The wire shape: `fenced` is omitted when false, and a reply from a host without
+    // the fence reads as unfenced.
+    let wire = serde_json::to_value(&stopped).unwrap();
+    assert!(wire.get("fenced").is_none());
+    let older: HostedStopReply =
+        serde_json::from_value(json!({"stopped": false, "reason": "session_not_found"})).unwrap();
+    assert!(!older.fenced);
 }

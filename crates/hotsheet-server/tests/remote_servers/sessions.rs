@@ -930,3 +930,51 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         "capacity_unknown"
     );
 }
+
+/// HS2-WHR4GS: a stop that finds no record fences the operation on a live service, so
+/// the start request that arrives after it launches nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_whr4gs_a_late_start_after_its_stop_is_refused_on_a_live_service() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let router = app(host);
+    let hosted = format!("/checkouts/{}/target-sessions", checkout.id);
+    let actor = json!({"role":"ai","id":"scheduler-1"});
+    let (status, stopped) = api(
+        router.clone(),
+        "DELETE",
+        &hosted,
+        json!({"operation_id":"op-late","actor":actor}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{stopped}");
+    assert_eq!(stopped["stopped"], false);
+    assert_eq!(stopped["reason"], "session_not_found");
+    assert_eq!(stopped["fenced"], true);
+    let start = json!({
+        "session": {
+            "operation_id": "op-late",
+            "tool": "codex",
+            "origin": {"owner_checkout_id": "owner-0123456789ab", "project": "Synthetic"}
+        },
+        "actor": actor,
+    });
+    for _ in 0..2 {
+        let (status, late) = api(router.clone(), "POST", &hosted, start.clone(), true).await;
+        assert_eq!(status, StatusCode::OK, "{late}");
+        assert_eq!(late["outcome"], "refused");
+        assert_eq!(late["reason"], "session_withdrawn");
+        assert!(late.get("session").is_none());
+    }
+    let (_, listed) = api(router.clone(), "GET", &hosted, Value::Null, true).await;
+    assert_eq!(listed["sessions"], json!([]));
+    assert!(home.join("orchestration-withdrawn-sessions.json").is_file());
+}

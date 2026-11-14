@@ -197,10 +197,13 @@ pub enum SessionError {
     StartFailed,
     /// HS2-DG0YPA: another `requested` or `running` session still holds the run's work.
     RunHeld,
+    /// HS2-WHR4GS: the orchestrator withdrew this operation; its host launches nothing
+    /// for it.
+    Withdrawn,
 }
 
 impl SessionError {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::NotFound,
         Self::NotActive,
         Self::InvalidTransition,
@@ -212,6 +215,7 @@ impl SessionError {
         Self::RoleActive,
         Self::StartFailed,
         Self::RunHeld,
+        Self::Withdrawn,
     ];
 
     pub fn code(self) -> &'static str {
@@ -227,6 +231,7 @@ impl SessionError {
             Self::RoleActive => "session_role_active",
             Self::StartFailed => "session_start_failed",
             Self::RunHeld => "session_run_held",
+            Self::Withdrawn => "session_withdrawn",
         }
     }
 
@@ -1105,13 +1110,92 @@ struct HostedFile {
 #[derive(Clone)]
 pub struct HostedSessionRegistry {
     storage: Storage,
+    /// HS2-WHR4GS: withdrawn operations, written under `storage`'s lock. A file of its
+    /// own, so a binary without the fence still reads the sessions file.
+    fences: Storage,
+}
+
+const MAX_FENCE_BYTES: usize = 512 * 1024;
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FenceFile {
+    schema_version: u32,
+    withdrawn: Vec<WithdrawnOperation>,
 }
 
 impl HostedSessionRegistry {
     pub fn new(home: &Path) -> Self {
         Self {
             storage: Storage::machine_named(home, "orchestration-hosted-sessions.json"),
+            fences: Storage::machine_named(home, "orchestration-withdrawn-sessions.json"),
         }
+    }
+
+    /// HS2-WHR4GS: the fences still standing at `now_ms`. Call under the lock.
+    fn read_fences(&self, now_ms: u64) -> Result<WithdrawnFences, OrchestrationError> {
+        let Some(bytes) = self.fences.read(MAX_FENCE_BYTES)? else {
+            return Ok(WithdrawnFences::default());
+        };
+        let file: FenceFile = decode(&bytes)?;
+        let mut fences = WithdrawnFences {
+            withdrawn: file.withdrawn,
+        };
+        fences.validate()?;
+        fences.prune(now_ms);
+        Ok(fences)
+    }
+
+    fn write_fences(&self, fences: &WithdrawnFences) -> Result<(), OrchestrationError> {
+        let bytes = serde_json::to_vec(&FenceFile {
+            schema_version: ORCHESTRATION_VERSION,
+            withdrawn: fences.withdrawn.clone(),
+        })
+        .map_err(|_| OrchestrationError::Corrupt)?;
+        self.fences.write(&bytes, MAX_FENCE_BYTES)
+    }
+
+    /// HS2-WHR4GS: the operations fenced on this machine at `now_ms`, oldest first.
+    pub fn withdrawn(&self, now_ms: u64) -> Result<Vec<WithdrawnOperation>, OrchestrationError> {
+        let _lock = self.storage.lock()?;
+        Ok(self.read_fences(now_ms)?.withdrawn)
+    }
+
+    /// HS2-WHR4GS: a stop withdraws an operation. A launched terminal is left to the
+    /// stop and nothing is fenced. A reservation that never launched is released and
+    /// fenced, and an operation this machine has no record of is fenced, so a start
+    /// that arrives later launches nothing. Atomic with [`Self::reserve`].
+    pub fn withdraw(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        now_ms: u64,
+    ) -> Result<Withdrawal, OrchestrationError> {
+        valid_identifier(checkout_id)?;
+        valid_identifier(operation_id)?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let index = file.sessions.iter().position(|session| {
+            session.checkout_id == checkout_id && session.operation_id == operation_id
+        });
+        if let Some(index) = index
+            && file.sessions[index].started
+        {
+            return Ok(Withdrawal::Launched(Box::new(file.sessions[index].clone())));
+        }
+        let mut fences = self.read_fences(now_ms)?;
+        fences.fence(checkout_id, operation_id, now_ms)?;
+        // The fence is written first: a crash between the two writes leaves a fenced
+        // reservation that no start can launch, never a launchable withdrawn one.
+        self.write_fences(&fences)?;
+        Ok(match index {
+            Some(index) => {
+                file.sessions.remove(index);
+                self.write_file(&file)?;
+                Withdrawal::Released
+            }
+            None => Withdrawal::Unknown,
+        })
     }
 
     fn read_file(&self) -> Result<HostedFile, OrchestrationError> {
@@ -1179,6 +1263,14 @@ impl HostedSessionRegistry {
         valid_identifier(checkout_id)?;
         new.validate()?;
         let _lock = self.storage.lock()?;
+        // HS2-WHR4GS: a start for an operation a stop withdrew launches nothing.
+        if self.read_fences(tx.clock.now_ms())?.is_fenced(
+            checkout_id,
+            &new.operation_id,
+            tx.clock.now_ms(),
+        ) {
+            return Err(OrchestrationError::Session(SessionError::Withdrawn));
+        }
         let mut file = self.read_file()?;
         if let Some(existing) = file.sessions.iter().find(|session| {
             session.checkout_id == checkout_id && session.operation_id == new.operation_id

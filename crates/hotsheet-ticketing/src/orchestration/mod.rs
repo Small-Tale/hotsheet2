@@ -23,6 +23,7 @@ mod role_delivery;
 mod run_events;
 mod runs;
 mod scheduler;
+mod session_fence;
 mod session_idle;
 mod sessions;
 mod storage;
@@ -126,6 +127,9 @@ pub use scheduler::{
     ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
     TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, plan, refusal_backoff_ms, remember,
     scheduler_pass_lock, score,
+};
+pub use session_fence::{
+    MAX_WITHDRAWN_FENCES, WITHDRAWN_FENCE_MS, Withdrawal, WithdrawnFences, WithdrawnOperation,
 };
 pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{
@@ -375,6 +379,8 @@ mod run_event_tests;
 mod run_tests;
 #[cfg(test)]
 mod scheduler_tests;
+#[cfg(test)]
+mod session_fence_tests;
 #[cfg(test)]
 mod session_idle_tests;
 #[cfg(test)]

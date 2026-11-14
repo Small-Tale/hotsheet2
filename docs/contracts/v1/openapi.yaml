@@ -2864,7 +2864,8 @@ paths:
       operationId: startHostedTargetSession
       description:
         The same `operation_id` never launches twice. A refusal (admission, a role already held, no terminal host) is
-        a `refused` outcome with a reason code, and forgets the reservation so the request can be repeated later.
+        a `refused` outcome with a reason code, and forgets the reservation so the request can be repeated later. An
+        operation a stop withdrew is refused `session_withdrawn` and launches nothing (HS2-WHR4GS).
       requestBody:
         required: true
         content:
@@ -3008,7 +3009,9 @@ paths:
       operationId: stopHostedTargetSession
       description:
         This machine checks the safe point itself. A refusal is `stopped` false with a session code as `reason`
-        (`session_not_safe`, `session_human_owned`, `session_force_not_permitted`, `session_not_found`).
+        (`session_not_safe`, `session_human_owned`, `session_force_not_permitted`, `session_not_found`). A stop of an
+        operation that never launched, or that this machine has no record of, fences it for 15 minutes and answers
+        `fenced` true, so a start of it arriving later is refused `session_withdrawn` (HS2-WHR4GS).
       requestBody:
         required: true
         content:
@@ -3045,6 +3048,9 @@ paths:
                     $ref: '#/components/schemas/OrchestrationSessionSafePoint'
                   session:
                     $ref: '#/components/schemas/HostedTargetSession'
+                  fenced:
+                    description: The operation is fenced against a late start (HS2-WHR4GS); absent from an older host.
+                    type: boolean
                 additionalProperties: false
         default:
           description:
