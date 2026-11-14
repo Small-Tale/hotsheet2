@@ -86,6 +86,26 @@ export function NotificationCardDemo() {
       <CatalogExample label="Footer Layout: Stack" viewport={{ width: 'compact' }}>
         <DemoCard elevation="list" footerLayout="stack" />
       </CatalogExample>
+      {/* HS2-DBQSWB: the card a Show Request link opened takes focus and shows the ring while it has it. */}
+      <CatalogExample label="Targeted: Focus From a Link">
+        <List gap="m">
+          <Row gap="xs">
+            <Button size="compact" emphasis="secondary" type="button" rootAttributes={{ 'data-demo-target-card': '' }}>
+              Show Request
+            </Button>
+          </Row>
+          <NotificationCard
+            identity="Orchestrator"
+            role="Launch orchestration"
+            projectName="Launch"
+            time="Now"
+            summary={PERMISSION_SUMMARY}
+            details={{ text: 'Target project: API' }}
+            targeted
+            rootAttributes={{ 'data-demo-targeted-card': '' }}
+          />
+        </List>
+      </CatalogExample>
       <CatalogExample label="Details: Prose, Bounded Code, and Custom Content">
         <List gap="m">
           <NotificationCard
@@ -121,6 +141,11 @@ function wireNotificationCardDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', '[data-demo-notification-action]', (_event, target) => {
       notificationCardDemoResult.value = `${(target as HTMLElement).dataset.demoNotificationAction ?? ''} was chosen; the composing notification owns its decision.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[data-demo-target-card]', () => {
+      root.querySelector<HTMLElement>('[data-demo-targeted-card]')?.focus();
     }),
   );
   return () => {

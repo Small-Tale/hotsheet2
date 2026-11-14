@@ -32,6 +32,8 @@ export interface WorkspaceSurfaceDependencies {
   hideVerifiedColumn: () => boolean;
   loading: Signal<boolean>;
   notificationView: Signal<NotificationView>;
+  /** HS2-DBQSWB: the pending request Show Request opened, by its key; it takes focus in Pending. */
+  targetedPermission: Signal<string | undefined>;
   clientNotifications: ReturnType<typeof createClientNotifications>;
   partialSourcesByProject: Signal<Record<string, boolean>>;
   project: () => Project | undefined;
@@ -86,6 +88,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     hideVerifiedColumn,
     loading,
     notificationView,
+    targetedPermission,
     clientNotifications,
     partialSourcesByProject,
     project,
@@ -161,6 +164,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
           notifications: {
             title: notificationViewTitle(view),
             pending: view === 'pending' ? projectPendingPermissions() : [],
+            targeted: view === 'pending' ? targetedPermission.value : undefined,
             history:
               view === 'day' ? history.filter((item) => item.resolvedAt >= cutoff) : view === 'week' ? history : [],
             notices:

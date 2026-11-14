@@ -305,6 +305,26 @@ describe('orchestrator permission requests (HS2-XHQ1EH)', () => {
     expect(markup).not.toContain('Wants permission to use Orchestrator');
   });
 
+  it('HS2-DBQSWB lets only the request Show Request opened take focus in Pending, never as a Tab stop', () => {
+    const other: PermissionItem = { ...orchestrated, id: 10, key: 'launch:10' };
+    const markup = String(NotificationCenter({ pending: [orchestrated, other], history: [], targeted: 'launch:9' }));
+    const cards = markup.split('<article').slice(1);
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toContain('data-request-key="launch:9"');
+    expect(cards[0]).toContain('data-targeted="true"');
+    expect(cards[0]).toContain('tabindex="-1"');
+    expect(cards[1]).not.toContain('data-targeted');
+    expect(cards[1]).not.toContain('tabindex');
+    // Without a target, or with one no longer pending, no card is focusable.
+    expect(String(NotificationCenter({ pending: [orchestrated], history: [] }))).not.toContain('tabindex');
+    expect(String(NotificationCenter({ pending: [orchestrated], history: [], targeted: 'launch:99' }))).not.toContain(
+      'data-targeted',
+    );
+    // The ring shows only while the card has focus.
+    const css = readFileSync(resolve(import.meta.dirname, 'notification-card.css'), 'utf8');
+    expect(css).toContain(".notification-card[data-targeted='true']:focus {");
+  });
+
   it('offers only Allow Once for a request asked each time', () => {
     const each = {
       ...orchestrated,

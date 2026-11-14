@@ -56,6 +56,8 @@ export interface OrchestrationInspectorProps {
 }
 
 const words = (code: string) => code.replaceAll('_', ' ');
+/** What the orchestrator asked to do, as a verb phrase (HS2-DBQSWB): a timeline asks only these two. */
+const ASKED: Readonly<Record<string, string>> = { session_start: 'start a session', work_start: 'start work' };
 const sentence = (code: string) => {
   const text = words(code);
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -239,7 +241,7 @@ function stateDetail(item: TimelineItem) {
       return (
         <Section label="Waits for Permission">
           <Note
-            text={`The orchestrator asked to ${permission ? words(permission.action) : 'act'} in ${item.project_label}. ${
+            text={`The orchestrator asked to ${permission ? (ASKED[permission.action] ?? words(permission.action)) : 'act'} in ${item.project_label}. ${
               permission?.kind === 'permission'
                 ? 'The request is in the permission popup and in Notifications.'
                 : 'The request waits for a person in Notifications.'

@@ -23,6 +23,8 @@ export interface NotificationCenterProps {
    * a host surface already insets its content, such as the ticket rail's sunken list (HS2-8FS5BJ).
    */
   inset?: 'page' | 'flush';
+  /** The pending request a Show Request link opened (HS2-DBQSWB): its key, as `PermissionItem.key`. */
+  targeted?: string;
 }
 
 /** Project-scoped pending-permission queue and newest-first resolution history. */
@@ -34,6 +36,7 @@ export function NotificationCenter({
   countdownAction = 'allow',
   title = 'Notifications',
   inset = 'page',
+  targeted,
 }: NotificationCenterProps) {
   const empty = pending.length === 0 && history.length === 0 && notices.length === 0;
   return (
@@ -42,7 +45,12 @@ export function NotificationCenter({
         {pending.length > 0 && (
           <List gap={px(12)}>
             {pending.map((item) => (
-              <PermissionRequestCard item={item} countdown={countdowns[item.key]} countdownAction={countdownAction} />
+              <PermissionRequestCard
+                item={item}
+                countdown={countdowns[item.key]}
+                countdownAction={countdownAction}
+                targeted={item.key === targeted}
+              />
             ))}
           </List>
         )}

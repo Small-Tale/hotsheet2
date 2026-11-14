@@ -154,6 +154,8 @@ export interface OrchestrationViewDependencies {
   readonly confirm: (options: ConfirmationOptions) => Promise<boolean>;
   readonly showToast: (message: string) => void;
   readonly openTicket: (match: TicketLinkMatch) => Promise<void>;
+  /** HS2-DBQSWB: open this exact orchestrator permission request's card in Notifications. */
+  readonly showPermissionRequest: (requestId: string) => Promise<void>;
   /** Open Orchestration settings (HS2-W27N1D), or Settings until that category exists. */
   readonly openOrchestrationSettings: () => void;
   readonly persistWorkspacePreferences: () => void;
@@ -535,10 +537,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
-  function showRequest() {
-    // Orchestrator requests surface where every permission request does (HS2-XHQ1EH): Notifications.
-    dependencies.viewMode.value = 'notifications';
-    dependencies.persistWorkspacePreferences();
+  /**
+   * Orchestrator requests surface where every permission request does (HS2-XHQ1EH): Notifications.
+   * Show Request opens the selected step's own request there (HS2-DBQSWB); with no request id it
+   * falls back to the selected card's.
+   */
+  async function showRequest(requestId?: string) {
+    const id = requestId || selected()?.permission?.request_id;
+    if (id) await dependencies.showPermissionRequest(id);
   }
 
   async function openGoal() {

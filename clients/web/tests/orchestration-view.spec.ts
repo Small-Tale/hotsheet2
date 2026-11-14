@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
 import { expect, type Page, test } from '@playwright/test';
 
 import { realTicketServer } from './real-ticket-server';
@@ -31,7 +34,7 @@ async function asOrchestrationProject(server: Server) {
 }
 
 /** Declare this project as its own target, bind it, and remember the scheduler's dispatch rule (HS2-XHQ1EH). */
-async function declareSelf(server: Server) {
+async function declareSelf(server: Server, rememberDispatch = true) {
   const base = `/checkouts/${server.checkoutId}/orchestration`;
   const added = await send(server, 'POST', `${base}/targets`, {
     target_id: TARGET,
@@ -48,11 +51,12 @@ async function declareSelf(server: Server) {
     previous_destination: null,
     destination: candidate.destination,
   });
-  await send(server, 'POST', `${base}/permission-rules`, {
-    target_id: TARGET,
-    action: 'work_start',
-    actor: { role: 'human', id: 'maintainer' },
-  });
+  if (rememberDispatch)
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'work_start',
+      actor: { role: 'human', id: 'maintainer' },
+    });
 }
 
 async function planAndDispatch(server: Server) {
@@ -141,14 +145,14 @@ const visibleShare = (page: Page, label: string) =>
     return Math.max(0, Math.min(box.right, view.right) - Math.max(box.left, view.left)) / box.width;
   });
 
-const capture = async (page: Page, name: string) => {
+const capture = async (page: Page, name: string, ticket = 'hs2-j89jc7') => {
   // Rails and sheets slide; capture once every finite animation has finished.
   await page.waitForFunction(() =>
     document
       .getAnimations()
       .every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity),
   );
-  await page.screenshot({ path: test.info().outputPath(`hs2-j89jc7-${name}.png`) });
+  await page.screenshot({ path: test.info().outputPath(`${ticket}-${name}.png`) });
 };
 
 test('HS2-J89JC7 a project that is not an orchestration project has no Orchestration view', async ({ page }) => {
@@ -289,6 +293,137 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     const group = view.locator('[data-ticket-group]').first();
     await group.locator('[data-action="toggle-ticket-group"]').first().click();
     await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toHaveCount(0);
+  } finally {
+    await server.stop();
+  }
+});
+
+/**
+ * HS2-DBQSWB: the scheduler's dispatch of a step waits on a person. The run route refuses the AI
+ * actor with a real orchestrator permission request, and the pass's decision names it, exactly as
+ * the scheduler logs it (`permission_required` with the request id), so the timeline links the card.
+ */
+async function waitOnPermission(server: Server, plan: Awaited<ReturnType<typeof planAndDispatch>>) {
+  const base = `/checkouts/${server.checkoutId}/orchestration`;
+  const timeline = await send(server, 'GET', `${base}/timeline`);
+  const items = (timeline.waves as Array<{ items: Array<{ step_id: string; target: { native_id: string } }> }>)
+    .flatMap((wave) => wave.items)
+    .filter((item) => item.target.native_id === plan.first.id);
+  const step = items[0].step_id,
+    operation = `sched-run-${step}`;
+  const response = await fetch(`${server.url}${base}/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+    body: JSON.stringify({
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: plan.first.id,
+      operation_id: operation,
+      worker_id: 'browser-worker',
+      actor: scheduler,
+    }),
+  });
+  const refused = (await response.json()) as { code?: string; request_id?: string };
+  expect(response.status).toBe(403);
+  expect(refused.code).toBe('permission_required');
+  const decisions = resolve(server.home, 'orchestration-scheduler-decisions');
+  await mkdir(decisions, { recursive: true });
+  const record = {
+    seq: 1,
+    at_ms: Date.now(),
+    tick_id: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+    mode: 'applied',
+    trigger: 'event',
+    kind: 'start',
+    actor_id: scheduler.id,
+    target_id: TARGET,
+    step_id: step,
+    outcome: 'permission_required',
+    outcome_detail: refused.request_id,
+    operation_id: operation,
+  };
+  await writeFile(resolve(decisions, `${server.checkoutId}.jsonl`), `${JSON.stringify(record)}\n`);
+  return refused.request_id!;
+}
+
+test('HS2-DBQSWB Show Request opens that exact orchestrator request in Pending and focuses it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server, false);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    // Another pending request of the same project, so the link has to pick the right card.
+    const other = await fetch(`${server.url}/checkouts/${server.checkoutId}/orchestration/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+      body: JSON.stringify({
+        ticket: { native_id: plan.goal.id },
+        target_id: TARGET,
+        connection_id: plan.first.connection_id,
+        native_id: plan.second.id,
+        operation_id: 'op-other',
+        worker_id: 'browser-worker',
+        actor: scheduler,
+      }),
+    });
+    expect(other.status).toBe(403);
+    const requestId = await waitOnPermission(server, plan);
+    for (const width of [1440, 1100, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      if (width === 1440) await openProject(page, server, 'Launch');
+      // The popup asks first, as for any request; Ignore leaves both in Pending.
+      const popup = page.locator('[data-component="permission-request-popup"]');
+      if (width === 1440) await expect(popup).toContainText('Orchestrator: Start work on a ticket in Self');
+      while (await popup.isVisible()) await popup.getByRole('button', { name: 'Ignore' }).click();
+      await page.locator('[data-segment-value="orchestration"]').first().click();
+      const view = page.locator('[data-orchestration-view="true"]');
+      const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+      await expect(card.locator('[data-orchestration-part="state"]')).toHaveText('Waits for permission', {
+        timeout: 30_000,
+      });
+      await card.click();
+      const inspector = page.locator('[data-orchestration-inspector]');
+      const show = inspector.getByRole('button', { name: 'Show Request' });
+      await expect(show).toHaveAttribute('data-request-id', requestId);
+      await capture(page, `inspector-${width}`, 'hs2-dbqswb');
+      await show.click();
+      await expect(page.locator('[data-segment-value="notifications"][aria-pressed="true"]').first()).toBeVisible();
+      const cards = page.locator('[data-component="permission-request-card"][data-presentation="list"]');
+      await expect(cards).toHaveCount(2);
+      const targeted = page.locator('[data-component="permission-request-card"][data-targeted="true"]');
+      await expect(targeted).toHaveCount(1);
+      await expect(targeted).toBeFocused();
+      // The whole card and its focus ring show, not cut by the list's scroll edge.
+      await expect(targeted).toBeInViewport({ ratio: 1 });
+      // Nothing covers it: on a phone the inspector sheet that held Show Request closes.
+      const box = (await targeted.boundingBox())!;
+      const hit = await page.evaluate(
+        ([x, y]) => document.elementFromPoint(x, y)?.closest('[data-targeted="true"]') !== null,
+        [box.x + box.width / 2, box.y + Math.min(box.height / 2, 40)],
+      );
+      expect(hit).toBe(true);
+      // The focused card is the one this step waits on, not the other request.
+      const pending = (await send(server, 'GET', '/permissions')) as unknown as Array<{
+        id: number;
+        orchestrator?: { request_id: string };
+      }>;
+      const bridged = pending.find((item) => item.orchestrator?.request_id === requestId);
+      await expect(targeted).toHaveAttribute('data-request-key', `${server.checkoutId}:${bridged!.id}`);
+      await expect(targeted).toContainText('Orchestrator:');
+      const outline = await targeted.evaluate((node) => getComputedStyle(node).outlineStyle);
+      expect(outline).not.toBe('none');
+      // It is never a Tab stop: Tab moves on into the card's own controls.
+      await page.keyboard.press('Tab');
+      await expect(targeted).not.toBeFocused();
+      await targeted.focus();
+      await capture(page, `pending-${width}`, 'hs2-dbqswb');
+    }
+    // Narrow back to wide: the focused card stays the same one, in view.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.locator('[data-component="permission-request-card"][data-targeted="true"]')).toBeInViewport();
+    await capture(page, 'pending-1440-after-narrow', 'hs2-dbqswb');
   } finally {
     await server.stop();
   }

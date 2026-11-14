@@ -47,6 +47,11 @@ export interface NotificationCardProps {
   elevation?: NotificationCardElevation;
   footerLayout?: NotificationCardFooterLayout;
   rootAttributes?: Record<string, string | undefined>;
+  /**
+   * The card a link opened, such as Show Request (HS2-DBQSWB): it can take programmatic focus and
+   * shows the focus ring while it has it. It never becomes a Tab stop.
+   */
+  targeted?: boolean;
 }
 
 const SUCCESS_IDENTITY = foregroundColorVar('--wa-color-success-fill-loud');
@@ -65,9 +70,17 @@ export function NotificationCard({
   elevation = 'list',
   footerLayout = 'wrap',
   rootAttributes = {},
+  targeted = false,
 }: NotificationCardProps) {
   return (
-    <article class="notification-card" data-elevation={elevation} data-footer-layout={footerLayout} {...rootAttributes}>
+    <article
+      class="notification-card"
+      data-elevation={elevation}
+      data-footer-layout={footerLayout}
+      data-targeted={targeted ? 'true' : undefined}
+      tabindex={targeted ? -1 : undefined}
+      {...rootAttributes}
+    >
       <header class="notification-card__header">
         <span class="notification-card__identity">
           <span class="notification-card__identity-icon">

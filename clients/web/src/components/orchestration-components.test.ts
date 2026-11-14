@@ -123,6 +123,9 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(permission).toContain('data-orchestration-section="Waits for Permission"');
     expect(permission).toContain('data-action="show-orchestration-request"');
     expect(permission).toContain('data-request-id="request-6"');
+    // HS2-DBQSWB: the action reads as words a person uses, not its code.
+    expect(permission).toContain('The orchestrator asked to start a session in');
+    expect(permission).not.toContain('session start');
     const decision = inspector('step-7');
     expect(decision).toContain('data-action="open-orchestration-goal"');
     expect(decision).toContain('Open LCH-1');

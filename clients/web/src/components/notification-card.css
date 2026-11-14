@@ -9,6 +9,11 @@
   box-shadow: var(--wa-shadow-s);
   container-type: inline-size;
 }
+/* A card a link opened (Show Request, HS2-DBQSWB) shows where focus landed. */
+.notification-card[data-targeted='true']:focus {
+  outline: var(--wa-focus-ring);
+  outline-offset: 2px;
+}
 .notification-card[data-elevation='popup'] {
   border-color: var(--wa-color-neutral-border-loud);
   box-shadow: var(--wa-shadow-l);

@@ -970,6 +970,8 @@ export async function startHotSheetWebClient() {
   const keyboardShortcutOverrides = signal<Record<string, ShortcutChord>>(loadShortcutOverrides(localStorage));
   const capturingShortcutId = signal<string | undefined>(undefined);
   const notificationView = signal<NotificationView>('pending');
+  // HS2-DBQSWB: the pending request Show Request opened; its card takes focus in Pending.
+  const targetedPermission = signal<string | undefined>(undefined);
   const lastUsedTicketCategory = loadLastTicketCategory(localStorage);
   const composerExpanded = signal(false),
     composerTitle = signal(''),
@@ -3373,6 +3375,7 @@ export async function startHotSheetWebClient() {
     confirm: confirmation.request,
     showToast,
     openTicket: openTicketLinkMatch,
+    showPermissionRequest,
     // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
     // Unknown until Settings read the type, so the view's own declaration read decides meanwhile.
     orchestrationProject: (id) => orchestrationSurfaceRef.current?.knownOrchestrationProject(id),
@@ -3395,6 +3398,41 @@ export async function startHotSheetWebClient() {
       personId: () => orchestrationPersonId(localStorage),
     }),
   });
+  /**
+   * HS2-DBQSWB: open one orchestrator permission request where every request is answered, the
+   * project's Pending notifications, and move focus to its card. A request this browser has not
+   * read yet is read first; one already answered leaves Pending showing and says so.
+   */
+  async function showPermissionRequest(requestId: string) {
+    const current = project();
+    if (!current) return;
+    const find = () =>
+      projectPendingPermissions(current.id).find((item) => item.orchestrator?.request_id === requestId);
+    let item = find();
+    if (!item) {
+      await refreshPermissions(current.id);
+      item = find();
+    }
+    if (project()?.id !== current.id) return;
+    targetedPermission.value = item?.key;
+    notificationView.value = 'pending';
+    viewMode.value = 'notifications';
+    // A phone shows the inspector as a sheet over the view; Pending is what the person asked for.
+    if (viewportMobile.value) setInspectorVisible(false);
+    persistWorkspacePreferences();
+    if (!item) {
+      showToast('That permission request was already answered.');
+      return;
+    }
+    const key = item.key;
+    requestAnimationFrame(() => {
+      const card = [...document.querySelectorAll<HTMLElement>('[data-component="permission-request-card"]')].find(
+        (candidate) => candidate.dataset.requestKey === key && candidate.dataset.presentation === 'list',
+      );
+      card?.focus({ preventScroll: true });
+      card?.scrollIntoView({ block: 'center' });
+    });
+  }
   function setInspectorVisible(visible: boolean) {
     inspectorCollapsed.value = !visible;
     if (viewportMobile.value) return;
@@ -5695,6 +5733,7 @@ export async function startHotSheetWebClient() {
     hideVerifiedColumn,
     loading,
     notificationView,
+    targetedPermission,
     clientNotifications,
     partialSourcesByProject,
     project,
@@ -6257,8 +6296,8 @@ export async function startHotSheetWebClient() {
         orchestrationView.chooseProjects();
       },
       runControl: (control, state) => void orchestrationView.runControl(control, state),
-      showRequest: () => {
-        orchestrationView.showRequest();
+      showRequest: (requestId) => {
+        void orchestrationView.showRequest(requestId);
       },
       openGoal: () => void orchestrationView.openGoal(),
     },

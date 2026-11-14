@@ -3950,11 +3950,16 @@ wake it yet (HS2-ANQXQ4). A read on the server also starts the target followers 
   badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
   same prop; showing it on target tickets in their own project is HS2-S3FKJ7.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
-  Request, which opens Notifications, HS2-DBQSWB; Open <goal>, which opens the goal
-  ticket; or its prerequisites), then its Run with the person's controls (Pause or
+  Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and
   §26.14, each a person's act with a confirmation where undo cannot help), then the
   run's gates, validation steps and latest events.
+- **Show Request** (HS2-DBQSWB) opens the request the step waits on where every
+  permission request is answered: the project's Notifications, Pending, with keyboard
+  focus on that exact card (found by the orchestrator request id the card carries). The
+  card shows the focus ring while it has focus and is never a Tab stop. A request this
+  browser has not read yet is read first; one already answered leaves Pending showing and
+  says so. On a phone the inspector sheet closes so the card is in view.
 - **Kick-off.** With no plan, **Propose Plan** starts the planning session of §26.25 in
   the tool the person drives with in this project. A proposed or paused plan has
   **Start Orchestration**, which turns `placement.automatic` on through the policy route

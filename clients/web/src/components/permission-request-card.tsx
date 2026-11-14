@@ -75,6 +75,11 @@ export interface PermissionRequestCardProps {
   reviewAlreadyAllowed?: boolean;
   /** Pending requests identical to this one, itself included (HS2-JNHAYB); one answer covers them all. */
   groupCount?: number;
+  /**
+   * The request a Show Request link opened (HS2-DBQSWB). The card takes programmatic focus, so it
+   * shows the focus ring until focus moves on; it is never a Tab stop of its own.
+   */
+  targeted?: boolean;
 }
 
 function isHistory(item: PermissionItem | PermissionHistoryItem): item is PermissionHistoryItem {
@@ -140,6 +145,7 @@ export function PermissionRequestCard({
   error,
   reviewAlreadyAllowed = false,
   groupCount = 1,
+  targeted = false,
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
@@ -502,6 +508,7 @@ export function PermissionRequestCard({
         'data-resolved': history ? 'true' : undefined,
         'data-request-key': item.key,
       }}
+      targeted={targeted}
       elevation={
         presentation === 'popup'
           ? popupShadow === 'container'
