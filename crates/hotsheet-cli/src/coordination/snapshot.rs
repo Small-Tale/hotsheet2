@@ -4,6 +4,16 @@ use super::*;
 
 impl Coordinator {
     pub fn snapshot(&self, now: i64) -> Result<Snapshot> {
+        self.snapshot_probed(now, None)
+    }
+
+    /// [`Self::snapshot`] with an injected gate probe for an enabled speculation
+    /// policy; `None` uses the live probe of this pool's checkout (HS2-J77XJA).
+    pub fn snapshot_probed(
+        &self,
+        now: i64,
+        probe: Option<&dyn super::speculation_runtime::BaseProbe>,
+    ) -> Result<Snapshot> {
         let (state, ledger) =
             self.change_batches(|state, ledger| Ok((state.clone(), ledger.clone())))?;
         let settings = hotsheet_ticketing::Settings::for_project(&self.project);
@@ -172,18 +182,38 @@ impl Coordinator {
         .to_owned();
         let dispatch_blockers =
             Self::dispatch_blockers(&state, now, &live_workers, local_queue.is_some());
+        // HS2-J77XJA: with the project's opt-in, a dependency awaiting CI no longer holds
+        // a plan row or a worker match back. Disabled, nothing here is read.
+        let speculation_policy =
+            hotsheet_ticketing::provisional::SpeculationPolicy::read(&settings)?;
+        let provisional = match (&selected_tickets, speculation_policy.enabled) {
+            (Some(tickets), true) => match probe {
+                Some(probe) => self.provisional_ready(&speculation_policy, probe, tickets)?,
+                None => self.provisional_ready(
+                    &speculation_policy,
+                    &self.speculation_probe(&speculation_policy),
+                    tickets,
+                )?,
+            },
+            _ => std::collections::BTreeSet::new(),
+        };
         let planned = state
             .next_plan
             .iter()
-            .map(|entry| contract::PlannedTicket {
-                entry: entry.clone(),
-                reasons: plan_reasons(
+            .map(|entry| {
+                let (reasons, provisional) = plan_reasons(
                     &state,
                     entry,
                     selected_connection.as_deref(),
                     selected_tickets.as_deref(),
+                    &provisional,
                     now,
-                ),
+                );
+                contract::PlannedTicket {
+                    entry: entry.clone(),
+                    reasons,
+                    provisional,
+                }
             })
             .collect::<Vec<_>>();
         let finished_assignments = finished_assignments(
@@ -203,6 +233,7 @@ impl Coordinator {
                 connection_id,
                 tickets,
                 now: &claim_now,
+                provisional: &provisional,
             });
         let (worker_matches, unmatched_tickets) =
             super::preferences::project(&state, facts.as_ref(), &live_workers);
@@ -303,12 +334,37 @@ pub(super) fn finished_assignments(
         .collect()
 }
 
+/// Why a plan row cannot be dispatched now, and whether it is dispatchable only
+/// provisionally (HS2-J77XJA).
 fn plan_reasons(
     state: &State,
     entry: &contract::NextPlanEntry,
     selected_connection: Option<&str>,
     selected_tickets: Option<&[hotsheet_model::Ticket]>,
+    provisional: &std::collections::BTreeSet<hotsheet_model::Ulid>,
     now: i64,
+) -> (Vec<String>, bool) {
+    let mut waits = false;
+    let reasons = plan_reasons_inner(
+        state,
+        entry,
+        selected_connection,
+        selected_tickets,
+        provisional,
+        now,
+        &mut waits,
+    );
+    (reasons, waits)
+}
+
+fn plan_reasons_inner(
+    state: &State,
+    entry: &contract::NextPlanEntry,
+    selected_connection: Option<&str>,
+    selected_tickets: Option<&[hotsheet_model::Ticket]>,
+    provisional: &std::collections::BTreeSet<hotsheet_model::Ulid>,
+    now: i64,
+    waits: &mut bool,
 ) -> Vec<String> {
     let mut reasons = Vec::new();
     match state.workers.get(&entry.worker) {
@@ -384,7 +440,11 @@ fn plan_reasons(
             .find(|candidate| candidate.id == *dependency)
             .is_some_and(|candidate| !ops::is_open(candidate))
         {
-            reasons.push("dependency_open_or_unknown".into());
+            if provisional.contains(&ticket.id) {
+                *waits = true;
+            } else {
+                reasons.push("dependency_open_or_unknown".into());
+            }
             break;
         }
     }

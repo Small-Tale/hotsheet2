@@ -165,6 +165,47 @@ impl Coordinator {
         operation: &str,
         base: &str,
     ) -> Result<Assignment> {
+        self.dispatch_next_plan_probed(
+            authority,
+            generation,
+            clock,
+            expected_revision,
+            operation,
+            base,
+            None,
+        )
+    }
+
+    /// [`Self::dispatch_next_plan`] with an injected gate probe for an enabled
+    /// speculation policy; `None` uses the live probe of this pool's checkout.
+    ///
+    /// HS2-J77XJA: with the project's opt-in, the dependency check is the one
+    /// `coordination assign` runs: a prerequisite awaiting CI with a pushed gate commit
+    /// satisfies it provisionally, `base` must contain that commit, and the reservation
+    /// is recorded in the speculation ledger. Disabled, the check is unchanged.
+    #[allow(clippy::too_many_arguments)] // HS2-J77XJA: the public form keeps its arguments.
+    pub fn dispatch_next_plan_probed(
+        &self,
+        authority: &str,
+        generation: &str,
+        clock: &dyn Fn() -> i64,
+        expected_revision: u64,
+        operation: &str,
+        base: &str,
+        probe: Option<&dyn super::speculation_runtime::BaseProbe>,
+    ) -> Result<Assignment> {
+        let speculation = hotsheet_ticketing::provisional::SpeculationPolicy::read(
+            &hotsheet_ticketing::Settings::for_project(&self.project),
+        )?;
+        let live =
+            (speculation.enabled && probe.is_none()).then(|| self.speculation_probe(&speculation));
+        let probe: Option<&dyn super::speculation_runtime::BaseProbe> = if speculation.enabled {
+            probe.or(live.as_ref().map(|live| live as _))
+        } else {
+            None
+        };
+        let reserved = std::cell::RefCell::new(None);
+        let (reserved_at, speculation_at) = (&reserved, &speculation);
         let state = self.state()?;
         let entry = if state.plan_revision == expected_revision {
             state
@@ -223,6 +264,17 @@ impl Coordinator {
                 "planned operation changed before dispatch"
             );
             let ticket = store.read_ticket(&ticket_id)?;
+            if replayed.is_some() {
+                // A replay repairs a ledger write interrupted after the reservation;
+                // it never refuses the durable reservation it acknowledges.
+                if let Some(probe) = probe {
+                    let tickets = store.list_tickets()?;
+                    *reserved_at.borrow_mut() = self
+                        .speculation_reservation(speculation_at, probe, &ticket, &tickets, base)
+                        .ok()
+                        .flatten();
+                }
+            }
             if replayed.is_none() {
                 let tickets = store.list_tickets()?;
                 let now = time::OffsetDateTime::from_unix_timestamp(clock())?;
@@ -255,19 +307,33 @@ impl Coordinator {
                     ticket.slug == check_entry.slug,
                     "ticket slug changed; replace the next plan before dispatch"
                 );
-                for dependency in &ticket.blocked_by {
-                    ensure!(
-                        tickets
-                            .iter()
-                            .find(|candidate| candidate.id == *dependency)
-                            .is_some_and(|candidate| !ops::is_open(candidate)),
-                        "ticket has an open or unavailable dependency {dependency}"
-                    );
+                match probe {
+                    // Confirmed, or provisional on a pushed prerequisite awaiting CI.
+                    Some(probe) => {
+                        *reserved_at.borrow_mut() = self.speculation_reservation(
+                            speculation_at,
+                            probe,
+                            &ticket,
+                            &tickets,
+                            base,
+                        )?;
+                    }
+                    None => {
+                        for dependency in &ticket.blocked_by {
+                            ensure!(
+                                tickets
+                                    .iter()
+                                    .find(|candidate| candidate.id == *dependency)
+                                    .is_some_and(|candidate| !ops::is_open(candidate)),
+                                "ticket has an open or unavailable dependency {dependency}"
+                            );
+                        }
+                    }
                 }
             }
             Ok(())
         });
-        self.assign_verified(
+        let assigned = self.assign_verified(
             authority,
             generation,
             clock,
@@ -293,6 +359,16 @@ impl Coordinator {
                 retirement_note: None,
             },
             check,
-        )
+        )?;
+        if let Some(reservation) = reserved.into_inner() {
+            self.speculation_record(
+                &assigned.id,
+                reservation.depth,
+                speculation.integration,
+                reservation.gates,
+                clock(),
+            )?;
+        }
+        Ok(assigned)
     }
 }

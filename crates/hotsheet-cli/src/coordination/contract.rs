@@ -276,6 +276,9 @@ pub struct PlannedTicket {
     pub entry: NextPlanEntry,
     /// Empty only when the selected local source is known dispatchable now.
     pub reasons: Vec<String>,
+    /// HS2-J77XJA: dispatchable only provisionally, on a prerequisite awaiting CI.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub provisional: bool,
 }
 
 impl Assignment {

@@ -1167,3 +1167,178 @@ fn hs2_j3smmt_retiring_forgets_settled_records_oldest_first() {
     ledger.records.insert(key, entry);
     assert_eq!(ledger.retire_settled(2), ["f-confirmed"]);
 }
+
+fn planned_for(store: &FsStore, t: &Ticket, worker: &str, operation: &str) -> NextPlanEntry {
+    NextPlanEntry {
+        operation: operation.into(),
+        worker: worker.into(),
+        generation: GEN.into(),
+        ticket: TicketRef {
+            connection_id: git_connection_id(store),
+            native_id: t.id.to_string(),
+        },
+        slug: t.slug.clone(),
+        priority_at_plan: None,
+        updated_at_plan: None,
+        scope: Vec::new(),
+    }
+}
+
+fn write_policy(c: &Coordinator, policy: &SpeculationPolicy) {
+    policy
+        .write(&hotsheet_ticketing::Settings::for_project(&c.project))
+        .unwrap();
+}
+
+/// HS2-J77XJA: plan rows and plan-dispatch use the same provisional rule as
+/// `assign`. Off, nothing changes; on, a prerequisite awaiting CI no longer holds a row
+/// back, the row says it is provisional, the reservation is recorded, a base without
+/// the gate commit is refused, and a red base gate stops new provisional dispatch.
+#[test]
+fn hs2_j77xja_plan_dispatch_uses_provisional_readiness_only_when_enabled() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let facts = Facts::default();
+    let prerequisite = awaiting_ci(&store, "Prerequisite", GATE_A);
+    let dependent = ticket(&store, "Dependent", vec![prerequisite.id]);
+    let second = ticket(&store, "Second dependent", vec![prerequisite.id]);
+    facts.push(GATE_A, BASE, GateResult::Pending, Some("run-1"));
+    facts
+        .contained
+        .borrow_mut()
+        .push((GATE_A.into(), BASE_2.into()));
+    register(&c, Role::Integrator, "i", GEN, NOW);
+    register(&c, Role::Worker, "w1", GEN, NOW);
+    register(&c, Role::Worker, "w2", GEN, NOW);
+    c.replace_next_plan(
+        "i",
+        GEN,
+        &|| NOW,
+        0,
+        vec![
+            planned_for(&store, &dependent, "w1", "plan-1"),
+            planned_for(&store, &second, "w2", "plan-2"),
+        ],
+        true,
+    )
+    .unwrap();
+    let rows = |c: &Coordinator| {
+        c.snapshot_probed(NOW, Some(&facts))
+            .unwrap()
+            .planned
+            .into_iter()
+            .map(|row| (row.reasons, row.provisional))
+            .collect::<Vec<_>>()
+    };
+    let held = (vec!["dependency_open_or_unknown".to_owned()], false);
+    // Off: exactly the confirmed-only answers, and nothing is serialized for it.
+    assert_eq!(rows(&c), [held.clone(), held.clone()]);
+    let off = serde_json::to_value(c.snapshot_probed(NOW, Some(&facts)).unwrap()).unwrap();
+    assert!(off["planned"][0].get("provisional").is_none());
+    let refused = c
+        .dispatch_next_plan_probed("i", GEN, &|| NOW, 1, "plan-1", BASE, Some(&facts))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.contains("open or unavailable dependency"),
+        "{refused}"
+    );
+    assert!(!c.directory.join(LEDGER_FILE).exists());
+    // On: both rows are dispatchable, provisionally.
+    write_policy(&c, &enabled(IntegrationRule::PushPerTicket));
+    let provisional = (Vec::<String>::new(), true);
+    assert_eq!(rows(&c), [provisional.clone(), provisional.clone()]);
+    // A base that does not contain the pushed gate commit is refused; nothing changes.
+    let refused = c
+        .dispatch_next_plan_probed("i", GEN, &|| NOW, 1, "plan-1", OTHER, Some(&facts))
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("does not contain"), "{refused}");
+    assert_eq!(c.state().unwrap().plan_revision, 1);
+    let assigned = c
+        .dispatch_next_plan_probed("i", GEN, &|| NOW, 1, "plan-1", BASE, Some(&facts))
+        .unwrap();
+    assert_eq!(assigned.id, "plan-1");
+    let ledger = c.speculation_ledger().unwrap().unwrap();
+    assert_eq!(
+        ledger.records["plan-1"].state,
+        SpeculationState::Provisional
+    );
+    assert_eq!(ledger.records["plan-1"].gates[0].commit, GATE_A);
+    // A replayed dispatch keeps the one record.
+    c.dispatch_next_plan_probed("i", GEN, &|| NOW, 1, "plan-1", BASE, Some(&facts))
+        .unwrap();
+    assert_eq!(c.speculation_ledger().unwrap().unwrap().records.len(), 1);
+    // A red base gate: the repair comes first, so the other row is held again.
+    facts.set(GATE_A, GateResult::Red, Some("run-1"));
+    c.speculation_result(
+        GATE_A,
+        GateObservation {
+            result: GateResult::Red,
+            run: Some("run-1".into()),
+        },
+        None,
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(rows(&c), std::slice::from_ref(&held));
+    assert!(
+        c.dispatch_next_plan_probed("i", GEN, &|| NOW, 2, "plan-2", BASE_2, Some(&facts))
+            .is_err()
+    );
+}
+
+/// HS2-J77XJA: under dispatcher authority, a worker match admits a dependent whose
+/// prerequisite awaits CI only with the opt-in, marked provisional, and never a
+/// dependent of an open prerequisite.
+#[test]
+fn hs2_j77xja_worker_matches_mark_provisional_candidates() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let facts = Facts::default();
+    let prerequisite = awaiting_ci(&store, "Prerequisite", GATE_A);
+    let dependent = ticket(&store, "Dependent", vec![prerequisite.id]);
+    let open = ticket(&store, "Open prerequisite", Vec::new());
+    let blocked = ticket(&store, "Blocked dependent", vec![open.id]);
+    facts.push(GATE_A, BASE, GateResult::Pending, Some("run-1"));
+    register(&c, Role::Integrator, "i", GEN, NOW);
+    c.set_authority("i", GEN, NOW, Authority::Dispatcher, true)
+        .unwrap();
+    register(&c, Role::Dispatcher, "d", GEN, NOW);
+    c.publish("i", GEN, &|| NOW, BASE, Vec::new(), &[], &[], false)
+        .unwrap();
+    c.register_full(
+        Role::Worker,
+        "w",
+        GEN,
+        NOW,
+        120,
+        ReturnRoute::HumanRelay,
+        StrategyRequest::default(),
+        PreferenceRequest::replace(
+            WorkerPreferences::stated(
+                vec!["category:task".parse().unwrap()],
+                Vec::new(),
+                Vec::new(),
+                None,
+            )
+            .unwrap(),
+            true,
+        ),
+    )
+    .unwrap();
+    let candidates = |c: &Coordinator| {
+        c.snapshot_probed(NOW, Some(&facts)).unwrap().worker_matches["w"]
+            .candidates
+            .iter()
+            .map(|candidate| (candidate.slug.clone(), candidate.provisional))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let off = candidates(&c);
+    assert!(!off.contains_key(&dependent.slug) && !off.contains_key(&blocked.slug));
+    write_policy(&c, &enabled(IntegrationRule::Parked));
+    let on = candidates(&c);
+    assert_eq!(on.get(&dependent.slug), Some(&true));
+    assert!(!on.contains_key(&blocked.slug));
+    assert_eq!(on.get(&open.slug), Some(&false));
+}

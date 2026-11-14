@@ -421,3 +421,78 @@ fn hs2_2sjpch_default_refusal_is_unchanged_and_opt_in_reserves_provisionally() {
     assert_eq!(explained["opted_out"], false);
     assert_eq!(explained["readiness"]["level"], "provisional");
 }
+
+/// HS2-J77XJA: a plan row and its separate-process `plan-dispatch` follow the opt-in:
+/// off, the row is held and dispatch refused as before; on, the row is provisional,
+/// dispatch reserves it on the pushed gate commit and records the ledger entry.
+#[test]
+fn hs2_j77xja_plan_dispatch_reserves_provisionally_only_with_the_opt_in() {
+    let f = Fixture::new();
+    let pushed = git(&f.project, &["rev-parse", "HEAD"]);
+    let blocker = awaiting_ci(&f, &pushed);
+    let waiting = dependent(&f, &blocker);
+    register(&f, "integrator", "integrator", "root");
+    register(&f, "worker", "worker", "worker-session");
+    let entries = serde_json::json!([{
+        "operation": "planned-op",
+        "worker": "worker",
+        "generation": "worker-session",
+        "ticket": {"connection_id": git_connection_id(&f.store), "native_id": waiting.id.to_string()},
+        "slug": waiting.slug,
+        "scope": []
+    }]);
+    let plan_file = f.root.path().join("plan.json");
+    std::fs::write(&plan_file, entries.to_string()).unwrap();
+    json(
+        &f,
+        &[
+            "plan-replace",
+            "--id",
+            "integrator",
+            "--session",
+            "root",
+            "--expected-revision",
+            "0",
+            "--entries-file",
+            plan_file.to_str().unwrap(),
+            "--all-participants-upgraded",
+        ],
+    );
+    let dispatch = [
+        "plan-dispatch",
+        "--id",
+        "integrator",
+        "--session",
+        "root",
+        "--expected-revision",
+        "1",
+        "--operation",
+        "planned-op",
+        "--base",
+        &pushed,
+    ];
+    let row = |f: &Fixture| json(f, &["status"])["planned"][0].clone();
+    // Off: held exactly as before, with no new field.
+    let held = row(&f);
+    assert_eq!(
+        held["reasons"],
+        serde_json::json!(["dependency_open_or_unknown"])
+    );
+    assert!(held.get("provisional").is_none());
+    refused(&f, &dispatch, "open or unavailable dependency");
+    // On: provisional, dispatched, recorded.
+    json(
+        &f,
+        &["speculation-policy", "--enable", "--base-branch", "main"],
+    );
+    let ready = row(&f);
+    assert_eq!(ready["reasons"], serde_json::json!([]));
+    assert_eq!(ready["provisional"], true);
+    let assigned = json(&f, &dispatch);
+    assert_eq!(assigned["id"], "planned-op");
+    let status = json(&f, &["speculation-status"]);
+    let records = status["status"]["records"].as_array().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["assignment"], "planned-op");
+    assert_eq!(records[0]["gates"][0]["commit"], pushed.as_str());
+}

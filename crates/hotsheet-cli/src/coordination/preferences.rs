@@ -341,6 +341,9 @@ pub struct Candidate {
     pub slug: String,
     pub priority: Priority,
     pub preferred: bool,
+    /// HS2-J77XJA: ready only provisionally, on a prerequisite awaiting CI.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub provisional: bool,
 }
 
 /// Facts about a worker's pending request. `reasons` is empty when the ticket is
@@ -370,10 +373,16 @@ pub(super) struct QueueFacts<'a> {
     pub connection_id: &'a str,
     pub tickets: &'a [Ticket],
     pub now: &'a hotsheet_model::Timestamp,
+    /// HS2-J77XJA: tickets an enabled speculation policy makes provisionally ready.
+    pub provisional: &'a std::collections::BTreeSet<hotsheet_model::Ulid>,
 }
 
 impl QueueFacts<'_> {
     fn open_dependency(&self, ticket: &Ticket) -> bool {
+        !self.provisional.contains(&ticket.id) && self.waits_on_dependency(ticket)
+    }
+
+    fn waits_on_dependency(&self, ticket: &Ticket) -> bool {
         ticket.blocked_by.iter().any(|dependency| {
             !self
                 .tickets
@@ -496,6 +505,8 @@ pub(super) fn project(
                     slug: ticket.slug.clone(),
                     priority: ticket.priority,
                     preferred: preferences.prefers(ticket),
+                    provisional: q.provisional.contains(&ticket.id)
+                        && q.waits_on_dependency(ticket),
                 })
                 .collect()
         });

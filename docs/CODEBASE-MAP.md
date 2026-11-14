@@ -1329,7 +1329,7 @@ idempotent `record`/`apply`/`rebase`/`reopen`, the integration rule that `mark`
 enforces, the `SpeculationStatus` projected into the snapshot and worker view, and
 the timer-free `follow` wait. `speculation_runtime.rs` is its I/O: `LiveGateProbe`
 (Git reachability and the HS2-3R9V0R watch Jobs), the reservation check
-`speculation_reservation`, `speculation_explain`, `speculation_sync`,
+`speculation_reservation`, HS2-J77XJA `provisional_ready` (the snapshot's plan rows and worker candidates, and `dispatch_next_plan_probed` recording the reservation), `speculation_explain`, `speculation_sync`,
 `speculation_result`, at-risk and reopen ticket notes, and the worktree branch
 record. The rule itself is `crates/hotsheet-ticketing/src/provisional.rs`
 (`SpeculationPolicy` in the shared `speculation` setting, `blocker_readiness`,

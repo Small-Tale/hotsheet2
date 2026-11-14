@@ -3276,8 +3276,19 @@ are `PUT` and `POST`, so a read-only device is refused them like every other wri
 machine that holds it. MCP actions: `policy_show`, `policy_set`, `status`, `explain`,
 `result`, `sync`, `rebase`, `reopen`; they work with or without a running server.
 
-**Not built here.** `plan-dispatch` and the worker next plan, automatic `claim-next`
-and worker preference candidates remain confirmed-only (HS2-J77XJA, HS2-XYF4YT). The web
+**Plan rows and worker matches (HS2-J77XJA).** With the opt-in, the next plan, its
+`plan-dispatch` (CLI, `POST /checkouts/{reference}/worker-plan/dispatch`, MCP
+`hotsheet_worker_plan_dispatch`) and the worker preference candidates use the same
+rule as `assign`. A plan row whose only open dependency is provisionally satisfied
+loses `dependency_open_or_unknown` and carries `provisional: true`; a candidate the
+dispatcher would otherwise hold back is listed with `provisional: true`. Dispatch
+then runs the reservation check (the base must contain each pending gate commit) and
+records the ledger entry, and a replay keeps the first record. While a base gate is
+red no row or candidate is provisional, because the reservation refuses new
+provisional work until the repair. Disabled, the rows, candidates and dispatch
+refusal are exactly what they were, and neither field is serialized.
+
+**Not built here.** Automatic `claim-next` remains confirmed-only (HS2-XYF4YT). The web
 client does not display the records (HS2-N8H97X), a ticket entering `final_testing`
 does not start its watch by itself (HS2-X6FB9V), and a batch or ci-staged member is
 not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for

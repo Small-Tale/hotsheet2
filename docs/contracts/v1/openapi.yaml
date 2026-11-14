@@ -27600,6 +27600,11 @@ components:
                   - lowest
               preferred:
                 type: boolean
+              provisional:
+                description:
+                  HS2-J77XJA. Ready only provisionally, on a prerequisite awaiting CI under the project's speculation
+                  opt-in. Absent otherwise.
+                type: boolean
             additionalProperties: false
         idle_reason:
           type:
@@ -27675,6 +27680,11 @@ components:
           type: array
           items:
             type: string
+        provisional:
+          description:
+            HS2-J77XJA. Dispatchable only provisionally, on a prerequisite awaiting CI under the project's speculation
+            opt-in. Absent otherwise.
+          type: boolean
       additionalProperties: false
     WorkerPlanEvent:
       type: object

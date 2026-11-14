@@ -226,6 +226,42 @@ impl Coordinator {
         }
     }
 
+    /// HS2-J77XJA: the open Up Next tickets whose open dependencies an enabled policy
+    /// satisfies provisionally now, as `coordination assign` would decide them. Empty
+    /// when the policy is off, and while a recorded base gate is red, because the
+    /// reservation then refuses new provisional work until the repair lands.
+    pub fn provisional_ready(
+        &self,
+        policy: &SpeculationPolicy,
+        probe: &dyn GateProbe,
+        tickets: &[Ticket],
+    ) -> Result<std::collections::BTreeSet<Ulid>> {
+        let mut ready = std::collections::BTreeSet::new();
+        if !policy.enabled
+            || self
+                .speculation_ledger()?
+                .is_some_and(|ledger| !ledger.repair_first().is_empty())
+        {
+            return Ok(ready);
+        }
+        for ticket in tickets {
+            let waits = ticket.blocked_by.iter().any(|dependency| {
+                !tickets
+                    .iter()
+                    .any(|candidate| candidate.id == *dependency && !ops::is_open(candidate))
+            });
+            if ticket.up_next
+                && ops::is_open(ticket)
+                && waits
+                && ticket_readiness(policy, ticket, tickets, probe).level
+                    == ReadinessLevel::Provisional
+            {
+                ready.insert(ticket.id);
+            }
+        }
+        Ok(ready)
+    }
+
     /// The ledger read without taking the pool lock, for a caller that already holds it
     /// (the reservation check runs under the ticket transaction and the state lock).
     fn speculation_ledger_locked(&self) -> Result<Option<speculation::SpeculationLedger>> {
