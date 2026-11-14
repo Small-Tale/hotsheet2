@@ -2775,3 +2775,163 @@ describe('remembered-rule refresh after a saved reviewed match (HS2-9YVX6Q)', ()
     owner.dispose();
   });
 });
+
+describe('bulk remembered-answer summary across list refreshes (HS2-HBAEMM)', () => {
+  const rule = (action: string, decision: 'allow' | 'deny' = 'allow') => ({
+    project: '/work/a',
+    tool: 'Bash',
+    action,
+    exact_action: action,
+    decision,
+    scope: 'always',
+    created_at: '2026-10-16T00:00:00Z',
+    match_type: 'exact',
+  });
+  const flush = async () => {
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+  };
+  const noContent = () => new Response(null, { status: 204 });
+  const failure = (status: number) => Response.json({ error: `status ${status}` }, { status });
+  const calls = (method: 'GET' | 'PATCH') =>
+    fetchMock.mock.calls.filter(
+      ([url, options]) => url === '/api/a/permissions/rules' && (options?.method ?? 'GET') === method,
+    ).length;
+  // A Settings → Permissions view: it re-renders, and so queues any stale load, when what it read changes.
+  async function shown(initial: unknown[]) {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    fetchMock.mockResolvedValueOnce(json(initial));
+    let rows: string[] = [];
+    const stop = effect(() => {
+      rows = owner.permissionRules('a').map((value) => `${value.action}:${value.decision}`);
+    });
+    await flush();
+    owner.openPermissionRules('a');
+    owner.selectVisiblePermissionRules('a');
+    return { owner, stop, rows: () => rows };
+  }
+
+  it('keeps the bulk summary through a failed refresh, retries the list only, and keeps it after recovery', async () => {
+    const { owner, stop, rows } = await shown([rule('one'), rule('two')]);
+    fetchMock
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(failure(503))
+      .mockResolvedValueOnce(failure(500));
+    await owner.applySelectedPermissionRules('a', 'deny');
+    await flush();
+    // The shown view's automatic refetch must neither clear nor replace the bulk result.
+    expect(owner.permissionRulesMessage.value).toBe(
+      'Updated 1 of 2 answers. 1 failed and remain selected for retry. The list could not be refreshed. status 500',
+    );
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(true);
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([permissionRuleKey(rule('two'))]);
+    expect(rows()).toEqual(['one:deny', 'two:allow']);
+    expect(calls('GET')).toBe(2);
+    // Retry re-reads the list only; it never resubmits a PATCH, and the bulk counts stay.
+    fetchMock.mockResolvedValueOnce(failure(502));
+    await owner.retryPermissionRules('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe(
+      'Updated 1 of 2 answers. 1 failed and remain selected for retry. The list could not be refreshed. status 502',
+    );
+    fetchMock.mockResolvedValueOnce(json([rule('one', 'deny'), rule('two')]));
+    await owner.retryPermissionRules('a');
+    await flush();
+    expect(calls('PATCH')).toBe(2);
+    expect(calls('GET')).toBe(4);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(owner.permissionRulesMessage.value).toBe('Updated 1 of 2 answers. 1 failed and remain selected for retry.');
+    expect(rows()).toEqual(['one:deny', 'two:allow']);
+    stop();
+    owner.dispose();
+  });
+
+  it('reports a lock found by the refresh after the bulk result', async () => {
+    const { owner, stop, rows } = await shown([rule('one')]);
+    fetchMock.mockResolvedValueOnce(noContent()).mockResolvedValueOnce(failure(503));
+    await owner.applySelectedPermissionRules('a', 'deny');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toMatch(/^Updated 1 of 1 answers\. Remembered answers are locked\./);
+    expect(owner.lockedPermissionRules.value.has('a')).toBe(true);
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(rows()).toEqual([]);
+    stop();
+    owner.dispose();
+  });
+
+  it('waits out a load that started before the bulk edit and reports from a newer one', async () => {
+    const { owner, stop, rows } = await shown([rule('one')]);
+    const overlapping = deferred<Response>(),
+      newer = deferred<Response>();
+    fetchMock
+      .mockReturnValueOnce(overlapping.promise)
+      .mockResolvedValueOnce(noContent())
+      .mockReturnValueOnce(newer.promise);
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(calls('GET')).toBe(2);
+    let settled = false;
+    const editing = owner.applySelectedPermissionRules('a', 'deny').then(() => {
+      settled = true;
+    });
+    await flush();
+    expect(calls('PATCH')).toBe(1);
+    // No second GET races the older load, whose late pre-edit rows could otherwise win.
+    expect(calls('GET')).toBe(2);
+    // The pre-edit load settles with pre-edit rows; the bulk edit must not report from it.
+    overlapping.resolve(json([rule('one')]));
+    await flush();
+    expect(settled).toBe(false);
+    expect(calls('GET')).toBe(3);
+    newer.resolve(json([rule('one', 'deny')]));
+    await editing;
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe('Updated 1 of 1 answers.');
+    expect(rows()).toEqual(['one:deny']);
+    expect(calls('GET')).toBe(3);
+    stop();
+    owner.dispose();
+  });
+
+  it('keeps the summary through a later rules-change refetch, and each repeated bulk edit replaces the last', async () => {
+    const { owner, stop, rows } = await shown([rule('one'), rule('two')]);
+    fetchMock
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(json([rule('one', 'deny'), rule('two', 'deny')]));
+    await owner.applySelectedPermissionRules('a', 'deny');
+    expect(owner.permissionRulesMessage.value).toBe('Updated 2 of 2 answers.');
+    // This client's own change echoes back as a rules-change event; its refetch keeps the result.
+    fetchMock.mockResolvedValueOnce(json([rule('one', 'deny'), rule('two', 'deny')]));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe('Updated 2 of 2 answers.');
+    fetchMock.mockResolvedValueOnce(failure(500));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe(
+      'Updated 2 of 2 answers. The list could not be refreshed. status 500',
+    );
+    // A second bulk edit reports only itself.
+    owner.filterPermissionRules('a', { decision: 'deny' });
+    owner.selectVisiblePermissionRules('a');
+    fetchMock
+      .mockResolvedValueOnce(failure(400))
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(json([rule('one', 'deny'), rule('two')]));
+    await owner.applySelectedPermissionRules('a', 'allow');
+    await flush();
+    expect(owner.permissionRulesMessage.value).toBe('Updated 1 of 2 answers. 1 failed and remain selected for retry.');
+    expect(owner.unrefreshedPermissionRules.value.has('a')).toBe(false);
+    expect(rows()).toEqual(['one:deny', 'two:allow']);
+    // Another status replaces the bulk result, and a later refetch does not bring it back.
+    fetchMock.mockResolvedValueOnce(noContent());
+    await owner.changePermissionRuleDecision('a', permissionRuleKey(rule('two')), 'deny');
+    expect(owner.permissionRulesMessage.value).toBe('Answer set to Disallow.');
+    fetchMock.mockResolvedValueOnce(json([rule('one', 'deny'), rule('two', 'deny')]));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(owner.permissionRulesMessage.value).not.toContain('Updated');
+    stop();
+    owner.dispose();
+  });
+});

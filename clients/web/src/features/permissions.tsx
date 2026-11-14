@@ -149,6 +149,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   // Projects whose last rule load failed without a lock: the list on screen is the last good copy,
   // and the view offers a refresh retry that never resubmits a mutation (HS2-9YVX6Q).
   const unrefreshedPermissionRules = signal<ReadonlySet<string>>(new Set());
+  // The last bulk result shown and the exact status it produced. While that status stands, a later
+  // list load reports its own outcome after the result instead of replacing it (HS2-HBAEMM).
+  let bulkPermissionRulesSummary: { projectId: string; summary: string; shown: string } | undefined;
   const legacyDiscard = signal<
     | {
         projectId: string;
@@ -765,18 +768,9 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           : [{ ...rule, decision: operation }];
       }),
     };
-    let refreshFailed = false;
-    try {
-      const refreshed = await api.permissionRules();
-      permissionRulesByProject.value = {
-        ...permissionRulesByProject.value,
-        [projectId]: projectPermissionRules(refreshed, project),
-      };
-      freshPermissionRules.value = new Set([...freshPermissionRules.value, projectId]);
-    } catch {
-      refreshFailed = true;
-      markPermissionRulesStale(projectId);
-    }
+    // Share the post-mutation reload, so an older in-flight load cannot win and a settled refresh
+    // leaves the list fresh instead of queueing a view refetch that would erase the result (HS2-HBAEMM).
+    const refreshed = await reloadPermissionRules(project);
     function finishSelection() {
       const remaining = new Set((permissionRulesByProject.value[projectId] ?? []).map(permissionRuleKey));
       const selected = [...failed].filter((key) => remaining.has(key));
@@ -802,8 +796,46 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       }
       return true;
     }
-    if (finishSelection())
-      permissionRulesMessage.value = `${operation === 'delete' ? 'Deleted' : 'Updated'} ${succeeded.size} of ${targets.length} answers.${failed.size ? ` ${failed.size} failed and remain selected for retry.` : ''}${refreshFailed ? ' Could not refresh the list; retry loading to confirm the latest state.' : ''}`;
+    if (finishSelection() && selectedProjectId.value === projectId)
+      showBulkPermissionRulesSummary(
+        projectId,
+        `${operation === 'delete' ? 'Deleted' : 'Updated'} ${succeeded.size} of ${targets.length} answers.${failed.size ? ` ${failed.size} failed and remain selected for retry.` : ''}`,
+        refreshed,
+      );
+  }
+
+  /** Show a bulk result followed by how the list refresh after it settled (HS2-HBAEMM). */
+  function showBulkPermissionRulesSummary(projectId: string, summary: string, refreshed: PermissionRulesLoad) {
+    const shown =
+      refreshed.status === 'failed'
+        ? `${summary} The list could not be refreshed. ${refreshed.reason}`
+        : refreshed.status === 'locked'
+          ? `${summary} ${PERMISSION_RULES_LOCKED_MESSAGE}`
+          : summary;
+    bulkPermissionRulesSummary = { projectId, summary, shown };
+    permissionRulesMessage.value = shown;
+  }
+
+  /** The bulk result still shown for `projectId`, if no other status has replaced it (HS2-HBAEMM). */
+  function shownBulkPermissionRulesSummary(projectId: string) {
+    const current = bulkPermissionRulesSummary;
+    return current?.projectId === projectId && permissionRulesMessage.peek() === current.shown
+      ? current.summary
+      : undefined;
+  }
+
+  /** Report a settled list load in the status, after a bulk result that is still shown (HS2-HBAEMM). */
+  function reportPermissionRulesLoad(projectId: string, outcome: PermissionRulesLoad) {
+    if (selectedProjectId.value !== projectId) return;
+    const summary = shownBulkPermissionRulesSummary(projectId);
+    if (summary !== undefined) showBulkPermissionRulesSummary(projectId, summary, outcome);
+    else
+      permissionRulesMessage.value =
+        outcome.status === 'failed'
+          ? `Could not load remembered answers. ${outcome.reason}`
+          : outcome.status === 'locked'
+            ? PERMISSION_RULES_LOCKED_MESSAGE
+            : '';
   }
 
   /** Another client remembered or revoked one of `projectId`'s answers (HS2-KYK1S7). */
@@ -862,13 +894,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
         lockedPermissionRules.value = new Set([...lockedPermissionRules.value, project.id]);
         setUnrefreshedPermissionRules(project.id, false);
         outcome = { status: 'locked' };
-        if (selectedProjectId.value === project.id) permissionRulesMessage.value = PERMISSION_RULES_LOCKED_MESSAGE;
       } else {
         setUnrefreshedPermissionRules(project.id, true);
         outcome = { status: 'failed', reason: reason instanceof Error ? reason.message : String(reason) };
-        if (selectedProjectId.value === project.id)
-          permissionRulesMessage.value = `Could not load remembered answers. ${outcome.reason}`;
       }
+      reportPermissionRulesLoad(project.id, outcome);
       settledPermissionRules.set(project.id, { seq, outcome });
       return outcome;
     }
@@ -876,7 +906,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     settledPermissionRules.set(project.id, { seq, outcome: { status: 'loaded' } });
     lockedPermissionRules.value = new Set([...lockedPermissionRules.value].filter((id) => id !== project.id));
     setUnrefreshedPermissionRules(project.id, false);
-    if (selectedProjectId.value === project.id) permissionRulesMessage.value = '';
+    reportPermissionRulesLoad(project.id, { status: 'loaded' });
     permissionRulesByProject.value = {
       ...permissionRulesByProject.value,
       [project.id]: projectPermissionRules(rules, project),
@@ -907,7 +937,12 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   async function retryPermissionRules(projectId: string) {
     const project = projects.value.find((value) => value.id === projectId);
     if (!project || loadingPermissionRules.has(projectId)) return;
-    if (selectedProjectId.value === projectId) permissionRulesMessage.value = '';
+    if (selectedProjectId.value === projectId) {
+      // Keep a shown bulk result; drop only the failed-refresh text the retry is about to replace.
+      const summary = shownBulkPermissionRulesSummary(projectId);
+      if (summary !== undefined) showBulkPermissionRulesSummary(projectId, summary, { status: 'loaded' });
+      else permissionRulesMessage.value = '';
+    }
     await reloadPermissionRules(project);
   }
 

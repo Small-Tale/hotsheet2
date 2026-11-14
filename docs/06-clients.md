@@ -3252,7 +3252,11 @@ chat-scoped answers keep their connection lifetime.
 The effective duration updates in both lists after a successful server write, and a
 failed edit leaves the displayed duration intact (HS2-V95VEB).
 After a batch the dialog refreshes from the server, summarizes successes and failures,
-and keeps failed rows selected for retry.
+and keeps failed rows selected for retry. The refresh waits out any list load that started
+before the batch and reports its outcome after the batch summary rather than replacing it: a
+failed refresh keeps the last good list and offers a list-only Retry that never resubmits an
+edit, and a later automatic or Retry refresh keeps the summary while it is still shown
+(HS2-HBAEMM).
 A `permission_asked` event also refreshes terminal connection state; the client derives
 the refreshed snapshot before publishing it and skips an unchanged snapshot, so a prompt
 does not cause extra whole-app render passes (HS2-2RN05B).

@@ -18929,6 +18929,158 @@ test('reports a lock found by the refresh after a saved reviewed match (HS2-9YVX
   await expect(preview.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
 });
 
+/**
+ * Settings → Permissions with two remembered answers behind faithful route fixtures: PATCH answers
+ * 204 with no body, and a failed PATCH or GET answers the server's `{ error }` body (HS2-HBAEMM).
+ */
+async function bulkPermissionRulesFixture(page: import('@playwright/test').Page) {
+  await mockProject(page);
+  const rule = (action: string, decision: 'allow' | 'deny' = 'allow') => ({
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action: rememberedActionKey(action),
+    exact_action: action,
+    decision,
+    scope: 'always',
+    match_type: 'exact',
+  });
+  const state = {
+    rules: [rule('npm test'), rule('npm run lint')],
+    requests: [] as string[],
+    /** Status codes for the next GETs, in order; an empty queue answers with the rules. */
+    getFailures: [] as number[],
+    /** Exact actions whose PATCH answers 503. */
+    patchFailures: new Set<string>(),
+    /** When set, the next GET waits for this to resolve and answers with the rules as they were then. */
+    holdNextGet: undefined as Promise<void> | undefined,
+  };
+  await page.route('**/permissions/rules', async (route) => {
+    const method = route.request().method();
+    state.requests.push(method);
+    if (method === 'PATCH') {
+      const body = route.request().postDataJSON() as { action: string; decision: 'allow' | 'deny' };
+      const current = state.rules.find((value) => value.action === body.action);
+      if (current && state.patchFailures.has(current.exact_action))
+        return route.fulfill({ status: 503, json: { error: 'Unavailable' } });
+      state.rules = state.rules.map((value) =>
+        value.action === body.action ? { ...value, decision: body.decision } : value,
+      );
+      return route.fulfill({ status: 204, body: '' });
+    }
+    const snapshot = state.rules;
+    const held = state.holdNextGet;
+    state.holdNextGet = undefined;
+    if (held) {
+      await held;
+      return route.fulfill({ json: snapshot });
+    }
+    const status = state.getFailures.shift();
+    if (status) return route.fulfill({ status, json: { error: `rule store busy ${status}` } });
+    return route.fulfill({ json: state.rules });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+  if (await showSidebar.isVisible()) await showSidebar.click();
+  await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+  const hideSidebar = page.getByRole('button', { name: 'Hide Settings Sidebar' });
+  if (await hideSidebar.isVisible()) await hideSidebar.click();
+  const settings = page.locator('[data-component="permission-rules-settings"]');
+  const list = page.getByRole('list', { name: 'Recent Remembered Answers' });
+  const row = (action: string) =>
+    list
+      .locator('[data-permission-rule]')
+      .filter({ hasText: action })
+      .locator('[data-action="select-permission-rule-row"]');
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await expect(list).toContainText('npm run lint');
+  return {
+    state,
+    settings,
+    list,
+    status: settings.getByRole('status'),
+    retry: settings.getByRole('button', { name: 'Retry', exact: true }),
+    /** Select `actions` in the preview, then apply one Selected Answer Actions item. */
+    bulk: async (actions: string[], item: 'Allow Selected' | 'Deny Selected') => {
+      await row(actions[0]).click();
+      for (const action of actions.slice(1)) await row(action).click({ modifiers: [modifier] });
+      await page
+        .locator('[data-permission-selection-surface="preview"][data-permission-bulk-menu]')
+        .getByRole('button', { name: 'Selected Answer Actions' })
+        .click();
+      await page.getByRole('menuitem', { name: item }).click();
+    },
+  };
+}
+
+for (const width of [1280, 390]) {
+  test(`keeps the bulk remembered-answer summary when its list refresh fails, then retries the list only at ${width}px (HS2-HBAEMM)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const { state, settings, list, status, retry, bulk } = await bulkPermissionRulesFixture(page);
+    state.patchFailures.add('npm run lint');
+    state.getFailures.push(500);
+    await bulk(['npm test', 'npm run lint'], 'Deny Selected');
+    const summary = 'Updated 1 of 2 answers. 1 failed and remain selected for retry.';
+    await expect(status).toHaveText(`${summary} The list could not be refreshed. rule store busy 500`);
+    await expect(retry).toBeVisible();
+    // The last good list stays, with the saved change, and the failed row stays selected.
+    await expect(list.locator('[data-permission-rule-decision="deny"]')).toHaveCount(1);
+    await expect(list.locator('[data-permission-rule]').filter({ hasText: 'npm run lint' })).toHaveAttribute(
+      'data-rule-selected',
+      'true',
+    );
+    await settings.screenshot({ path: `target/visual-captures/hs2-hbaemm-refresh-failed-${width}.png` });
+    // No automatic refetch replaced the result: one GET for the view, one refresh after the edit.
+    await expect(status).toHaveText(`${summary} The list could not be refreshed. rule store busy 500`);
+    expect(state.requests).toEqual(['GET', 'PATCH', 'PATCH', 'GET']);
+    state.getFailures.push(502);
+    await retry.click();
+    await expect(status).toHaveText(`${summary} The list could not be refreshed. rule store busy 502`);
+    await retry.click();
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveText(summary);
+    // Retry re-read the list twice and never resubmitted an edit.
+    expect(state.requests).toEqual(['GET', 'PATCH', 'PATCH', 'GET', 'GET', 'GET']);
+    await settings.screenshot({ path: `target/visual-captures/hs2-hbaemm-recovered-${width}.png` });
+  });
+}
+
+test('reports repeated bulk edits from a refresh started after each edit, not an overlapping load (HS2-HBAEMM)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const { state, list, status, retry, bulk } = await bulkPermissionRulesFixture(page);
+  // First edit: its refresh fails, leaving a list-only Retry.
+  state.getFailures.push(500);
+  await bulk(['npm test'], 'Deny Selected');
+  await expect(status).toHaveText('Updated 1 of 1 answers. The list could not be refreshed. rule store busy 500');
+  // Start a Retry load and hold it in flight, then make a second edit while it is pending.
+  let release!: () => void;
+  state.holdNextGet = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await retry.click();
+  await expect.poll(() => state.requests.length).toBe(4);
+  await bulk(['npm run lint'], 'Deny Selected');
+  await expect.poll(() => state.requests.filter((method) => method === 'PATCH').length).toBe(2);
+  // The edit waits out the older load instead of racing it with a second GET.
+  expect(state.requests).toEqual(['GET', 'PATCH', 'GET', 'GET', 'PATCH']);
+  release();
+  await expect(status).toHaveText('Updated 1 of 1 answers.');
+  await expect(list.locator('[data-permission-rule-decision="deny"]')).toHaveCount(2);
+  expect(state.requests).toEqual(['GET', 'PATCH', 'GET', 'GET', 'PATCH', 'GET']);
+  // A third edit reports only itself.
+  await bulk(['npm test', 'npm run lint'], 'Allow Selected');
+  await expect(status).toHaveText('Updated 2 of 2 answers.');
+  await expect(retry).toHaveCount(0);
+  await expect(list.locator('[data-permission-rule-decision="allow"]')).toHaveCount(2);
+});
+
 test('validates and applies the dedicated match editor through a real permission server (HS2-400WZZ)', async ({
   page,
 }) => {
