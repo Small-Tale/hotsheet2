@@ -1335,6 +1335,9 @@ record. The rule itself is `crates/hotsheet-ticketing/src/provisional.rs`
 (`SpeculationPolicy` in the shared `speculation` setting, `blocker_readiness`,
 `ticket_readiness`, `ci_gate_commit`, the `speculate:never` tag). The CLI side is
 `dispatch/coordination_speculation.rs` (`coordination speculation-*`);
+`speculation_api.rs` (HS2-7J2ZSE) is the one request layer that the CLI, the
+`/checkouts/{reference}/speculation/...` routes in `checkout_workers.rs` and the MCP
+`hotsheet_speculation` tool share;
 `provisional_tests.rs`, `speculation_tests.rs` and `tests/coordination_speculation.rs`
 pin the transitions.
 `source_support.rs` produces additive, registry-only per-source

@@ -291,8 +291,8 @@ base and pending gate, and follows the gate's result from the CI watch without
 polling (green confirms; red marks the work at risk with a ticket note, puts the
 repair first, and is followed by a recorded rebase or reopen). It is off by default,
 capped by a depth limit of one and refused for `speculate:never` tickets;
-`plan-dispatch` (HS2-J77XJA), `claim-next` (HS2-XYF4YT), REST and MCP policy actions
-(HS2-7J2ZSE) and the web display (HS2-N8H97X) remain open.
+REST and MCP policy actions ship (HS2-7J2ZSE); `plan-dispatch` (HS2-J77XJA),
+`claim-next` (HS2-XYF4YT) and the web display (HS2-N8H97X) remain open.
 An optional dispatcher can own assignment while the integrator keeps review, integration
 and CI, behind an explicit schema-four authority switch that fences older artifacts
 (HS2-TWZW7X); the three role skills and shared headless/GUI setup ship in HS2-7E5R4A,

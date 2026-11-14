@@ -3258,9 +3258,26 @@ reason. `speculation-status`, `coordination status`, `coordination workers`, `GE
 `repair_first` and `reevaluate`. Opting a ticket out is the ordinary tag edit in the
 CLI (`edit --tag`) and MCP (`hotsheet_update`).
 
+**REST and MCP (HS2-7J2ZSE).** The same requests are authenticated routes beside
+`integration-strategies`, and the MCP tool `hotsheet_speculation`, over one library
+(`hotsheet_cli::coordination::speculation_api`) that the commands use too:
+
+| Route                                                                 | Command                         |
+| --------------------------------------------------------------------- | ------------------------------- |
+| `GET`/`PUT /checkouts/{reference}/speculation/policy`                 | `speculation-policy`            |
+| `GET /checkouts/{reference}/speculation/status`                       | `speculation-status`            |
+| `GET /checkouts/{reference}/speculation/explain?ticket=`              | `speculation-explain`           |
+| `POST /checkouts/{reference}/speculation/{result,sync,rebase,reopen}` | `speculation-result` … `reopen` |
+
+A `PUT` changes only the members it names, and the same change again writes nothing.
+`sync` waits at most 25 seconds per request over HTTP and MCP. The changing requests
+are `PUT` and `POST`, so a read-only device is refused them like every other write.
+`speculation-branch` writes into a local worktree path and stays a command of the
+machine that holds it. MCP actions: `policy_show`, `policy_set`, `status`, `explain`,
+`result`, `sync`, `rebase`, `reopen`; they work with or without a running server.
+
 **Not built here.** `plan-dispatch` and the worker next plan, automatic `claim-next`
-and worker preference candidates remain confirmed-only (HS2-J77XJA, HS2-XYF4YT). The
-policy and the explanation have no REST or MCP action yet (HS2-7J2ZSE), the web
+and worker preference candidates remain confirmed-only (HS2-J77XJA, HS2-XYF4YT). The web
 client does not display the records (HS2-N8H97X), a ticket entering `final_testing`
 does not start its watch by itself (HS2-X6FB9V), and a batch or ci-staged member is
 not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for

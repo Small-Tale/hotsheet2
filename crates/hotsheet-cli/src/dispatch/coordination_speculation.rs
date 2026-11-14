@@ -5,20 +5,16 @@
 //! `hotsheet_cli::coordination::speculation` and `::speculation_runtime`.
 
 use std::path::Path;
-use std::time::Duration;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use hotsheet_cli::coordination::Coordinator;
-use hotsheet_cli::coordination::speculation::{Rebase, follow};
-use hotsheet_ticketing::provisional::{
-    GateObservation, GateProbe, GateResult, IntegrationRule, SpeculationPolicy,
+use hotsheet_cli::coordination::speculation_api::{
+    MAX_SYNC_WAIT_MS, PolicyChange, SpeculationRequest, speculation_policy, speculation_request,
 };
-use hotsheet_ticketing::{FsStore, Settings};
+use hotsheet_ticketing::FsStore;
+use hotsheet_ticketing::provisional::{GateResult, IntegrationRule};
 
 use super::{CoordinationCmd, Ctx};
-
-/// Longest single wait `speculation-sync` accepts; a caller that needs longer calls again.
-const MAX_WAIT_MS: u64 = 10 * 60 * 1000;
 
 pub(super) fn parse_integration(raw: &str) -> Result<IntegrationRule, String> {
     serde_json::from_value(serde_json::Value::String(raw.to_owned()))
@@ -31,7 +27,7 @@ pub(super) fn parse_result(raw: &str) -> Result<GateResult, String> {
 }
 
 /// Run `speculation-policy` against the project's committed settings, without opening
-/// the pool; false for any other command.
+/// the pool; false for any other command. HS2-7J2ZSE: the same write the routes use.
 pub(super) fn policy(project: &Path, command: &CoordinationCmd) -> Result<bool> {
     let CoordinationCmd::SpeculationPolicy {
         enable,
@@ -44,31 +40,20 @@ pub(super) fn policy(project: &Path, command: &CoordinationCmd) -> Result<bool> 
     else {
         return Ok(false);
     };
-    let settings = Settings::for_project(project);
-    let mut policy = SpeculationPolicy::read(&settings)?;
-    let before = policy.clone();
-    if *enable {
-        policy.enabled = true;
-    }
-    if *disable {
-        policy.enabled = false;
-    }
-    if let Some(depth) = max_depth {
-        policy.max_depth = *depth;
-    }
-    if let Some(rule) = integration {
-        policy.integration = *rule;
-    }
-    if let Some(branch) = base_branch {
-        policy.base_branch = Some(branch.clone());
-    }
-    if *clear_base_branch {
-        policy.base_branch = None;
-    }
-    if policy != before {
-        policy.write(&settings)?;
-        policy = SpeculationPolicy::read(&settings)?;
-    }
+    let change = PolicyChange {
+        enabled: if *enable {
+            Some(true)
+        } else if *disable {
+            Some(false)
+        } else {
+            None
+        },
+        max_depth: *max_depth,
+        integration: *integration,
+        base_branch: base_branch.clone(),
+        clear_base_branch: *clear_base_branch,
+    };
+    let policy = speculation_policy(project, &change)?;
     println!("{}", serde_json::to_string_pretty(&policy)?);
     Ok(true)
 }
@@ -98,118 +83,52 @@ pub(super) fn run(
     command: CoordinationCmd,
     now: i64,
 ) -> Result<serde_json::Value> {
-    let policy = SpeculationPolicy::read(&Settings::for_project(project))?;
     let store = local_store(ctx)?;
-    Ok(match command {
-        CoordinationCmd::SpeculationStatus => serde_json::json!({
-            "policy": policy,
-            "status": coordinator.speculation_ledger()?.unwrap_or_default().status(),
-        }),
-        CoordinationCmd::SpeculationExplain { ticket } => {
-            let store = store.ok_or_else(|| {
-                anyhow::anyhow!("explaining readiness needs the local ticket source (-C)")
-            })?;
-            let tickets = store.list_tickets()?;
-            let found = tickets
-                .iter()
-                .find(|t| t.slug.eq_ignore_ascii_case(&ticket) || t.id.to_string() == ticket)
-                .ok_or_else(|| anyhow::anyhow!("no ticket {ticket} in this source"))?;
-            let probe = coordinator.speculation_probe(&policy);
-            serde_json::to_value(
-                coordinator.speculation_explain(&policy, &probe, found, &tickets)?,
-            )?
-        }
+    let request = match command {
+        CoordinationCmd::SpeculationStatus => SpeculationRequest::Status,
+        CoordinationCmd::SpeculationExplain { ticket } => SpeculationRequest::Explain { ticket },
         CoordinationCmd::SpeculationResult {
             gate_commit,
             result,
             run,
-        } => {
-            ensure!(
-                result != GateResult::Unknown,
-                "an unknown result records nothing; omit the command"
-            );
-            serde_json::to_value(coordinator.speculation_result(
-                &gate_commit,
-                GateObservation { result, run },
-                store.as_ref(),
-                now,
-            )?)?
-        }
-        CoordinationCmd::SpeculationSync { wait_ms } => {
-            ensure!(
-                wait_ms <= MAX_WAIT_MS,
-                "wait-ms is at most {MAX_WAIT_MS}; call again to keep waiting"
-            );
-            let probe = coordinator.speculation_probe(&policy);
-            let waiting = coordinator
-                .speculation_ledger()?
-                .is_some_and(|ledger| !ledger.watched_commits().is_empty());
-            let mut last = None;
-            follow(
-                Duration::from_millis(if waiting { wait_ms } else { 0 }),
-                || {
-                    // The revision is read before the gates, so a change during the
-                    // read is seen by the wait.
-                    let revision = probe.revision();
-                    let report = coordinator.speculation_sync(
-                        &probe,
-                        store.as_ref(),
-                        time::OffsetDateTime::now_utc().unix_timestamp(),
-                    )?;
-                    let changes = report.changes.clone();
-                    last = Some(report);
-                    Ok((changes, revision))
-                },
-                |revision, remaining| Ok(probe.wait(revision, remaining)),
-            )?;
-            let mut report = serde_json::to_value(last)?;
-            // `none` means no CI watch exists for this checkout: the call returned at
-            // once, and repeating it in a loop would be polling.
-            report["event_source"] = if probe.watchable() {
-                "ci_watch"
-            } else {
-                "none"
-            }
-            .into();
-            report
-        }
+        } => SpeculationRequest::Result {
+            gate_commit,
+            result,
+            run,
+        },
+        CoordinationCmd::SpeculationSync { wait_ms } => SpeculationRequest::Sync { wait_ms },
         CoordinationCmd::SpeculationRebase {
             assignment,
             replaces,
             gate_commit,
             base,
-        } => {
-            let probe = coordinator.speculation_probe(&policy);
-            let gate = probe.gate(&gate_commit);
-            serde_json::to_value(coordinator.speculation_rebase_checked(
-                &probe,
-                &assignment,
-                &Rebase {
-                    replaces,
-                    gate_commit,
-                    gate,
-                    base,
-                },
-                now,
-                actor(ctx).as_deref(),
-            )?)?
-        }
+        } => SpeculationRequest::Rebase {
+            assignment,
+            replaces,
+            gate_commit,
+            base,
+        },
         CoordinationCmd::SpeculationReopen { assignment, reason } => {
-            let store = store.ok_or_else(|| {
-                anyhow::anyhow!("reopening writes a ticket note; pass the local ticket source (-C)")
-            })?;
-            serde_json::to_value(coordinator.speculation_reopen_noted(
-                &store,
-                &assignment,
-                &reason,
-                now,
-                actor(ctx).as_deref(),
-            )?)?
+            SpeculationRequest::Reopen { assignment, reason }
         }
+        // A worktree is a local path: the branch record stays a command of this machine.
         CoordinationCmd::SpeculationBranch {
             assignment,
             worktree,
-        } => serde_json::to_value(coordinator.speculation_branch(&worktree, &assignment)?)?,
+        } => {
+            return Ok(serde_json::to_value(
+                coordinator.speculation_branch(&worktree, &assignment)?,
+            )?);
+        }
         _ => unreachable!("only speculation commands are routed here"),
-    })
+    };
+    speculation_request(
+        coordinator,
+        project,
+        store.as_ref(),
+        request,
+        actor(ctx).as_deref(),
+        MAX_SYNC_WAIT_MS,
+        now,
+    )
 }

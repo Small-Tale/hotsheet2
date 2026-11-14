@@ -409,6 +409,29 @@ fn base_tools_list() -> Value {
             }, "required": ["checkout"] }
         },
         {
+            "name": "hotsheet_speculation",
+            "description": "Provisional readiness of a registered checkout (HS2-2SJPCH, HS2-7J2ZSE): action policy_show reads the committed policy and policy_set changes it (enabled, max_depth, integration push-per-ticket or parked, base_branch or clear_base_branch; the same change again writes nothing); status lists provisional assignments with their base SHA, pending gates and state; explain says why one ticket is or is not ready; result records a CI result for a gate commit when no CI watch reports it (green confirms, red marks dependents at risk); sync applies the CI watch's gate results and with wait_ms (at most 25000) waits for the next change instead of polling; rebase records that at-risk work rests on the repaired gate commit; reopen reopens provisional work with a ticket note. The same as the `coordination speculation-*` commands; the worktree branch record stays a local command.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id or alias"),
+                "action": {"type":"string","enum":["policy_show","policy_set","status","explain","result","sync","rebase","reopen"]},
+                "connection_id": str_prop("optional linked Git source id; required when no unambiguous default exists"),
+                "enabled": {"type":"boolean","description":"policy_set"},
+                "max_depth": {"type":"integer","minimum":1,"description":"policy_set: unconfirmed gates that may stack beneath one ticket"},
+                "integration": {"type":"string","enum":["push-per-ticket","parked"],"description":"policy_set"},
+                "base_branch": str_prop("policy_set: branch a gate commit must be reachable from"),
+                "clear_base_branch": {"type":"boolean","description":"policy_set"},
+                "ticket": str_prop("explain: slug or id"),
+                "gate_commit": str_prop("result/rebase: the gate commit"),
+                "result": {"type":"string","enum":["pending","green","red","superseded","cancelled"],"description":"result"},
+                "run": str_prop("result: provider run identifier"),
+                "wait_ms": {"type":"integer","minimum":0,"maximum":25000,"description":"sync: wait for the next gate change"},
+                "assignment": str_prop("rebase/reopen: the assignment"),
+                "replaces": str_prop("rebase: the gate commit being replaced"),
+                "base": str_prop("rebase: the base the work was rebased onto"),
+                "reason": str_prop("reopen: a stable reason code")
+            }, "required": ["checkout","action"] }
+        },
+        {
             "name": "hotsheet_worker_plan_replace",
             "description": "Replace ordered tentative worker intent at an exact plan revision; no ticket is claimed or changed.",
             "inputSchema": { "type": "object", "properties": {
@@ -1031,6 +1054,68 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
+        // HS2-7J2ZSE: provisional readiness over the same routes the server has.
+        "hotsheet_speculation" => {
+            let checkout = arg_str(args, "checkout")?;
+            let base = format!(
+                "/checkouts/{}/speculation",
+                encode_checkout_reference(&checkout)
+            );
+            let action = arg_str(args, "action")?;
+            let pick = |keys: &[&str]| {
+                let mut body = serde_json::Map::new();
+                for key in keys {
+                    if let Some(value) = args.get(*key).filter(|value| !value.is_null()) {
+                        body.insert((*key).into(), value.clone());
+                    }
+                }
+                Value::Object(body)
+            };
+            let mut query = Vec::new();
+            if let Some(connection_id) = args.get("connection_id").and_then(Value::as_str) {
+                query.push(("connection_id".to_owned(), connection_id.to_owned()));
+            }
+            match action.as_str() {
+                "policy_show" => backend.get(&format!("{base}/policy"), &[]),
+                "policy_set" => backend.send(
+                    "PUT",
+                    &format!("{base}/policy"),
+                    &pick(&[
+                        "enabled",
+                        "max_depth",
+                        "integration",
+                        "base_branch",
+                        "clear_base_branch",
+                    ]),
+                ),
+                "status" => backend.get(&format!("{base}/status"), &query),
+                "explain" => {
+                    query.push(("ticket".to_owned(), arg_str(args, "ticket")?));
+                    backend.get(&format!("{base}/explain"), &query)
+                }
+                "result" | "sync" | "rebase" | "reopen" => {
+                    let keys: &[&str] = match action.as_str() {
+                        "result" => &["connection_id", "gate_commit", "result", "run"],
+                        "sync" => &["connection_id", "wait_ms"],
+                        "rebase" => &[
+                            "connection_id",
+                            "assignment",
+                            "replaces",
+                            "gate_commit",
+                            "base",
+                        ],
+                        _ => &["connection_id", "assignment", "reason"],
+                    };
+                    let mut body = pick(keys);
+                    if let Some(actor) = args.get("actor_id").and_then(Value::as_str) {
+                        body["actor_id"] = actor.into();
+                    }
+                    backend.send("POST", &format!("{base}/{action}"), &body)
+                }
+                _ => return Err("unsupported speculation action".into()),
+            }
+            .map_err(be_msg)
+        }
         "hotsheet_worker_plan_replace" | "hotsheet_worker_plan_dispatch" => {
             let checkout = arg_str(args, "checkout")?;
             let endpoint = if name == "hotsheet_worker_plan_replace" {
@@ -1438,6 +1523,14 @@ fn encode_checkout_reference(reference: &str) -> String {
         }
     }
     encoded
+}
+
+/// HS2-7J2ZSE: `(reference, operation)` of a `/checkouts/{reference}/speculation/{operation}`
+/// path; the reference stays encoded.
+fn speculation_path(path: &str) -> Option<(&str, &str)> {
+    let rest = path.strip_prefix("/checkouts/")?;
+    let (reference, operation) = rest.split_once("/speculation/")?;
+    (!reference.is_empty() && !operation.contains('/')).then_some((reference, operation))
 }
 
 fn decode_checkout_reference(reference: &str) -> Result<std::borrow::Cow<'_, str>, BackendError> {
@@ -1875,6 +1968,81 @@ mod core_backend {
             Ok((checkout, stores))
         }
 
+        /// HS2-7J2ZSE: provisional readiness over the shared library, as the server's
+        /// `/checkouts/{reference}/speculation/...` routes answer it.
+        fn speculation(
+            &self,
+            method: &str,
+            reference: &str,
+            operation: &str,
+            mut body: Value,
+        ) -> Result<Value, BackendError> {
+            use hotsheet_cli::coordination::speculation_api as api;
+            let decoded = decode_checkout_reference(reference)?;
+            let checkout = self
+                .checkout_registry
+                .resolve(&decoded)
+                .map_err(checkout_err)?;
+            let failed = |error: anyhow::Error| BackendError {
+                status: Some(409),
+                message: error.to_string(),
+            };
+            if operation == "policy" {
+                let change: api::PolicyChange = if method == "PUT" {
+                    serde_json::from_value(body).map_err(|error| bad_request(error.to_string()))?
+                } else {
+                    api::PolicyChange::default()
+                };
+                return api::speculation_policy(Path::new(&checkout.root), &change)
+                    .map(|policy| to_value(&policy))
+                    .map_err(failed);
+            }
+            let object = body
+                .as_object_mut()
+                .ok_or_else(|| bad_request("a JSON object is required"))?;
+            let connection = object
+                .remove("connection_id")
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .or_else(|| checkout.default_source.clone())
+                .or_else(|| {
+                    let git: Vec<_> = checkout
+                        .sources
+                        .iter()
+                        .filter(|source| source.provider == "git")
+                        .collect();
+                    (git.len() == 1).then(|| git[0].connection_id.clone())
+                })
+                .ok_or_else(|| bad_request("select a linked Git source with connection_id"))?;
+            let actor = object
+                .remove("actor_id")
+                .and_then(|value| value.as_str().map(str::to_owned));
+            let allowed = match method {
+                "GET" => matches!(operation, "status" | "explain"),
+                "POST" => matches!(operation, "result" | "sync" | "rebase" | "reopen"),
+                _ => false,
+            };
+            if !allowed {
+                return Err(bad_request("unsupported provisional readiness request"));
+            }
+            object.insert("operation".into(), operation.into());
+            let request: api::SpeculationRequest =
+                serde_json::from_value(body).map_err(|error| bad_request(error.to_string()))?;
+            let coordinator = self.worker_plan_coordinator(reference, &connection)?;
+            let store = checkout
+                .verified_git_source(&connection)
+                .map_err(checkout_err)?;
+            api::speculation_request(
+                &coordinator,
+                Path::new(&checkout.root),
+                Some(&store),
+                request,
+                actor.as_deref(),
+                api::MAX_HTTP_SYNC_WAIT_MS,
+                OffsetDateTime::now_utc().unix_timestamp(),
+            )
+            .map_err(failed)
+        }
+
         fn worker_plan_coordinator(
             &self,
             reference: &str,
@@ -2139,6 +2307,13 @@ mod core_backend {
             true
         }
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+            if let Some((reference, operation)) = crate::speculation_path(path) {
+                let mut body = serde_json::Map::new();
+                for (key, value) in query {
+                    body.insert(key.clone(), value.clone().into());
+                }
+                return self.speculation("GET", reference, operation, Value::Object(body));
+            }
             if hotsheet_cli::orchestration::is_path(path) {
                 return self.orchestration_request("GET", path, &Value::Null);
             }
@@ -2564,6 +2739,9 @@ mod core_backend {
 
     impl CoreBackend {
         fn route(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            if let Some((reference, operation)) = crate::speculation_path(path) {
+                return self.speculation(method, reference, operation, body.clone());
+            }
             if hotsheet_cli::orchestration::is_path(path) {
                 return self.orchestration_request(method, path, body);
             }
@@ -7037,6 +7215,63 @@ mod tests {
             "{:?}",
             fake.calls.borrow()
         );
+    }
+
+    #[test]
+    fn hs2_7j2zse_the_speculation_tool_answers_without_a_server() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("code");
+        let source = root.path().join("tickets");
+        std::fs::create_dir(&project).unwrap();
+        assert!(
+            hotsheet_ticketing::git::launch("git")
+                .args(["init", "-q"])
+                .arg(&project)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let store = FsStore::init_git(&source, &StoreMetadata::new("HS")).unwrap();
+        let registry_path = root.path().join("home/checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+        registry
+            .register(&project, Some("spec"), None, vec![source.clone()])
+            .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        let shown = call(
+            &backend,
+            "hotsheet_speculation",
+            json!({"checkout":"spec","action":"policy_show"}),
+        );
+        assert_eq!(shown["enabled"], false);
+        let set = call(
+            &backend,
+            "hotsheet_speculation",
+            json!({"checkout":"spec","action":"policy_set","enabled":true,"integration":"parked"}),
+        );
+        assert_eq!(
+            (set["enabled"].clone(), set["integration"].clone()),
+            (json!(true), json!("parked"))
+        );
+        let status = call(
+            &backend,
+            "hotsheet_speculation",
+            json!({"checkout":"spec","action":"status"}),
+        );
+        assert_eq!(status["policy"]["enabled"], true);
+        let synced = call(
+            &backend,
+            "hotsheet_speculation",
+            json!({"checkout":"spec","action":"sync","wait_ms":0}),
+        );
+        assert_eq!(synced["event_source"], "none");
+        // An unknown action never reaches the backend.
+        let refused = dispatch_tool(
+            "hotsheet_speculation",
+            &json!({"checkout":"spec","action":"branch"}),
+            &backend,
+        );
+        assert!(refused.is_err());
     }
 
     #[test]

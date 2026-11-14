@@ -1581,6 +1581,17 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/integration-strategies",
             get(get_integration_strategies).put(put_integration_strategies),
         )
+        // HS2-7J2ZSE: provisional readiness (HS2-2SJPCH) beside the strategies.
+        .route(
+            "/checkouts/{reference}/speculation/policy",
+            get(routes::checkout_workers::get_speculation_policy)
+                .put(routes::checkout_workers::put_speculation_policy),
+        )
+        .route(
+            "/checkouts/{reference}/speculation/{operation}",
+            get(routes::checkout_workers::get_speculation)
+                .post(routes::checkout_workers::post_speculation),
+        )
         .route(
             "/checkouts/{reference}/development-strategy",
             get(get_development_strategy).put(put_development_strategy),

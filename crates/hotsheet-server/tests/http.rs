@@ -32910,3 +32910,156 @@ async fn hs2_sqkjyg_responses_carry_the_change_cursor_they_were_served_at() {
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
     assert!(rejected.headers().get("x-hotsheet-change-cursor").is_none());
 }
+
+/// HS2-7J2ZSE: provisional readiness over REST calls the same library as the
+/// `coordination speculation-*` commands.
+#[tokio::test]
+async fn hs2_7j2zse_speculation_policy_status_explain_and_requests_over_rest() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let project = workspace.path().join("code");
+    let tickets = workspace.path().join("tickets");
+    std::fs::create_dir(&project).unwrap();
+    assert!(
+        hotsheet_ticketing::git::launch("git")
+            .args(["init", "-q"])
+            .arg(&project)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let store = FsStore::init_git(&tickets, &StoreMetadata::new("PLAN")).unwrap();
+    let ticket = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "PLAN",
+        "2026-10-15T00:00:00Z".into(),
+        hotsheet_ticketing::NewTicket {
+            title: "Synthetic dependent".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": project, "stores": [tickets]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/checkouts/{id}/speculation");
+    let call = |method: &'static str, path: String, body: Option<serde_json::Value>| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(authed(
+                    method,
+                    &path,
+                    body.map(|body| body.to_string()).as_deref(),
+                ))
+                .await
+                .unwrap();
+            let status = response.status();
+            (status, body_json(response).await)
+        }
+    };
+    // Off by default; a change is written once and read back as the committed setting.
+    let (status, policy) = call("GET", format!("{base}/policy"), None).await;
+    assert_eq!(status, StatusCode::OK, "{policy}");
+    assert_eq!(policy["enabled"], false);
+    let (status, enabled) = call(
+        "PUT",
+        format!("{base}/policy"),
+        Some(serde_json::json!({"enabled": true, "max_depth": 2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{enabled}");
+    assert_eq!(
+        (enabled["enabled"].clone(), enabled["max_depth"].clone()),
+        (true.into(), 2.into())
+    );
+    let settings = hotsheet_ticketing::Settings::for_project(&project);
+    assert!(
+        hotsheet_ticketing::provisional::SpeculationPolicy::read(&settings)
+            .unwrap()
+            .enabled
+    );
+    let (status, _) = call(
+        "PUT",
+        format!("{base}/policy"),
+        Some(serde_json::json!({"base_branch": "main", "clear_base_branch": true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Reads: the ledger status and one ticket's explanation.
+    let (status, report) = call("GET", format!("{base}/status"), None).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["policy"]["enabled"], true);
+    let (status, explained) = call(
+        "GET",
+        format!("{base}/explain?ticket={}", ticket.slug),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{explained}");
+    assert!(explained.is_object());
+    let (status, _) = call("GET", format!("{base}/explain"), None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Requests: a sync with nothing watched answers at once and says it has no source.
+    let (status, synced) = call(
+        "POST",
+        format!("{base}/sync"),
+        Some(serde_json::json!({"wait_ms": 0})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{synced}");
+    assert_eq!(synced["event_source"], "none");
+    let (status, _) = call(
+        "POST",
+        format!("{base}/sync"),
+        Some(serde_json::json!({"wait_ms": 60_000})),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "a wait over the HTTP bound is refused"
+    );
+    let (status, _) = call(
+        "POST",
+        format!("{base}/result"),
+        Some(serde_json::json!({"gate_commit": "abc", "result": "unknown"})),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK);
+    // Unknown operations and members are refused; reads are not POSTed, requests not
+    // read.
+    for (method, path, body) in [
+        (
+            "POST",
+            format!("{base}/branch"),
+            Some(serde_json::json!({})),
+        ),
+        ("GET", format!("{base}/sync"), None),
+        (
+            "POST",
+            format!("{base}/sync"),
+            Some(serde_json::json!({"wait_ms": 0, "surprise": 1})),
+        ),
+    ] {
+        let (status, _) = call(method, path.clone(), body).await;
+        assert!(
+            matches!(status, StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND),
+            "{method} {path}: {status}"
+        );
+    }
+}

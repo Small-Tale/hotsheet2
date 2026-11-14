@@ -36,6 +36,7 @@ mod source_support;
 #[cfg(test)]
 mod source_support_tests;
 pub mod speculation;
+pub mod speculation_api;
 pub mod speculation_runtime;
 #[cfg(test)]
 mod speculation_tests;

@@ -3731,6 +3731,127 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{reference}/speculation/policy:
+    get:
+      operationId: get_speculation_policy
+      description: The checkout's committed provisional readiness policy (HS2-2SJPCH, HS2-7J2ZSE).
+      responses:
+        '200':
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeculationPolicy'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_speculation_policy
+      description: Change the policy through the same validated write as `coordination speculation-policy`; the same
+        change again writes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpeculationPolicyChange'
+      responses:
+        '200':
+          description: The policy as written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpeculationPolicy'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+  /checkouts/{reference}/speculation/{operation}:
+    get:
+      operationId: read_speculation
+      description: '`status` (provisional assignments, pending gates, repairs first) or `explain` with `ticket` (why one
+        ticket is or is not ready). Read-only (HS2-7J2ZSE).'
+      parameters:
+        - name: connection_id
+          in: query
+          schema:
+            type: string
+            maxLength: 160
+        - name: ticket
+          in: query
+          description: '`explain`: the ticket slug or id.'
+          schema:
+            type: string
+            maxLength: 160
+      responses:
+        '200':
+          description: The status report or the explanation.
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      operationId: request_speculation
+      description: '`result` {gate_commit, result, run?}, `sync` {wait_ms (at most 25000)}, `rebase` {assignment,
+        replaces, gate_commit, base?} or `reopen` {assignment, reason}, with optional `connection_id` and `actor_id`.
+        The same requests as the `coordination speculation-*` commands (HS2-7J2ZSE).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: The request's report.
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+      - name: operation
+        in: path
+        required: true
+        schema:
+          enum:
+            - status
+            - explain
+            - result
+            - sync
+            - rebase
+            - reopen
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -24105,6 +24226,51 @@ components:
           $ref: '#/components/schemas/OrchestrationRetiredAuthority'
         remaining:
           $ref: '#/components/schemas/OrchestrationRetiredAuthority'
+      additionalProperties: false
+    SpeculationPolicy:
+      description: A project's provisional readiness policy (HS2-2SJPCH).
+      type: object
+      required:
+        - enabled
+        - max_depth
+        - integration
+      properties:
+        enabled:
+          type: boolean
+        max_depth:
+          type: integer
+          minimum: 1
+        integration:
+          enum:
+            - push-per-ticket
+            - parked
+        base_branch:
+          type: string
+    SpeculationPolicyChange:
+      description: A change to the provisional readiness policy; absent members stay as they are (HS2-7J2ZSE).
+      type: object
+      properties:
+        enabled:
+          type:
+            - boolean
+            - 'null'
+        max_depth:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        integration:
+          anyOf:
+            - enum:
+                - push-per-ticket
+                - parked
+            - type: 'null'
+        base_branch:
+          type:
+            - string
+            - 'null'
+        clear_base_branch:
+          type: boolean
       additionalProperties: false
     RemoteIdentity:
       type: object

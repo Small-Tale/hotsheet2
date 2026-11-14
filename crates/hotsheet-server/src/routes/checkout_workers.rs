@@ -536,3 +536,203 @@ pub(crate) async fn dispatch_worker_plan(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
+
+/// HS2-7J2ZSE: the project root, local ticket source and pool of a registered
+/// checkout's linked Git source, as the worker view selects them. No caller path.
+fn speculation_scope(
+    state: &AppState,
+    reference: &str,
+    connection_id: Option<&str>,
+) -> Result<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf), ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(checkout_lookup_error)?;
+    let source_id = match connection_id {
+        Some(id) => id.to_owned(),
+        None => checkout
+            .default_source
+            .clone()
+            .or_else(|| {
+                let git: Vec<_> = checkout
+                    .sources
+                    .iter()
+                    .filter(|s| s.provider == "git")
+                    .collect();
+                (git.len() == 1).then(|| git[0].connection_id.clone())
+            })
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::CONFLICT,
+                    "select a linked Git source with connection_id",
+                )
+            })?,
+    };
+    let source = checkout.source(&source_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "source is not linked to this checkout",
+        )
+    })?;
+    if source.provider != "git" {
+        return Err(ApiError::new(
+            StatusCode::NOT_IMPLEMENTED,
+            "provisional readiness is unavailable for this source",
+        ));
+    }
+    let store = checkout
+        .verified_git_source(&source_id)
+        .map_err(checkout_lookup_error)?;
+    let registry_home = state
+        .checkout_registry
+        .path()
+        .parent()
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid checkout registry path",
+            )
+        })?
+        .to_path_buf();
+    Ok((
+        std::path::PathBuf::from(&checkout.root),
+        store.root().to_path_buf(),
+        registry_home,
+    ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SpeculationQuery {
+    connection_id: Option<String>,
+    ticket: Option<String>,
+}
+
+/// One provisional readiness request through the shared library, on a blocking thread.
+async fn speculation_answer(
+    state: &AppState,
+    reference: &str,
+    connection_id: Option<&str>,
+    request: hotsheet_cli::coordination::speculation_api::SpeculationRequest,
+    actor: Option<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (project, source, registry_home) = speculation_scope(state, reference, connection_id)?;
+    tokio::task::spawn_blocking(move || {
+        let coordinator = Coordinator::open_with_registry_home(&project, &source, registry_home)?;
+        let store = hotsheet_ticketing::FsStore::open_without_maintenance(&source)?;
+        hotsheet_cli::coordination::speculation_api::speculation_request(
+            &coordinator,
+            &project,
+            Some(&store),
+            request,
+            actor.as_deref(),
+            hotsheet_cli::coordination::speculation_api::MAX_HTTP_SYNC_WAIT_MS,
+            time::OffsetDateTime::now_utc().unix_timestamp(),
+        )
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))
+}
+
+/// `GET /checkouts/{reference}/speculation/policy`: the committed provisional readiness
+/// policy (HS2-7J2ZSE); `coordination speculation-policy` prints the same.
+pub(crate) async fn get_speculation_policy(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+) -> Result<Json<hotsheet_ticketing::provisional::SpeculationPolicy>, ApiError> {
+    let (checkout, _) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    hotsheet_cli::coordination::speculation_api::speculation_policy(
+        std::path::Path::new(&checkout.root),
+        &hotsheet_cli::coordination::speculation_api::PolicyChange::default(),
+    )
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// `PUT /checkouts/{reference}/speculation/policy`: change the policy through the same
+/// validated write as the command. The same change again writes nothing.
+pub(crate) async fn put_speculation_policy(
+    State(state): State<AppState>,
+    RoutePath(reference): RoutePath<String>,
+    Json(change): Json<hotsheet_cli::coordination::speculation_api::PolicyChange>,
+) -> Result<Json<hotsheet_ticketing::provisional::SpeculationPolicy>, ApiError> {
+    let (checkout, _) = crate::routes::project_tools::checkout_settings(&state, &reference)?;
+    hotsheet_cli::coordination::speculation_api::speculation_policy(
+        std::path::Path::new(&checkout.root),
+        &change,
+    )
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+/// `GET /checkouts/{reference}/speculation/{status|explain}`: read-only answers.
+pub(crate) async fn get_speculation(
+    State(state): State<AppState>,
+    RoutePath((reference, operation)): RoutePath<(String, String)>,
+    Query(query): Query<SpeculationQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use hotsheet_cli::coordination::speculation_api::SpeculationRequest as R;
+    let request = match operation.as_str() {
+        "status" => R::Status,
+        "explain" => R::Explain {
+            ticket: query
+                .ticket
+                .clone()
+                .filter(|ticket| !ticket.is_empty() && ticket.len() <= 160)
+                .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "ticket is required"))?,
+        },
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "unknown provisional readiness read",
+            ));
+        }
+    };
+    speculation_answer(
+        &state,
+        &reference,
+        query.connection_id.as_deref(),
+        request,
+        None,
+    )
+    .await
+}
+
+/// `POST /checkouts/{reference}/speculation/{result|sync|rebase|reopen}`: the
+/// requests that change the ledger or a ticket. The body is the request's members,
+/// with optional `connection_id` and `actor_id`.
+pub(crate) async fn post_speculation(
+    State(state): State<AppState>,
+    RoutePath((reference, operation)): RoutePath<(String, String)>,
+    Json(mut body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !matches!(operation.as_str(), "result" | "sync" | "rebase" | "reopen") {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "unknown provisional readiness request",
+        ));
+    }
+    let object = body
+        .as_object_mut()
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "a JSON object is required"))?;
+    let text = |value: Option<serde_json::Value>| -> Result<Option<String>, ApiError> {
+        match value {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(serde_json::Value::String(text)) if !text.is_empty() && text.len() <= 160 => {
+                Ok(Some(text))
+            }
+            Some(_) => Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "connection_id and actor_id are bounded strings",
+            )),
+        }
+    };
+    let connection_id = text(object.remove("connection_id"))?;
+    let actor = text(object.remove("actor_id"))?;
+    object.insert("operation".into(), operation.clone().into());
+    let request: hotsheet_cli::coordination::speculation_api::SpeculationRequest =
+        serde_json::from_value(body)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    speculation_answer(&state, &reference, connection_id.as_deref(), request, actor).await
+}
