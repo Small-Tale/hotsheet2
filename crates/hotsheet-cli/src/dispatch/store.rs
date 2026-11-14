@@ -1122,6 +1122,9 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
         } => super::checkout_remove::cmd_checkout_remove(
             &registry, store, &reference, dry_run, json,
         )?,
+        CheckoutCmd::Prune { dry_run, json } => {
+            super::checkout_remove::cmd_checkout_prune(&registry, store, dry_run, json)?
+        }
         CheckoutCmd::RenameSource {
             reference,
             connection_id,
@@ -1469,6 +1472,18 @@ pub(crate) enum CheckoutCmd {
         #[arg(long)]
         dry_run: bool,
         /// Print the removal report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Unregister abandoned temporary checkouts (HS2-HM0Y6X): ones under the OS
+    /// temporary directory whose folder is gone or holds only Hot Sheet's generated
+    /// worklist, and whose sources are all Git. The server runs the same prune at start.
+    /// Only that generated worklist is ever deleted.
+    Prune {
+        /// Report what would be removed without changing anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// Print the prune report as JSON.
         #[arg(long)]
         json: bool,
     },

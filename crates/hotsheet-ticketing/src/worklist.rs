@@ -267,11 +267,15 @@ pub fn regenerate_checkout_from_tickets(
         .iter()
         .filter(|ticket| ticket.up_next && ticket.status.is_active())
         .count();
+    // HS2-HM0Y6X: a registered checkout's projection never recreates its deleted root.
+    // Creating it resurrected removed temporary worktrees as folders holding only this
+    // file, which then listed as live projects forever.
+    let root = PathBuf::from(&checkout.root);
+    if !root.is_dir() {
+        return Ok(n);
+    }
     let body = render_with_auto_context(tickets, &entries);
-    write_worklist(
-        &PathBuf::from(&checkout.root).join(CHECKOUT_WORKLIST),
-        &body,
-    )?;
+    write_worklist(&root.join(CHECKOUT_WORKLIST), &body)?;
     Ok(n)
 }
 
@@ -683,6 +687,18 @@ mod tests {
         assert!(body.contains("from second"));
         assert!(!first.root().join("worklist.md").exists());
         assert!(!second.root().join("worklist.md").exists());
+
+        // HS2-HM0Y6X: after the checkout folder is deleted, refreshing still counts the
+        // queue but never recreates the folder; then a recreated folder is written again.
+        std::fs::remove_dir_all(&project).unwrap();
+        assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);
+        assert!(
+            !project.exists(),
+            "a deleted checkout must not be resurrected"
+        );
+        std::fs::create_dir(&project).unwrap();
+        assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);
+        assert!(project.join(CHECKOUT_WORKLIST).is_file());
     }
 
     #[test]

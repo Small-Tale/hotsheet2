@@ -13,6 +13,7 @@
 //! `registered: false` and changes nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -159,6 +160,190 @@ fn collect_removed(
     }
     report.removed_connections.sort();
     report.kept_credentials = credentials.into_iter().collect();
+}
+
+/// What [`prune_abandoned_temporary`] removed, or would remove with `dry_run` (HS2-HM0Y6X).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemporaryCheckoutPrune {
+    pub dry_run: bool,
+    /// Why nothing was considered, when the registry itself is temporary (a test home).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
+    /// One removal report per pruned checkout.
+    pub removed: Vec<CheckoutRemoval>,
+}
+
+/// Unregister abandoned temporary checkouts from this machine's registry (HS2-HM0Y6X).
+///
+/// Tests, reviews, and agents create throwaway checkouts under the OS temporary
+/// directory, and running Hot Sheet setup in one registers it. A candidate is a checkout
+/// whose root lies under a temporary directory, whose sources are all Git (so no provider
+/// connection is touched), and whose root is either gone or holds nothing but Hot Sheet's
+/// regenerated `.hotsheet2/worklist.md` (older releases recreated a deleted root to write
+/// it). Each is removed with [`remove_checkout`], and the generated skeleton is deleted
+/// file by file; anything else in the folder keeps it registered.
+///
+/// A registry that itself lives under a temporary directory (a test home) is left alone,
+/// so hermetic tests keep the checkouts they register.
+pub fn prune_abandoned_temporary(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    dry_run: bool,
+) -> Result<TemporaryCheckoutPrune, ConnectionRemovalError> {
+    if registry_is_temporary(checkouts) {
+        return Ok(TemporaryCheckoutPrune {
+            dry_run,
+            skipped: Some(TEMPORARY_REGISTRY.into()),
+            removed: Vec::new(),
+        });
+    }
+    prune_under(providers, checkouts, dry_run, &temporary_roots())
+}
+
+/// Why a prune considered nothing: the registry is a test or scratch home.
+pub const TEMPORARY_REGISTRY: &str = "the checkout registry is itself temporary";
+
+/// Whether `checkouts` lives under a temporary directory (a hermetic test home).
+pub fn registry_is_temporary(checkouts: &CheckoutRegistry) -> bool {
+    is_under_any(checkouts.path(), &temporary_roots())
+}
+
+fn prune_under(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    dry_run: bool,
+    roots: &[PathBuf],
+) -> Result<TemporaryCheckoutPrune, ConnectionRemovalError> {
+    let mut report = TemporaryCheckoutPrune {
+        dry_run,
+        ..TemporaryCheckoutPrune::default()
+    };
+    for checkout in candidates_under(checkouts, roots)? {
+        let removal = remove_checkout(providers, checkouts, &checkout.id, dry_run)?;
+        if removal.removed {
+            clear_abandoned_skeleton(Path::new(&checkout.root));
+        }
+        if removal.registered {
+            report.removed.push(removal);
+        }
+    }
+    Ok(report)
+}
+
+/// The checkouts [`prune_abandoned_temporary`] would remove, for a caller that removes
+/// each one through a running server. Empty when the registry itself is temporary.
+pub fn abandoned_temporary_candidates(
+    checkouts: &CheckoutRegistry,
+) -> Result<Vec<Checkout>, ConnectionRemovalError> {
+    let roots = temporary_roots();
+    if is_under_any(checkouts.path(), &roots) {
+        return Ok(Vec::new());
+    }
+    candidates_under(checkouts, &roots)
+}
+
+fn candidates_under(
+    checkouts: &CheckoutRegistry,
+    roots: &[PathBuf],
+) -> Result<Vec<Checkout>, ConnectionRemovalError> {
+    Ok(checkouts
+        .list()?
+        .into_iter()
+        .filter(|checkout| {
+            let root = Path::new(&checkout.root);
+            is_under_any(root, roots)
+                && checkout
+                    .sources
+                    .iter()
+                    .all(|source| source.provider == "git")
+                && is_abandoned(root)
+        })
+        .collect())
+}
+
+/// The machine's temporary directories, in written and resolved forms.
+pub fn temporary_roots() -> Vec<PathBuf> {
+    let mut roots = vec![std::env::temp_dir()];
+    if cfg!(unix) {
+        roots.extend(
+            [
+                "/tmp",
+                "/var/tmp",
+                "/private/tmp",
+                "/private/var/tmp",
+                "/private/var/folders",
+                "/var/folders",
+            ]
+            .into_iter()
+            .map(PathBuf::from),
+        );
+    }
+    let resolved: Vec<PathBuf> = roots
+        .iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .collect();
+    roots.extend(resolved);
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
+fn is_under_any(path: &Path, roots: &[PathBuf]) -> bool {
+    // A registered root is stored resolved and may no longer exist, so compare it with
+    // each root in both its written and resolved forms.
+    let resolved = path.canonicalize().ok();
+    roots.iter().any(|root| {
+        let resolved_root = root.canonicalize().ok();
+        [Some(path), resolved.as_deref()]
+            .into_iter()
+            .flatten()
+            .any(|path| {
+                path.starts_with(root)
+                    || resolved_root
+                        .as_deref()
+                        .is_some_and(|root| path.starts_with(root))
+            })
+    })
+}
+
+/// Gone, or holding only the generated `.hotsheet2/worklist.md` (or an empty `.hotsheet2`).
+fn is_abandoned(root: &Path) -> bool {
+    if !root.exists() {
+        return true;
+    }
+    let Some(entries) = names(root) else {
+        return false;
+    };
+    if entries != [".hotsheet2"] {
+        return false;
+    }
+    names(&root.join(".hotsheet2"))
+        .is_some_and(|inner| inner.is_empty() || inner == ["worklist.md"])
+}
+
+fn names(dir: &Path) -> Option<Vec<String>> {
+    let mut names = std::fs::read_dir(dir)
+        .ok()?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    names.sort();
+    Some(names)
+}
+
+/// After a candidate was unregistered, delete the generated skeleton older releases left
+/// in its root: the worklist, then the two now-empty directories. It rechecks that the
+/// root still holds nothing else, and each step is non-recursive, so a file that appeared
+/// in the meantime is kept.
+pub fn clear_abandoned_skeleton(root: &Path) {
+    if !root.exists() || !is_abandoned(root) {
+        return;
+    }
+    let dir = root.join(".hotsheet2");
+    let _ = std::fs::remove_file(dir.join("worklist.md"));
+    let _ = std::fs::remove_dir(&dir);
+    let _ = std::fs::remove_dir(root);
 }
 
 #[cfg(test)]

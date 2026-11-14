@@ -53,7 +53,7 @@ export function DesktopRemoteDialog({
                   <TextField
                     name="remote-address"
                     label="Server Address"
-                    placeholder="http://host:port"
+                    placeholder="https://host.example.com"
                     value={editing?.origin ?? ''}
                     required
                   />
@@ -61,7 +61,7 @@ export function DesktopRemoteDialog({
                   <details>
                     <summary>Advanced TLS settings</summary>
                     <List gap="xs">
-                      <TextField name="remote-ca-file" label="Host CA PEM Path" />
+                      <TextField name="remote-ca-file" label="Host CA PEM Path (Optional)" />
                       <TextField name="remote-cert-file" label="Client Certificate PEM Path (Optional)" />
                       <TextField name="remote-key-file" label="Client Key PEM Path (Optional)" />
                     </List>

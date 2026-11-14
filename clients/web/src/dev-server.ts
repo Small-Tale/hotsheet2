@@ -205,10 +205,10 @@ export function createDevApp(
       return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
     }
   });
-  // A trusted desktop host owns the cross-server registry. In remote browser mode the auth
-  // middleware above denies these routes; another device still sees only its one host's projects.
+  // A trusted desktop host owns the cross-server registry. In remote browser mode these are host
+  // routes: the auth middleware above admits only a session with the local grant (the host owner's
+  // own browser), and another device still sees only its one host's projects (HS2-HBM3JN).
   app.get('/__hotsheet/remotes', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       return context.json(await listRemoteServers());
     } catch {
@@ -216,7 +216,6 @@ export function createDevApp(
     }
   });
   app.get('/__hotsheet/remotes/selected-projects', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       return context.json(await selectedRemoteProjects());
     } catch {
@@ -224,7 +223,6 @@ export function createDevApp(
     }
   });
   app.post('/__hotsheet/remotes/pair', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       const { address, label, tls, reviewId } = await context.req.json<{
         address: string;
@@ -241,7 +239,6 @@ export function createDevApp(
     }
   });
   app.post('/__hotsheet/remotes/pair/:handle/redeem', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       const { discovery, revisedId } = await finishRemotePairing(context.req.param('handle'));
       if (revisedId) closeRemoteServerSessions(revisedId);
@@ -251,7 +248,6 @@ export function createDevApp(
     }
   });
   app.get('/__hotsheet/remotes/:id/checkouts', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       return context.json(await discoverRemoteProjects(context.req.param('id')));
     } catch {
@@ -259,7 +255,6 @@ export function createDevApp(
     }
   });
   app.post('/__hotsheet/remotes/:id/projects/:checkout/open', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       const id = context.req.param('id');
       const checkout = context.req.param('checkout');
@@ -271,7 +266,6 @@ export function createDevApp(
     }
   });
   app.delete('/__hotsheet/remotes/:id/projects/:checkout', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       return context.json(await unselectRemoteProject(context.req.param('id'), context.req.param('checkout')));
     } catch {
@@ -279,7 +273,6 @@ export function createDevApp(
     }
   });
   app.delete('/__hotsheet/remotes/:id', async (context) => {
-    if (remoteBrowserAuthRequired()) return context.notFound();
     try {
       const revision = Number(context.req.query('revision'));
       if (!Number.isSafeInteger(revision) || revision <= 0) return context.json({ error: 'Revision required.' }, 400);

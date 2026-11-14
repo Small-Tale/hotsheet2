@@ -259,3 +259,106 @@ fn an_empty_reference_is_rejected() {
         Err(ConnectionRemovalError::Checkout(CheckoutError::Invalid(_)))
     ));
 }
+
+/// HS2-HM0Y6X: which temporary checkouts the automatic prune removes and which it keeps.
+#[test]
+fn prune_removes_only_abandoned_git_checkouts_under_a_temporary_root() {
+    let f = fixture();
+    let temp = f.dir.path().join("tmp");
+    let elsewhere = f.dir.path().join("home-projects");
+    std::fs::create_dir_all(&temp).unwrap();
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let register = |root: &Path, sources: Vec<TicketSource>| {
+        std::fs::create_dir_all(root).unwrap();
+        f.checkouts
+            .register_registered_sources(&f.providers, root, None, None, sources, None)
+            .unwrap()
+    };
+    let store = TicketSource::git(&f.store);
+    // Deleted after registration.
+    let gone = register(&temp.join("gone"), vec![store.clone()]);
+    std::fs::remove_dir_all(temp.join("gone")).unwrap();
+    // Resurrected by an older worklist refresh: only the generated projection remains.
+    let skeleton = register(&temp.join("skeleton"), vec![store.clone()]);
+    std::fs::create_dir(temp.join("skeleton/.hotsheet2")).unwrap();
+    std::fs::write(temp.join("skeleton/.hotsheet2/worklist.md"), "# Up Next\n").unwrap();
+    // A skeleton that also holds a user file is real content.
+    let with_file = register(&temp.join("with-file"), vec![store.clone()]);
+    std::fs::create_dir(temp.join("with-file/.hotsheet2")).unwrap();
+    std::fs::write(temp.join("with-file/.hotsheet2/worklist.md"), "x").unwrap();
+    std::fs::write(temp.join("with-file/notes.txt"), "keep").unwrap();
+    // A live temporary checkout.
+    let live = register(&temp.join("live"), vec![store.clone()]);
+    std::fs::write(temp.join("live/Cargo.toml"), "").unwrap();
+    // Missing, but not temporary (an unmounted volume, say).
+    let unmounted = register(&elsewhere.join("unmounted"), vec![store.clone()]);
+    std::fs::remove_dir_all(elsewhere.join("unmounted")).unwrap();
+    // Gone, but it links an external connection the prune must not touch.
+    let external = register(&temp.join("external"), vec![github("github-main")]);
+    std::fs::remove_dir_all(temp.join("external")).unwrap();
+
+    let roots = [temp.clone()];
+    let dry = prune_under(&f.providers, &f.checkouts, true, &roots).unwrap();
+    let mut dry_ids: Vec<_> = dry
+        .removed
+        .iter()
+        .filter_map(|r| r.checkout_id.clone())
+        .collect();
+    dry_ids.sort();
+    let mut expected = vec![gone.id.clone(), skeleton.id.clone()];
+    expected.sort();
+    assert_eq!(dry_ids, expected);
+    assert!(dry.removed.iter().all(|r| r.dry_run && !r.removed));
+    assert!(
+        temp.join("skeleton/.hotsheet2/worklist.md").is_file(),
+        "dry run deletes nothing"
+    );
+    assert_eq!(f.checkouts.list().unwrap().len(), 8);
+
+    let real = prune_under(&f.providers, &f.checkouts, false, &roots).unwrap();
+    assert_eq!(real.removed.len(), 2);
+    assert!(real.removed.iter().all(|r| r.removed));
+    assert!(
+        !temp.join("skeleton").exists(),
+        "the generated skeleton is deleted"
+    );
+    assert!(temp.join("with-file/notes.txt").is_file());
+    let left: Vec<_> = f
+        .checkouts
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    for kept in [
+        &with_file.id,
+        &live.id,
+        &unmounted.id,
+        &external.id,
+        &f.one.id,
+        &f.two.id,
+    ] {
+        assert!(left.contains(kept), "{kept} must stay registered");
+    }
+    assert!(f.provider_ids().contains(&"github-main".to_owned()));
+
+    // Idempotent.
+    let again = prune_under(&f.providers, &f.checkouts, false, &roots).unwrap();
+    assert!(again.removed.is_empty());
+}
+
+#[test]
+fn prune_skips_a_registry_that_is_itself_temporary() {
+    let f = fixture();
+    // The fixture's registry lives under the OS temporary directory, like a test home.
+    let report = prune_abandoned_temporary(&f.providers, &f.checkouts, false).unwrap();
+    assert!(report.skipped.is_some());
+    assert!(report.removed.is_empty());
+}
+
+#[test]
+fn temporary_roots_cover_the_os_temp_dir() {
+    let roots = temporary_roots();
+    assert!(roots.contains(&std::env::temp_dir()));
+    assert!(is_under_any(&std::env::temp_dir().join("x/y"), &roots));
+}

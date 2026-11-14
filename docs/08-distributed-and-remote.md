@@ -143,14 +143,30 @@ never contain them.
 
 Off-box HTTP origins require a paired session and an explicit HTTP URL. HTTPS
 verifies the hostname and chain against the reviewed CA, with either a paired
-session or a verified mTLS device certificate. There is no redirect, insecure
-TLS fallback or trust-on-first-use. A powerful machine bearer is sent only to
+session or a verified mTLS device certificate. Without a reviewed CA, HTTPS
+verifies against the public web roots instead (a Tailscale Serve name or another
+publicly trusted certificate) and pins no fingerprint; a reviewed CA is never mixed
+with public roots (HS2-H4REBS). There is no redirect, insecure TLS fallback or
+trust-on-first-use. A powerful machine bearer is sent only to
 a literal loopback HTTP origin. Remote URL normalization uses the URL parser's
 canonical origin, including normal default-port canonicalization; it does not alter
 the separate GitHub provider configuration identity contract. Probes bound time,
 response size and checkout count. They read authenticated `/remote-identity`,
 `/remote-checkouts`, then confirm the identity again. Unsupported legacy peers and
 partial/truncated responses cannot become usable targets.
+
+**Peer gateway (HS2-H4REBS).** A remote-mode browser host is often reachable only
+through an HTTPS proxy that exposes the browser host, not its machine server. That
+host therefore passes the machine server's native top-level routes
+(`clients/web/src/peer-gateway.ts`, pinned to the router by a policy test), and
+their WebSocket upgrades, straight through to its own machine server. It strips
+`X-Hotsheet-Secret`, `Authorization` and a `secret` query parameter and never adds
+its own bearer, so the machine server authenticates the peer's paired session,
+Origin and CSRF exactly as on a direct connection. This grants nothing beyond
+`/__hotsheet/project-api/*`, which already forwards any machine path for a browser
+session. A pairing peer learns the server id from the `/remote-auth/pair` answer;
+`/remote-identity` stays authenticated, and registration refuses a peer whose
+authenticated identity differs.
 
 Listing performs no network requests and marks cached checkout observations stale.
 Explicit discovery returns live checkouts only on successful authenticated identity

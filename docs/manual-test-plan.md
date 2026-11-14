@@ -915,6 +915,22 @@ Use only disposable homes and synthetic issued device credentials. Read `remote 
 
 The synthetic automated CLI/service/MCP and TLS lifecycle cases passed on 2026-10-30. The operator enrollment checklist above was not performed with real devices or credentials. There is no rendered UI in this foundation.
 
+### Pairing through Tailscale Serve (HS2-H4REBS)
+
+Use two machines on one tailnet with disposable homes and synthetic projects. On the
+peer, run the browser host in remote mode (`HOTSHEET_BROWSER_AUTH_MODE=remote`) behind
+`tailscale serve`. On the other machine, open Remote Project → Add Server and enter
+`https://<peer>.<tailnet>.ts.net` without a port or CA. Approve the request on the peer
+with `hotsheet-cli remote sessions approve <id>`, press **I Approved It — Connect**, and
+confirm that the peer's projects are listed. Then confirm each refusal:
+
+- The peer's `/remote-identity` answers 401 without a session.
+- A request carrying `X-Hotsheet-Secret` or `?secret=` is not authenticated by it.
+- A peer with a private CA fails until its CA path is supplied.
+
+Not yet performed with real machines. The live loopback case in
+`remote-auth-server-integration.test.ts` covers the same flow on one host.
+
 ### Hook and MCP terminal attribution (HS2-HBA9Z8)
 
 Use an isolated rebuilt server and two synthetic AI terminals sharing one directory.

@@ -594,3 +594,55 @@ fn hs2_1y45mz_failed_and_interrupted_review_preserves_the_prior_active_credentia
             .contains("synthetic-replacement-bearer")
     );
 }
+
+#[test]
+fn hs2_h4rebs_publicly_trusted_https_pins_nothing_and_http_never_pins() {
+    let mut credentials = request().credentials;
+    credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    // A Tailscale Serve name: HTTPS with a paired session and no reviewed CA.
+    assert_eq!(
+        credentials
+            .trust_fingerprint("https://peer.example.ts.net")
+            .unwrap(),
+        None
+    );
+    // HTTPS still needs a paired session or a device certificate.
+    let bearer = request().credentials;
+    assert!(
+        bearer
+            .trust_fingerprint("https://peer.example.ts.net")
+            .is_err()
+    );
+    // A supplied but empty CA is refused rather than silently ignored.
+    credentials.ca_pem = Some(String::new());
+    assert!(
+        credentials
+            .trust_fingerprint("https://peer.example.ts.net")
+            .is_err()
+    );
+
+    let home = tempfile::tempdir().unwrap();
+    let registry = RemoteRegistry::new(home.path().join("remotes.json"));
+    let secrets = Memory::default();
+    let peer = Peer::default();
+    let mut https = request();
+    https.origin = "https://peer.example.ts.net".into();
+    https.credentials.bearer_secret = format!("session:{}", "A".repeat(43));
+    let registered = registry.register(https, &secrets, &peer, 1).unwrap();
+    assert_eq!(registered.remote.origin, "https://peer.example.ts.net");
+    assert_eq!(registered.remote.identity.ca_fingerprint, None);
+    // The publicly trusted binding round-trips through the registry's own validation.
+    assert_eq!(registry.list().unwrap().len(), 1);
+
+    // A plaintext binding that claims a pinned CA is corrupt.
+    let disk = std::fs::read_to_string(&registry.path).unwrap();
+    let pinned = disk
+        .replace("https://peer.example.ts.net", "http://peer.example.ts.net")
+        .replace(
+            "\"ca_fingerprint\": null",
+            &format!("\"ca_fingerprint\": \"{}\"", "a".repeat(64)),
+        );
+    assert_ne!(pinned, disk);
+    std::fs::write(&registry.path, pinned).unwrap();
+    assert!(matches!(registry.list(), Err(RemoteError::Corrupt)));
+}
