@@ -257,15 +257,35 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
       return;
     }
     if (openSession() === dialog.session) ticketGroupDialog.value = undefined;
-    // List the new group at once so its members show its name before the next summaries arrive.
-    const listed = projectTicketGroups.value[dialog.projectId] ?? [];
+    await assignCreatedGroup(dialog.projectId, created, dialog.slugs);
+  }
+  /** List a just-created group at once, so its members show its name, then move the tickets into it. */
+  async function assignCreatedGroup(
+    projectId: string,
+    created: { id: string; name: string },
+    slugs: string[],
+  ): Promise<boolean> {
+    const listed = projectTicketGroups.value[projectId] ?? [];
     if (!listed.some((group) => group.id === created.id))
-      storeSummaries(dialog.projectId, [
+      storeSummaries(projectId, [
         ...listed,
         { id: created.id, name: created.name, count: 0, named: true, legacy: false, duplicate: false },
       ]);
-    await setGroup(dialog.slugs, created.id);
+    const moved = await setGroup(slugs, created.id);
     await refreshGroups();
+    return moved;
+  }
+  /**
+   * Create a group by name in the project's registry and move the tickets into it, without the
+   * dialog: Add to Group › Automatic uses it for a name the AI proposed (HS2-4C32A0). A failed
+   * create rejects and changes no ticket.
+   */
+  async function createAndAssignGroup(name: string, slugs: string[]): Promise<{ id: string; name: string }> {
+    const current = project();
+    if (!current) throw new Error('No project is open.');
+    const created = await api().createCheckoutGroup(current.id, name);
+    await assignCreatedGroup(current.id, created, slugs);
+    return created;
   }
   async function renameGroup(
     dialog: NonNullable<typeof ticketGroupDialog.value>,
@@ -382,6 +402,7 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     navigable,
     disabledReason,
     setGroup,
+    createAndAssignGroup,
     openNewGroup,
     openRenameGroup,
     editDialogName,

@@ -42,7 +42,7 @@ describe('TicketGroup demo (HS2-WZ3JGZ)', () => {
     ticketGroupSettings.name.value = '  Search   syntax ';
     ticketGroupSettings.collapsed.value = true;
     ticketGroupSettings.dropTarget.value = true;
-    ticketGroupSettings.menu.value = { x: 10, y: 20, group: 'Search syntax' };
+    ticketGroupSettings.menu.value = { x: 10, y: 20, group: 'Search syntax', scope: 'started' };
     const markup = String(TicketGroupDemo());
     // The group carries its fixture id and shows the typed display name (HS2-9KZSD4).
     expect(markup).toContain('data-ticket-group="7K3M9P2QXA"');
@@ -53,6 +53,7 @@ describe('TicketGroup demo (HS2-WZ3JGZ)', () => {
     expect(markup).not.toContain('data-ticket-slug=');
     expect(markup.match(/data-drop-target="true"/g)).toHaveLength(2);
     expect(markup).toContain('data-ticket-group-menu="true"');
+    expect(markup).toContain('data-ticket-group-scope="started"');
     // An emptied name falls back to the fixture name instead of an unnamed group.
     ticketGroupSettings.name.value = '   ';
     expect(String(TicketGroupDemo())).toContain('>Board drag &amp; drop<');
@@ -62,7 +63,7 @@ describe('TicketGroup demo (HS2-WZ3JGZ)', () => {
     expect(String(TicketGroupSettings())).toContain('data-action="reset-settings"');
     ticketGroupSettings.collapsed.value = true;
     ticketGroupSettings.duplicate.value = true;
-    ticketGroupSettings.menu.value = { x: 1, y: 1, group: 'x' };
+    ticketGroupSettings.menu.value = { x: 1, y: 1, group: 'x', scope: 'list' };
     const { root, controls } = fakeRoot();
     resetTicketGroupDemo(root);
     expect(ticketGroupSettings.collapsed.value).toBe(false);

@@ -21,6 +21,11 @@ function harness(
     openProjectIds?: () => readonly string[];
     hostHealth?: () => HostHealthSnapshot | undefined;
     completions?: (projectIds: readonly string[]) => Promise<readonly CalibrationReport[]>;
+    windowTokens?: (
+      stores: ReadonlyArray<{ projectId: string; store: string }>,
+      sinceMs: number,
+      untilMs: number,
+    ) => Promise<number | undefined>;
   } = {},
 ) {
   let clock = 1_000_000;
@@ -33,6 +38,7 @@ function harness(
     liveStates: options.liveStates ?? createLiveStateStore(),
     ...(options.hostHealth ? { hostHealth: options.hostHealth } : {}),
     ...(options.completions ? { completions: options.completions } : {}),
+    ...(options.windowTokens ? { windowTokens: options.windowTokens } : {}),
     api: () => options.api,
     // Fake timers drive the idle tests through the real clock.
     now: () => (vi.isFakeTimers() ? Date.now() : clock),
@@ -361,6 +367,47 @@ describe('standby controller (HS2-EQVZTZ)', () => {
       await Promise.resolve();
       expect(controller.awayDigest.value).toBeUndefined();
       controller.exit();
+    });
+
+    it("HS2-ZTRF4Q reads the tokens of the whole window once on exit, for the open projects' stores", async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      const windowTokens = vi.fn<
+        (
+          stores: ReadonlyArray<{ projectId: string; store: string }>,
+          sinceMs: number,
+          untilMs: number,
+        ) => Promise<number>
+      >(() => Promise.resolve(48_000));
+      const { controller } = harness({ liveStates, openProjectIds: () => ['p1'], windowTokens });
+      controller.enter();
+      expect(windowTokens).not.toHaveBeenCalled();
+      controller.exit();
+      await vi.waitFor(() => {
+        expect(controller.awayDigest.value?.tokens).toBe(48_000);
+      });
+      expect(windowTokens).toHaveBeenCalledTimes(1);
+      const [stores, sinceMs, untilMs] = windowTokens.mock.calls[0];
+      expect(stores).toEqual([{ projectId: 'p1', store: live(1).store }]);
+      expect(untilMs).toBeGreaterThanOrEqual(sinceMs);
+    });
+
+    it('HS2-ZTRF4Q shows tokens as unknown when the window read fails and nothing was seen', async () => {
+      const liveStates = createLiveStateStore();
+      liveStates.apply(live(1));
+      const { controller } = harness({
+        liveStates,
+        openProjectIds: () => ['p1'],
+        completions: () => Promise.resolve([]),
+        windowTokens: () => Promise.reject(new Error('offline')),
+      });
+      controller.enter();
+      liveStates.apply(live(2, { activity: { ...live(2).activity, stalled: [{ slug: 'STW-9', worker: 'w' }] } }));
+      controller.exit();
+      await vi.waitFor(() => {
+        expect(controller.awayDigest.value?.events).toMatchObject([{ kind: 'stalled', slug: 'STW-9' }]);
+      });
+      expect(controller.awayDigest.value?.tokens).toBeNull();
     });
 
     it('a failed completions read still shows the events', async () => {

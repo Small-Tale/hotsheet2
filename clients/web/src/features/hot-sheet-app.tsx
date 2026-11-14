@@ -106,6 +106,8 @@ export interface HotSheetAppDependencies {
   }) => Parameters<typeof AttachmentContextMenuSurface>[0]['menu'];
   bulkTicketDialog: Signal<BulkTicketDialogState | undefined>;
   bulkUpdateProgress: Signal<BulkUpdateProgress | undefined>;
+  /** A background AI request's busy label, such as Add to Group › Automatic (HS2-4C32A0). */
+  aiTaskStatus: Signal<string | undefined>;
   canStageNewTicketAttachments: () => boolean;
   changeEvidenceSurface: (readerScope?: string) => SafeHtml;
   commandDialogSurface: () => SafeHtml;
@@ -255,6 +257,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     attachmentMenuSurfaceProps,
     bulkTicketDialog,
     bulkUpdateProgress,
+    aiTaskStatus,
     canStageNewTicketAttachments,
     changeEvidenceSurface,
     commandDialogSurface,
@@ -444,6 +447,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
       deleteView = deleteTargetId ? customViewsFor().find((item) => item.id === deleteTargetId) : undefined,
       showCornerLoading =
         bulkUpdateProgress.value !== undefined ||
+        aiTaskStatus.value !== undefined ||
         (loading.value && (!project() || tickets.value.length > 0 || corruptTickets.value.length > 0));
     const composerRecovery = draftFiles.state(
         `composer:${project()?.id ?? ''}`,
@@ -615,7 +619,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         {gallerySurface()}
         <AttachmentContextMenuSurface menu={attachmentMenuSurfaceProps()} />
         <AppTabMenuSurface menu={appTabContextMenu.value} />
-        {showCornerLoading && <AppLoadingIndicator progress={bulkUpdateProgress.value} />}
+        {showCornerLoading && <AppLoadingIndicator progress={bulkUpdateProgress.value} task={aiTaskStatus.value} />}
         {(error.value || refreshError.value) && project() && <AppError message={error.value || refreshError.value} />}
       </>
     );

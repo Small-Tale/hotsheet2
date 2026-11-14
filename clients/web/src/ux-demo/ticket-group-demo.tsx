@@ -73,7 +73,7 @@ export const ticketGroupSettings = {
   dropTarget: signal(false),
   /** Another group shares this group's name, so its menu offers Merge Duplicate Groups (HS2-9KZSD4). */
   duplicate: signal(false),
-  menu: signal<{ x: number; y: number; group: string } | undefined>(undefined),
+  menu: signal<{ x: number; y: number; group: string; scope: string } | undefined>(undefined),
   event: signal(INITIAL_EVENT),
 };
 
@@ -187,9 +187,13 @@ function wireTicketGroupDemo(root: HTMLElement): () => void {
         ticketGroupSettings.event.value = `“${label()}” ${collapsed ? 'collapsed' : 'expanded'}.`;
         syncSettingsControls(root, 'ticket-group', { checked: { 'group-collapsed': collapsed } });
       },
-      openMenu: (group, x, y) => {
-        ticketGroupSettings.menu.value = { x, y, group };
+      openMenu: (group, x, y, scope) => {
+        ticketGroupSettings.menu.value = { x, y, group, scope };
         ticketGroupSettings.event.value = `Group menu opened for “${label()}”.`;
+      },
+      selectAll: (_group, scope) => {
+        ticketGroupSettings.menu.value = undefined;
+        ticketGroupSettings.event.value = `Select all in “${label()}” requested for the ${scope === 'list' ? 'list' : `${scope} column`}.`;
       },
       rename: () => {
         ticketGroupSettings.menu.value = undefined;

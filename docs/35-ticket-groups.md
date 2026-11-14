@@ -130,6 +130,31 @@ once more when loaded tickets name an id it has no name for; it never polls.
   inline error and disables Create Group. Submitting creates the group in the registry
   (`POST /checkouts/{reference}/groups`) and then assigns its id to every selected ticket
   in one bulk update.
+- **Automatic** (HS2-4C32A0, Lucide `sparkles`) follows New Group… in the submenu. It asks
+  the project's default AI tool (`ai.defaults`, see
+  [05-ai-tool-plugins.md](05-ai-tool-plugins.md)) to choose a group for the selected tickets.
+  - **Request.** The client opens a private one-shot drive connection
+    (`POST /drive/connections` with a `hotsheet-automatic-group-` id). It sends one turn carrying
+    the loaded tickets' slugs, titles, and categories and the project's groups as JSON, and asks
+    for JSON only: `{"group_id": "<id>"}` or `{"new_group": "<name>"}`. Nothing opens. The turn's
+    events never join a conversation, and the client closes the connection afterwards.
+  - **Busy state.** While the AI works, the app's corner status reads "Asking <tool> to choose a
+    group…", and Automatic is disabled until the request ends.
+  - **Result.** The reply is validated:
+    - an id must name a listed group;
+    - a new name must be a valid group name;
+    - a new name that matches an existing group joins that group.
+
+    The choice is applied like a menu choice, through the ordinary bulk update (after creating the
+    group in the registry for a new name). It is therefore optimistic and undoable, and a toast names
+    the group.
+
+  - **Failures.** Each of these shows a toast saying no group was changed, and nothing is written:
+    no available AI tool, a failed or interrupted turn, no answer within three minutes (the turn is
+    interrupted), and an answer that is not the expected JSON.
+  - **Headless path.** No separate command is needed: an agent reads `hotsheet-cli groups --json`
+    and runs `hotsheet-cli edit <slug> --group <name>`, which creates the group when the name is new
+    (§35.2).
 - **Remove from Group** appears when the selection contains a grouped ticket.
 - **Drag and drop.** Dragging tickets over a group outlines the whole group; there
   is no insertion line because order follows the sort. Dropping sets the group. In
@@ -150,7 +175,14 @@ once more when loaded tickets name an id it has no name for; it never polls.
 ## 35.5 Managing a group (HS2-8CDFKR)
 
 Right-clicking a group header, or pressing the keyboard's context-menu key on it,
-opens a menu with **Rename Group…** and **Ungroup**. Rename uses the same dialog as
+opens a menu with **Select All in Group**, **Rename Group…**, and **Ungroup**.
+
+**Select All in Group** (HS2-EYEGDQ, Lucide `check-check`) selects the tickets that
+this one container shows, in drawn order: the whole group in the list view, or only the
+column's share of it in the column view, like a column header's Select All. A collapsed
+group is expanded first, because a selection never holds hidden tickets. A single
+ticket becomes an ordinary single selection. Selecting changes no ticket, so the item
+stays enabled for a source without group support. Rename uses the same dialog as
 New Group and enforces unique names; it is a registry edit by id, and it also names a
 placeholder group. A group flagged as a duplicate also offers **Merge Duplicate Groups**
 (Lucide `merge`), which moves every other group with the same name into this one. These

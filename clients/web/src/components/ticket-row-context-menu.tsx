@@ -17,6 +17,7 @@ import {
   Plus,
   RotateCcw,
   Shapes,
+  Sparkles,
   SquareArrowOutUpRight,
   Star,
   Tag,
@@ -165,6 +166,11 @@ function metadataSubmenu({
 
 /** The value a New Group… submenu choice reports; no group can have an empty name. */
 export const NEW_TICKET_GROUP_CHOICE = '';
+/**
+ * The value the Automatic submenu choice reports (HS2-4C32A0). Group names are trimmed and ids are
+ * base32, so no group can be stored with a leading space.
+ */
+export const AUTOMATIC_TICKET_GROUP_CHOICE = ' automatic';
 
 /** What the ticket menu offers for groups (HS2-TX17CM). */
 export interface TicketGroupMenuModel {
@@ -176,6 +182,8 @@ export interface TicketGroupMenuModel {
   removable: boolean;
   /** Why grouping is unavailable for the targets, such as a provider without group support. */
   disabledReason?: string;
+  /** An Automatic request is already running, so another one waits (HS2-4C32A0). */
+  automaticBusy?: boolean;
 }
 
 export const ADD_TO_GROUP_CONTEXT_ACTION = { label: 'Add to Group', icon: Group, iconName: 'group' } as const;
@@ -186,7 +194,10 @@ export const REMOVE_FROM_GROUP_CONTEXT_ACTION = {
   iconName: 'ungroup',
 } as const;
 
-/** **Add to Group ›**: New Group… first, then a divider, then the existing groups (HS2-TX17CM). */
+/**
+ * **Add to Group ›**: New Group… and Automatic first (HS2-TX17CM, HS2-4C32A0), then a divider, then
+ * the existing groups.
+ */
 function groupSubmenu(model: TicketGroupMenuModel): PopupMenuItem {
   const disabled = Boolean(model.disabledReason);
   return {
@@ -207,6 +218,13 @@ function groupSubmenu(model: TicketGroupMenuModel): PopupMenuItem {
         label: 'New Group…',
         icon: <LucideIcon size="s" icon={Plus} name="plus" color={uiColor('neutral-on-quiet')} />,
         attributes: { 'data-context-group': NEW_TICKET_GROUP_CHOICE, 'data-context-group-new': 'true' },
+      },
+      {
+        label: 'Automatic',
+        disabled: model.automaticBusy === true,
+        disabledReason: model.automaticBusy === true ? 'The AI is already choosing a group.' : undefined,
+        icon: <LucideIcon size="s" icon={Sparkles} name="sparkles" color={uiColor('neutral-on-quiet')} />,
+        attributes: { 'data-context-group': AUTOMATIC_TICKET_GROUP_CHOICE, 'data-context-group-automatic': 'true' },
       },
       ...(model.groups.length ? [{ kind: 'divider' } as const] : []),
       ...model.groups.map((group): PopupMenuItem => ({

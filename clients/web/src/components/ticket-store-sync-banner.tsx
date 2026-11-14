@@ -17,8 +17,30 @@ type FailingStore = TicketStoreSyncReport['stores'][number];
  * remote refused, a conflict, an unfinished rebase, a required history recovery, or an outage that
  * has persisted. A local-only store or one waiting for its next pass is not failing.
  */
-export function failingTicketStores(report: TicketStoreSyncReport | undefined): FailingStore[] {
-  return (report?.stores ?? []).filter(({ health }) => isPublicationFailure(health));
+export function failingTicketStores(
+  report: TicketStoreSyncReport | undefined,
+  nowMs: number = Date.now(),
+): FailingStore[] {
+  return (report?.stores ?? []).filter(
+    ({ health }) => isPublicationFailure(health) && !repairInProgress(health, nowMs),
+  );
+}
+
+/** How long an AI repair Hot Sheet asked for keeps the warning back before a person is told. A CLI-started
+ * session's end is not watched, so its ask stays `started` until the store publishes (HS2-D4TK0W). */
+export const AI_REPAIR_GRACE_MS = 30 * 60 * 1000;
+
+/**
+ * Whether Hot Sheet is still repairing the stall on its own (HS2-D4TK0W): an AI session it started or the
+ * running session it asked is working, within {@link AI_REPAIR_GRACE_MS}. The warning is for a person, so it
+ * waits until that repair ended, failed, could not be asked, or ran past the grace period.
+ */
+export function repairInProgress(health: TicketStoreSyncHealth, nowMs: number): boolean {
+  const help = health.ai_help;
+  if (!help || (health.state !== 'conflict' && health.state !== 'rebase_in_progress')) return false;
+  if (help.outcome !== 'started' && help.outcome !== 'session_asked') return false;
+  const askedAt = Date.parse(help.asked_at);
+  return Number.isFinite(askedAt) && nowMs - askedAt < AI_REPAIR_GRACE_MS;
 }
 
 function isPublicationFailure(health: TicketStoreSyncHealth): boolean {
@@ -92,8 +114,14 @@ function unpublishedSentence(count: number): string {
  * server's next step (which names the headless command). It has no dismiss: it clears when a sync
  * publishes again.
  */
-export function TicketStoreSyncBanner({ report }: { report: TicketStoreSyncReport | undefined }) {
-  const failing = failingTicketStores(report);
+export function TicketStoreSyncBanner({
+  report,
+  nowMs = Date.now(),
+}: {
+  report: TicketStoreSyncReport | undefined;
+  nowMs?: number;
+}) {
+  const failing = failingTicketStores(report, nowMs);
   const first = failing.at(0);
   if (!first) return;
   const others = failing.length - 1;

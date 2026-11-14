@@ -854,7 +854,7 @@ impl UsageTail {
     }
 
     fn prune(&mut self, now_ms: i64) {
-        let keep = now_ms - 2 * 86_400_000;
+        let keep = now_ms - TOKEN_RETENTION_MS;
         self.minutes = self.minutes.split_off(&keep);
         let days = [day_of(now_ms - 86_400_000), day_of(now_ms)];
         self.offsets.retain(|path, _| {
@@ -1000,6 +1000,78 @@ pub(crate) async fn store_live_state(
     refresh(&state, &store_id)
         .map(Json)
         .ok_or_else(|| ApiError::not_found(&store_id))
+}
+
+/// How long the per-minute token series is kept (see [`UsageTail::prune`]).
+const TOKEN_RETENTION_MS: i64 = 2 * 86_400_000;
+
+/// Recorded tokens (in + out) of one store inside a window (HS2-ZTRF4Q). The standby digest reads
+/// it once on exit, so a gap between pushed snapshots longer than the snapshot's five-minute
+/// series cannot lose tokens. `complete` is false when the window starts before the retained
+/// series, so the sum may be short.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LiveTokenTotal {
+    pub store: String,
+    pub since_ms: i64,
+    pub until_ms: i64,
+    pub tokens: u64,
+    pub complete: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct TokenWindow {
+    since_ms: i64,
+    until_ms: Option<i64>,
+}
+
+/// `GET /stores/{store_id}/live-tokens?since_ms&until_ms` — one store's recorded tokens in the
+/// window, the minute containing `since_ms` included; `until_ms` defaults to now.
+pub(crate) async fn store_live_tokens(
+    State(state): State<AppState>,
+    RoutePath(store_id): RoutePath<String>,
+    axum::extract::Query(window): axum::extract::Query<TokenWindow>,
+) -> Result<Json<LiveTokenTotal>, ApiError> {
+    tokens_between_at(
+        &state,
+        &store_id,
+        window.since_ms,
+        window.until_ms,
+        OffsetDateTime::now_utc(),
+    )
+    .map(Json)
+    .ok_or_else(|| ApiError::not_found(&store_id))
+}
+
+/// [`store_live_tokens`] at a given clock (tests). Refreshing first ingests usage appended since
+/// the last snapshot.
+pub fn tokens_between_at(
+    state: &AppState,
+    store: &str,
+    since_ms: i64,
+    until_ms: Option<i64>,
+    now: OffsetDateTime,
+) -> Option<LiveTokenTotal> {
+    refresh_at(state, store, now)?;
+    let now_ms = unix_ms(now);
+    let until_ms = until_ms.unwrap_or(now_ms).min(now_ms);
+    let stores = state.live_states.stores.lock_or_recover();
+    let minutes = &stores.get(store)?.usage.minutes;
+    let first = minute_of(since_ms);
+    let tokens = if first > until_ms {
+        0
+    } else {
+        minutes
+            .range(first..=until_ms)
+            .map(|(_, tokens)| *tokens)
+            .sum()
+    };
+    Some(LiveTokenTotal {
+        store: store.to_string(),
+        since_ms,
+        until_ms,
+        tokens,
+        complete: since_ms >= now_ms - TOKEN_RETENTION_MS,
+    })
 }
 
 #[cfg(test)]

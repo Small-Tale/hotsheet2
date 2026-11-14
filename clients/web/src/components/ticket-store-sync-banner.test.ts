@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { TicketStoreAiHelp, TicketStoreSyncHealth, TicketStoreSyncReport, TicketStoreSyncState } from '../api';
 import {
+  AI_REPAIR_GRACE_MS,
   aiHelpSentence,
   failingTicketStores,
   PERSISTENT_OFFLINE_FAILURES,
+  repairInProgress,
   syncFailureSummary,
   TicketStoreSyncBanner,
 } from './ticket-store-sync-banner';
@@ -159,5 +161,50 @@ describe('TicketStoreSyncBanner AI repair (HS2-QR1K8R)', () => {
     const html = String(TicketStoreSyncBanner({ report: report(['tickets.hs2', health('conflict')]) }));
     expect(html).not.toContain('open-linked-ticket');
     expect(html).not.toContain('to repair it');
+  });
+});
+
+describe('TicketStoreSyncBanner while Hot Sheet repairs the stall (HS2-D4TK0W)', () => {
+  const asked = Date.parse('2026-11-13T08:00:00Z');
+  const stalled = (state: TicketStoreSyncState, outcome: TicketStoreAiHelp['outcome']) =>
+    health(state, {
+      unpublished_commits: 2,
+      ai_help: { outcome, mode: 'start', tool: 'codex', ticket: 'HS-ABC123', asked_at: '2026-11-13T08:00:00Z' },
+    });
+  const shown = (item: TicketStoreSyncHealth, nowMs: number) =>
+    String(TicketStoreSyncBanner({ report: report(['tickets.hs2', item]), nowMs })) !== 'undefined' &&
+    failingTicketStores(report(['tickets.hs2', item]), nowMs).length === 1;
+
+  it('holds the warning back while a session it started or asked is repairing', () => {
+    for (const state of ['conflict', 'rebase_in_progress'] as const)
+      for (const outcome of ['started', 'session_asked'] as const) {
+        const item = stalled(state, outcome);
+        expect(repairInProgress(item, asked + 60_000), `${state} ${outcome}`).toBe(true);
+        expect(failingTicketStores(report(['tickets.hs2', item]), asked + 60_000)).toEqual([]);
+        expect(TicketStoreSyncBanner({ report: report(['tickets.hs2', item]), nowMs: asked + 60_000 })).toBeUndefined();
+      }
+  });
+
+  it('warns once that repair ended, failed, could not be asked, or ran past the grace period', () => {
+    for (const outcome of ['finished', 'failed', 'ticket_only'] as const)
+      expect(shown(stalled('rebase_in_progress', outcome), asked + 60_000), outcome).toBe(true);
+    expect(shown(stalled('conflict', 'started'), asked + AI_REPAIR_GRACE_MS), 'grace elapsed').toBe(true);
+    // A stall nobody was asked about (the ask setting is off) is for a person at once.
+    expect(shown(health('rebase_in_progress'), asked)).toBe(true);
+    expect(repairInProgress({ ...stalled('conflict', 'started'), ai_help: undefined }, asked)).toBe(false);
+  });
+
+  it('never holds back failures an AI repair does not cover', () => {
+    for (const state of ['rejected', 'history_recovery_required'] as const)
+      expect(shown(stalled(state, 'started'), asked + 60_000), state).toBe(true);
+    const offline = { ...stalled('offline', 'started'), consecutive_failures: PERSISTENT_OFFLINE_FAILURES };
+    expect(shown(offline, asked + 60_000)).toBe(true);
+  });
+
+  it('shows again when a repair in progress stops (started, then failed)', () => {
+    const now = asked + 60_000;
+    expect(shown(stalled('conflict', 'started'), now)).toBe(false);
+    expect(shown(stalled('conflict', 'failed'), now)).toBe(true);
+    expect(shown(health('synced'), now)).toBe(false);
   });
 });

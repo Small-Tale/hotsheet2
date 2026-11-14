@@ -85,7 +85,7 @@ export function AwayDigestDialog({ digest, clock = awayClock }: AwayDigestDialog
           <ContentItem appearance="surface" frame="framed" rootAttributes={{ 'data-away-tile': 'tokens' }}>
             <List gap="2xs">
               <Text variant="span" size="xlarge" weight="strong" flush>
-                {formatGlanceValue(digest.tokens)}
+                {digest.tokens === null ? '—' : formatGlanceValue(digest.tokens)}
               </Text>
               <Text variant="span" size="compact" tone="quiet" flush>
                 Tokens

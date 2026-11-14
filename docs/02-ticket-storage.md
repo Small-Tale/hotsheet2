@@ -1116,7 +1116,11 @@ consecutive failures. An open client reloads health only on that event. The web 
 shows a persistent `TicketStoreSyncBanner` while any store is `rejected`, `conflict`,
 `rebase_in_progress`, `history_recovery_required`, or `offline` for three or more
 passes. The banner names the store, the cause, how many local changes are unpublished,
-and the next step.
+and the next step. It is for a person, so while Hot Sheet is still repairing a `conflict`
+or `rebase_in_progress` itself (its AI ask is `started` or `session_asked`, §2.12.4) it
+stays hidden for up to 30 minutes from the ask. It appears once that repair ended,
+failed, or could not be asked, or ran past that time (HS2-D4TK0W; maintainer: _"only
+show that kind of warning if you've really reached an insurmountable blocker"_).
 
 Headless parity:
 

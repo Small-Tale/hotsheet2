@@ -14,7 +14,8 @@
   padding: remify(1px) remify(5px);
   border: 1.5px solid var(--wa-color-neutral-fill-normal);
   border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-warning-on-normal);
+  /* The up-next fill's own paired text color, readable in both schemes (HS2-Z6WW8P). */
+  color: var(--hs-ticket-state-up-next-on);
   background: var(--hs-ticket-state-up-next);
   font-size: var(--wa-font-size-3xs);
   font-weight: 750;

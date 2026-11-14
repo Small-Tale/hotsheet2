@@ -344,9 +344,13 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
     that share a store. It comes from each open project's `GET /checkouts/{id}/confidence-report`,
     read once when standby exits; a failed read counts none.
   - Need you is the waiting count at the moment standby exits.
-  - Tokens sums the distinct per-minute token buckets the pushed snapshots carried during the window.
-    A gap of more than the snapshot's 5-minute window between snapshots undercounts. The live state
-    carries no cost, so the tile shows tokens only; the cost follow-up is HS2-9V4CGN.
+  - Tokens is each open project's stores' recorded tokens across the whole window, read once when
+    standby exits from `GET /stores/{id}/live-tokens?since_ms&until_ms` (HS2-ZTRF4Q). Before that
+    read, a gap of more than the pushed snapshot's 5-minute series between snapshots read as 0. The
+    tile never shows fewer than the distinct per-minute buckets the snapshots carried. When any store's
+    read fails, or the window starts before the server's two-day retention, it falls back to those
+    buckets; with none it shows "—" (unknown) rather than 0. The live state carries no cost, so the
+    tile shows tokens only; the cost follow-up is HS2-9V4CGN.
 - **Silent exit.** The digest shows only when some row, completion, or token was recorded; otherwise
   standby exits silently. Re-entering standby while the exit's completions load drops that digest.
 - **Dialog.** Kerf `DialogSurface`, named "While you were away" and described by the time range. Need

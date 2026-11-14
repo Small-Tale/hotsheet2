@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AUTOMATIC_TICKET_GROUP_CHOICE,
   CLOSE_TICKET_CONTEXT_ACTION,
   COMPLETED_TICKET_CONTEXT_ACTIONS,
   COPY_TICKET_IDS_CONTEXT_ACTION,
@@ -263,7 +264,15 @@ describe('TicketRowContextMenu', () => {
     expect(itemTag(markup, `data-context-group="${NEW_TICKET_GROUP_CHOICE}"`)).toContain(
       'data-context-group-new="true"',
     );
-    expect(divider).toBeGreaterThan(newGroup);
+    // HS2-4C32A0: Automatic follows New Group…, before the divider and the groups.
+    const automatic = markup.indexOf('data-context-group-automatic="true"');
+    expect(automatic).toBeGreaterThan(newGroup);
+    expect(itemTag(markup, `data-context-group="${AUTOMATIC_TICKET_GROUP_CHOICE}"`)).toContain(
+      'data-context-group-automatic="true"',
+    );
+    expect(disabledItem(markup, `data-context-group="${AUTOMATIC_TICKET_GROUP_CHOICE}"`)).toBe(false);
+    expect(markup).toContain('data-lucide="sparkles"');
+    expect(divider).toBeGreaterThan(automatic);
     expect(first).toBeGreaterThan(divider);
     expect(second).toBeGreaterThan(first);
     // HS2-9KZSD4: an item carries the group's id and shows its display name.
@@ -292,5 +301,16 @@ describe('TicketRowContextMenu', () => {
     expect(disabledItem(unsupported, 'data-context-submenu="group"')).toBe(true);
     expect(itemTag(unsupported, 'data-context-submenu="group"')).toContain(`title="${reason}"`);
     expect(disabledItem(unsupported, `data-context-action="${REMOVE_FROM_GROUP_CONTEXT_ACTION.action}"`)).toBe(true);
+  });
+
+  it('disables Automatic with a reason while an Automatic request runs (HS2-4C32A0)', () => {
+    const markup = String(
+      TicketRowContextMenu({ x: 0, y: 0, group: { groups: [], removable: false, automaticBusy: true } }),
+    );
+    expect(disabledItem(markup, `data-context-group="${AUTOMATIC_TICKET_GROUP_CHOICE}"`)).toBe(true);
+    expect(itemTag(markup, `data-context-group="${AUTOMATIC_TICKET_GROUP_CHOICE}"`)).toContain(
+      'title="The AI is already choosing a group."',
+    );
+    expect(AUTOMATIC_TICKET_GROUP_CHOICE.trim()).not.toBe(AUTOMATIC_TICKET_GROUP_CHOICE);
   });
 });

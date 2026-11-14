@@ -26,6 +26,7 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
   const bindings = {
     toggle: vi.fn(),
     openMenu: vi.fn(),
+    selectAll: vi.fn(),
     rename: vi.fn(),
     ungroup: vi.fn(),
     merge: vi.fn(),
@@ -35,7 +36,7 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
   };
   vi.stubGlobal('window', { innerWidth: 1200, innerHeight: 800 });
   wireTicketGroups({} as HTMLElement, bindings);
-  const groupElement = { dataset: { ticketGroup: 'Board' } };
+  const groupElement = { dataset: { ticketGroup: 'Board', ticketGroupScope: 'started' } };
   const inside = (extra: Record<string, unknown> = {}) =>
     ({ dataset: {}, closest: () => groupElement, ...extra }) as unknown as Element;
 
@@ -54,9 +55,9 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
       pointer = fake({ clientX: 420, clientY: 96 });
     contextmenu(pointer, header);
     expect(prevented(pointer)).toHaveBeenCalled();
-    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 420, 96);
+    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 420, 96, 'started');
     contextmenu(fake({ clientX: 0, clientY: 0 }), header);
-    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 316, 140);
+    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 316, 140, 'started');
     const outside = fake({ clientX: 1, clientY: 1 });
     contextmenu(outside, { dataset: {}, closest: () => null } as unknown as Element);
     expect(prevented(outside)).not.toHaveBeenCalled();
@@ -71,6 +72,29 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
     handler('click', '[data-action="ungroup-ticket-group"]')(fake(), item());
     expect(bindings.rename.mock.calls).toEqual([['Board']]);
     expect(bindings.ungroup.mock.calls).toEqual([['Search']]);
+  });
+
+  it('routes Select All in Group with its group and scope (HS2-EYEGDQ)', () => {
+    const item = (dataset: Record<string, string>) => ({ dataset }) as unknown as Element,
+      select = handler('click', '[data-action="select-ticket-group"]');
+    select(fake(), item({ ticketGroup: 'Board', ticketGroupScope: 'started' }));
+    select(fake(), item({ ticketGroup: 'Search' }));
+    select(fake(), item({ ticketGroupScope: 'list' }));
+    expect(bindings.selectAll.mock.calls).toEqual([
+      ['Board', 'started'],
+      ['Search', 'list'],
+    ]);
+  });
+
+  it('opens the menu for the list when the header sits outside a scoped container', () => {
+    const contextmenu = handler('contextmenu', '[data-component="list-header"]'),
+      header = {
+        dataset: { ticketGroup: 'Loose' },
+        closest: () => null,
+        getBoundingClientRect: () => ({ left: 0, bottom: 0 }),
+      } as unknown as Element;
+    contextmenu(fake({ clientX: 10, clientY: 20 }), header);
+    expect(bindings.openMenu).toHaveBeenLastCalledWith('Loose', 10, 20, 'list');
   });
 
   it('routes Merge Duplicate Groups with the group id (HS2-9KZSD4)', () => {
