@@ -539,8 +539,15 @@ fn hs2_qr1k8r_a_continue_that_conflicts_is_reported_and_never_stacked() {
     // The explicit recovery still works and keeps every local commit.
     let aborted = abort_stalled_integration(&root).unwrap();
     assert_eq!(aborted.aborted, IntegrationInProgress::Rebase);
-    assert_eq!(aborted.head, local_head.trim());
-    assert!(attached(&root));
+    // HS2-JGH11Q: the deferred write is committed on the branch, after the local commits.
+    assert_eq!(aborted.saved_writes, 1);
+    assert!(aborted.saved_writes_committed);
+    assert_eq!(aborted.head, head(&root).trim());
+    assert_eq!(
+        git_stdout(&root, &["rev-parse", "HEAD^"]).unwrap(),
+        local_head
+    );
+    assert!(attached(&root) && clean(&root));
     assert_eq!(read(&root, "during.md"), "during the stall\n");
 }
 

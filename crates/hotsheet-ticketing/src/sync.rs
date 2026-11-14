@@ -524,6 +524,14 @@ pub struct StalledIntegrationAbort {
     pub backup_ref: String,
     /// The branch commit after the abort.
     pub head: String,
+    /// Ticket writes whose commits were deferred while the rebase or merge was unfinished
+    /// (HS2-JGH11Q): kept across the abort and committed on the branch.
+    pub saved_writes: usize,
+    /// A ref keeping those writes as they were before the abort, when there were any.
+    pub saved_writes_ref: Option<String>,
+    /// Whether the kept writes were committed on the branch. When not, they stay in the
+    /// working tree for the next commit.
+    pub saved_writes_committed: bool,
 }
 
 /// Errors from [`abort_stalled_integration`].
@@ -541,6 +549,12 @@ pub enum StalledIntegrationError {
 /// recovery for [`SyncReport::RebaseInProgress`]. First records a backup ref at the
 /// current `HEAD`, then restores the branch to its pre-rebase commit; local commits on
 /// the branch are kept and nothing is pushed.
+///
+/// HS2-JGH11Q: ticket writes made while it was unfinished were saved with their commits
+/// deferred. `git rebase --abort` resets the tree hard, so those writes are first
+/// recorded under a second backup ref, set aside, and written back and committed on the
+/// branch after the abort. The rebase's own staged or conflicted content is discarded,
+/// as an abort should.
 pub fn abort_stalled_integration(
     store_path: &Path,
 ) -> Result<StalledIntegrationAbort, StalledIntegrationError> {
@@ -550,17 +564,34 @@ pub fn abort_stalled_integration(
         return Err(StalledIntegrationError::NothingInProgress);
     };
     let (_head, backup_ref) = record_backup_ref(store_path)?;
+    let saved = crate::sync_saved_writes::save(store_path)?;
+    if let Some(saved) = &saved
+        && let Err(error) = crate::sync_saved_writes::set_aside(saved)
+    {
+        let _ = crate::sync_saved_writes::restore(saved);
+        return Err(error);
+    }
     let args: &[&str] = match kind {
         crate::sync_health::IntegrationInProgress::Rebase => &["rebase", "--abort"],
         crate::sync_health::IntegrationInProgress::Merge => &["merge", "--abort"],
     };
     let abort = git_run(store_path, args);
+    let restored = saved.as_ref().map(crate::sync_saved_writes::restore);
     if !abort.ok || integration_in_progress(store_path).is_some() {
         return Err(StalledIntegrationError::Git {
             step: "abort",
             detail: abort.stderr.trim().to_string(),
         });
     }
+    if let (Some(saved), Some(Err(error))) = (&saved, restored) {
+        return Err(StalledIntegrationError::Git {
+            step: "restore saved writes",
+            detail: format!("{error}; they are kept at {}", saved.backup_ref),
+        });
+    }
+    let saved_writes_committed = saved
+        .as_ref()
+        .is_some_and(|saved| crate::sync_saved_writes::commit(saved).unwrap_or(false));
     let after = git_stdout(store_path, &["rev-parse", "HEAD"])
         .map(|value| value.trim().to_string())
         .unwrap_or_default();
@@ -568,6 +599,11 @@ pub fn abort_stalled_integration(
         aborted: kind,
         backup_ref,
         head: after,
+        saved_writes: saved
+            .as_ref()
+            .map_or(0, crate::sync_saved_writes::SavedWrites::len),
+        saved_writes_ref: saved.map(|saved| saved.backup_ref),
+        saved_writes_committed,
     })
 }
 
@@ -816,6 +852,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
 
 #[cfg(test)]
 mod merge_driver_tests;
+#[cfg(test)]
+mod saved_writes_tests;
 #[cfg(test)]
 mod stall_tests;
 

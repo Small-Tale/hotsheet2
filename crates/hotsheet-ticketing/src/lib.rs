@@ -58,6 +58,7 @@ pub mod sync;
 pub mod sync_ai;
 pub mod sync_health;
 pub mod sync_replay;
+pub mod sync_saved_writes;
 pub mod terminal_limits;
 pub mod wire;
 pub mod worklist;

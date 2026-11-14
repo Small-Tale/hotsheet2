@@ -10734,6 +10734,119 @@ fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile()
     hs(&peer).args(["show", &during]).assert().success();
 }
 
+/// HS2-JGH11Q end to end with real CLI processes: a person pauses a rebase in the store;
+/// ticket edits made meanwhile are saved but not committed onto the detached `HEAD`, the
+/// status says so, `sync --abort-stalled-rebase` keeps and commits them on the branch,
+/// and after another edit `sync` publishes everything.
+#[cfg(unix)]
+#[test]
+fn hs2_jgh11q_abort_stalled_rebase_keeps_ticket_edits_saved_during_the_stall() {
+    use std::os::unix::fs::PermissionsExt;
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    let published = new_ticket(a, "published ticket");
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+
+    // An unpublished local ticket, then a person's rebase paused at its pick.
+    let local = new_ticket(a, "local ticket");
+    assert!(git(a, &["fetch", "--quiet"]));
+    let editor = a.join(".git/hotsheet-test-todo-editor.sh");
+    std::fs::write(
+        &editor,
+        "#!/bin/sh\nsed '1s/^pick/edit/' \"$1\" > \"$1.new\" && mv \"$1.new\" \"$1\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&editor, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let editor = format!("sequence.editor={}", editor.display());
+    let _ = git(a, &["-c", &editor, "rebase", "-i", "--quiet", "@{u}"]);
+    assert!(a.join(".git/rebase-merge").is_dir());
+    let stopped = git_out(a, &["rev-parse", "HEAD"]);
+
+    // Edits during the stall are saved, never committed onto the detached HEAD.
+    hs(a)
+        .args(["edit", &published, "--title", "retitled during the stall"])
+        .assert()
+        .success();
+    let during = new_ticket(a, "created during the stall");
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), stopped);
+    hs(a).arg("sync").assert().failure();
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), stopped);
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: rebase_in_progress"))
+        .stdout(predicate::str::contains(
+            "saved in the store but not committed",
+        ));
+
+    hs(a)
+        .args(["sync", "--abort-stalled-rebase"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("committed them on the branch"));
+    assert!(!a.join(".git/rebase-merge").exists());
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    hs(a)
+        .args(["show", &published])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled during the stall"));
+    hs(a).args(["show", &during]).assert().success();
+
+    // Another edit commits normally, and sync publishes everything.
+    hs(a)
+        .args(["edit", &published, "--title", "retitled after the abort"])
+        .assert()
+        .success();
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    hs(a).arg("sync").assert().success();
+    assert!(git(&peer, &["pull", "--quiet"]));
+    hs(&peer)
+        .args(["show", &published])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled after the abort"));
+    hs(&peer).args(["show", &during]).assert().success();
+    hs(&peer).args(["show", &local]).assert().success();
+}
+
 /// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists
 /// as unread (●); `read` clears it; the state lives in `local/reads.json`, gitignored.
 #[test]

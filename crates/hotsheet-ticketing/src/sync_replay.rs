@@ -138,7 +138,7 @@ pub(crate) fn replay_onto_upstream(store_path: &Path) -> Result<String, ReplayEr
 
 /// The fallback committer identity [`crate::FsStore::autocommit`] uses when the
 /// repository has none.
-fn committer_identity(store_path: &Path) -> &'static [&'static str] {
+pub(crate) fn committer_identity(store_path: &Path) -> &'static [&'static str] {
     let configured = git_stdout(store_path, &["config", "user.email"])
         .is_some_and(|email| !email.trim().is_empty());
     if configured {

@@ -593,6 +593,22 @@ pub(crate) fn cmd_sync(
             aborted.head,
             aborted.backup_ref
         );
+        // HS2-JGH11Q: writes made while it was unfinished survive the abort.
+        if let Some(saved_ref) = &aborted.saved_writes_ref {
+            let count = aborted.saved_writes;
+            let plural = if count == 1 { "" } else { "s" };
+            if aborted.saved_writes_committed {
+                println!(
+                    "Kept {count} change{plural} saved while it was unfinished and committed \
+                     them on the branch. Backup of those changes: {saved_ref}"
+                );
+            } else {
+                println!(
+                    "Kept {count} change{plural} saved while it was unfinished; they are in the \
+                     working tree. Backup of those changes: {saved_ref}"
+                );
+            }
+        }
         println!("Run `hotsheet-cli sync` to integrate and publish.");
         return Ok(());
     }

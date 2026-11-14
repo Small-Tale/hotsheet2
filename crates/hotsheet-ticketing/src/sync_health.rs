@@ -297,6 +297,14 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
             .clone()
             .filter(|_| record.outcome == Some(SyncState::RebaseInProgress))
             .or_else(|| Some(crate::sync::STALLED_INTEGRATION_REASON.to_string()));
+        // HS2-JGH11Q: Hot Sheet saves writes but defers their commits until it finishes.
+        let pending = crate::sync_saved_writes::pending_count(store_path);
+        if pending > 0
+            && let Some(reason) = health.reason.as_mut()
+        {
+            reason.push('\n');
+            reason.push_str(&deferred_writes_line(pending));
+        }
     } else if let Some(outcome) = record.outcome {
         // A live-only condition the store no longer shows has been resolved; the next
         // cycle decides the new state.
@@ -345,6 +353,21 @@ fn is_active(record: &SyncRecord, now: OffsetDateTime) -> bool {
     let finished = record.last_attempt_at.as_deref().and_then(parse_time);
     finished.is_none_or(|finished| started > finished)
         && (now - started).whole_seconds() < ACTIVE_ATTEMPT_WINDOW_SECONDS
+}
+
+/// The reason line for writes saved while a rebase or merge is unfinished (HS2-JGH11Q).
+fn deferred_writes_line(pending: usize) -> String {
+    let (count, verb) = if pending == 1 {
+        ("1 change is".to_string(), "it")
+    } else {
+        (format!("{pending} changes are"), "them")
+    };
+    format!(
+        "{count} saved in the store but not committed until it is finished; \
+         `hotsheet-cli sync --abort-stalled-rebase` keeps {verb} and commits {verb} on the \
+         branch. To finish it with Git instead, stage {verb} (`git add -A`) before \
+         continuing it, because Git refuses to continue over unstaged changes."
+    )
 }
 
 fn next_action(health: &SyncHealth) -> Option<String> {

@@ -1129,7 +1129,9 @@ Headless parity:
   `rebase_in_progress`, and `history_recovery_required`.
 - `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
   rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current
-  `HEAD`, aborts, and keeps every local commit on the branch. It never pushes.
+  `HEAD`, aborts, and keeps every local commit on the branch. It never pushes. Ticket
+  writes whose commits were deferred during the stall survive the abort and are
+  committed on the branch (§2.12.3, HS2-JGH11Q).
 - `hotsheet-cli sync` runs the same ask-the-AI workflow as the server (§2.12.4), and
   `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree.
 
@@ -1169,6 +1171,18 @@ The rules that prevent and repair this:
   `rebase-merge`, `rebase-apply`, and `MERGE_HEAD` under the transaction lock. While one
   exists, the write is saved, the commit is skipped with a warning, and the file is
   committed on the branch by the first cycle after the rebase or merge finishes.
+- **Report and keep deferred writes (HS2-JGH11Q).** A deferred write is an unstaged
+  working-tree change or an untracked file in the store; staged and unmerged content
+  belongs to the rebase or merge. While one is unfinished, the sync health reason says
+  how many changes are saved but not committed, that `sync --abort-stalled-rebase` keeps
+  them, and that finishing it with Git needs them staged first (`git rebase --continue`
+  refuses over unstaged changes). `git rebase --abort` resets the tree hard, so the
+  abort first records the writes as a commit at
+  `refs/hotsheet/sync-backup/<timestamp>-saved-writes` (built on a temporary index),
+  returns those paths to their index state, aborts, writes each path back as saved
+  (content or deletion), and commits them on the branch with path-scoped
+  `commit --only`. The rebase's own staged pick and conflicted files are discarded, as
+  an abort should. A failed restore names the backup ref; nothing is pushed.
 - **Continue what needs no judgment.** A cycle that finds a `rebase-merge` replay with
   no unmerged path and no `stopped-sha` (the shape a rescheduled pick leaves) records
   `refs/hotsheet/sync-backup/<timestamp>` at `HEAD`, commits stray working-tree changes,
