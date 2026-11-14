@@ -199,6 +199,7 @@ fn hs2_t2ks8g_an_older_reader_parses_a_newer_answer_with_an_extra_field() {
             coverage: Coverage::Exact,
             artifact: None,
             exit_code: None,
+            duration_ms: None,
             at_ms: 3,
         }),
         watch_ref: Some("job-1".into()),
