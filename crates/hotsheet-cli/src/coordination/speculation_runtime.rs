@@ -406,7 +406,9 @@ impl Coordinator {
 
     /// The ledger read without taking the pool lock, for a caller that already holds it
     /// (the reservation check runs under the ticket transaction and the state lock).
-    fn speculation_ledger_locked(&self) -> Result<Option<speculation::SpeculationLedger>> {
+    pub(super) fn speculation_ledger_locked(
+        &self,
+    ) -> Result<Option<speculation::SpeculationLedger>> {
         let path = self.directory.join(speculation::LEDGER_FILE);
         if !path.exists() {
             return Ok(None);

@@ -725,6 +725,14 @@ impl Coordinator {
                 )),
                 "another ticket is integrating or verifying; finish it before opening a batch"
             );
+            // HS2-CK4S3F: a batch member is integrated, so provisional work passes the same
+            // integration rule as `mark --phase integrating`. A pool without a speculation
+            // ledger is not read here at all.
+            if let Some(speculation) = self.speculation_ledger_locked()? {
+                for member in &requested {
+                    speculation.integration_rule(member)?;
+                }
+            }
             let mut tickets = Vec::with_capacity(members.len());
             for (assignment, paths) in &members {
                 let a = state

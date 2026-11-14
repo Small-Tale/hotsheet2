@@ -292,7 +292,7 @@ polling (green confirms; red marks the work at risk with a ticket note, puts the
 repair first, and is followed by a recorded rebase or reopen). It is off by default,
 capped by a depth limit of one and refused for `speculate:never` tickets;
 REST and MCP policy actions ship (HS2-7J2ZSE), as do provisional plan rows,
-`plan-dispatch` and worker candidates (HS2-J77XJA), and gates that start their own CI watch, report the repaired gate commit and replace it for landed work (HS2-X6FB9V); `claim-next` (HS2-XYF4YT) and the web display (HS2-N8H97X) remain open.
+`plan-dispatch` and worker candidates (HS2-J77XJA), and gates that start their own CI watch, report the repaired gate commit and replace it for landed work (HS2-X6FB9V), and batch members held by the integration rule (HS2-CK4S3F); `claim-next` (HS2-XYF4YT) and the web display (HS2-N8H97X) remain open.
 An optional dispatcher can own assignment while the integrator keeps review, integration
 and CI, behind an explicit schema-four authority switch that fences older artifacts
 (HS2-TWZW7X); the three role skills and shared headless/GUI setup ship in HS2-7E5R4A,

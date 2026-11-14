@@ -3249,7 +3249,10 @@ Started. No transition deletes a record.
 rule holds back. Under `push-per-ticket` the dependent may integrate once its own
 local gates pass and is then covered by the batch CI rule. Under `parked` it stays on
 its branch until its record is confirmed. At-risk work integrates under neither rule
-until it is rebased, and reopened work never does.
+until it is rebased, and reopened work never does. A batch or ci-staged integrator
+applies the same rule to every member (HS2-CK4S3F): `batch-plan` defers a held member
+with the rule's reason, and `batch-open` refuses the whole batch, moving nothing,
+while any member is held. A replay of an open batch is not judged again.
 
 **Surfaces.** `speculation-explain --ticket` answers `confirmed`, `provisional on
 <slug> CI <run>` with the base commit, pending gate and depth, or each blocking
@@ -3309,9 +3312,10 @@ red no row or candidate is provisional, because the reservation refuses new
 provisional work until the repair. Disabled, the rows, candidates and dispatch
 refusal are exactly what they were, and neither field is serialized.
 
-**Not built here.** Automatic `claim-next` remains confirmed-only (HS2-XYF4YT). The web
-client does not display the records (HS2-N8H97X), and a batch or ci-staged member is
-not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for
+**Not built here.** Automatic `claim-next` does not consult this rule: since
+HS2-E3C530 it ignores dependency edges altogether, and whether it should use them
+under the opt-in is HS2-XYF4YT. The web client does not display the records
+(HS2-N8H97X). The shared playbook wording for
 `final_testing` is proposed in HS2-5BNWVN. The cross-target form is
 HS2-JSF985 ([26](26-orchestration-projects.md) §26.22): there this setting is the
 target project's own opt-in, which its machine reports with its capacity, and the

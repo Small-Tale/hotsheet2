@@ -1326,7 +1326,7 @@ exact-SHA and fast-forward guard in `integration-batch.mjs`.
 ledger beside the pool (own `version: 1`, written under `state.lock`, no pool schema
 bump), the provisional, confirmed, at-risk and reopened transitions with their
 idempotent `record`/`apply`/`rebase`/`reopen`, the integration rule that `mark`
-enforces, the `SpeculationStatus` projected into the snapshot and worker view, and
+enforces (and, since HS2-CK4S3F, `batch_open_unit` and `batch-plan` for every batch member), the `SpeculationStatus` projected into the snapshot and worker view, and
 the timer-free `follow` wait. `speculation_runtime.rs` is its I/O: `LiveGateProbe`
 (Git reachability and the HS2-3R9V0R watch Jobs), the reservation check
 `speculation_reservation`, HS2-X6FB9V `GateWatch`/`LiveGateWatch`, `speculation_watcher`, `speculation_watch_reserved` and `speculation_sync_watching` (watches started by reservations and syncs, `repairs` and automatic replacement of landed work's gate, repair-first ordering in worker matches), HS2-J77XJA `provisional_ready` (the snapshot's plan rows and worker candidates, and `dispatch_next_plan_probed` recording the reservation), `speculation_explain`, `speculation_sync`,

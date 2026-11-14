@@ -49,7 +49,17 @@ fn handoff(
     operation: &str,
     path: &str,
 ) -> (hotsheet_model::Ticket, String) {
-    let ticket = f.ticket();
+    handoff_of(f, f.ticket(), worker, operation, path)
+}
+
+/// [`handoff`] of a ticket the caller created, for example one with a dependency.
+fn handoff_of(
+    f: &Fixture,
+    ticket: hotsheet_model::Ticket,
+    worker: &str,
+    operation: &str,
+    path: &str,
+) -> (hotsheet_model::Ticket, String) {
     let base = git(&f.project, &["rev-parse", "main"]);
     let worktree = f.root.path().join(format!("worktree-{worker}"));
     git(
@@ -836,4 +846,108 @@ fn hs2_0bj1a3_headless_status_uses_shared_goal_without_opening_a_batch() {
     );
     assert_eq!(status["cadence"]["action"], "no_ready_work");
     assert!(status["batches"].as_object().unwrap().is_empty());
+}
+
+/// HS2-CK4S3F: a batch member is integrated, so provisional work passes the same
+/// integration rule as `mark --phase integrating`: `batch-plan` defers parked work with
+/// the rule's reason, `batch-open` refuses it, and a green base gate releases it.
+#[test]
+fn hs2_ck4s3f_batches_hold_back_provisional_work_its_rule_parks() {
+    use hotsheet_model::{NoteKind, StartedPhase, Status, Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+    let f = batch_fixture("2");
+    let now = || Timestamp::from_datetime(time::OffsetDateTime::now_utc());
+    let pushed = git(&f.project, &["rev-parse", "main"]);
+    // A prerequisite pushed to main and waiting on CI.
+    let prerequisite = f.ticket();
+    let mut waiting = f.store.read_ticket(&prerequisite.id).unwrap();
+    waiting.status = Status::Started;
+    waiting.started_phase = Some(StartedPhase::FinalTesting);
+    f.store.write_ticket(&waiting).unwrap();
+    ops::add_note(
+        &f.store,
+        &prerequisite.id,
+        Ulid::new(),
+        now(),
+        NoteKind::Regular,
+        format!("Pushed; waiting on CI.\n\nCI gate commit: {pushed}\n"),
+    )
+    .unwrap();
+    let dependent = ops::create(
+        &f.store,
+        Ulid::new(),
+        "HS",
+        now(),
+        NewTicket {
+            title: "synthetic provisional dependent".into(),
+            up_next: true,
+            blocked_by: vec![prerequisite.id],
+            ..NewTicket::default()
+        },
+    )
+    .unwrap();
+    json(
+        &f,
+        &[
+            "speculation-policy",
+            "--enable",
+            "--integration",
+            "parked",
+            "--base-branch",
+            "main",
+        ],
+    );
+    let (parked, _) = handoff_of(&f, dependent, "worker-1", "op-parked", "parked.txt");
+    let (plain, _) = handoff(&f, "worker-2", "op-plain", "plain.txt");
+    let status = json(&f, &["speculation-status"]);
+    assert_eq!(status["status"]["records"][0]["assignment"], "op-parked");
+    let plan = json(&f, &["batch-plan"]);
+    assert_eq!(plan["selected"][0]["slug"], plain.slug.as_str());
+    assert_eq!(plan["selected"].as_array().unwrap().len(), 1);
+    assert_eq!(plan["deferred"][0]["slug"], parked.slug.as_str());
+    assert!(
+        plan["deferred"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("stays parked"),
+        "{plan}"
+    );
+    refused(
+        &f,
+        &with_id(
+            "batch-open",
+            &[
+                "--batch",
+                "batch-1",
+                "--assignment",
+                "op-plain",
+                "--assignment",
+                "op-parked",
+            ],
+        ),
+        "stays parked",
+    );
+    // Nothing moved: both are still ready handoffs.
+    let state = json(&f, &["status"]);
+    assert_eq!(
+        state["state"]["assignments"]["op-plain"]["phase"],
+        "handoff"
+    );
+    assert_eq!(
+        state["state"]["assignments"]["op-parked"]["phase"],
+        "handoff"
+    );
+    // The base gate turns green: the parked work joins a batch.
+    json(
+        &f,
+        &[
+            "speculation-result",
+            "--gate-commit",
+            &pushed,
+            "--result",
+            "green",
+        ],
+    );
+    let plan = json(&f, &["batch-plan"]);
+    assert_eq!(plan["selected"].as_array().unwrap().len(), 2, "{plan}");
 }

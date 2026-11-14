@@ -395,6 +395,10 @@ fn candidates(
         {
             blocker = Some("its ticket claim is still live".into());
         }
+        // HS2-CK4S3F: provisional work its integration rule holds back waits too.
+        if let Err(rule) = coordinator.speculation_integration_rule(&a.id) {
+            blocker = Some(rule.to_string());
+        }
         if let Some(batch) = held(&a.id) {
             blocker = Some(format!(
                 "it is held as a suspect of re-staged batch {}; review-return it",

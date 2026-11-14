@@ -903,3 +903,81 @@ fn hs2_9g0m3v_ledger_refuses_an_unknown_version() {
             .is_err()
     );
 }
+
+fn provisional(
+    c: &Coordinator,
+    id: &str,
+    integration: hotsheet_ticketing::provisional::IntegrationRule,
+) {
+    c.speculation_record(
+        id,
+        1,
+        integration,
+        vec![super::speculation::PendingGate {
+            blocker: "native-blocker".into(),
+            slug: "HS-BLOCKER".into(),
+            commit: MAIN_2.into(),
+            result: hotsheet_ticketing::provisional::GateResult::Pending,
+            run: None,
+        }],
+        NOW,
+    )
+    .unwrap();
+}
+
+/// HS2-CK4S3F: `batch-open` applies the provisional integration rule to every member,
+/// as `mark --phase integrating` does: parked, at-risk and reopened work are refused
+/// and nothing moves; push-per-ticket and confirmed work, and members without a record,
+/// open; a replay of an open batch is not re-judged.
+#[test]
+fn hs2_ck4s3f_batch_open_applies_the_integration_rule_to_every_member() {
+    use hotsheet_ticketing::provisional::{GateObservation, GateResult, IntegrationRule};
+    let (_root, c) = pool(4);
+    provisional(&c, "a0", IntegrationRule::Parked);
+    provisional(&c, "a1", IntegrationRule::PushPerTicket);
+    let open = |c: &Coordinator, batch: &str, ids: &[&str]| {
+        c.batch_open(
+            "integrator",
+            "generation-1",
+            NOW,
+            batch,
+            ids.iter()
+                .map(|id| member(id, &format!("src/{id}.rs")))
+                .collect(),
+            LIMITS,
+        )
+    };
+    let refused = open(&c, "b-1", &["a1", "a0"]).unwrap_err().to_string();
+    assert!(refused.contains("stays parked"), "{refused}");
+    for id in ["a0", "a1", "a2"] {
+        assert_eq!(phase(&c, id), Phase::Handoff);
+    }
+    assert!(
+        c.batch_ledger()
+            .unwrap()
+            .is_none_or(|l| l.batches.is_empty())
+    );
+    // A red base gate: push-per-ticket work is at risk and refused too.
+    c.speculation_apply(
+        &[(
+            MAIN_2.into(),
+            GateObservation {
+                result: GateResult::Red,
+                run: Some("7.1".into()),
+            },
+        )],
+        NOW,
+    )
+    .unwrap();
+    let refused = open(&c, "b-1", &["a1", "a2"]).unwrap_err().to_string();
+    assert!(refused.contains("at risk"), "{refused}");
+    // Reopened work never integrates.
+    c.speculation_reopen("a1", "invalidated", NOW, None)
+        .unwrap();
+    let refused = open(&c, "b-1", &["a1"]).unwrap_err().to_string();
+    assert!(refused.contains("reopened"), "{refused}");
+    // Members without a record open; the same batch again replays.
+    let manifest = open(&c, "b-1", &["a2", "a3"]).unwrap();
+    assert_eq!(manifest.assignments(), ["a2", "a3"]);
+    assert_eq!(open(&c, "b-1", &["a2", "a3"]).unwrap(), manifest);
+}
