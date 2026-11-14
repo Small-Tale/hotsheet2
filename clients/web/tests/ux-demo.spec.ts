@@ -288,7 +288,8 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 1200 : 844 });
     for (const [component, label, count] of [
-      ['settings-navigation', 'Project Settings', 9],
+      // HS2-W27N1D: the project-scoped General joins; Orchestration shows only for an Orchestration project.
+      ['settings-navigation', 'Project Settings', 10],
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
       await page.goto(`/ux-demo?component=${component}`);

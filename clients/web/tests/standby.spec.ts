@@ -271,7 +271,10 @@ test.describe('standby (HS2-EQVZTZ)', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     const host = await openStandbyProject(page, { enabled: null, idle_minutes: null });
     await page.getByLabel('Settings View').click();
-    await page.getByRole('button', { name: 'General', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'App Settings' })
+      .getByRole('button', { name: 'General', exact: true })
+      .click(); // HS2-W27N1D: Project Settings has its own General
     const section = page.locator('[data-component="standby-settings"]');
     await expect(section.getByRole('heading', { name: 'Standby' })).toBeVisible();
     const enabled = section.getByRole('checkbox', { name: 'Enter standby when idle' });

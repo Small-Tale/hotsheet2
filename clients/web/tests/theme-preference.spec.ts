@@ -13,7 +13,10 @@ async function scheme(page: Page) {
 
 async function openGeneral(page: Page) {
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'App Settings' })
+    .getByRole('button', { name: 'General', exact: true })
+    .click(); // HS2-W27N1D: Project Settings has its own General
   const picker = page.locator('[data-component="theme-picker"]');
   await expect(picker.getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
   return picker;

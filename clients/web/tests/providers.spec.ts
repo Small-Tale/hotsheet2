@@ -26160,7 +26160,10 @@ test('App Settings manages the disks host health monitors, by switch, path, and 
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'App Settings' })
+    .getByRole('button', { name: 'General', exact: true })
+    .click(); // HS2-W27N1D: Project Settings has its own General
   const section = page.locator('[data-component="host-disk-settings"]');
   await expect(section.getByRole('heading', { name: 'Host health disks' })).toBeVisible();
   await expect(section).toContainText('on studio');
