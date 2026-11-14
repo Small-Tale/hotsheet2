@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session receiving exact dispatcher or legacy assignments and handing verified work to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 50 -->
+<!-- hotsheet-skill-version: 51 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -257,6 +257,29 @@ handoff` with the branch name, full commit SHA, worktree location labeled as
    reclaims the ticket and owns integration, push, CI confirmation, completion, and worktree removal for code;
    for findings it verifies the note and completes without code integration or CI. Do not
    mark the ticket Completed or Verified from a worker worktree.
+
+## Resource claims for your work (HS2-7YSKXE)
+
+When the prompt that started you, or your assignment, names resources the work needs
+(for example `vm/macos-vm`), you acquire them yourself. Nobody claims them for you:
+the orchestrator and the scheduler only read who holds what.
+
+1. Acquire each one before the work that uses it, with a duration sized to the work
+   and a bounded wait instead of a retry loop:
+   `hotsheet-cli resource acquire <namespace>/<resource> --duration 45m --wait 5m`
+   (MCP `hotsheet_resource_claim` `action: "acquire"`). An answer of `held_by` or
+   `wait_timeout` means someone else has it: work on something that does not need it,
+   or report the wait; never take it from the holder.
+2. Keep the `renewal_token` from the answer, and give it to the task you start with
+   the resource (for example a test run inside the VM) so the task renews for itself:
+   `hotsheet-cli resource renew --token <token> --duration 30m`. Where the resource
+   checks it, hand the `fencing_token` to the resource too.
+3. Renew before the lease ends only while the work still runs. Never renew for a task
+   that is stuck or gone: let the lease lapse.
+4. Release as soon as you are done with it, before handing off:
+   `hotsheet-cli resource release --token <token>`.
+
+Record only the resource name and timings in notes, never a token.
 
 ## Provisional assignments (HS2-2SJPCH)
 

@@ -574,6 +574,7 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
                     },
                     limits: None,
                     actor: None,
+                    resources: Vec::new(),
                 },
                 &mut tx,
             )
@@ -1191,6 +1192,7 @@ fn hs2_gdjxgz_a_crashed_session_is_lost_and_replaced_by_a_new_one() {
                     },
                     limits: None,
                     actor: None,
+                    resources: Vec::new(),
                 },
                 &mut tx,
             )
@@ -1474,6 +1476,7 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
                     },
                     limits: None,
                     actor: None,
+                    resources: Vec::new(),
                 },
                 &mut tx,
             )
@@ -2345,6 +2348,7 @@ fn hosted_start(f: &Fixture, operation: &str, tx: &mut Transaction<'_>) -> Hoste
                 session: late_start(f, operation),
                 limits: None,
                 actor: None,
+                resources: Vec::new(),
             },
             tx,
         )

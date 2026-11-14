@@ -198,6 +198,26 @@ pub fn role_prompt_text(role: SessionRole, worker_id: &str, request: Option<&str
     text
 }
 
+/// HS2-7YSKXE: what a session is told about the resources its work needs. It acquires
+/// each itself with the claim service, keeps the renewal token, renews while it works
+/// and releases when done; the `hotsheet-worker` skill teaches the pattern. `None`
+/// when the work needs none.
+pub fn resources_prompt_text(
+    resources: &[hotsheet_ticketing::orchestration::ResourceNeed],
+) -> Option<String> {
+    if resources.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = resources
+        .iter()
+        .map(|need| format!("`{}/{}`", need.namespace, need.resource))
+        .collect();
+    Some(format!(
+        "This work needs the resources {}. Before you start it, acquire each yourself with `hotsheet-cli resource acquire <namespace>/<resource> --duration <how long the work takes> --wait 5m` (or the `hotsheet_resource_claim` tool), keep the renewal token, renew before the lease ends while you still work, and release each one as soon as you are done. Nobody else claims them for you; follow the resource claims section of the `hotsheet-worker` skill.",
+        names.join(", ")
+    ))
+}
+
 /// HS2-HCW7MD: the message that asks a planning session to propose the plan. It
 /// names the skill, the orchestration project's checkout id every orchestration
 /// command takes, the proposal's id, and the one goal ticket when only one was asked
@@ -448,6 +468,10 @@ pub struct HostedSessionStart {
     /// Who asked, for attribution. The start is decided by this machine either way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<MutationActor>,
+    /// HS2-7YSKXE: resources the work needs; the started session is told to acquire
+    /// them itself. Absent when there are none, so an older host reads the start.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<hotsheet_ticketing::orchestration::ResourceNeed>,
 }
 
 /// A hosted session with what its host knows about it right now.
@@ -609,6 +633,10 @@ pub struct StartSession {
     /// The lost or failed session this one replaces.
     #[serde(default)]
     pub replaces: Option<String>,
+    /// HS2-7YSKXE: resources the work needs, at most four, as `{namespace, resource}`.
+    /// The session acquires them itself; nobody claims on its behalf.
+    #[serde(default)]
+    pub resources: Vec<hotsheet_ticketing::orchestration::ResourceNeed>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -1015,12 +1043,13 @@ impl OrchestrationRuntime {
             role_prompt: None,
             tool_setup: None,
         };
-        let (reserved, _) = match registry.reserve(&checkout.id, &request.session, tx) {
-            Ok(reserved) => reserved,
-            // HS2-WHR4GS: a stop withdrew this operation before its start arrived.
-            Err(OrchestrationError::Session(SessionError::Withdrawn)) => return Ok(withdrawn()),
-            Err(error) => return Err(error),
-        };
+        let (reserved, _) =
+            match registry.reserve_with(&checkout.id, &request.session, &request.resources, tx) {
+                Ok(reserved) => reserved,
+                // HS2-WHR4GS: a stop withdrew this operation before its start arrived.
+                Err(OrchestrationError::Session(SessionError::Withdrawn)) => return Ok(withdrawn()),
+                Err(error) => return Err(error),
+            };
         let live = self.sessions.sessions(&checkout);
         if reserved.started {
             let session = self.note_lost(reserved, live.as_deref(), tx.clock.now_ms())?;
@@ -1184,7 +1213,13 @@ impl OrchestrationRuntime {
                 request.as_deref(),
             );
         }
-        role_prompt_text(session.role, &worker, request.as_deref())
+        let mut text = role_prompt_text(session.role, &worker, request.as_deref());
+        // HS2-7YSKXE: the work's resources, for the session to acquire itself.
+        if let Some(resources) = resources_prompt_text(&session.resources) {
+            text.push(' ');
+            text.push_str(&resources);
+        }
+        text
     }
 
     /// The slug of a ticket in the checkout's git stores, by its canonical id.
@@ -2068,6 +2103,7 @@ impl OrchestrationRuntime {
                 },
                 limits: Some(policy.machine_limits(&request.target_id)),
                 actor: actor.cloned(),
+                resources: request.resources.clone(),
             })
             .map_err(|_| OrchestrationError::Corrupt)?;
             let fail = |reason: &str, tx: &mut Transaction<'_>| {

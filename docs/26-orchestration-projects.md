@@ -25,7 +25,8 @@
 > a level a validation deadline changes is published at that deadline, HS2-J7N3PQ;
 > step events name their step in `step_id`, HS2-J7RG42; prerequisite tickets without a
 > run are followed on their target's change feed, HS2-TMA4YA; a session's host reports
-> since when it has been idle, HS2-RG91SK),
+> since when it has been idle, HS2-RG91SK; a placed session is told the resources its
+> work needs and acquires them itself, HS2-7YSKXE),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
@@ -3028,8 +3029,21 @@ anyone. The session that does the work acquires the resource itself with the cla
 service's primitives (§36.10), keeps the renewal token, renews while it works and
 releases when done (§36.1, §36.4). A stuck session lets its lease lapse. The
 scheduler's part ends at naming the resources in the start request
-(`PlacementStart.resources`). Passing them into the started session and teaching the
-acquire-and-hand-off pattern are HS2-7YSKXE and HS2-SHDW2Q; neither is built.
+(`PlacementStart.resources`).
+
+**Handing them to the session (HS2-7YSKXE).** The executor passes those resources into
+the session start (`StartSession.resources`, the hosted start's `resources`, at most
+four), and the host keeps them on its session record. The session's prompt names each
+one and tells it to acquire them itself with
+`hotsheet-cli resource acquire <namespace>/<resource> --duration … --wait 5m` (or
+`hotsheet_resource_claim`), keep the renewal token, renew while it works and release
+when done; the `hotsheet-worker` skill's resource claims section teaches the same
+pattern, and that nobody claims on its behalf. The same start operation with other
+resources is a conflict at the host. A start with no resources sends none, so an older
+host reads it; one with resources is refused by a host that predates them. A person or
+tool can start a session with them too (`session start --resource`, MCP `session_start`
+`resources`). The broader shared skill of HS2-SHDW2Q (fencing, ticket-claim guidance,
+bound backends) remains.
 
 ### Declaring a requirement
 

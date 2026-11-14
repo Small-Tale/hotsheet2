@@ -1000,6 +1000,10 @@ pub struct HostedSession {
     /// running session after it was given that ticket's run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<HostedRequest>,
+    /// HS2-7YSKXE: resources the work needs, which the session acquires itself. The
+    /// orchestrator never claims on its behalf.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceNeed>,
 }
 
 /// HS2-R7QH35: why a running session is told about one exact ticket.
@@ -1265,7 +1269,20 @@ impl HostedSessionRegistry {
         new: &NewHostedSession,
         tx: &mut Transaction<'_>,
     ) -> Result<(HostedSession, bool), OrchestrationError> {
+        self.reserve_with(checkout_id, new, &[], tx)
+    }
+
+    /// HS2-7YSKXE: [`Self::reserve`] for work that needs `resources`. The same
+    /// operation id with other resources conflicts.
+    pub fn reserve_with(
+        &self,
+        checkout_id: &str,
+        new: &NewHostedSession,
+        resources: &[ResourceNeed],
+        tx: &mut Transaction<'_>,
+    ) -> Result<(HostedSession, bool), OrchestrationError> {
         valid_identifier(checkout_id)?;
+        validate_needs(resources, MAX_STEP_RESOURCES)?;
         new.validate()?;
         let _lock = self.storage.lock()?;
         // HS2-WHR4GS: a start for an operation a stop withdrew launches nothing.
@@ -1284,7 +1301,8 @@ impl HostedSessionRegistry {
                 && existing.model == new.model
                 && existing.effort == new.effort
                 && existing.role == new.role
-                && existing.origin == new.origin;
+                && existing.origin == new.origin
+                && existing.resources == resources;
             return if same {
                 Ok((existing.clone(), false))
             } else {
@@ -1318,6 +1336,7 @@ impl HostedSessionRegistry {
             end_reason: None,
             role_delivery: RoleDelivery::default(),
             request: None,
+            resources: resources.to_vec(),
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());

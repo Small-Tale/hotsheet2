@@ -2719,3 +2719,100 @@ fn hs2_rg91sk_the_hosts_idle_time_is_used_and_an_older_host_falls_back() {
     f.host.set_idle_since(&terminal, None);
     assert!(f.listed(&mut tx)[0].idle_since_ms.is_some());
 }
+
+/// HS2-7YSKXE: the scheduler places work that needs a resource; the session it starts
+/// is told to acquire the resource itself, and does: acquire, renew with its own
+/// token, release, on the local claim backend. The scheduler claims nothing.
+#[test]
+fn hs2_7yskxe_a_started_session_is_told_its_resources_and_claims_them_itself() {
+    use hotsheet_resource_claims::{ClaimService, Namespace, ResourceRef};
+    clocked!(clock, tx);
+    let _ = &clock;
+    let f = Placed::new(&BOTH, &mut tx);
+    let step = f.ready("Needs the VM", &mut tx);
+    // The step declares the resource its work must hold.
+    let defined = f.m.runtime.readiness(&f.owner(), &step, &mut tx).unwrap();
+    let target_ticket = defined.readiness.step.target.native_id.clone();
+    f.m.runtime
+        .readiness_define(
+            &f.owner(),
+            serde_json::from_value(json!({
+                "ticket": {"connection_id": f.m.owner_connection(),
+                    "native_id": f.orchestration.id.to_string()},
+                "target_id": id(1), "connection_id": f.m.target_connection(),
+                "native_id": target_ticket, "prerequisites": [],
+                "resources": [{"namespace": "vm", "resource": "macos-vm"}],
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let claims = |home: &Path| {
+        ClaimService::new(home)
+            .list(&Namespace::parse("vm").unwrap())
+            .unwrap()
+            .len()
+    };
+    f.tick(&mut tx);
+    // The session was launched with the resource in its prompt; nothing is claimed.
+    let launches = f.host.launches();
+    assert_eq!(launches.len(), 1, "{launches:?}");
+    let prompt = &launches[0].role_prompt;
+    assert!(prompt.contains("`vm/macos-vm`"), "{prompt}");
+    assert!(prompt.contains("hotsheet-cli resource acquire"), "{prompt}");
+    assert!(
+        prompt.contains("Nobody else claims them for you"),
+        "{prompt}"
+    );
+    assert_eq!(claims(&f.m.home), 0, "the scheduler never claims");
+    // The host keeps what the session was told, for a later retry of its prompt.
+    let operation = format!("sched-start-{step}");
+    let hosted = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&f.m.home)
+        .get(&f.m.target.id, &operation)
+        .unwrap()
+        .unwrap();
+    assert_eq!(hosted.resources.len(), 1);
+    assert_eq!(hosted.resources[0].namespace, "vm");
+    // The session does what it was told, with its own token.
+    let service = ClaimService::new(&f.m.home);
+    let target = ResourceRef::parse("vm/macos-vm").unwrap();
+    let grant = service
+        .acquire(
+            &target,
+            std::time::Duration::from_secs(45 * 60),
+            Some(std::time::Duration::from_secs(1)),
+            &std::collections::BTreeMap::new(),
+        )
+        .unwrap();
+    assert_eq!(claims(&f.m.home), 1);
+    let renewed = service
+        .renew(
+            &grant.renewal_token,
+            std::time::Duration::from_secs(90 * 60),
+            Some(&target),
+        )
+        .unwrap();
+    assert!(renewed.expires_at_ms >= grant.claim.expires_at_ms);
+    service
+        .release(&grant.renewal_token, Some(&target))
+        .unwrap();
+    assert_eq!(claims(&f.m.home), 0);
+    // A start of the same operation with other resources conflicts at the host.
+    let other = hotsheet_ticketing::orchestration::NewHostedSession {
+        operation_id: operation.clone(),
+        tool: hosted.tool.clone(),
+        model: hosted.model.clone(),
+        effort: hosted.effort.clone(),
+        role: hosted.role,
+        origin: hosted.origin.clone(),
+    };
+    assert!(matches!(
+        hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&f.m.home).reserve(
+            &f.m.target.id,
+            &other,
+            &mut tx
+        ),
+        Err(OrchestrationError::Conflict)
+    ));
+}

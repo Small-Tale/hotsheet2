@@ -21529,6 +21529,12 @@ components:
           type:
             - string
             - 'null'
+        resources:
+          description: Resources the work needs; the started session is told to acquire them itself (HS2-7YSKXE).
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/OrchestrationResourceNeed'
       additionalProperties: false
     OrchestrationSession:
       description:
@@ -21702,6 +21708,12 @@ components:
           $ref: '#/components/schemas/OrchestrationMachineLimits'
         actor:
           $ref: '#/components/schemas/OrchestrationActor'
+        resources:
+          description: Resources the work needs, for the session's prompt (HS2-7YSKXE); absent when none.
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/OrchestrationResourceNeed'
       additionalProperties: false
     HostedTargetSessionOrigin:
       description: The orchestration project a hosted session works for. Identifiers and a display name only.
@@ -21806,6 +21818,12 @@ components:
                 delivery:
                   $ref: '#/components/schemas/OrchestrationRoleDelivery'
               additionalProperties: false
+            resources:
+              description: Resources the session was told to acquire itself (HS2-7YSKXE).
+              type: array
+              maxItems: 4
+              items:
+                $ref: '#/components/schemas/OrchestrationResourceNeed'
           additionalProperties: false
         server_id:
           type: string

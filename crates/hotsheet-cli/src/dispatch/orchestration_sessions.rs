@@ -20,6 +20,7 @@ pub(super) struct SessionArgs {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)] // HS2-7YSKXE: parsed once per process; `start` carries its flags inline for clap
 enum SessionCmd {
     /// Start an AI session on the server that hosts a target. Repeating the command
     /// with the same --operation-id returns the same session and never launches twice.
@@ -47,6 +48,10 @@ enum SessionCmd {
         /// The lost or failed session this one replaces.
         #[arg(long)]
         replaces: Option<String>,
+        /// HS2-7YSKXE: a resource the work needs, as `<namespace>/<resource>`. The
+        /// session is told to acquire it itself. Repeatable, at most four.
+        #[arg(long = "resource")]
+        resources: Vec<String>,
     },
     /// Sessions this project started, from this machine's records; --active leaves out
     /// finished ones. With --checkout, the sessions orchestrators started on a checkout
@@ -130,13 +135,26 @@ pub(super) fn route(arguments: SessionArgs) -> Result<(String, (&'static str, St
             role,
             run,
             replaces,
-        } => (
-            "POST",
-            base,
-            json!({"target_id": target, "operation_id": operation_id, "tool": tool,
-                "model": model, "effort": effort, "account": account, "role": role,
-                "run_id": run, "replaces": replaces}),
-        ),
+            resources,
+        } => {
+            let mut needs = Vec::new();
+            for spec in &resources {
+                let Some((namespace, resource)) = spec
+                    .split_once('/')
+                    .filter(|(namespace, resource)| !namespace.is_empty() && !resource.is_empty())
+                else {
+                    bail!("--resource takes <namespace>/<resource>");
+                };
+                needs.push(json!({"namespace": namespace, "resource": resource}));
+            }
+            (
+                "POST",
+                base,
+                json!({"target_id": target, "operation_id": operation_id, "tool": tool,
+                    "model": model, "effort": effort, "account": account, "role": role,
+                    "run_id": run, "replaces": replaces, "resources": needs}),
+            )
+        }
         SessionCmd::List { active, .. } => (
             "GET",
             format!("{base}{}", if active { "?active=true" } else { "" }),
@@ -218,12 +236,15 @@ mod tests {
                     "R",
                     "--replaces",
                     "S",
+                    "--resource",
+                    "vm/macos-vm",
                 ],
                 "POST",
                 format!("{base}/sessions"),
                 json!({"target_id":"T","operation_id":"op-1","tool":"codex","model":"model-a",
                     "effort":"high","account":"team","role":"integrator","run_id":"R",
-                    "replaces":"S"}),
+                    "replaces":"S",
+                    "resources":[{"namespace":"vm","resource":"macos-vm"}]}),
             ),
             (&["list"], "GET", format!("{base}/sessions"), Value::Null),
             (

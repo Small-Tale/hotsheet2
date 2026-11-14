@@ -399,6 +399,8 @@ impl OrchestrationRuntime {
                 role: None,
                 run_id: start_run,
                 replaces,
+                // HS2-7YSKXE: the session acquires what its work needs itself.
+                resources: request.resources.clone(),
             },
             Some(&PlacedGate {
                 operation_id: &request.operation_id,

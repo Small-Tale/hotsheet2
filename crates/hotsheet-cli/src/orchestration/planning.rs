@@ -339,6 +339,7 @@ impl OrchestrationRuntime {
                 session,
                 limits: None,
                 actor: actor.cloned(),
+                resources: Vec::new(),
             },
             tx,
         )?;

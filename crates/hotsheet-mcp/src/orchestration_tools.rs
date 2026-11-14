@@ -19,7 +19,7 @@ pub(crate) fn definition() -> Value {
         "session_role":{"type":"string","enum":["worker","dispatcher","integrator"],"description":"session_start: the part the session plays in the target's role model (default worker)"},
         "session_id":{"type":"string","description":"session_show/session_safe_point/session_request/session_stop: the session's id; session_sync: omit to sync every unfinished session"},
         "replaces":{"type":"string","description":"session_start: the lost or failed session this one replaces"},
-        "resources":{"type":"array","maxItems":4,"items":{"type":"object"},"description":"readiness_define: resources the session working the step must hold, each {namespace,resource} in the resource-claim service's names (HS2-2FG91X)"},
+        "resources":{"type":"array","maxItems":4,"items":{"type":"object"},"description":"readiness_define: resources the session working the step must hold, each {namespace,resource} in the resource-claim service's names (HS2-2FG91X); session_start: resources the work needs, which the started session is told to acquire itself (HS2-7YSKXE)"},
         "dry_run":{"type":"boolean","description":"scheduler_tick: compute and log the decisions and apply none of them, whatever the policy says"},
         "tool_load":{"type":"array","items":{"type":"object","required":["tool","sessions"],"properties":{"tool":{"type":"string"},"account":{"type":"string"},"sessions":{"type":"integer","minimum":0}}},"description":"tool_select (required): sessions now running per tool account; an empty list states that none are running"},
         "claim_namespaces":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"capacity: resource-claim namespaces whose live claims to list"},
@@ -478,6 +478,8 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
                     ("session_role", "role"),
                     ("run_id", "run_id"),
                     ("replaces", "replaces"),
+                    // HS2-7YSKXE: the session acquires these itself.
+                    ("resources", "resources"),
                 ] {
                     if let Some(value) = args.get(argument) {
                         body.insert(field.into(), value.clone());
