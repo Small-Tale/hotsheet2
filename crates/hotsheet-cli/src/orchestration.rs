@@ -8,6 +8,7 @@ mod capacity;
 mod capacity_watch;
 mod decisions;
 mod gates;
+mod hosted_deployments;
 mod hosted_gates;
 mod job_monitor;
 mod joining;
@@ -52,6 +53,9 @@ pub use capacity_watch::{CapacityFollow, MAX_CAPACITY_WATCHES};
 pub use gates::{
     GateFollowState, GateFollowStep, GateProvider, GateView, GithubActionsGates, LinkGate,
     MAX_GATE_WAIT_MS, RequestDeployment, RunGates, SyncGates, TARGET_SCRIPT_PROVIDER,
+};
+pub use hosted_deployments::{
+    DEPLOYMENT_WORKTREES_DIRECTORY, HostedDeploymentStart, MAX_DEPLOYMENT_SECONDS,
 };
 pub use hosted_gates::{HostedGate, HostedGateWatch, MAX_HOSTED_GATE_WAIT_MS};
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
@@ -548,7 +552,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::InvalidTransition
                 | E::RepositoryMismatch
                 | E::DeploymentActive
-                | E::ArtifactMismatch => 409,
+                | E::ArtifactMismatch
+                | E::DeploymentScriptUntracked => 409,
             }
         }
         OrchestrationError::Session(error) => {

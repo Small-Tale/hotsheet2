@@ -13,16 +13,16 @@ use super::gates::{judge, sha};
 use super::tickets::{NOW, RemotePeer, machine, unsupported, worker};
 use super::*;
 
-struct Remote {
-    peer: Arc<RemotePeer>,
-    runtime: OrchestrationRuntime,
-    owner: String,
-    run: String,
+pub(super) struct Remote {
+    pub(super) peer: Arc<RemotePeer>,
+    pub(super) runtime: OrchestrationRuntime,
+    pub(super) owner: String,
+    pub(super) run: String,
     _root: tempfile::TempDir,
 }
 
 impl Remote {
-    fn calls(&self, needle: &str) -> Vec<(String, String)> {
+    pub(super) fn calls(&self, needle: &str) -> Vec<(String, String)> {
         self.peer
             .calls
             .lock()
@@ -56,7 +56,7 @@ impl Remote {
 }
 
 /// An orchestrating machine with a run on a target another machine hosts.
-fn remote(tx: &mut Transaction<'_>) -> Remote {
+pub(super) fn remote(tx: &mut Transaction<'_>) -> Remote {
     let peer = Arc::new(RemotePeer {
         hosted: machine(99, false, unsupported),
         calls: Mutex::new(Vec::new()),
@@ -201,7 +201,7 @@ fn remote(tx: &mut Transaction<'_>) -> Remote {
 }
 
 /// Give a hosted checkout a Git remote.
-fn git_remote(root: &Path, url: &str) {
+pub(super) fn git_remote(root: &Path, url: &str) {
     for args in [&["init", "-q"][..], &["remote", "add", "origin", url][..]] {
         let status = hotsheet_ticketing::git::command_in(root)
             .args(args)
@@ -223,7 +223,7 @@ fn link(r: &Remote, commit: &str, tx: &mut Transaction<'_>) -> GateView {
         .unwrap()
 }
 
-fn sync(r: &Remote, wait_ms: u64, tx: &mut Transaction<'_>) -> RunGates {
+pub(super) fn sync(r: &Remote, wait_ms: u64, tx: &mut Transaction<'_>) -> RunGates {
     r.runtime
         .gate_sync(
             &r.owner,

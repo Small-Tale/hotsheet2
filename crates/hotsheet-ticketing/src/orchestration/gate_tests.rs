@@ -74,6 +74,7 @@ fn evidence(order: u64, attempt: u32, commit: &str, coverage: Coverage) -> GateE
         coverage,
         artifact: None,
         exit_code: None,
+        duration_ms: None,
         at_ms: 1,
     }
 }
@@ -848,11 +849,16 @@ fn hs2_5jbypv_requests_are_validated_and_a_damaged_file_is_never_evaluated() {
         GateError::RepositoryMismatch,
         GateError::DeploymentActive,
         GateError::ArtifactMismatch,
+        GateError::DeploymentScriptUntracked,
     ]
     .map(GateError::code)
     .into_iter()
     .collect();
-    assert_eq!(codes.len(), 8);
+    assert_eq!(codes.len(), 9);
+    for code in &codes {
+        assert_eq!(GateError::from_code(code).map(GateError::code), Some(*code));
+    }
+    assert_eq!(GateError::from_code("conflict"), None);
     assert_eq!(
         OrchestrationError::Gate(GateError::NotPassed).code(),
         "gate_not_passed"

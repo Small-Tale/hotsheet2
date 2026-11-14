@@ -28,7 +28,7 @@ use hotsheet_ticketing::orchestration::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::step_process::{process_started, step_process};
+use super::step_process::process_started;
 use super::*;
 
 /// The directory under a machine home that holds pending step launches.
@@ -48,6 +48,66 @@ pub(super) struct StepSpec {
     pub output_limit: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retain: Option<PathBuf>,
+    /// HS2-G3VAK4: a checkout made for this execution, removed when it ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<Worktree>,
+}
+
+/// HS2-G3VAK4: a detached Git worktree of one commit, made for one execution so it runs
+/// exactly that commit's tracked files and never a working tree's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Worktree {
+    /// The repository it is made from.
+    pub repository: PathBuf,
+    /// Where it is made; private to this machine's home.
+    pub path: PathBuf,
+    /// The full commit it holds.
+    pub commit: String,
+}
+
+impl Worktree {
+    fn git(&self, args: &[&std::ffi::OsStr]) -> std::io::Result<()> {
+        let status = hotsheet_ticketing::git::command_in(&self.repository)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other("git worktree"))
+        }
+    }
+
+    /// Make it. A leftover of an earlier attempt of the same execution is replaced.
+    pub fn create(&self) -> std::io::Result<()> {
+        if let Some(parent) = self.path.parent() {
+            private_dir(parent)?;
+        }
+        self.remove();
+        self.git(&[
+            "worktree".as_ref(),
+            "add".as_ref(),
+            "--detach".as_ref(),
+            "--force".as_ref(),
+            self.path.as_os_str(),
+            self.commit.as_ref(),
+        ])
+    }
+
+    /// Remove it, best effort, and forget its administrative record.
+    pub fn remove(&self) {
+        let _ = self.git(&[
+            "worktree".as_ref(),
+            "remove".as_ref(),
+            "--force".as_ref(),
+            self.path.as_os_str(),
+        ]);
+        let _ = fs::remove_dir_all(&self.path);
+        let _ = self.git(&["worktree".as_ref(), "prune".as_ref()]);
+    }
 }
 
 /// Where a checkout's step launches live.
@@ -249,9 +309,12 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
         })
     };
     let record = |pid| {
-        if let Some(process) = step_process(pid) {
-            let _ = registry.launched(&spec.checkout_id, &spec.execution_id, process);
-        }
+        super::step_process::record_step(
+            registry.clone(),
+            spec.checkout_id.clone(),
+            spec.execution_id.clone(),
+            pid,
+        );
     };
     let outcome = if marker.exists() {
         ExecutionOutcome {
@@ -277,6 +340,9 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
         )
     };
     done.store(true, Ordering::SeqCst);
+    if let Some(worktree) = &spec.worktree {
+        worktree.remove();
+    }
     let _ = registry.finish(
         &spec.checkout_id,
         &spec.execution_id,

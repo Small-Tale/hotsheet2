@@ -118,6 +118,7 @@ pub(super) fn verdict(
         coverage,
         artifact: None,
         exit_code: (provider != CI).then_some(i32::from(state != GateState::Passed)),
+        duration_ms: None,
         at_ms: 150,
     })
 }
@@ -777,8 +778,9 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_and_a_person_for_production() {
             Err(OrchestrationError::Invalid(_))
         ));
     }
-    // A non-production deployment a remembered rule allows is authorized at once. No
-    // adapter runs deployments here, and the gate says so instead of pretending.
+    // A non-production deployment a remembered rule allows is authorized at once. The
+    // target's own machine runs its script (HS2-G3VAK4); this target tracks none, so
+    // nothing runs and the gate says so instead of pretending.
     let beta = request(&m, deploy("deploy-1", false), &mut tx).unwrap();
     assert!(beta.created && beta.request_id.is_none());
     let scope = beta.gate.deployment.clone().unwrap();
@@ -792,7 +794,7 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_and_a_person_for_production() {
         ),
         (
             GateState::Unknown,
-            Some("deployment_executor_unavailable"),
+            Some("gate_deployment_script_untracked"),
             a.as_str(),
             ci_gate.as_str(),
             "scripts/deploy.sh"
@@ -888,7 +890,7 @@ fn hs2_5jbypv_a_deployment_needs_a_passed_gate_and_a_person_for_production() {
     let approved = request(&m, deploy("deploy-prod", true), &mut tx).unwrap();
     assert_eq!(
         (approved.gate.state, approved.gate.reason.as_deref()),
-        (GateState::Unknown, Some("deployment_executor_unavailable"))
+        (GateState::Unknown, Some("gate_deployment_script_untracked"))
     );
     assert_eq!(
         approvals(&m, &mut tx)[0].request.state,

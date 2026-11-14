@@ -159,6 +159,30 @@ impl HostedValidationRegistry {
         self.set_process(checkout_id, execution_id, Some(process), true)
     }
 
+    /// HS2-M7EV18: record a process only when none is recorded yet, so a launcher's
+    /// late note of the runner never replaces what the runner already recorded.
+    pub fn launching(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+        process: StepProcess,
+    ) -> Result<(), OrchestrationError> {
+        valid_identifier(checkout_id)?;
+        valid_identifier(execution_id)?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let Some(record) = file.executions.iter_mut().find(|record| {
+            record.checkout_id == checkout_id && record.execution_id == execution_id
+        }) else {
+            return Ok(());
+        };
+        if record.outcome.is_some() || record.process.is_some() {
+            return Ok(());
+        }
+        record.process = Some(process);
+        self.write_file(&file)
+    }
+
     /// HS2-HTS89S: the process group is gone (it ended, or was stopped).
     pub fn process_gone(
         &self,

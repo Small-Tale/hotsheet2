@@ -864,6 +864,7 @@ fn hs2_42tara_a_superseded_gate_no_longer_counts_for_a_prerequisite() {
             coverage: Coverage::Exact,
             artifact: None,
             exit_code: None,
+            duration_ms: None,
             at_ms: 1,
         })
     };

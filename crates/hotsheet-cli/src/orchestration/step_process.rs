@@ -65,18 +65,36 @@ pub(super) fn spawned_started(pid: u32) -> Option<u64> {
     None
 }
 
-/// The identity of a step just launched by this process.
-pub(super) fn step_process(pid: u32) -> Option<StepProcess> {
-    if !cfg!(unix) {
-        return None;
-    }
-    let host_pid = std::process::id();
-    Some(StepProcess {
-        pid,
-        started: spawned_started(pid)?,
-        host_pid,
-        host_started: process_started(host_pid)?,
-    })
+/// HS2-M7EV18: record a just-launched step's process group without holding up its
+/// launch. A heavily loaded machine can take seconds to answer for a new child, so a
+/// thread asks for up to ten seconds; an execution that ended meanwhile keeps no group.
+pub(super) fn record_step(
+    registry: hotsheet_ticketing::orchestration::HostedValidationRegistry,
+    checkout_id: String,
+    execution_id: String,
+    pid: u32,
+) {
+    std::thread::spawn(move || {
+        let Some(started) = (0..1000).find_map(|_| {
+            process_started(pid).or_else(|| {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                None
+            })
+        }) else {
+            return;
+        };
+        let host_pid = std::process::id();
+        let Some(host_started) = process_started(host_pid) else {
+            return;
+        };
+        let process = StepProcess {
+            pid,
+            started,
+            host_pid,
+            host_started,
+        };
+        let _ = registry.launched(&checkout_id, &execution_id, process);
+    });
 }
 
 /// Whether the process that launched the step still runs.

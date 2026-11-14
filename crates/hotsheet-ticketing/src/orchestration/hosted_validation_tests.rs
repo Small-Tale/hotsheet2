@@ -135,6 +135,16 @@ fn hs2_hts89s_a_running_execution_records_its_group_until_it_ends() {
     registry.launched(CHECKOUT, &id(1), process).unwrap();
     assert_eq!(registry.with_process().unwrap().len(), 1);
     // Forgotten when stopped, and set again only while it still runs.
+    // HS2-M7EV18: a launcher's late note never replaces a recorded process.
+    let late = StepProcess {
+        pid: 9_000,
+        ..process
+    };
+    registry.launching(CHECKOUT, &id(1), late).unwrap();
+    assert_eq!(
+        registry.record(CHECKOUT, &id(1)).unwrap().unwrap().process,
+        Some(process)
+    );
     registry.process_gone(CHECKOUT, &id(1)).unwrap();
     assert!(registry.with_process().unwrap().is_empty());
     registry.launched(CHECKOUT, &id(1), process).unwrap();

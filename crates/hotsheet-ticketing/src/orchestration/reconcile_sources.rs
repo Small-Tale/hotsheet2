@@ -155,6 +155,8 @@ pub const NOTE_DEPLOYMENT_NOT_EXECUTED: &str = "deployment_not_executed";
 const EXECUTOR_UNAVAILABLE: &str = "deployment_executor_unavailable";
 /// The reason a deployment whose executor was asked to start it is recorded with.
 const DEPLOYMENT_STARTING: &str = "deployment_starting";
+/// HS2-G3VAK4: a start the machine hosting the target did not confirm.
+const DEPLOYMENT_START_UNCONFIRMED: &str = "deployment_start_unconfirmed";
 /// What a deployment executor answers for an operation it has no execution of.
 pub const EXECUTION_NOT_FOUND: &str = "execution_not_found";
 
@@ -177,7 +179,10 @@ fn deployment_gate(gate: &Gate, reading: &Result<GateReading, String>) -> Source
             return SourceWork::Settled(Some(NOTE_DEPLOYMENT_NOT_EXECUTED.into()));
         }
         // Withdrawn, or otherwise never handed to an executor.
-        GateState::Unknown if reason != Some(DEPLOYMENT_STARTING) => {
+        GateState::Unknown
+            if reason != Some(DEPLOYMENT_STARTING)
+                && reason != Some(DEPLOYMENT_START_UNCONFIRMED) =>
+        {
             return SourceWork::Settled(None);
         }
         // Executing, or asked to start: only the executor can say.

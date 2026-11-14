@@ -128,6 +128,9 @@ pub struct GateEvidence {
     pub artifact: Option<ArtifactRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
+    /// HS2-G3VAK4: how long a deployment execution ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
     pub at_ms: u64,
 }
 
@@ -412,6 +415,9 @@ pub enum GateError {
     /// HS2-3YC577: the deployment names an artifact other than the one the passed CI
     /// run built.
     ArtifactMismatch,
+    /// HS2-G3VAK4: the deploy script is not tracked as an executable file at the gate's
+    /// commit on the machine that hosts the target.
+    DeploymentScriptUntracked,
 }
 
 impl GateError {
@@ -425,7 +431,26 @@ impl GateError {
             Self::RepositoryMismatch => "gate_repository_mismatch",
             Self::DeploymentActive => "gate_deployment_active",
             Self::ArtifactMismatch => "gate_artifact_mismatch",
+            Self::DeploymentScriptUntracked => "gate_deployment_script_untracked",
         }
+    }
+
+    /// HS2-G3VAK4: the error a peer named by its code, so a refusal from the machine
+    /// that hosts a target keeps its type across the transport.
+    pub fn from_code(code: &str) -> Option<Self> {
+        [
+            Self::NotFound,
+            Self::ProviderUnsupported,
+            Self::ProviderUnavailable,
+            Self::NotPassed,
+            Self::InvalidTransition,
+            Self::RepositoryMismatch,
+            Self::DeploymentActive,
+            Self::ArtifactMismatch,
+            Self::DeploymentScriptUntracked,
+        ]
+        .into_iter()
+        .find(|error| error.code() == code)
     }
 }
 

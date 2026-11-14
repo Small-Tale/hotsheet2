@@ -568,11 +568,13 @@ impl OrchestrationRuntime {
                 // The peer names its own refusal by code; anything else is classified
                 // by status alone. Its message text is never forwarded.
                 let code = parsed.get("code").and_then(Value::as_str);
-                // HS2-K2YE6A: a host that refuses to watch a repository its checkout
-                // does not name says so by the gate's own code.
-                let mismatch = hotsheet_ticketing::orchestration::GateError::RepositoryMismatch;
-                if code == Some(mismatch.code()) {
-                    return Err(OrchestrationError::Gate(mismatch));
+                // HS2-K2YE6A, HS2-G3VAK4: a host that refuses by a gate's own code
+                // (a repository its checkout does not name, an untracked deploy
+                // script) keeps that type here.
+                if let Some(refused) =
+                    code.and_then(hotsheet_ticketing::orchestration::GateError::from_code)
+                {
+                    return Err(OrchestrationError::Gate(refused));
                 }
                 Err(OrchestrationError::TargetOperation(
                     code.and_then(TargetOpError::from_code)

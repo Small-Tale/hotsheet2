@@ -46,6 +46,19 @@ const DRAIN_GRACE: Duration = Duration::from_secs(2);
 
 // ---- Hosted half ----
 
+/// One command a hosted execution runs (HS2-G3VAK4: shared by validation steps and
+/// deployments).
+pub(super) struct HostedCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    pub timeout_seconds: u32,
+    pub root: PathBuf,
+    /// Where small output is kept (HS2-ZCR3Y7); `None` keeps digests only.
+    pub retain: Option<PathBuf>,
+    /// HS2-G3VAK4: a checkout made for this execution, removed when it ends.
+    pub worktree: Option<super::validation_runner::Worktree>,
+}
+
 /// Start one execution on the machine that hosts the checkout, or return the one this
 /// id already names.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,14 +501,14 @@ fn unknown_reply(execution_id: &str) -> HostedValidation {
     }
 }
 
-fn wait(wait_ms: u64) -> Result<u64, OrchestrationError> {
+pub(super) fn wait(wait_ms: u64) -> Result<u64, OrchestrationError> {
     if wait_ms > MAX_VALIDATION_WAIT_MS {
         return Err(OrchestrationError::Invalid("wait_ms must be at most 8000"));
     }
     Ok(wait_ms)
 }
 
-fn execution_id(value: &str) -> Result<(), OrchestrationError> {
+pub(super) fn execution_id(value: &str) -> Result<(), OrchestrationError> {
     if value
         .parse::<ulid::Ulid>()
         .ok()
@@ -526,7 +539,7 @@ impl OrchestrationRuntime {
         let exited = match super::validation_runner::launch(&self.home, &spec) {
             Ok(launched) => {
                 if let Some(runner) = launched.identity {
-                    let _ = registry.launched(checkout_id, &execution_id, runner);
+                    let _ = registry.launching(checkout_id, &execution_id, runner);
                 }
                 launched.exited
             }
@@ -661,29 +674,62 @@ impl OrchestrationRuntime {
             ));
         }
         let checkout = self.owner(checkout_id)?;
-        self.reap_once();
         let root = PathBuf::from(&checkout.root);
-        let key = self.execution_key(checkout_id, &request.execution_id);
-        let started_at_ms = tx.clock.now_ms();
+        let retain = self.validation_output_dir(&checkout.id);
+        // Resolve before anything is remembered: a damaged profile file is an error,
+        // never a guess. HS2-YYNW9F: a profile's own timeout shortens the step's.
+        let resolve = || -> Result<Option<HostedCommand>, OrchestrationError> {
+            let command = match &request.check {
+                ValidationCheck::Command { program, args } => {
+                    Some((program.clone(), args.clone(), request.timeout_seconds))
+                }
+                ValidationCheck::Profile { name } => ValidationProfileStore::new(&root)
+                    .find(name)?
+                    .map(|profile| {
+                        let timeout = profile.effective_timeout(request.timeout_seconds);
+                        (profile.program, profile.args, timeout)
+                    }),
+            };
+            Ok(
+                command.map(|(program, args, timeout_seconds)| HostedCommand {
+                    program,
+                    args,
+                    timeout_seconds,
+                    root: root.clone(),
+                    retain: Some(retain.clone()),
+                    worktree: None,
+                }),
+            )
+        };
+        self.start_hosted(
+            &checkout.id,
+            &request.execution_id,
+            resolve,
+            tx.clock.now_ms(),
+            wait_ms,
+        )
+    }
+
+    /// Start one hosted execution, or answer the one its id already names: in this
+    /// process, in a detached runner (HS2-M7EV18), or from the machine's record
+    /// (HS2-7BTV98). `resolve` names the command, or `None` when nothing is defined;
+    /// it runs only for an id this process does not hold. Never runs an id twice.
+    pub(super) fn start_hosted(
+        &self,
+        checkout_id: &str,
+        execution_id: &str,
+        resolve: impl FnOnce() -> Result<Option<HostedCommand>, OrchestrationError>,
+        started_at_ms: u64,
+        wait_ms: u64,
+    ) -> Result<HostedValidation, OrchestrationError> {
+        self.reap_once();
+        let key = self.execution_key(checkout_id, execution_id);
         let execution = {
             let mut known = executions();
             if let Some(existing) = known.iter().find(|execution| execution.key == key) {
                 existing.clone()
             } else {
-                // Resolve before anything is remembered: a damaged profile file is an
-                // error, never a guess.
-                // HS2-YYNW9F: a profile's own timeout shortens the step's.
-                let command = match &request.check {
-                    ValidationCheck::Command { program, args } => {
-                        Some((program.clone(), args.clone(), request.timeout_seconds))
-                    }
-                    ValidationCheck::Profile { name } => ValidationProfileStore::new(&root)
-                        .find(name)?
-                        .map(|profile| {
-                            let timeout = profile.effective_timeout(request.timeout_seconds);
-                            (profile.program, profile.args, timeout)
-                        }),
-                };
+                let command = resolve()?;
                 make_room(&mut known)?;
                 if command.is_some()
                     && known
@@ -698,23 +744,25 @@ impl OrchestrationRuntime {
                 // is gone. A finished one is answered from its record; one that was
                 // accepted is never started again.
                 let registry = self.hosted_validation_registry();
-                match registry.accept(&checkout.id, &request.execution_id, started_at_ms)? {
+                match registry.accept(checkout_id, execution_id, started_at_ms)? {
                     HostedValidationKnown::Unknown => {}
                     HostedValidationKnown::Finished(outcome) => {
-                        return Ok(hosted_reply(&request.execution_id, Some(outcome)));
+                        return Ok(hosted_reply(execution_id, Some(outcome)));
                     }
                     HostedValidationKnown::Accepted => {
                         // HS2-M7EV18: a detached runner may still run it.
                         drop(known);
-                        return Ok(self.detached_reply(
-                            &checkout.id,
-                            &request.execution_id,
-                            wait_ms,
-                        ));
+                        return Ok(self.detached_reply(checkout_id, execution_id, wait_ms));
                     }
                 }
                 let execution = new_execution(key);
                 known.push(execution.clone());
+                let launch_failed = |execution: &Execution| {
+                    let outcome = ended(ExecutionEnd::LaunchFailed, started_at_ms, Instant::now());
+                    let _ =
+                        registry.finish(checkout_id, execution_id, started_at_ms, outcome.clone());
+                    execution.finish(outcome);
+                };
                 match command {
                     None => {
                         let outcome = ended(
@@ -723,57 +771,71 @@ impl OrchestrationRuntime {
                             Instant::now(),
                         );
                         let _ = registry.finish(
-                            &checkout.id,
-                            &request.execution_id,
+                            checkout_id,
+                            execution_id,
                             started_at_ms,
                             outcome.clone(),
                         );
                         execution.finish(outcome);
                     }
-                    Some((program, args, timeout_seconds)) if self.detached_validation => {
+                    // HS2-G3VAK4: a checkout made for this execution must exist first.
+                    Some(command)
+                        if command
+                            .worktree
+                            .as_ref()
+                            .is_some_and(|worktree| worktree.create().is_err()) =>
+                    {
+                        launch_failed(&execution);
+                    }
+                    Some(command) if self.detached_validation => {
                         self.launch_detached(
-                            &checkout.id,
+                            checkout_id,
                             super::validation_runner::StepSpec {
-                                checkout_id: checkout.id.clone(),
-                                execution_id: request.execution_id.clone(),
-                                root: root.clone(),
-                                program,
-                                args,
-                                timeout_seconds,
+                                checkout_id: checkout_id.to_owned(),
+                                execution_id: execution_id.to_owned(),
+                                root: command.root,
+                                program: command.program,
+                                args: command.args,
+                                timeout_seconds: command.timeout_seconds,
                                 started_at_ms,
                                 output_limit: MAX_VALIDATION_OUTPUT_BYTES,
-                                retain: Some(self.validation_output_dir(&checkout.id)),
+                                retain: command.retain,
+                                worktree: command.worktree,
                             },
                             &execution,
                         );
                     }
-                    Some((program, args, timeout_seconds)) => {
+                    Some(command) => {
                         let running = execution.clone();
-                        let step_execution = request.execution_id.clone();
-                        let retain = self.validation_output_dir(&checkout.id);
-                        let checkout_id = checkout.id.clone();
-                        let timeout = Duration::from_secs(u64::from(timeout_seconds));
+                        let step_execution = execution_id.to_owned();
+                        let checkout_id = checkout_id.to_owned();
+                        let timeout = Duration::from_secs(u64::from(command.timeout_seconds));
                         std::thread::spawn(move || {
                             // HS2-HTS89S: the group is recorded while it runs, so a
                             // later host can stop it if this process dies first.
                             let record = |pid| {
-                                if let Some(process) = super::step_process::step_process(pid) {
-                                    let _ =
-                                        registry.launched(&checkout_id, &step_execution, process);
-                                }
+                                super::step_process::record_step(
+                                    registry.clone(),
+                                    checkout_id.clone(),
+                                    step_execution.clone(),
+                                    pid,
+                                );
                             };
                             let outcome = execute_reporting(
-                                &root,
-                                &program,
-                                &args,
+                                &command.root,
+                                &command.program,
+                                &command.args,
                                 timeout,
                                 MAX_VALIDATION_OUTPUT_BYTES,
                                 started_at_ms,
                                 &running.cancel,
                                 &step_execution,
-                                Some(&retain),
+                                command.retain.as_deref(),
                                 &record,
                             );
+                            if let Some(worktree) = &command.worktree {
+                                worktree.remove();
+                            }
                             // Recorded before it is answered, so a restart right after
                             // still finds how it ended.
                             let _ = registry.finish(
@@ -789,7 +851,7 @@ impl OrchestrationRuntime {
                 execution
             }
         };
-        Ok(execution.reply(&request.execution_id, wait_ms))
+        Ok(execution.reply(execution_id, wait_ms))
     }
 
     /// The state of an execution this host process started, waiting a bounded time for

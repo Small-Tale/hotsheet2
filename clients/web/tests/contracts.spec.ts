@@ -35,7 +35,7 @@ test('all HTTP routes have concrete, compilable OpenAPI schemas', () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(318); // HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(319); // HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router)
     for (const [method] of Object.entries(methods)) {
       const operation = openapi.paths[path][method];
@@ -61,7 +61,7 @@ test('client contracts accept real ticket and replay responses', async () => {
     readFileSync(fileURLToPath(new URL('../../../crates/hotsheet-server/src/lib.rs', import.meta.url)), 'utf8'),
   );
   expect(Object.keys(openapi.paths).sort()).toEqual([...router.keys()].sort());
-  expect(Object.keys(openapi.paths)).toHaveLength(318); // HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
+  expect(Object.keys(openapi.paths)).toHaveLength(319); // HS2-G3VAK4 hosted target deployments, HS2-FJ6MDW hosted speculation setting, HS2-WDQZ37 hosted target CI gate, HS2-ZCR3Y7 kept validation output, HS2-D9ZGAE sync kick route, HS2-B6236S hosted target ticket cost, HS2-YYNW9F hosted validation profiles, HS2-7J2ZSE speculation policy and requests, HS2-JWV5S1 retired permission files, HS2-S3FKJ7 orchestration target lines, HS2-G1PKK2 hosted target resource wait, HS2-D85G19 hosted target ticket list, HS2-W27N1D project type and orchestration projects, HS2-J89JC7 orchestration timeline, HS2-HCW7MD orchestration planning, HS2-S13719 orchestration progress summary, HS2-ECWG50 orchestration scheduler, HS2-42TARA orchestration readiness plan, HS2-GDJXGZ orchestration sessions and hosted target sessions, HS2-WN0MXZ orchestration validation steps and hosted target validations, HS2-5JBYPV orchestration gate reads, HS2-WBREDM orchestration run reconciliation, HS2-J8PRTV target capacity and admission, HS2-AHG7HW orchestration tool capacity, signals and selection, HS2-7QHWHJ run events and hosted target events, HS2-EBHDSB orchestration runs and hosted target claims, HS2-AZ15GA orchestration target tickets and hosted target-ticket route, HS2-FMHH9Y resource claim routes, HS2-YCJDEB orchestration policy and dry-run, HS2-XHQ1EH orchestration permission requests and remembered rules, HS2-SBQ3T8 orchestration access check and audit journal, HS2-ADHFKZ ticket-store sync health route, HS2-9AN4DN live history route, HS2-ZTRF4Q live tokens route, HS2-9KZSD4 group merge and migrate routes, HS2-CPFBWP live CPU long poll, HS2-NHK8V8 disk choices, HS2-M8HHEA CI status report, HS2-DXM0YN device reject and long poll
   for (const [path, methods] of router) {
     const operations = openapi.paths[path] as Record<string, unknown>;
     const parameterNames = new Set(
@@ -1072,6 +1072,66 @@ test('HS2-WDQZ37 real hosted target gate responses match the OpenAPI contract', 
     const odd = await send('POST', hosted, { ...watch, repository: 'not a repository' });
     expect(odd.status).toBe(409);
     matches(gates, 'post', 'default', odd.body);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('HS2-G3VAK4 real hosted target deployment responses match the OpenAPI contract', async () => {
+  test.setTimeout(90_000);
+  const openapi = YAML.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/contracts/v1/openapi.yaml', import.meta.url)), 'utf8'),
+  ) as {
+    paths: Record<
+      string,
+      Record<string, { responses: Record<string, { content: Record<string, { schema: object }> }> }>
+    >;
+    components: object;
+  };
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const matches = (path: string, method: string, status: string, value: unknown) => {
+    const validate = ajv.compile({
+      ...openapi.paths[path][method].responses[status].content['application/json'].schema,
+      components: openapi.components,
+    });
+    expect(validate(value), `${method} ${path} ${status}: ${JSON.stringify(validate.errors)}`).toBe(true);
+  };
+  const server = await realTicketServer();
+  try {
+    const send = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${server.url}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    };
+    const deployments = '/checkouts/{checkout}/target-deployments';
+    const hosted = `/checkouts/${server.checkoutId}/target-deployments`;
+    const execution = '01ARZ3NDEKTSV4RRFFQ69G5FE8';
+    // Nothing has run under that id.
+    const unknown = await send('GET', `${hosted}?execution_id=${execution}`);
+    expect(unknown.status).toBe(200);
+    matches(deployments, 'get', '200', unknown.body);
+    expect(unknown.body).toEqual({ execution_id: execution, state: 'unknown' });
+    // The fixture project tracks no deploy script at that commit: refused, nothing runs.
+    const refused = await send('POST', hosted, {
+      execution_id: execution,
+      commit: 'a'.repeat(40),
+      script: 'scripts/deploy.sh',
+      environment: 'beta',
+    });
+    expect(refused.status).toBe(409);
+    matches(deployments, 'post', 'default', refused.body);
+    expect(refused.body.code).toBe('gate_deployment_script_untracked');
+    const invalid = await send('POST', hosted, {
+      execution_id: execution,
+      commit: 'a'.repeat(40),
+      script: '../deploy.sh',
+      environment: 'beta',
+    });
+    expect(invalid.status).toBe(400);
+    matches(deployments, 'post', 'default', invalid.body);
   } finally {
     await server.stop();
   }

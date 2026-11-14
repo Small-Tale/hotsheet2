@@ -21,6 +21,8 @@ use super::*;
 mod access;
 mod capacity;
 mod gates;
+#[cfg(unix)]
+mod hosted_deployments;
 mod hosted_gates;
 mod job_monitor;
 mod planning;

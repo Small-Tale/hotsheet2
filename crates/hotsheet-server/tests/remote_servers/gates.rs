@@ -25,7 +25,7 @@ fn ticket(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
 }
 
 /// Finish a watch Job with the verdict a monitor would record.
-fn judge(home: &std::path::Path, owner: &str, job_id: &str, gate: &str, head: &str) {
+pub(super) fn judge(home: &std::path::Path, owner: &str, job_id: &str, gate: &str, head: &str) {
     let store = JobStore::at(home);
     let (_, token) = store
         .acquire(
@@ -372,12 +372,13 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
             expected
         );
     }
-    // Approved and consumed. No deployment adapter exists here, and the gate says so.
+    // Approved and consumed. The target's machine runs only a tracked script
+    // (HS2-G3VAK4); this target tracks none, and the gate says so.
     let approved = call(request.clone());
     assert_eq!(approved["gate"]["state"], "unknown");
     assert_eq!(
         approved["gate"]["reason"],
-        "deployment_executor_unavailable"
+        "gate_deployment_script_untracked"
     );
     assert_eq!(call(request)["gate"]["state"], "unknown");
     assert_eq!(

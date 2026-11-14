@@ -1732,8 +1732,9 @@ short or symbolic name is refused.
 | `superseded`        | The link no longer stands for the run                  | nothing                                                             |
 
 Reason codes for `unknown` include `not_watched`, `watch_lost`, `watch_cancelled`,
-`gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering` and
-`deployment_executor_unavailable`.
+`gate_provider_unavailable`, `evidence_missing`, `evidence_not_covering`,
+`deployment_executor_unavailable`, `deployment_start_unconfirmed`,
+`gate_deployment_script_untracked` and `execution_lost` (HS2-G3VAK4).
 
 Readings can arrive late, twice or out of order. A reading whose evidence ranks
 below the recorded evidence (an older run, or an earlier attempt of the same run) is
@@ -1829,11 +1830,44 @@ its repository root, and an operation id.
   with a deployment in progress refuses a second with `gate_deployment_active`.
 - **Result.** Only a deployment adapter's typed evidence settles the gate.
 
-No deployment adapter ships. This repository has no hosted deployment
-(`AGENTS.md`, HS2-51HMCC), so an authorized deployment is recorded as `unknown` with
-`deployment_executor_unavailable`: allowed, and not run. Running the target's script
-on the target's server with target-scoped credentials, after verifying that it is
-tracked at the gated commit, is HS2-G3VAK4.
+### The target's own deploy script (HS2-G3VAK4)
+
+The `target-script` provider runs the target's checked-in deploy script on the
+machine that hosts the target, never from the orchestrating machine's checkout and
+never from anyone's working tree. Once `gate_deploy` passed the permission gate, the
+orchestrator sends the deployment to the target's destination (the same machine
+for a local target, the reviewed transport for a remote one):
+
+- **Hosted half.** `POST /checkouts/{checkout}/target-deployments` with
+  `{execution_id, commit, script, environment, wait_ms}`, where `execution_id` is
+  the gate's id. The host checks that the commit exists in the hosted checkout and
+  that the script is tracked there as an executable file (mode `100755`); anything
+  else is refused with `gate_deployment_script_untracked` (409) and nothing runs. It
+  checks the commit out into a private detached worktree under
+  `${HOTSHEET_HOME}/orchestration-deployments/`, runs `<script> <environment>` in it
+  as a hosted execution and removes the worktree when it ends. A hosted execution
+  is the same as a validation step's: the step environment of §26.12 (an allowlist
+  plus its ids, never the orchestrating machine's credentials), its own process
+  group, a detached runner where available, at most an hour, recorded once under
+  the gate's id so a repeat never runs it twice. No copy of its output is kept: a
+  deployment's output may name secrets. The script uses the credentials the hosting
+  machine's own user has (for example a cloud CLI's login under `HOME`).
+  `GET ...?execution_id=&wait_ms=` reads it, a long poll of at most 8 seconds.
+- **Gate.** Running is `pending`; exit 0 is `passed` and anything else `failed`
+  (reason `deployment_<end>`), each with evidence of the provider, the execution id,
+  the exit code, `duration_ms`, the deployed commit (exact: the worktree held that
+  commit) and the artifact the deployment was authorized for. A refused script is
+  `unknown` with `gate_deployment_script_untracked`; a runner that died without an
+  end is `unknown` with `execution_lost`. Gate sync and the follower read it as
+  they read a hosted CI gate.
+- **Repeats.** The same request again asks nobody and starts nothing. A start the
+  host did not confirm (unreachable) is `unknown` with
+  `deployment_start_unconfirmed`, and the same request sends it again as a
+  continuation of the decision already made, so nobody is asked twice.
+- A provider name no adapter serves is still recorded as `unknown` with
+  `deployment_executor_unavailable`: allowed, and not run. Reading a hosted
+  deployment during run reconciliation is HS2-WZ0NKH; per-target secret variables
+  for the script are not provided.
 
 ### Watched where the target lives (HS2-WDQZ37)
 
@@ -1869,8 +1903,8 @@ repository, workflow, branch, again}` starts or finds the watch Job in the hosti
   gate as it stands: a sync returns it unchanged, and the follower spends the rest
   of its wait on this machine's records instead of asking again at once. A host that
   answers a wait at once with nothing new is treated the same way.
-- Deployment gates are unchanged: their execution on the target's server is
-  HS2-G3VAK4.
+- Deployment gates of the `target-script` provider are always run and read on the
+  target's machine, local or remote (HS2-G3VAK4, below).
 
 ### Artifact identity (HS2-3YC577)
 
@@ -1995,9 +2029,10 @@ target, and only a finished one is watched again.
 ### Deployments (HS2-BYEB60)
 
 The deployment source reads the run's standing deployment gates by their retained
-operation ids. No deployment executor ships (§26.13, HS2-G3VAK4), so for most
-requests the only thing reconciliation can verify is that nothing was executed, and
-it says so in the finding's reason:
+operation ids. A `target-script` deployment runs on the target's machine
+(§26.13, HS2-G3VAK4) and is not yet read from there during reconciliation
+(HS2-WZ0NKH); for a provider no adapter serves, the only thing reconciliation can
+verify is that nothing was executed, and it says so in the finding's reason:
 
 | A standing deployment gate                                 | Finding                                      |
 | ---------------------------------------------------------- | -------------------------------------------- |

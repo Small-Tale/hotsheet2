@@ -3598,6 +3598,80 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-deployments:
+    description:
+      The hosted half of a `target-script` deployment gate (HS2-G3VAK4). The machine that hosts the target runs its
+      own deploy script, tracked as an executable file at the gate's commit, in a private worktree of that commit,
+      with the step environment and no output kept. The same execution id never runs twice. A script the commit does
+      not track is refused with `gate_deployment_script_untracked` (409). Ordinary authenticated project data; the
+      orchestrating machine passed `deployments_run` first.
+    post:
+      operationId: startHostedTargetDeployment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedDeploymentStart'
+      responses:
+        '200':
+          description: The execution, started or found, waited on for at most `wait_ms`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    get:
+      operationId: readHostedTargetDeployment
+      parameters:
+        - name: execution_id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        - name: wait_ms
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 8000
+            default: 0
+      responses:
+        '200':
+          description: The execution, waited on for at most `wait_ms`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
   /checkouts/{checkout}/target-gates:
     description:
       The hosted half of a remote target's CI gate (HS2-WDQZ37). The machine that hosts the target watches the gate's
@@ -21427,6 +21501,10 @@ components:
           $ref: '#/components/schemas/OrchestrationGateArtifact'
         exit_code:
           type: integer
+        duration_ms:
+          description: How long a deployment execution ran (HS2-G3VAK4).
+          type: integer
+          minimum: 0
         at_ms:
           type: integer
           minimum: 0
@@ -24994,6 +25072,33 @@ components:
           maximum: 4194304
         content_base64:
           type: string
+      additionalProperties: false
+    HostedDeploymentStart:
+      description: Run one deployment on the machine that hosts the target (HS2-G3VAK4).
+      type: object
+      required:
+        - execution_id
+        - commit
+        - script
+        - environment
+      properties:
+        execution_id:
+          description: The deployment gate's id.
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        commit:
+          type: string
+          pattern: ^[0-9a-fA-F]{40}$
+        script:
+          description: The target's checked-in deploy script, relative to its repository root.
+          type: string
+        environment:
+          description: Passed to the script as its only argument.
+          type: string
+        wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 8000
       additionalProperties: false
     HostedGateWatch:
       description: Which CI gate a hosting machine watches (HS2-WDQZ37).

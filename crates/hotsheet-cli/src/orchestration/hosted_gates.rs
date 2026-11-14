@@ -76,6 +76,23 @@ pub(super) struct HostedRefresh {
     pub watching: Option<bool>,
 }
 
+/// Whether a gate is read from the machine at `destination`: a `github-actions` CI
+/// gate of a target on another machine (HS2-WDQZ37), and every `target-script`
+/// deployment gate, wherever its target is, because the script only ever runs where
+/// the target lives (HS2-G3VAK4).
+pub(super) fn hosted_on(destination: &TargetDestination, gate: &Gate) -> bool {
+    match gate.kind {
+        GateKind::Ci => {
+            gate.provider == GITHUB_ACTIONS_KIND
+                && gate.ci.is_some()
+                && matches!(destination, TargetDestination::Remote { .. })
+        }
+        GateKind::Deployment => {
+            gate.provider == super::gates::TARGET_SCRIPT_PROVIDER && gate.deployment.is_some()
+        }
+    }
+}
+
 /// A hosted read that came back before half the wait it was asked for, unchanged, did
 /// not wait: asking again at once would spin.
 pub(super) fn hosted_did_not_wait(asked: Instant, wait_ms: u64) -> bool {
@@ -267,15 +284,21 @@ impl OrchestrationRuntime {
     /// a target bound to another machine. A same-machine target keeps the local
     /// adapter, which reads the same Job store.
     pub(super) fn hosted_gate_destination<'a>(
+        &self,
         authorized: &'a Authorized,
         gate: &Gate,
     ) -> Option<&'a TargetDestination> {
-        if gate.kind != GateKind::Ci || gate.provider != GITHUB_ACTIONS_KIND || gate.ci.is_none() {
-            return None;
-        }
         Self::destination(authorized)
             .ok()
-            .filter(|destination| matches!(destination, TargetDestination::Remote { .. }))
+            .filter(|destination| self.hosted(destination, gate))
+    }
+
+    /// [`hosted_on`], unless an adapter registered on this runtime serves the gate's
+    /// deployment provider itself (tests, embedders).
+    pub(super) fn hosted(&self, destination: &TargetDestination, gate: &Gate) -> bool {
+        hosted_on(destination, gate)
+            && !(gate.kind == GateKind::Deployment
+                && self.gate_provider(&gate.provider, gate.kind).is_some())
     }
 
     /// Ask the hosting machine about one gate: start its watch (`start` = `Some(again)`)
@@ -361,14 +384,27 @@ impl OrchestrationRuntime {
         wait_ms: u64,
         tx: &mut Transaction<'_>,
     ) -> Result<HostedRefresh, OrchestrationError> {
-        if matches!(
+        let settled = matches!(
             gate.state,
             GateState::Superseded | GateState::AwaitingApproval | GateState::Passed
-        ) {
+        ) || (gate.kind == GateKind::Deployment && gate.state == GateState::Failed);
+        if settled {
             return Ok(HostedRefresh {
                 gate,
                 changed: false,
                 cursor: None,
+                watching: None,
+            });
+        }
+        // HS2-G3VAK4: a deployment is read by its execution; a wait is its long poll.
+        if gate.kind == GateKind::Deployment {
+            let wait_ms = if after.is_some() { wait_ms } else { 0 };
+            let (gate, changed) =
+                self.deployment_refresh_hosted(gate, destination, false, wait_ms, tx)?;
+            return Ok(HostedRefresh {
+                gate,
+                changed,
+                cursor: Some(0),
                 watching: None,
             });
         }

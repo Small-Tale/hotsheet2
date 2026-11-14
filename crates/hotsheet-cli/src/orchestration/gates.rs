@@ -30,6 +30,9 @@ use super::*;
 
 /// The provider name of deployments run by the target's own checked-in script.
 pub const TARGET_SCRIPT_PROVIDER: &str = "target-script";
+/// HS2-G3VAK4: a deployment start the hosting machine did not confirm.
+const DEPLOYMENT_START_UNCONFIRMED: &str = "deployment_start_unconfirmed";
+
 /// The longest a sync or a follow step waits for a provider's records to change.
 pub const MAX_GATE_WAIT_MS: u64 = 20_000;
 /// A follower re-confirms its authority this often.
@@ -185,6 +188,7 @@ impl GateProvider for GithubActionsGates {
                     })
                     .filter(ArtifactRef::is_valid),
                 exit_code: None,
+                duration_ms: None,
                 at_ms: self.store.now_ms(),
             }
         };
@@ -326,8 +330,8 @@ pub struct RunGates {
 #[derive(Default)]
 pub struct GateFollowState {
     authorized: BTreeMap<String, (bool, u64)>,
-    /// HS2-WDQZ37: targets on another machine, as last authorized: their CI gates are
-    /// read from, and waited on at, the hosting machine.
+    /// HS2-WDQZ37, HS2-G3VAK4: each target's destination as last authorized; the gates
+    /// `hosted_on` it are read from, and waited on at, the machine hosting the target.
     remote: BTreeMap<String, TargetDestination>,
     /// HS2-VVHVF0: the delay after the last failed observer start, and when the next
     /// start may be tried.
@@ -629,9 +633,10 @@ impl OrchestrationRuntime {
             // HS2-WDQZ37: a target on another machine is watched there, with that
             // machine's provider credentials.
             let hosted =
-                Self::hosted_gate_destination(&authorized, &linked.gate).map(|destination| {
-                    self.hosted_gate_call(destination, &linked.gate, Some(again), None, 0, tx)
-                });
+                self.hosted_gate_destination(&authorized, &linked.gate)
+                    .map(|destination| {
+                        self.hosted_gate_call(destination, &linked.gate, Some(again), None, 0, tx)
+                    });
             let (gate, watching) = match hosted {
                 Some(Ok(reply)) => {
                     let (gate, _) = self.gate_record_hosted(linked.gate, &reply, tx)?;
@@ -698,7 +703,7 @@ impl OrchestrationRuntime {
             let mut changed = Vec::new();
             // HS2-WDQZ37: a CI gate of a target on another machine is read from, and
             // waited on at, that machine.
-            let remote = |gate: &Gate| Self::hosted_gate_destination(&authorized, gate);
+            let remote = |gate: &Gate| self.hosted_gate_destination(&authorized, gate);
             let refresh = |tx: &mut Transaction<'_>| -> Result<_, OrchestrationError> {
                 let gates = self.gate_registry().list(owner_id, &filter)?;
                 let mut moved = Vec::new();
@@ -871,12 +876,12 @@ impl OrchestrationRuntime {
                         .as_ref()
                         .and_then(|authorized| Self::destination(authorized).ok())
                     {
-                        Some(destination @ TargetDestination::Remote { .. }) => {
+                        Some(destination) => {
                             state
                                 .remote
                                 .insert(gate.target_id.clone(), destination.clone());
                         }
-                        _ => {
+                        None => {
                             state.remote.remove(&gate.target_id);
                         }
                     }
@@ -892,11 +897,7 @@ impl OrchestrationRuntime {
                 let destination = state
                     .remote
                     .get(&gate.target_id)
-                    .filter(|_| {
-                        gate.kind == GateKind::Ci
-                            && gate.provider == GITHUB_ACTIONS_KIND
-                            && gate.ci.is_some()
-                    })
+                    .filter(|destination| self.hosted(destination, &gate))
                     .cloned();
                 if let Some(destination) = destination {
                     match self.gate_refresh_hosted(gate.clone(), &destination, None, 0, tx) {
@@ -1016,6 +1017,28 @@ impl OrchestrationRuntime {
 
     // ---- Deployments ----
 
+    /// HS2-G3VAK4: send an authorized target-script deployment to the machine that
+    /// hosts its target and record what it answers. A start the host did not confirm
+    /// leaves the gate unknown with `deployment_start_unconfirmed`, which the same
+    /// request sends again.
+    fn deployment_start(
+        &self,
+        gate: Gate,
+        destination: &TargetDestination,
+        tx: &mut Transaction<'_>,
+    ) -> Gate {
+        match self.deployment_refresh_hosted(gate.clone(), destination, true, 0, tx) {
+            Ok((gate, _)) => gate,
+            Err(_) => self
+                .gate_record(
+                    gate.clone(),
+                    GateReading::new(GateState::Unknown).reason(DEPLOYMENT_START_UNCONFIRMED),
+                    tx,
+                )
+                .map_or(gate, |(gate, _)| gate),
+        }
+    }
+
     /// Ask for a deployment of the commit the run's CI gate passed, through the
     /// target's checked-in script.
     ///
@@ -1024,9 +1047,11 @@ impl OrchestrationRuntime {
     /// asks a person through a permission request unless a remembered rule allows it
     /// (HS2-XHQ1EH). A production deployment cannot be undone, so it asks for each
     /// operation whatever is remembered. While waiting the gate is
-    /// `awaiting_approval`; repeating the request after the answer moves it on. A registered deployment
-    /// adapter then runs it and reports typed evidence. Without one the gate is
-    /// `unknown` with `deployment_executor_unavailable`: authorized, and not run.
+    /// `awaiting_approval`; repeating the request after the answer moves it on. The
+    /// `target-script` provider then runs the target's own tracked script on the
+    /// machine that hosts the target (HS2-G3VAK4); another provider is run by its
+    /// registered adapter. Without one the gate is `unknown` with
+    /// `deployment_executor_unavailable`: authorized, and not run.
     pub fn gate_deploy(
         &self,
         owner_id: &str,
@@ -1140,6 +1165,34 @@ impl OrchestrationRuntime {
             if !same {
                 return Err(OrchestrationError::Conflict);
             }
+            // HS2-G3VAK4: a target-script start the host never confirmed is sent again
+            // under the same operation, as a continuation: no one is asked again, and
+            // the host never runs one gate twice.
+            let unconfirmed = name == TARGET_SCRIPT_PROVIDER
+                && self.gate_provider(&name, GateKind::Deployment).is_none()
+                && gate.state == GateState::Unknown
+                && matches!(
+                    gate.reason.as_deref(),
+                    Some("deployment_starting" | DEPLOYMENT_START_UNCONFIRMED)
+                );
+            if unconfirmed {
+                let mut again = ActionRequest {
+                    irreversible: request.production,
+                    ..ActionRequest::new(TargetAction::DeploymentsRun)
+                        .operation(request.operation_id.clone())
+                };
+                again.continuing = true;
+                let authorized = self.authorize(&target, actor, again, tx)?;
+                let outcome = Self::destination(&authorized).cloned().map(|destination| {
+                    view(
+                        self.deployment_start(gate.clone(), &destination, tx),
+                        false,
+                        None,
+                    )
+                });
+                self.finish(&target, &authorized, &outcome, tx)?;
+                return outcome;
+            }
             if gate.state != GateState::AwaitingApproval {
                 // Already answered: a repeat asks nobody again and starts nothing.
                 return Ok(view(gate.clone(), false, None));
@@ -1197,6 +1250,11 @@ impl OrchestrationRuntime {
         };
         let outcome = (|| {
             let executor = self.gate_provider(&name, GateKind::Deployment);
+            // HS2-G3VAK4: the target's own script runs on the machine that hosts it.
+            let hosted = (name == TARGET_SCRIPT_PROVIDER && executor.is_none())
+                .then(|| Self::destination(&authorized).ok().cloned())
+                .flatten();
+            let available = executor.is_some() || hosted.is_some();
             // Authorized. A gate that waited moves on; a new one starts where it stands.
             let (mut gate, created) = match existing {
                 Some(gate) => (gate, false),
@@ -1205,7 +1263,7 @@ impl OrchestrationRuntime {
                         owner_id,
                         new(
                             GateState::Unknown,
-                            Some(if executor.is_some() {
+                            Some(if available {
                                 "deployment_starting"
                             } else {
                                 "deployment_executor_unavailable"
@@ -1222,16 +1280,19 @@ impl OrchestrationRuntime {
                 }
             };
             if gate.state == GateState::AwaitingApproval {
-                let (to, reason) = match executor {
-                    Some(_) => (GateState::Pending, None),
-                    None => (GateState::Unknown, Some("deployment_executor_unavailable")),
+                let (to, reason) = if available {
+                    (GateState::Pending, None)
+                } else {
+                    (GateState::Unknown, Some("deployment_executor_unavailable"))
                 };
                 gate = registry
                     .resolve_approval(owner_id, &gate.gate_id, to, reason, tx)?
                     .0;
                 self.gate_event(&gate, RunEventSource::Orchestrator);
             }
-            if let Some(executor) = executor {
+            if let Some(destination) = &hosted {
+                gate = self.deployment_start(gate, destination, tx);
+            } else if let Some(executor) = executor {
                 let started = executor.start(&gate, &run, false);
                 gate = self.gate_refresh(gate, tx)?.0;
                 started.map_err(OrchestrationError::Gate)?;

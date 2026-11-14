@@ -14,6 +14,14 @@ fn github(commit: &str) -> LinkGate {
     serde_json::from_value(json!({"commit": commit, "repository": "example/widgets"})).unwrap()
 }
 
+/// HS2-G3VAK4: a deployment for a provider no adapter serves here, so it is approved
+/// and never executed (the `target-script` provider now runs on the target's machine).
+fn unrun(operation: &str, production: bool) -> RequestDeployment {
+    let mut request = super::gates::deploy(operation, production);
+    request.provider = Some("synthetic-deployer".into());
+    request
+}
+
 #[test]
 fn hs2_7qnk7y_reconciliation_reads_the_ci_runs_gating_a_run() {
     let mut rng = Rng(100);
@@ -153,7 +161,7 @@ fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
         .gate_deploy(
             &owner,
             &run,
-            deploy("deploy-prod", true),
+            unrun("deploy-prod", true),
             Some(&worker()),
             &mut tx,
         )
@@ -178,7 +186,7 @@ fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
         .gate_deploy(
             &owner,
             &run,
-            deploy("deploy-prod", true),
+            unrun("deploy-prod", true),
             Some(&worker()),
             &mut tx,
         )
