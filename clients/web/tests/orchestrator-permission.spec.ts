@@ -149,6 +149,11 @@ test('keeps an orchestrator card out of the project auto-allow (HS2-42WS4Z)', as
       await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeVisible();
       await expect(popup).not.toContainText('Auto-allow in');
       await expect(popup.getByRole('button', { name: 'Stop auto-allow Countdown' })).toHaveCount(0);
+      // The popup moves between layers when the width changes; capture once it settles.
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => animation.playState !== 'running'),
+      );
+      await expect(popup).toBeVisible();
       await popup.screenshot({ path: `target/visual-captures/hs2-42ws4z-card-${width}.png` });
     }
     // Still waiting on the server: nothing answered it automatically.
