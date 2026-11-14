@@ -33,6 +33,12 @@ pub fn resolve_backend(
     Ok(Arc::new(LocalBackend::machine(home)))
 }
 
+/// HS2-YDZAFH: every namespace this machine's claim backend keeps state for, sorted.
+/// Namespaces are machine-scoped, so the machine backend answers for all of them.
+pub fn held_namespaces(home: &Path) -> Result<Vec<Namespace>, ClaimError> {
+    LocalBackend::machine(home).namespaces()
+}
+
 /// The live claim on `<namespace>/<resource>`, if any, without acquiring it. A scheduler
 /// counts `Some` as unavailable capacity until `expires_at_ms`.
 pub fn held(home: &Path, target: &ResourceRef) -> Result<Option<Claim>, ClaimError> {
@@ -202,6 +208,11 @@ impl ClaimService {
     /// Every live claim in a namespace.
     pub fn list(&self, namespace: &Namespace) -> Result<Vec<Claim>, ClaimError> {
         self.backend(namespace)?.list(namespace)
+    }
+
+    /// HS2-YDZAFH: every namespace with state on this machine.
+    pub fn namespaces(&self) -> Result<Vec<Namespace>, ClaimError> {
+        held_namespaces(&self.home)
     }
 
     fn status_json(&self, target: &ResourceRef, claim: Option<Claim>) -> Result<Value, ClaimError> {

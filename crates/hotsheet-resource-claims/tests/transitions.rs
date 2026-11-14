@@ -628,3 +628,46 @@ fn hs2_h3wppy_the_machine_key_file_is_private_and_stable() {
         "corrupt"
     );
 }
+
+/// HS2-YDZAFH: the backend enumerates the namespaces it keeps state for, sorted, without
+/// creating anything; a directory that is not a namespace name is not one. A namespace
+/// stays listed after its claims are released or expire (it simply holds none).
+#[test]
+fn hs2_ydzafh_the_backend_enumerates_its_namespaces() {
+    let f = fixture();
+    let root = f.dir.path().join("resource-claims");
+    assert_eq!(f.backend.namespaces().unwrap(), Vec::<Namespace>::new());
+    assert!(!root.exists(), "an enumeration creates nothing");
+    let vm = f.backend.acquire(&target("vms/mac-1"), &lease(60)).unwrap();
+    f.backend.acquire(&target("gpu/a100"), &lease(60)).unwrap();
+    f.backend.acquire(&target("vms/mac-2"), &lease(60)).unwrap();
+    let names = |f: &Fixture| {
+        f.backend
+            .namespaces()
+            .unwrap()
+            .into_iter()
+            .map(|namespace| namespace.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&f), ["gpu", "vms"]);
+    // Foreign entries next to the namespaces are ignored.
+    std::fs::create_dir_all(root.join("namespaces/Not A Namespace")).unwrap();
+    std::fs::write(root.join("namespaces/stray.txt"), b"x").unwrap();
+    assert_eq!(names(&f), ["gpu", "vms"]);
+    // Released and expired: still a namespace, now without live claims.
+    f.backend.release(&vm.renewal_token).unwrap();
+    f.clock.advance_ms(61_000);
+    assert_eq!(names(&f), ["gpu", "vms"]);
+    for namespace in f.backend.namespaces().unwrap() {
+        assert!(f.backend.list(&namespace).unwrap().is_empty());
+    }
+    // Refilled.
+    f.backend.acquire(&target("vms/mac-1"), &lease(60)).unwrap();
+    assert_eq!(
+        f.backend
+            .list(&Namespace::parse("vms").unwrap())
+            .unwrap()
+            .len(),
+        1
+    );
+}

@@ -336,6 +336,31 @@ impl ClaimBackend for LocalBackend {
         Ok(claims)
     }
 
+    fn namespaces(&self) -> Result<Vec<Namespace>, ClaimError> {
+        let entries = match std::fs::read_dir(self.root.join("namespaces")) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        let mut names = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            // A directory that is not a namespace name was not written by this backend.
+            if let Some(name) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| Namespace::parse(name).ok())
+            {
+                names.push(name);
+            }
+        }
+        names.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        Ok(names)
+    }
+
     fn wait_free(
         &self,
         target: &ResourceRef,

@@ -526,6 +526,29 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
     assert_eq!(snapshot["checkout_id"], checkout.id.as_str());
     assert_eq!(snapshot["memory"]["free_mb"], 6000);
     assert_eq!(snapshot["claims"], json!([]));
+    // HS2-YDZAFH: a claim held on this machine is listed by every client when no
+    // namespace is named: the stdio MCP tool, the HTTP route and the CLI.
+    hotsheet_resource_claims::ClaimService::new(&home)
+        .acquire(
+            &hotsheet_resource_claims::ResourceRef::parse("vm/macos-vm").unwrap(),
+            std::time::Duration::from_secs(600),
+            None,
+            &std::collections::BTreeMap::new(),
+        )
+        .unwrap();
+    let all = call(json!({"action":"capacity","target_id":TARGET}));
+    assert_eq!(all["claim_namespaces"], json!(["vm"]));
+    assert_eq!(all["claims"][0]["resource"], "macos-vm");
+    let (status, read) = api(
+        router.clone(),
+        "GET",
+        &format!("{target}/capacity?actor_id=scheduler-1&actor_role=ai"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(read["claims"][0]["namespace"], "vm");
     let decision = call(json!({"action":"admission_check","target_id":TARGET,
         "tool":"codex","sessions":4}));
     assert_eq!(decision["outcome"], "reduced");

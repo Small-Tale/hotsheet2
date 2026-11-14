@@ -118,6 +118,10 @@ pub(super) fn capacity_after(after: Option<&str>) -> Result<Option<&str>, Orches
     }
 }
 
+/// HS2-YDZAFH: the most namespaces a capacity read that names none enumerates; beyond
+/// it the claims read as unknown rather than as a partial list.
+pub const MAX_ENUMERATED_NAMESPACES: usize = 64;
+
 /// Parse `a,b` into distinct claim namespaces. An invalid name is the caller's error.
 pub(super) fn claim_namespaces(text: Option<&str>) -> Result<Vec<String>, OrchestrationError> {
     let mut names: Vec<String> = Vec::new();
@@ -169,6 +173,25 @@ impl OrchestrationRuntime {
         if namespaces.is_empty() {
             return (None, None);
         }
+        self.held_in(namespaces)
+    }
+
+    /// HS2-YDZAFH: the namespaces a capacity read covers: the named ones, or, when none
+    /// is named, every namespace with claim state on this machine. `None` when they
+    /// cannot be enumerated or there are more than [`MAX_ENUMERATED_NAMESPACES`]: the
+    /// claims are then unknown, never a partial list.
+    fn claim_scope(&self, named: &[String]) -> Result<Vec<String>, OfflinePolicy> {
+        if !named.is_empty() {
+            return Ok(named.to_vec());
+        }
+        match self.claims.namespaces() {
+            Ok(all) if all.len() <= MAX_ENUMERATED_NAMESPACES => Ok(all),
+            Ok(_) => Err(OfflinePolicy::FailClosed),
+            Err(unreachable) => Err(unreachable.offline),
+        }
+    }
+
+    fn held_in(&self, namespaces: &[String]) -> (Option<Vec<HeldClaim>>, Option<OfflinePolicy>) {
         let mut held = Vec::new();
         let mut offline: Option<OfflinePolicy> = None;
         for name in namespaces {
@@ -194,12 +217,21 @@ impl OrchestrationRuntime {
         namespaces: &[String],
     ) -> Result<CapacitySnapshot, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
-        let (claims, offline) = self.held_claims(namespaces);
+        // HS2-YDZAFH: with no namespace named, every held claim of this machine.
+        let (scope, claims, offline) = match self.claim_scope(namespaces) {
+            Ok(scope) if scope.is_empty() => (scope, Some(Vec::new()), None),
+            Ok(scope) => {
+                let (claims, offline) = self.held_claims(&scope);
+                (scope, claims, offline)
+            }
+            // Unknown, exactly as a read that named nothing reported before.
+            Err(_) => (namespaces.to_vec(), None, None),
+        };
         Ok(CapacitySnapshot::new(
             self.server_id.clone(),
             checkout.id.clone(),
             self.capacity.observe(&checkout),
-            namespaces.to_vec(),
+            scope,
             claims,
         )
         .with_claims_offline(offline)

@@ -448,7 +448,8 @@ mod server {
         assert_eq!(snapshot["cpu"]["load_percent"], 12);
         assert_eq!(snapshot["disk"]["free_mb"], 60 * 1024);
         assert_eq!(snapshot["sessions"], json!([]));
-        assert_eq!(snapshot["claims"], Value::Null);
+        // HS2-YDZAFH: no namespace named and none held on this machine.
+        assert_eq!(snapshot["claims"], json!([]));
         assert_eq!(
             snapshot["tools"],
             json!([{"tool":"codex","installed":true,"configured":true},

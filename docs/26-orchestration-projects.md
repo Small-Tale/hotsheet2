@@ -940,16 +940,16 @@ A snapshot is what the server hosting a checkout measured just now. Megabytes an
 percent are integers. A value the host could not measure is `null`; nothing is
 estimated in its place.
 
-| Field                                  | Meaning                                                                                                |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `server_id`, `checkout_id`             | The machine identity and the hosted checkout the snapshot is for                                       |
-| `sampled_at_ms`                        | When the shared reading was taken                                                                      |
-| `memory.free_mb`, `memory.total_mb`    | Memory a new process could use without swapping, and physical memory                                   |
-| `cpu.load_percent`, `cpu.logical_cpus` | Whole-machine busy share over a 250 ms window, and the core count                                      |
-| `disk.free_mb`, `disk.total_mb`        | The volume that holds the checkout                                                                     |
-| `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured` |
-| `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                    |
-| `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the namespaces the caller named                  |
+| Field                                  | Meaning                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `server_id`, `checkout_id`             | The machine identity and the hosted checkout the snapshot is for                                         |
+| `sampled_at_ms`                        | When the shared reading was taken                                                                        |
+| `memory.free_mb`, `memory.total_mb`    | Memory a new process could use without swapping, and physical memory                                     |
+| `cpu.load_percent`, `cpu.logical_cpus` | Whole-machine busy share over a 250 ms window, and the core count                                        |
+| `disk.free_mb`, `disk.total_mb`        | The volume that holds the checkout                                                                       |
+| `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured`   |
+| `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                      |
+| `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the named namespaces, or in every one (HS2-YDZAFH) |
 
 - **Tools** come from the plugin registry. A tool is installed when its program is on
   the server's `PATH`; nothing is executed to find out, so
@@ -961,8 +961,11 @@ estimated in its place.
   platform or the journal cannot supply it. `on_checkout` says whether the session was
   started inside the checkout.
 - **Claims** are reported for the namespaces the caller names with `claim_namespaces`
-  (at most eight). The claims API cannot enumerate namespaces yet (HS2-YDZAFH), so
-  without a name `claims` is `null`, not an empty list. When a named namespace's
+  (at most eight). Without a name, every namespace with claim state on the machine is
+  enumerated (`ClaimBackend::namespaces`, HS2-YDZAFH) and `claim_namespaces` lists the
+  ones covered, so `claims` is every held claim, an empty list when none is held. More
+  than 64 namespaces, or a claim source that cannot enumerate, reads as `null`, never
+  a partial list. When a named namespace's
   backend cannot be read, `claims` is `null` as a whole and `claims_offline` says
   what that backend's configuration asks for meanwhile (`fail_closed` or
   `provisional`, §26.20); the member is absent otherwise.

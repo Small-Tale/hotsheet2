@@ -42,6 +42,11 @@ pub trait ClaimBackend: Send + Sync {
     /// Every live claim in a namespace, by resource name.
     fn list(&self, namespace: &Namespace) -> Result<Vec<Claim>, ClaimError>;
 
+    /// HS2-YDZAFH: every namespace this backend keeps state for, sorted. A namespace in
+    /// the list may hold no live claim; one that is not listed holds none. Never
+    /// creates anything.
+    fn namespaces(&self) -> Result<Vec<Namespace>, ClaimError>;
+
     /// Block until the resource is free or `timeout` passes, without acquiring it.
     fn wait_free(&self, target: &ResourceRef, timeout: Duration)
     -> Result<WaitOutcome, ClaimError>;

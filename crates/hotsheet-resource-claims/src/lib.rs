@@ -31,7 +31,7 @@ pub use model::{
     validate_metadata,
 };
 pub use service::{
-    ClaimService, ROUTE_PREFIX, TOKEN_ROUTE_PREFIX, held, http_status, is_path, parse_duration,
-    resolve_backend, wait_until_free,
+    ClaimService, ROUTE_PREFIX, TOKEN_ROUTE_PREFIX, held, held_namespaces, http_status, is_path,
+    parse_duration, resolve_backend, wait_until_free,
 };
 pub use token::{MAX_RENEWAL_TOKEN_LEN, RenewalTokenClaims, parse_renewal_token};

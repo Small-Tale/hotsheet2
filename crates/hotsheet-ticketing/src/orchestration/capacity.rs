@@ -112,9 +112,11 @@ pub struct CapacitySnapshot {
     pub disk: DiskCapacity,
     pub tools: Option<Vec<ToolAvailability>>,
     pub sessions: Option<Vec<SessionFootprint>>,
-    /// Live claims in the namespaces the caller named; `None` when it named none or
-    /// they could not be read.
+    /// Live claims in `claim_namespaces`: the namespaces the caller named or, when it
+    /// named none, every namespace with claim state on the machine (HS2-YDZAFH). `None`
+    /// when they could not be read or enumerated.
     pub claims: Option<Vec<HeldClaim>>,
+    /// The namespaces `claims` covers.
     pub claim_namespaces: Vec<String>,
     /// HS2-2FG91X: set when a named namespace's backend could not be reached, with
     /// what its configuration says to do meanwhile. `claims` is then `None`.

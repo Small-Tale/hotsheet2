@@ -179,10 +179,10 @@ fn hs2_j8prtv_local_target_capacity_and_admission_pass_the_gate_and_the_targets_
     assert_eq!(snapshot.cpu.load_percent, Some(10));
     assert_eq!(snapshot.disk.free_mb, Some(60_000));
     assert_eq!(snapshot.sessions, Some(Vec::new()));
-    // No namespace named: claims are unknown, not an empty list.
+    // HS2-YDZAFH: no namespace named lists every held claim; none is held yet.
     assert_eq!(
         (snapshot.claims, snapshot.claim_namespaces.len()),
-        (None, 0)
+        (Some(Vec::new()), 0)
     );
     assert_eq!(
         m.last_audit(),
@@ -214,6 +214,13 @@ fn hs2_j8prtv_local_target_capacity_and_admission_pass_the_gate_and_the_targets_
         (held[0].namespace.as_str(), held[0].resource.as_str()),
         ("builds", "ios-simulator")
     );
+    // HS2-YDZAFH: named nowhere, the same claim is found by enumeration.
+    let all = m
+        .runtime
+        .target_capacity(&target, &[], Some(&worker()), &mut tx)
+        .unwrap();
+    assert_eq!(all.claim_namespaces, ["builds"]);
+    assert_eq!(all.claims.as_ref().map(Vec::len), Some(1));
     // A claim is a namespace, a resource and an expiry: never its token or metadata.
     let wire = serde_json::to_value(&held[0]).unwrap();
     let mut keys: Vec<_> = wire.as_object().unwrap().keys().collect();
@@ -443,7 +450,8 @@ fn hs2_j8prtv_orchestration_capacity_routes_and_hosted_routes() {
     assert_eq!(snapshot["schema_version"], 1);
     assert_eq!(snapshot["checkout_id"], m.target.id.as_str());
     assert_eq!(snapshot["memory"]["free_mb"], 8192);
-    assert_eq!(snapshot["claims"], Value::Null);
+    // HS2-YDZAFH: no namespace named and none held on this machine: an empty list.
+    assert_eq!(snapshot["claims"], json!([]));
     let named = m
         .runtime
         .request(
@@ -1004,4 +1012,73 @@ fn hs2_p5gtsw_the_capacity_routes_wait_by_version_locally_and_over_the_transport
         format!("?claim_namespaces=vm&after=ab12&wait_ms={MAX_CAPACITY_WAIT_MS}")
     );
     assert_eq!(super::super::capacity::capacity_query(&[], None, 5), "");
+}
+
+/// HS2-YDZAFH: a capacity read that names no namespace enumerates them. A claim source
+/// that cannot enumerate, or more namespaces than the bound, reads as unknown rather
+/// than a partial list; a named read never enumerates.
+#[test]
+fn hs2_ydzafh_an_unnamed_capacity_read_lists_every_held_claim_or_none_at_all() {
+    use crate::orchestration::capacity::MAX_ENUMERATED_NAMESPACES;
+    use crate::orchestration::resources::{ClaimSource, ClaimsUnreachable};
+    use hotsheet_ticketing::orchestration::HeldClaim;
+    struct Source {
+        names: Option<usize>,
+        listed: Mutex<Vec<String>>,
+    }
+    impl ClaimSource for Source {
+        fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
+            self.listed.lock().unwrap().push(namespace.to_owned());
+            Ok(vec![HeldClaim {
+                namespace: namespace.to_owned(),
+                resource: "r".into(),
+                expires_at_ms: 1,
+            }])
+        }
+        fn wait_free(&self, _: &str, _: &str, _: std::time::Duration) -> bool {
+            true
+        }
+        fn namespaces(&self) -> Result<Vec<String>, ClaimsUnreachable> {
+            match self.names {
+                Some(count) => Ok((0..count).map(|n| format!("ns{n}")).collect()),
+                None => Err(ClaimsUnreachable {
+                    offline: hotsheet_ticketing::orchestration::OfflinePolicy::FailClosed,
+                }),
+            }
+        }
+    }
+    let read = |names: Option<usize>, named: &[String]| {
+        let mut m = machine(10, false, unsupported);
+        let source = Arc::new(Source {
+            names,
+            listed: Mutex::new(Vec::new()),
+        });
+        m.runtime = m.runtime.clone().with_claim_source(source.clone());
+        let snapshot = m.runtime.hosted_capacity(&m.target.id, named).unwrap();
+        let listed = source.listed.lock().unwrap().clone();
+        (snapshot, listed)
+    };
+    let (two, listed) = read(Some(2), &[]);
+    assert_eq!(two.claim_namespaces, ["ns0", "ns1"]);
+    assert_eq!(two.claims.map(|claims| claims.len()), Some(2));
+    assert_eq!(listed, ["ns0", "ns1"]);
+    // At the bound, still listed; one past it, unknown and nothing listed.
+    let (bound, _) = read(Some(MAX_ENUMERATED_NAMESPACES), &[]);
+    assert_eq!(
+        bound.claims.map(|claims| claims.len()),
+        Some(MAX_ENUMERATED_NAMESPACES)
+    );
+    let (over, listed) = read(Some(MAX_ENUMERATED_NAMESPACES + 1), &[]);
+    assert_eq!((over.claims, over.claims_offline), (None, None));
+    assert!(listed.is_empty());
+    // A source that cannot enumerate: unknown, as before enumeration existed.
+    let (unknown, _) = read(None, &[]);
+    assert_eq!((unknown.claims, unknown.claim_namespaces.len()), (None, 0));
+    // Named: exactly the named ones, enumeration unused.
+    let (named, listed) = read(None, &["builds".into()]);
+    assert_eq!(named.claim_namespaces, ["builds"]);
+    assert_eq!(listed, ["builds"]);
+    // Nothing on the machine: an empty list, not unknown.
+    let (empty, _) = read(Some(0), &[]);
+    assert_eq!(empty.claims, Some(Vec::new()));
 }

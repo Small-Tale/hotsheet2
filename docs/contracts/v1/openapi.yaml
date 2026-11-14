@@ -2004,7 +2004,7 @@ paths:
           in: query
           description:
             Comma-separated resource-claim namespaces (at most 8) whose live claims the snapshot lists. Without it,
-            `claims` is null.
+            every held claim of the machine is listed (HS2-YDZAFH), or `claims` is null when they cannot be enumerated.
           schema:
             type: string
             maxLength: 600
@@ -2121,7 +2121,7 @@ paths:
           in: query
           description:
             Comma-separated resource-claim namespaces (at most 8) whose live claims the snapshot lists. Without it,
-            `claims` is null.
+            every held claim of the machine is listed (HS2-YDZAFH), or `claims` is null when they cannot be enumerated.
           schema:
             type: string
             maxLength: 600
@@ -20343,8 +20343,9 @@ components:
                 type: integer
                 minimum: 0
         claim_namespaces:
+          description: The namespaces `claims` covers, named by the caller (at most 8) or enumerated (at most 64, HS2-YDZAFH).
           type: array
-          maxItems: 8
+          maxItems: 64
           items:
             type: string
         claims_offline:

@@ -70,6 +70,14 @@ pub trait ClaimSource: Send + Sync {
     /// Block until the resource is free or the timeout passes, woken by the
     /// backend's own signal. True when it is free.
     fn wait_free(&self, namespace: &str, resource: &str, timeout: Duration) -> bool;
+    /// HS2-YDZAFH: every namespace with claim state on this machine. A source that
+    /// cannot enumerate answers unreachable, so a capacity read that named no namespace
+    /// reports its claims as unknown rather than as none.
+    fn namespaces(&self) -> Result<Vec<String>, ClaimsUnreachable> {
+        Err(ClaimsUnreachable {
+            offline: OfflinePolicy::FailClosed,
+        })
+    }
 }
 
 /// The claim service of this machine (`hotsheet_resource_claims`). Backend
@@ -100,6 +108,14 @@ impl ClaimSource for MachineClaims {
                 expires_at_ms: claim.expires_at_ms,
             })
             .collect())
+    }
+
+    fn namespaces(&self) -> Result<Vec<String>, ClaimsUnreachable> {
+        hotsheet_resource_claims::held_namespaces(&self.home)
+            .map(|names| names.iter().map(|name| name.as_str().to_owned()).collect())
+            .map_err(|_| ClaimsUnreachable {
+                offline: OfflinePolicy::FailClosed,
+            })
     }
 
     fn wait_free(&self, namespace: &str, resource: &str, timeout: Duration) -> bool {
