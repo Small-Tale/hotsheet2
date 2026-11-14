@@ -1171,8 +1171,15 @@ The rules that prevent and repair this:
   and runs `git rebase --continue` under both locks. It logs the attempt and the backup
   ref. One replay (one `orig-head`) is continued at most three times; the count is kept
   in the sync record and cleared when no rebase or merge is unfinished.
+- **Finish Hot Sheet's own resolved stop (HS2-Z2AT6H).** When one of those continues
+  stopped at a conflict (`stopped-sha`) and the conflict was later resolved and staged,
+  with no unmerged path and no staged `<<<<<<<`/`>>>>>>>` marker line, the next cycle
+  stages any writes made meanwhile and continues it under the same count. The pick keeps
+  its own message and takes those writes with it. The sync record's attempt for that
+  `orig-head` is what marks the stop as Hot Sheet's; staged markers are reported instead.
 - **Leave what needs a decision.** A rebase stopped at a conflict, one a person resolved
-  but did not continue, a `rebase-apply` replay, and any unfinished merge are reported
+  but did not continue without a recorded Hot Sheet attempt, a `rebase-apply` replay, and
+  any unfinished merge are reported
   as `rebase_in_progress` and never touched. A continue that fails stays in place with
   its reason and backup ref; nothing is aborted or discarded automatically.
 

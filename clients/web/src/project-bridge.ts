@@ -1930,8 +1930,7 @@ export async function proxyProjectRequest(
   const target = sessions.get(projectId);
   if (!target) return Response.json({ error: 'Project session is not open.' }, { status: 404 });
   if (target.remote) {
-    if (remoteBrowserAuthRequired())
-      return Response.json({ error: 'Cross-server projects require the trusted desktop host.' }, { status: 403 });
+    // On a remote-mode host the bridge admits only a local-grant session here (HS2-F04J42).
     try {
       await requireCurrentRemoteBinding(target.remote.connection);
       if (path.split('?')[0] === '/close') {
@@ -2129,7 +2128,7 @@ export async function projectChangeWebSocketUrl(projectId: string, client?: stri
   if (!target) return undefined;
   if (target.remote) await requireCurrentRemoteBinding(target.remote.connection);
   await refreshSupervisedTarget(target);
-  if (remoteBrowserAuthRequired()) {
+  if (remoteBrowserAuthRequired() && !target.remote) {
     const bootstrap = await ensureServer(await bootstrapStore());
     if (bootstrap.url !== target.url) return undefined;
   }
@@ -2154,7 +2153,7 @@ export async function projectRemoteWebSocketOptions(projectId: string): Promise<
 > {
   const target = sessions.get(projectId);
   if (!target?.remote) return undefined;
-  if (remoteBrowserAuthRequired()) throw new Error('Cross-server projects require the trusted desktop host.');
+  // The upgrade handler refuses a remote tab to a session without the local grant (HS2-F04J42).
   await requireCurrentRemoteBinding(target.remote.connection);
   const credentials = target.remote.connection.credentials;
   if (!credentials.bearer_secret.startsWith('session:') || !credentials.session_origin || !credentials.session_csrf)

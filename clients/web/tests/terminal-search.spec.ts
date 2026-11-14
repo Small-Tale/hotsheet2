@@ -86,3 +86,32 @@ test('HS2-TWZSZF terminal search expands from a borderless icon, selects matches
   await drawer.getByRole('button', { name: 'Project Grid' }).click();
   await expect(drawer.locator('.kui-toolbar-control-group[data-content="search"]')).toHaveCount(0);
 });
+
+test('HS2-SW2YAZ double-clicking in the terminal search field never maximizes the drawer', async ({ page }) => {
+  const { drawer } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    trigger = group.getByRole('button', { name: 'Search Terminal' }),
+    editor = group.locator('[data-search-field-editor="terminal-search"]');
+  await expect(drawer).toHaveAttribute('data-maximized', 'false');
+  await trigger.click();
+  await expect(group).toHaveAttribute('data-expanded', 'true');
+  // The reported gesture: double-click in the field, empty and then on a word, then the group's own edge.
+  await editor.dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized', 'false');
+  await page.keyboard.type('Justify');
+  await editor.dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized', 'false');
+  await expect(editor).toBeFocused();
+  const box = (await group.boundingBox())!;
+  await page.mouse.dblclick(box.x + 2, box.y + box.height / 2);
+  await expect(drawer).toHaveAttribute('data-maximized', 'false');
+  // The rail's empty space still maximizes and restores.
+  const doubleClickRail = async () => {
+    const rail = (await drawer.locator('.terminal-drawer__rail').boundingBox())!;
+    await page.mouse.dblclick(rail.x + rail.width / 2, rail.y + rail.height - 2);
+  };
+  await doubleClickRail();
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await doubleClickRail();
+  await expect(drawer).toHaveAttribute('data-maximized', 'false');
+});

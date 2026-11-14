@@ -13,11 +13,19 @@ import {
   projectTerminalWebSocketUrl,
   remoteBrowserAuthRequired,
 } from './project-bridge';
+import { isRemoteProjectId } from './remote-projects/identity';
 
 const browserAttach = /^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
 const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
 type TargetResolver = (projectId: string, terminalId: string) => string | undefined | Promise<string | undefined>;
 type SyncTargetResolver = (projectId: string, client?: string) => string | undefined | Promise<string | undefined>;
+
+/** A resolver that never yields a cross-server tab, for a session without the local grant (HS2-F04J42). */
+export function hideRemoteProjects<Rest extends unknown[]>(
+  resolve: (projectId: string, ...rest: Rest) => string | undefined | Promise<string | undefined>,
+): (projectId: string, ...rest: Rest) => string | undefined | Promise<string | undefined> {
+  return (projectId, ...rest) => (isRemoteProjectId(projectId) ? undefined : resolve(projectId, ...rest));
+}
 type StoreResolver = (projectId: string) => string[] | undefined;
 /** The web client build this host serves (HS2-KPJWBK); undefined when it is unknown. */
 type ClientBuildResolver = () => string | undefined;
@@ -433,6 +441,8 @@ export function installProjectWebSocketBridge(
       socket.destroy();
     });
     void (async () => {
+      let syncTarget = resolveSync,
+        terminalTarget = resolveTerminal;
       const remote = remoteBrowserAuthRequired();
       const upstreamHeaders =
         remote && request.headers.cookie && request.headers.origin
@@ -455,15 +465,23 @@ export function installProjectWebSocketBridge(
           socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
           return;
         }
+        // A cross-server tab rides this host owner's peer credentials: without the local grant
+        // its projects resolve to nothing, so the socket is refused or the subscription closed
+        // (HS2-F04J42).
+        const device: unknown = await checked.json().catch(() => undefined);
+        if (!(typeof device === 'object' && device !== null && (device as { local?: unknown }).local === true)) {
+          syncTarget = hideRemoteProjects(resolveSync);
+          terminalTarget = hideRemoteProjects(resolveTerminal);
+        }
       }
       if (socket.destroyed) return;
       if (new URL(request.url ?? '/', 'http://localhost').pathname === CHANGE_WS_MUX_PATH) {
         browserServer.handleUpgrade(request, socket, head, (browser) => {
-          serveChangeMux(browser, resolveSync, resolveStores, clientBuild, upstreamHeaders);
+          serveChangeMux(browser, syncTarget, resolveStores, clientBuild, upstreamHeaders);
         });
         return;
       }
-      void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
+      void browserProjectWebSocketTarget(request.url, terminalTarget, syncTarget)
         .then(async (target) => {
           if (!target) {
             // A Hot Sheet path the bridge cannot resolve (no open session, unreachable server) used to
