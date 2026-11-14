@@ -1550,15 +1550,18 @@ test('HS2-JSF985 real provisional work responses match the OpenAPI contract', as
       actor: person,
     });
     expect(policy.status, JSON.stringify(policy.body)).toBe(200);
-    // Nothing was read from the target yet, so its own setting is unknown: refused, with the reason.
+    // Nothing the rule needs has been read yet, so it refuses, with the reason.
+    // HS2-W5H48W: the prerequisite run's follower stores the target's own setting from any feed
+    // page it takes once the policy opts in, and under load a page it was behind on lands here.
+    // The rule then names the next unknown, the tickets' opt-out tags, which the dispatch below
+    // reads. Both refusals are correct answers at this point and both match the contract; the
+    // order of the rule's checks is pinned by the Rust provisional tests, which control every read.
     const unknown = await act('show', { step_id: stepId });
     shaped('StepReadiness', unknown.body);
-    expect(unknown.body.speculation).toEqual({
-      allowed: false,
-      refusal: 'target_speculation_unknown',
-      depth: 0,
-      max_depth: 1,
-    });
+    expect([
+      { allowed: false, refusal: 'target_speculation_unknown', depth: 0, max_depth: 1 },
+      { allowed: false, refusal: 'opt_out_unknown', depth: 0, max_depth: 1 },
+    ]).toContainEqual(unknown.body.speculation);
 
     const admitted = await dispatch(second.id, 'op-contract-provisional');
     expect(admitted.status, JSON.stringify(admitted.body)).toBe(200);
