@@ -671,17 +671,23 @@ impl AppState {
     /// publishes nothing and makes no request. It ends when the server stops. Call
     /// inside the runtime, once per serving process.
     pub fn spawn_hosted_session_follower(&self) {
-        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        if tokio::runtime::Handle::try_current().is_err() {
             return;
-        };
+        }
         let watcher = self.clone();
+        // HS2-TWSXK7: the baseline is read here, before the thread starts its runtime and
+        // platform watcher, so a takeover recorded meanwhile is announced, not taken as
+        // already seen.
+        let directory = self
+            .machine_home()
+            .join(hotsheet_cli::orchestration::HOSTED_SESSION_SIGNAL_DIRECTORY);
+        let seen = hotsheet_cli::orchestration::signal_token(&directory);
         let _ = std::thread::Builder::new()
             .name("orchestration-hosted-session-signal".into())
             .spawn(move || {
-                let Ok(runtime) = runtime(&watcher, handle) else {
-                    return;
-                };
-                let Ok(mut waiter) = runtime.hosted_session_signal_waiter() else {
+                let Ok(mut waiter) =
+                    hotsheet_cli::orchestration::SignalWaiter::since(&directory, seen)
+                else {
                     return;
                 };
                 while !watcher.is_stopping() {

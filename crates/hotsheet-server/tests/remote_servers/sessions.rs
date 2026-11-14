@@ -1068,3 +1068,34 @@ async fn hs2_whr4gs_a_late_start_after_its_stop_is_refused_on_a_live_service() {
     assert_eq!(listed["sessions"], json!([]));
     assert!(home.join("orchestration-withdrawn-sessions.json").is_file());
 }
+
+/// HS2-TWSXK7: a takeover a headless CLI records while the server's hosted-session
+/// follower is still starting is announced. The follower reads its baseline before it
+/// starts its thread and platform watcher, so a token written right after it was asked
+/// for is a change, not a token it takes as already seen. Repeated, each new token is
+/// announced again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_twsxk7_a_takeover_recorded_while_the_follower_starts_is_announced() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let host = state(&root.path().join("store"), &home);
+    let directory = home.join(hotsheet_cli::orchestration::HOSTED_SESSION_SIGNAL_DIRECTORY);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("token"), "before-the-follower").unwrap();
+    let mut events = host.subscribe();
+    host.spawn_hosted_session_follower();
+    // At once: the follower's thread cannot have started its watcher yet.
+    for token in ["while-it-starts", "after-it-started"] {
+        std::fs::write(directory.join("token"), token).unwrap();
+        loop {
+            match events.recv().await {
+                Ok(event) if event.kind == "terminal_orchestrator" => break,
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    panic!("change bus closed before {token} was announced")
+                }
+            }
+        }
+    }
+    host.begin_stopping();
+}

@@ -163,10 +163,17 @@ impl SignalWaiter {
 
     /// Start watching one signal directory; a change already written counts as seen.
     pub fn at(directory: &std::path::Path) -> std::io::Result<Self> {
+        Self::since(directory, signal_token(directory))
+    }
+
+    /// HS2-TWSXK7: start watching one signal directory from a token read earlier, so a
+    /// change written while the watcher was still starting is reported by the first
+    /// wait instead of being taken as already seen.
+    pub fn since(directory: &std::path::Path, seen: Option<String>) -> std::io::Result<Self> {
         let waiter = hotsheet_jobs::ChangeWaiter::new(directory)?;
         Ok(Self {
             directory: directory.to_path_buf(),
-            seen: signal_token(directory),
+            seen,
             waiter,
         })
     }
