@@ -18821,6 +18821,7 @@ components:
       required:
         - requests
         - rules
+        - decisions
         - retired
       properties:
         requests:
@@ -18833,6 +18834,12 @@ components:
           maxItems: 1024
           items:
             $ref: '#/components/schemas/OrchestrationPermissionRuleView'
+        decisions:
+          description: HS2-0RAZ1J. Judgment calls asked on goal tickets, waiting or answered.
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/OrchestrationDecision'
         retired:
           $ref: '#/components/schemas/OrchestrationRetiredAuthority'
       additionalProperties: false
@@ -23874,6 +23881,58 @@ components:
           minimum: 0
         item:
           $ref: '#/components/schemas/OrchestrationTimelineItem'
+    OrchestrationDecision:
+      description: >-
+        HS2-0RAZ1J. A judgment call the orchestrator asked as a FEEDBACK NEEDED note with CHOICE options on a goal
+        ticket, by identifiers only. answered is present once a person's response chose an option.
+      type: object
+      required:
+        - decision_id
+        - target
+        - kind
+        - operation_id
+        - connection_id
+        - native_id
+        - note_id
+        - actor_id
+        - asked_at_ms
+      properties:
+        decision_id:
+          type: string
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        kind:
+          type: string
+        operation_id:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        note_id:
+          type: string
+        actor_id:
+          type: string
+        asked_at_ms:
+          type: integer
+          minimum: 0
+        answered:
+          type: object
+          required:
+            - response_note_id
+            - option
+            - at_ms
+          properties:
+            response_note_id:
+              type: string
+            option:
+              type: integer
+              minimum: 0
+            at_ms:
+              type: integer
+              minimum: 0
+          additionalProperties: false
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:

@@ -280,8 +280,25 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         "- A. Start anyway".into(),
     )
     .unwrap();
+    // HS2-0RAZ1J: the wait is listed outside the ticket, by identifiers.
+    let listed = cli_named(
+        &home,
+        &human,
+        &["permission", "list", "--project", &owner.id],
+    );
+    assert_eq!(listed["decisions"].as_array().unwrap().len(), 1, "{listed}");
+    assert_eq!(listed["decisions"][0]["note_id"], decision.id.to_string());
+    assert_eq!(listed["decisions"][0]["answered"], Value::Null);
     let run = cli_named(&home, &worker, &refs(&asking));
     assert_eq!(run["state"], "dispatched");
+    // The response that unblocked it is recorded on the decision and audited.
+    let listed = cli_named(
+        &home,
+        &human,
+        &["permission", "list", "--project", &owner.id],
+    );
+    assert_eq!(listed["decisions"][0]["answered"]["option"], 0, "{listed}");
+    assert!(listed["decisions"][0]["answered"]["response_note_id"].is_string());
     assert_eq!(
         store.read_ticket(&second.id).unwrap().claimed_by.as_deref(),
         Some("worker-b")
@@ -301,6 +318,15 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         .collect();
     // Asked twice, then decided and used, under the one operation.
     assert_eq!(overrides.len(), 3, "{audit}");
+    let answers: Vec<&Value> = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "decision_answer")
+        .collect();
+    assert_eq!(answers.len(), 1, "{audit}");
+    assert_eq!(answers[0]["reason"], "readiness_override");
+    assert_eq!(answers[0]["operation_id"], "op-b");
     assert_eq!(overrides[0]["outcome"], "denied");
     assert_eq!(overrides[0]["reason"], "decision_required");
     assert_eq!(overrides[2]["outcome"], "allowed");

@@ -296,6 +296,22 @@ pub struct DecisionAsked {
     pub note_id: String,
     pub actor_id: String,
     pub asked_at_ms: u64,
+    /// HS2-0RAZ1J: when a person's response to the note chose an option. Absent while
+    /// the decision waits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answered: Option<DecisionAnswered>,
+}
+
+/// HS2-0RAZ1J: the person's response that decided a judgment call, by identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionAnswered {
+    /// The response note on the orchestration ticket.
+    pub response_note_id: String,
+    /// The index of the option it chose, in the order the note listed them.
+    pub option: u32,
+    /// When the orchestrator first read this response.
+    pub at_ms: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -717,6 +733,47 @@ impl PermissionLedger {
         }))
     }
 
+    /// HS2-0RAZ1J: every decision asked for one orchestration project, oldest first.
+    pub fn decisions(&self, owner_id: &str) -> Result<Vec<DecisionAsked>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .decisions
+            .into_iter()
+            .filter(|decision| decision.target.owner_checkout_id == owner_id)
+            .collect())
+    }
+
+    /// HS2-0RAZ1J: record the person's response that decides a decision. The first
+    /// response that chooses is recorded with its time; a newer response that chooses
+    /// differently replaces it. Returns the record when it changed, `None` when it
+    /// already said the same or no such decision is recorded.
+    pub fn answer_decision(
+        &self,
+        decision_id: &str,
+        answered: DecisionAnswered,
+    ) -> Result<Option<DecisionAsked>, OrchestrationError> {
+        valid_token(&answered.response_note_id)?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let Some(decision) = file
+            .decisions
+            .iter_mut()
+            .find(|decision| decision.decision_id == decision_id)
+        else {
+            return Ok(None);
+        };
+        if decision.answered.as_ref().is_some_and(|current| {
+            current.response_note_id == answered.response_note_id
+                && current.option == answered.option
+        }) {
+            return Ok(None);
+        }
+        decision.answered = Some(answered);
+        let changed = decision.clone();
+        self.write_file(&file)?;
+        Ok(Some(changed))
+    }
+
     /// Remember a decision asked. The first record for an operation wins: a second
     /// call returns the one already recorded and writes nothing.
     pub fn record_decision(
@@ -750,6 +807,9 @@ fn validate_decision(decision: &DecisionAsked) -> Result<(), OrchestrationError>
     valid_identifier(&decision.connection_id)?;
     valid_identifier(&decision.native_id)?;
     valid_token(&decision.note_id)?;
+    if let Some(answered) = &decision.answered {
+        valid_token(&answered.response_note_id)?;
+    }
     valid_identifier(&decision.actor_id)
 }
 

@@ -8,8 +8,9 @@
 //! [`OrchestrationRuntime::permission_answer`], is audited, and wakes the scheduler.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    Answered, AuditOutcome, AuditRecord, DeclarationState, PermissionAction, PermissionAnswer,
-    PermissionRequest, PermissionRule, PermissionState, RetiredAuthority, retired_authority,
+    Answered, AuditOutcome, AuditRecord, DecisionAsked, DeclarationState, PermissionAction,
+    PermissionAnswer, PermissionRequest, PermissionRule, PermissionState, RetiredAuthority,
+    retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -59,6 +60,9 @@ pub struct RuleView {
 pub struct PermissionList {
     pub requests: Vec<PromptRequest>,
     pub rules: Vec<RuleView>,
+    /// HS2-0RAZ1J: judgment calls asked on the goal tickets, waiting or answered, by
+    /// identifiers: the note a person answers and, once answered, the response.
+    pub decisions: Vec<DecisionAsked>,
     /// HS2-XHQ1EH: grant and approval files from before this model. They are never
     /// read as authority; remove them once nothing needs their history.
     pub retired: RetiredAuthority,
@@ -295,6 +299,7 @@ impl OrchestrationRuntime {
                 .into_iter()
                 .map(|rule| self.rule_view(rule))
                 .collect(),
+            decisions: ledger.decisions(owner_id)?,
             retired: retired_authority(&self.home),
         })
     }

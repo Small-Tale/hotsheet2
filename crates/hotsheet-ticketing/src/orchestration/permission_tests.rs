@@ -603,6 +603,7 @@ fn hs2_xhq1eh_a_decision_is_recorded_once_per_operation() {
         note_id: ulid::Ulid::from(note).to_string(),
         actor_id: "scheduler".into(),
         asked_at_ms: 1,
+        answered: None,
     };
     assert!(
         ledger
@@ -628,6 +629,118 @@ fn hs2_xhq1eh_a_decision_is_recorded_once_per_operation() {
     let mut bad = record(9);
     bad.kind = "not a code".into();
     assert!(ledger.record_decision(bad).is_err());
+}
+
+/// HS2-0RAZ1J: recording the response that decides a judgment call. Transition
+/// matrix over (current answer, incoming answer), then repeated, interleaved, unknown
+/// and old-file sequences.
+#[test]
+fn hs2_0raz1j_a_decision_records_the_response_that_decided_it() {
+    let home = tempfile::tempdir().unwrap();
+    let ledger = PermissionLedger::new(home.path());
+    let asked = |operation: &str, note: u128, owner: u128| DecisionAsked {
+        decision_id: ulid::Ulid::from(note + 1_000).to_string(),
+        target: TargetRef {
+            owner_checkout_id: format!("launch-{owner}"),
+            ..target(1)
+        },
+        kind: "readiness_override".into(),
+        operation_id: operation.into(),
+        connection_id: "git-main".into(),
+        native_id: ulid::Ulid::from(42u128).to_string(),
+        note_id: ulid::Ulid::from(note).to_string(),
+        actor_id: "scheduler".into(),
+        asked_at_ms: 1,
+        answered: None,
+    };
+    let answer = |response: u128, option: u32, at_ms: u64| DecisionAnswered {
+        response_note_id: ulid::Ulid::from(response).to_string(),
+        option,
+        at_ms,
+    };
+    // Empty ledger: nothing to answer, nothing listed.
+    assert_eq!(
+        ledger
+            .answer_decision(&ulid::Ulid::from(1_007u128).to_string(), answer(20, 0, 5))
+            .unwrap(),
+        None
+    );
+    assert!(ledger.decisions("launch-1").unwrap().is_empty());
+    let first = ledger.record_decision(asked("dispatch-1", 7, 1)).unwrap();
+    let other = ledger.record_decision(asked("dispatch-2", 8, 1)).unwrap();
+    let elsewhere = ledger.record_decision(asked("dispatch-1", 9, 2)).unwrap();
+    // (current, incoming) -> changed?
+    let table: [(Option<DecisionAnswered>, DecisionAnswered, bool); 5] = [
+        (None, answer(20, 0, 5), true),
+        (Some(answer(20, 0, 5)), answer(20, 0, 9), false),
+        (Some(answer(20, 0, 5)), answer(21, 0, 9), true),
+        (Some(answer(21, 0, 9)), answer(21, 1, 10), true),
+        (Some(answer(21, 1, 10)), answer(22, 1, 11), true),
+    ];
+    for (current, incoming, changed) in table {
+        assert_eq!(
+            ledger
+                .decisions("launch-1")
+                .unwrap()
+                .into_iter()
+                .find(|decision| decision.decision_id == first.decision_id)
+                .unwrap()
+                .answered,
+            current
+        );
+        let result = ledger
+            .answer_decision(&first.decision_id, incoming.clone())
+            .unwrap();
+        assert_eq!(result.is_some(), changed, "{incoming:?}");
+        if let Some(record) = result {
+            assert_eq!(record.answered, Some(incoming));
+        }
+    }
+    // Interleaved: answering one decision leaves the others waiting, per owner.
+    let listed = ledger.decisions("launch-1").unwrap();
+    assert_eq!(
+        listed
+            .iter()
+            .map(|decision| decision.decision_id.as_str())
+            .collect::<Vec<_>>(),
+        [first.decision_id.as_str(), other.decision_id.as_str()]
+    );
+    assert!(listed[1].answered.is_none());
+    assert_eq!(
+        ledger.decisions("launch-2").unwrap(),
+        std::slice::from_ref(&elsewhere)
+    );
+    // The record of the decision asked is kept; asking again returns it, answered.
+    let again = ledger.record_decision(asked("dispatch-1", 10, 1)).unwrap();
+    assert_eq!(again.note_id, first.note_id);
+    assert_eq!(again.answered, Some(answer(22, 1, 11)));
+    // An invalid response id is refused before anything is written.
+    let mut bad = answer(23, 0, 12);
+    bad.response_note_id = "not a token".into();
+    assert!(ledger.answer_decision(&other.decision_id, bad).is_err());
+    assert!(ledger.decisions("launch-1").unwrap()[1].answered.is_none());
+    // A file written before HS2-0RAZ1J, without `answered`, still reads.
+    let path = home.path().join("orchestration-permissions.json");
+    let mut stored: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for decision in stored["decisions"].as_array_mut().unwrap() {
+        decision.as_object_mut().unwrap().remove("answered");
+    }
+    std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+    assert!(
+        ledger
+            .decisions("launch-1")
+            .unwrap()
+            .iter()
+            .all(|decision| decision.answered.is_none())
+    );
+    // Empty then refill: the old decision is answered again from nothing.
+    assert!(
+        ledger
+            .answer_decision(&first.decision_id, answer(24, 0, 13))
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[test]

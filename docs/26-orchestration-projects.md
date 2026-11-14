@@ -462,6 +462,17 @@ the `note_id`. A person's response that names an option decides; one note is add
 operation, and asking again reads the response. A person making the same choice for
 themselves needs no note.
 
+Outside the ticket (HS2-0RAZ1J), the wait shows where people already look: the note is
+an ordinary `FEEDBACK NEEDED` request, so it raises the `ticket.feedback_needed`
+notification of [32](32-notifier-plugins.md) §32.8 and the ticket's feedback state, and
+the Orchestration timeline marks the step "Waits for your decision" with a link to the
+goal ticket (§26.26). `permission list` (and its route and MCP view) lists each decision
+by identifiers under `decisions`: the target, operation, goal ticket and `note_id`. The
+first time the orchestrator reads a person's response that chooses, it records it on the
+decision as `answered` (the response note, the option's index and the time) and audits
+`decision_answer`; a newer response that chooses differently replaces it, and reading the
+same response again records nothing.
+
 ### Retired grants and approvals
 
 `orchestration-grants.json` and `orchestration-approvals.json` from before this model
@@ -524,14 +535,14 @@ request; it is idempotent by key and needs a declared target. `permission check`
 accepts `--operation-id`, `--model`, `--target-sessions`, `--machine-sessions`,
 `--tool-sessions`, `--account` and `--account-sessions`.
 
-| Route                                                      | Methods and purpose                                                  |
-| ---------------------------------------------------------- | -------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/permissions`             | GET requests with their state, remembered rules and retired files    |
-| `/checkouts/{owner}/orchestration/permissions/{request}`   | POST `{answer}`: `allow_once`, `always_allow` or `deny`              |
-| `/checkouts/{owner}/orchestration/permission-rules`        | POST `{target_id, action, tool?}` remember a rule ahead of a request |
-| `/checkouts/{owner}/orchestration/permission-rules/{rule}` | DELETE forget a rule                                                 |
-| `/checkouts/{owner}/orchestration/targets/{target}/access` | POST side-effect-free check against the cached binding               |
-| `/checkouts/{owner}/orchestration/audit`                   | GET journal page, `?after=<seq>&limit=<n>`                           |
+| Route                                                      | Methods and purpose                                                          |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/permissions`             | GET requests with their state, remembered rules, decisions and retired files |
+| `/checkouts/{owner}/orchestration/permissions/{request}`   | POST `{answer}`: `allow_once`, `always_allow` or `deny`                      |
+| `/checkouts/{owner}/orchestration/permission-rules`        | POST `{target_id, action, tool?}` remember a rule ahead of a request         |
+| `/checkouts/{owner}/orchestration/permission-rules/{rule}` | DELETE forget a rule                                                         |
+| `/checkouts/{owner}/orchestration/targets/{target}/access` | POST side-effect-free check against the cached binding                       |
+| `/checkouts/{owner}/orchestration/audit`                   | GET journal page, `?after=<seq>&limit=<n>`                                   |
 
 All require the bearer and literal loopback at the serving machine for every device
 role. The server's own permission routes (`GET /permissions`, `POST

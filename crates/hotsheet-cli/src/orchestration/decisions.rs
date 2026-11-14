@@ -9,7 +9,9 @@
 use hotsheet_model::NoteKind;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::ops;
-use hotsheet_ticketing::orchestration::{DecisionAsked, RunTicket};
+use hotsheet_ticketing::orchestration::{
+    AuditOutcome, AuditRecord, DecisionAnswered, DecisionAsked, RunTicket,
+};
 
 use super::tickets::timestamp;
 use super::*;
@@ -75,8 +77,13 @@ impl OrchestrationRuntime {
                         .options
                         .iter()
                         .position(|option| text.contains(&option.to_lowercase()))
+                        .map(|option| (option, response.id))
                 });
-            return Ok(match chosen {
+            // HS2-0RAZ1J: record the response that unblocks it, once per response.
+            if let Some((option, response)) = chosen {
+                self.decision_answered(owner_id, &asked, option, &response.to_string(), actor, tx)?;
+            }
+            return Ok(match chosen.map(|(option, _)| option) {
                 Some(option) => Decided::Chosen {
                     option,
                     note_id: asked.note_id,
@@ -122,9 +129,50 @@ impl OrchestrationRuntime {
                 .and_then(|actor| actor.id.clone())
                 .unwrap_or_else(|| "orchestrator".into()),
             asked_at_ms: tx.clock.now_ms(),
+            answered: None,
         })?;
         Ok(Decided::Waiting {
             note_id: recorded.note_id,
         })
+    }
+
+    /// HS2-0RAZ1J: a person's response chose an option. Recorded in the ledger with
+    /// when it was first read, and audited as `decision_answer` under the operation.
+    /// Reading the same response again records nothing.
+    fn decision_answered(
+        &self,
+        owner_id: &str,
+        asked: &DecisionAsked,
+        option: usize,
+        response_note_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(), OrchestrationError> {
+        let answered = DecisionAnswered {
+            response_note_id: response_note_id.into(),
+            option: u32::try_from(option).map_err(|_| OrchestrationError::Corrupt)?,
+            at_ms: tx.clock.now_ms(),
+        };
+        if self
+            .permission_ledger()
+            .answer_decision(&asked.decision_id, answered)?
+            .is_none()
+        {
+            return Ok(());
+        }
+        self.audit_record(
+            owner_id,
+            AuditRecord {
+                at_ms: tx.clock.now_ms(),
+                actor_role: access::role_code(actor),
+                actor_id: actor.and_then(|actor| actor.id.clone()),
+                target_id: Some(asked.target.target_id.clone()),
+                action: "decision_answer".into(),
+                operation_id: Some(asked.operation_id.clone()),
+                outcome: AuditOutcome::Changed,
+                reason: Some(asked.kind.clone()),
+                permission_id: Some(asked.decision_id.clone()),
+            },
+        )
     }
 }

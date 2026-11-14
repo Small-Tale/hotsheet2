@@ -571,13 +571,13 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
     }
     assert!(!decision[0].text.contains("Second"));
     assert!(m.runtime.run_list(&owner, false).unwrap().is_empty());
-    assert!(
-        m.runtime
-            .permission_list(&owner, &mut tx)
-            .unwrap()
-            .requests
-            .is_empty()
-    );
+    let listed = m.runtime.permission_list(&owner, &mut tx).unwrap();
+    assert!(listed.requests.is_empty());
+    // HS2-0RAZ1J: the wait is listed outside the ticket, by identifiers.
+    assert_eq!(listed.decisions.len(), 1);
+    assert_eq!(listed.decisions[0].note_id, notes[0]);
+    assert_eq!(listed.decisions[0].operation_id, "op-1");
+    assert!(listed.decisions[0].answered.is_none());
     assert_eq!(
         audited(&m, "readiness_override"),
         [
@@ -616,6 +616,32 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
         .unwrap()
         .run;
     assert_eq!(run.state, RunState::Dispatched);
+    // HS2-0RAZ1J: the response that unblocked it is recorded once, with its time.
+    let decided = m
+        .runtime
+        .permission_list(&owner, &mut tx)
+        .unwrap()
+        .decisions;
+    let answered = decided[0].answered.clone().unwrap();
+    assert_eq!(answered.option, 0);
+    assert_eq!(answered.at_ms, tx.clock.now_ms());
+    let response = m
+        .owner_store
+        .read_ticket(&orchestration.id)
+        .unwrap()
+        .notes
+        .into_iter()
+        .find(|note| note.response_to.map(|id| id.to_string()) == Some(notes[0].clone()))
+        .unwrap();
+    assert_eq!(answered.response_note_id, response.id.to_string());
+    assert_eq!(
+        audited(&m, "decision_answer"),
+        [(
+            AuditOutcome::Changed,
+            Some("readiness_override".into()),
+            Some("op-1".into())
+        )]
+    );
     assert_eq!(
         audited(&m, "readiness_override").last().unwrap(),
         &(
@@ -672,6 +698,20 @@ fn hs2_42tara_a_person_overrides_readiness_for_one_exact_operation() {
             Some("op-2".into())
         )
     );
+    // HS2-0RAZ1J: a choice to wait is recorded too; reading it again adds nothing.
+    refusal(
+        m.runtime
+            .run_dispatch(&owner, ask("op-2"), Some(&worker()), &mut tx),
+    );
+    let decided = m
+        .runtime
+        .permission_list(&owner, &mut tx)
+        .unwrap()
+        .decisions;
+    assert_eq!(decided.len(), 2);
+    assert_eq!(decided[1].note_id, second);
+    assert_eq!(decided[1].answered.as_ref().unwrap().option, 1);
+    assert_eq!(audited(&m, "decision_answer").len(), 2);
     // A person's own override is their decision: nothing is asked.
     let person = m
         .runtime
