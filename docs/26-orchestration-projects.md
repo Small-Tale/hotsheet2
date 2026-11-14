@@ -881,6 +881,14 @@ It confirms its authority through the gate when it connects, after any failure a
 every ten minutes, acting as whoever dispatched the run. A target with no unfinished
 run is not contacted at all, and a run a person took over is still followed.
 
+A change written straight to a target store, such as by a headless `hotsheet-cli` in the
+session's checkout rather than through a server route, reaches the feed through that
+store's file watcher, so it is seen while the hosting server hosts the store (a project
+open in a client, or its configured stores) (HS2-BDNJ5S). A linked Git store the server
+does not host has no watcher: a write there reaches a follower only when it next
+reconciles (on connect, after a failure or an `overflow`). Covering such stores is
+HS2-G5FYP6.
+
 **Planned tickets without a run (HS2-TMA4YA).** A target is also followed while an
 unfinished plan step names one of its tickets: a prerequisite, or the step's own
 ticket. On the first request, after an `overflow` and on a reconnect every such ticket

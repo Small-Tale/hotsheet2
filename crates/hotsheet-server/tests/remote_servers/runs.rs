@@ -777,3 +777,124 @@ async fn hs2_7qhwhj_a_remote_run_completes_from_the_peers_change_feed_without_po
     assert_eq!(handshake["events"], json!([]));
     peer.stop().await;
 }
+
+/// Follow a hosted target feed from `cursor`, as a run follower does, until a page names
+/// `native` or `wait_ms` passed. Returns whether it was named and the cursor reached.
+async fn feed_names(
+    router: &axum::Router,
+    feed: &str,
+    mut cursor: u64,
+    wait_ms: u64,
+    native: &str,
+) -> (bool, u64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return (false, cursor);
+        }
+        let (status, page) = api(
+            router.clone(),
+            "GET",
+            &format!(
+                "{feed}?since={cursor}&wait_ms={}",
+                remaining.as_millis().min(20_000)
+            ),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{page}");
+        cursor = page["cursor"].as_u64().unwrap_or(cursor);
+        if page["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["native_id"] == native)
+        {
+            return (true, cursor);
+        }
+    }
+}
+
+/// HS2-BDNJ5S: a run follower learns of target ticket changes from the hosting server's
+/// change feed. A change written straight to a store this server hosts (a headless CLI in
+/// the session's checkout, not a server route) reaches the feed through the store's file
+/// watcher: a claim, a release and a completion each do. A linked store of the same
+/// checkout that the server does not host has no watcher, so a write there does not
+/// reach the feed (HS2-BDNJ5S documents it; HS2-G5FYP6 follows it up).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_bdnj5s_target_feed_sees_writes_made_outside_the_server() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let linked = root.path().join("linked");
+    let store = FsStore::init_git(&source, &StoreMetadata::new("TST")).unwrap();
+    let other = FsStore::init_git(&linked, &StoreMetadata::new("LNK")).unwrap();
+    let work = ticket(&store, "TST", "Work changed outside the server");
+    let elsewhere = ticket(&other, "LNK", "Work in a store the server does not host");
+    let host = state(&source, &home);
+    let _watching = hotsheet_server::spawn_watcher(host.clone()).unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone(), linked.clone()])
+        .unwrap();
+    assert_eq!(checkout.sources.len(), 2, "{:?}", checkout.sources);
+    let router = app(host);
+    let feed = format!("/checkouts/{}/target-events", checkout.id);
+    let (status, handshake) = api(router.clone(), "GET", &feed, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{handshake}");
+    let mut cursor = handshake["cursor"].as_u64().unwrap();
+    // Straight to the hosted store, as `hotsheet-cli claim|release|edit` in the checkout
+    // would write it: each change is on the feed.
+    let now: hotsheet_model::Timestamp = NOW.into();
+    let lease: hotsheet_model::Timestamp = "2030-01-01T00:00:00Z".into();
+    let feed_sees = |cursor: u64, native: String| {
+        let (router, feed) = (router.clone(), feed.clone());
+        async move { feed_names(&router, &feed, cursor, 30_000, &native).await }
+    };
+    let id = work.id.to_string();
+    ops::claim_with_eta(
+        &store,
+        &work.id,
+        &now,
+        lease.clone(),
+        "cli-worker",
+        None,
+        None,
+    )
+    .unwrap();
+    let (seen, next) = feed_sees(cursor, id.clone()).await;
+    assert!(
+        seen,
+        "the claim written outside the server never reached the feed"
+    );
+    ops::release(&store, &work.id, now.clone(), "cli-worker", false).unwrap();
+    let (seen, next) = feed_sees(next, id.clone()).await;
+    assert!(
+        seen,
+        "the release written outside the server never reached the feed"
+    );
+    ops::update(
+        &store,
+        &work.id,
+        now.clone(),
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let (seen, next) = feed_sees(next, id).await;
+    assert!(
+        seen,
+        "the completion written outside the server never reached the feed"
+    );
+    cursor = next;
+    // A store the server does not host has no watcher: its claim does not reach the feed.
+    // The bound only limits how long the absence is checked.
+    ops::claim_with_eta(&other, &elsewhere.id, &now, lease, "cli-worker", None, None).unwrap();
+    let (seen, _) = feed_names(&router, &feed, cursor, 2_000, &elsewhere.id.to_string()).await;
+    assert!(!seen, "an unhosted store reported a change");
+}
