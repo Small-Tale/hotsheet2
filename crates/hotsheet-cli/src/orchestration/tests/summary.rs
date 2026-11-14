@@ -350,3 +350,173 @@ fn hs2_b6236s_the_hosted_cost_read_answers_one_tickets_reading() {
         Err(OrchestrationError::Invalid(_))
     ));
 }
+
+struct At(std::cell::Cell<u64>);
+impl hotsheet_ticketing::Clock for At {
+    fn now_ms(&self) -> u64 {
+        self.0.get()
+    }
+}
+
+/// HS2-XK7TJS: the summary's utilization through the shared runtime and its one router:
+/// running time per tool and machine against the policy's caps from the session
+/// records, and idle and limited time from the decision journal.
+#[test]
+fn hs2_xk7tjs_utilization_reads_sessions_journal_and_policy_caps() {
+    use hotsheet_ticketing::actor::MutationActor;
+    use hotsheet_ticketing::orchestration::{
+        DecisionJournal, DecisionRecord, HostedRef, MachineLimits, NewSession, PolicyBody,
+        SessionRegistry, SessionRole, SessionState, SessionUpdate, SetPolicy, TargetPolicy,
+        ToolPolicy, ToolScope,
+    };
+    let m = machine(10, false, unsupported);
+    let clock = At(std::cell::Cell::new(1_000));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::TicketsRead], &mut tx);
+    let read = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .request(
+                "GET",
+                &format!("/checkouts/{}/orchestration/summary", m.owner.id),
+                &Value::Null,
+                tx,
+            )
+            .unwrap()["utilization"]
+            .clone()
+    };
+    // Nothing ran: every measure is a known zero, and no tool or machine is listed.
+    let empty = read(&mut tx);
+    assert_eq!(empty["tools"], json!([]));
+    assert_eq!(empty["idle_ms"], json!({"status":"known","value":0}));
+
+    let human = MutationActor::parse("human", Some("maintainer".into())).unwrap();
+    let expected_revision = m.runtime.policy(&m.owner.id).unwrap().revision;
+    m.runtime
+        .set_policy(
+            &m.owner.id,
+            SetPolicy {
+                expected_revision,
+                policy: PolicyBody {
+                    machine: MachineLimits {
+                        max_sessions: 4,
+                        ..MachineLimits::default()
+                    },
+                    targets: vec![TargetPolicy {
+                        target_id: id(1),
+                        enabled: true,
+                        actions: None,
+                        tools: vec![ToolScope {
+                            tool: "claude".into(),
+                            models: Vec::new(),
+                        }],
+                        max_sessions: 2,
+                        machine: None,
+                        speculation: None,
+                    }],
+                    tools: vec![ToolPolicy {
+                        tool: "claude".into(),
+                        max_sessions: 2,
+                        weight: 80,
+                        accounts: Vec::new(),
+                    }],
+                    ..PolicyBody::default()
+                },
+            },
+            Some(&human),
+            &mut tx,
+        )
+        .unwrap();
+    // One claude session runs from 1000 to 2000 on this machine's server.
+    let sessions = SessionRegistry::new(&m.home);
+    let (session, _) = sessions
+        .begin(
+            &m.owner.id,
+            NewSession {
+                operation_id: "op-session".into(),
+                target_id: id(1),
+                role: SessionRole::Worker,
+                tool: "claude".into(),
+                model: None,
+                effort: None,
+                account: None,
+                run_id: None,
+                replaces: None,
+            },
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    sessions
+        .update(
+            &m.owner.id,
+            &session.session_id,
+            SessionUpdate {
+                to: Some(SessionState::Running),
+                reason: Some("started".into()),
+                hosted: Some(HostedRef {
+                    server_id: id(50),
+                    session_id: id(700),
+                    worker_id: "worker-a".into(),
+                }),
+                ..SessionUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    // Idle from 1200 to 1500; one step waited on tool capacity from 1100 to 1400.
+    let journal = DecisionJournal::new(&m.home, &m.owner.id).unwrap();
+    for (at, kind, subject, reason) in [
+        (1_100_u64, "unplaced", "step", Some("no_tool_available")),
+        (1_200, "keep", "session", Some("idle_grace")),
+        (1_400, "start", "step", None),
+        (1_500, "keep", "session", Some("busy")),
+    ] {
+        let mut record = json!({
+            "at_ms": at, "tick_id": id(900 + u128::from(at)), "mode": "applied",
+            "trigger": "event", "kind": kind, "target_id": id(1),
+        });
+        if subject == "step" {
+            record["step_id"] = json!("step-a");
+        } else {
+            record["session_id"] = json!(session.session_id);
+        }
+        if let Some(reason) = reason {
+            record["reason"] = json!(reason);
+        }
+        if kind == "start" {
+            record["outcome"] = json!("started");
+        }
+        let record: DecisionRecord = serde_json::from_value(record).unwrap();
+        journal.append(record).unwrap();
+    }
+    clock.0.set(2_000);
+    let use_ = read(&mut tx);
+    assert_eq!(
+        use_["tools"],
+        json!([{"key":"claude","sessions":1,"session_ms":{"status":"known","value":1000},
+            "peak_sessions":1,"cap":2,"utilization_permille":{"status":"known","value":500}}])
+    );
+    assert_eq!(use_["machines"][0]["key"], json!(id(50)));
+    // The machine's cap is the policy's machine limit for the target, not the target's.
+    assert_eq!(use_["machines"][0]["cap"], json!(4));
+    assert_eq!(
+        use_["machines"][0]["utilization_permille"],
+        json!({"status":"known","value":250})
+    );
+    assert_eq!(use_["idle_ms"], json!({"status":"known","value":300}));
+    assert_eq!(
+        use_["limited"]["tool_capacity_ms"],
+        json!({"status":"known","value":300})
+    );
+    assert_eq!(use_["limited"]["steps_tool_limited"], json!(1));
+    // The typed runtime call every adapter shares answers the same.
+    let typed = m
+        .runtime
+        .progress_summary(&m.owner.id, None, &mut tx)
+        .unwrap();
+    assert_eq!(serde_json::to_value(typed.utilization).unwrap(), use_);
+}

@@ -17,6 +17,10 @@ use hotsheet_ticketing::orchestration::{
     SessionRegistry, TargetAction, TargetDestination, TargetOpError, UnknownReason,
     ValidationRegistry, WorkItemKey, summarize_progress,
 };
+use hotsheet_ticketing::orchestration::{
+    DecisionJournal, DecisionKind, OrchestratedSession, Utilization, UtilizationInput,
+    summarize_utilization,
+};
 
 use super::tickets::{identifier, native};
 use super::*;
@@ -205,16 +209,80 @@ impl OrchestrationRuntime {
             }
         }
         let (events, events_trimmed) = self.retained_run_events(owner_id)?;
-        Ok(summarize_progress(&ProgressInput {
+        let sessions = SessionRegistry::new(&self.home).list(owner_id, false)?;
+        let mut summary = summarize_progress(&ProgressInput {
             owner_checkout_id: owner_id,
             now_ms,
             runs: &runs,
             gates: &GateRegistry::new(&self.home).list(owner_id, &GateFilter::default())?,
             validations: &ValidationRegistry::new(&self.home).steps(owner_id, None, now_ms)?,
-            sessions: &SessionRegistry::new(&self.home).list(owner_id, false)?,
+            sessions: &sessions,
             events: &events,
             events_trimmed,
             costs: &costs,
+        });
+        summary.utilization = self.utilization(owner_id, &sessions, now_ms)?;
+        Ok(summary)
+    }
+
+    /// HS2-XK7TJS: throughput and utilization of the whole owner, from its session
+    /// records, the scheduler's decision journal and the policy's caps.
+    fn utilization(
+        &self,
+        owner_id: &str,
+        sessions: &[OrchestratedSession],
+        now_ms: u64,
+    ) -> Result<Utilization, OrchestrationError> {
+        let journal = DecisionJournal::new(&self.home, owner_id)?;
+        let (mut decisions, mut after, mut trimmed) = (Vec::new(), 0, false);
+        loop {
+            // Only the decisions the measures read: starts, keeps, wind-downs and
+            // unplaced work.
+            let page = journal.read_matching(after, MAX_AUDIT_PAGE, |record| {
+                matches!(
+                    record.kind,
+                    DecisionKind::Start
+                        | DecisionKind::Keep
+                        | DecisionKind::WindDown
+                        | DecisionKind::Unplaced
+                )
+            })?;
+            trimmed |= page.gap;
+            let done = !page.more || page.cursor == after;
+            after = page.cursor;
+            decisions.extend(page.entries.into_iter().map(|entry| entry.record));
+            if done {
+                break;
+            }
+        }
+        let policy = self.policy(owner_id).ok().and_then(|view| view.policy);
+        let tool_caps: BTreeMap<String, u32> = policy
+            .iter()
+            .flat_map(|policy| policy.tools.iter())
+            .map(|tool| (tool.tool.clone(), tool.max_sessions))
+            .collect();
+        // A machine's cap is the strictest of the targets the sessions ran for there.
+        let mut machine_caps: BTreeMap<String, u32> = BTreeMap::new();
+        if let Some(policy) = &policy {
+            for session in sessions {
+                let Some(hosted) = &session.hosted else {
+                    continue;
+                };
+                let cap = policy.machine_limits(&session.target_id).max_sessions;
+                machine_caps
+                    .entry(hosted.server_id.clone())
+                    .and_modify(|known| *known = (*known).min(cap))
+                    .or_insert(cap);
+            }
+        }
+        Ok(summarize_utilization(&UtilizationInput {
+            owner_checkout_id: owner_id,
+            now_ms,
+            sessions,
+            decisions: &decisions,
+            decisions_trimmed: trimmed,
+            tool_caps: &tool_caps,
+            machine_caps: &machine_caps,
         }))
     }
 }

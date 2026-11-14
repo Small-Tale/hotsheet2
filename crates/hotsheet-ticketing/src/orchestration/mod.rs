@@ -29,6 +29,7 @@ mod session_idle;
 mod sessions;
 mod storage;
 mod summary;
+mod summary_use;
 mod target_lines;
 mod timeline;
 mod tool_capacity;
@@ -156,6 +157,9 @@ pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
     RunRetries, TargetProgress, UnknownReason, WorkItemKey, WorkItemProgress, summarize_progress,
+};
+pub use summary_use::{
+    CapacityUse, LimitedTime, Utilization, UtilizationInput, summarize_utilization,
 };
 pub use target_lines::{TargetLine, TargetLineSource, TargetLines, target_lines};
 pub use timeline::{
@@ -403,6 +407,8 @@ mod session_idle_tests;
 mod session_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod summary_use_tests;
 #[cfg(test)]
 mod target_lines_tests;
 #[cfg(test)]

@@ -3524,6 +3524,8 @@ out. The reason codes:
 | `usage_store_unavailable`  | The usage records could not be opened or read                           |
 | `no_usage_recorded`        | The usage records hold nothing for the target ticket                    |
 | `cost_not_read`            | No cost reading was taken for the work item                             |
+| `decisions_trimmed`        | Retention removed scheduler decisions the measure needs (HS2-XK7TJS)    |
+| `cap_not_configured`       | The policy sets no session cap for the tool or machine (HS2-XK7TJS)     |
 
 ### Measures of a run
 
@@ -3592,11 +3594,42 @@ counted on both sides. There is no second telemetry source.
 - When a work item was reached through several targets, a target that can be read is
   preferred over one that cannot.
 
+### Throughput and utilization (HS2-XK7TJS)
+
+`utilization` measures the whole owning checkout; narrowing to one orchestration
+ticket does not narrow it, because sessions and the scheduler's decisions are shared
+by every ticket. It is a second pure fold (`orchestration/summary_use.rs`,
+`summarize_utilization`) over the session records (§26.16), the scheduler's decision
+journal (§26.17) and the policy's caps (§26.8).
+
+- **Sessions per tool and per machine** (`tools`, `machines`): distinct sessions,
+  running time (`session_ms`, from each transition into `running` to the transition
+  out of it, or to `as_of_ms`), the most running at once (`peak_sessions`) and the cap.
+  A session is counted once by its host's id for it (server and terminal), whatever
+  number of records or targets name it. A session that never ran is not counted; one
+  whose bounded history lost its start makes `session_ms` `history_truncated`.
+- **Utilization** (`utilization_permille`): running time over the cap's allowance from
+  the first time a session ran (`from_ms`) to `as_of_ms`, in thousandths. The tool cap
+  is the policy's `max_sessions` for the tool. A machine is the server that hosts the
+  session, and its cap is the strictest machine limit (§26.20) of the targets its
+  sessions ran for. With no cap the measure is `cap_not_configured`.
+- **Idle time** (`idle_ms`): the time the scheduler kept sessions without work, from
+  a `keep` decision with reason `idle_grace` or `keep_warm` to the next decision about
+  that session that is not one, or to `as_of_ms`.
+- **Limited time** (`limited`): per step, the time it stayed unplaced because no tool
+  account could take it (`no_tool_available`, §26.18) or a resource it needs was held
+  or unreadable (`resource_held`, `resource_unknown`, §26.20), until a decision placed
+  it, with the number of steps each cause held back.
+
+The decision journal logs only passes that changed something, so an episode lasts
+until the next recorded decision about its subject. When retention removed decisions,
+idle and limited time are `decisions_trimmed` rather than a lower figure. The panel
+that shows these measures waits on design sign-off (HS2-2XJSJK).
+
 ### Not measured yet
 
-Sessions running against their limits, idle-session time and time limited by tool
-capacity or resources are HS2-XK7TJS. Time spent waiting on external systems and
-provisional work started or redone are HS2-9FXASE. The workspace view is HS2-XJEH08.
+Time spent waiting on external systems and provisional work started or redone are
+HS2-9FXASE. The workspace view is HS2-XJEH08.
 
 ### Headless surface
 

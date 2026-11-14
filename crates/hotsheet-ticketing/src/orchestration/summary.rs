@@ -61,10 +61,14 @@ pub enum UnknownReason {
     /// HS2-B6236S: the remote target's server could not be asked for the cost, or did
     /// not answer with one.
     TargetUnreachable,
+    /// HS2-XK7TJS: retention removed scheduler decisions older than the ones kept.
+    DecisionsTrimmed,
+    /// HS2-XK7TJS: the policy configures no cap to measure use against.
+    CapNotConfigured,
 }
 
 impl UnknownReason {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 17] = [
         Self::RunUnfinished,
         Self::NeverDispatched,
         Self::HistoryTruncated,
@@ -80,6 +84,8 @@ impl UnknownReason {
         Self::NoUsageRecorded,
         Self::CostNotRead,
         Self::TargetUnreachable,
+        Self::DecisionsTrimmed,
+        Self::CapNotConfigured,
     ];
 
     pub fn code(self) -> &'static str {
@@ -99,6 +105,8 @@ impl UnknownReason {
             Self::NoUsageRecorded => "no_usage_recorded",
             Self::CostNotRead => "cost_not_read",
             Self::TargetUnreachable => "target_unreachable",
+            Self::DecisionsTrimmed => "decisions_trimmed",
+            Self::CapNotConfigured => "cap_not_configured",
         }
     }
 }
@@ -379,6 +387,11 @@ pub struct ProgressSummary {
     pub work_items: Vec<WorkItemProgress>,
     /// Oldest first.
     pub runs: Vec<RunProgress>,
+    /// HS2-XK7TJS: throughput and utilization of the whole owner, never narrowed to one
+    /// orchestration ticket. The runtime fills it from the session records, the
+    /// decision journal and the policy (`summarize_utilization`).
+    #[serde(default)]
+    pub utilization: super::Utilization,
 }
 
 /// Everything a summary is computed from. Records of other owners are ignored.
@@ -778,5 +791,6 @@ pub fn summarize_progress(input: &ProgressInput<'_>) -> ProgressSummary {
             .collect(),
         work_items: items.into_values().collect(),
         runs,
+        utilization: super::Utilization::default(),
     }
 }

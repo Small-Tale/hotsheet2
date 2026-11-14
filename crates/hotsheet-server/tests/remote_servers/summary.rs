@@ -58,6 +58,13 @@ async fn hs2_s13719_http_mcp_and_cli_read_the_same_progress_and_cost_summary() {
     assert_eq!(empty["runs"], json!([]));
     assert_eq!(empty["totals"]["runs"], 0);
     assert_eq!(empty["totals"]["cost"]["items_unknown"], 0);
+    // HS2-XK7TJS: utilization over HTTP; nothing ran, so known zeros and no tool.
+    assert_eq!(
+        empty["utilization"],
+        json!({"tools":[],"machines":[],"idle_ms":{"status":"known","value":0},
+            "limited":{"tool_capacity_ms":{"status":"known","value":0},"steps_tool_limited":0,
+                "resources_ms":{"status":"known","value":0},"steps_resource_limited":0}})
+    );
 
     let added = api(
         router.clone(),

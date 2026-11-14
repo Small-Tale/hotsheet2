@@ -23229,6 +23229,8 @@ components:
         - no_usage_recorded
         - cost_not_read
         - target_unreachable
+        - decisions_trimmed
+        - cap_not_configured
     OrchestrationDurationMetric:
       description: Milliseconds when `known`, otherwise the `reason` it is unknown.
       type: object
@@ -23630,6 +23632,94 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrchestrationRunProgress'
+        utilization:
+          $ref: '#/components/schemas/OrchestrationUtilization'
+    OrchestrationUtilization:
+      description:
+        Throughput and utilization of the whole owning checkout, not narrowed by `ticket` (HS2-XK7TJS). Session time
+        comes from the session records, each session counted once across targets; idle and limited time come from the
+        scheduler's decision journal and are unknown with `decisions_trimmed` when retention removed decisions.
+      type: object
+      required:
+        - tools
+        - machines
+        - idle_ms
+        - limited
+      properties:
+        from_ms:
+          description: The first time a session ran; utilization is measured from it to `as_of_ms`.
+          type: integer
+          minimum: 0
+        tools:
+          description: Per tool, sorted by tool.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationCapacityUse'
+        machines:
+          description: Per machine (hosting server id), sorted by server id.
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationCapacityUse'
+        idle_ms:
+          description: Time sessions spent idle, kept by the scheduler for work that may come.
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        limited:
+          $ref: '#/components/schemas/OrchestrationLimitedTime'
+      additionalProperties: false
+    OrchestrationCapacityUse:
+      description: How much of one tool's or machine's session allowance was used (HS2-XK7TJS).
+      type: object
+      required:
+        - key
+        - sessions
+        - session_ms
+        - peak_sessions
+        - utilization_permille
+      properties:
+        key:
+          description: The tool id, or the machine's server id (empty when a session never reached a host).
+          type: string
+        sessions:
+          description: Distinct sessions.
+          type: integer
+          minimum: 0
+        session_ms:
+          description: Running time summed over the sessions.
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        peak_sessions:
+          description: The most sessions running at once.
+          type: integer
+          minimum: 0
+        cap:
+          description: The policy's session cap, when one is configured.
+          type: integer
+          minimum: 0
+        utilization_permille:
+          description: Running time over the cap's allowance for the window, in thousandths; `cap_not_configured` without a cap.
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+      additionalProperties: false
+    OrchestrationLimitedTime:
+      description: Time steps could not start for want of tool capacity or a resource (HS2-XK7TJS).
+      type: object
+      required:
+        - tool_capacity_ms
+        - steps_tool_limited
+        - resources_ms
+        - steps_resource_limited
+      properties:
+        tool_capacity_ms:
+          description: Unplaced because no tool account could take the step.
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        steps_tool_limited:
+          type: integer
+          minimum: 0
+        resources_ms:
+          description: Unplaced because a resource the step needs was held or could not be read.
+          $ref: '#/components/schemas/OrchestrationDurationMetric'
+        steps_resource_limited:
+          type: integer
+          minimum: 0
+      additionalProperties: false
     ProvisionalStanding:
       description:
         The provisional rule's answer for one step at the `provisional` level, present only while the orchestration
