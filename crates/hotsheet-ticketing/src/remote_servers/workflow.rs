@@ -70,11 +70,7 @@ impl RemoteRegistry {
             }
             update_observation(&mut file.servers[index], Ok(&snapshot), now_ms);
             self.write(&file)?;
-            return Ok(discovery(
-                &file.servers[index],
-                &file,
-                Some(snapshot.checkouts),
-            ));
+            return Ok(discovery(&file.servers[index], &file, Some(snapshot)));
         }
         if observed.is_some() {
             return Err(RemoteError::Conflict);
@@ -109,7 +105,7 @@ impl RemoteRegistry {
         };
         self.commit_credentials(&mut file, binding, &request.credentials, secrets)?;
         let binding = file.servers.last().ok_or(RemoteError::Corrupt)?;
-        Ok(discovery(binding, &file, Some(snapshot.checkouts)))
+        Ok(discovery(binding, &file, Some(snapshot)))
     }
 
     pub fn review(
@@ -180,7 +176,7 @@ impl RemoteRegistry {
             .iter()
             .find(|binding| binding.id == id)
             .ok_or(RemoteError::Corrupt)?;
-        Ok(discovery(binding, &file, Some(snapshot.checkouts)))
+        Ok(discovery(binding, &file, Some(snapshot)))
     }
 
     pub fn revoke(
@@ -265,11 +261,7 @@ impl RemoteRegistry {
             .iter()
             .find(|current| current.id == id)
             .ok_or(RemoteError::Corrupt)?;
-        Ok(discovery(
-            current,
-            &file,
-            outcome.ok().map(|snapshot| snapshot.checkouts),
-        ))
+        Ok(discovery(current, &file, outcome.ok()))
     }
 
     fn commit_credentials(
@@ -426,9 +418,16 @@ fn same_observation(current: &Binding, before: &Binding) -> bool {
 fn discovery(
     binding: &Binding,
     file: &RegistryFile,
-    checkouts: Option<Vec<RemoteCheckout>>,
+    snapshot: Option<RemoteSnapshot>,
 ) -> RemoteDiscovery {
     let mut remote = binding.view(file);
-    remote.stale = checkouts.is_none();
-    RemoteDiscovery { remote, checkouts }
+    remote.stale = snapshot.is_none();
+    let (checkouts, host_name) = snapshot
+        .map(|snapshot| (Some(snapshot.checkouts), snapshot.identity.host_name))
+        .unwrap_or_default();
+    RemoteDiscovery {
+        remote,
+        checkouts,
+        host_name,
+    }
 }

@@ -61,6 +61,13 @@ async fn hs2_1y45mz_real_cli_reconnect_review_ca_rotation_and_revocation() {
     );
     assert_eq!(registered["checkouts"][0]["id"], checkout.id);
     assert_eq!(registered["checkouts"][0]["state"], "available");
+    // HS2-HGG426: the live discovery names the peer machine for its project tabs.
+    assert!(
+        registered["host_name"]
+            .as_str()
+            .is_some_and(|name| !name.trim().is_empty() && !name.ends_with(".local")),
+        "live discovery should carry the peer host name: {registered}"
+    );
     assert!(
         !serde_json::to_string(&registered)
             .unwrap()
@@ -323,13 +330,20 @@ async fn hs2_w4jjje_mtls_uses_certificate_and_enforces_expiry_hostname_and_acl()
     wrong_bearer.bearer_secret = "synthetic-wrong-bearer".into();
     // HS2-W4JJJE: the legacy machine bearer is not sent off-box. The valid
     // device certificate still authenticates this mTLS request.
+    let probed = MtlsRemoteTransport
+        .probe(&origin, &wrong_bearer)
+        .unwrap()
+        .identity;
+    // The live identity adds the machine's display name (HS2-HGG426); the stored one never does.
+    assert!(expected.host_name.is_none() && probed.host_name.is_some());
     assert_eq!(
-        MtlsRemoteTransport
-            .probe(&origin, &wrong_bearer)
-            .unwrap()
-            .identity,
+        hotsheet_ticketing::remote_servers::RemoteIdentity {
+            host_name: None,
+            ..probed.clone()
+        },
         expected
     );
+    let expected = probed;
     let other = Paths::at(root.path().join("foreign"));
     init_ca(&other, &[]).unwrap();
     let foreign = credentials(&issue_device(&other, "synthetic-device").unwrap());

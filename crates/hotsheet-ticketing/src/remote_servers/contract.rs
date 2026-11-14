@@ -178,6 +178,10 @@ pub struct RemoteIdentity {
     pub generation: String,
     pub protocol: u32,
     pub server_id: String,
+    /// The peer's short machine name, for display only (HS2-HGG426). Never persisted and never
+    /// part of trust; older peers omit it and clients fall back to the binding origin's host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_name: Option<String>,
 }
 
 impl RemoteIdentity {
@@ -185,9 +189,20 @@ impl RemoteIdentity {
         if self.generation != "hs2" || self.protocol != REMOTE_PROTOCOL_VERSION {
             return Err(RemoteFailure::Unsupported);
         }
-        valid_id(&self.server_id).map_err(|_| RemoteFailure::Unsupported)
+        valid_id(&self.server_id).map_err(|_| RemoteFailure::Unsupported)?;
+        if self
+            .host_name
+            .as_deref()
+            .is_some_and(|name| !bounded_text(name, MAX_REMOTE_HOST_NAME))
+        {
+            return Err(RemoteFailure::InvalidResponse);
+        }
+        Ok(())
     }
 }
+
+/// Upper bound on a peer's self-reported host name (a DNS name is at most 253 bytes).
+pub const MAX_REMOTE_HOST_NAME: usize = 255;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteSource {
@@ -323,6 +338,10 @@ pub struct RemoteDiscovery {
     pub remote: RemoteView,
     /// None for revoked, inaccessible, unsupported or changed identities, even with cached data.
     pub checkouts: Option<Vec<RemoteCheckout>>,
+    /// The peer's self-reported machine name from this live discovery (HS2-HGG426). Absent when
+    /// the probe failed or the peer predates the field; it is display metadata, not identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_name: Option<String>,
 }
 
 /// A desktop project selection. The registry persists only these non-secret identifiers.

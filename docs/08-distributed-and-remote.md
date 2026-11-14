@@ -266,7 +266,14 @@ Each tab uses a composite browser id, so equal checkout ids on two servers
 remain separate. The trusted bridge translates that id to the reviewed server's
 native checkout, applies only that server's private session to REST and change
 WebSocket requests, and rechecks the local binding revision before dispatch.
-The picker shows server labels and schemes; tabs show server labels and
+The picker shows server labels and schemes. A remote project tab reads
+`<remote host name> · <project name>` (HS2-HGG426): `/remote-identity` adds the
+peer machine's optional short `host_name` (the hostname with `.local` removed),
+and a live discovery passes it on as `RemoteDiscovery.host_name`. It is display
+metadata only: it never enters `remotes.json` or `server-identity.json` and is not
+part of trust. When the peer predates the field or does not report a name, the tab
+falls back to the binding origin's host (the DNS name or IP the user entered),
+never to the label this device gave itself while pairing. Tabs also show
 connection failures. Editing a binding requires fresh host approval and explicit registry review;
 removing one disables its selected projects and closes that host's active desktop
 streams without disturbing another server. A failed discovery has a deliberate

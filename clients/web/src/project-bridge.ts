@@ -29,7 +29,7 @@ import {
   privateRemoteConnection,
   requireCurrentRemoteBinding,
 } from './remote-projects/host';
-import { remoteProjectId } from './remote-projects/identity';
+import { remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
 import { remoteRequest } from './remote-projects/transport';
 import { developmentRepositoryRoot } from './repository-root';
 import {
@@ -1675,7 +1675,8 @@ export async function openReviewedRemoteProject(bindingId: string, checkoutId: s
     return {
       id,
       root: id,
-      name: `${connection.binding.label} · ${checkout.name}`,
+      // HS2-HGG426: the remote machine's name, not the label this device gave itself.
+      name: remoteProjectTabName(discovery.host_name, connection.binding.origin, checkout.name),
       stores: [],
       apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
       changeMuxPath: CHANGE_MUX_PATH,
