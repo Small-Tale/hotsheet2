@@ -807,9 +807,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   );
   lifetime.add(
     delegate(document.body, 'dblclick', TERMINALS_ACTIONS.toggleTerminalDrawerMaximize.selector, (event) => {
+      // Only the rail's empty space maximizes. A double-click inside a control, including the
+      // terminal search field's contenteditable editor and its group's padding, selects text there
+      // instead (HS2-SW2YAZ).
       if (
         (event.target as Element).closest(
-          'button, input, textarea, select, a, wa-button, .kui-popup-menu, [data-tab-kind="terminal"]',
+          'button, input, textarea, select, a, wa-button, .kui-popup-menu, [data-tab-kind="terminal"], ' +
+            '[contenteditable="true"], [role="searchbox"], [data-component="search-field"], ' +
+            '[data-component="toolbar-control-group"]',
         )
       )
         return;
