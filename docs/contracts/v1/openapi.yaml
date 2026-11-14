@@ -2259,8 +2259,10 @@ paths:
         "`define` attaches or changes a step, `list` and `evidence` read the latest evidence, `run` starts or continues
         the request a retained `operation_id` names, and `remove` deletes a step. `run` passes the permission gate as
         `validation_run`, and a `command` step (not a target profile) asks a person every time (403
-        `permission_required`). `define` and `remove` change only the orchestration project's records. Refusals use the
-        `validation_*` codes."
+        `permission_required`). `cancel` stops a running attempt (HS2-17ABM2): it only lowers activity, so it never asks
+        and the policy never refuses it; the attempt ends `cancelled`, unless the step ended by itself first, and while
+        the host has not confirmed the stop it stays `running` with `unverified: [target_execution]`. `define` and
+        `remove` change only the orchestration project's records. Refusals use the `validation_*` codes."
       requestBody:
         required: true
         content:
@@ -2271,7 +2273,7 @@ paths:
         '200':
           description:
             The step's evidence (`define`, `evidence`, `remove`), a list of them (`list`), or the request's latest
-            attempt with the evidence (`run`).
+            attempt with the evidence (`run`, `cancel`).
           content:
             application/json:
               schema:
@@ -2312,6 +2314,7 @@ paths:
             - evidence
             - run
             - remove
+            - cancel
   /checkouts/{checkout}/target-validations:
     description: Runs a validation step in a checkout this machine hosts, for a local or remote orchestration project
       (HS2-WN0MXZ). The step's output is digested as it is read and never kept or returned. Ordinary authenticated
@@ -2338,6 +2341,36 @@ paths:
       responses:
         '200':
           description: Running, finished with its outcome, or unknown.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedValidation'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    delete:
+      operationId: cancelHostedValidation
+      description:
+        HS2-17ABM2. Stops the execution an id names and waits at most `wait_ms` for it to end. A step that already
+        ended keeps its own outcome; a stopped one ends `cancelled`. An id this process does not know answers `unknown`
+        and is remembered as cancelled, so a later start under it runs nothing. Repeating it changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedValidationCancel'
+      responses:
+        '200':
+          description: Running (still stopping), finished with its outcome, or unknown.
           content:
             application/json:
               schema:
@@ -20565,7 +20598,8 @@ components:
     ValidationOperation:
       description:
         The body of a validation operation. `define` needs `ticket` and `step`; `evidence` and `remove` need `ticket`
-        and `step_id`; `run` also needs `operation_id`; `list` takes an optional `ticket`.
+        and `step_id`; `run` also needs `operation_id`; `cancel` takes an optional `operation_id` (omit for the running
+        attempt) and `wait_ms`; `list` takes an optional `ticket`.
       type: object
       properties:
         actor:
@@ -20598,7 +20632,7 @@ components:
             - string
             - 'null'
         wait_ms:
-          description: How long `run` waits for the attempt to finish.
+          description: How long `run` waits for the attempt to finish, or `cancel` for the stopped attempt to end.
           type:
             - integer
             - 'null'
@@ -20636,6 +20670,7 @@ components:
             - profile_not_defined
             - program_not_found
             - launch_failed
+            - cancelled
         exit_code:
           type: integer
         started_at_ms:
@@ -20657,6 +20692,7 @@ components:
         - skipped
         - unavailable
         - unverified
+        - cancelled
     ValidationResult:
       description: One attempt at a step. A finished result never changes.
       type: object
@@ -20790,6 +20826,20 @@ components:
           type: array
           items:
             type: string
+      additionalProperties: false
+    HostedValidationCancel:
+      type: object
+      required:
+        - execution_id
+      properties:
+        execution_id:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+        wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 8000
+          default: 0
       additionalProperties: false
     HostedValidationStart:
       type: object

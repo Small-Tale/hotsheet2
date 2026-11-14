@@ -488,6 +488,7 @@ pub(super) fn verdict(prerequisite: &Prerequisite, facts: &PlanFacts) -> Verdict
             Some((ValidationState::Running, _)) => Verdict::Blocked("validation_running"),
             Some((ValidationState::Skipped, _)) => Verdict::Blocked("validation_skipped"),
             Some((ValidationState::Unavailable, _)) => Verdict::Blocked("validation_unavailable"),
+            Some((ValidationState::Cancelled, _)) => Verdict::Blocked("validation_cancelled"),
             Some((ValidationState::Unverified, reason)) => match reason.as_deref() {
                 Some("not_run") => Verdict::Blocked("validation_not_run"),
                 // Evidence for an earlier definition proves nothing about this one.

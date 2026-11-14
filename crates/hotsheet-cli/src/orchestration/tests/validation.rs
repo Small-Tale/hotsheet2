@@ -1132,6 +1132,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
             std::time::Duration::from_secs(20),
             limit,
             7,
+            &AtomicBool::new(false),
         )
     };
     let small = sh("printf ok; printf problem >&2; exit 2", 1024);
@@ -1168,6 +1169,7 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         std::time::Duration::from_millis(200),
         1024,
         7,
+        &AtomicBool::new(false),
     );
     assert_eq!(family.end, ExecutionEnd::TimedOut);
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
@@ -1419,4 +1421,445 @@ fn hs2_wn0mxz_a_remote_target_runs_the_step_and_an_unconfirmed_one_stays_running
     // The peer's own records hold no step: definitions and results are the controller's.
     assert!(!hosted.home.join("orchestration-validation.json").exists());
     assert!(home.join("orchestration-validation.json").exists());
+}
+
+fn cancel(ticket: &Ticket, step: &str, operation: Option<&str>, wait_ms: u64) -> CancelValidation {
+    serde_json::from_value(json!({"ticket": ticket_ref(ticket), "step_id": step,
+        "operation_id": operation, "wait_ms": wait_ms}))
+    .unwrap()
+}
+fn notes_with(m: &Machine, ticket: &Ticket, word: &str) -> usize {
+    m.owner_store
+        .read_ticket(&ticket.id)
+        .unwrap()
+        .notes
+        .iter()
+        .filter(|note| note.text.contains(word))
+        .count()
+}
+
+/// HS2-17ABM2: cancelling stops the step on its host, ends the attempt `cancelled`
+/// (not `failed`), never asks anyone, and is idempotent.
+#[test]
+fn hs2_17abm2_cancelling_stops_a_running_step_and_records_cancelled() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    profiles(
+        &m.target.root,
+        &[(
+            "gated",
+            "echo x >> starts; while [ ! -f go ]; do sleep 0.05; done; echo done >> ends",
+        )],
+    );
+    let ticket = m.orchestration_ticket("Coordinate");
+    m.runtime
+        .validation_define(
+            &m.owner.id,
+            define(
+                &ticket,
+                json!({"step_id": "gated", "check": {"kind": "profile", "name": "gated"},
+                    "timeout_seconds": 20, "retry": {"max_attempts": 3}}),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    // Nothing has run: there is nothing to cancel.
+    assert_eq!(
+        validation_error(m.runtime.validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "gated", None, 0),
+            Some(&worker()),
+            &mut tx
+        )),
+        ValidationError::ResultNotFound
+    );
+    let started = m
+        .runtime
+        .validation_run(
+            &m.owner.id,
+            run(&ticket, "gated", "op-1", 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(started.result.state, ValidationState::Running);
+    // An anonymous caller is refused before the host is told anything.
+    assert!(
+        m.runtime
+            .validation_cancel(
+                &m.owner.id,
+                cancel(&ticket, "gated", None, 0),
+                None,
+                &mut tx
+            )
+            .is_err()
+    );
+    let cancelled = m
+        .runtime
+        .validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "gated", None, MAX_VALIDATION_WAIT_MS),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(cancelled.result.result_id, started.result.result_id);
+    assert_eq!(cancelled.result.state, ValidationState::Cancelled);
+    assert_eq!(cancelled.result.reason.as_deref(), Some("cancelled"));
+    assert_eq!(
+        cancelled.result.outcome.as_ref().unwrap().end,
+        ExecutionEnd::Cancelled
+    );
+    assert_eq!(cancelled.result.outcome.as_ref().unwrap().exit_code, None);
+    // Distinct from failed: the retry policy takes no further attempt.
+    assert_eq!(cancelled.attempts_left, 0);
+    assert_eq!(cancelled.evidence.state, ValidationState::Cancelled);
+    assert!(cancelled.unverified.is_empty());
+    // It never asked anyone, and the gate recorded why.
+    assert!(
+        m.runtime
+            .permission_list(&m.owner.id, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+    assert_eq!(
+        m.last_audit(),
+        ("validation_run".into(), AuditOutcome::Succeeded, None)
+    );
+    // The step was stopped: it never reached its end.
+    std::fs::write(Path::new(&m.target.root).join("go"), "").unwrap();
+    assert!(!Path::new(&m.target.root).join("ends").exists());
+    assert_eq!(notes_with(&m, &ticket, "cancelled"), 1);
+    // The same cancel again, by request or by operation, changes nothing.
+    for operation in [None, Some("op-1")] {
+        let again = m
+            .runtime
+            .validation_cancel(
+                &m.owner.id,
+                cancel(&ticket, "gated", operation, 0),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(again.result, cancelled.result);
+    }
+    assert_eq!(notes_with(&m, &ticket, "cancelled"), 1);
+    // The cancelled request is a fact: running it again runs nothing.
+    let rerun = m
+        .runtime
+        .validation_run(
+            &m.owner.id,
+            run(&ticket, "gated", "op-1", 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(rerun.result, cancelled.result);
+    let starts = || {
+        std::fs::read_to_string(Path::new(&m.target.root).join("starts"))
+            .unwrap()
+            .lines()
+            .count()
+    };
+    assert_eq!(starts(), 1);
+    // A new request runs it again; once it passed, a cancel answers the pass.
+    let passed = until_finished(&m, &ticket, "gated", "op-2", &mut tx);
+    assert_eq!(passed.result.state, ValidationState::Passed);
+    assert_eq!(starts(), 2);
+    let after = m
+        .runtime
+        .validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "gated", None, 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(after.result, passed.result);
+    assert_eq!(
+        validation_error(m.runtime.validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "gated", Some("op-unknown"), 0),
+            Some(&worker()),
+            &mut tx
+        )),
+        ValidationError::ResultNotFound
+    );
+}
+
+/// HS2-17ABM2: a cancel that races the step's own end. Whoever settles the attempt
+/// first, it records how the step really ended, and reports it once.
+#[test]
+fn hs2_17abm2_a_cancel_racing_the_steps_exit_records_how_it_ended() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    profiles(
+        &m.target.root,
+        &[
+            ("quick", "printf ok"),
+            ("gated", "while [ ! -f go ]; do sleep 0.05; done"),
+            ("marked", "echo x >> marked-runs"),
+        ],
+    );
+    let ticket = m.orchestration_ticket("Coordinate");
+    for name in ["quick", "gated", "marked"] {
+        m.runtime
+            .validation_define(
+                &m.owner.id,
+                profile(&ticket, name, name),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    }
+    // 1. The step exits by itself before the cancel reaches its host: the cancel
+    //    records the pass the host saw, not a cancellation.
+    let started = m
+        .runtime
+        .validation_run(
+            &m.owner.id,
+            run(&ticket, "quick", "op-quick", 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let ended = m
+        .runtime
+        .hosted_validation(&m.target.id, &started.result.result_id, 8_000)
+        .unwrap();
+    assert_eq!(ended.outcome.unwrap().end, ExecutionEnd::Exited);
+    let lost_race = m
+        .runtime
+        .validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "quick", Some("op-quick"), MAX_VALIDATION_WAIT_MS),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(lost_race.result.state, ValidationState::Passed);
+    assert_eq!(notes_with(&m, &ticket, "`quick`"), 1);
+    // The request that started it now answers the same pass and reports nothing more.
+    let continued = until_finished(&m, &ticket, "quick", "op-quick", &mut tx);
+    assert_eq!(continued.result, lost_race.result);
+    assert_eq!(notes_with(&m, &ticket, "`quick`"), 1);
+
+    // 2. A cancel and the waiting request settle the same attempt at once. Either may
+    //    write it; both answer the same cancellation and it is reported once.
+    let started = m
+        .runtime
+        .validation_run(
+            &m.owner.id,
+            run(&ticket, "gated", "op-gated", 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(started.result.host_started);
+    let (waited, stopped) = std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| {
+            let mut rng = Rng(200);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            m.runtime
+                .validation_run(
+                    &m.owner.id,
+                    run(&ticket, "gated", "op-gated", MAX_VALIDATION_WAIT_MS),
+                    Some(&worker()),
+                    &mut tx,
+                )
+                .unwrap()
+        });
+        let stopped = m
+            .runtime
+            .validation_cancel(
+                &m.owner.id,
+                cancel(&ticket, "gated", None, MAX_VALIDATION_WAIT_MS),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+        (waiter.join().unwrap(), stopped)
+    });
+    assert_eq!(stopped.result.state, ValidationState::Cancelled);
+    if waited.result.state.is_final() {
+        assert_eq!(waited.result, stopped.result);
+    }
+    assert_eq!(notes_with(&m, &ticket, "`gated`"), 1);
+
+    // 3. A cancel reaches the host before the start does: the host remembers the id as
+    //    cancelled, and the late start runs nothing.
+    let registry = ValidationRegistry::new(&m.home);
+    let key = RunTicket {
+        connection_id: m.owner_connection(),
+        native_id: ticket.id.to_string(),
+    };
+    let (pending, _) = registry
+        .begin(
+            &m.owner.id,
+            &key,
+            "marked",
+            NewResult {
+                operation_id: "op-marked".into(),
+                state: ValidationState::Running,
+                reason: None,
+                actor_id: Some("worker-1".into()),
+                run_id: None,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let early = m
+        .runtime
+        .validation_cancel(
+            &m.owner.id,
+            cancel(&ticket, "marked", Some("op-marked"), 0),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(early.result.state, ValidationState::Cancelled);
+    assert_eq!(early.result.outcome, None);
+    let late = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            HostedValidationStart {
+                execution_id: pending.result_id.clone(),
+                check: hotsheet_ticketing::orchestration::ValidationCheck::Profile {
+                    name: "marked".into(),
+                },
+                timeout_seconds: 20,
+                wait_ms: 0,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(late.outcome.as_ref().unwrap().end, ExecutionEnd::Cancelled);
+    assert!(!Path::new(&m.target.root).join("marked-runs").exists());
+    // The late start's outcome cannot replace what the cancel recorded; the attempt
+    // is answered as recorded and nothing is reported again.
+    let (recorded, changed) = m
+        .runtime
+        .validation_settle(
+            &m.owner.id,
+            &key,
+            "marked",
+            &pending.result_id,
+            ResultUpdate {
+                to: Some(ValidationState::Cancelled),
+                reason: Some("cancelled".into()),
+                outcome: late.outcome,
+                host_started: None,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert!(!changed);
+    assert_eq!(recorded, early.result);
+}
+
+/// HS2-17ABM2: the hosted stop is idempotent, keeps a step's own end, and an id the
+/// host does not know is never started afterwards.
+#[test]
+fn hs2_17abm2_the_hosted_stop_ends_an_execution_once() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let start = |n: u128, line: &str, wait_ms: u64| HostedValidationStart {
+        execution_id: id(n),
+        check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), line.into()],
+        },
+        timeout_seconds: 20,
+        wait_ms,
+    };
+    let stop = |n: u128, wait_ms: u64| HostedValidationCancel {
+        execution_id: id(n),
+        wait_ms,
+    };
+    let running = m
+        .runtime
+        .hosted_validation_start(&m.target.id, start(1, "sleep 30", 0), &mut tx)
+        .unwrap();
+    assert_eq!(running.state, HostedExecutionState::Running);
+    let stopped = m
+        .runtime
+        .hosted_validation_cancel(&m.target.id, stop(1, 8_000), &mut tx)
+        .unwrap();
+    assert_eq!(stopped.state, HostedExecutionState::Finished);
+    let outcome = stopped.outcome.clone().unwrap();
+    assert_eq!(outcome.end, ExecutionEnd::Cancelled);
+    assert!(outcome.duration_ms < 8_000);
+    for _ in 0..2 {
+        let again = m
+            .runtime
+            .hosted_validation_cancel(&m.target.id, stop(1, 0), &mut tx)
+            .unwrap();
+        assert_eq!(again.outcome, stopped.outcome);
+    }
+    // A step that already ended keeps its own end.
+    let exited = m
+        .runtime
+        .hosted_validation_start(&m.target.id, start(2, "exit 3", 8_000), &mut tx)
+        .unwrap();
+    assert_eq!(exited.outcome.as_ref().unwrap().exit_code, Some(3));
+    let late = m
+        .runtime
+        .hosted_validation_cancel(&m.target.id, stop(2, 0), &mut tx)
+        .unwrap();
+    assert_eq!(late.outcome, exited.outcome);
+    // Unknown here: answered as unknown, and a later start under that id runs nothing.
+    let unknown = m
+        .runtime
+        .hosted_validation_cancel(&m.target.id, stop(3, 0), &mut tx)
+        .unwrap();
+    assert_eq!(unknown.state, HostedExecutionState::Unknown);
+    let after = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            start(3, "echo x >> stop-runs", 8_000),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(after.outcome.unwrap().end, ExecutionEnd::Cancelled);
+    assert!(!Path::new(&m.target.root).join("stop-runs").exists());
+    // Requests are validated first.
+    for bad in [
+        HostedValidationCancel {
+            execution_id: "nope".into(),
+            wait_ms: 0,
+        },
+        stop(4, MAX_VALIDATION_WAIT_MS + 1),
+    ] {
+        assert!(matches!(
+            m.runtime
+                .hosted_validation_cancel(&m.target.id, bad, &mut tx),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    assert!(
+        m.runtime
+            .hosted_validation_cancel("unknown-checkout", stop(5, 0), &mut tx)
+            .is_err()
+    );
 }

@@ -176,12 +176,14 @@ impl Bench {
 
 #[test]
 fn hs2_wn0mxz_every_result_state_edge_is_allowed_or_refused_exactly() {
-    use ValidationState::{Failed, Passed, Running, Skipped, Unavailable, Unverified};
+    use ValidationState::{Cancelled, Failed, Passed, Running, Skipped, Unavailable, Unverified};
     let allowed = [
         (Running, Passed),
         (Running, Failed),
         (Running, Unavailable),
         (Running, Unverified),
+        // HS2-17ABM2: only a running attempt can be cancelled.
+        (Running, Cancelled),
     ];
     for from in ValidationState::ALL {
         for next in ValidationState::ALL {
@@ -206,7 +208,8 @@ fn hs2_wn0mxz_every_result_state_edge_is_allowed_or_refused_exactly() {
             "failed",
             "skipped",
             "unavailable",
-            "unverified"
+            "unverified",
+            "cancelled"
         ]
     );
     // The registry enforces the same matrix on a stored result, from every state.
@@ -241,7 +244,8 @@ fn hs2_wn0mxz_every_result_state_edge_is_allowed_or_refused_exactly() {
 #[test]
 fn hs2_wn0mxz_an_outcome_is_judged_against_the_expected_evidence() {
     use ExecutionEnd::{
-        Exited, LaunchFailed, OutputLimit, ProfileNotDefined, ProgramNotFound, Signalled, TimedOut,
+        Cancelled, Exited, LaunchFailed, OutputLimit, ProfileNotDefined, ProgramNotFound,
+        Signalled, TimedOut,
     };
     use ValidationState::{Failed, Passed, Unavailable, Unverified};
     let plain = ExpectedEvidence::default();
@@ -307,6 +311,15 @@ fn hs2_wn0mxz_an_outcome_is_judged_against_the_expected_evidence() {
             Some("exit_code_mismatch"),
         ),
         (&plain, TimedOut, None, None, Failed, Some("timed_out")),
+        // HS2-17ABM2: stopped on request is neither a pass nor a failure.
+        (
+            &exact,
+            Cancelled,
+            None,
+            Some(DIGEST),
+            ValidationState::Cancelled,
+            Some("cancelled"),
+        ),
         (
             &plain,
             Signalled,

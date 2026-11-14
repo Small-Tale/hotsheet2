@@ -67,6 +67,10 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
                 "flaky",
                 "if [ -f seen ]; then exit 0; else touch seen; exit 3; fi",
             ),
+            (
+                "held",
+                "while [ ! -f release ]; do sleep 0.05; done; echo x >> held-ends",
+            ),
         ],
     );
     let expected = identity(&peer_home);
@@ -402,6 +406,45 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
             ("absent".into(), "unavailable".into()),
         ]
     );
+    // HS2-17ABM2: a running step is stopped on the peer by a cancel that asks nobody,
+    // and ends `cancelled`, not `failed`.
+    ok(
+        &worker,
+        &[
+            "define",
+            "--ticket",
+            &orchestration.slug,
+            "--step",
+            "held",
+            "--target",
+            TARGET,
+            "--profile",
+            "held",
+        ],
+    );
+    let held = ok(
+        &worker,
+        &[
+            &["run"][..],
+            &step("held"),
+            &["--operation-id", "op-val-held", "--no-wait"],
+        ]
+        .concat(),
+    );
+    assert_eq!(held["result"]["state"], "running", "{held}");
+    let cancelled = ok(&worker, &[&["cancel"][..], &step("held")].concat());
+    assert_eq!(cancelled["result"]["state"], "cancelled", "{cancelled}");
+    assert_eq!(cancelled["result"]["outcome"]["end"], "cancelled");
+    assert_eq!(
+        cancelled["result"]["result_id"],
+        held["result"]["result_id"]
+    );
+    std::fs::write(peer_project.join("release"), "").unwrap();
+    assert!(!peer_project.join("held-ends").exists());
+    assert_eq!(
+        ok(&worker, &[&["cancel"][..], &step("held")].concat())["result"],
+        cancelled["result"]
+    );
     // The peer narrows the pairing to read-only: it refuses to run anything, and the
     // step is unavailable rather than failed.
     set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadOnly).unwrap();
@@ -468,6 +511,7 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         &[
             ("smoke", "printf ok; echo x >> smoke-runs"),
             ("gated", "while [ ! -f go ]; do sleep 0.05; done"),
+            ("held", "while [ ! -f never ]; do sleep 0.05; done"),
         ],
     );
     let router = app(host.clone());
@@ -517,7 +561,9 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
     for (method, path) in [
         ("POST", format!("{base}/validations/list")),
         ("POST", format!("{base}/validations/run")),
+        ("POST", format!("{base}/validations/cancel")),
         ("POST", hosted.clone()),
+        ("DELETE", hosted.clone()),
         ("GET", format!("{hosted}?execution_id={TARGET}")),
     ] {
         assert_eq!(
@@ -546,6 +592,17 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(invalid["code"], "invalid_request");
+    // HS2-17ABM2: the hosted stop answers an id it does not know as unknown.
+    let (status, stopped) = api(
+        router.clone(),
+        "DELETE",
+        &hosted,
+        json!({"execution_id":TARGET,"wait_ms":0}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(stopped, json!({"execution_id":TARGET,"state":"unknown"}));
     let (status, unsupported) = api(
         router.clone(),
         "POST",
@@ -638,6 +695,26 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
             .len(),
         1
     );
+    // HS2-17ABM2: cancelling a running step through MCP.
+    call(
+        json!({"action":"validation_define","target_id":TARGET,"ticket":of,
+        "step":{"step_id":"held","check":{"kind":"profile","name":"held"}}}),
+    );
+    let held = call(
+        json!({"action":"validation_run","ticket":of,"step_id":"held",
+        "operation_id":"op-mcp-held","wait_ms":0}),
+    );
+    assert_eq!(held["result"]["state"], "running", "{held}");
+    let cancelled = call(
+        json!({"action":"validation_cancel","ticket":of,"step_id":"held",
+        "wait_ms":8000}),
+    );
+    assert_eq!(cancelled["result"]["state"], "cancelled", "{cancelled}");
+    assert_eq!(cancelled["evidence"]["state"], "cancelled");
+    assert_eq!(
+        cancelled["result"]["result_id"],
+        held["result"]["result_id"]
+    );
     for arguments in [
         // No step object, no target, an unknown step, no identified actor, an unknown
         // action.
@@ -650,6 +727,8 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         json!({"action":"validation_run","checkout":checkout.id,"ticket":of,"step_id":"smoke",
             "operation_id":"op-other"}),
         json!({"action":"validation_explode","checkout":checkout.id}),
+        json!({"action":"validation_cancel","checkout":checkout.id,"ticket":of,"step_id":"held",
+            "actor_role":"ai","actor_id":"scheduler-1","operation_id":"op-none"}),
     ] {
         mcp_rejected(&home, &backend, "hotsheet_targets", arguments);
     }

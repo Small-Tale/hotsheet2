@@ -58,6 +58,16 @@ pub struct HostedValidationStart {
     pub wait_ms: u64,
 }
 
+/// HS2-17ABM2: stop the execution an id names and wait a bounded time for it to end.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostedValidationCancel {
+    pub execution_id: String,
+    /// How long to wait for the stopped execution to end before answering `running`.
+    #[serde(default)]
+    pub wait_ms: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostedExecutionState {
@@ -81,6 +91,8 @@ struct Execution {
     key: String,
     outcome: Mutex<Option<ExecutionOutcome>>,
     done: Condvar,
+    /// HS2-17ABM2: set by a cancel; the step's own thread stops it.
+    cancel: Arc<AtomicBool>,
 }
 
 impl Execution {
@@ -124,6 +136,30 @@ fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn new_execution(key: String) -> Arc<Execution> {
+    Arc::new(Execution {
+        key,
+        outcome: Mutex::new(None),
+        done: Condvar::new(),
+        cancel: Arc::new(AtomicBool::new(false)),
+    })
+}
+
+/// Make room for one more execution by forgetting the oldest finished one; a running
+/// one is never forgotten.
+fn make_room(known: &mut Vec<Arc<Execution>>) -> Result<(), OrchestrationError> {
+    while known.len() >= MAX_HOSTED_EXECUTIONS {
+        let Some(index) = known
+            .iter()
+            .position(|execution| execution.finished().is_some())
+        else {
+            return Err(OrchestrationError::Capacity);
+        };
+        known.remove(index);
+    }
+    Ok(())
 }
 
 fn ended(end: ExecutionEnd, started_at_ms: u64, started: Instant) -> ExecutionOutcome {
@@ -182,7 +218,8 @@ fn stop(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
-/// Run one command in `root` and report how it ended. Blocks until it has.
+/// Run one command in `root` and report how it ended. Blocks until it has. Setting
+/// `cancel` stops it; a step that already ended by itself keeps its own end.
 pub(super) fn execute(
     root: &Path,
     program: &str,
@@ -190,6 +227,7 @@ pub(super) fn execute(
     timeout: Duration,
     output_limit: u64,
     started_at_ms: u64,
+    cancel: &AtomicBool,
 ) -> ExecutionOutcome {
     let started = Instant::now();
     // A relative program with a directory part is the checkout's own script; a bare
@@ -248,7 +286,9 @@ pub(super) fn execute(
             Ok(None) => {}
             Err(_) => break None,
         }
-        if over.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
+            end = ExecutionEnd::Cancelled;
+        } else if over.load(Ordering::SeqCst) {
             end = ExecutionEnd::OutputLimit;
         } else if started.elapsed() >= timeout {
             end = ExecutionEnd::TimedOut;
@@ -357,16 +397,7 @@ impl OrchestrationRuntime {
                         .find(name)?
                         .map(|profile| (profile.program, profile.args)),
                 };
-                // Forget the oldest finished executions; a running one is never forgotten.
-                while known.len() >= MAX_HOSTED_EXECUTIONS {
-                    let Some(index) = known
-                        .iter()
-                        .position(|execution| execution.finished().is_some())
-                    else {
-                        return Err(OrchestrationError::Capacity);
-                    };
-                    known.remove(index);
-                }
+                make_room(&mut known)?;
                 if command.is_some()
                     && known
                         .iter()
@@ -376,11 +407,7 @@ impl OrchestrationRuntime {
                 {
                     return Err(OrchestrationError::Capacity);
                 }
-                let execution = Arc::new(Execution {
-                    key,
-                    outcome: Mutex::new(None),
-                    done: Condvar::new(),
-                });
+                let execution = new_execution(key);
                 known.push(execution.clone());
                 match command {
                     None => execution.finish(ended(
@@ -399,6 +426,7 @@ impl OrchestrationRuntime {
                                 timeout,
                                 MAX_VALIDATION_OUTPUT_BYTES,
                                 started_at_ms,
+                                &running.cancel,
                             ));
                         });
                     }
@@ -433,6 +461,47 @@ impl OrchestrationRuntime {
                 outcome: None,
             },
         })
+    }
+
+    /// HS2-17ABM2: stop an execution this host process started and wait a bounded time
+    /// for it to end. It only lowers activity, so it is ordinary authenticated data
+    /// like the start. A step that already ended keeps its own outcome, so a cancel
+    /// that races the step's exit answers with how it really ended. An id this process
+    /// does not know answers `unknown` and is remembered as cancelled, so a start with
+    /// that id that arrives later runs nothing. The same cancel again is a no-op.
+    pub fn hosted_validation_cancel(
+        &self,
+        checkout_id: &str,
+        request: HostedValidationCancel,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedValidation, OrchestrationError> {
+        execution_id(&request.execution_id)?;
+        let wait_ms = wait(request.wait_ms)?;
+        self.owner(checkout_id)?;
+        let key = self.execution_key(checkout_id, &request.execution_id);
+        let execution = {
+            let mut known = executions();
+            match known.iter().find(|execution| execution.key == key) {
+                Some(execution) => execution.clone(),
+                None => {
+                    make_room(&mut known)?;
+                    let tombstone = new_execution(key);
+                    tombstone.finish(ended(
+                        ExecutionEnd::Cancelled,
+                        tx.clock.now_ms(),
+                        Instant::now(),
+                    ));
+                    known.push(tombstone);
+                    return Ok(HostedValidation {
+                        execution_id: request.execution_id,
+                        state: HostedExecutionState::Unknown,
+                        outcome: None,
+                    });
+                }
+            }
+        };
+        execution.cancel.store(true, Ordering::SeqCst);
+        Ok(hosted_reply(&request.execution_id, execution.wait(wait_ms)))
     }
 }
 
@@ -473,6 +542,20 @@ pub struct RunValidation {
     #[serde(default)]
     pub run_id: Option<String>,
     /// How long to wait for the attempt to finish, at most 8000.
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
+}
+
+/// HS2-17ABM2: stop a step's running attempt.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CancelValidation {
+    pub ticket: OrchestrationTicket,
+    pub step_id: String,
+    /// The request to stop; omit for whichever attempt of the step is running.
+    #[serde(default)]
+    pub operation_id: Option<String>,
+    /// How long to wait for the stopped attempt to end, at most 8000.
     #[serde(default)]
     pub wait_ms: Option<u64>,
 }
@@ -879,7 +962,7 @@ impl OrchestrationRuntime {
                 .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
         });
         let finish = |update: ResultUpdate, tx: &mut Transaction<'_>| {
-            registry.finish(
+            self.validation_settle(
                 owner_id,
                 &ticket,
                 &request.step_id,
@@ -895,7 +978,7 @@ impl OrchestrationRuntime {
             host_started: None,
         };
         let mut unverified = Vec::new();
-        let result = match hosted {
+        let (result, changed) = match hosted {
             Ok(HostedValidation {
                 outcome: Some(outcome),
                 ..
@@ -925,13 +1008,13 @@ impl OrchestrationRuntime {
             // `running`; the same request again asks under the same execution id.
             Err(OrchestrationError::Observation(_) | OrchestrationError::Storage(_)) => {
                 unverified.push("target_execution");
-                result
+                (result, false)
             }
             // An accepted execution is not written off because one later read was
             // refused; it stays `running` until the host answers or it lapses.
             Err(_) if result.host_started => {
                 unverified.push("target_execution");
-                result
+                (result, false)
             }
             // The target refused to run it at all.
             Err(error) => finish(
@@ -947,6 +1030,187 @@ impl OrchestrationRuntime {
                 (result.state != ValidationState::Passed).then(|| result.state.code()),
                 tx,
             )?;
+            // A cancel that settled it first has already reported it (HS2-17ABM2).
+            if changed {
+                self.validation_report(
+                    owner_id,
+                    &ticket,
+                    &request.step_id,
+                    &target.target_id,
+                    &result,
+                    tx,
+                );
+            }
+        }
+        self.validation_view(owner_id, &ticket, &request.step_id, result, unverified, tx)
+    }
+
+    /// Apply one change to a running attempt, saying whether this call wrote it. An
+    /// attempt another caller settled differently in the meantime (a cancel, or the
+    /// request that saw the step's own end) is answered as recorded, unchanged.
+    pub(super) fn validation_settle(
+        &self,
+        owner_id: &str,
+        ticket: &RunTicket,
+        step_id: &str,
+        result_id: &str,
+        update: ResultUpdate,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(ValidationResult, bool), OrchestrationError> {
+        let registry = self.validations();
+        match registry.settle(owner_id, ticket, step_id, result_id, update, tx) {
+            Err(OrchestrationError::Validation(
+                hotsheet_ticketing::orchestration::ValidationError::ResultFinal,
+            )) => registry
+                .evidence(owner_id, ticket, step_id, tx.clock.now_ms())?
+                .history
+                .into_iter()
+                .find(|result| result.result_id == result_id)
+                .map(|result| (result, false))
+                .ok_or(OrchestrationError::Validation(
+                    hotsheet_ticketing::orchestration::ValidationError::ResultNotFound,
+                )),
+            other => other,
+        }
+    }
+
+    /// HS2-17ABM2: stop a step's running attempt.
+    ///
+    /// Cancelling only lowers activity on the target, so it passes the
+    /// `validation_run` gate without asking anyone and the policy never refuses it;
+    /// it needs an identified actor and is audited. The attempt ends `cancelled`,
+    /// distinct from `failed`, unless the step ended by itself first: then it records
+    /// how the step really ended. An attempt that is already finished is answered from
+    /// the record without the gate or the target. While the host has not confirmed
+    /// the stop, the attempt stays `running` and the same cancel again waits further.
+    pub fn validation_cancel(
+        &self,
+        owner_id: &str,
+        request: CancelValidation,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<ValidationRunView, OrchestrationError> {
+        if let Some(operation) = &request.operation_id {
+            identifier(operation, "bounded operation id required")?;
+        }
+        let wait_ms = wait(request.wait_ms.unwrap_or(0))?;
+        let ticket = self.validation_ticket(owner_id, &request.ticket)?;
+        let evidence =
+            self.validations()
+                .evidence(owner_id, &ticket, &request.step_id, tx.clock.now_ms())?;
+        let found = match &request.operation_id {
+            Some(operation) => evidence
+                .history
+                .iter()
+                .rev()
+                .find(|result| result.operation_id == *operation),
+            None => evidence
+                .history
+                .iter()
+                .rev()
+                .find(|result| result.state == ValidationState::Running)
+                .or(evidence.latest.as_ref()),
+        }
+        .cloned()
+        .ok_or(OrchestrationError::Validation(
+            hotsheet_ticketing::orchestration::ValidationError::ResultNotFound,
+        ))?;
+        // Nothing is running: the finished attempt is a fact and nothing is asked.
+        if found.state.is_final() {
+            return self.validation_view(
+                owner_id,
+                &ticket,
+                &request.step_id,
+                found,
+                Vec::new(),
+                tx,
+            );
+        }
+        let definition = &evidence.step.definition;
+        let target = Self::target_ref(owner_id, &definition.target_id)?;
+        let authorized = self.authorize(
+            &target,
+            actor,
+            ActionRequest::new(TargetAction::ValidationRun)
+                .operation(found.operation_id.clone())
+                .reducing(),
+            tx,
+        )?;
+        // Asked even when the host never confirmed the start: a start in flight may
+        // have reached it, and an id it does not know is then never started.
+        let hosted = Self::destination(&authorized).and_then(|destination| {
+            let body = serde_json::to_value(HostedValidationCancel {
+                execution_id: found.result_id.clone(),
+                wait_ms,
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            let reply = self.hosted_call_at(
+                destination,
+                "/target-validations",
+                "DELETE",
+                "",
+                Some(&body),
+                tx,
+            )?;
+            serde_json::from_value::<HostedValidation>(reply)
+                .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        });
+        let ended = |state, reason: &str, outcome| ResultUpdate {
+            to: Some(state),
+            reason: Some(reason.into()),
+            outcome,
+            host_started: None,
+        };
+        let update = match hosted {
+            Ok(HostedValidation {
+                outcome: Some(outcome),
+                ..
+            }) => {
+                let (state, reason) = evaluate(&definition.evidence, &outcome);
+                Some(ResultUpdate {
+                    to: Some(state),
+                    reason: reason.map(Into::into),
+                    outcome: Some(outcome),
+                    host_started: None,
+                })
+            }
+            // Accepted earlier and no longer known there: it cannot be confirmed.
+            Ok(HostedValidation {
+                state: HostedExecutionState::Unknown,
+                ..
+            }) if found.host_started => {
+                Some(ended(ValidationState::Unverified, "execution_lost", None))
+            }
+            // Never started there, and now it never will be.
+            Ok(HostedValidation {
+                state: HostedExecutionState::Unknown,
+                ..
+            }) => Some(ended(ValidationState::Cancelled, "cancelled", None)),
+            // Stopping, or the host could not be told: it stays `running`.
+            Ok(_) | Err(_) => None,
+        };
+        let (result, changed, unverified) = match update {
+            Some(update) => {
+                let (result, changed) = self.validation_settle(
+                    owner_id,
+                    &ticket,
+                    &request.step_id,
+                    &found.result_id,
+                    update,
+                    tx,
+                )?;
+                (result, changed, Vec::new())
+            }
+            None => (found, false, vec!["target_execution"]),
+        };
+        self.record_outcome(
+            &target,
+            &authorized,
+            result.state.is_final(),
+            (!result.state.is_final()).then_some("cancel_unconfirmed"),
+            tx,
+        )?;
+        if changed {
             self.validation_report(
                 owner_id,
                 &ticket,

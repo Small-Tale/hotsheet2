@@ -430,6 +430,12 @@ fn hs2_42tara_validation_prerequisite_table() {
             L::Blocked,
             Some("validation_unavailable"),
         ),
+        // HS2-17ABM2: a cancelled step proves nothing and blocks until run again.
+        (
+            Some((V::Cancelled, Some("cancelled"))),
+            L::Blocked,
+            Some("validation_cancelled"),
+        ),
         (
             Some((V::Unverified, Some("not_run"))),
             L::Blocked,

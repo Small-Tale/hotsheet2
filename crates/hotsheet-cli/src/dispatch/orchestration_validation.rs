@@ -94,6 +94,19 @@ enum ValidationCmd {
         #[arg(long)]
         no_wait: bool,
     },
+    /// Stop a step's running attempt (HS2-17ABM2). It only lowers activity, so it
+    /// never asks a person. The attempt ends `cancelled`, unless the step ended by
+    /// itself first; a finished attempt is answered as recorded.
+    Cancel {
+        #[command(flatten)]
+        step: StepArgs,
+        /// The request to stop; omit for whichever attempt is running.
+        #[arg(long)]
+        operation_id: Option<String>,
+        /// Return at once instead of waiting for the stopped attempt to end.
+        #[arg(long)]
+        no_wait: bool,
+    },
     /// Remove a step and its retained results.
     Remove {
         #[command(flatten)]
@@ -165,6 +178,20 @@ pub(super) fn route(
         ),
         ValidationCmd::Show { step } => ("POST", format!("{base}/evidence"), of(&step)),
         ValidationCmd::Remove { step } => ("POST", format!("{base}/remove"), of(&step)),
+        ValidationCmd::Cancel {
+            step,
+            operation_id,
+            no_wait,
+        } => {
+            let mut body = of(&step);
+            if let Some(operation_id) = operation_id {
+                body["operation_id"] = operation_id.into();
+            }
+            if !no_wait {
+                body["wait_ms"] = MAX_VALIDATION_WAIT_MS.into();
+            }
+            ("POST", format!("{base}/cancel"), body)
+        }
         ValidationCmd::Run {
             step,
             operation_id,

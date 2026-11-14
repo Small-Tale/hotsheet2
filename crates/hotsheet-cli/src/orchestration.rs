@@ -113,9 +113,9 @@ pub use tool_capacity::{
     SelectTool, SignalResult, ToolCapacityRow, ToolCapacityView, ToolSelection,
 };
 pub use validation::{
-    DefineValidation, HostedExecutionState, HostedValidation, HostedValidationStart,
-    ListValidations, MAX_VALIDATION_OUTPUT_BYTES, MAX_VALIDATION_WAIT_MS, RunValidation,
-    ValidationRunView, ValidationStepRef,
+    CancelValidation, DefineValidation, HostedExecutionState, HostedValidation,
+    HostedValidationCancel, HostedValidationStart, ListValidations, MAX_VALIDATION_OUTPUT_BYTES,
+    MAX_VALIDATION_WAIT_MS, RunValidation, ValidationRunView, ValidationStepRef,
 };
 pub use watch::{
     MAX_TARGET_EVENT_WAIT_MS, TargetEventPage, TargetEvents, TargetSessionEvent, TargetTicketEvent,

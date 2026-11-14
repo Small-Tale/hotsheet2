@@ -596,6 +596,10 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", checkout, "target-validations"]) => {
                 value(self.hosted_validation_start(checkout, decode(body)?, tx)?)
             }
+            // HS2-17ABM2: stop it; only lowers activity.
+            ("DELETE", ["checkouts", checkout, "target-validations"]) => {
+                value(self.hosted_validation_cancel(checkout, decode(body)?, tx)?)
+            }
             ("GET", ["checkouts", checkout, "target-validations"]) => {
                 let execution = query_text(path, "execution_id")?
                     .ok_or(OrchestrationError::Invalid("execution_id is required"))?;
@@ -709,6 +713,10 @@ impl OrchestrationRuntime {
                     }
                     "remove" => {
                         value(self.validation_remove(owner, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    // HS2-17ABM2
+                    "cancel" => {
+                        value(self.validation_cancel(owner, decode(body)?, actor.as_ref(), tx)?)
                     }
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }

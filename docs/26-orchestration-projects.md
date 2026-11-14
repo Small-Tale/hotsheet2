@@ -1299,14 +1299,15 @@ recent results.
 
 A result is one attempt at a step.
 
-| State         | Meaning                                                                  | May become                                      |
-| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
-| `running`     | The attempt was started and its outcome is not known yet                 | `passed`, `failed`, `unavailable`, `unverified` |
-| `passed`      | It ran and produced the expected evidence                                | nothing                                         |
-| `failed`      | It ran and did not: wrong exit code or output, timeout, signal, too loud | nothing                                         |
-| `skipped`     | It was not run because a prerequisite has not passed                     | nothing                                         |
-| `unavailable` | The target could not run it at all                                       | nothing                                         |
-| `unverified`  | It may have run, but its outcome could not be confirmed                  | nothing                                         |
+| State         | Meaning                                                                  | May become                                                   |
+| ------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `running`     | The attempt was started and its outcome is not known yet                 | `passed`, `failed`, `unavailable`, `unverified`, `cancelled` |
+| `passed`      | It ran and produced the expected evidence                                | nothing                                                      |
+| `failed`      | It ran and did not: wrong exit code or output, timeout, signal, too loud | nothing                                                      |
+| `skipped`     | It was not run because a prerequisite has not passed                     | nothing                                                      |
+| `unavailable` | The target could not run it at all                                       | nothing                                                      |
+| `unverified`  | It may have run, but its outcome could not be confirmed                  | nothing                                                      |
+| `cancelled`   | It was stopped on request before it ended (HS2-17ABM2)                   | nothing                                                      |
 
 A finished result is immutable. Reporting the same outcome again is a no-op and any
 other change is refused with `validation_result_final`; an edge the table does not
@@ -1325,6 +1326,9 @@ Each state other than `passed` and `running` carries a reason code:
 - `unverified`: `execution_lost` (the host accepted the attempt and no longer knows
   it), `deadline_passed` (a running attempt outlived its timeout by more than a
   minute), `exit_code_unknown`, `output_unknown`.
+- `cancelled`: `cancelled`. It is not a failure: the retry policy takes no further
+  attempt, and a readiness prerequisite on the step is blocked with
+  `validation_cancelled` until a new request passes it.
 
 ### What a result records
 
@@ -1391,8 +1395,39 @@ at most `wait_ms` (8,000) for it:
   contacting the target and without asking anyone. A later request with a new
   `operation_id` runs it once the prerequisite passes.
 
-There is no cancel yet (HS2-17ABM2). The scheduler that runs steps without a caller
-is HS2-ECWG50.
+The scheduler that runs steps without a caller is HS2-ECWG50.
+
+### Cancelling a step (HS2-17ABM2)
+
+`cancel` stops a step's running attempt: the one its `operation_id` names, or
+whichever attempt of the step is running when it is omitted.
+
+- **It never asks.** Cancelling only lowers activity on the target, so it passes the
+  `validation_run` gate as reducing activity (§26.7): no person is asked, the policy
+  never refuses it, and it needs an identified actor and is audited.
+- **The host stops the execution** and its process group, then answers how it
+  ended, waiting at most `wait_ms` (8,000). The attempt ends `cancelled` with an
+  outcome whose `end` is `cancelled`. It is never recorded as `failed`.
+- **A race with the step's own end** is decided by the host: a step that exited
+  before the stop took effect keeps its own outcome, and the cancel records that
+  (`passed`, `failed`, ...). The request that started the attempt may observe the
+  same end at the same moment; whichever writes it first records it, the other
+  answers the same result, and the ticket note and run event appear once.
+- **A start the host has not seen yet** cannot run afterwards: the host answers
+  `unknown` and remembers the id as cancelled, so a start that arrives later under
+  that id runs nothing. The attempt is recorded `cancelled` without an outcome. An
+  attempt the host had accepted and no longer knows is `unverified`
+  (`execution_lost`), as for `run`.
+- **While the stop is not confirmed** (the host is unreachable or still stopping),
+  the attempt stays `running` and the answer lists `target_execution` under
+  `unverified`; the same cancel again waits further.
+- **Nothing running** is answered from the record: a finished attempt is returned as
+  it is, without the gate or the target. A step that never ran, or an unknown
+  `operation_id`, is `validation_result_not_found`.
+
+A cancelled request is finished: running it again with the same `operation_id`
+answers the cancellation, and a new `operation_id` runs the step again. The target's
+own device role still applies, so a read-only pairing cannot stop an execution.
 
 ### Authority
 
@@ -1441,6 +1476,8 @@ hotsheet-cli ... orchestration validation define --project <owner> --ticket <orc
 hotsheet-cli ... orchestration validation define ... --program <program> [--arg <argument>]...
 hotsheet-cli ... orchestration validation run --project <owner> --ticket <orchestration-ticket> \
   --step <name> --operation-id <retained-id> [--run <run-id>] [--no-wait]
+hotsheet-cli ... orchestration validation cancel --project <owner> --ticket <orchestration-ticket> \
+  --step <name> [--operation-id <retained-id>] [--no-wait]
 hotsheet-cli ... orchestration validation show|remove --project <owner> --ticket <orchestration-ticket> --step <name>
 hotsheet-cli ... orchestration validation list --project <owner> [--ticket <orchestration-ticket>]
 ```
@@ -1451,14 +1488,15 @@ The result is in the JSON (`result.state`), not in the exit status. `--source` n
 the orchestration ticket's connection and may be omitted when the project has one git
 ticket source.
 
-| Route                                                                            | Methods and purpose                                                                          |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/validations/{define,list,evidence,run,remove}` | POST orchestrating-side operations; machine-local                                            |
-| `/checkouts/{checkout}/target-validations`                                       | Hosted half: POST start or re-attach by `execution_id`; GET its state, both with a `wait_ms` |
+| Route                                                                                   | Methods and purpose                                                                                                       |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/validations/{define,list,evidence,run,remove,cancel}` | POST orchestrating-side operations; machine-local                                                                         |
+| `/checkouts/{checkout}/target-validations`                                              | Hosted half: POST start or re-attach by `execution_id`; GET its state; DELETE stop it (HS2-17ABM2), each with a `wait_ms` |
 
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_define`,
-`validation_list`, `validation_evidence`, `validation_run` and `validation_remove`.
+`validation_list`, `validation_evidence`, `validation_run`, `validation_remove` and
+`validation_cancel`.
 Listing and checking a target's profiles headlessly is HS2-YYNW9F, and the workspace
 view is HS2-9XJEZC.
 
@@ -2034,7 +2072,7 @@ stable code, the prerequisite, and for a provisional one the commits it rests on
   the opt-in it is not.
 - **Validation.** `validation_step_missing`, `validation_not_run`,
   `validation_step_changed`, `validation_failed`, `validation_running`,
-  `validation_skipped` and `validation_unavailable` block; other unverified evidence
+  `validation_skipped`, `validation_unavailable` and `validation_cancelled` block; other unverified evidence
   is stale (`validation_unverified`).
 - **Cycles.** Every step of a cycle is `cyclic` (`plan_cycle`) with the sorted step
   ids of its cycle, whatever the targets say: the plan is wrong and nothing in it

@@ -2251,7 +2251,10 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/checkouts/{checkout}/target-validations",
-            get(routes::orchestration::read).post(routes::orchestration::write),
+            get(routes::orchestration::read)
+                .post(routes::orchestration::write)
+                // HS2-17ABM2: stop an execution.
+                .delete(routes::orchestration::write),
         )
         // HS2-J8PRTV: this machine's capacity and its own admission answer, read when
         // asked; and the orchestrating side's gated reach to a target's machine.

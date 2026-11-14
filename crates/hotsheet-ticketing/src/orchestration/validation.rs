@@ -44,16 +44,20 @@ pub enum ValidationState {
     Unavailable,
     /// It may have run, but its outcome could not be confirmed.
     Unverified,
+    /// HS2-17ABM2: it was stopped on request before it finished. Not a failure: the
+    /// retry policy does not take another attempt, and a new request runs it again.
+    Cancelled,
 }
 
 impl ValidationState {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Running,
         Self::Passed,
         Self::Failed,
         Self::Skipped,
         Self::Unavailable,
         Self::Unverified,
+        Self::Cancelled,
     ];
 
     pub fn is_final(self) -> bool {
@@ -71,7 +75,11 @@ impl ValidationState {
         self == Self::Running
             && matches!(
                 next,
-                Self::Passed | Self::Failed | Self::Unavailable | Self::Unverified
+                Self::Passed
+                    | Self::Failed
+                    | Self::Unavailable
+                    | Self::Unverified
+                    | Self::Cancelled
             )
     }
 
@@ -83,6 +91,7 @@ impl ValidationState {
             Self::Skipped => "skipped",
             Self::Unavailable => "unavailable",
             Self::Unverified => "unverified",
+            Self::Cancelled => "cancelled",
         }
     }
 }
@@ -253,6 +262,8 @@ pub enum ExecutionEnd {
     ProfileNotDefined,
     ProgramNotFound,
     LaunchFailed,
+    /// HS2-17ABM2: stopped on request before it ended by itself.
+    Cancelled,
 }
 
 /// What the host observed. Codes, numbers and digests only.
@@ -285,8 +296,9 @@ pub fn evaluate(
     expected: &ExpectedEvidence,
     outcome: &ExecutionOutcome,
 ) -> (ValidationState, Option<&'static str>) {
-    use ValidationState::{Failed, Passed, Unavailable, Unverified};
+    use ValidationState::{Cancelled, Failed, Passed, Unavailable, Unverified};
     match outcome.end {
+        ExecutionEnd::Cancelled => (Cancelled, Some("cancelled")),
         ExecutionEnd::ProfileNotDefined => (Unavailable, Some("profile_not_defined")),
         ExecutionEnd::ProgramNotFound => (Unavailable, Some("program_not_found")),
         ExecutionEnd::LaunchFailed => (Unavailable, Some("launch_failed")),
@@ -780,6 +792,23 @@ impl ValidationRegistry {
         update: ResultUpdate,
         tx: &mut Transaction<'_>,
     ) -> Result<ValidationResult, OrchestrationError> {
+        self.settle(owner_checkout_id, ticket, step_id, result_id, update, tx)
+            .map(|(result, _)| result)
+    }
+
+    /// [`Self::finish`], also saying whether this call changed the record. Of two
+    /// callers that settle the same attempt at once (a cancel racing the request that
+    /// observed the step's own end), only the one that wrote it reports it
+    /// (HS2-17ABM2).
+    pub fn settle(
+        &self,
+        owner_checkout_id: &str,
+        ticket: &RunTicket,
+        step_id: &str,
+        result_id: &str,
+        update: ResultUpdate,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(ValidationResult, bool), OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         valid_identifier(step_id)?;
         valid_token(result_id)?;
@@ -806,7 +835,7 @@ impl ValidationRegistry {
                     .as_ref()
                     .is_none_or(|reason| Some(reason) == result.reason.as_ref());
             return if same {
-                Ok(result.clone())
+                Ok((result.clone(), false))
             } else {
                 Err(OrchestrationError::Validation(ValidationError::ResultFinal))
             };
@@ -829,12 +858,12 @@ impl ValidationRegistry {
             result.deadline_ms = None;
         }
         if *result == before {
-            return Ok(before);
+            return Ok((before, false));
         }
         let updated = result.clone();
         validate(record)?;
         self.write_file(&file)?;
-        Ok(updated)
+        Ok((updated, true))
     }
 }
 

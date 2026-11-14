@@ -976,6 +976,18 @@ test('HS2-WN0MXZ real hosted validation responses match the OpenAPI contract', a
     matches(validations, 'get', '200', again.body);
     expect(again.body).toEqual(finished.body);
     expect((await send('POST', hosted, start)).body).toEqual(finished.body);
+    // HS2-17ABM2: stopping an execution that already ended answers its own outcome.
+    const stopped = await send('DELETE', hosted, { execution_id: execution, wait_ms: 0 });
+    expect(stopped.status).toBe(200);
+    matches(validations, 'delete', '200', stopped.body);
+    expect(stopped.body).toEqual(finished.body);
+    const neverStarted = '01ARZ3NDEKTSV4RRFFQ69G5FE6';
+    const unknownStop = await send('DELETE', hosted, { execution_id: neverStarted });
+    matches(validations, 'delete', '200', unknownStop.body);
+    expect(unknownStop.body).toEqual({ execution_id: neverStarted, state: 'unknown' });
+    const late = await send('POST', hosted, { ...start, execution_id: neverStarted, wait_ms: 8000 });
+    matches(validations, 'post', '200', late.body);
+    expect((late.body.outcome as { end: string }).end).toBe('cancelled');
 
     const invalid = await send('POST', hosted, { ...start, timeout_seconds: 0 });
     expect(invalid.status).toBe(400);
