@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { NotificationChannel, NotifierDescriptor } from './api';
 import {
   CHANNEL_FIELD,
+  channelChoiceValue,
   channelDraftFromForm,
   channelFormFields,
   channelIdFrom,
@@ -61,6 +62,31 @@ describe('channelFormFields (HS2-DPBJJA)', () => {
     expect(fields.token.stored).toBe(true);
     expect(fields.priority.choices).toEqual(['auto', 'high']);
     expect(channelFormFields(ntfy).find((field) => field.key === 'token')?.stored).toBe(false);
+  });
+});
+
+describe('channelChoiceValue (HS2-XCZY10)', () => {
+  const priority = (channel?: NotificationChannel) => {
+    const field = channelFormFields(ntfy, channel).find((item) => item.key === 'priority');
+    if (!field) throw new Error('ntfy has a priority field');
+    return field;
+  };
+
+  it('shows the open choice over the stored value, so a re-render keeps it', () => {
+    const stored = { ...phone, settings: { ...phone.settings, priority: 'auto' } };
+    expect(channelChoiceValue(priority(stored))).toBe('auto');
+    expect(channelChoiceValue(priority(stored), 'high')).toBe('high');
+    // Choosing the stored value again, then another, follows the latest choice.
+    expect(channelChoiceValue(priority(stored), 'auto')).toBe('auto');
+  });
+
+  it('falls back to the stored, default, or first choice when the open choice is absent or stale', () => {
+    expect(channelChoiceValue(priority())).toBe('auto');
+    expect(channelChoiceValue(priority(), 'PUT')).toBe('auto');
+    expect(channelChoiceValue(priority(), '')).toBe('auto');
+    const bare = { ...priority(), value: '' };
+    expect(channelChoiceValue(bare)).toBe('auto');
+    expect(channelChoiceValue({ ...bare, choices: [] })).toBe('');
   });
 });
 

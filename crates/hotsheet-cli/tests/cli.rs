@@ -8893,6 +8893,61 @@ fn hs2_c1cfsh_edit_warns_when_explicit_regular_suppresses_a_feedback_marker() {
         .stderr(predicate::str::contains("warning:").not());
 }
 
+/// HS2-RG6Z9H: the reported shape. A note appended through the shipped CLI without
+/// `--note-kind` that discusses the marker mid-line stays Regular in the stored file and
+/// opens no request; a line-start marker still does. Neither warns.
+#[test]
+fn hs2_rg6z9h_cli_note_mentioning_the_marker_mid_line_stays_regular() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Synthetic marker discussion");
+    let read = || {
+        let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+    };
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "## Preliminary thoughts\n\nRoot cause: the FEEDBACK NEEDED rule matches mid-line.",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+    let ticket = read();
+    assert_eq!(ticket.notes[0].kind, hotsheet_model::NoteKind::Regular);
+    assert!(!ticket.notes[0].feedback_request);
+    assert!(!ticket.feedback_needed());
+    let file = std::fs::read_to_string(
+        hotsheet_ticketing::FsStore::open(p)
+            .unwrap()
+            .ticket_path(&ticket.id),
+    )
+    .unwrap();
+    assert!(!file.contains("kind: feedback_needed"));
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "Context.\n\nFEEDBACK NEEDED: which layout?",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning:").not());
+    let ticket = read();
+    assert_eq!(
+        ticket.notes[1].kind,
+        hotsheet_model::NoteKind::FeedbackNeeded
+    );
+    assert!(ticket.feedback_needed());
+}
+
 #[test]
 fn edit_accepts_notes_but_warns_about_unresolved_attachment_references() {
     let dir = tempfile::tempdir().unwrap();
@@ -10147,6 +10202,78 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert_eq!(status_json(a.path())["state"], "up_to_date");
 }
 
+/// HS2-6ACT5Y headless parity: a stale Git `index.lock` makes `hotsheet-cli sync` fail as
+/// `blocked`, naming the lock and the safe recovery, never as a ticket merge conflict or an
+/// unreachable remote; `sync --status --json` reports the same state; and the first sync
+/// after the lock is removed publishes the ticket saved meanwhile. Synthetic stores only.
+#[cfg(unix)]
+#[test]
+fn hs2_6act5y_sync_reports_a_stale_git_lock_as_blocked_headlessly() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn status_json(dir: &Path) -> serde_json::Value {
+        let out = hs(dir)
+            .args(["sync", "--status", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&out).unwrap()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    hs(a.path()).arg("sync").assert().success();
+    let slug = new_ticket(a.path(), "saved before the lock");
+    // An unpublished local commit the lock keeps from the remote.
+    std::fs::write(a.path().join("notes.txt"), "local\n").unwrap();
+    assert!(git(a.path(), &["add", "notes.txt"]));
+    assert!(git(a.path(), &["commit", "--quiet", "-m", "local notes"]));
+
+    let lock = a.path().join(".git").join("index.lock");
+    std::fs::write(&lock, "stale\n").unwrap();
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("State: blocked"))
+        .stderr(predicate::str::contains(".git/index.lock"))
+        .stderr(predicate::str::contains("no Git process is running"))
+        .stderr(predicate::str::contains("body change").not())
+        .stderr(predicate::str::contains("unreachable").not());
+    let blocked = status_json(a.path());
+    assert_eq!(blocked["state"], "blocked");
+    assert!(blocked["unpublished_commits"].as_u64().unwrap() >= 1);
+    assert!(
+        blocked["reason"]
+            .as_str()
+            .unwrap()
+            .contains(".git/index.lock")
+    );
+    assert!(lock.is_file(), "Hot Sheet never removes a lock by itself");
+
+    std::fs::remove_file(&lock).unwrap();
+    hs(a.path()).arg("sync").assert().success();
+    let synced = status_json(a.path());
+    assert_eq!(synced["state"], "synced");
+    assert_eq!(synced["unpublished_commits"], 0);
+    hs(a.path()).args(["show", &slug]).assert().success();
+}
+
 /// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
 /// start the project's default AI tool once, as a detached `hotsheet-cli trigger` that
 /// outlives the command and receives the repair prompt; a second `sync` starts nothing.
@@ -10732,6 +10859,119 @@ fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile()
         .success()
         .stdout(predicate::str::contains("second ticket, retitled"));
     hs(&peer).args(["show", &during]).assert().success();
+}
+
+/// HS2-JGH11Q end to end with real CLI processes: a person pauses a rebase in the store;
+/// ticket edits made meanwhile are saved but not committed onto the detached `HEAD`, the
+/// status says so, `sync --abort-stalled-rebase` keeps and commits them on the branch,
+/// and after another edit `sync` publishes everything.
+#[cfg(unix)]
+#[test]
+fn hs2_jgh11q_abort_stalled_rebase_keeps_ticket_edits_saved_during_the_stall() {
+    use std::os::unix::fs::PermissionsExt;
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn git_out(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(a, &["remote", "add", "origin", bare_url]);
+    let published = new_ticket(a, "published ticket");
+    hs(a).arg("sync").assert().success();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let peer = peer_dir.path().join("peer");
+    assert!(git(
+        peer_dir.path(),
+        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
+    ));
+    git(&peer, &["config", "user.email", "p@example.com"]);
+    git(&peer, &["config", "user.name", "P"]);
+    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+    assert!(git(&peer, &["add", "notes.txt"]));
+    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+    assert!(git(&peer, &["push", "--quiet"]));
+
+    // An unpublished local ticket, then a person's rebase paused at its pick.
+    let local = new_ticket(a, "local ticket");
+    assert!(git(a, &["fetch", "--quiet"]));
+    let editor = a.join(".git/hotsheet-test-todo-editor.sh");
+    std::fs::write(
+        &editor,
+        "#!/bin/sh\nsed '1s/^pick/edit/' \"$1\" > \"$1.new\" && mv \"$1.new\" \"$1\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&editor, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let editor = format!("sequence.editor={}", editor.display());
+    let _ = git(a, &["-c", &editor, "rebase", "-i", "--quiet", "@{u}"]);
+    assert!(a.join(".git/rebase-merge").is_dir());
+    let stopped = git_out(a, &["rev-parse", "HEAD"]);
+
+    // Edits during the stall are saved, never committed onto the detached HEAD.
+    hs(a)
+        .args(["edit", &published, "--title", "retitled during the stall"])
+        .assert()
+        .success();
+    let during = new_ticket(a, "created during the stall");
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), stopped);
+    hs(a).arg("sync").assert().failure();
+    assert_eq!(git_out(a, &["rev-parse", "HEAD"]), stopped);
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("State: rebase_in_progress"))
+        .stdout(predicate::str::contains(
+            "saved in the store but not committed",
+        ));
+
+    hs(a)
+        .args(["sync", "--abort-stalled-rebase"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("committed them on the branch"));
+    assert!(!a.join(".git/rebase-merge").exists());
+    assert!(git(a, &["symbolic-ref", "--quiet", "HEAD"]));
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    hs(a)
+        .args(["show", &published])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled during the stall"));
+    hs(a).args(["show", &during]).assert().success();
+
+    // Another edit commits normally, and sync publishes everything.
+    hs(a)
+        .args(["edit", &published, "--title", "retitled after the abort"])
+        .assert()
+        .success();
+    assert!(git_out(a, &["status", "--porcelain"]).is_empty());
+    hs(a).arg("sync").assert().success();
+    assert!(git(&peer, &["pull", "--quiet"]));
+    hs(&peer)
+        .args(["show", &published])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled after the abort"));
+    hs(&peer).args(["show", &during]).assert().success();
+    hs(&peer).args(["show", &local]).assert().success();
 }
 
 /// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists
@@ -13309,6 +13549,96 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
     assert!(!none.status.success());
 }
 
+/// HS2-VG3E8N: a project store with no per-store host reaches the machine host anchored on
+/// `<home>/server-bootstrap.hs2`; store-default reads refuse that host instead of reporting
+/// the bootstrap store's data; with no host at all the error names the machine host.
+#[test]
+fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let cli = |args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+
+    // Neither a per-store nor a machine host.
+    let none = cli(&["lifecycle", "status"]);
+    assert!(!none.status.success());
+    let message = String::from_utf8_lossy(&none.stderr);
+    assert!(message.contains("machine host"), "{message}");
+
+    let machine = home.join("server-bootstrap.hs2");
+    std::fs::create_dir_all(&machine).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &machine);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "machine-secret",
+            "store_path": machine.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(line.trim_end(), "GET /lifecycle/quiescence HTTP/1.1");
+        let mut secret = None;
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                secret = Some(value.trim().to_string());
+            }
+        }
+        assert_eq!(secret.as_deref(), Some("machine-secret"));
+        let body = r#"{"quiescing":false,"report":{"quiescent":true,"blockers":[]}}"#;
+        write!(
+            reader.get_mut(),
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+
+    // The host-wide command reaches the bootstrap-only machine host.
+    let status = cli(&["lifecycle", "status"]);
+    assert!(
+        status.status.success(),
+        "{}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(String::from_utf8_lossy(&status.stdout).contains("\"quiescent\": true"));
+    server.join().unwrap();
+
+    // A store-default read refuses before sending any request to that host.
+    let flow = cli(&["ticket-flow"]);
+    assert!(!flow.status.success());
+    let message = String::from_utf8_lossy(&flow.stderr);
+    assert!(message.contains("machine host"), "{message}");
+    assert!(message.contains("analytics/tickets"), "{message}");
+}
+
 /// Headless parity for Ticket sources' "review its location" recovery (HS2-47AFBK): a Git
 /// source linked before identities were recorded is reviewed read-only, recorded only on
 /// --yes, idempotent afterwards, and a moved store relinks through the same command.
@@ -13725,7 +14055,7 @@ fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
         .assert()
         .success();
     let slug = new_ticket(dir.path(), "Synthetic explicit kind");
-    let body = "Implementation prerequisite, not FEEDBACK NEEDED or a decision.";
+    let body = "FEEDBACK NEEDED: implementation prerequisite, not a decision.";
     hs(dir.path())
         .args(["edit", &slug, "--note", body, "--note-kind", "regular"])
         .assert()

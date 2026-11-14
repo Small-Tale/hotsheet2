@@ -104,6 +104,16 @@ export function channelFormFields(descriptor: NotifierDescriptor, channel?: Noti
   });
 }
 
+/**
+ * The value a schema choice `Select` shows (HS2-XCZY10): the person's choice in the open dialog while it
+ * is still one of the field's choices, else the stored or default value, else the first choice. Kerf
+ * `Select` is controlled, so a re-render without the open choice would snap back to the stored value.
+ */
+export function channelChoiceValue(field: ChannelFormField, chosen?: string): string {
+  if (chosen !== undefined && field.choices.includes(chosen)) return chosen;
+  return field.value || field.choices[0] || '';
+}
+
 /** The device's IANA time zone (HS2-9T27WQ), or `UTC` when the runtime cannot name it. */
 export function deviceTimeZone(): string {
   try {

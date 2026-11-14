@@ -32275,7 +32275,7 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     let explicit = body_json(
         patch(
             path.clone(),
-            serde_json::json!({"note":"not FEEDBACK NEEDED","note_kind":"regular"}),
+            serde_json::json!({"note":"FEEDBACK NEEDED: synthetic marker","note_kind":"regular"}),
         )
         .await,
     )
@@ -32290,7 +32290,7 @@ async fn hs2_cv5nmc_api_explicit_intent_and_kind_correction() {
     let legacy = body_json(
         patch(
             path.clone(),
-            serde_json::json!({"note":"not FEEDBACK NEEDED"}),
+            serde_json::json!({"note":"FEEDBACK NEEDED: synthetic marker"}),
         )
         .await,
     )
@@ -33251,4 +33251,62 @@ async fn hs2_xfmkhq_recorded_usage_feeds_tool_capacity_once_per_response() {
         std::fs::read_to_string(machine_home.join("orchestration-tool-capacity.json")).unwrap();
     assert!(!stored.contains("output_tokens") && !stored.contains("cap-session.jsonl"));
     send("DELETE", format!("/terminals/{terminal}"), String::new()).await;
+}
+
+/// HS2-M0EWHK: a browser reading the server cross-origin can only see response headers the
+/// server names in `Access-Control-Expose-Headers`, so the change-cursor stamp is exposed on
+/// every response that carries it. Exposure grants no access: the server still sends no
+/// `Access-Control-Allow-Origin`, and an unauthenticated response carries neither header.
+#[tokio::test]
+async fn hs2_m0ewhk_cross_origin_reads_expose_the_change_cursor_header() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let origin = header::HeaderValue::from_static("https://remote-client.example.test");
+    let mut request = authed("GET", "/tickets", None);
+    request.headers_mut().insert(header::ORIGIN, origin.clone());
+    let response = router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get("x-hotsheet-change-cursor").is_some());
+    let exposed: Vec<String> = response
+        .headers()
+        .get_all(header::ACCESS_CONTROL_EXPOSE_HEADERS)
+        .iter()
+        .flat_map(|value| {
+            value
+                .to_str()
+                .unwrap()
+                .split(',')
+                .map(|name| name.trim().to_ascii_lowercase())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        exposed
+            .iter()
+            .filter(|name| *name == "x-hotsheet-change-cursor")
+            .count(),
+        1,
+        "the cursor is exposed exactly once: {exposed:?}"
+    );
+    assert!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_none(),
+        "exposing a header grants no origin access"
+    );
+
+    let mut rejected = Request::builder()
+        .uri("/tickets")
+        .body(Body::empty())
+        .unwrap();
+    rejected.headers_mut().insert(header::ORIGIN, origin);
+    let rejected = router.oneshot(rejected).await.unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    assert!(
+        rejected
+            .headers()
+            .get(header::ACCESS_CONTROL_EXPOSE_HEADERS)
+            .is_none()
+    );
 }

@@ -6488,7 +6488,7 @@ mod tests {
             json!({"title":"Synthetic explicit kind"}),
         );
         let id = created["id"].as_str().unwrap();
-        let body = "not FEEDBACK NEEDED";
+        let body = "FEEDBACK NEEDED: synthetic marker";
         let explicit = call(
             &backend,
             "hotsheet_update",

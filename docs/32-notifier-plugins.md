@@ -646,6 +646,9 @@ from the notifier's settings schema:
 - a select for a choice;
 - a password input for a credential.
 
+A choice the person makes in the open dialog stays chosen until it is saved or the dialog
+closes, even when the dialog re-renders on a resize (HS2-XCZY10).
+
 A credential input never shows a stored value ("Stored; leave empty to keep it"), and it is
 written only through the secret route. Quiet hours and the hourly limit sit below. A
 **Quiet Time** select offers "No quiet time" (the default for a new channel; saving removes any

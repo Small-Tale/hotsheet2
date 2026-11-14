@@ -8,21 +8,26 @@ type ExchangeNote = Pick<Note, 'kind'> & Partial<Pick<Note, 'text' | 'feedback_f
 
 export const DETAILS_FEEDBACK_ID = 'ticket-details';
 
-/** Match the intentionally case-sensitive HS1 feedback marker used by the core.
- * Markdown blockquote lines are ignored so a reply that quotes the original request
- * back is not mistaken for a new feedback request (HS2-HG7FZ0); mirrors the core
- * `Note::text_requests_feedback`. */
-export function textRequestsFeedback(text: string) {
-  return text.split('\n').some((line) => !line.trimStart().startsWith('>') && line.includes('FEEDBACK NEEDED'));
+/** Whether note text whose kind was not set explicitly opens a feedback request (HS2-RG6Z9H).
+ * Notes use the details line-start rule, so a quoted reply (HS2-HG7FZ0) or prose that mentions
+ * the marker mid-line never opens one; notes alone also accept HS1's urgent `IMMEDIATE ` prefix.
+ * Mirrors the core `Note::text_requests_feedback`. The client reads note kinds from the server,
+ * so this mirror only keeps the shared case table honest. */
+export function textRequestsFeedback(text: string): boolean {
+  return lineStartFeedbackMarker(text, true);
 }
 
 /** Whether ticket details carry the dedicated line-start feedback marker (HS2-FF9ZMS).
- * Details are prose that often names feedback state, so, unlike notes, a mention mid-line,
- * in inline code, a quote, a fenced block or indented code never opens a request. A line
- * opens one when, after up to three spaces and an optional heading, list and emphasis
- * prefix, it begins with the phrase followed by a non-word character or the line's end.
+ * Details are prose that often names feedback state, so a mention mid-line, in inline code,
+ * a quote, a fenced block or indented code never opens a request. A line opens one when,
+ * after up to three spaces and an optional heading, list and emphasis prefix, it begins with
+ * the phrase followed by a non-word character or the line's end.
  * Mirrors the core `Note::details_request_feedback` exactly. */
 export function detailsTextRequestsFeedback(text: string): boolean {
+  return lineStartFeedbackMarker(text, false);
+}
+
+function lineStartFeedbackMarker(text: string, allowImmediate: boolean): boolean {
   const marker = 'FEEDBACK NEEDED';
   let fence: { char: string; length: number } | null = null;
   for (const line of text.split(/\r?\n/u)) {
@@ -52,6 +57,7 @@ export function detailsTextRequestsFeedback(text: string): boolean {
     if (bullet) rest = rest.slice(bullet[0].length).replace(/^ +/u, '');
     const emphasis = ['**', '__', '*', '_'].find((opener) => rest.startsWith(opener)) ?? '';
     rest = rest.slice(emphasis.length);
+    if (allowImmediate && rest.startsWith('IMMEDIATE ')) rest = rest.slice('IMMEDIATE '.length);
     if (!rest.startsWith(marker)) continue;
     let after = rest.slice(marker.length);
     if (emphasis && after.startsWith(emphasis)) after = after.slice(emphasis.length);

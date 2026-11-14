@@ -14494,6 +14494,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /sync/kick:
+    post:
+      operationId: post_sync_kick
+      description: >-
+        Ask the host's background sync loop for one prompt sync of a ticket store a headless
+        write committed to (HS2-D9ZGAE, docs/02 §2.12). Accepted only for a hosted store or a
+        Git store linked to a registered checkout; the sync runs asynchronously, coalesced with
+        other kicks and the regular pass.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncKickRequest'
+      responses:
+        '202':
+          description: The sync loop will sync the store promptly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncKickAccepted'
+        '400':
+          description: The store path is not absolute.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The store is not hosted or linked to a registered checkout (code store_not_registered).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The host runs no background ticket-store sync (code sync_not_running).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /health:
     get:
       operationId: health
@@ -29921,6 +29966,30 @@ components:
           minimum: 1
           maximum: 1440
       additionalProperties: false
+    SyncKickRequest:
+      type: object
+      description: The ticket store a headless write committed to (HS2-D9ZGAE).
+      required:
+        - store
+      properties:
+        store:
+          type: string
+          description: Absolute path of the store's root.
+      additionalProperties: false
+    SyncKickAccepted:
+      type: object
+      description: An accepted sync request (HS2-D9ZGAE).
+      required:
+        - accepted
+        - store
+      properties:
+        accepted:
+          type: boolean
+          const: true
+        store:
+          type: string
+          description: The store's canonical root.
+      additionalProperties: false
     ConfiguredStandbySettings:
       type: object
       description: Explicit machine-wide standby settings; null or missing means the default. Unknown names are rejected.
@@ -31896,6 +31965,7 @@ components:
         - offline
         - rejected
         - conflict
+        - blocked
         - rebase_in_progress
         - history_recovery_required
     TicketStoreOversizedObject:

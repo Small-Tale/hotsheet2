@@ -253,7 +253,7 @@ test('HS2-1C1565 real CLI process replays a registered proposal and refuses chan
     assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);
     return result.stdout.trim();
   };
-  git(root, 'init', '--bare', bare);
+  git(root, 'init', '--bare', '-b', 'main', bare);
   git(root, 'init', '-b', 'main', project);
   git(project, 'config', 'user.name', 'Synthetic Test');
   git(project, 'config', 'user.email', 'synthetic@example.test');

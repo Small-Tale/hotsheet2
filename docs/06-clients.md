@@ -3206,7 +3206,9 @@ and loads another 100 on request, still newest first (HS2-988X4X).
 Legacy Answers lists linked Git sources separately. Opening one source shows its answer count
 without revealing action text. Confirmation discards that source's old answers for every linked
 project; future actions need fresh approval. Cancel leaves the encrypted vault unchanged
-(HS2-AFSF4X).
+(HS2-AFSF4X). The discard confirmation stays shown while the remembered-answer list refreshes:
+the refresh waits out older loads and reports a failure or lock after the confirmation, and a
+later automatic or list-only Retry refresh keeps it, as for a batch edit (HS2-JRBFSN).
 Search sits above two equal-width segmented controls that filter the dialog by Persistent or
 Session and by Allow or Disallow, defaulting to Persistent and Allow. The controls stack at
 phone width. Session includes chat-only answers, whose exact lifetime remains in their row.
@@ -3259,7 +3261,11 @@ chat-scoped answers keep their connection lifetime.
 The effective duration updates in both lists after a successful server write, and a
 failed edit leaves the displayed duration intact (HS2-V95VEB).
 After a batch the dialog refreshes from the server, summarizes successes and failures,
-and keeps failed rows selected for retry.
+and keeps failed rows selected for retry. The refresh waits out any list load that started
+before the batch and reports its outcome after the batch summary rather than replacing it: a
+failed refresh keeps the last good list and offers a list-only Retry that never resubmits an
+edit, and a later automatic or Retry refresh keeps the summary while it is still shown
+(HS2-HBAEMM).
 A `permission_asked` event also refreshes terminal connection state; the client derives
 the refreshed snapshot before publishing it and skips an unchanged snapshot, so a prompt
 does not cause extra whole-app render passes (HS2-2RN05B).
@@ -5006,7 +5012,9 @@ transition history (HS2-XKXE7V).
   on a `ticket_store_sync` change event for that checkout. A failed request keeps the last
   report. The project shell shows `TicketStoreSyncBanner`, a warning-toned `ShellBanner`,
   while any linked Git ticket store is `rejected`, `conflict`, `rebase_in_progress`, or
-  `history_recovery_required`, or has been `offline` for three or more passes. A
+  `history_recovery_required`, or has been `offline` or `blocked` (a Git lock file,
+  HS2-6ACT5Y) for three or more passes. A `blocked` store's sentence is the server's
+  reason, which names the lock file and its age. A
   `conflict` or `rebase_in_progress` that Hot Sheet is still repairing (an AI ask
   `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). The banner:
   - names the store, or the number of failing stores;
@@ -5170,14 +5178,17 @@ An explicitly `regular` note keeps its kind even when its text carries an unquot
 (stderr), MCP `hotsheet_update`, and the server ticket and provider PATCH routes return a
 warning naming `note_kind feedback_needed` as the fix, after an append and after an edit
 that leaves such a note; linked replies are exempt (HS2-C1CFSH).
-For compatibility with HS1 and early HS2 automation, a regular note containing the
-case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
-kind at the wire boundary and participates in the same exchange. The phrase may appear
-after introductory context and its colon is optional; lowercase prose does not match.
+For compatibility with HS1 and early HS2 automation, a regular note whose kind was not
+set explicitly is normalized to the `feedback_needed` kind at the wire boundary, and
+participates in the same exchange, when a line begins with the case-sensitive all-caps
+phrase `FEEDBACK NEEDED`. Notes use the description rule (HS2-RG6Z9H, docs/17): context
+may precede it on earlier lines, HS1's `IMMEDIATE` prefix is accepted, and the colon is
+optional; a mid-line mention, inline code, a code block and lowercase prose do not match,
+so a note that only discusses the marker stays an ordinary note.
 The marker is ignored inside Markdown blockquote lines (those beginning with `>`), so a
 reply that quotes the original request back — which the inline-reply composer produces —
 is not mistaken for a new request and does not reopen the exchange (HS2-HG7FZ0); an
-unquoted marker the author adds in the same reply still opens one.
+unquoted line-start marker the author adds in the same reply still opens one.
 New core writes promote the same marker to the first-class kind. Rebuilding an older
 disposable index must therefore recompute the compact flag for unchanged ticket files.
 

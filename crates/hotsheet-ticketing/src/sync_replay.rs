@@ -138,7 +138,7 @@ pub(crate) fn replay_onto_upstream(store_path: &Path) -> Result<String, ReplayEr
 
 /// The fallback committer identity [`crate::FsStore::autocommit`] uses when the
 /// repository has none.
-fn committer_identity(store_path: &Path) -> &'static [&'static str] {
+pub(crate) fn committer_identity(store_path: &Path) -> &'static [&'static str] {
     let configured = git_stdout(store_path, &["config", "user.email"])
         .is_some_and(|email| !email.trim().is_empty());
     if configured {
@@ -246,10 +246,21 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// What [`move_branch_to`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BranchMove {
+    Moved,
+    /// `HEAD` moved underneath, or an uncommitted change touches a path the move updates.
+    /// Nothing changed.
+    Refused,
+    /// A Git lock file refused the update (HS2-6ACT5Y). Nothing changed.
+    Locked(Vec<std::path::PathBuf>),
+}
+
 /// Move the checked-out branch from `expected_head` to `tip` and update only the working
 /// tree files that differ between them. Git checks every such path first and refuses,
-/// changing nothing, when one has an uncommitted change. Returns whether the branch moved.
-pub(crate) fn move_branch_to(store_path: &Path, expected_head: &str, tip: &str) -> bool {
+/// changing nothing, when one has an uncommitted change.
+pub(crate) fn move_branch_to(store_path: &Path, expected_head: &str, tip: &str) -> BranchMove {
     #[cfg(test)]
     BEFORE_BRANCH_MOVE.with(|hook| {
         if let Some(hook) = hook.borrow_mut().as_mut() {
@@ -258,9 +269,18 @@ pub(crate) fn move_branch_to(store_path: &Path, expected_head: &str, tip: &str) 
     });
     // Only lock holders move `HEAD`, so this holds unless a foreign Git process ran.
     if rev_parse(store_path, "HEAD").as_deref() != Some(expected_head) {
-        return false;
+        return BranchMove::Refused;
     }
-    git_ok(store_path, &["reset", "--quiet", "--keep", tip])
+    let reset = git_run(store_path, &["reset", "--quiet", "--keep", tip]);
+    if reset.ok {
+        return BranchMove::Moved;
+    }
+    let locks = crate::sync_locks::locks_in_output(&reset.stderr);
+    if locks.is_empty() {
+        BranchMove::Refused
+    } else {
+        BranchMove::Locked(locks)
+    }
 }
 
 /// What [`continue_unfinished`] decided.

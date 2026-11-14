@@ -64,6 +64,10 @@ pub enum SyncState {
     Rejected,
     /// A ticket body changed on both sides and the merge driver could not resolve it.
     Conflict,
+    /// A Git lock file in the store stopped the last cycle (HS2-6ACT5Y): a stale lock a
+    /// crashed Git process left, or one another running Git process holds. Not a merge
+    /// conflict; the loop retries with backoff and the reason names the lock files.
+    Blocked,
     /// A rebase or merge is in progress or was abandoned in the store; sync will not
     /// start another one until it is finished or aborted.
     RebaseInProgress,
@@ -81,6 +85,7 @@ impl SyncState {
             Self::Offline
                 | Self::Rejected
                 | Self::Conflict
+                | Self::Blocked
                 | Self::RebaseInProgress
                 | Self::HistoryRecoveryRequired
         )
@@ -97,6 +102,7 @@ impl SyncState {
             Self::Offline => "offline",
             Self::Rejected => "rejected",
             Self::Conflict => "conflict",
+            Self::Blocked => "blocked",
             Self::RebaseInProgress => "rebase_in_progress",
             Self::HistoryRecoveryRequired => "history_recovery_required",
         }
@@ -112,6 +118,7 @@ impl From<SyncReport> for SyncState {
             SyncReport::Offline => Self::Offline,
             SyncReport::Rejected => Self::Rejected,
             SyncReport::Conflict => Self::Conflict,
+            SyncReport::Blocked => Self::Blocked,
             SyncReport::RebaseInProgress => Self::RebaseInProgress,
             SyncReport::HistoryRecoveryRequired => Self::HistoryRecoveryRequired,
         }
@@ -289,6 +296,11 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
             "a history rewrite replaced the remote; recover this checkout before syncing"
                 .to_string(),
         );
+    } else if record.outcome == Some(SyncState::Blocked) {
+        // HS2-6ACT5Y: the lock stopped the last cycle before it could continue an
+        // unfinished rebase, so the lock is what needs fixing first.
+        health.state = SyncState::Blocked;
+        health.reason.clone_from(&record.reason);
     } else if integration_in_progress(store_path).is_some() {
         health.state = SyncState::RebaseInProgress;
         // The cycle that found it says why it was not continued (HS2-QR1K8R).
@@ -297,6 +309,14 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
             .clone()
             .filter(|_| record.outcome == Some(SyncState::RebaseInProgress))
             .or_else(|| Some(crate::sync::STALLED_INTEGRATION_REASON.to_string()));
+        // HS2-JGH11Q: Hot Sheet saves writes but defers their commits until it finishes.
+        let pending = crate::sync_saved_writes::pending_count(store_path);
+        if pending > 0
+            && let Some(reason) = health.reason.as_mut()
+        {
+            reason.push('\n');
+            reason.push_str(&deferred_writes_line(pending));
+        }
     } else if let Some(outcome) = record.outcome {
         // A live-only condition the store no longer shows has been resolved; the next
         // cycle decides the new state.
@@ -347,6 +367,21 @@ fn is_active(record: &SyncRecord, now: OffsetDateTime) -> bool {
         && (now - started).whole_seconds() < ACTIVE_ATTEMPT_WINDOW_SECONDS
 }
 
+/// The reason line for writes saved while a rebase or merge is unfinished (HS2-JGH11Q).
+fn deferred_writes_line(pending: usize) -> String {
+    let (count, verb) = if pending == 1 {
+        ("1 change is".to_string(), "it")
+    } else {
+        (format!("{pending} changes are"), "them")
+    };
+    format!(
+        "{count} saved in the store but not committed until it is finished; \
+         `hotsheet-cli sync --abort-stalled-rebase` keeps {verb} and commits {verb} on the \
+         branch. To finish it with Git instead, stage {verb} (`git add -A`) before \
+         continuing it, because Git refuses to continue over unstaged changes."
+    )
+}
+
 fn next_action(health: &SyncHealth) -> Option<String> {
     Some(match health.state {
         SyncState::Rejected if !health.oversized.is_empty() => {
@@ -376,6 +411,7 @@ fn next_action(health: &SyncHealth) -> Option<String> {
              `hotsheet-cli sync`."
                 .to_string()
         }
+        SyncState::Blocked => crate::sync_locks::LOCK_RECOVERY_ACTION.to_string(),
         SyncState::RebaseInProgress => "Sync continues an unfinished rebase by itself when \
              nothing conflicts; this one needs a decision. Finish the rebase or merge in the \
              store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local \

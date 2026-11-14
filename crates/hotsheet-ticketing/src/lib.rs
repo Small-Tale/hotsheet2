@@ -58,7 +58,9 @@ pub mod store_git;
 pub mod sync;
 pub mod sync_ai;
 pub mod sync_health;
+pub mod sync_locks;
 pub mod sync_replay;
+pub mod sync_saved_writes;
 pub mod terminal_limits;
 pub mod wire;
 pub mod worklist;
@@ -105,7 +107,7 @@ pub use settings::{
 pub use store::{
     AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,
     StoreError, StoreListing, StoreMetadata, flush_background_commits, normalize_ticket_prefix,
-    recover_ticket_identity,
+    recover_ticket_identity, take_headless_published_stores,
 };
 pub use sync::{SyncReport, sync_once};
 pub use sync_health::{SyncHealth, SyncState};

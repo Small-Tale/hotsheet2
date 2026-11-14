@@ -1093,6 +1093,7 @@ const TICKET_STORE_SYNC_STATES = new Set([
   'offline',
   'rejected',
   'conflict',
+  'blocked',
   'rebase_in_progress',
   'history_recovery_required',
 ]);

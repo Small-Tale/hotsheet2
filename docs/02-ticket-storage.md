@@ -991,6 +991,25 @@ engine** so the user effectively never runs git by hand:
   healthy; while the loop is backed off for an offline remote (doubling from 60 s to a
   300 s cap), writes are coalesced into the backoff-deadline pass and never reset the
   backoff (HS2-2YSMCW).
+- **Registered stores and headless writes (HS2-D9ZGAE).** The machine host's loop
+  syncs every hosted store and also every Git store linked to a registered checkout,
+  whether or not a client has opened that project since the host started. It reads
+  only the checkout registry and never opens the project. Those stores announce
+  nothing to clients, but each cycle still records durable sync health. A headless
+  write (`hotsheet-cli`) commits locally and starts its own best-effort `git push`,
+  which cannot fetch or rebase. After each command, the CLI therefore sends an
+  authenticated `POST /sync/kick` with the store's absolute path for every store it
+  committed to. It finds the host through the same discovery as other CLI commands,
+  under `HOTSHEET_HOME`. The host accepts only a hosted or registered store (`202`);
+  otherwise it returns `404 store_not_registered`, or `503 sync_not_running` when it
+  runs no sync loop. An accepted kick runs one prompt pass over just the kicked
+  stores. Kicks in one burst coalesce into one pass. A kicked pass leaves the regular
+  pass's deadline unchanged, and a kick that arrives when that pass is due joins it.
+  A kicked pass that finds its remote unreachable backs the loop off like a regular
+  pass. While backed off, kicks wait for the deadline pass. No kick adds a timer or a
+  poll. If no host accepts the kick, the CLI prints on stderr that the commits may be
+  local only and names `hotsheet-cli -C <store> sync`. Writes made through the
+  serverless MCP backend do not kick yet (HS2-4BG2QN); the host's regular pass covers them.
 - **Offline-tolerant:** when the remote is unreachable, keep working locally and
   reconcile on reconnect; never block a local edit on the network.
 - **Surface a conflict only when the driver genuinely cannot resolve** (the rare
@@ -1078,6 +1097,7 @@ Each cycle ends in one state:
 | `offline`                   | Fetch or push could not reach the remote, authentication failed, or another pusher won a race | exponential backoff                  |
 | `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)   | exponential backoff; needs a repair  |
 | `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                 | not replayed for the same divergence |
+| `blocked`                   | A Git lock file in the store stopped a local step (HS2-6ACT5Y); nothing was merged            | exponential backoff                  |
 | `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                         | none until finished or aborted       |
 | `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                          | none until recovered                 |
 
@@ -1089,6 +1109,25 @@ The rules:
   re-fetch fixes it. A rejection scans the unpublished commits once and names every
   blob over the remote's file limit (GitHub's 100 MiB) by path and size. Local commits
   are kept.
+- **A lock is not a conflict or an outage (HS2-6ACT5Y).** Git serializes writers with
+  `<name>.lock` files, and a crashed or killed Git process leaves its lock behind. Every
+  later step that needs the file fails with `Unable to create '<path>.lock': File
+exists`. Before any Git step a cycle checks for the locks it needs (`index.lock`,
+  `HEAD.lock`, the branch's ref lock, and its remote-tracking ref lock), looking again a
+  few times over 300 ms so a command that runs beside sync does not fail the pass. A
+  held lock makes the cycle `blocked` before it commits, fetches, or replays, so a
+  stale lock never stops a rebase half-way. A lock another process takes during the
+  cycle is read from the failed step's output (the local commit, fetch, branch update,
+  rebase, or push) and is also `blocked`. The remote's own locks (`remote:` lines) are
+  not. A rebase a lock interrupts is never aborted, because an abort that cannot lock
+  the branch detaches `HEAD`; a later cycle continues it once the lock is gone. The
+  reason names each lock file (store-relative when inside the store) and its age. The
+  next step says to check that no Git process is running in the store, remove the
+  stale lock, and run `hotsheet-cli sync`. Hot Sheet never removes a lock by itself:
+  the file looks the same whether its owner crashed or still runs, and removing a live
+  process's lock can corrupt the index or a ref. Automatic recovery of a provably stale
+  lock is HS2-T0V269. A recorded `blocked` outranks a live unfinished rebase in the
+  health read, because that rebase cannot continue until the lock is gone.
 - **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
   `MERGE_HEAD` in the store's Git directory. If one exists and needs a decision, the
   cycle stops before committing or fetching; a rebase with nothing to decide is
@@ -1114,8 +1153,9 @@ The background loop emits a replayable `ticket_store_sync` change event (with th
 state as `slug`) when a store's state changes, or when an outage reaches three
 consecutive failures. An open client reloads health only on that event. The web shell
 shows a persistent `TicketStoreSyncBanner` while any store is `rejected`, `conflict`,
-`rebase_in_progress`, `history_recovery_required`, or `offline` for three or more
-passes. The banner names the store, the cause, how many local changes are unpublished,
+`rebase_in_progress`, `history_recovery_required`, or `offline` or `blocked` for three
+or more passes. A `blocked` banner repeats the reason naming the lock file. The banner
+names the store, the cause, how many local changes are unpublished,
 and the next step. It is for a person, so while Hot Sheet is still repairing a `conflict`
 or `rebase_in_progress` itself (its AI ask is `started` or `session_asked`, §2.12.4) it
 stays hidden for up to 30 minutes from the ask. It appears once that repair ended,
@@ -1125,11 +1165,13 @@ show that kind of warning if you've really reached an insurmountable blocker"_).
 Headless parity:
 
 - `hotsheet-cli sync --status [--json]` prints the same health.
-- `hotsheet-cli sync` exits non-zero with that health for `rejected`,
+- `hotsheet-cli sync` exits non-zero with that health for `rejected`, `blocked`,
   `rebase_in_progress`, and `history_recovery_required`.
 - `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
   rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current
-  `HEAD`, aborts, and keeps every local commit on the branch. It never pushes.
+  `HEAD`, aborts, and keeps every local commit on the branch. It never pushes. Ticket
+  writes whose commits were deferred during the stall survive the abort and are
+  committed on the branch (§2.12.3, HS2-JGH11Q).
 - `hotsheet-cli sync` runs the same ask-the-AI workflow as the server (§2.12.4), and
   `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree.
 
@@ -1169,6 +1211,18 @@ The rules that prevent and repair this:
   `rebase-merge`, `rebase-apply`, and `MERGE_HEAD` under the transaction lock. While one
   exists, the write is saved, the commit is skipped with a warning, and the file is
   committed on the branch by the first cycle after the rebase or merge finishes.
+- **Report and keep deferred writes (HS2-JGH11Q).** A deferred write is an unstaged
+  working-tree change or an untracked file in the store; staged and unmerged content
+  belongs to the rebase or merge. While one is unfinished, the sync health reason says
+  how many changes are saved but not committed, that `sync --abort-stalled-rebase` keeps
+  them, and that finishing it with Git needs them staged first (`git rebase --continue`
+  refuses over unstaged changes). `git rebase --abort` resets the tree hard, so the
+  abort first records the writes as a commit at
+  `refs/hotsheet/sync-backup/<timestamp>-saved-writes` (built on a temporary index),
+  returns those paths to their index state, aborts, writes each path back as saved
+  (content or deletion), and commits them on the branch with path-scoped
+  `commit --only`. The rebase's own staged pick and conflicted files are discarded, as
+  an abort should. A failed restore names the backup ref; nothing is pushed.
 - **Continue what needs no judgment.** A cycle that finds a `rebase-merge` replay with
   no unmerged path and no `stopped-sha` (the shape a rescheduled pick leaves) records
   `refs/hotsheet/sync-backup/<timestamp>` at `HEAD`, commits stray working-tree changes,

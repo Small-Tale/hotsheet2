@@ -1116,6 +1116,9 @@ fn main() -> Result<()> {
         .then(|| notify_watch::Watch::before(&ctx.path))
         .flatten();
     let result = dispatch::run(cli.command, &ctx);
+    // HS2-D9ZGAE: ask the running host to sync every store this command committed to,
+    // even when the command failed after a commit.
+    hotsheet_cli::sync_kick::kick_recorded_writes(&hotsheet_plugins::hotsheet_home());
     if let (Ok(()), Some(watch)) = (&result, watch) {
         watch.after();
     }

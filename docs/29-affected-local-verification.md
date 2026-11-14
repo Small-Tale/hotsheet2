@@ -70,6 +70,17 @@ covering `main` CI run (Linux) or the Platforms workflow (Windows, macOS) is the
 those branches. The scan and its measured 55-65 ms cost are described in
 [12-code-organization-and-testing.md](12-code-organization-and-testing.md).
 
+## Workspace chrome selection (HS2-P9A21R, HS2-4S22C4)
+
+A change to a workspace chrome owner selects the phone navigation and resize cases
+in `mobile-layout.spec.ts`, the title remeasurement case in `search-scope.spec.ts`,
+the warm-switch search width cases in `project-tab-warm-cache.spec.ts`, and the
+mode-transition and search-focus cases in `providers.spec.ts`. The owners are
+`app-shell`, `workspace-controls`, `workspace-header` and
+`workspace-composition-surfaces` (`.tsx` or `.css`), `workspace-toolbar-visibility.ts`
+and `features/hot-sheet-shell.tsx`. HS2-6PZ35D narrowed the phone workspace search
+from `app-shell.tsx` and broke the last two after a green local gate.
+
 ## Browser specs that exercise a changed module (HS2-N7EY18, HS2-R1D0S5)
 
 Browser selection used to pick specs from path keywords (`terminal`, `timeline`,
@@ -189,6 +200,9 @@ Root Node tests are two declared stage lists. The cross-package policy list
 stays mandatory. The script-local tooling list is selected when the full fallback
 applies. Its tests read `scripts/` and configuration inputs already classified as
 full-fallback paths; a new or changed test list is unclassified until reviewed.
+CI's root test steps hand-list the same files, and `scripts/gate-plan.test.mjs`
+fails when a file in either list is missing from `.github/workflows/ci.yml` or CI
+runs a root test that neither list classifies (HS2-E6NFF6).
 `scripts/`, hooks, CI, package manifests and locks, toolchains, formatter code,
 shared guidance generators, and unknown paths still select every stage. The
 planner tests mutate positive and negative paths, and exact-input receipt tests

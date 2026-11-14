@@ -267,9 +267,22 @@ HS2-QR1K8R). A stalled rebase or merge is aborted headlessly with
 asks an AI through the same workflow as the server and reports it in `ai_help`;
 `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
 (§2.12.4).
-`hotsheet-cli sync` exits non-zero for `rejected`, `rebase_in_progress`, and
-`history_recovery_required`. The background loop emits `ticket_store_sync` change
+`hotsheet-cli sync` exits non-zero for `rejected`, `blocked` (a Git lock file,
+HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
+
+**Sync after headless writes (HS2-D9ZGAE).** The background loop also syncs every Git
+store linked to a registered checkout, including projects no client has opened since the
+host started. It reads the registry only, emits no events for those stores, and records
+their sync health. After each command, `hotsheet-cli` sends `POST /sync/kick`
+`{store: <absolute path>}` for every store the command committed to and published with
+its own best-effort push. The route is authenticated. It answers `202 {accepted, store}`
+for a hosted or registered store, `404` with code `store_not_registered` for any other
+path, `400` for a relative path, and `503` with code `sync_not_running` when the host
+runs no loop. The kick queues one prompt sync of that store, coalesced with other kicks
+and with the regular pass ([02](02-ticket-storage.md) §2.12). When no host accepts, the
+CLI prints on stderr that the commits may be local only and names
+`hotsheet-cli -C <store> sync`.
 
 **Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
 checkout's code repository and every linked ticket source. The CLI twin,
@@ -595,6 +608,11 @@ Responsibilities:
   cursor read before its handler ran (HS2-SQKJYG). A change after that cursor may be
   missing from the response, so a client whose read was stamped below its stream's
   handshake cursor replays `since=<stamp>` for exactly that gap instead of reading again.
+  The same responses list the header in `Access-Control-Expose-Headers` (HS2-M0EWHK), so
+  a browser client that reads the server cross-origin can see the stamp wherever a layer
+  grants that origin access. Exposure grants no access by itself: the server sends no
+  `Access-Control-Allow-Origin` and answers no preflight, and shipped web clients reach
+  it through the same-origin local bridge.
   The browser's development bridge proxies a credential-free project-scoped
   `/ws/sync` URL to this authenticated loopback endpoint, keeping the server secret
   outside browser JavaScript. The web client handshakes and closes the WebSocket
@@ -685,6 +703,22 @@ containing its local `url`, `pid`, and start identity. It points to the browser 
 the per-store instance records above point to the machine API server. External local tools
 can combine that client URL with the ticket deep-link route in [06-clients.md](06-clients.md)
 (HS2-RVSPQ9).
+
+**CLI host discovery (HS2-VG3E8N).** The desktop app and headless launches run one machine
+host anchored on `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`, so its instance
+record is keyed by that anchor, not by any project store. Every CLI command that talks to the
+local server resolves its host through one helper, `external_launch::discover_local_host`:
+
+- Host-wide commands (`remote sessions status|approve|reject|update|revoke|revoke-all`,
+  `lifecycle status|restart`) use the machine host first, then a host started on the
+  selected store with `hotsheet-cli serve`.
+- Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
+  `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
+  first, then the machine host. `ticket-flow` and `activity` read the host's own store, so
+  they refuse a host anchored on another store rather than report the bootstrap store's
+  data as the project's.
+- A stale record (its pid is gone) does not count as a host. With no live host the error
+  names the machine host and `hotsheet-cli serve`, and lists each record it looked for.
 
 **Shutdown is bounded (HS2-W1KJR4).** The first SIGTERM/Ctrl-C (or an accepted quiescent
 restart) enters a _stopping_ state. The listener stops accepting on both the plaintext

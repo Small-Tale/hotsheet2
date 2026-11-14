@@ -1167,8 +1167,9 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
 
-    // Reproduce HS1's relaxed read shape in an early HS2 regular note: introductory
-    // context is allowed and the marker's colon is optional.
+    // An early HS2 regular note with an omitted kind: introductory context is allowed on
+    // earlier lines, HS1's urgent prefix is accepted and the colon is optional. A mid-line
+    // mention no longer counts (HS2-RG6Z9H).
     let mut ticket = store.read_ticket(&id).unwrap();
     ticket.notes.push(Note {
         id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
@@ -1189,13 +1190,20 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
     store.write_ticket(&ticket).unwrap();
     ix.reconcile(&store).unwrap();
 
-    let indexed = ix
-        .query(&TicketQuery::default())
-        .unwrap()
-        .into_iter()
-        .find(|row| row.id == id.to_string())
-        .unwrap();
-    assert!(indexed.feedback_needed);
+    let indexed = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    assert!(!indexed(&ix).feedback_needed, "mid-line mention");
+
+    ticket.notes.last_mut().unwrap().text =
+        "Context first.\n\nIMMEDIATE FEEDBACK NEEDED choose one".into();
+    store.write_ticket(&ticket).unwrap();
+    ix.reconcile(&store).unwrap();
+    assert!(indexed(&ix).feedback_needed, "line-start urgent marker");
 }
 
 #[test]
@@ -2296,7 +2304,7 @@ fn marker_note(
         ai_feedback: None,
         human_edited: false,
         actor: None,
-        text: "Acting on a quoted FEEDBACK NEEDED line from an earlier exchange".into(),
+        text: "FEEDBACK NEEDED: acting on a line from an earlier exchange".into(),
     }
 }
 
@@ -2374,8 +2382,14 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
         n.text = "> FEEDBACK NEEDED: earlier".into();
         n
     };
+    let mid_line = {
+        let mut n = marker_note(id, at, NoteKind::Regular, false);
+        n.text = "Discussing the FEEDBACK NEEDED marker mid-line".into();
+        n
+    };
     let corpus = [
         ticket("FEEDBACK NEEDED: details only", vec![]),
+        ticket("", vec![mid_line]),
         ticket("", vec![marker_note(id, at, NoteKind::Regular, false)]),
         ticket("", vec![marker_note(id, at, NoteKind::Regular, true)]),
         ticket(
@@ -2391,8 +2405,9 @@ fn derived_feedback_projection_is_pinned_to_index_schema_version_hs2_4zfb8k() {
     assert_eq!(
         (SCHEMA_VERSION, projection),
         // 23: the group columns (HS2-PDSHNN); 24: group ids (HS2-9KZSD4); 25: the claim host
-        // column (HS2-DQJPW0). The feedback projection is unchanged.
-        (25, vec![true, true, false, true, false]),
+        // column (HS2-DQJPW0); 26: notes infer feedback only from a line-start marker, so the
+        // mid-line note no longer needs feedback (HS2-RG6Z9H).
+        (26, vec![true, false, true, false, true, false]),
         "feedback_needed derivation changed: bump the index SCHEMA_VERSION (HS2-4ZFB8K)"
     );
 }

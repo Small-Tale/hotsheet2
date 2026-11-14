@@ -609,6 +609,7 @@ export type TicketStoreSyncState =
   | 'offline'
   | 'rejected'
   | 'conflict'
+  | 'blocked'
   | 'rebase_in_progress'
   | 'history_recovery_required';
 /** An unpublished Git blob larger than the remote accepts. */
