@@ -1238,6 +1238,27 @@ sync <session-id> --project <owner>` and confirm `role_prompt` is `delivered`, a
    again and confirm `joined_at_ms` is set.
 4. Stop each session as a person with `--force`. Remove the temporary directories.
 
+## Antigravity launch prompt (HS2-KK3CCE)
+
+Antigravity (`agy`) declares no `[launch] prompt_args` yet, so its orchestrated sessions
+carry only `HOTSHEET_SESSION_ROLE` and `HOTSHEET_ROLE_SKILL` and report `role_prompt:
+unsupported`. Third-party guides for agy 1.2.4 say `agy "<prompt>"` and
+`agy -i "<prompt>"` (`--prompt-interactive`) open the interactive session with a first
+prompt; that is unverified. With a real, signed-in install:
+
+1. Run `agy --version` and `agy --help`; record the version and whether a positional
+   prompt or `-i`/`--prompt-interactive` is listed for the interactive session.
+2. In a scratch project, run `agy -i "Reply with the single word READY"` in a terminal.
+   Confirm agy answers READY and then stays open for another prompt (it must not exit
+   like `--print`). Repeat with `agy "Reply with the single word READY"`.
+3. Repeat step 2 with a two-line prompt (a line break inside the quotes) and confirm
+   both lines reach agy as one prompt.
+4. If a form passes, add it to `plugins/antigravity/manifest.toml` under `[launch]`
+   (for example `prompt_args = ["-i", "{prompt}"]`), rebuild, start an orchestrated
+   session for `antigravity` as in the HS2-WEFJV8 steps and confirm its answer's
+   `role_prompt` is `at_launch` and the tool shows the role prompt. If none passes,
+   record the version and keep `prompt_args` undeclared.
+
 ## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
 
 The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions
