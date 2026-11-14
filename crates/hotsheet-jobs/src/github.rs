@@ -45,6 +45,20 @@ pub struct RunFloor {
     pub attempt: u32,
 }
 
+/// `owner/name` from a Git remote URL in any of its usual spellings.
+pub fn repo_from_remote(url: &str) -> Option<String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    let path = match trimmed.split_once("://") {
+        Some((_, rest)) => rest.split_once('/')?.1,
+        // The scp-like form: git@host:owner/name
+        None => trimmed.split_once(':')?.1,
+    };
+    let mut parts = path.rsplit('/');
+    let (name, owner) = (parts.next()?, parts.next()?);
+    (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}"))
+}
+
 impl CiTarget {
     /// Validate and normalize. A refused value is never echoed.
     pub fn new(

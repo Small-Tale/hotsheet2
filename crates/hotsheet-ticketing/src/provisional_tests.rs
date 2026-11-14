@@ -457,6 +457,7 @@ fn hs2_2sjpch_policy_defaults_validates_and_round_trips_shared_settings_only() {
         max_depth: 2,
         integration: IntegrationRule::Parked,
         base_branch: Some("release/next".into()),
+        ci_workflow: None,
     };
     policy.write(&settings).unwrap();
     assert_eq!(SpeculationPolicy::read(&settings).unwrap(), policy);
@@ -498,4 +499,22 @@ fn hs2_2sjpch_policy_defaults_validates_and_round_trips_shared_settings_only() {
         .write(&settings)
         .is_err()
     );
+    // HS2-X6FB9V: the watched workflow is a bounded printable name; absent means CI.
+    assert_eq!(enabled().workflow(), "CI");
+    for bad in ["", "  ", "line\nbreak"] {
+        assert_eq!(
+            SpeculationPolicy {
+                ci_workflow: Some(bad.into()),
+                ..enabled()
+            }
+            .validate(),
+            Err(SpeculationPolicyError::Workflow)
+        );
+    }
+    let named = SpeculationPolicy {
+        ci_workflow: Some("Build and test".into()),
+        ..enabled()
+    };
+    assert_eq!(named.validate(), Ok(()));
+    assert_eq!(named.workflow(), "Build and test");
 }

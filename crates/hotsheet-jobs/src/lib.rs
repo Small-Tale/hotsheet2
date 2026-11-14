@@ -53,7 +53,7 @@ pub use feed::{
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiTarget, GITHUB_ACTIONS_KIND,
-    GithubActionsSource, GithubApi, RunFloor,
+    GithubActionsSource, GithubApi, RunFloor, repo_from_remote,
 };
 pub use model::{
     ActiveStatus, Capabilities, Eta, EtaSource, ExternalRef, FeedState, FinalStatus, Job, JobKind,

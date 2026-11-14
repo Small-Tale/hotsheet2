@@ -38,6 +38,11 @@ pub struct PolicyChange {
     pub base_branch: Option<String>,
     #[serde(default)]
     pub clear_base_branch: bool,
+    /// HS2-X6FB9V: the workflow gates are watched in; `clear_ci_workflow` restores "CI".
+    #[serde(default)]
+    pub ci_workflow: Option<String>,
+    #[serde(default)]
+    pub clear_ci_workflow: bool,
 }
 
 /// One provisional readiness request.
@@ -85,6 +90,10 @@ pub fn speculation_policy(project: &Path, change: &PolicyChange) -> Result<Specu
         !(change.base_branch.is_some() && change.clear_base_branch),
         "base_branch and clear_base_branch conflict"
     );
+    ensure!(
+        !(change.ci_workflow.is_some() && change.clear_ci_workflow),
+        "ci_workflow and clear_ci_workflow conflict"
+    );
     let settings = Settings::for_project(project);
     let mut policy = SpeculationPolicy::read(&settings)?;
     let before = policy.clone();
@@ -102,6 +111,12 @@ pub fn speculation_policy(project: &Path, change: &PolicyChange) -> Result<Specu
     }
     if change.clear_base_branch {
         policy.base_branch = None;
+    }
+    if let Some(workflow) = &change.ci_workflow {
+        policy.ci_workflow = Some(workflow.clone());
+    }
+    if change.clear_ci_workflow {
+        policy.ci_workflow = None;
     }
     if policy != before {
         policy.write(&settings)?;
@@ -163,6 +178,12 @@ pub fn speculation_request(
                 "wait-ms is at most {max_wait_ms}; call again to keep waiting"
             );
             let probe = coordinator.speculation_probe(&policy);
+            // HS2-X6FB9V: the sync also starts the watches its gates need.
+            let watch = coordinator.speculation_watcher(
+                &policy,
+                crate::orchestration::DetachedJobMonitor::automatic()
+                    .map(|monitor| std::sync::Arc::new(monitor) as _),
+            );
             let waiting = coordinator
                 .speculation_ledger()?
                 .is_some_and(|ledger| !ledger.watched_commits().is_empty());
@@ -173,8 +194,9 @@ pub fn speculation_request(
                     // The revision is read before the gates, so a change during the
                     // read is seen by the wait.
                     let revision = probe.revision();
-                    let report = coordinator.speculation_sync(
+                    let report = coordinator.speculation_sync_watching(
                         &probe,
+                        Some(&watch),
                         store,
                         time::OffsetDateTime::now_utc().unix_timestamp(),
                     )?;

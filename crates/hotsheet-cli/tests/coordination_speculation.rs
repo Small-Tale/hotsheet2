@@ -496,3 +496,56 @@ fn hs2_j77xja_plan_dispatch_reserves_provisionally_only_with_the_opt_in() {
     assert_eq!(records[0]["assignment"], "planned-op");
     assert_eq!(records[0]["gates"][0]["commit"], pushed.as_str());
 }
+
+/// HS2-X6FB9V: a provisional reservation starts the CI watch of its gate by itself, in
+/// the checkout's `origin` repository and the policy's workflow, so the next sync reads
+/// it as pending from the Job store instead of an unwatched gate.
+#[test]
+fn hs2_x6fb9v_a_provisional_reservation_starts_its_gate_watch() {
+    let f = Fixture::new();
+    git(
+        &f.project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/synthetic/repo.git",
+        ],
+    );
+    let pushed = git(&f.project, &["rev-parse", "HEAD"]);
+    let blocker = awaiting_ci(&f, &pushed);
+    let waiting = dependent(&f, &blocker);
+    register(&f, "integrator", "integrator", "root");
+    register(&f, "worker", "worker", "worker-session");
+    let policy = json(
+        &f,
+        &[
+            "speculation-policy",
+            "--enable",
+            "--base-branch",
+            "main",
+            "--ci-workflow",
+            "Build",
+        ],
+    );
+    assert_eq!(policy["ci_workflow"], "Build");
+    let assign = assign_args(&f, "worker", "op", &waiting, &pushed);
+    json(&f, &assign.iter().map(String::as_str).collect::<Vec<_>>());
+    let synced = json(&f, &["speculation-sync"]);
+    assert_eq!(synced["event_source"], "ci_watch", "{synced}");
+    let status = json(&f, &["speculation-status"]);
+    assert_eq!(
+        status["status"]["records"][0]["gates"][0]["result"],
+        "pending"
+    );
+    refused(
+        &f,
+        &[
+            "speculation-policy",
+            "--ci-workflow",
+            "Build",
+            "--clear-ci-workflow",
+        ],
+        "cannot be used with",
+    );
+}

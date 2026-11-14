@@ -483,6 +483,12 @@ enum CoordinationCmd {
         base_branch: Option<String>,
         #[arg(long)]
         clear_base_branch: bool,
+        /// The CI workflow whose push runs judge a gate commit, as the provider names it
+        /// (default `CI`). Provisional work watches its gates there (HS2-X6FB9V).
+        #[arg(long, conflicts_with = "clear_ci_workflow")]
+        ci_workflow: Option<String>,
+        #[arg(long)]
+        clear_ci_workflow: bool,
     },
     /// Explain one ticket's readiness: confirmed, `provisional on <slug> CI <run>` with
     /// its base SHA and pending gate, or each blocking reason. Read-only.
@@ -1141,6 +1147,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             );
             let existing = state.assignments.get(&operation);
             let ticket_id: hotsheet_model::Ulid = native_id.parse()?;
+            let connection_for_watch = connection.clone();
             let (author, checked_worker, checked_generation, checked_operation) = (
                 i.id.clone(),
                 worker.clone(),
@@ -1261,6 +1268,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 check,
             )?;
             if let Some(reservation) = reserved.into_inner() {
+                let gates = reservation.gates.clone();
                 coordinator.speculation_record(
                     &operation,
                     reservation.depth,
@@ -1268,6 +1276,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     reservation.gates,
                     now,
                 )?;
+                // HS2-X6FB9V: follow the pending gates from now on.
+                coordinator.speculation_watch_reserved(&speculation, &connection_for_watch, &gates);
             }
         }
         CoordinationCmd::Worker {

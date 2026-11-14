@@ -24340,6 +24340,9 @@ components:
             - parked
         base_branch:
           type: string
+        ci_workflow:
+          description: HS2-X6FB9V. The CI workflow gates are watched in; absent means `CI`.
+          type: string
     SpeculationPolicyChange:
       description: A change to the provisional readiness policy; absent members stay as they are (HS2-7J2ZSE).
       type: object
@@ -24364,6 +24367,12 @@ components:
             - string
             - 'null'
         clear_base_branch:
+          type: boolean
+        ci_workflow:
+          type:
+            - string
+            - 'null'
+        clear_ci_workflow:
           type: boolean
       additionalProperties: false
     ValidationProfile:

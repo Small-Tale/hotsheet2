@@ -1342,3 +1342,278 @@ fn hs2_j77xja_worker_matches_mark_provisional_candidates() {
     assert!(!on.contains_key(&blocked.slug));
     assert_eq!(on.get(&open.slug), Some(&false));
 }
+
+/// Records every watch request; `refuse` makes each one fail with that reason.
+#[derive(Default)]
+struct Watches {
+    started: RefCell<Vec<(String, String)>>,
+    refuse: Option<String>,
+}
+
+impl super::speculation_runtime::GateWatch for Watches {
+    fn watch(&self, commit: &str, ticket: &TicketRef) -> std::result::Result<(), String> {
+        if let Some(reason) = &self.refuse {
+            return Err(reason.clone());
+        }
+        self.started
+            .borrow_mut()
+            .push((commit.to_owned(), ticket.native_id.clone()));
+        Ok(())
+    }
+}
+
+/// HS2-X6FB9V: a sync starts the watch of every unwatched gate the ledger waits on and
+/// of every pushed prerequisite awaiting CI that open work depends on, once; a watched
+/// gate, an unpushed commit and a closed dependent start nothing.
+#[test]
+fn hs2_x6fb9v_sync_starts_the_watches_its_gates_need() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let policy = enabled(IntegrationRule::PushPerTicket);
+    let facts = Facts::default();
+    let reserved = awaiting_ci(&store, "reserved prerequisite", GATE_A);
+    let dependent = ticket(&store, "dependent", vec![reserved.id]);
+    facts.push(GATE_A, BASE, GateResult::Unknown, None);
+    reserve(&c, &store, &policy, &facts, "op", &dependent, BASE).unwrap();
+    // Not reserved yet, but open work waits on it.
+    let waited_on = awaiting_ci(&store, "awaited prerequisite", GATE_B);
+    ticket(&store, "waiting", vec![waited_on.id]);
+    facts.push(GATE_B, BASE, GateResult::Unknown, None);
+    // Not pushed: never watched.
+    let unpushed = awaiting_ci(&store, "unpushed prerequisite", OTHER);
+    ticket(&store, "waiting on unpushed", vec![unpushed.id]);
+    let watches = Watches::default();
+    let report = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    assert_eq!(report.watched, [GATE_A, GATE_B]);
+    assert_eq!(
+        *watches.started.borrow(),
+        [
+            (GATE_A.to_owned(), reserved.id.to_string()),
+            (GATE_B.to_owned(), waited_on.id.to_string()),
+        ]
+    );
+    // Once watched (pending), nothing starts again.
+    facts.set(GATE_A, GateResult::Pending, None);
+    facts.set(GATE_B, GateResult::Pending, None);
+    let again = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    assert!(again.watched.is_empty());
+    assert_eq!(watches.started.borrow().len(), 2);
+    // A watch that cannot start says why, and the plain sync starts none.
+    facts.set(GATE_A, GateResult::Unknown, None);
+    let refused = Watches {
+        refuse: Some("origin_repository_unknown".into()),
+        ..Watches::default()
+    };
+    let report = c
+        .speculation_sync_watching(&facts, Some(&refused), Some(&store), NOW)
+        .unwrap();
+    assert!(report.watched.is_empty());
+    assert_eq!(
+        report.watch_unavailable.as_deref(),
+        Some("origin_repository_unknown")
+    );
+    let plain = c.speculation_sync(&facts, Some(&store), NOW).unwrap();
+    assert!(plain.watched.is_empty() && plain.watch_unavailable.is_none());
+}
+
+/// HS2-X6FB9V: after a red gate the prerequisite's newer `CI gate commit` is reported
+/// and watched; landed work moves onto it once it is green, work still on its branch
+/// waits for `speculation-rebase --base`.
+#[test]
+fn hs2_x6fb9v_a_repaired_gate_is_reported_and_replaced_for_landed_work() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let policy = enabled(IntegrationRule::PushPerTicket);
+    let facts = Facts::default();
+    let blocker = awaiting_ci(&store, "blocker", GATE_A);
+    let landed = ticket(&store, "landed", vec![blocker.id]);
+    let branch = ticket(&store, "on its branch", vec![blocker.id]);
+    facts.push(GATE_A, BASE, GateResult::Pending, Some("10.1"));
+    reserve(&c, &store, &policy, &facts, "landed", &landed, BASE).unwrap();
+    reserve(&c, &store, &policy, &facts, "branch", &branch, BASE).unwrap();
+    to_handoff(&c, "landed");
+    c.mark("i", GEN, NOW, "landed", Phase::Integrating).unwrap();
+    c.mark("i", GEN, NOW, "landed", Phase::Ci).unwrap();
+    facts.set(GATE_A, GateResult::Red, Some("10.1"));
+    let watches = Watches::default();
+    let red = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    assert!(red.repairs.is_empty(), "no newer gate commit yet");
+    assert_eq!(state_of(&c, "landed"), SpeculationState::AtRisk);
+    // The prerequisite records its fix.
+    ops::add_note(
+        &store,
+        &blocker.id,
+        Ulid::new(),
+        at(),
+        NoteKind::Regular,
+        format!("Fixed and pushed.\n\nCI gate commit: {FIX}\n"),
+    )
+    .unwrap();
+    facts.push(FIX, BASE_2, GateResult::Unknown, None);
+    let reported = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    let repairs: Vec<_> = reported
+        .repairs
+        .iter()
+        .map(|r| {
+            (
+                r.assignment.as_str(),
+                r.fix.as_str(),
+                r.fix_result,
+                r.replaced,
+            )
+        })
+        .collect();
+    assert_eq!(
+        repairs,
+        [
+            ("branch", FIX, GateResult::Unknown, false),
+            ("landed", FIX, GateResult::Unknown, false),
+        ]
+    );
+    assert_eq!(reported.watched, [FIX]);
+    // Green fix: landed work moves onto it and is confirmed; branch work waits.
+    facts.set(FIX, GateResult::Green, Some("11.1"));
+    let replaced = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    let replaced: BTreeMap<_, _> = replaced
+        .repairs
+        .iter()
+        .map(|r| (r.assignment.clone(), r.replaced))
+        .collect();
+    assert!(replaced["landed"]);
+    assert!(!replaced["branch"]);
+    assert_eq!(state_of(&c, "landed"), SpeculationState::Confirmed);
+    assert_eq!(state_of(&c, "branch"), SpeculationState::AtRisk);
+    let ledger = c.speculation_ledger().unwrap().unwrap();
+    assert_eq!(ledger.records["landed"].gates[0].commit, FIX);
+    // Repeating changes nothing more.
+    let again = c
+        .speculation_sync_watching(&facts, Some(&watches), Some(&store), NOW)
+        .unwrap();
+    assert!(again.repairs.iter().all(|r| r.assignment == "branch"));
+}
+
+/// HS2-X6FB9V: while its gate is red, the failing prerequisite is offered first.
+#[test]
+fn hs2_x6fb9v_a_red_gate_puts_its_repair_first_in_worker_matches() {
+    let (_root, c) = fixture();
+    let store = store_of(&c);
+    let policy = enabled(IntegrationRule::PushPerTicket);
+    let facts = Facts::default();
+    let blocker = awaiting_ci(&store, "blocker", GATE_A);
+    let dependent = ticket(&store, "dependent", vec![blocker.id]);
+    let urgent = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        at(),
+        NewTicket {
+            title: "highest priority".into(),
+            up_next: true,
+            priority: hotsheet_model::Priority::Highest,
+            ..NewTicket::default()
+        },
+    )
+    .unwrap();
+    facts.push(GATE_A, BASE, GateResult::Pending, Some("10.1"));
+    reserve(&c, &store, &policy, &facts, "op", &dependent, BASE).unwrap();
+    c.register_full(
+        Role::Worker,
+        "w",
+        GEN,
+        NOW,
+        120,
+        ReturnRoute::HumanRelay,
+        StrategyRequest::default(),
+        PreferenceRequest::replace(
+            WorkerPreferences::stated(
+                vec!["category:task".parse().unwrap()],
+                Vec::new(),
+                Vec::new(),
+                None,
+            )
+            .unwrap(),
+            true,
+        ),
+    )
+    .unwrap();
+    let first = |c: &Coordinator| {
+        c.snapshot_probed(NOW, Some(&facts)).unwrap().worker_matches["w"].candidates[0]
+            .slug
+            .clone()
+    };
+    assert_eq!(first(&c), urgent.slug);
+    c.speculation_apply(&[(GATE_A.into(), read(GateResult::Red, "10.1"))], NOW)
+        .unwrap();
+    assert_eq!(first(&c), blocker.slug);
+}
+
+/// HS2-X6FB9V: the live watch names the checkout's `origin` repository, the policy's
+/// branch and workflow, and refuses without an origin.
+#[test]
+fn hs2_x6fb9v_the_live_watch_creates_one_job_from_origin_and_the_policy() {
+    use super::speculation_runtime::GateWatch;
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    fs::create_dir(&project).unwrap();
+    git(&project, &["init", "-q", "-b", "main"]);
+    git(&project, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    let pushed = git(&project, &["rev-parse", "HEAD"]);
+    let store = root.path().join("store");
+    FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
+    let home = root.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let c = Coordinator::open_with_registry_home(&project, &store, home.clone()).unwrap();
+    let policy = SpeculationPolicy {
+        base_branch: Some("main".into()),
+        ci_workflow: Some("Build".into()),
+        ..enabled(IntegrationRule::PushPerTicket)
+    };
+    let ticket = TicketRef {
+        connection_id: "local".into(),
+        native_id: Ulid::new().to_string(),
+    };
+    assert_eq!(
+        c.speculation_watcher(&policy, None).watch(&pushed, &ticket),
+        Err("origin_repository_unknown".to_owned())
+    );
+    git(
+        &project,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:synthetic/repo.git",
+        ],
+    );
+    let watch = c.speculation_watcher(&policy, None);
+    watch.watch(&pushed, &ticket).unwrap();
+    watch.watch(&pushed, &ticket).unwrap();
+    let jobs = hotsheet_jobs::JobStore::at(&home)
+        .list(&c.project_id)
+        .unwrap()
+        .jobs;
+    assert_eq!(jobs.len(), 1, "a repeated watch keeps one Job");
+    let (target, _) = hotsheet_jobs::CiTarget::parse(jobs[0].external.as_ref().unwrap()).unwrap();
+    assert_eq!(
+        (
+            target.repo.as_str(),
+            target.workflow.as_str(),
+            target.branch.as_str()
+        ),
+        ("synthetic/repo", "Build", "main")
+    );
+    assert_eq!(
+        c.speculation_probe(&policy).gate(&pushed).result,
+        GateResult::Pending
+    );
+}

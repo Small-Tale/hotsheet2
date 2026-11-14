@@ -3276,6 +3276,27 @@ are `PUT` and `POST`, so a read-only device is refused them like every other wri
 machine that holds it. MCP actions: `policy_show`, `policy_set`, `status`, `explain`,
 `result`, `sync`, `rebase`, `reopen`; they work with or without a running server.
 
+**Following gates by themselves (HS2-X6FB9V).** Recording a provisional reservation
+(`assign`, `plan-dispatch`) starts the CI watch Job of each pending gate, and each
+`speculation-sync` starts any watch still missing: for every gate the ledger waits on
+and for every pushed `CI gate commit` of a prerequisite in `final_testing` that open
+work depends on. The watch names the shipping checkout's `origin` repository, the
+policy's `base_branch` (else the upstream's branch) and its `ci_workflow` (default
+`CI`, set with `speculation-policy --ci-workflow`); outside test builds the machine's
+Job monitor is started too. A watch that cannot be started is reported as
+`watch_unavailable` (`origin_repository_unknown`, `shipping_branch_unknown`,
+`job_store_unavailable`, `job_monitor_unavailable`) and retried by the next sync; the
+reservation stands either way. Nothing here contacts the CI provider except the
+monitor, and nothing runs on a timer.
+
+After a red, superseded or cancelled gate, the sync compares the prerequisite's newest
+`CI gate commit`: a newer one is listed under `repairs` with its result and is watched.
+Work already on the shipping branch (`ci` or `done`) is moved onto it once it is green
+and reachable, exactly as `speculation-rebase` without `--base`, and is then confirmed;
+work still on its branch waits for `speculation-rebase --base`. While a gate is red, the
+failing prerequisite is offered first in worker matches and the unmatched list,
+ahead of priority.
+
 **Plan rows and worker matches (HS2-J77XJA).** With the opt-in, the next plan, its
 `plan-dispatch` (CLI, `POST /checkouts/{reference}/worker-plan/dispatch`, MCP
 `hotsheet_worker_plan_dispatch`) and the worker preference candidates use the same
@@ -3289,8 +3310,7 @@ provisional work until the repair. Disabled, the rows, candidates and dispatch
 refusal are exactly what they were, and neither field is serialized.
 
 **Not built here.** Automatic `claim-next` remains confirmed-only (HS2-XYF4YT). The web
-client does not display the records (HS2-N8H97X), a ticket entering `final_testing`
-does not start its watch by itself (HS2-X6FB9V), and a batch or ci-staged member is
+client does not display the records (HS2-N8H97X), and a batch or ci-staged member is
 not checked against the integration rule (HS2-CK4S3F). The shared playbook wording for
 `final_testing` is proposed in HS2-5BNWVN. The cross-target form is
 HS2-JSF985 ([26](26-orchestration-projects.md) §26.22): there this setting is the

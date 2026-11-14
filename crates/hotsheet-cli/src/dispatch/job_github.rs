@@ -159,19 +159,9 @@ impl GithubApi for UreqGithubApi {
     }
 }
 
-/// `owner/name` from a Git remote URL in any of its usual spellings.
-pub(super) fn repo_from_remote(url: &str) -> Option<String> {
-    let trimmed = url.trim().trim_end_matches('/');
-    let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
-    let path = match trimmed.split_once("://") {
-        Some((_, rest)) => rest.split_once('/')?.1,
-        // The scp-like form: git@host:owner/name
-        None => trimmed.split_once(':')?.1,
-    };
-    let mut parts = path.rsplit('/');
-    let (name, owner) = (parts.next()?, parts.next()?);
-    (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}"))
-}
+/// `owner/name` from a Git remote URL; HS2-X6FB9V moved it to the jobs library so the
+/// shared runtime can start a watch too.
+pub(super) use hotsheet_jobs::repo_from_remote;
 
 #[cfg(test)]
 mod tests {

@@ -59,7 +59,15 @@ pub struct SpeculationPolicy {
     /// shipping checkout's upstream branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    /// HS2-X6FB9V: the CI workflow whose push runs judge a gate commit, as the provider
+    /// names it. `None` means [`DEFAULT_CI_WORKFLOW`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ci_workflow: Option<String>,
 }
+
+/// The workflow a gate is watched in when the policy names none (HS2-X6FB9V), the same
+/// default as `job watch ci`.
+pub const DEFAULT_CI_WORKFLOW: &str = "CI";
 
 fn default_max_depth() -> u32 {
     DEFAULT_MAX_DEPTH
@@ -72,6 +80,7 @@ impl Default for SpeculationPolicy {
             max_depth: DEFAULT_MAX_DEPTH,
             integration: IntegrationRule::default(),
             base_branch: None,
+            ci_workflow: None,
         }
     }
 }
@@ -82,6 +91,8 @@ pub enum SpeculationPolicyError {
     Depth,
     #[error("base_branch must be a plain branch name")]
     Branch,
+    #[error("ci_workflow must be a workflow name of 1 to 200 printable characters")]
+    Workflow,
     #[error("invalid {SPECULATION_POLICY_SETTING} setting: {0}")]
     Invalid(String),
     #[error("settings: {0}")]
@@ -107,7 +118,20 @@ impl SpeculationPolicy {
                 return Err(SpeculationPolicyError::Branch);
             }
         }
+        if let Some(workflow) = &self.ci_workflow {
+            if workflow.trim().is_empty()
+                || workflow.len() > 200
+                || workflow.chars().any(char::is_control)
+            {
+                return Err(SpeculationPolicyError::Workflow);
+            }
+        }
         Ok(())
+    }
+
+    /// The workflow a gate commit is watched in.
+    pub fn workflow(&self) -> &str {
+        self.ci_workflow.as_deref().unwrap_or(DEFAULT_CI_WORKFLOW)
     }
 
     /// Read the committed project policy. Speculation is a project decision, so a

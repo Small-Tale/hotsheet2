@@ -361,6 +361,7 @@ impl Coordinator {
             check,
         )?;
         if let Some(reservation) = reserved.into_inner() {
+            let gates = reservation.gates.clone();
             self.speculation_record(
                 &assigned.id,
                 reservation.depth,
@@ -368,6 +369,8 @@ impl Coordinator {
                 reservation.gates,
                 clock(),
             )?;
+            // HS2-X6FB9V: follow the pending gates from now on.
+            self.speculation_watch_reserved(&speculation, &assigned.ticket.connection_id, &gates);
         }
         Ok(assigned)
     }

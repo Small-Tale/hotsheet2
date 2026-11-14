@@ -410,7 +410,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_speculation",
-            "description": "Provisional readiness of a registered checkout (HS2-2SJPCH, HS2-7J2ZSE): action policy_show reads the committed policy and policy_set changes it (enabled, max_depth, integration push-per-ticket or parked, base_branch or clear_base_branch; the same change again writes nothing); status lists provisional assignments with their base SHA, pending gates and state; explain says why one ticket is or is not ready; result records a CI result for a gate commit when no CI watch reports it (green confirms, red marks dependents at risk); sync applies the CI watch's gate results and with wait_ms (at most 25000) waits for the next change instead of polling; rebase records that at-risk work rests on the repaired gate commit; reopen reopens provisional work with a ticket note. The same as the `coordination speculation-*` commands; the worktree branch record stays a local command.",
+            "description": "Provisional readiness of a registered checkout (HS2-2SJPCH, HS2-7J2ZSE): action policy_show reads the committed policy and policy_set changes it (enabled, max_depth, integration push-per-ticket or parked, base_branch or clear_base_branch, ci_workflow or clear_ci_workflow; the same change again writes nothing); status lists provisional assignments with their base SHA, pending gates and state; explain says why one ticket is or is not ready; result records a CI result for a gate commit when no CI watch reports it (green confirms, red marks dependents at risk); sync applies the CI watch's gate results and with wait_ms (at most 25000) waits for the next change instead of polling; rebase records that at-risk work rests on the repaired gate commit; reopen reopens provisional work with a ticket note. The same as the `coordination speculation-*` commands; the worktree branch record stays a local command.",
             "inputSchema": { "type": "object", "properties": {
                 "checkout": str_prop("registered checkout id or alias"),
                 "action": {"type":"string","enum":["policy_show","policy_set","status","explain","result","sync","rebase","reopen"]},
@@ -420,6 +420,8 @@ fn base_tools_list() -> Value {
                 "integration": {"type":"string","enum":["push-per-ticket","parked"],"description":"policy_set"},
                 "base_branch": str_prop("policy_set: branch a gate commit must be reachable from"),
                 "clear_base_branch": {"type":"boolean","description":"policy_set"},
+                "ci_workflow": str_prop("policy_set: the CI workflow gates are watched in (default CI)"),
+                "clear_ci_workflow": {"type":"boolean","description":"policy_set"},
                 "ticket": str_prop("explain: slug or id"),
                 "gate_commit": str_prop("result/rebase: the gate commit"),
                 "result": {"type":"string","enum":["pending","green","red","superseded","cancelled"],"description":"result"},
@@ -1086,6 +1088,8 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                         "integration",
                         "base_branch",
                         "clear_base_branch",
+                        "ci_workflow",
+                        "clear_ci_workflow",
                     ]),
                 ),
                 "status" => backend.get(&format!("{base}/status"), &query),

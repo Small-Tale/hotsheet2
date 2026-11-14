@@ -197,6 +197,12 @@ impl Coordinator {
             },
             _ => std::collections::BTreeSet::new(),
         };
+        // HS2-X6FB9V: a red base gate's repair is offered first. Only a pool with a
+        // speculation ledger can have one.
+        let urgent: std::collections::BTreeSet<String> = self
+            .speculation_ledger()?
+            .map(|ledger| ledger.repair_first().into_iter().collect())
+            .unwrap_or_default();
         let planned = state
             .next_plan
             .iter()
@@ -234,6 +240,7 @@ impl Coordinator {
                 tickets,
                 now: &claim_now,
                 provisional: &provisional,
+                urgent: &urgent,
             });
         let (worker_matches, unmatched_tickets) =
             super::preferences::project(&state, facts.as_ref(), &live_workers);

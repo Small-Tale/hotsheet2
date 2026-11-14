@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use anyhow::{bail, ensure};
-use hotsheet_jobs::{CiTarget, GateState, JobStore, gate_of};
+use hotsheet_jobs::{CiTarget, CiWatchOptions, GateState, JobStore, TicketLink, gate_of};
 use hotsheet_model::{NoteKind, Status, Ticket, Timestamp, Ulid};
 use hotsheet_ticketing::provisional::{
     GateObservation, GateProbe, GateResult, ReadinessLevel, SpeculationPolicy, TicketReadiness,
@@ -15,8 +15,8 @@ use hotsheet_ticketing::provisional::{
 use serde::Serialize;
 
 use super::speculation::{
-    OwedNote, PendingGate, Rebase, Recovery, SpeculationChange, SpeculationRow, SpeculationStatus,
-    SpeculativeRecord,
+    OwedNote, PendingGate, Rebase, Recovery, SpeculationChange, SpeculationRow, SpeculationState,
+    SpeculationStatus, SpeculativeRecord,
 };
 use super::*;
 
@@ -158,6 +158,77 @@ pub struct SpeculationReport {
     /// At-risk notes that could not be written to this ticket source yet.
     pub notes_owed: Vec<OwedNote>,
     pub status: SpeculationStatus,
+    /// HS2-X6FB9V: gate commits this pass started a CI watch for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub watched: Vec<String>,
+    /// HS2-X6FB9V: why no watch could be started, when one was needed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch_unavailable: Option<String>,
+    /// HS2-X6FB9V: red, superseded or cancelled gates whose prerequisite has since
+    /// recorded a newer `CI gate commit`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repairs: Vec<GateRepair>,
+}
+
+/// HS2-X6FB9V: a failed or lost gate and the commit that repairs it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct GateRepair {
+    pub assignment: String,
+    /// The prerequisite's slug.
+    pub slug: String,
+    /// The gate commit the work rests on.
+    pub replaces: String,
+    /// The prerequisite's newest recorded `CI gate commit`.
+    pub fix: String,
+    pub fix_result: GateResult,
+    /// The work is on the shipping branch and the fix is green: this pass replaced the
+    /// gate. Work still on its branch is rebased by `speculation-rebase --base`.
+    pub replaced: bool,
+}
+
+/// HS2-X6FB9V: starts the CI watch of a gate commit.
+pub trait GateWatch {
+    /// Make sure `commit` is watched, for `ticket`. `Err` names why it cannot be.
+    fn watch(&self, commit: &str, ticket: &TicketRef) -> std::result::Result<(), String>;
+}
+
+/// The shipped [`GateWatch`]: a watch Job in this machine's Job store for the shipping
+/// checkout's `origin` repository, the policy's workflow and branch, plus the machine's
+/// Job monitor so the Job is followed. Neither step contacts the CI provider itself.
+pub struct LiveGateWatch {
+    jobs: JobStore,
+    home: PathBuf,
+    checkout_id: String,
+    /// `(repository, workflow, branch)`, or why it could not be resolved.
+    scope: std::result::Result<(String, String, String), String>,
+    monitor: Option<std::sync::Arc<dyn crate::orchestration::JobMonitor>>,
+}
+
+impl GateWatch for LiveGateWatch {
+    fn watch(&self, commit: &str, ticket: &TicketRef) -> std::result::Result<(), String> {
+        let (repo, workflow, branch) = self.scope.clone()?;
+        let target = CiTarget::new(&repo, commit, &workflow, &branch)
+            .map_err(|_| "ci_target_invalid".to_owned())?;
+        hotsheet_jobs::ensure_ci_watch(
+            &self.jobs,
+            &self.checkout_id,
+            &target,
+            &CiWatchOptions {
+                ticket: Some(TicketLink {
+                    connection_id: ticket.connection_id.clone(),
+                    native_id: ticket.native_id.clone(),
+                }),
+                can_cancel: false,
+            },
+        )
+        .map_err(|_| "job_store_unavailable".to_owned())?;
+        if let Some(monitor) = &self.monitor {
+            monitor
+                .ensure(&self.home)
+                .map_err(|_| "job_monitor_unavailable".to_owned())?;
+        }
+        Ok(())
+    }
 }
 
 /// The branch record `coordination speculation-branch` wrote.
@@ -260,6 +331,77 @@ impl Coordinator {
             }
         }
         Ok(ready)
+    }
+
+    /// HS2-X6FB9V: the watch for gates of this pool's checkout under `policy`. The
+    /// repository is the checkout's `origin`, the branch the policy's base branch or the
+    /// upstream's, and the workflow the policy's. `monitor` starts the Job monitor;
+    /// without one a Job is created and waits for a monitor to follow it.
+    pub fn speculation_watcher(
+        &self,
+        policy: &SpeculationPolicy,
+        monitor: Option<std::sync::Arc<dyn crate::orchestration::JobMonitor>>,
+    ) -> LiveGateWatch {
+        let text = |args: &[&str]| {
+            git(&self.project, args)
+                .filter(|output| output.status.success())
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|text| text.trim().to_owned())
+                .filter(|text| !text.is_empty())
+        };
+        let repo = text(&["remote", "get-url", "origin"])
+            .and_then(|url| hotsheet_jobs::repo_from_remote(&url))
+            .ok_or_else(|| "origin_repository_unknown".to_owned());
+        let branch = policy
+            .base_branch
+            .clone()
+            .or_else(|| {
+                text(&["rev-parse", "--abbrev-ref", "@{upstream}"]).map(|upstream| {
+                    upstream
+                        .split_once('/')
+                        .map_or(upstream.clone(), |(_, branch)| branch.to_owned())
+                })
+            })
+            .ok_or_else(|| "shipping_branch_unknown".to_owned());
+        LiveGateWatch {
+            jobs: JobStore::at(&self.registry_home),
+            home: self.registry_home.clone(),
+            checkout_id: self.project_id.clone(),
+            scope: repo
+                .and_then(|repo| branch.map(|branch| (repo, policy.workflow().to_owned(), branch))),
+            monitor,
+        }
+    }
+
+    /// HS2-X6FB9V: when a provisional reservation is recorded, start the CI watch of
+    /// each of its pending gates (and the Job monitor, outside test builds), so its
+    /// result arrives without anyone running `job watch ci`. Best effort: the
+    /// reservation stands either way and `speculation-sync` retries; the answer lists
+    /// the commits watched.
+    pub fn speculation_watch_reserved(
+        &self,
+        policy: &SpeculationPolicy,
+        connection_id: &str,
+        gates: &[PendingGate],
+    ) -> Vec<String> {
+        let monitor = crate::orchestration::DetachedJobMonitor::automatic()
+            .map(|monitor| std::sync::Arc::new(monitor) as _);
+        let watch = self.speculation_watcher(policy, monitor);
+        gates
+            .iter()
+            .filter(|gate| {
+                watch
+                    .watch(
+                        &gate.commit,
+                        &TicketRef {
+                            connection_id: connection_id.to_owned(),
+                            native_id: gate.blocker.clone(),
+                        },
+                    )
+                    .is_ok()
+            })
+            .map(|gate| gate.commit.clone())
+            .collect()
     }
 
     /// The ledger read without taking the pool lock, for a caller that already holds it
@@ -423,6 +565,7 @@ impl Coordinator {
             notes_written,
             notes_owed: ledger.owed_notes(),
             status: ledger.status(),
+            ..SpeculationReport::default()
         })
     }
 
@@ -447,6 +590,79 @@ impl Coordinator {
         store: Option<&FsStore>,
         now: i64,
     ) -> Result<SpeculationReport> {
+        self.speculation_sync_watching(probe, None, store, now)
+    }
+
+    /// [`Self::speculation_sync`] that also keeps the gates followed (HS2-X6FB9V):
+    ///
+    /// 1. every gate the ledger waits on, and the pushed `CI gate commit` of every
+    ///    prerequisite awaiting CI that an open ticket depends on, gets a CI watch when it
+    ///    has none (`watch`);
+    /// 2. a red, superseded or cancelled gate whose prerequisite has recorded a newer
+    ///    `CI gate commit` is reported as a repair, and its fix is watched;
+    /// 3. work already on the shipping branch is moved onto that fix once the fix is
+    ///    green and reachable, as `speculation-rebase` without `--base` would.
+    pub fn speculation_sync_watching(
+        &self,
+        probe: &dyn GateProbe,
+        watch: Option<&dyn GateWatch>,
+        store: Option<&FsStore>,
+        now: i64,
+    ) -> Result<SpeculationReport> {
+        let mut watched = Vec::new();
+        let mut watch_unavailable = None;
+        let mut follow = |commit: &str, ticket: TicketRef| {
+            let Some(watch) = watch else { return };
+            if watched.iter().any(|done| done == commit)
+                || probe.gate(commit).result != GateResult::Unknown
+            {
+                return;
+            }
+            match watch.watch(commit, &ticket) {
+                Ok(()) => watched.push(commit.to_owned()),
+                Err(reason) => watch_unavailable = Some(reason),
+            }
+        };
+        let tickets = store.map(FsStore::list_tickets).transpose()?;
+        let connection = store.map(git_connection_id);
+        if let Some(ledger) = self.speculation_ledger()? {
+            let waiting = ledger.watched_commits();
+            for record in ledger.records.values() {
+                for gate in &record.gates {
+                    if waiting.contains(&gate.commit) {
+                        follow(
+                            &gate.commit,
+                            TicketRef {
+                                connection_id: record.ticket.connection_id.clone(),
+                                native_id: gate.blocker.clone(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        if let (Some(tickets), Some(connection)) = (&tickets, &connection) {
+            for prerequisite in tickets.iter().filter(|t| {
+                t.started_phase == Some(hotsheet_model::StartedPhase::FinalTesting)
+                    && ops::is_open(t)
+                    && tickets
+                        .iter()
+                        .any(|d| ops::is_open(d) && d.blocked_by.contains(&t.id))
+            }) {
+                if let Some(commit) = hotsheet_ticketing::provisional::ci_gate_commit(prerequisite)
+                {
+                    if probe.reachable(&commit) == Some(true) {
+                        follow(
+                            &commit,
+                            TicketRef {
+                                connection_id: connection.clone(),
+                                native_id: prerequisite.id.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
         let readings: Vec<(String, GateObservation)> = self
             .speculation_ledger()?
             .map(|ledger| ledger.watched_commits())
@@ -458,8 +674,82 @@ impl Coordinator {
             })
             .filter(|(_, observation)| observation.result != GateResult::Unknown)
             .collect();
-        let changes = self.speculation_apply(&readings, now)?;
-        self.speculation_report(changes, store)
+        let mut changes = self.speculation_apply(&readings, now)?;
+        let mut repairs = Vec::new();
+        if let (Some(ledger), Some(tickets)) = (self.speculation_ledger()?, &tickets) {
+            let state = self.state()?;
+            for record in ledger.records.values().filter(|record| {
+                !matches!(
+                    record.state,
+                    SpeculationState::Confirmed | SpeculationState::Reopened
+                )
+            }) {
+                for gate in record.gates.iter().filter(|gate| {
+                    matches!(
+                        gate.result,
+                        GateResult::Red | GateResult::Superseded | GateResult::Cancelled
+                    )
+                }) {
+                    let Some(prerequisite) =
+                        tickets.iter().find(|t| t.id.to_string() == gate.blocker)
+                    else {
+                        continue;
+                    };
+                    let Some(fix) = hotsheet_ticketing::provisional::ci_gate_commit(prerequisite)
+                    else {
+                        continue;
+                    };
+                    if fix.eq_ignore_ascii_case(&gate.commit) {
+                        continue;
+                    }
+                    follow(
+                        &fix,
+                        TicketRef {
+                            connection_id: record.ticket.connection_id.clone(),
+                            native_id: gate.blocker.clone(),
+                        },
+                    );
+                    let observed = probe.gate(&fix);
+                    let landed = state
+                        .assignments
+                        .get(&record.assignment)
+                        .is_some_and(|a| matches!(a.phase, Phase::Ci | Phase::Done));
+                    let replaced = landed
+                        && observed.result == GateResult::Green
+                        && probe.reachable(&fix) == Some(true)
+                        && self
+                            .speculation_rebase(
+                                &record.assignment,
+                                &Rebase {
+                                    replaces: gate.commit.clone(),
+                                    gate_commit: fix.clone(),
+                                    gate: observed.clone(),
+                                    base: None,
+                                },
+                                now,
+                                None,
+                            )
+                            .is_ok();
+                    repairs.push(GateRepair {
+                        assignment: record.assignment.clone(),
+                        slug: gate.slug.clone(),
+                        replaces: gate.commit.clone(),
+                        fix,
+                        fix_result: observed.result,
+                        replaced,
+                    });
+                }
+            }
+            if repairs.iter().any(|repair| repair.replaced) {
+                // The replaced gate is green: the record may be confirmed now.
+                changes.extend(self.speculation_apply(&[], now)?);
+            }
+        }
+        let mut report = self.speculation_report(changes, store)?;
+        report.watched = watched;
+        report.watch_unavailable = watch_unavailable;
+        report.repairs = repairs;
+        Ok(report)
     }
 
     /// Record a rebase onto the repaired prerequisite after checking it against Git: the

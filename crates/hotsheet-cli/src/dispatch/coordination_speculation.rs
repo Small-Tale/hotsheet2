@@ -36,6 +36,8 @@ pub(super) fn policy(project: &Path, command: &CoordinationCmd) -> Result<bool> 
         integration,
         base_branch,
         clear_base_branch,
+        ci_workflow,
+        clear_ci_workflow,
     } = command
     else {
         return Ok(false);
@@ -52,6 +54,8 @@ pub(super) fn policy(project: &Path, command: &CoordinationCmd) -> Result<bool> 
         integration: *integration,
         base_branch: base_branch.clone(),
         clear_base_branch: *clear_base_branch,
+        ci_workflow: ci_workflow.clone(),
+        clear_ci_workflow: *clear_ci_workflow,
     };
     let policy = speculation_policy(project, &change)?;
     println!("{}", serde_json::to_string_pretty(&policy)?);

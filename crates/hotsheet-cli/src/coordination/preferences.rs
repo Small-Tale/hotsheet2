@@ -375,6 +375,9 @@ pub(super) struct QueueFacts<'a> {
     pub now: &'a hotsheet_model::Timestamp,
     /// HS2-J77XJA: tickets an enabled speculation policy makes provisionally ready.
     pub provisional: &'a std::collections::BTreeSet<hotsheet_model::Ulid>,
+    /// HS2-X6FB9V: slugs whose red CI gate holds provisional work back
+    /// (`repair_first`); they are offered before every other ready ticket.
+    pub urgent: &'a std::collections::BTreeSet<String>,
 }
 
 impl QueueFacts<'_> {
@@ -456,7 +459,13 @@ impl QueueFacts<'_> {
             .iter()
             .filter(|ticket| self.ready(state, ticket))
             .collect();
-        ready.sort_by_key(|ticket| (priority_rank(ticket.priority), ticket.id));
+        ready.sort_by_key(|ticket| {
+            (
+                !self.urgent.contains(&ticket.slug),
+                priority_rank(ticket.priority),
+                ticket.id,
+            )
+        });
         ready
     }
 }
@@ -484,6 +493,7 @@ pub(super) fn project(
             .collect();
         candidates.sort_by_key(|ticket| {
             (
+                !queue.is_some_and(|q| q.urgent.contains(&ticket.slug)),
                 priority_rank(ticket.priority),
                 !preferences.prefers(ticket),
                 ticket.id,
