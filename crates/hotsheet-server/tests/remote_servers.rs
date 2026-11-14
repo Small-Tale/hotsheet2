@@ -481,6 +481,9 @@ mod capacity;
 #[path = "remote_servers/e2e.rs"]
 mod e2e;
 #[cfg(unix)]
+#[path = "remote_servers/e2e_coverage.rs"]
+mod e2e_coverage;
+#[cfg(unix)]
 #[path = "remote_servers/e2e_failures.rs"]
 mod e2e_failures;
 #[cfg(unix)]
