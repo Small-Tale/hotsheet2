@@ -335,7 +335,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
         // Open a dialog-presented conversation now so its draft can take focus.
         syncControlledOpen(document);
         syncConversationScroll(document, true);
-        document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]')?.focus();
+        conversationComposers(prepared.id)[0]?.focus();
       });
     } catch (reason) {
       if (project()?.id === current.id) error.value = reason instanceof Error ? reason.message : String(reason);
@@ -367,6 +367,18 @@ export function createDriveConversationsController(dependencies: DriveConversati
     conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: step.value };
     return step.value;
   }
+  /**
+   * HS2-FC8G3P: the draft fields of one conversation. The drawer chat and the conversation dialog can
+   * be mounted at once (the drawer also while it hides), each inside a root that names its connection,
+   * so the first draft field in the document can belong to another conversation.
+   */
+  function conversationComposers(connectionId: string): HTMLTextAreaElement[] {
+    return [
+      ...document.querySelectorAll<HTMLTextAreaElement>(
+        `[data-selection-id="${CSS.escape(connectionId)}"] [name="conversation-draft"]`,
+      ),
+    ];
+  }
   async function sendConversationTurn() {
     const current = project(),
       connectionId = conversationConnectionId.value,
@@ -393,8 +405,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
     const start = beginConversation(connectionId, draft);
     conversationHistoryCursors.delete(connectionId);
     conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
-    const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
-    if (composer) composer.value = '';
+    for (const composer of conversationComposers(connectionId)) composer.value = '';
     requestAnimationFrame(() => {
       syncConversationScroll(document, true);
     });

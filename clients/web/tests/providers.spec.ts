@@ -24826,6 +24826,37 @@ test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2
   await runLongTurnUntilStuck(page, host, 'dialog', [1280, 390]);
 });
 
+test('sending from the conversation dialog clears its own draft, not the drawer chat draft (HS2-FC8G3P)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const drawerField = drawer
+    .locator('[data-component="ai-conversation"]')
+    .getByRole('textbox', { name: 'Message Codex' });
+  await drawerField.fill('A drawer draft in progress');
+  // The drawer chat stays mounted while the conversation dialog opens over it.
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialogField = host.getByRole('textbox', { name: 'Message Codex' });
+  await expect(host).toBeVisible();
+  await expect(dialogField).toBeFocused();
+  await dialogField.fill('What time is it in California?');
+  await dialogField.press('Enter');
+  await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute('data-status', 'completed');
+  await expect(dialogField).toHaveValue('');
+  await expect(drawerField).toHaveValue('A drawer draft in progress');
+});
+
 test('cycles each chat composer through its own sent messages with Up and Down (HS2-AJQKK0)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
