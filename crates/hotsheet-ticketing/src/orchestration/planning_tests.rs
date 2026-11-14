@@ -290,6 +290,7 @@ fn hs2_hcw7md_the_planner_role_is_not_a_target_role() {
     }
     assert_eq!(SessionRole::from_code("orchestrator"), None);
     let mut hosted = NewHostedSession {
+        account: None,
         operation_id: "plan-1".into(),
         tool: "claude".into(),
         model: None,

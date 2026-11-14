@@ -808,6 +808,7 @@ fn hs2_gdjxgz_the_label_names_the_project_and_the_run_or_role() {
 
 fn hosted(operation: &str, tool: &str) -> NewHostedSession {
     NewHostedSession {
+        account: None,
         operation_id: operation.into(),
         tool: tool.into(),
         model: Some("model-a".into()),
@@ -1487,4 +1488,60 @@ fn hs2_rg91sk_the_idle_time_is_a_fact_not_a_blocker() {
     }))
     .unwrap();
     assert_eq!(newer.idle_since_ms, Some(7));
+}
+
+/// HS2-PFHRS9: a hosted start may name the tool account it is for. The host keeps it,
+/// answers it by terminal id, refuses an account that is not an identifier, and treats
+/// the same operation for another account as a conflict; a repeat with the same
+/// account is the same reservation, and a session without one stays unattributed.
+#[test]
+fn hs2_pfhrs9_a_hosted_session_keeps_the_account_it_was_started_for() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let for_account = |operation: &str, account: Option<&str>| NewHostedSession {
+        account: account.map(Into::into),
+        ..hosted(operation, "codex")
+    };
+    let (team, created) = registry
+        .reserve(HOSTED, &for_account("op-team", Some("team-a")), &mut tx)
+        .unwrap();
+    assert!(created);
+    assert_eq!(team.account.as_deref(), Some("team-a"));
+    let (again, created) = registry
+        .reserve(HOSTED, &for_account("op-team", Some("team-a")), &mut tx)
+        .unwrap();
+    assert!(!created && again.session_id == team.session_id);
+    for other in [Some("team-b"), None] {
+        assert!(matches!(
+            registry.reserve(HOSTED, &for_account("op-team", other), &mut tx),
+            Err(OrchestrationError::Conflict)
+        ));
+    }
+    for bad in ["", "has space", "a/b"] {
+        assert!(matches!(
+            registry.reserve(HOSTED, &for_account("op-bad", Some(bad)), &mut tx),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    let (plain, _) = registry
+        .reserve(HOSTED, &for_account("op-plain", None), &mut tx)
+        .unwrap();
+    assert_eq!(
+        registry.account_of(&team.session_id).unwrap().as_deref(),
+        Some("team-a")
+    );
+    assert_eq!(registry.account_of(&plain.session_id).unwrap(), None);
+    assert_eq!(registry.account_of("unknown-terminal").unwrap(), None);
+    // The wire form omits a missing account, so an older host reads the start.
+    let wire = serde_json::to_value(for_account("op-plain", None)).unwrap();
+    assert!(wire.get("account").is_none());
+    let stored =
+        std::fs::read_to_string(home.path().join("orchestration-hosted-sessions.json")).unwrap();
+    assert_eq!(stored.matches("team-a").count(), 1);
 }

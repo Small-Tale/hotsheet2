@@ -1004,6 +1004,9 @@ pub struct HostedSession {
     /// orchestrator never claims on its behalf.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-PFHRS9: the tool account it was started for, if the orchestrator named one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 /// HS2-R7QH35: why a running session is told about one exact ticket.
@@ -1073,6 +1076,11 @@ pub struct NewHostedSession {
     #[serde(default)]
     pub role: SessionRole,
     pub origin: SessionOrigin,
+    /// HS2-PFHRS9: the tool account the orchestrator started this session for, so the
+    /// host attributes the session's limit and usage signals to it. An identifier only;
+    /// omitted when none, so an older host reads a start without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 impl NewHostedSession {
@@ -1084,6 +1092,9 @@ impl NewHostedSession {
         }
         if let Some(effort) = &self.effort {
             valid_identifier(effort)?;
+        }
+        if let Some(account) = &self.account {
+            valid_identifier(account)?;
         }
         valid_identifier(&self.origin.owner_checkout_id)?;
         if !bounded_text(&self.origin.project, 4 * MAX_SESSION_PROJECT_CHARS)
@@ -1248,6 +1259,17 @@ impl HostedSessionRegistry {
             .any(|session| session.session_id == session_id))
     }
 
+    /// HS2-PFHRS9: the tool account the terminal with this id was started for, when an
+    /// orchestrator started it for one. Anything else is unattributed.
+    pub fn account_of(&self, session_id: &str) -> Result<Option<String>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .sessions
+            .into_iter()
+            .find(|session| session.session_id == session_id)
+            .and_then(|session| session.account))
+    }
+
     pub fn get(
         &self,
         checkout_id: &str,
@@ -1262,7 +1284,7 @@ impl HostedSessionRegistry {
 
     /// Reserve a terminal id for a start, or return the reservation an earlier request
     /// with the same operation id made (`false`). The same operation id for a different
-    /// tool, model, effort, role or origin conflicts.
+    /// tool, model, effort, role, origin or account (HS2-PFHRS9) conflicts.
     pub fn reserve(
         &self,
         checkout_id: &str,
@@ -1302,6 +1324,7 @@ impl HostedSessionRegistry {
                 && existing.effort == new.effort
                 && existing.role == new.role
                 && existing.origin == new.origin
+                && existing.account == new.account
                 && existing.resources == resources;
             return if same {
                 Ok((existing.clone(), false))
@@ -1337,6 +1360,7 @@ impl HostedSessionRegistry {
             role_delivery: RoleDelivery::default(),
             request: None,
             resources: resources.to_vec(),
+            account: new.account.clone(),
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());
@@ -1540,6 +1564,7 @@ fn validate_hosted(session: &HostedSession) -> Result<(), OrchestrationError> {
     valid_identifier(&session.checkout_id)?;
     valid_token(&session.session_id)?;
     NewHostedSession {
+        account: session.account.clone(),
         operation_id: session.operation_id.clone(),
         tool: session.tool.clone(),
         model: session.model.clone(),

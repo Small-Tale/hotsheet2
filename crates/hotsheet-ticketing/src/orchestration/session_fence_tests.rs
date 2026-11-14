@@ -23,6 +23,7 @@ const OTHER: &str = "other-0123456789ab";
 
 fn hosted(operation: &str) -> NewHostedSession {
     NewHostedSession {
+        account: None,
         operation_id: operation.into(),
         tool: "codex".into(),
         model: None,

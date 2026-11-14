@@ -565,6 +565,7 @@ fn hs2_gdjxgz_a_start_launches_once_on_the_targets_host_labels_it_and_joins_the_
                 &f.m.target.id,
                 HostedSessionStart {
                     session: hotsheet_ticketing::orchestration::NewHostedSession {
+                        account: None,
                         operation_id: "op-1".into(),
                         tool: "codex".into(),
                         model: Some("model-a".into()),
@@ -1178,6 +1179,7 @@ fn hs2_gdjxgz_a_crashed_session_is_lost_and_replaced_by_a_new_one() {
                 &f.m.target.id,
                 HostedSessionStart {
                     session: hotsheet_ticketing::orchestration::NewHostedSession {
+                        account: None,
                         operation_id: "op-unheard".into(),
                         tool: "codex".into(),
                         model: None,
@@ -1462,6 +1464,7 @@ fn hs2_gdjxgz_a_role_session_starts_only_when_the_target_has_none() {
                 &f.m.target.id,
                 HostedSessionStart {
                     session: hotsheet_ticketing::orchestration::NewHostedSession {
+                        account: None,
                         operation_id: "foreign-op".into(),
                         tool: "codex".into(),
                         model: None,
@@ -2326,6 +2329,7 @@ fn hs2_dg0ypa_a_second_start_for_a_held_run_is_refused_until_its_holder_is_gone(
 /// HS2-WHR4GS: the late start that HS2-7VV79Q's immediate `never_started` left open.
 fn late_start(f: &Fixture, operation: &str) -> hotsheet_ticketing::orchestration::NewHostedSession {
     hotsheet_ticketing::orchestration::NewHostedSession {
+        account: None,
         operation_id: operation.into(),
         tool: "codex".into(),
         model: None,
@@ -2515,4 +2519,39 @@ fn hs2_whr4gs_hosted_stop_sequences_fence_only_what_never_launched() {
     let older: HostedStopReply =
         serde_json::from_value(json!({"stopped": false, "reason": "session_not_found"})).unwrap();
     assert!(!older.fenced);
+}
+
+/// HS2-PFHRS9: a start for a tool account carries the account to the session's host,
+/// which keeps it so the session's limit signals are attributed to that account. A
+/// start without an account reaches the host without one.
+#[test]
+fn hs2_pfhrs9_a_start_for_an_account_carries_it_to_the_host() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let mut body = policy();
+    body.tools[0].accounts = vec![hotsheet_ticketing::orchestration::AccountPolicy {
+        account: "team-a".into(),
+        max_sessions: 2,
+        budget_cents_per_day: None,
+    }];
+    f.set_policy(body, &mut tx);
+    let hosts = hotsheet_ticketing::orchestration::HostedSessionRegistry::new(&f.m.home);
+    let started = f
+        .start("op-team", 1, "codex", json!({"account": "team-a"}), &mut tx)
+        .unwrap();
+    assert_eq!(started.session.account.as_deref(), Some("team-a"));
+    let terminal = started.session.hosted.clone().unwrap().session_id;
+    assert_eq!(
+        hosts.account_of(&terminal).unwrap().as_deref(),
+        Some("team-a")
+    );
+    let plain = f
+        .start("op-plain", 2, "claude", json!({}), &mut tx)
+        .unwrap();
+    let terminal = plain.session.hosted.clone().unwrap().session_id;
+    assert_eq!(hosts.account_of(&terminal).unwrap(), None);
 }

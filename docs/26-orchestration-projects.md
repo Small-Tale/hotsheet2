@@ -1173,8 +1173,19 @@ provider message a second way:
 
 A failed record is logged by code and never fails the halt or resume that carried
 it. `tool_capacity_signals::usage_signal` maps a usage event to a `usage` signal;
-feeding usage events automatically is HS2-XFMKHQ. Sessions do not carry an account
-identity yet, so detected signals are unattributed (HS2-PFHRS9).
+feeding usage events automatically is HS2-XFMKHQ.
+
+**Which account (HS2-PFHRS9).** A session's account is declared by whoever starts it for
+one: the orchestrator, when `session_start` names an `account` (required when the
+policy configures accounts for the tool). The hosted start carries it
+(`NewHostedSession.account`, an identifier, left out when absent so an older host reads
+a start without one) and the host keeps it on its record (`HostedSession.account`). The
+same operation for another account conflicts. When a terminal halts on a limit or
+resumes, the host looks its terminal id up in its hosted-session records
+(`HostedSessionRegistry::account_of`) and the signal carries that account, so it limits
+and recovers that one account. Any other session (a person's own terminal, a start
+without an account) stays unattributed. Only the account id is read and stored: no
+credential, provider profile or environment.
 
 ### States
 

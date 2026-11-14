@@ -21917,6 +21917,11 @@ components:
               $ref: '#/components/schemas/OrchestrationSessionRole'
             origin:
               $ref: '#/components/schemas/HostedTargetSessionOrigin'
+            account:
+              description: The tool account the session is started for, so its limit signals are attributed to it (HS2-PFHRS9); absent when none.
+              type: string
+              maxLength: 160
+              pattern: ^[A-Za-z0-9._-]+$
           additionalProperties: false
         limits:
           description: The orchestrator's policy limits for this machine; the policy defaults when omitted.
@@ -21998,6 +22003,9 @@ components:
               $ref: '#/components/schemas/OrchestrationSessionRole'
             origin:
               $ref: '#/components/schemas/HostedTargetSessionOrigin'
+            account:
+              description: The tool account it was started for (HS2-PFHRS9); absent when none.
+              type: string
             owner:
               $ref: '#/components/schemas/OrchestrationSessionOwner'
             paused:

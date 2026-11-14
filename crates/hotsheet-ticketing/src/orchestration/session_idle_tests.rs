@@ -172,6 +172,7 @@ fn hs2_95swq4_a_host_knows_which_terminals_an_orchestrator_started() {
         rng: &mut rng,
     };
     let request = NewHostedSession {
+        account: None,
         operation_id: "op-1".into(),
         tool: "codex".into(),
         model: None,

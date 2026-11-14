@@ -305,6 +305,7 @@ impl OrchestrationRuntime {
                 .iter()
                 .find(|view| &view.session.operation_id == reused)
                 .map(|view| NewHostedSession {
+                    account: None,
                     operation_id: view.session.operation_id.clone(),
                     tool: view.session.tool.clone(),
                     model: view.session.model.clone(),
@@ -314,6 +315,7 @@ impl OrchestrationRuntime {
                 })
                 .ok_or(OrchestrationError::Corrupt)?,
             ProposeDecision::Start(started) => NewHostedSession {
+                account: None,
                 operation_id: started.clone(),
                 tool: request.tool.clone(),
                 model: request.model.clone(),

@@ -1457,6 +1457,117 @@ async fn hs2_ahg7hw_usage_limit_halts_and_resumes_record_tool_capacity_signals()
     call(&router, "DELETE", "/terminals/cap", None).await;
 }
 
+/// HS2-PFHRS9 E2E: a terminal an orchestrator started for a tool account carries that
+/// account, so its limit limits that one account and its resume recovers it; a terminal
+/// nobody declared an account for stays unattributed. Only the account id is stored.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_pfhrs9_a_session_started_for_an_account_limits_only_that_account() {
+    use hotsheet_ticketing::orchestration::{
+        HostedSessionRegistry, NewHostedSession, SessionOrigin, SessionRole, ToolCapacityRegistry,
+        Transaction,
+    };
+    struct Fixed;
+    impl hotsheet_ticketing::Clock for Fixed {
+        fn now_ms(&self) -> u64 {
+            1_794_000_000_000
+        }
+    }
+    struct Counter(u128);
+    impl hotsheet_ticketing::Rng for Counter {
+        fn next_u128(&mut self) -> u128 {
+            self.0 += 1;
+            self.0
+        }
+    }
+    let h = harness();
+    let router = app(h.state.clone());
+    let registry = ToolCapacityRegistry::new(h.state.machine_home());
+    let entry = |account: Option<&str>| {
+        registry
+            .entries()
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.tool == "claude" && entry.account.as_deref() == account)
+    };
+    // The orchestrator's start for account team-a reserved this terminal on the host.
+    let mut rng = Counter(7);
+    let mut tx = Transaction {
+        clock: &Fixed,
+        rng: &mut rng,
+    };
+    let (hosted, _) = HostedSessionRegistry::new(h.state.machine_home())
+        .reserve(
+            "target-0123456789ab",
+            &NewHostedSession {
+                operation_id: "op-team-a".into(),
+                tool: "claude".into(),
+                model: None,
+                effort: None,
+                role: SessionRole::Worker,
+                origin: SessionOrigin {
+                    owner_checkout_id: "owner-0123456789ab".into(),
+                    project: "Launch".into(),
+                    run_id: None,
+                    ticket: None,
+                },
+                account: Some("team-a".into()),
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let terminal = hosted.session_id.clone();
+    for id in [terminal.as_str(), "plain"] {
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/terminals",
+            Some(json!({"command":"cat","id":id})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{id}");
+    }
+    let halt = |id: String| {
+        let router = router.clone();
+        async move {
+            let (status, _) = call(
+                &router,
+                "POST",
+                &format!("/terminals/{id}/halt"),
+                Some(json!({"error_type":"rate_limit","message":"Usage limit reached. Resets in 2h.","agent":"claude"})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+        }
+    };
+    halt(terminal.clone()).await;
+    let team = entry(Some("team-a")).expect("the limit is the account's");
+    assert!(team.limit.is_some());
+    assert!(entry(None).is_none(), "nothing unattributed was recorded");
+    // A terminal nobody declared an account for stays unattributed.
+    halt("plain".into()).await;
+    assert!(entry(None).unwrap().limit.is_some());
+    // The account's resume recovers that account only.
+    call(
+        &router,
+        "DELETE",
+        &format!("/terminals/{terminal}/halt"),
+        None,
+    )
+    .await;
+    assert!(entry(Some("team-a")).unwrap().limit.is_none());
+    assert!(entry(None).unwrap().limit.is_some());
+    let stored = std::fs::read_to_string(
+        h.state
+            .machine_home()
+            .join("orchestration-tool-capacity.json"),
+    )
+    .unwrap();
+    assert!(stored.contains("team-a") && !stored.contains("Usage limit"));
+    for id in [terminal.as_str(), "plain"] {
+        call(&router, "DELETE", &format!("/terminals/{id}"), None).await;
+    }
+}
+
 /// HS2-ZTRF4Q: the standby digest reads one store's recorded tokens for its whole window, so a
 /// long gap between pushed snapshots (each carries only five minutes) cannot read as zero.
 #[tokio::test(flavor = "multi_thread")]

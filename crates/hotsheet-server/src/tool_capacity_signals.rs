@@ -103,6 +103,31 @@ pub fn usage_signal(event: &UsageEvent) -> Option<LimitSignal> {
     })
 }
 
+/// HS2-PFHRS9: the tool account the terminal `terminal_id` was started for, when an
+/// orchestrator started it for one. Read from this machine's hosted-session records;
+/// identifiers only, never credentials or provider profiles.
+pub(crate) fn session_account(state: &AppState, terminal_id: &str) -> Option<String> {
+    hotsheet_ticketing::orchestration::HostedSessionRegistry::new(state.machine_home())
+        .account_of(terminal_id)
+        .ok()
+        .flatten()
+        .and_then(|account| identifier(&account))
+}
+
+/// HS2-PFHRS9: a signal observed in terminal `terminal_id`, attributed to the account its
+/// session was started for. A session without one stays unattributed.
+pub(crate) fn attributed(
+    state: &AppState,
+    terminal_id: &str,
+    signal: Option<LimitSignal>,
+) -> Option<LimitSignal> {
+    let signal = signal?;
+    Some(LimitSignal {
+        account: session_account(state, terminal_id),
+        ..signal
+    })
+}
+
 /// Record one observed signal in this machine's capacity registry. Capacity is
 /// advisory to the session that produced it: a refused or failed record is logged by
 /// code and never fails the halt or resume that carried it.

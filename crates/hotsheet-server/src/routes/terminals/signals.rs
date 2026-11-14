@@ -553,17 +553,22 @@ pub(crate) fn record_terminal_halt(
         !same
     };
     if changed {
-        // HS2-AHG7HW: a usage or rate limit is also a capacity signal for its tool.
+        // HS2-AHG7HW: a usage or rate limit is also a capacity signal for its tool, and
+        // HS2-PFHRS9 for the account the session was started for.
         crate::tool_capacity_signals::record(
             state,
-            halt.agent.as_deref().and_then(|tool| {
-                crate::tool_capacity_signals::halt_signal(
-                    tool,
-                    &halt.error_type,
-                    &halt.message,
-                    OffsetDateTime::now_utc(),
-                )
-            }),
+            crate::tool_capacity_signals::attributed(
+                state,
+                id,
+                halt.agent.as_deref().and_then(|tool| {
+                    crate::tool_capacity_signals::halt_signal(
+                        tool,
+                        &halt.error_type,
+                        &halt.message,
+                        OffsetDateTime::now_utc(),
+                    )
+                }),
+            ),
         );
         emit_terminal_halted(state, id, Some(halt.message));
     }
@@ -572,7 +577,7 @@ pub(crate) fn record_terminal_halt(
 /// Clear terminal `id`'s halt because its Codex session started a new turn (HS2-CYHAWB).
 pub(crate) fn clear_terminal_halt_on_resume(state: &AppState, id: &str) {
     if let Some(halt) = take_terminal_halt_if(state, id, None) {
-        note_capacity_recovered(state, &halt);
+        note_capacity_recovered(state, id, &halt);
         emit_terminal_halted(state, id, None);
     }
 }
@@ -580,13 +585,17 @@ pub(crate) fn clear_terminal_halt_on_resume(state: &AppState, id: &str) {
 /// HS2-AHG7HW: a session halted on a usage or rate limit took a new turn, so its tool is
 /// no longer known to be limited. Ending or dismissing a halted session proves nothing
 /// and records nothing.
-fn note_capacity_recovered(state: &AppState, halt: &TerminalHalt) {
+fn note_capacity_recovered(state: &AppState, id: &str, halt: &TerminalHalt) {
     if crate::stuck_causes::is_usage_limit(&halt.error_type) {
         crate::tool_capacity_signals::record(
             state,
-            halt.agent.as_deref().and_then(|tool| {
-                crate::tool_capacity_signals::recovered_signal(tool, OffsetDateTime::now_utc())
-            }),
+            crate::tool_capacity_signals::attributed(
+                state,
+                id,
+                halt.agent.as_deref().and_then(|tool| {
+                    crate::tool_capacity_signals::recovered_signal(tool, OffsetDateTime::now_utc())
+                }),
+            ),
         );
     }
 }
@@ -611,7 +620,7 @@ pub(crate) async fn clear_terminal_halt(
         // A hook's clear (no `at`) is the session resuming; a dated clear is the user
         // dismissing the stopped state, which says nothing about the tool's limit.
         if query.at.is_none() {
-            note_capacity_recovered(&state, &halt);
+            note_capacity_recovered(&state, &id, &halt);
         }
         emit_terminal_halted(&state, &id, None);
     }

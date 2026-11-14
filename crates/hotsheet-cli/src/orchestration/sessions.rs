@@ -2089,6 +2089,7 @@ impl OrchestrationRuntime {
                 .ok_or(OrchestrationError::Conflict)?;
             let body = serde_json::to_value(HostedSessionStart {
                 session: NewHostedSession {
+                    account: session.account.clone(),
                     operation_id: session.operation_id.clone(),
                     tool: session.tool.clone(),
                     model: session.model.clone(),

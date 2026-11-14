@@ -2800,6 +2800,7 @@ fn hs2_7yskxe_a_started_session_is_told_its_resources_and_claims_them_itself() {
     assert_eq!(claims(&f.m.home), 0);
     // A start of the same operation with other resources conflicts at the host.
     let other = hotsheet_ticketing::orchestration::NewHostedSession {
+        account: None,
         operation_id: operation.clone(),
         tool: hosted.tool.clone(),
         model: hosted.model.clone(),
