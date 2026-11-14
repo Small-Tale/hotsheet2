@@ -1174,10 +1174,17 @@ fn hs2_5jbypv_the_github_actions_adapter_reads_the_watch_job_and_wakes_on_its_ch
         (m.home.clone(), owner.clone(), jobs[0].id.clone(), a.clone());
     let judged = std::thread::spawn(move || judge(&home, &waiter, &job, "red", &commit, 41));
     let started = std::time::Instant::now();
+    // HS2-7YGHEE: the monitor writes the Job twice (it takes the Job, then records the
+    // verdict), and a waiting sync ends on the first write, which may be all it can read
+    // yet. Each further sync waits for the next change, until the verdict is there; a
+    // verdict that landed before the first read's cursor is read at once.
     let mut red = sync(15_000, &mut tx);
-    if red.changed.is_empty() {
-        // The verdict landed before the first read's cursor; the next read has it.
-        red = sync(0, &mut tx);
+    while red.summary.ci == GateState::Pending {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the verdict never ended a wait"
+        );
+        red = sync(15_000, &mut tx);
     }
     judged.join().unwrap();
     assert!(started.elapsed() < Duration::from_secs(10));
