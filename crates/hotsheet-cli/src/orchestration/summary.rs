@@ -1,17 +1,21 @@
 //! HS2-S13719: the progress and cost summary of an owning checkout's runs.
 //!
-//! A read. It answers from this machine's records, contacts no target and writes
-//! nothing, like the gate reads of HS2-5JBYPV. Cost comes from the usage records of
-//! `docs/14` (HS2-38RJMK): the same per-ticket read the ticket timeline uses, taken
-//! from the target ticket's Git store when the target's reviewed destination is a
-//! checkout on this machine. Anything else is reported as unknown with its reason.
+//! A read. It answers from this machine's records and writes nothing, like the gate
+//! reads of HS2-5JBYPV. Cost comes from the usage records of `docs/14` (HS2-38RJMK): the
+//! same per-ticket read the ticket timeline uses, taken from the target ticket's Git
+//! store when the target's reviewed destination is a checkout on this machine, or
+//! (HS2-B6236S) asked of a remote target's server through the reviewed transport, once
+//! per remote work item, as an observation. Anything else is reported as unknown with
+//! its reason.
 use std::collections::{BTreeMap, BTreeSet};
 
+use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::metrics;
 use hotsheet_ticketing::orchestration::{
-    BindingRegistry, CostReading, GateFilter, GateRegistry, MAX_AUDIT_PAGE, Metric, ProgressInput,
-    ProgressSummary, Run, RunEvent, RunEventJournal, RunTicket, SessionRegistry, TargetDestination,
-    UnknownReason, ValidationRegistry, WorkItemKey, summarize_progress,
+    BindingRegistry, CostReading, GateFilter, GateRegistry, MAX_AUDIT_PAGE, Metric,
+    PlacementPolicy, ProgressInput, ProgressSummary, Run, RunEvent, RunEventJournal, RunTicket,
+    SessionRegistry, TargetAction, TargetDestination, TargetOpError, UnknownReason,
+    ValidationRegistry, WorkItemKey, summarize_progress,
 };
 
 use super::tickets::{identifier, native};
@@ -44,8 +48,9 @@ impl OrchestrationRuntime {
     }
 
     /// What the usage records say the run's target ticket cost, read through the run's
-    /// target. Never contacts another machine.
-    fn work_item_cost(&self, run: &Run) -> Metric<CostReading> {
+    /// target: from this machine's checkout, or (HS2-B6236S) from a remote target's
+    /// server through the reviewed transport.
+    fn work_item_cost(&self, run: &Run, tx: &mut Transaction<'_>) -> Metric<CostReading> {
         let Ok(target) = Self::target_ref(&run.owner_checkout_id, &run.target.target_id) else {
             return unknown(UnknownReason::TargetUnbound);
         };
@@ -53,7 +58,7 @@ impl OrchestrationRuntime {
             Ok(binding) => match binding.destination {
                 Some(TargetDestination::Local { checkout_id, .. }) => checkout_id,
                 Some(TargetDestination::Remote { .. }) => {
-                    return unknown(UnknownReason::TargetRemote);
+                    return self.remote_ticket_cost(&target, run, tx);
                 }
                 None => return unknown(UnknownReason::TargetUnbound),
             },
@@ -62,15 +67,89 @@ impl OrchestrationRuntime {
         let Ok(checkout) = self.checkouts.describe(&checkout_id) else {
             return unknown(UnknownReason::UsageStoreUnavailable);
         };
-        match checkout.source(&run.target.connection_id) {
+        Self::checkout_ticket_cost(&checkout, &run.target.connection_id, &run.target.native_id)
+    }
+
+    /// HS2-B6236S: a remote target's cost reading, asked of its server through the
+    /// reviewed transport. It is an observation (`tickets_read`): adding the project
+    /// consented to reading it, so it never asks, and it is audited as a read by the
+    /// orchestration project's own orchestrator. The host's own unknowns pass through; a
+    /// host without the route is `target_remote`, and anything else that fails is
+    /// `target_unreachable`.
+    fn remote_ticket_cost(
+        &self,
+        target: &TargetRef,
+        run: &Run,
+        tx: &mut Transaction<'_>,
+    ) -> Metric<CostReading> {
+        let Ok(actor) = MutationActor::parse(
+            "system",
+            Some(PlacementPolicy::default().acting_actor(&run.owner_checkout_id)),
+        ) else {
+            return unknown(UnknownReason::TargetUnreachable);
+        };
+        let Ok(authorized) = self.authorize(
+            target,
+            Some(&actor),
+            ActionRequest::new(TargetAction::TicketsRead),
+            tx,
+        ) else {
+            return unknown(UnknownReason::TargetUnreachable);
+        };
+        let query = format!(
+            "?connection_id={}&native_id={}",
+            super::tickets::encode(&run.target.connection_id),
+            super::tickets::encode(&run.target.native_id)
+        );
+        let outcome = Self::destination(&authorized).and_then(|destination| {
+            self.hosted_call_at(destination, "/target-tickets/cost", "GET", &query, None, tx)
+        });
+        let _ = self.finish(target, &authorized, &outcome, tx);
+        match outcome {
+            Ok(answer) => {
+                serde_json::from_value(answer).unwrap_or(unknown(UnknownReason::TargetUnreachable))
+            }
+            // An older peer has no such route.
+            Err(OrchestrationError::TargetOperation(TargetOpError::PeerUnsupported)) => {
+                unknown(UnknownReason::TargetRemote)
+            }
+            Err(_) => unknown(UnknownReason::TargetUnreachable),
+        }
+    }
+
+    /// HS2-B6236S hosted half: what a checkout of this machine's usage records say one of
+    /// its tickets cost. Identifiers and metrics only; contacts nothing.
+    pub fn hosted_ticket_cost(
+        &self,
+        checkout_id: &str,
+        connection_id: &str,
+        native_id: &str,
+    ) -> Result<Metric<CostReading>, OrchestrationError> {
+        identifier(connection_id, "bounded connection id required")?;
+        native(native_id)?;
+        let checkout = self.owner(checkout_id)?;
+        Ok(Self::checkout_ticket_cost(
+            &checkout,
+            connection_id,
+            native_id,
+        ))
+    }
+
+    /// One ticket's cost from a checkout's Git source on this machine.
+    fn checkout_ticket_cost(
+        checkout: &hotsheet_ticketing::checkouts::Checkout,
+        connection_id: &str,
+        native_id: &str,
+    ) -> Metric<CostReading> {
+        match checkout.source(connection_id) {
             Some(source) if source.provider == "git" => {}
             Some(_) => return unknown(UnknownReason::UsageSourceUnsupported),
             None => return unknown(UnknownReason::UsageStoreUnavailable),
         }
         let cost = checkout
-            .verified_git_source(&run.target.connection_id)
+            .verified_git_source(connection_id)
             .ok()
-            .and_then(|store| metrics::ticket_cost(&store, &run.target.native_id).ok());
+            .and_then(|store| metrics::ticket_cost(&store, native_id).ok());
         match cost {
             Some(Some(cost)) => Metric::Known {
                 value: CostReading {
@@ -120,7 +199,7 @@ impl OrchestrationRuntime {
             {
                 continue;
             }
-            let cost = self.work_item_cost(run);
+            let cost = self.work_item_cost(run, tx);
             if cost.known().is_some() || !costs.contains_key(&key) {
                 costs.insert(key, cost);
             }

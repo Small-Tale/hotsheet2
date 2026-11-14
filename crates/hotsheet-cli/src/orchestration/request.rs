@@ -36,6 +36,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "target-tickets"]
             // HS2-D85G19: one bounded page of a hosted source's open tickets.
             | ["checkouts", _, "target-tickets", "list"]
+            // HS2-B6236S: one hosted ticket's cost reading.
+            | ["checkouts", _, "target-tickets", "cost"]
             // HS2-EBHDSB: runs (orchestrating) and the hosted exact claim.
             | ["checkouts", _, "orchestration", "runs"]
             | ["checkouts", _, "orchestration", "runs", _]
@@ -520,6 +522,14 @@ impl OrchestrationRuntime {
                         "exactly one of native_id or operation_id is required",
                     )),
                 }
+            }
+            // HS2-B6236S hosted half: what one ticket of a hosted checkout cost.
+            ("GET", ["checkouts", checkout, "target-tickets", "cost"]) => {
+                let connection = query_text(path, "connection_id")?
+                    .ok_or(OrchestrationError::Invalid("connection_id is required"))?;
+                let native_id = query_text(path, "native_id")?
+                    .ok_or(OrchestrationError::Invalid("native_id is required"))?;
+                value(self.hosted_ticket_cost(checkout, &connection, &native_id)?)
             }
             // HS2-D85G19 hosted half: one bounded page of a source's open tickets.
             ("GET", ["checkouts", checkout, "target-tickets", "list"]) => {

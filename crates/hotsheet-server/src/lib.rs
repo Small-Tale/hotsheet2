@@ -2227,6 +2227,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{checkout}/target-tickets/list",
             get(routes::orchestration::read),
         )
+        // HS2-B6236S: what one hosted ticket cost, identifiers and metrics only.
+        .route(
+            "/checkouts/{checkout}/target-tickets/cost",
+            get(routes::orchestration::read),
+        )
         // HS2-WN0MXZ: validation steps of an orchestration ticket (machine-local) and
         // the hosted execution of one step where the target lives.
         .route(

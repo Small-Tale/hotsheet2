@@ -277,3 +277,76 @@ fn hs2_s13719_summary_reads_runs_and_usage_once_per_work_item_across_targets() {
             .is_empty()
     );
 }
+
+/// HS2-B6236S hosted half: a hosted checkout answers what one of its tickets cost, the
+/// same reading the local summary takes: the store's own unknown first, then the cost,
+/// identifiers and metrics only; malformed identifiers and an unknown checkout refused.
+#[test]
+fn hs2_b6236s_the_hosted_cost_read_answers_one_tickets_reading() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let work = target_ticket(&m);
+    let path = |connection: &str, native: &str| {
+        format!(
+            "/checkouts/{}/target-tickets/cost?connection_id={connection}&native_id={native}",
+            m.target.id
+        )
+    };
+    let read =
+        |path: String, tx: &mut Transaction<'_>| m.runtime.request("GET", &path, &Value::Null, tx);
+    let id = work.id.to_string();
+    assert_eq!(
+        read(path(&m.target_connection(), &id), &mut tx).unwrap(),
+        json!({"status":"unknown","reason":"no_usage_recorded"})
+    );
+    for (ts, cost) in [
+        ("2026-10-15T01:00:00Z", 1.5),
+        ("2026-10-15T02:00:00Z", 0.25),
+    ] {
+        metrics::record(&m.target_store, &usage(Some(&work), ts, Some(cost))).unwrap();
+    }
+    let known = read(path(&m.target_connection(), &id), &mut tx).unwrap();
+    assert_eq!(
+        known,
+        json!({"status":"known","value":{"cost_usd":1.75,"events":2,"unpriced_events":0}})
+    );
+    assert!(!known.to_string().contains("Target work"));
+    // The same reading as the runtime call every adapter shares.
+    assert_eq!(
+        serde_json::to_value(
+            m.runtime
+                .hosted_ticket_cost(&m.target.id, &m.target_connection(), &id)
+                .unwrap()
+        )
+        .unwrap(),
+        known
+    );
+    // A source this checkout does not have, malformed ids and an unknown checkout.
+    assert_eq!(
+        read(path("not-a-source", &id), &mut tx).unwrap(),
+        json!({"status":"unknown","reason":"usage_store_unavailable"})
+    );
+    for bad in [path("bad id", &id), path(&m.target_connection(), "bad id")] {
+        assert!(matches!(
+            read(bad, &mut tx),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    assert!(
+        m.runtime
+            .hosted_ticket_cost("unknown-0123456789ab", &m.target_connection(), &id)
+            .is_err()
+    );
+    let missing = format!(
+        "/checkouts/{}/target-tickets/cost?native_id={id}",
+        m.target.id
+    );
+    assert!(matches!(
+        read(missing, &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+}

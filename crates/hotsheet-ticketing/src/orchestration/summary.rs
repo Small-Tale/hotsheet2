@@ -47,7 +47,8 @@ pub enum UnknownReason {
     GateUnverified,
     /// The target has no reviewed destination on this machine.
     TargetUnbound,
-    /// The target lives on another machine; its usage records are not read from here.
+    /// The target lives on another machine whose server does not offer the hosted cost
+    /// read (HS2-B6236S); its usage records are not read from here.
     TargetRemote,
     /// The target ticket's source is not a Git store, which is where usage is kept.
     UsageSourceUnsupported,
@@ -57,10 +58,13 @@ pub enum UnknownReason {
     NoUsageRecorded,
     /// The caller supplied no cost reading for the work item.
     CostNotRead,
+    /// HS2-B6236S: the remote target's server could not be asked for the cost, or did
+    /// not answer with one.
+    TargetUnreachable,
 }
 
 impl UnknownReason {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::RunUnfinished,
         Self::NeverDispatched,
         Self::HistoryTruncated,
@@ -75,6 +79,7 @@ impl UnknownReason {
         Self::UsageStoreUnavailable,
         Self::NoUsageRecorded,
         Self::CostNotRead,
+        Self::TargetUnreachable,
     ];
 
     pub fn code(self) -> &'static str {
@@ -93,6 +98,7 @@ impl UnknownReason {
             Self::UsageStoreUnavailable => "usage_store_unavailable",
             Self::NoUsageRecorded => "no_usage_recorded",
             Self::CostNotRead => "cost_not_read",
+            Self::TargetUnreachable => "target_unreachable",
         }
     }
 }

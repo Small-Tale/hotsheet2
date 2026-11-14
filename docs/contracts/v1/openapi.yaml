@@ -3926,6 +3926,53 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-tickets/cost:
+    description:
+      What one ticket of a hosted checkout cost, from that checkout's own usage records (HS2-B6236S). Identifiers
+      and metrics only. A remote orchestration project's progress summary reads it through the reviewed transport as
+      an observation. Ordinary authenticated project data under the caller's device role.
+    get:
+      operationId: readHostedTargetTicketCost
+      parameters:
+        - name: connection_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 160
+        - name: native_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 160
+      responses:
+        '200':
+          description: The reading, or why it is unknown.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationCostMetric'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -22902,6 +22949,7 @@ components:
         - usage_store_unavailable
         - no_usage_recorded
         - cost_not_read
+        - target_unreachable
     OrchestrationDurationMetric:
       description: Milliseconds when `known`, otherwise the `reason` it is unknown.
       type: object

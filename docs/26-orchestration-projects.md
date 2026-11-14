@@ -3323,8 +3323,10 @@ or the `resource-claims` routes.
 One read answers how an owning checkout's runs are going across its targets: lead
 time, queue wait, blocked time, retries, CI and deployment outcomes, and known AI
 cost. It carries identifiers, states, counts, durations and amounts only: no ticket
-title, body, note or command output. It answers from this machine's records,
-contacts no target, asks no one and writes nothing, like the gate reads of §26.13.
+title, body, note or command output. It answers from this machine's records, asks no
+one and writes nothing, like the gate reads of §26.13. It contacts no target except a
+remote target's server for a work item's cost, once per remote work item (HS2-B6236S,
+below).
 
 It is a pure fold (`orchestration/summary.rs`, `summarize_progress`) over the runs
 and their histories and the run event journal (§26.9), validation results (§26.12),
@@ -3338,22 +3340,23 @@ Every measure is `{"status":"known","value":…}` or
 parts separately and lists the reasons, so a total never silently leaves something
 out. The reason codes:
 
-| Code                       | Meaning                                                                  |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `run_unfinished`           | The run has not finished, so it has no lead time yet                     |
-| `never_dispatched`         | The run was never claimed on its target                                  |
-| `history_truncated`        | The run's bounded history no longer holds the entries the measure needs  |
-| `events_trimmed`           | Retention removed run events older than the oldest one kept              |
-| `clock_inconsistent`       | Recorded times run backwards                                             |
-| `no_gate_linked`           | No CI gate stands for the run                                            |
-| `no_deployment_requested`  | No deployment was requested for the run                                  |
-| `gate_unverified`          | A gate stands with no trustworthy verdict                                |
-| `target_unbound`           | The target has no reviewed destination on this machine                   |
-| `target_remote`            | The target lives on another machine; its usage records are not read here |
-| `usage_source_unsupported` | The target ticket's source is not a Git store                            |
-| `usage_store_unavailable`  | The usage records could not be opened or read                            |
-| `no_usage_recorded`        | The usage records hold nothing for the target ticket                     |
-| `cost_not_read`            | No cost reading was taken for the work item                              |
+| Code                       | Meaning                                                                 |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `run_unfinished`           | The run has not finished, so it has no lead time yet                    |
+| `never_dispatched`         | The run was never claimed on its target                                 |
+| `history_truncated`        | The run's bounded history no longer holds the entries the measure needs |
+| `events_trimmed`           | Retention removed run events older than the oldest one kept             |
+| `clock_inconsistent`       | Recorded times run backwards                                            |
+| `no_gate_linked`           | No CI gate stands for the run                                           |
+| `no_deployment_requested`  | No deployment was requested for the run                                 |
+| `gate_unverified`          | A gate stands with no trustworthy verdict                               |
+| `target_unbound`           | The target has no reviewed destination on this machine                  |
+| `target_remote`            | The target's remote server does not offer the hosted cost read          |
+| `target_unreachable`       | The remote target's server could not be asked for the cost              |
+| `usage_source_unsupported` | The target ticket's source is not a Git store                           |
+| `usage_store_unavailable`  | The usage records could not be opened or read                           |
+| `no_usage_recorded`        | The usage records hold nothing for the target ticket                    |
+| `cost_not_read`            | No cost reading was taken for the work item                             |
 
 ### Measures of a run
 
@@ -3400,9 +3403,20 @@ attributed to the target ticket in its Git store. It adds the settled rollup's c
 for the ticket and the priced raw events newer than the rollup, so an event is not
 counted on both sides. There is no second telemetry source.
 
-- The store is read only when the target's reviewed destination is a checkout on this
-  machine. Remote targets report `target_remote` (HS2-B6236S).
-- Raw usage events are per device, so the figure is what this machine recorded.
+- For a target whose reviewed destination is a checkout on this machine, the store is
+  read here.
+- **Remote targets (HS2-B6236S).** The target's server reads its own store: the
+  summary asks `GET /checkouts/{checkout}/target-tickets/cost?connection_id=&native_id=`
+  through the reviewed transport, which answers the same reading (identifiers and
+  metrics only). Under the permission model (§26.7) this is an observation,
+  `tickets_read`: it never asks anyone and is audited as a read by the orchestration
+  project's own orchestrator (`orchestrator.<owner>`, §26.17). The host's own unknowns
+  pass through unchanged. A server without the route reports `target_remote`, and one
+  that cannot be reached or answers otherwise reports `target_unreachable`. The
+  summary's per-work-item loop asks once per work item and prefers a readable target,
+  so a cost is never counted twice.
+- Raw usage events are per device, so the figure is what the machine that holds the
+  target ticket's store recorded.
 - `unpriced_events` counts newer events with no cost; when it is above zero the
   figure is a lower bound.
 - A ticket with nothing recorded reports `no_usage_recorded`, not a cost of zero.
@@ -3426,7 +3440,8 @@ hotsheet-cli ... orchestration summary --project <owner> --ticket <ticket-id> \
 ```
 
 `GET /checkouts/{owner}/orchestration/summary[?ticket=<id>&connection_id=<source>]`
-is machine-local. MCP `hotsheet_targets` has the `summary` action with an optional
+is machine-local. The hosted `GET /checkouts/{checkout}/target-tickets/cost` (HS2-B6236S)
+is ordinary authenticated project data, so a remote orchestration project can reach it. MCP `hotsheet_targets` has the `summary` action with an optional
 `ticket` of `{native_id, connection_id?}`. All three call
 `OrchestrationRuntime::progress_summary`.
 

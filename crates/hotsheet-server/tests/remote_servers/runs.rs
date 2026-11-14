@@ -182,6 +182,46 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
     for forbidden in [SECRET, peer.origin.as_str(), "Synthetic remote work"] {
         assert!(!record.contains(forbidden));
     }
+    // HS2-B6236S: the summary reads the remote work item's cost from the peer through
+    // the reviewed transport: the peer's own unknown first, then its recorded cost.
+    let summary = || cli_named(&home, &worker, &["summary", "--project", &owner.id]);
+    assert_eq!(
+        summary()["work_items"][0]["cost"],
+        json!({"status":"unknown","reason":"no_usage_recorded"})
+    );
+    for (hour, cost_usd) in [(1, 1.5), (2, 0.25)] {
+        hotsheet_ticketing::metrics::record(
+            &peer_store,
+            &hotsheet_ticketing::metrics::UsageEvent {
+                ts: format!("2026-10-15T0{hour}:00:00Z"),
+                tool: "claude".into(),
+                model: Some("model-a".into()),
+                tokens_in: 10,
+                tokens_out: 2,
+                cost_usd: Some(cost_usd),
+                ticket: Some(first_id.clone()),
+                session: Some("session-a".into()),
+            },
+        )
+        .unwrap();
+    }
+    let read = summary();
+    assert_eq!(
+        read["work_items"][0]["cost"],
+        json!({"status":"known","value":{"cost_usd":1.75,"events":2,"unpriced_events":0}})
+    );
+    assert_eq!(read["totals"]["cost"]["known_usd"], 1.75);
+    assert!(!read.to_string().contains("Synthetic remote work"));
+    // The read is an observation by the orchestration project's own orchestrator.
+    let journal = cli_named(
+        &home,
+        &human,
+        &["audit", "--project", &owner.id, "--limit", "200"],
+    );
+    let orchestrator = format!("orchestrator.{}", owner.id);
+    assert!(journal["entries"].as_array().unwrap().iter().any(|entry| {
+        entry["action"] == "tickets_read" && entry["actor_id"] == orchestrator.as_str()
+    }));
     // Repeating the command is the same run and one claim.
     assert_eq!(cli_named(&home, &worker, &dispatch)["run_id"], run_id);
     assert_eq!(peer_store.read_ticket(&first.id).unwrap().claim_count, 1);
@@ -361,6 +401,14 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
     );
     assert_eq!(shown["state"], "completed");
     peer.stop().await;
+    // HS2-B6236S: with the peer gone the remote cost cannot be asked: unknown with
+    // its reason, never a zero, and the summary still answers.
+    let offline = cli_named(&home, &worker, &["summary", "--project", &owner.id]);
+    assert_eq!(
+        offline["work_items"][0]["cost"],
+        json!({"status":"unknown","reason":"target_unreachable"})
+    );
+    assert_eq!(offline["totals"]["cost"]["complete"], false);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
