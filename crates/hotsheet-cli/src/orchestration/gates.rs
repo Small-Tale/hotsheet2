@@ -152,7 +152,15 @@ impl GateProvider for GithubActionsGates {
                     Coverage::Ancestor
                 },
                 commit,
-                artifact: None,
+                // HS2-3YC577: what a green run built, when the source recorded one.
+                artifact: run
+                    .artifact
+                    .as_ref()
+                    .map(|artifact| ArtifactRef {
+                        name: artifact.name.clone(),
+                        digest: artifact.digest.clone(),
+                    })
+                    .filter(ArtifactRef::is_valid),
                 exit_code: None,
                 at_ms: self.store.now_ms(),
             }
@@ -834,12 +842,22 @@ impl OrchestrationRuntime {
                     .gates
                     .iter()
                     .find(|gate| gate.kind == GateKind::Ci && gate.state == GateState::Passed);
-                match (standing.ci, standing.commits.as_slice(), passed) {
-                    (GateState::Passed, [commit], Some(gate)) => {
-                        (commit.clone(), gate.gate_id.clone())
-                    }
+                let (commit, gate) = match (standing.ci, standing.commits.as_slice(), passed) {
+                    (GateState::Passed, [commit], Some(gate)) => (commit.clone(), gate),
                     _ => return Err(OrchestrationError::Gate(GateError::NotPassed)),
+                };
+                // HS2-3YC577: when both the request and the CI run name what was built,
+                // they must be the same artifact. Refused before anything is asked.
+                let built = gate
+                    .evidence
+                    .as_ref()
+                    .and_then(|evidence| evidence.artifact.as_ref());
+                if let (Some(wanted), Some(built)) = (&request.artifact, built) {
+                    if wanted != built {
+                        return Err(OrchestrationError::Gate(GateError::ArtifactMismatch));
+                    }
                 }
+                (commit, gate.gate_id.clone())
             }
         };
         let new = |state, reason: Option<&str>, actor_id: &str| NewGate {

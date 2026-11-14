@@ -103,6 +103,14 @@ pub struct ArtifactRef {
     pub digest: String,
 }
 
+impl ArtifactRef {
+    /// HS2-3YC577: whether a gate record would accept this artifact, so an adapter can
+    /// leave out a provider name the store refuses instead of failing the whole reading.
+    pub fn is_valid(&self) -> bool {
+        validate_artifact(self).is_ok()
+    }
+}
+
 /// What a provider adapter observed. Identifiers, counts and codes only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -398,6 +406,9 @@ pub enum GateError {
     RepositoryMismatch,
     /// The slot already has a deployment in progress.
     DeploymentActive,
+    /// HS2-3YC577: the deployment names an artifact other than the one the passed CI
+    /// run built.
+    ArtifactMismatch,
 }
 
 impl GateError {
@@ -410,6 +421,7 @@ impl GateError {
             Self::InvalidTransition => "gate_invalid_transition",
             Self::RepositoryMismatch => "gate_repository_mismatch",
             Self::DeploymentActive => "gate_deployment_active",
+            Self::ArtifactMismatch => "gate_artifact_mismatch",
         }
     }
 }

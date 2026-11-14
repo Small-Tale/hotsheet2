@@ -9,8 +9,8 @@ use std::time::Duration;
 use hotsheet_jobs::{Acquire, ActiveStatus, FinalStatus, JobStore, Outcome};
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AuditOutcome, Coverage, Gate, GateError, GateEvidence, GateFilter, GateKind, GateReading,
-    GateState, PermissionAction, PermissionAnswer, PermissionState, Run, RunEventKind,
+    ArtifactRef, AuditOutcome, Coverage, Gate, GateError, GateEvidence, GateFilter, GateKind,
+    GateReading, GateState, PermissionAction, PermissionAnswer, PermissionState, Run, RunEventKind,
     RunEventSource, TargetAction,
 };
 use serde_json::json;
@@ -1088,6 +1088,19 @@ fn hs2_5jbypv_a_deployment_adapter_supplies_the_only_result_and_a_person_is_aske
 
 /// Finish the watch Job of a gate the way the Job monitor would.
 pub(super) fn judge(home: &Path, owner: &str, job_id: &str, gate: &str, head: &str, run: u64) {
+    judge_with(home, owner, job_id, gate, head, run, &[]);
+}
+
+/// [`judge`], with further outcome refs such as the artifact a green run built.
+fn judge_with(
+    home: &Path,
+    owner: &str,
+    job_id: &str,
+    gate: &str,
+    head: &str,
+    run: u64,
+    extra: &[(&str, &str)],
+) {
     let store = JobStore::at(home);
     let (_, token) = store
         .acquire(
@@ -1109,6 +1122,11 @@ pub(super) fn judge(home: &Path, owner: &str, job_id: &str, gate: &str, head: &s
     ]
     .into_iter()
     .map(|(key, value)| (key.to_owned(), value))
+    .chain(
+        extra
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned())),
+    )
     .collect();
     store
         .finish(
@@ -1259,5 +1277,127 @@ fn hs2_5jbypv_the_github_actions_adapter_reads_the_watch_job_and_wakes_on_its_ch
                 .gate_link(&owner, &run, odd, Some(&worker()), &mut tx)
         ),
         GateError::ProviderUnsupported
+    );
+}
+
+#[test]
+fn hs2_3yc577_a_deployment_must_name_the_artifact_the_passed_ci_run_built() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (built, other) = ("1".repeat(64), "2".repeat(64));
+    // A run judged green, with the artifact name its outcome records.
+    let green_run = |name: &str, tx: &mut Transaction<'_>| {
+        let (m, run) = with_run(
+            &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
+            tx,
+        );
+        let (a, owner) = (sha('a'), m.owner.id.clone());
+        let github: LinkGate =
+            serde_json::from_value(json!({"commit": a, "repository": "example/widgets"})).unwrap();
+        let linked = m
+            .runtime
+            .gate_link(&owner, &run, github, Some(&worker()), tx)
+            .unwrap();
+        judge_with(
+            &m.home,
+            &owner,
+            linked.gate.watch_ref.as_deref().unwrap(),
+            "green",
+            &a,
+            51,
+            &[("artifact_name", name), ("artifact_digest", &built)],
+        );
+        let green = m
+            .runtime
+            .gate_sync(&owner, &run, &SyncGates { wait_ms: 0 }, Some(&worker()), tx)
+            .unwrap();
+        assert_eq!(green.summary.ci, GateState::Passed);
+        let evidence = green.summary.gates[0].evidence.clone().unwrap();
+        (m, run, owner, evidence)
+    };
+    // A name the gate record cannot hold is left out; the verdict stands.
+    let (_, _, _, evidence) = green_run("my bundle", &mut tx);
+    assert_eq!(evidence.artifact, None);
+    // A green run that built one artifact records it.
+    let (m, run, owner, passed) = green_run("widgets-bundle", &mut tx);
+    let recorded = ArtifactRef {
+        name: "widgets-bundle".into(),
+        digest: built.clone(),
+    };
+    assert_eq!(passed.artifact.as_ref(), Some(&recorded));
+    let with_artifact = |operation: &str, artifact: &ArtifactRef| -> RequestDeployment {
+        serde_json::from_value(json!({
+            "environment": "beta", "script": "scripts/deploy.sh", "operation_id": operation,
+            "artifact": artifact,
+        }))
+        .unwrap()
+    };
+    // Another digest, or the same digest under another name, is not what CI built.
+    for (operation, wrong) in [
+        (
+            "deploy-other-digest",
+            ArtifactRef {
+                digest: other,
+                ..recorded.clone()
+            },
+        ),
+        (
+            "deploy-other-name",
+            ArtifactRef {
+                name: "widgets-other".into(),
+                ..recorded.clone()
+            },
+        ),
+    ] {
+        assert_eq!(
+            gate_error(m.runtime.gate_deploy(
+                &owner,
+                &run,
+                with_artifact(operation, &wrong),
+                Some(&worker()),
+                &mut tx
+            )),
+            GateError::ArtifactMismatch
+        );
+    }
+    assert!(
+        m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty(),
+        "a mismatch is refused before anyone is asked"
+    );
+    assert!(
+        m.runtime
+            .gate_summary(&owner, &GateFilter::default())
+            .unwrap()
+            .gates
+            .iter()
+            .all(|gate| gate.kind == GateKind::Ci),
+        "and records no deployment gate"
+    );
+    // The artifact CI built is deployed as any other request.
+    let deployed = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            with_artifact("deploy-built", &recorded),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert!(deployed.created);
+    assert_eq!(
+        deployed.gate.deployment.unwrap().artifact.as_ref(),
+        Some(&recorded)
+    );
+    assert_eq!(
+        OrchestrationError::Gate(GateError::ArtifactMismatch).code(),
+        "gate_artifact_mismatch"
     );
 }

@@ -22,6 +22,17 @@ pub struct CiRun {
     /// The commit the run built. It is the watched commit or a descendant of it.
     pub head_sha: String,
     pub url: Option<String>,
+    /// HS2-3YC577: what a green run built, when it built exactly one artifact with a
+    /// digest. Always `None` for a red run.
+    pub artifact: Option<CiArtifact>,
+}
+
+/// One artifact a CI run uploaded, by name and content digest.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CiArtifact {
+    pub name: String,
+    /// Lowercase hex SHA-256 of the artifact as the provider stores it.
+    pub digest: String,
 }
 
 /// The CI gate of one commit.
@@ -195,6 +206,13 @@ pub fn gate_of(job: &Job) -> GateState {
             attempt: refs.get("run_attempt")?.parse().ok()?,
             head_sha: refs.get("run_head_sha")?.clone(),
             url: refs.get("run_url").cloned(),
+            artifact: refs
+                .get("artifact_name")
+                .zip(refs.get("artifact_digest"))
+                .map(|(name, digest)| CiArtifact {
+                    name: name.clone(),
+                    digest: digest.clone(),
+                }),
         })
     };
     let gate = refs.and_then(|refs| refs.get("gate")).map(String::as_str);

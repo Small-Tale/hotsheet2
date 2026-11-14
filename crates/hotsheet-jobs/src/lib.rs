@@ -42,8 +42,8 @@ mod store;
 pub mod watch;
 
 pub use ci::{
-    CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome, ensure_ci_watch,
-    find_ci_watch, gate_of, gate_state, rewatch_ci, wait_for_gate_change,
+    CiArtifact, CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome,
+    ensure_ci_watch, find_ci_watch, gate_of, gate_state, rewatch_ci, wait_for_gate_change,
 };
 pub use clock::{Clock, IdSource, ManualClock, SequenceIds, SystemClock, UlidSource};
 pub use error::JobError;

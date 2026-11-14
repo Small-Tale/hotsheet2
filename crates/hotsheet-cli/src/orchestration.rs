@@ -527,7 +527,8 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 E::NotPassed
                 | E::InvalidTransition
                 | E::RepositoryMismatch
-                | E::DeploymentActive => 409,
+                | E::DeploymentActive
+                | E::ArtifactMismatch => 409,
             }
         }
         OrchestrationError::Session(error) => {

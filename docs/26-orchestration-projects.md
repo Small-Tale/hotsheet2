@@ -1774,7 +1774,28 @@ No deployment adapter ships. This repository has no hosted deployment
 (`AGENTS.md`, HS2-51HMCC), so an authorized deployment is recorded as `unknown` with
 `deployment_executor_unavailable`: allowed, and not run. Running the target's script
 on the target's server with target-scoped credentials, after verifying that it is
-tracked at the gated commit, is HS2-G3VAK4. Artifact identity from CI is HS2-3YC577.
+tracked at the gated commit, is HS2-G3VAK4.
+
+### Artifact identity (HS2-3YC577)
+
+A green CI verdict records what the run built. When the `github-actions` watch
+source judges a run green, it reads that run's artifact list once per run and
+attempt (conditionally, by ETag) and keeps the unexpired artifacts that carry a
+`sha256:` digest. The watch Job's outcome records `artifact_count`, and
+`artifact_name` with `artifact_digest` (lowercase hex, without the prefix) when
+exactly one artifact qualifies. Several artifacts record none, because nothing says
+which one a deployment ships (naming it in the CI scope is HS2-TQG6AT). An artifact
+list GitHub refuses (403) or does not have (404) leaves the verdict standing without
+an artifact; any other failure is retried with the watch's backoff before the
+verdict is reported. A red or cancelled run reads no artifacts.
+
+The adapter puts that artifact into the CI gate's evidence when its name and digest
+are ones a gate record holds (an identifier and a SHA-256), and leaves it out
+otherwise, so an unusual provider name never fails the reading. A deployment request
+that names an `artifact` is then checked against the passed CI gate it rests on:
+when both are known they must be equal, name and digest, or the request is refused
+with `gate_artifact_mismatch` (409) before anyone is asked and before any gate is
+recorded. When either side is unknown, the request is decided as before.
 
 ### Headless surface
 

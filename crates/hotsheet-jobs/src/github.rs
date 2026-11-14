@@ -288,6 +288,54 @@ struct WorkflowStep {
     status: Option<String>,
 }
 
+/// HS2-3YC577: the artifacts a run uploaded.
+#[derive(Clone, Debug, Deserialize)]
+struct ArtifactList {
+    #[serde(default)]
+    artifacts: Vec<RunArtifact>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RunArtifact {
+    #[serde(default)]
+    name: Option<String>,
+    /// `sha256:<hex>` for artifacts uploaded by `upload-artifact` v4 and later.
+    #[serde(default)]
+    digest: Option<String>,
+    #[serde(default)]
+    expired: bool,
+}
+
+/// The identity of one artifact a green run built, as the outcome records it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BuiltArtifact {
+    name: String,
+    /// Lowercase hex SHA-256, without the `sha256:` prefix.
+    digest: String,
+}
+
+/// Unexpired artifacts with a SHA-256 digest; the others cannot identify what was built.
+fn built_artifacts(list: ArtifactList) -> Vec<BuiltArtifact> {
+    list.artifacts
+        .into_iter()
+        .filter(|artifact| !artifact.expired)
+        .filter_map(|artifact| {
+            let digest = artifact
+                .digest?
+                .strip_prefix("sha256:")?
+                .to_ascii_lowercase();
+            let hex = digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+            hex.then(|| BuiltArtifact {
+                name: clean(artifact.name.as_deref().unwrap_or(""), 200),
+                digest,
+            })
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct Comparison {
     status: String,
@@ -400,6 +448,10 @@ struct Cached {
     jobs_run: Option<(u64, u32)>,
     jobs_etag: Option<String>,
     jobs: Vec<WorkflowJob>,
+    /// HS2-3YC577: the artifacts of a green run, read once per run and attempt.
+    artifacts_run: Option<(u64, u32)>,
+    artifacts_etag: Option<String>,
+    artifacts: Vec<BuiltArtifact>,
     /// The last observation was reported, so an unchanged poll may say "not modified".
     reported: bool,
     /// The newest covering run, for cancel.
@@ -580,6 +632,41 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
             }
         }
 
+        // HS2-3YC577: a green verdict records what the run built. 403 and 404 mean the
+        // artifacts cannot be read with these credentials (or there are none): the verdict
+        // stands without them. Anything else is retried like the other reads.
+        if let Decision::Green { run } = decision {
+            let run = &runs[run];
+            let key = Some((run.id, run.attempt()));
+            let etag = self
+                .jobs
+                .get(&job.id)
+                .filter(|cached| cached.artifacts_run == key)
+                .and_then(|cached| cached.artifacts_etag.clone());
+            let path = format!(
+                "repos/{}/actions/runs/{}/artifacts?per_page=100",
+                target.repo, run.id
+            );
+            let response = self.get(path, etag)?;
+            let found = match response.status {
+                304 => None,
+                200 => Some(
+                    serde_json::from_str::<ArtifactList>(&response.body)
+                        .map(built_artifacts)
+                        .map_err(|_| transient(&response))?,
+                ),
+                403 | 404 => Some(Vec::new()),
+                _ => return Err(transient(&response)),
+            };
+            if let Some(found) = found {
+                let cached = self.jobs.entry(job.id.clone()).or_default();
+                cached.artifacts = found;
+                cached.artifacts_run = key;
+                cached.artifacts_etag = response.etag.clone().filter(|_| response.status == 200);
+                changed = true;
+            }
+        }
+
         let cached = self.jobs.entry(job.id.clone()).or_default();
         cached.current = current.map(|run| (run.id, run.head_sha.clone(), run.completed()));
         if !changed && cached.reported {
@@ -603,14 +690,19 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
                     Observed::Waiting
                 }
             }
-            Decision::Green { run } => {
-                Observed::Succeeded(outcome(&target, "green", Some(&runs[run])))
+            Decision::Green { run } => Observed::Succeeded(outcome(
+                &target,
+                "green",
+                Some(&runs[run]),
+                &cached.artifacts,
+            )),
+            Decision::Red { run } => {
+                Observed::Failed(outcome(&target, "red", Some(&runs[run]), &[]))
             }
-            Decision::Red { run } => Observed::Failed(outcome(&target, "red", Some(&runs[run]))),
             Decision::Cancelled { run } => {
-                Observed::Cancelled(outcome(&target, "cancelled", Some(&runs[run])))
+                Observed::Cancelled(outcome(&target, "cancelled", Some(&runs[run]), &[]))
             }
-            Decision::Superseded => Observed::Failed(outcome(&target, "superseded", None)),
+            Decision::Superseded => Observed::Failed(outcome(&target, "superseded", None, &[])),
         };
         let mut latest = BTreeMap::new();
         if let Some(run) = current {
@@ -686,7 +778,16 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
 /// The outcome record of a finished CI watch. It carries identifiers only; the ticket
 /// result summary (HS2-BDH12X), the notifier (HS2-FCBYC8) and the orchestration layer
 /// read it through [`crate::ci_outcome`].
-fn outcome(target: &CiTarget, gate: &str, run: Option<&Run>) -> Outcome {
+///
+/// HS2-3YC577: a green outcome also records `artifact_count`, and the artifact's
+/// `artifact_name` and `artifact_digest` when the run built exactly one with a digest.
+/// Several artifacts record none, since nothing says which one a deployment ships.
+fn outcome(
+    target: &CiTarget,
+    gate: &str,
+    run: Option<&Run>,
+    artifacts: &[BuiltArtifact],
+) -> Outcome {
     let mut refs = BTreeMap::from([
         ("gate".to_owned(), gate.to_owned()),
         ("commit".to_owned(), target.sha.clone()),
@@ -701,6 +802,13 @@ fn outcome(target: &CiTarget, gate: &str, run: Option<&Run>) -> Outcome {
             refs.insert("run_head_sha".to_owned(), clean(&run.head_sha, 64));
             if !run.conclusion().is_empty() {
                 refs.insert("run_conclusion".to_owned(), clean(run.conclusion(), 64));
+            }
+            if gate == "green" {
+                refs.insert("artifact_count".to_owned(), artifacts.len().to_string());
+                if let [artifact] = artifacts {
+                    refs.insert("artifact_name".to_owned(), artifact.name.clone());
+                    refs.insert("artifact_digest".to_owned(), artifact.digest.clone());
+                }
             }
             if let Some(url) = run.html_url.as_deref().filter(|url| {
                 url.starts_with("https://")

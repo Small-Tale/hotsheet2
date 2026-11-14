@@ -846,11 +846,12 @@ fn hs2_5jbypv_requests_are_validated_and_a_damaged_file_is_never_evaluated() {
         GateError::InvalidTransition,
         GateError::RepositoryMismatch,
         GateError::DeploymentActive,
+        GateError::ArtifactMismatch,
     ]
     .map(GateError::code)
     .into_iter()
     .collect();
-    assert_eq!(codes.len(), 7);
+    assert_eq!(codes.len(), 8);
     assert_eq!(
         OrchestrationError::Gate(GateError::NotPassed).code(),
         "gate_not_passed"

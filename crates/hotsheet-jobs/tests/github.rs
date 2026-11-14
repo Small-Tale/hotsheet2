@@ -10,10 +10,10 @@ use std::time::{Duration, Instant};
 
 use common::{CHECKOUT, Fixture, LEASE_MS, LOST_AFTER_MS, fixture};
 use hotsheet_jobs::{
-    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiRun, CiTarget, CiWatchOptions,
-    GITHUB_ACTIONS_KIND, GateState, GithubActionsSource, GithubApi, JobError, Liveness, Monitor,
-    MonitorConfig, NoProbe, Status, StepStatus, TicketLink, WATCH_STATE_KEY, ci_outcome,
-    ensure_ci_watch, find_ci_watch, gate_state, rewatch_ci, wait_for_gate_change,
+    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiArtifact, CiRun, CiTarget,
+    CiWatchOptions, GITHUB_ACTIONS_KIND, GateState, GithubActionsSource, GithubApi, JobError,
+    Liveness, Monitor, MonitorConfig, NoProbe, Status, StepStatus, TicketLink, WATCH_STATE_KEY,
+    ci_outcome, ensure_ci_watch, find_ci_watch, gate_state, rewatch_ci, wait_for_gate_change,
 };
 use serde_json::{Value, json};
 
@@ -324,6 +324,7 @@ fn a_commits_run_is_followed_from_queued_to_green() {
         attempt: 1,
         head_sha: SHA.into(),
         url: Some("https://github.example.test/acme/widgets/actions/runs/9".into()),
+        artifact: None,
     };
     assert_eq!(gate(&fx), GateState::Green { run: run.clone() });
 
@@ -949,4 +950,142 @@ fn a_caller_waits_for_the_gate_without_polling() {
     .unwrap();
     assert!(reading.state.is_final());
     assert!(started.elapsed() < Duration::from_secs(30));
+}
+
+fn artifact(name: &str, digest: Option<&str>, expired: bool) -> Value {
+    json!({
+        "id": 7,
+        "name": name,
+        "size_in_bytes": 1024,
+        "digest": digest,
+        "expired": expired,
+        "archive_download_url": "https://github.example.test/artifacts/7/zip"
+    })
+}
+
+const ARTIFACTS: &str = "repos/acme/widgets/actions/runs/9/artifacts?per_page=100";
+
+fn green_gate_with(artifacts: Option<(u16, Value)>) -> (GateState, BTreeMap<String, String>) {
+    let fx = fixture();
+    let api = FakeApi::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.runs(vec![run(9, SHA, "completed", Some("success"))]);
+    api.jobs(9, vec![]);
+    if let Some((status, body)) = artifacts {
+        api.serve(ARTIFACTS, status, body);
+    }
+    let mut monitor = monitor(&fx, &api);
+    monitor.tick().unwrap();
+    let refs = fx
+        .get(&job.id)
+        .outcome
+        .map(|outcome| outcome.refs)
+        .unwrap_or_default();
+    (gate(&fx), refs)
+}
+
+#[test]
+fn hs2_3yc577_a_green_gate_records_the_one_artifact_its_run_built() {
+    let digest = "AB".repeat(32);
+    let list = |artifacts: Vec<Value>| {
+        (
+            200,
+            json!({"total_count": artifacts.len(), "artifacts": artifacts}),
+        )
+    };
+    // One usable artifact among an expired one and one without a digest.
+    let (state, refs) = green_gate_with(Some(list(vec![
+        artifact(
+            "old-build",
+            Some(&format!("sha256:{}", "c".repeat(64))),
+            true,
+        ),
+        artifact("report", None, false),
+        artifact("widgets-bundle", Some(&format!("sha256:{digest}")), false),
+    ])));
+    let GateState::Green { run: green } = state else {
+        panic!("a green run is green: {state:?}");
+    };
+    assert_eq!(
+        green.artifact,
+        Some(CiArtifact {
+            name: "widgets-bundle".into(),
+            digest: digest.to_ascii_lowercase(),
+        })
+    );
+    assert_eq!(refs["artifact_count"], "1");
+    assert_eq!(refs["artifact_digest"], digest.to_ascii_lowercase());
+
+    // Two candidates: nothing says which one ships, so none is recorded.
+    let (state, refs) = green_gate_with(Some(list(vec![
+        artifact("a", Some(&format!("sha256:{}", "a".repeat(64))), false),
+        artifact("b", Some(&format!("sha256:{}", "b".repeat(64))), false),
+    ])));
+    assert!(matches!(state, GateState::Green { run } if run.artifact.is_none()));
+    assert_eq!(refs["artifact_count"], "2");
+    assert!(!refs.contains_key("artifact_digest"));
+
+    // A digest that is not SHA-256 does not identify anything.
+    let (state, refs) = green_gate_with(Some(list(vec![artifact("a", Some("md5:0123"), false)])));
+    assert!(matches!(state, GateState::Green { run } if run.artifact.is_none()));
+    assert_eq!(refs["artifact_count"], "0");
+
+    // Unreadable with these credentials, or not there: the verdict stands without it.
+    for status in [403, 404] {
+        let (state, refs) = green_gate_with(Some((status, json!({"message": "no"}))));
+        assert!(matches!(state, GateState::Green { run } if run.artifact.is_none()));
+        assert_eq!(refs["artifact_count"], "0");
+    }
+    let (state, _) = green_gate_with(None);
+    assert!(matches!(state, GateState::Green { .. }));
+
+    // A red run reads no artifacts at all.
+    let fx = fixture();
+    let api = FakeApi::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.runs(vec![run(9, SHA, "completed", Some("failure"))]);
+    api.jobs(9, vec![]);
+    let mut monitor = monitor(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(matches!(gate(&fx), GateState::Red { run } if run.artifact.is_none()));
+    assert_eq!(api.count("/artifacts"), 0);
+    let refs = fx.get(&job.id).outcome.unwrap().refs;
+    assert!(!refs.contains_key("artifact_count"));
+}
+
+#[test]
+fn hs2_3yc577_an_artifact_read_that_fails_is_retried_before_the_verdict() {
+    let fx = fixture();
+    let api = FakeApi::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.runs(vec![run(9, SHA, "completed", Some("success"))]);
+    api.jobs(9, vec![]);
+    api.serve(ARTIFACTS, 502, json!({"message": "Server Error"}));
+    let mut monitor = monitor(&fx, &api);
+    monitor.tick().unwrap();
+    assert!(
+        !fx.get(&job.id).status.is_finished(),
+        "a provider failure is not a verdict without the artifact"
+    );
+    let digest = "d".repeat(64);
+    api.serve(
+        ARTIFACTS,
+        200,
+        json!({"total_count": 1, "artifacts": [artifact("bundle", Some(&format!("sha256:{digest}")), false)]}),
+    );
+    for _ in 0..8 {
+        if fx.get(&job.id).status.is_finished() {
+            break;
+        }
+        step(&fx, &mut monitor);
+    }
+    assert!(matches!(
+        gate(&fx),
+        GateState::Green { run } if run.artifact.as_ref().map(|a| a.digest.as_str()) == Some(digest.as_str())
+    ));
+    assert_eq!(
+        api.count("/artifacts"),
+        2,
+        "read once more after the failure, then never"
+    );
 }
