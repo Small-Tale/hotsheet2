@@ -377,3 +377,30 @@ describe("a project's limits and tool accounts (HS2-7WF6JD)", () => {
     ]);
   });
 });
+
+describe("a project's models and required resources (HS2-YSY7AR)", () => {
+  it('applies them with the limits, and reads held resources in the new namespaces', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.docs);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.models.codex', 'gpt-5-codex');
+    t.settings.changeLimits(DEMO_OWNER, 'limits.resources', 'sim/iphone-16');
+    await t.settings.applyLimits(DEMO_OWNER);
+    const [, , body] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[0];
+    expect(body.targets?.find((entry) => entry.target_id === DEMO_TARGETS.docs)?.tools).toEqual([
+      { tool: 'codex', models: ['gpt-5-codex'] },
+      { tool: 'claude' },
+    ]);
+    expect(body.placement?.resources).toEqual([
+      { target_id: DEMO_TARGETS.web, resources: [{ namespace: 'vm', resource: 'macos-vm' }] },
+      { target_id: DEMO_TARGETS.docs, resources: [{ namespace: 'sim', resource: 'iphone-16' }] },
+    ]);
+    await vi.waitFor(() => {
+      expect(t.api.orchestrationCapacity).toHaveBeenLastCalledWith(DEMO_OWNER, DEMO_TARGETS.docs, ['sim']);
+    });
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits).toMatchObject({
+      models: { codex: 'gpt-5-codex', claude: '' },
+      resources: 'sim/iphone-16',
+    });
+  });
+});

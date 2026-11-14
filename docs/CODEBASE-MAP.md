@@ -1158,7 +1158,7 @@ its application wiring `features/orchestration-settings-surface.tsx`, the pure h
 `ux-demo/orchestration-settings-fixtures.ts`. HS2-7WF6JD added the project detail's Limits
 section (`targetLimitsDraftFrom`, `changeTargetLimits`, `policyWithTargetLimits`) and tool
 accounts with daily budgets in the policy form (`addPolicyAccount`, `removePolicyAccount`,
-`parseDollars`, `formatCents`).
+`parseDollars`, `formatCents`). HS2-YSY7AR added a project's models and required resources to Limits (`parseModels`, `parseResources`).
 
 ## Where do I look for X?
 

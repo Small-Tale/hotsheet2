@@ -336,6 +336,17 @@ function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
             Set up AI tools in the policy first; then choose which ones may run here.
           </Text>
         )}
+        {policyTools
+          .filter((tool) => limits?.tools.includes(tool))
+          .map((tool) => (
+            <TextField
+              name={`limits.models.${tool}`}
+              label={`${toolLabel(tool)} Models`}
+              hint="Separate models with commas. Empty allows any model."
+              value={limits?.models[tool] ?? ''}
+              disabled={disabled}
+            />
+          ))}
         <TextField
           name="limits.max_sessions"
           label="Sessions Here"
@@ -354,6 +365,13 @@ function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
             { value: 'on', label: 'Build Ahead Here' },
             { value: 'off', label: 'Never Build Ahead Here' },
           ]}
+        />
+        <TextField
+          name="limits.resources"
+          label="Required Resources"
+          hint="Resources every session here must hold, such as vm/macos-vm, separated by commas. The session claims them."
+          value={limits?.resources ?? ''}
+          disabled={disabled}
         />
         <Checkbox
           name="limits.machine_override"

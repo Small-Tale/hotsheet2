@@ -12,6 +12,8 @@ import {
   formatMegabytes,
   newUlid,
   parseDollars,
+  parseModels,
+  parseResources,
   policyDraftFrom,
   policyFromDraft,
   policyWithTargetLimits,
@@ -339,6 +341,8 @@ describe("one project's limits (HS2-7WF6JD)", () => {
       machineOverride: false,
       machine: { max_sessions: '3', min_free_ram_mb: '2048', max_cpu_percent: '90', min_free_disk_mb: '5120' },
       buildAhead: 'on',
+      models: { claude: '' },
+      resources: '',
     });
     expect(targetLimitsDraftFrom(stored, 'T9')).toMatchObject({
       listed: false,
@@ -440,5 +444,112 @@ describe("one project's limits (HS2-7WF6JD)", () => {
       '0',
     );
     expect(policyWithTargetLimits(stored, override)).toEqual({ error: 'CPU Ceiling must be 1 to 100.' });
+  });
+});
+
+describe("a project's models and required resources (HS2-YSY7AR)", () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      tools: [
+        { tool: 'codex', max_sessions: 3 },
+        { tool: 'claude', max_sessions: 2 },
+      ],
+      targets: [
+        { target_id: 'T1', tools: [{ tool: 'codex', models: ['gpt-x', 'gpt-y'] }], max_sessions: 1 },
+        { target_id: 'T2', tools: [{ tool: 'claude' }], max_sessions: 1 },
+      ],
+      placement: {
+        automatic: true,
+        aging_minutes: 30,
+        resources: [
+          { target_id: 'T2', resources: [{ namespace: 'gpu', resource: 'a100' }] },
+          { target_id: 'T1', resources: [{ namespace: 'vm', resource: 'macos-vm' }] },
+        ],
+      },
+    },
+  };
+  const build = (draft: ReturnType<typeof targetLimitsDraftFrom>) => {
+    const built = policyWithTargetLimits(stored, draft);
+    if (!('policy' in built)) throw new Error(built.error);
+    return built.policy;
+  };
+
+  it('reads models and resources as typed lists, and stores them unchanged when untouched', () => {
+    const draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(draft.models).toEqual({ codex: 'gpt-x, gpt-y' });
+    expect(draft.resources).toBe('vm/macos-vm');
+    const policy = build(draft);
+    expect(policy.targets?.[0].tools).toEqual(stored.policy!.targets![0].tools);
+    expect(policy.placement).toEqual(stored.policy!.placement);
+  });
+
+  it('replaces only this project models and resources, in place, keeping other entries and members', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    draft = changeTargetLimits(draft, 'limits.models.codex', ' gpt-z ,, gpt-x ');
+    draft = changeTargetLimits(draft, 'limits.resources', 'vm/macos-vm, sim/iphone-16');
+    const policy = build(draft);
+    expect(policy.targets?.[0].tools).toEqual([{ tool: 'codex', models: ['gpt-z', 'gpt-x'] }]);
+    expect(policy.placement).toEqual({
+      automatic: true,
+      aging_minutes: 30,
+      resources: [
+        { target_id: 'T2', resources: [{ namespace: 'gpu', resource: 'a100' }] },
+        {
+          target_id: 'T1',
+          resources: [
+            { namespace: 'vm', resource: 'macos-vm' },
+            { namespace: 'sim', resource: 'iphone-16' },
+          ],
+        },
+      ],
+    });
+    // Emptied: any model, and no resources entry for this project; others stay.
+    draft = changeTargetLimits(changeTargetLimits(draft, 'limits.models.codex', ''), 'limits.resources', ' ');
+    const emptied = build(draft);
+    expect(emptied.targets?.[0].tools).toEqual([{ tool: 'codex' }]);
+    expect(emptied.placement?.resources).toEqual([stored.policy!.placement!.resources![0]]);
+    // A project with no resources before gets an entry appended; a policy with none gets none.
+    const appended = build(changeTargetLimits(targetLimitsDraftFrom(stored, 'T3'), 'limits.resources', 'vm/linux'));
+    expect(appended.placement?.resources?.map((item) => item.target_id)).toEqual(['T2', 'T1', 'T3']);
+    const bare: OrchestrationPolicyView = {
+      enabled: true,
+      revision: 'p',
+      policy: { tools: [{ tool: 'codex', max_sessions: 1 }] },
+    };
+    const none = policyWithTargetLimits(bare, targetLimitsDraftFrom(bare, 'T1'));
+    expect('policy' in none && none.policy.placement).toBeUndefined();
+  });
+
+  it('drops a tool models with the tool, and starts again from any model, in any order', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    // Models of a tool not checked here are ignored.
+    expect(changeTargetLimits(draft, 'limits.models.claude', 'm')).toEqual(draft);
+    for (const checked of [false, false, true, true])
+      draft = changeTargetLimits(draft, 'limits.tools', 'codex', checked);
+    expect(draft.models).toEqual({});
+    expect(build(draft).targets?.[0].tools).toEqual([{ tool: 'codex' }]);
+    draft = changeTargetLimits(draft, 'limits.tools', 'claude', true);
+    draft = changeTargetLimits(draft, 'limits.models.claude', 'opus');
+    expect(build(draft).targets?.[0].tools).toEqual([{ tool: 'codex' }, { tool: 'claude', models: ['opus'] }]);
+  });
+
+  it('refuses models and resources the server would refuse', () => {
+    expect(parseModels('a b', 'codex models')).toBe('codex models: separate models with commas; "a b" has a space.');
+    expect(parseModels('a, a', 'codex models')).toBe('codex models lists a twice.');
+    expect(parseModels('x'.repeat(129), 'codex models')).toBe('codex models: a model name is at most 128 bytes.');
+    expect(parseModels(Array.from({ length: 33 }, (_v, i) => `m${String(i)}`).join(','), 'codex models')).toBe(
+      'codex models lists more than 32 models.',
+    );
+    expect(parseResources('vm/a, vm/b, vm/c, vm/d, vm/e')).toBe('Required Resources lists at most 4 resources.');
+    expect(parseResources('vm/a, vm/a')).toBe('Required Resources lists vm/a twice.');
+    for (const bad of ['vm', 'VM/a', 'vm/a/b', '/a', 'vm/', '-vm/a', 'v..m/a', 'vm/-a'])
+      expect(parseResources(bad)).toMatch(/is not <namespace>\/<resource>/u);
+    expect(parseResources('vm.mac_os-1/Mac.OS_1-x')).toEqual([{ namespace: 'vm.mac_os-1', resource: 'Mac.OS_1-x' }]);
+    const draft = changeTargetLimits(targetLimitsDraftFrom(stored, 'T1'), 'limits.resources', 'vm');
+    expect(policyWithTargetLimits(stored, draft)).toEqual({
+      error: '"vm" is not <namespace>/<resource>, such as vm/macos-vm: a lowercase namespace and a resource name.',
+    });
   });
 });

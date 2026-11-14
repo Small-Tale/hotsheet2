@@ -485,6 +485,10 @@ export interface TargetLimitsDraft {
   machineOverride: boolean;
   machine: { max_sessions: string; min_free_ram_mb: string; max_cpu_percent: string; min_free_disk_mb: string };
   buildAhead: BuildAheadChoice;
+  /** HS2-YSY7AR: the models each checked tool may use here, as typed (comma-separated; empty is any). */
+  models: Record<string, string>;
+  /** HS2-YSY7AR: the resources every piece of work here must hold, `<namespace>/<resource>`, comma-separated. */
+  resources: string;
 }
 
 const targetOf = (body: OrchestrationPolicyBody | null | undefined, targetId: string) =>
@@ -510,7 +514,54 @@ export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined,
       min_free_disk_mb: String(machine.min_free_disk_mb),
     },
     buildAhead: entry?.speculation === undefined ? 'default' : entry.speculation ? 'on' : 'off',
+    models: Object.fromEntries((entry?.tools ?? []).map((scope) => [scope.tool, (scope.models ?? []).join(', ')])),
+    resources: (body?.placement?.resources?.find((item) => item.target_id === targetId)?.resources ?? [])
+      .map((need) => `${need.namespace}/${need.resource}`)
+      .join(', '),
   };
+}
+
+/** The server's bounds (docs/26 §26.8, §26.20). */
+const MAX_TOOL_MODELS = 32;
+const MAX_PROJECT_RESOURCES = 4;
+const NAMESPACE = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+const RESOURCE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+
+/** A comma-separated list as typed: trimmed, empty entries dropped. */
+const listOf = (text: string) =>
+  text
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+/** The models a tool may use here, or why the list would be refused. Empty means any model. */
+export function parseModels(text: string, label: string): string[] | string {
+  const models = listOf(text);
+  if (models.length > MAX_TOOL_MODELS) return `${label} lists more than ${String(MAX_TOOL_MODELS)} models.`;
+  for (const [index, model] of models.entries()) {
+    if (/\s/u.test(model)) return `${label}: separate models with commas; "${model}" has a space.`;
+    if (new TextEncoder().encode(model).length > 128) return `${label}: a model name is at most 128 bytes.`;
+    if (models.indexOf(model) !== index) return `${label} lists ${model} twice.`;
+  }
+  return models;
+}
+
+/** Required resources as `<namespace>/<resource>` in the claim service's names, at most four, each once. */
+export function parseResources(text: string): { namespace: string; resource: string }[] | string {
+  const names = listOf(text);
+  if (names.length > MAX_PROJECT_RESOURCES)
+    return `Required Resources lists at most ${String(MAX_PROJECT_RESOURCES)} resources.`;
+  const needs: { namespace: string; resource: string }[] = [];
+  for (const name of names) {
+    const parts = name.split('/'),
+      [namespace = '', resource = ''] = parts;
+    if (parts.length !== 2 || !NAMESPACE.test(namespace) || namespace.includes('..') || !RESOURCE.test(resource))
+      return `"${name}" is not <namespace>/<resource>, such as vm/macos-vm: a lowercase namespace and a resource name.`;
+    if (needs.some((need) => need.namespace === namespace && need.resource === resource))
+      return `Required Resources lists ${name} twice.`;
+    needs.push({ namespace, resource });
+  }
+  return needs;
 }
 
 /**
@@ -525,7 +576,9 @@ export function changeTargetLimits(
 ): TargetLimitsDraft {
   if (field === 'limits.enabled' && typeof value === 'boolean') return { ...draft, enabled: value };
   if (field === 'limits.machine_override' && typeof value === 'boolean') return { ...draft, machineOverride: value };
-  if (field === 'limits.tools' && typeof value === 'string' && checked !== undefined)
+  if (field === 'limits.tools' && typeof value === 'string' && checked !== undefined) {
+    // An unchecked tool drops its models; checked again, it starts with any model.
+    const models = Object.fromEntries(Object.entries(draft.models).filter(([tool]) => checked || tool !== value));
     return {
       ...draft,
       tools: checked
@@ -533,9 +586,14 @@ export function changeTargetLimits(
           ? draft.tools
           : [...draft.tools, value]
         : draft.tools.filter((tool) => tool !== value),
+      models,
     };
+  }
   if (typeof value !== 'string') return draft;
   if (field === 'limits.max_sessions') return { ...draft, max_sessions: value };
+  if (field === 'limits.resources') return { ...draft, resources: value };
+  const modelsOf = /^limits\.models\.(.+)$/u.exec(field)?.[1];
+  if (modelsOf && draft.tools.includes(modelsOf)) return { ...draft, models: { ...draft.models, [modelsOf]: value } };
   if (field === 'limits.build_ahead' && (value === 'default' || value === 'on' || value === 'off'))
     return { ...draft, buildAhead: value };
   const machineField = /^limits\.machine\.(.+)$/u.exec(field)?.[1];
@@ -545,9 +603,10 @@ export function changeTargetLimits(
 }
 
 /**
- * The policy to store with one project's entry replaced: every other project and member, and the
- * models this project lists for a tool it keeps, round-trip unchanged. The project's tools must be
- * configured under the policy's tools, and its session cap may not exceed its machine's.
+ * The policy to store with one project's entry and its required resources replaced: every other
+ * project, resource entry and member round-trips unchanged. The project's tools must be configured
+ * under the policy's tools, their models and the resources must be what the server accepts, and its
+ * session cap may not exceed its machine's.
  */
 export function policyWithTargetLimits(
   view: OrchestrationPolicyView | undefined,
@@ -560,6 +619,14 @@ export function policyWithTargetLimits(
   if (typeof sessions === 'string') return { error: sessions };
   const unknown = draft.tools.find((tool) => !configured.has(tool));
   if (unknown) return { error: `${unknown} is not set up in the policy's tools.` };
+  const scopes: NonNullable<OrchestrationTargetPolicy['tools']> = [];
+  for (const tool of draft.tools) {
+    const models = parseModels(draft.models[tool] ?? '', `${tool} models`);
+    if (typeof models === 'string') return { error: models };
+    scopes.push(models.length ? { tool, models } : { tool });
+  }
+  const resources = parseResources(draft.resources);
+  if (typeof resources === 'string') return { error: resources };
   let machine: OrchestrationTargetPolicy['machine'];
   if (draft.machineOverride) {
     const limits: Record<string, number> = {};
@@ -582,7 +649,7 @@ export function policyWithTargetLimits(
     ...previous,
     target_id: draft.targetId,
     enabled: draft.enabled,
-    tools: draft.tools.map((tool) => previous?.tools?.find((scope) => scope.tool === tool) ?? { tool }),
+    tools: scopes,
     max_sessions: sessions,
   };
   if (machine) entry.machine = machine;
@@ -595,5 +662,16 @@ export function policyWithTargetLimits(
   body.targets = previous
     ? targets.map((item) => (item.target_id === draft.targetId ? entry : item))
     : [...targets, entry];
+  // HS2-YSY7AR: this project's required resources; other projects' entries stay as stored.
+  const required = body.placement?.resources ?? [],
+    kept = required.filter((item) => item.target_id !== draft.targetId),
+    mine = resources.length ? [{ target_id: draft.targetId, resources }] : [],
+    at = required.findIndex((item) => item.target_id === draft.targetId),
+    next = at < 0 ? [...kept, ...mine] : [...required.slice(0, at), ...mine, ...required.slice(at + 1)];
+  if (next.length || body.placement?.resources) {
+    body.placement = { ...body.placement };
+    if (next.length) body.placement.resources = next;
+    else delete body.placement.resources;
+  }
   return { policy: body };
 }

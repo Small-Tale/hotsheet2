@@ -24,6 +24,8 @@ const listedLimits: TargetLimitsDraft = {
   machineOverride: true,
   machine: { ...machine, min_free_ram_mb: '4096' },
   buildAhead: 'off',
+  models: { codex: 'gpt-5-codex', claude: '' },
+  resources: 'vm/macos-vm',
 };
 const unlistedLimits: TargetLimitsDraft = {
   targetId: DEMO_TARGETS.docs,
@@ -34,6 +36,8 @@ const unlistedLimits: TargetLimitsDraft = {
   machineOverride: false,
   machine,
   buildAhead: 'default',
+  models: {},
+  resources: '',
 };
 const policyTools = ['codex', 'claude'];
 

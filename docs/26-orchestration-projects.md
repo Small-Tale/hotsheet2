@@ -4146,15 +4146,20 @@ the type changes to Software while it shows.
   written back unchanged.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
   and Capacity and Admission, edits that project's entry in the policy (`targets[]`):
-  Orchestrate in This Project (`enabled`), AI Tools Here (the policy's configured tools;
-  the models a kept tool lists stay), Sessions Here (`max_sessions`, at most the
-  machine's limit), Build Ahead (as the policy says, on or never: `speculation`) and Use
-  Different Machine Limits (`machine`, the four machine fields). A project the policy
-  does not list yet says so, since no session may start there. **Apply Limits** stores
-  the policy at the stored revision with only that entry replaced, or appended; every
-  other project and member is unchanged. An edit in progress survives a reload from
-  `orchestration_changed`; a saved one follows the stored policy again, and admission
-  is read again for the new tools.
+  Orchestrate in This Project (`enabled`), AI Tools Here (the policy's configured tools),
+  **<Tool> Models** for each checked tool (HS2-YSY7AR: `tools[].models`, separated by
+  commas, empty for any model; unchecking a tool drops its models), Sessions Here
+  (`max_sessions`, at most the machine's limit), Build Ahead (as the policy says, on or
+  never: `speculation`), **Required Resources** (HS2-YSY7AR: this project's
+  `placement.resources` entry of §26.20, `<namespace>/<resource>` names separated by
+  commas, at most four; empty removes the entry) and Use Different Machine Limits
+  (`machine`, the four machine fields). Models and resources are checked as the server
+  checks them before anything is sent. A project the policy does not list yet says so,
+  since no session may start there. **Apply Limits** stores the policy at the stored
+  revision with only that project's entry and resources entry replaced in place, or
+  appended; every other project, resources entry and member is unchanged. An edit in
+  progress survives a reload from `orchestration_changed`; a saved one follows the
+  stored policy again, and admission and held resources are read again.
 
 A project opened from another server cannot add projects here: the add binds on the
 serving machine. The category says so and disables + Add Project (HS2-92FJXM).

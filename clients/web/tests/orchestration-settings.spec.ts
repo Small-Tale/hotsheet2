@@ -386,7 +386,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
  * HS2-7WF6JD: a project's own limits in its detail and a tool's accounts in the policy form, applied
  * through the real policy route; only that project's entry and that tool's accounts change.
  */
-test('HS2-7WF6JD edits a project limits and a tool account through the real policy route', async ({
+test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool account through the real policy route', async ({
   page,
   browserName,
 }) => {
@@ -476,6 +476,51 @@ test('HS2-7WF6JD edits a project limits and a tool account through the real poli
     // Admission is now asked for Codex here.
     await expect(capacity.getByText('Codex Admission')).toBeVisible();
     await expect(limits).not.toContainText('does not list this project');
+
+    // HS2-YSY7AR: the models Codex may use here and the resources work here must hold.
+    const models = limits.getByLabel('Codex Models');
+    await models.fill('gpt-5-codex, gpt-5');
+    await models.blur();
+    const resources = limits.getByLabel('Required Resources');
+    await resources.fill('vm/macos-vm');
+    await resources.blur();
+    const ysy = join('target', 'visual-captures', 'hs2-ysy7ar');
+    await mkdir(ysy, { recursive: true });
+    const captureModels = async (name: string) => {
+      await resources.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(ysy, `hs2-ysy7ar-${name}-${browserName}.png`), animations: 'disabled' });
+    };
+    await captureModels('limits-draft-1440');
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    // The status line already says the first save; wait for the stored policy itself.
+    type WithResources = Stored & {
+      policy: {
+        placement?: { resources?: { target_id: string; resources: { namespace: string; resource: string }[] }[] };
+      };
+    };
+    await expect
+      .poll(async () => (await server.request<WithResources>(`${base}/policy`)).policy.placement?.resources)
+      .toEqual([{ target_id: targets.Web, resources: [{ namespace: 'vm', resource: 'macos-vm' }] }]);
+    const withResources = await server.request<WithResources>(`${base}/policy`);
+    expect(withResources.policy.targets[1].tools).toEqual([{ tool: 'codex', models: ['gpt-5-codex', 'gpt-5'] }]);
+    // The detail reads held resources in the namespace the policy now requires here.
+    await expect(page.getByRole('region', { name: 'Held Resources' })).not.toContainText(
+      'The policy requires no resources here.',
+    );
+    await expect(models).toHaveValue('gpt-5-codex, gpt-5');
+    for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      await expect(resources).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await captureModels(`limits-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
+    }
+    await page.setViewportSize(wide);
 
     // A tool account with a daily budget in the policy form.
     const policy = page.locator('[data-component="orchestration-policy-settings"]');
