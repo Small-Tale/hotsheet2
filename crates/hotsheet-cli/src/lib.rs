@@ -37,13 +37,25 @@ pub mod workloop;
 
 /// Emit the local build/source revision for the bridge's binary selection probe.
 /// Both CLI binaries handle this before parsing their normal commands or opening a store.
+/// `--build-revision` prints only the embedded revision, without hashing the source tree
+/// (HS2-7JGDCC).
 pub fn print_revision_status_if_requested() -> bool {
-    if std::env::args_os().len() != 2
-        || std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new("--revision-status"))
-    {
+    if std::env::args_os().len() != 2 {
         return false;
     }
-    let status = source_revision::SourceRevisionMonitor::current_build().status();
+    let argument = std::env::args_os().nth(1);
+    let monitor = source_revision::SourceRevisionMonitor::current_build();
+    if argument.as_deref() == Some(std::ffi::OsStr::new("--build-revision")) {
+        println!(
+            "{}",
+            serde_json::json!({ "build_revision": monitor.build_revision() })
+        );
+        return true;
+    }
+    if argument.as_deref() != Some(std::ffi::OsStr::new("--revision-status")) {
+        return false;
+    }
+    let status = monitor.status();
     println!(
         "{}",
         serde_json::json!({

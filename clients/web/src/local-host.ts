@@ -63,9 +63,13 @@ export function parseBinaryRevisionStatus(value: unknown): BinaryRevisionStatus 
   return value;
 }
 
-function binaryRevisionStatus(path: string): BinaryRevisionStatus | undefined {
+/**
+ * Probe one binary. `full` runs `--revision-status`, which hashes the source tree; otherwise
+ * `--build-revision` reads only the embedded revision (HS2-7JGDCC).
+ */
+function binaryRevisionStatus(path: string, full = true): BinaryRevisionStatus | undefined {
   try {
-    const result = spawnSync(path, ['--revision-status'], {
+    const result = spawnSync(path, [full ? '--revision-status' : '--build-revision'], {
       encoding: 'utf8',
       timeout: 10_000,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -101,18 +105,31 @@ export function releaseBinaryEnvironment(
   repositoryRoot: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   exists: (path: string) => boolean = existsSync,
-  inspect: (path: string) => BinaryRevisionStatus | undefined = binaryRevisionStatus,
+  inspect: (path: string, full: boolean) => BinaryRevisionStatus | undefined = binaryRevisionStatus,
   platform = process.platform,
 ): Record<string, string> {
   const release = (name: string) => resolve(repositoryRoot, 'target/release', executableName(name, platform));
   const debug = (name: string) => resolve(repositoryRoot, 'target/debug', executableName(name, platform));
   const chosen: Record<string, string> = {};
   let expectedRevision: string | undefined;
+  // HS2-7JGDCC: the binaries share one source tree, so it is hashed once. The first full probe
+  // learns the current source revision; every later candidate only reports its embedded one.
+  // Hashing per candidate (up to six) outlasted the probe timeout under a loaded gate.
+  let sourceRevision: string | undefined;
+  const current = (path: string) => {
+    if (sourceRevision !== undefined) {
+      const built = inspect(path, false)?.build_revision;
+      return built === sourceRevision ? built : undefined;
+    }
+    const status = inspect(path, true);
+    if (typeof status?.source_revision === 'string') sourceRevision = status.source_revision;
+    return currentRevision(status);
+  };
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
     if (environment[variable]) continue;
     let selected: { path: string; revision: string } | undefined;
     for (const path of [release(name), debug(name)]) {
-      const revision = exists(path) ? currentRevision(inspect(path)) : undefined;
+      const revision = exists(path) ? current(path) : undefined;
       if (revision && (!expectedRevision || revision === expectedRevision)) {
         selected = { path, revision };
         break;

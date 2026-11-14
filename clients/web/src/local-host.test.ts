@@ -184,11 +184,41 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
     });
   });
 
+  it('hashes the source tree once and reads only embedded revisions after that (HS2-7JGDCC)', () => {
+    const probes: Array<[string, boolean]> = [];
+    const selected = releaseBinaryEnvironment(
+      root,
+      {},
+      built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'),
+      (path, full) => {
+        probes.push([path, full]);
+        if (path === release('hotsheet-server') || path === release('hotsheet-migrate'))
+          return full
+            ? { build_revision: 'old', source_revision: 'source-sha256:current', source_stale: true }
+            : { build_revision: 'old' };
+        return full ? current() : { build_revision: 'source-sha256:current' };
+      },
+    );
+    expect(selected).toEqual({
+      HOTSHEET_SERVER_BIN: debug('hotsheet-server'),
+      HOTSHEET_CLI_BIN: release('hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: debug('hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+    });
+    expect(probes).toEqual([
+      [release('hotsheet-server'), true],
+      [debug('hotsheet-server'), false],
+      [release('hotsheet-cli'), false],
+      [release('hotsheet-migrate'), false],
+      [debug('hotsheet-migrate'), false],
+    ]);
+  });
+
   it('falls back to current debug companions when release generations are stale', () => {
     expect(
       releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'), (path) =>
         path === release('hotsheet-cli') || path === release('hotsheet-migrate')
-          ? { build_revision: 'old', source_revision: 'current', source_stale: true }
+          ? { build_revision: 'old', source_revision: 'source-sha256:current', source_stale: true }
           : current(),
       ),
     ).toEqual({
@@ -203,7 +233,7 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
     expect(
       releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'), (path) =>
         path === release('hotsheet-server')
-          ? { build_revision: 'old', source_revision: 'current', source_stale: true }
+          ? { build_revision: 'old', source_revision: 'source-sha256:current', source_stale: true }
           : current(),
       ),
     ).toEqual({

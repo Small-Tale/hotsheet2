@@ -57,6 +57,13 @@ impl SourceRevisionMonitor {
         }
     }
 
+    /// The revision embedded at build time, read without hashing the source tree. The
+    /// bridge's binary probe hashes the tree once and then only compares companions'
+    /// embedded revisions with it (HS2-7JGDCC).
+    pub fn build_revision(&self) -> Option<&str> {
+        self.build_revision.as_deref()
+    }
+
     pub fn status(&self) -> SourceRevisionStatus {
         let (source_revision, source_unavailable_reason) = match self.source_root.as_deref() {
             None => (

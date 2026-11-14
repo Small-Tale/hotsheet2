@@ -5762,6 +5762,29 @@ fn server_binary_reports_its_revision_without_opening_a_store() {
     assert_eq!(status["source_stale"], false);
 }
 
+/// HS2-7JGDCC: `--build-revision` reports only the embedded revision, the same one
+/// `--revision-status` reports, without hashing the source tree.
+#[test]
+fn server_binary_reports_its_build_revision_alone() {
+    let run = |flag: &str| -> serde_json::Value {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+            .arg(flag)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{flag}");
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+    let build = run("--build-revision");
+    assert_eq!(
+        build.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["build_revision"]
+    );
+    assert_eq!(
+        build["build_revision"],
+        run("--revision-status")["build_revision"]
+    );
+}
+
 /// Whether this package was built as an unpinned local source build. A shell that inherits
 /// the local host's `HOT_SHEET_BUILD_REVISION` pin builds an explicitly revisioned binary
 /// that monitors no source root, which these tests must accept rather than fail on

@@ -66,6 +66,11 @@ struct Cli {
     #[arg(long)]
     revision_status: bool,
 
+    /// Print only this binary's embedded build revision as JSON, without hashing the
+    /// source tree (HS2-7JGDCC).
+    #[arg(long, conflicts_with = "revision_status")]
+    build_revision: bool,
+
     /// Report isolated fixture support without opening a store or credential backend.
     #[arg(long, hide = true)]
     test_fixture_capabilities: bool,
@@ -170,6 +175,14 @@ async fn main() -> Result<()> {
                 "isolated_permission_vault": isolated_vault,
                 "isolated_native_credentials": hotsheet_ticketing::secrets::test_credentials_available(),
             })
+        );
+        return Ok(());
+    }
+    if cli.build_revision {
+        let monitor = hotsheet_server::source_revision::SourceRevisionMonitor::current_build();
+        println!(
+            "{}",
+            serde_json::json!({ "build_revision": monitor.build_revision() })
         );
         return Ok(());
     }
