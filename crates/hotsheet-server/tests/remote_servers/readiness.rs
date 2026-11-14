@@ -40,7 +40,7 @@ fn levels(page: &Value, step: &str) -> Vec<String> {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|entry| entry["kind"] == "readiness" && entry["run_id"] == step)
+        .filter(|entry| entry["kind"] == "readiness" && entry["step_id"] == step)
         .map(|entry| entry["reason"].as_str().unwrap().to_owned())
         .collect()
 }

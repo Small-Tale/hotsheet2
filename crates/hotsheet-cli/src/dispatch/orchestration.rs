@@ -392,7 +392,8 @@ enum RunCmd {
         after: u64,
         #[arg(long, default_value_t = 100)]
         limit: u64,
-        /// Only this run's events.
+        /// Only this run's events, or this plan step's (its readiness and provisional
+        /// events name it as `step_id`, HS2-J7RG42).
         #[arg(long)]
         run: Option<String>,
         /// At most 20.

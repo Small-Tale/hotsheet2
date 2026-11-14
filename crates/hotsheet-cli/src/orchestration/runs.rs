@@ -282,7 +282,8 @@ impl OrchestrationRuntime {
         let after = self.runs().update(owner_id, run_id, update, tx)?;
         let event = |kind, state, reason: Option<String>, at_ms, dedupe: Option<String>| RunEvent {
             at_ms,
-            run_id: run_id.into(),
+            run_id: Some(run_id.into()),
+            step_id: None,
             kind,
             source,
             state,
@@ -394,7 +395,8 @@ impl OrchestrationRuntime {
                 owner_id,
                 RunEvent {
                     at_ms: found.at_ms,
-                    run_id: run_id.into(),
+                    run_id: Some(run_id.into()),
+                    step_id: None,
                     kind: RunEventKind::Reconciled,
                     source: RunEventSource::Orchestrator,
                     // The run's state did not change by being reconciled; a state

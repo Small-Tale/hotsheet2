@@ -502,7 +502,10 @@ fn hs2_7qhwhj_events_replay_by_cursor_and_wait_for_the_next_one_without_polling(
         let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
         let (page, waited) = waiter.join().unwrap();
         assert!(!page.entries.is_empty());
-        assert_eq!(page.entries[0].record.run_id, run_id);
+        assert_eq!(
+            page.entries[0].record.run_id.as_deref(),
+            Some(run_id.as_str())
+        );
         assert!(waited < std::time::Duration::from_secs(10), "{waited:?}");
         run_id
     });

@@ -663,7 +663,8 @@ impl OrchestrationRuntime {
                 owner_id,
                 RunEvent {
                     at_ms: tx.clock.now_ms(),
-                    run_id: run_id.clone(),
+                    run_id: Some(run_id.clone()),
+                    step_id: None,
                     kind: RunEventKind::Validation,
                     source: if result.state == ValidationState::Running {
                         RunEventSource::Orchestrator

@@ -716,7 +716,7 @@ pub fn summarize_progress(input: &ProgressInput<'_>) -> ProgressSummary {
         let events: Vec<&RunEvent> = input
             .events
             .iter()
-            .filter(|event| event.run_id == run.run_id)
+            .filter(|event| event.run_id.as_deref() == Some(run.run_id.as_str()))
             .collect();
         let (ci, deployment) = gate_outcomes(run, input.gates);
         runs.push(RunProgress {

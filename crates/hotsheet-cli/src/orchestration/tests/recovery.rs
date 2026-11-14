@@ -1381,7 +1381,8 @@ fn hs2_rzqfg1_a_sync_of_a_run_finished_meanwhile_answers_after_its_events() {
             owner,
             RunEvent {
                 at_ms: finished.updated_at_ms,
-                run_id: finished.run_id.clone(),
+                run_id: Some(finished.run_id.clone()),
+                step_id: None,
                 kind: RunEventKind::State,
                 source: RunEventSource::Target,
                 state: Some(RunState::Completed),

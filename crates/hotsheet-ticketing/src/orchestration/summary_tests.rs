@@ -78,7 +78,8 @@ fn finished(n: u128, target: u128, ticket: u128, created: u64, done: u64) -> Run
 fn event(run: u128, at_ms: u64, kind: RunEventKind) -> RunEvent {
     RunEvent {
         at_ms,
-        run_id: id(run),
+        run_id: (!kind.is_step_event()).then(|| id(run)),
+        step_id: kind.is_step_event().then(|| id(run)),
         kind,
         source: RunEventSource::Orchestrator,
         state: None,

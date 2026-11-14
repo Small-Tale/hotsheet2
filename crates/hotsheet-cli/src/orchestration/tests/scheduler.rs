@@ -1183,7 +1183,8 @@ fn hs2_ecwg50_a_session_whose_run_waits_on_ci_is_free_capacity() {
 fn event(kind: RunEventKind) -> RunEvent {
     RunEvent {
         at_ms: 200,
-        run_id: id(500),
+        run_id: (!kind.is_step_event()).then(|| id(500)),
+        step_id: kind.is_step_event().then(|| id(500)),
         kind,
         source: RunEventSource::Orchestrator,
         state: None,

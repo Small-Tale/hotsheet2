@@ -1571,7 +1571,8 @@ impl OrchestrationRuntime {
                     owner_id,
                     RunEvent {
                         at_ms: after.updated_at_ms,
-                        run_id: run_id.clone(),
+                        run_id: Some(run_id.clone()),
+                        step_id: None,
                         kind: RunEventKind::Session,
                         source: if from_target {
                             RunEventSource::Target
@@ -1619,7 +1620,8 @@ impl OrchestrationRuntime {
                     owner_id,
                     RunEvent {
                         at_ms: after.updated_at_ms,
-                        run_id: run_id.clone(),
+                        run_id: Some(run_id.clone()),
+                        step_id: None,
                         kind: RunEventKind::Session,
                         source: if from_target {
                             RunEventSource::Target
@@ -2267,7 +2269,8 @@ impl OrchestrationRuntime {
                     owner_id,
                     RunEvent {
                         at_ms: tx.clock.now_ms(),
-                        run_id: run_id.clone(),
+                        run_id: Some(run_id.clone()),
+                        step_id: None,
                         kind: RunEventKind::Session,
                         source: RunEventSource::Orchestrator,
                         state: None,

@@ -22,7 +22,8 @@
 > HS2-BYEB60, its validation attempts, HS2-G5H9FQ, and its sessions, HS2-75Q254),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
 > HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18;
-> a level a validation deadline changes is published at that deadline, HS2-J7N3PQ),
+> a level a validation deadline changes is published at that deadline, HS2-J7N3PQ;
+> step events name their step in `step_id`, HS2-J7RG42),
 > provisional work across targets under a policy opt-in, with its ledger, gate-result
 > handling and recovery (§26.22, HS2-JSF985; off by default),
 > orchestrator-owned sessions with safe-point wind-down and takeover (§26.16,
@@ -2055,9 +2056,11 @@ published (state, observation, target unreachable or reachable again, recovery),
 wherever a gate changes, when a validation attempt outside any run starts or ends,
 and after a plan change, a refresh or a dispatch's own read. A step whose level
 differs from the one last published gets one `readiness` event in the run event
-stream of §26.9. Its `reason` is the new level, and because a step may have no run
-its `run_id` holds the step id, so `run events --run <step-id>` replays one step's
-levels (a dedicated field is HS2-J7RG42). Repeated evaluation publishes nothing,
+stream of §26.9. Its `reason` is the new level. A step may have no run, so its
+readiness and provisional events name it in their own `step_id` field and carry no
+`run_id`, which stays for runs only (HS2-J7RG42). `run events --run <step-id>` replays
+one step's levels: the filter takes a run or a step. Entries written before the field
+existed carried the step in `run_id`; they read as step events. Repeated evaluation publishes nothing,
 concurrent evaluations publish a change once, and a level reached again later is its
 own event. Removing a step publishes one last `readiness` event for it, with reason
 `removed` (HS2-SQS266, §26.24). The scheduler (HS2-ECWG50) waits on that stream;
@@ -3402,7 +3405,7 @@ risk on the gate it knows. At-risk work recovers by `rebase_onto_fix`, or by
 discarded: a record keeps every transition.
 
 Each change is one `provisional` event in the run event stream (§26.9). Like a
-readiness event its `run_id` is the step id; `reason` is the new state and `gate_id`
+readiness event it names the step as `step_id` (HS2-J7RG42); `reason` is the new state and `gate_id`
 the gate behind it. Each at-risk mark is one activity note on the orchestration
 ticket naming the step, the operation, the prerequisite ticket, its commit, the gate
 and the provider run. The ledger's lock is held from finding a note owed to marking
@@ -3813,7 +3816,7 @@ Removing a plan step used to publish nothing when it emptied the plan, and nothi
 either when no other step's level moved, so the scheduling loop ran no pass and a
 session that served the step was not considered for wind-down until some other
 event or a named retry time. `readiness remove` now records one `readiness` event
-for the removed step itself: `run_id` is the step id, `reason` is `removed`, and its
+for the removed step itself: `step_id` is the step (HS2-J7RG42), `reason` is `removed`, and its
 dedupe key is `removed-<step id>`. It is the step's last event, so
 `run events --run <step-id>` ends with it, and every follower of the owner's stream,
 the loop above all, is woken by it like by any level change. A step id is never

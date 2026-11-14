@@ -372,7 +372,8 @@ impl OrchestrationRuntime {
     fn gate_event(&self, gate: &Gate, source: RunEventSource) {
         let event = RunEvent {
             at_ms: gate.updated_at_ms,
-            run_id: gate.run_id.clone(),
+            run_id: Some(gate.run_id.clone()),
+            step_id: None,
             kind: RunEventKind::Gate,
             source,
             state: None,

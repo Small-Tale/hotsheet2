@@ -1903,7 +1903,9 @@ paths:
             default: 100
         - name: run
           in: query
-          description: Only this run's events; the cursor still advances past the others.
+          description:
+            Only the events of this run, or of this plan step (its `step_id`, HS2-J7RG42); the cursor still advances
+            past the others.
           schema:
             type: string
             pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
@@ -19541,7 +19543,6 @@ components:
             required:
               - seq
               - at_ms
-              - run_id
               - kind
               - source
             properties:
@@ -19553,8 +19554,13 @@ components:
                 type: integer
                 minimum: 0
               run_id:
+                description: The run the event is about; absent from a plan step's event (HS2-J7RG42).
                 type: string
                 pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              step_id:
+                description: The plan step a `readiness` or `provisional` event is about (HS2-J7RG42).
+                type: string
+                maxLength: 160
               kind:
                 enum:
                   - state

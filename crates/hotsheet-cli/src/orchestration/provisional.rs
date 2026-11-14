@@ -324,7 +324,8 @@ impl OrchestrationRuntime {
             let _ = journal.record(RunEvent {
                 at_ms: now_ms,
                 // Like a readiness event: the step may have no run yet.
-                run_id: change.step_id,
+                run_id: None,
+                step_id: Some(change.step_id),
                 kind: RunEventKind::Provisional,
                 source: RunEventSource::Orchestrator,
                 state: None,

@@ -38,10 +38,10 @@ pub enum RunEventKind {
     Resumed,
     Handoff,
     Corrected,
-    /// HS2-42TARA: a plan step's readiness level changed. `run_id` holds the step id
-    /// (a step may have no run yet) and `reason` the new level.
+    /// HS2-42TARA: a plan step's readiness level changed. `step_id` names the step
+    /// (a step may have no run yet; HS2-J7RG42) and `reason` the new level.
     Readiness,
-    /// HS2-JSF985: provisional work changed state. `run_id` holds the step id,
+    /// HS2-JSF985: provisional work changed state. `step_id` names the step,
     /// `reason` the new state (`provisional`, `confirmed`, `at_risk`, `rebased`,
     /// `reopened`, `reevaluate`) and `gate_id` the gate that caused it, when one did.
     Provisional,
@@ -55,12 +55,24 @@ pub enum RunEventSource {
     Target,
 }
 
+impl RunEventKind {
+    /// HS2-J7RG42: an event about a plan step, which may have no run, rather than a run.
+    pub fn is_step_event(self) -> bool {
+        matches!(self, Self::Readiness | Self::Provisional)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, from = "StoredRunEvent")]
 pub struct RunEvent {
     /// When the fact was true at its source, which may be earlier than its arrival.
     pub at_ms: u64,
-    pub run_id: String,
+    /// The run the event is about. HS2-J7RG42: absent from a plan step's event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    /// HS2-J7RG42: the plan step a `readiness` or `provisional` event is about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
     pub kind: RunEventKind,
     pub source: RunEventSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,10 +93,84 @@ pub struct RunEvent {
     pub gate_state: Option<GateState>,
 }
 
+/// HS2-J7RG42: an event as stored. Events written before the step field carried a
+/// step's id in `run_id`; they read as step events with no run.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredRunEvent {
+    at_ms: u64,
+    #[serde(default)]
+    run_id: Option<String>,
+    #[serde(default)]
+    step_id: Option<String>,
+    kind: RunEventKind,
+    source: RunEventSource,
+    #[serde(default)]
+    state: Option<RunState>,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    actor_id: Option<String>,
+    #[serde(default)]
+    dedupe: Option<String>,
+    #[serde(default)]
+    gate_id: Option<String>,
+    #[serde(default)]
+    gate_state: Option<GateState>,
+}
+
+impl From<StoredRunEvent> for RunEvent {
+    fn from(stored: StoredRunEvent) -> Self {
+        let (run_id, step_id) = match (stored.kind.is_step_event(), stored.run_id, stored.step_id) {
+            (true, Some(old), None) => (None, Some(old)),
+            (_, run_id, step_id) => (run_id, step_id),
+        };
+        Self {
+            at_ms: stored.at_ms,
+            run_id,
+            step_id,
+            kind: stored.kind,
+            source: stored.source,
+            state: stored.state,
+            reason: stored.reason,
+            actor_id: stored.actor_id,
+            dedupe: stored.dedupe,
+            gate_id: stored.gate_id,
+            gate_state: stored.gate_state,
+        }
+    }
+}
+
+impl RunEvent {
+    /// The run or plan step the event is about.
+    pub fn subject(&self) -> Option<&str> {
+        self.run_id.as_deref().or(self.step_id.as_deref())
+    }
+
+    /// Whether the event is about this run or this plan step.
+    pub fn concerns(&self, id: &str) -> bool {
+        self.run_id.as_deref() == Some(id) || self.step_id.as_deref() == Some(id)
+    }
+}
+
 impl JournalRecord for RunEvent {
     const DIRECTORY: &'static str = "orchestration-run-events";
     fn validate(&self) -> Result<(), OrchestrationError> {
-        valid_token(&self.run_id)?;
+        // A step's event names its step; any other event names its run.
+        match (self.kind.is_step_event(), &self.run_id, &self.step_id) {
+            (true, run_id, Some(step_id)) => {
+                valid_token(step_id)?;
+                if let Some(run_id) = run_id {
+                    valid_token(run_id)?;
+                }
+            }
+            (false, Some(run_id), None) => valid_token(run_id)?,
+            _ => {
+                return Err(OrchestrationError::Invalid(
+                    "a run event names its run, a step event its step",
+                ));
+            }
+        }
         for value in [&self.reason, &self.actor_id, &self.dedupe]
             .into_iter()
             .flatten()
@@ -124,24 +210,26 @@ impl RunEventJournal {
         let Some(key) = event.dedupe.clone() else {
             return self.0.append(event).map(|entry| (entry, true));
         };
-        let run_id = event.run_id.clone();
+        let (run_id, step_id) = (event.run_id.clone(), event.step_id.clone());
         self.0.append_unless(event, |existing| {
-            existing.run_id == run_id && existing.dedupe.as_deref() == Some(key.as_str())
+            existing.run_id == run_id
+                && existing.step_id == step_id
+                && existing.dedupe.as_deref() == Some(key.as_str())
         })
     }
 
-    /// Events after the cursor, for one run or all, oldest first.
+    /// Events after the cursor, for one run or plan step or all, oldest first.
     pub fn read(
         &self,
         after: u64,
         limit: usize,
-        run_id: Option<&str>,
+        subject: Option<&str>,
     ) -> Result<RunEventPage, OrchestrationError> {
-        if let Some(run_id) = run_id {
-            valid_token(run_id)?;
+        if let Some(subject) = subject {
+            valid_token(subject)?;
         }
         self.0.read_matching(after, limit, |event| {
-            run_id.is_none_or(|id| event.run_id == id)
+            subject.is_none_or(|id| event.concerns(id))
         })
     }
 
