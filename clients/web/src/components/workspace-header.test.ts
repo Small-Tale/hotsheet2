@@ -368,6 +368,10 @@ describe('WorkspaceHeader', () => {
       /\.view-mode-switcher__badge \{[^}]*min-width: remify\(14\.4px\);[^}]*padding: remify\(1px\) remify\(5px\);/,
     );
     expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*(?:^|[;{]\s*)height:/);
+    // HS2-Z6WW8P: the count uses the up-next fill's paired text color, never the warning-fill text color,
+    // which turns light in dark mode while the yellow fill stays bright.
+    expect(css).toMatch(/\.view-mode-switcher__badge \{[^}]*color: var\(--hs-ticket-state-up-next-on\);/);
+    expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*color: var\(--wa-color-warning-on-normal\)/);
   });
 
   it("leaves the disabled utility buttons to Kerf's ToolbarControlGroup (KF-FTADQT, HS2-0MH5V1)", () => {

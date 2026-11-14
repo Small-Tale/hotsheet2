@@ -34210,6 +34210,18 @@ test('scopes the notification center, navigation counts, and header badge to the
   await popup.getByRole('button', { name: 'Ignore' }).click();
   const notifications = page.getByRole('button', { name: /Notifications View/ });
   await expect(notifications).toHaveAccessibleName('Notifications View, 1 pending');
+  // HS2-Z6WW8P: the count stays dark on the always-yellow up-next fill in both color schemes.
+  const badge = notifications.locator('.view-mode-switcher__badge');
+  for (const colorScheme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(badge).toHaveText('1');
+    await expect(badge).toHaveCSS('color', 'rgb(26, 26, 26)');
+    const toolbar = (await notifications.boundingBox())!;
+    await page.screenshot({
+      path: `target/visual-captures/hs2-z6ww8p-bell-badge-${colorScheme}.png`,
+      clip: { x: toolbar.x - 160, y: Math.max(0, toolbar.y - 24), width: 360, height: toolbar.height + 48 },
+    });
+  }
   await notifications.click();
   const center = page.locator('[data-component="notification-center"]'),
     navigation = page.locator('#app-left-rail nav[aria-label="Notification views"]');
