@@ -365,6 +365,14 @@ fn record_ready(
         }));
     }
     let added = metrics::record_many_once_with_claude_tokens(&target.store, &events)?;
+    // HS2-XFMKHQ: each written event is a usage signal for the account this terminal's
+    // session was started for. Events already written before are identical signals, which
+    // the capacity registry counts once.
+    crate::tool_capacity_signals::usage_appended(
+        state,
+        Some(&inner.terminal),
+        events.iter().map(|(_, event, _)| event),
+    );
     inner.reader.recorded(ready.len());
     inner.turn_messages += ready.len();
     for (agent, messages) in &subagent_ready {

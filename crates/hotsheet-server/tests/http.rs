@@ -33063,3 +33063,192 @@ async fn hs2_7j2zse_speculation_policy_status_explain_and_requests_over_rest() {
         );
     }
 }
+
+/// HS2-XFMKHQ: usage a session records becomes a capacity signal at the one choke point,
+/// attributed to the account its terminal was started for (HS2-PFHRS9). Driven through
+/// Claude transcript usage on a real router: the first recorded response confirms a
+/// guessed backoff that has ended, each response adds its cost once, and a repeated Stop
+/// adds nothing. Only identifiers and numbers reach the capacity file.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_xfmkhq_recorded_usage_feeds_tool_capacity_once_per_response() {
+    use hotsheet_ticketing::orchestration::{
+        HostedSessionRegistry, LimitSignal, NewHostedSession, SessionOrigin, SessionRole,
+        SignalKind, ToolCapacityRegistry, Transaction,
+    };
+    use std::io::Write as _;
+    struct Fixed;
+    impl hotsheet_ticketing::Clock for Fixed {
+        fn now_ms(&self) -> u64 {
+            1_794_000_000_000
+        }
+    }
+    struct Counter(u128);
+    impl hotsheet_ticketing::Rng for Counter {
+        fn next_u128(&mut self) -> u128 {
+            self.0 += 1;
+            self.0
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(dir.path().join("store.hs2"), &StoreMetadata::new("HS")).unwrap();
+    let machine_home = dir.path().join("machine-home");
+    let state = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_default_codex_home(dir.path().join("no-codex-home"))
+        .with_machine_home(&machine_home);
+    let router = app(state);
+    // The orchestrator started this terminal for account team-a.
+    let mut rng = Counter(3);
+    let mut tx = Transaction {
+        clock: &Fixed,
+        rng: &mut rng,
+    };
+    let (hosted, _) = HostedSessionRegistry::new(&machine_home)
+        .reserve(
+            "target-0123456789ab",
+            &NewHostedSession {
+                operation_id: "op-team-a".into(),
+                tool: "claude".into(),
+                model: None,
+                effort: None,
+                role: SessionRole::Worker,
+                origin: SessionOrigin {
+                    owner_checkout_id: "owner-0123456789ab".into(),
+                    project: "Launch".into(),
+                    run_id: None,
+                    ticket: None,
+                },
+                account: Some("team-a".into()),
+            },
+            &mut tx,
+        )
+        .unwrap();
+    let terminal = hosted.session_id;
+    // A limit without a reset time ten minutes ago: its five-minute backoff has ended,
+    // so the account waits for a completed turn to confirm it.
+    let now_ms =
+        u64::try_from(time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000).unwrap();
+    hotsheet_cli::orchestration::OrchestrationRuntime::record_tool_signal_at(
+        &machine_home,
+        &LimitSignal {
+            tool: "claude".into(),
+            account: Some("team-a".into()),
+            kind: SignalKind::UsageLimit,
+            at_ms: now_ms - 10 * 60_000,
+            resets_at_ms: None,
+            cost_cents: None,
+            session: None,
+        },
+        now_ms,
+    )
+    .unwrap();
+    let registry = ToolCapacityRegistry::new(&machine_home);
+    let entry = || {
+        registry
+            .entries()
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.tool == "claude" && entry.account.as_deref() == Some("team-a"))
+            .unwrap()
+    };
+    assert!(entry().last_ok_at_ms.is_none());
+
+    let transcripts = dir.path().join("claude").join("projects").join("p");
+    std::fs::create_dir_all(&transcripts).unwrap();
+    let transcript = transcripts.join("cap-session.jsonl");
+    let path = transcript.to_string_lossy().to_string();
+    let append = |id: &str, output: u64| {
+        let row = serde_json::json!({
+            "type":"assistant",
+            "timestamp": time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339).unwrap(),
+            "message":{"id": id, "model":"claude-opus-4-8",
+                "usage":{"input_tokens":1000,"output_tokens":output}}
+        });
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&transcript)
+            .unwrap();
+        writeln!(file, "{row}").unwrap();
+    };
+    let send = |method: &'static str, uri: String, body: String| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &uri, Some(&body)))
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    let turn = |event: &str| {
+        serde_json::json!({"event": event, "session_id": "cap-session", "transcript_path": path})
+            .to_string()
+    };
+    send(
+        "POST",
+        "/terminals".into(),
+        serde_json::json!({"command":"cat","id": terminal}).to_string(),
+    )
+    .await;
+    send(
+        "POST",
+        format!("/terminals/{terminal}/ai-connection"),
+        r#"{"agent":"claude","session_id":"cap-session"}"#.into(),
+    )
+    .await;
+    let endpoint = format!("/terminals/{terminal}/claude-turn");
+    assert_eq!(
+        send("POST", endpoint.clone(), turn("start")).await,
+        StatusCode::NO_CONTENT
+    );
+    append("a", 10);
+    append("b", 20);
+    assert_eq!(
+        send("POST", endpoint.clone(), turn("stop")).await,
+        StatusCode::NO_CONTENT
+    );
+    let recorded = hotsheet_ticketing::metrics::read_raw(&store).unwrap();
+    assert_eq!(recorded.len(), 2);
+    // The account's recovery is confirmed by the recorded turns, and both count once.
+    let confirmed = entry();
+    assert!(confirmed.limit.is_none() && !confirmed.unconfirmed);
+    assert!(confirmed.last_ok_at_ms.is_some());
+    let usage = |entry: &hotsheet_ticketing::orchestration::CapacityEntry| {
+        entry
+            .recent
+            .iter()
+            .filter(|signal| signal.kind == SignalKind::Usage)
+            .count()
+    };
+    assert_eq!(usage(&confirmed), 2);
+    let spend = confirmed.spend.clone().unwrap();
+    let priced: u64 = recorded
+        .iter()
+        .filter_map(|event| event.cost_usd)
+        .map(|usd| (usd * 100.0).ceil() as u64)
+        .sum();
+    assert_eq!(
+        (spend.cents, spend.unpriced),
+        (
+            priced,
+            recorded.iter().filter(|e| e.cost_usd.is_none()).count() as u32
+        )
+    );
+    // A repeated Stop records nothing and signals nothing new.
+    send("POST", endpoint.clone(), turn("stop")).await;
+    assert_eq!(usage(&entry()), 2);
+    // Nothing unattributed was recorded for the account's turns.
+    assert!(
+        registry
+            .entries()
+            .unwrap()
+            .iter()
+            .all(|entry| entry.account.is_some())
+    );
+    let stored =
+        std::fs::read_to_string(machine_home.join("orchestration-tool-capacity.json")).unwrap();
+    assert!(!stored.contains("output_tokens") && !stored.contains("cap-session.jsonl"));
+    send("DELETE", format!("/terminals/{terminal}"), String::new()).await;
+}

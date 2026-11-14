@@ -264,7 +264,8 @@ impl CapacityEntry {
         }
     }
 
-    fn is_for(&self, tool: &str, account: Option<&str>) -> bool {
+    /// The record of this tool and account.
+    pub fn is_for(&self, tool: &str, account: Option<&str>) -> bool {
         self.tool == tool && self.account.as_deref() == account
     }
 }

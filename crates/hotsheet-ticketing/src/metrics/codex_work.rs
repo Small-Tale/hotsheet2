@@ -10,7 +10,7 @@ use hotsheet_model::{ClaimEventKind, Ticket};
 use serde::Deserialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use super::{UsageEvent, read_raw, record_priced};
+use super::{UsageEvent, read_raw};
 use crate::store::FsStore;
 
 #[derive(Deserialize)]
@@ -336,8 +336,18 @@ pub fn record_session_responses(
     session: &str,
     responses: Vec<(String, UsageEvent)>,
 ) -> io::Result<usize> {
+    record_session_responses_written(store, session, responses).map(|written| written.len())
+}
+
+/// HS2-XFMKHQ: [`record_session_responses`] returning exactly the events it wrote, priced
+/// and keyed as stored, so a host can turn each into one capacity signal.
+pub fn record_session_responses_written(
+    store: &FsStore,
+    session: &str,
+    responses: Vec<(String, UsageEvent)>,
+) -> io::Result<Vec<UsageEvent>> {
     if responses.is_empty() || !valid_session_id(session) {
-        return Ok(0);
+        return Ok(Vec::new());
     }
     let local = store.root().join("metrics/local");
     fs::create_dir_all(&local)?;
@@ -375,7 +385,7 @@ pub fn record_session_responses(
     }
     if seen.contains(&watched) {
         write_checkpoint(&checkpoint, seen)?;
-        return Ok(0);
+        return Ok(Vec::new());
     }
     let prefix = response_key(session, "");
     seen.extend(
@@ -385,18 +395,19 @@ pub fn record_session_responses(
             .filter(|value| value.starts_with(&prefix))
             .cloned(),
     );
-    let mut added = 0;
+    let mut written = Vec::new();
     for (response_id, mut event) in responses {
         let key = response_key(session, &response_id);
         if !seen.insert(key.clone()) {
             continue;
         }
         event.session = Some(key);
-        record_priced(store, event)?;
-        added += 1;
+        let event = super::price_event(store, event);
+        super::record(store, &event)?;
+        written.push(event);
     }
     write_checkpoint(&checkpoint, seen)?;
-    Ok(added)
+    Ok(written)
 }
 
 fn write_checkpoint(path: &Path, seen: HashSet<String>) -> io::Result<()> {
@@ -656,7 +667,7 @@ mod tests {
             ),
         )
         .unwrap();
-        record_priced(
+        crate::metrics::record_priced(
             &store,
             UsageEvent {
                 ts: "2026-10-21T01:10:00Z".into(),

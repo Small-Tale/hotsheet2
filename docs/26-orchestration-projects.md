@@ -1172,8 +1172,20 @@ provider message a second way:
 - A halt that is not a limit, and a halt whose tool is not known, record nothing.
 
 A failed record is logged by code and never fails the halt or resume that carried
-it. `tool_capacity_signals::usage_signal` maps a usage event to a `usage` signal;
-feeding usage events automatically is HS2-XFMKHQ.
+it.
+
+**Usage (HS2-XFMKHQ).** Every usage event the server appends ([14](14-metrics-interface.md))
+becomes one `usage` signal at a single choke point, `tool_capacity_signals::usage_appended`,
+called right after the append with exactly the events written and priced: driven turns
+(through the dist work loop's usage sink), client-drive turns, Claude transcript usage and
+the Codex rollout watch. Events from a terminal carry the account its session was started
+for; driven and client-drive turns are unattributed. A retried append of the same event
+yields the identical signal (tool, time, session and cost), which the registry answers
+`duplicate`, so it counts once; two different responses of one session in the same
+millisecond with the same cost also collapse into one, which can undercount a budget by
+that response. A usage signal wakes the scheduler only when it changes the account's
+standing (a first completed turn, a confirmed recovery); one that only adds cost does
+not, and the budget is read at the next pass.
 
 **Which account (HS2-PFHRS9).** A session's account is declared by whoever starts it for
 one: the orchestrator, when `session_start` names an `account` (required when the

@@ -669,3 +669,48 @@ fn hs2_ahg7hw_signals_are_refused_closed_and_routed_like_every_other_adapter() {
         assert!(ToolCapacityRegistry::new(&f.home).entries().is_err());
     }
 }
+
+/// HS2-XFMKHQ: usage arrives with every turn, so it wakes the scheduler only when it
+/// changes the account's standing (a first completed turn, a confirmed recovery), never
+/// when it only adds cost; limits and recoveries always wake it.
+#[test]
+fn hs2_xfmkhq_usage_wakes_the_scheduler_only_when_the_standing_changes() {
+    use hotsheet_ticketing::orchestration::{LimitSignal, SignalKind};
+    let home = tempfile::tempdir().unwrap();
+    let marker = home
+        .path()
+        .join("orchestration-scheduler-wake")
+        .join("token");
+    let token = || std::fs::read_to_string(&marker).ok();
+    let signal = |kind: SignalKind, at_ms: u64, cost: Option<u64>| LimitSignal {
+        tool: "claude".into(),
+        account: Some("team-a".into()),
+        kind,
+        at_ms,
+        resets_at_ms: None,
+        cost_cents: cost,
+        session: Some(format!("s{at_ms}")),
+    };
+    let record = |signal: &LimitSignal| {
+        OrchestrationRuntime::record_tool_signal_at(home.path(), signal, 10_000_000).unwrap()
+    };
+    // The first completed turn: not observed to available.
+    record(&signal(SignalKind::Usage, 1_000_000, Some(5)));
+    let first = token().expect("a first turn changes the standing");
+    // More turns only add cost.
+    for at in [1_100_000, 1_200_000] {
+        record(&signal(SignalKind::Usage, at, Some(5)));
+        assert_eq!(token().as_deref(), Some(first.as_str()));
+    }
+    // A limit wakes it.
+    record(&signal(SignalKind::UsageLimit, 1_300_000, None));
+    let limited = token().unwrap();
+    assert_ne!(limited, first);
+    // A turn after the guessed backoff ended confirms the recovery: a standing change.
+    record(&signal(SignalKind::Usage, 1_300_000 + 6 * 60_000, Some(5)));
+    let confirmed = token().unwrap();
+    assert_ne!(confirmed, limited);
+    // Repeated: the identical signal changes nothing and wakes nothing.
+    record(&signal(SignalKind::Usage, 1_300_000 + 6 * 60_000, Some(5)));
+    assert_eq!(token(), Some(confirmed));
+}

@@ -1358,6 +1358,13 @@ pub(crate) async fn send_drive_turn(
                     {
                         tracing::warn!(%error, "recording turn usage metrics failed");
                     } else {
+                        // HS2-XFMKHQ: the turn is a usage signal for its tool's capacity;
+                        // a client drive has no terminal, so it is unattributed.
+                        crate::tool_capacity_signals::usage_appended(
+                            &thread_state,
+                            None,
+                            [&priced],
+                        );
                         // The drive's project store gained tokens (HS2-JTTQMY, HS2-B4EQ87).
                         crate::live_state::touch(
                             &thread_state,

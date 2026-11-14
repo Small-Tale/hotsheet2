@@ -151,14 +151,35 @@ impl OrchestrationRuntime {
         if !supports(home).contains_key(&signal.tool) {
             return Err(OrchestrationError::Invalid("tool is not a loaded plugin"));
         }
-        let applied = ToolCapacityRegistry::new(home)
-            .record(signal, now_ms)?
-            .applied;
-        if applied == Applied::Applied {
+        let registry = ToolCapacityRegistry::new(home);
+        // HS2-XFMKHQ: a usage signal arrives with every turn; it wakes the scheduler only
+        // when it changes the account's standing, not when it only adds cost.
+        let standing = |entry: &hotsheet_ticketing::orchestration::CapacityEntry| {
+            (
+                entry.limit.is_some(),
+                entry.unconfirmed,
+                entry.last_ok_at_ms.is_some(),
+            )
+        };
+        let before = (signal.kind == hotsheet_ticketing::orchestration::SignalKind::Usage)
+            .then(|| registry.entries())
+            .transpose()?
+            .map(|entries| {
+                entries
+                    .iter()
+                    .find(|entry| entry.is_for(&signal.tool, signal.account.as_deref()))
+                    .map(standing)
+            });
+        let outcome = registry.record(signal, now_ms)?;
+        let changed = match before {
+            Some(before) => before != Some(standing(&outcome.entry)),
+            None => true,
+        };
+        if outcome.applied == Applied::Applied && changed {
             // HS2-ECWG50: a limit or a recovery changes where sessions may start.
             Self::scheduler_wake_at(home);
         }
-        Ok(applied)
+        Ok(outcome.applied)
     }
 
     /// The capacity of every tool account the project's policy configures. A tool

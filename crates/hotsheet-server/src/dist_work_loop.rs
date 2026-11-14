@@ -219,15 +219,21 @@ pub struct LiveDriveCtx {
     pub persistent_home_root: Option<std::path::PathBuf>,
 }
 
-/// Called with the store a driven turn's usage was recorded in (HS2-P37AH7).
-pub type UsageSink = std::sync::Arc<dyn Fn(&FsStore) + Send + Sync + 'static>;
+/// Called with the store a driven turn's usage was recorded in (HS2-P37AH7) and the
+/// recorded event (HS2-XFMKHQ).
+pub type UsageSink = std::sync::Arc<
+    dyn Fn(&FsStore, &hotsheet_ticketing::metrics::UsageEvent) + Send + Sync + 'static,
+>;
 
 /// The server host's [`UsageSink`]: the recorded store's live state (tokens per minute)
-/// rebuilds and pushes now instead of at the next unrelated refresh (HS2-P37AH7).
+/// rebuilds and pushes now instead of at the next unrelated refresh (HS2-P37AH7), and the
+/// turn is a usage signal for its tool's capacity (HS2-XFMKHQ; a driven turn has no
+/// terminal, so it is unattributed).
 pub fn live_state_usage_sink(state: &crate::AppState) -> UsageSink {
     let state = state.clone();
-    std::sync::Arc::new(move |store| {
+    std::sync::Arc::new(move |store, event| {
         crate::live_state::touch(&state, &crate::multistore::store_url_id(store));
+        crate::tool_capacity_signals::usage_appended(&state, None, [event]);
     })
 }
 
@@ -238,10 +244,11 @@ fn record_turn_usage(
     store: &FsStore,
     event: hotsheet_ticketing::metrics::UsageEvent,
 ) {
-    match hotsheet_ticketing::metrics::record_priced(store, event) {
+    let event = hotsheet_ticketing::metrics::price_event(store, event);
+    match hotsheet_ticketing::metrics::record(store, &event) {
         Ok(()) => {
             if let Some(sink) = &ctx.usage_sink {
-                sink(store);
+                sink(store, &event);
             }
         }
         Err(error) => tracing::warn!(%error, "recording driven turn usage failed"),
@@ -730,7 +737,7 @@ mod tests {
         let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let sink_heard = heard.clone();
         let ctx = LiveDriveCtx {
-            usage_sink: Some(std::sync::Arc::new(move |store: &FsStore| {
+            usage_sink: Some(std::sync::Arc::new(move |store: &FsStore, _| {
                 sink_heard.lock().unwrap().push(store.root().to_path_buf());
             })),
             ..LiveDriveCtx::default()
@@ -781,6 +788,18 @@ mod tests {
         .await
         .expect("the store's live tokens per minute moved");
         assert_eq!(live["store"], store_id);
+        // HS2-XFMKHQ: the same sink makes the driven turn an unattributed usage signal.
+        let entries = hotsheet_ticketing::orchestration::ToolCapacityRegistry::new(
+            &dir.path().join("machine-home"),
+        )
+        .entries()
+        .unwrap();
+        let claude = entries
+            .iter()
+            .find(|entry| entry.tool == "claude")
+            .expect("the turn reached tool capacity");
+        assert_eq!(claude.account, None);
+        assert!(claude.last_ok_at_ms.is_some());
     }
 
     const SECRET: &str = "test-secret";

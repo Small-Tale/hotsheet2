@@ -128,6 +128,29 @@ pub(crate) fn attributed(
     })
 }
 
+/// HS2-XFMKHQ: the one place an appended usage event becomes a capacity signal. Call it
+/// right after each successful append with exactly the events written (priced, so a
+/// budget sees the recorded cost). Events from a terminal are attributed to the account
+/// its session was started for (HS2-PFHRS9); `None` stays unattributed. A retried append
+/// of the same event yields the identical signal, which the registry answers as a
+/// duplicate, so it is counted once.
+pub(crate) fn usage_appended<'a>(
+    state: &AppState,
+    terminal: Option<&str>,
+    events: impl IntoIterator<Item = &'a UsageEvent>,
+) {
+    let account = terminal.and_then(|terminal| session_account(state, terminal));
+    for event in events {
+        record(
+            state,
+            usage_signal(event).map(|signal| LimitSignal {
+                account: account.clone(),
+                ..signal
+            }),
+        );
+    }
+}
+
 /// Record one observed signal in this machine's capacity registry. Capacity is
 /// advisory to the session that produced it: a refused or failed record is logged by
 /// code and never fails the halt or resume that carried it.
