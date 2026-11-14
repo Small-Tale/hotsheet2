@@ -57,6 +57,7 @@ pub mod store_git;
 pub mod sync;
 pub mod sync_ai;
 pub mod sync_health;
+pub mod sync_locks;
 pub mod sync_replay;
 pub mod sync_saved_writes;
 pub mod terminal_limits;

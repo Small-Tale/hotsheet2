@@ -1078,6 +1078,7 @@ Each cycle ends in one state:
 | `offline`                   | Fetch or push could not reach the remote, authentication failed, or another pusher won a race | exponential backoff                  |
 | `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)   | exponential backoff; needs a repair  |
 | `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                 | not replayed for the same divergence |
+| `blocked`                   | A Git lock file in the store stopped a local step (HS2-6ACT5Y); nothing was merged            | exponential backoff                  |
 | `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                         | none until finished or aborted       |
 | `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                          | none until recovered                 |
 
@@ -1089,6 +1090,25 @@ The rules:
   re-fetch fixes it. A rejection scans the unpublished commits once and names every
   blob over the remote's file limit (GitHub's 100 MiB) by path and size. Local commits
   are kept.
+- **A lock is not a conflict or an outage (HS2-6ACT5Y).** Git serializes writers with
+  `<name>.lock` files, and a crashed or killed Git process leaves its lock behind. Every
+  later step that needs the file fails with `Unable to create '<path>.lock': File
+exists`. Before any Git step a cycle checks for the locks it needs (`index.lock`,
+  `HEAD.lock`, the branch's ref lock, and its remote-tracking ref lock), looking again a
+  few times over 300 ms so a command that runs beside sync does not fail the pass. A
+  held lock makes the cycle `blocked` before it commits, fetches, or replays, so a
+  stale lock never stops a rebase half-way. A lock another process takes during the
+  cycle is read from the failed step's output (the local commit, fetch, branch update,
+  rebase, or push) and is also `blocked`. The remote's own locks (`remote:` lines) are
+  not. A rebase a lock interrupts is never aborted, because an abort that cannot lock
+  the branch detaches `HEAD`; a later cycle continues it once the lock is gone. The
+  reason names each lock file (store-relative when inside the store) and its age. The
+  next step says to check that no Git process is running in the store, remove the
+  stale lock, and run `hotsheet-cli sync`. Hot Sheet never removes a lock by itself:
+  the file looks the same whether its owner crashed or still runs, and removing a live
+  process's lock can corrupt the index or a ref. Automatic recovery of a provably stale
+  lock is HS2-T0V269. A recorded `blocked` outranks a live unfinished rebase in the
+  health read, because that rebase cannot continue until the lock is gone.
 - **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
   `MERGE_HEAD` in the store's Git directory. If one exists and needs a decision, the
   cycle stops before committing or fetching; a rebase with nothing to decide is
@@ -1114,8 +1134,9 @@ The background loop emits a replayable `ticket_store_sync` change event (with th
 state as `slug`) when a store's state changes, or when an outage reaches three
 consecutive failures. An open client reloads health only on that event. The web shell
 shows a persistent `TicketStoreSyncBanner` while any store is `rejected`, `conflict`,
-`rebase_in_progress`, `history_recovery_required`, or `offline` for three or more
-passes. The banner names the store, the cause, how many local changes are unpublished,
+`rebase_in_progress`, `history_recovery_required`, or `offline` or `blocked` for three
+or more passes. A `blocked` banner repeats the reason naming the lock file. The banner
+names the store, the cause, how many local changes are unpublished,
 and the next step. It is for a person, so while Hot Sheet is still repairing a `conflict`
 or `rebase_in_progress` itself (its AI ask is `started` or `session_asked`, §2.12.4) it
 stays hidden for up to 30 minutes from the ask. It appears once that repair ended,
@@ -1125,7 +1146,7 @@ show that kind of warning if you've really reached an insurmountable blocker"_).
 Headless parity:
 
 - `hotsheet-cli sync --status [--json]` prints the same health.
-- `hotsheet-cli sync` exits non-zero with that health for `rejected`,
+- `hotsheet-cli sync` exits non-zero with that health for `rejected`, `blocked`,
   `rebase_in_progress`, and `history_recovery_required`.
 - `hotsheet-cli sync --abort-stalled-rebase` is the explicit recovery for a stalled
   rebase or merge. It records `refs/hotsheet/sync-backup/<timestamp>` at the current

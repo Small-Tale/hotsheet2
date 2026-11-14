@@ -5002,7 +5002,9 @@ transition history (HS2-XKXE7V).
   on a `ticket_store_sync` change event for that checkout. A failed request keeps the last
   report. The project shell shows `TicketStoreSyncBanner`, a warning-toned `ShellBanner`,
   while any linked Git ticket store is `rejected`, `conflict`, `rebase_in_progress`, or
-  `history_recovery_required`, or has been `offline` for three or more passes. A
+  `history_recovery_required`, or has been `offline` or `blocked` (a Git lock file,
+  HS2-6ACT5Y) for three or more passes. A `blocked` store's sentence is the server's
+  reason, which names the lock file and its age. A
   `conflict` or `rebase_in_progress` that Hot Sheet is still repairing (an AI ask
   `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). The banner:
   - names the store, or the number of failing stores;

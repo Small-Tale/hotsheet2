@@ -10202,6 +10202,78 @@ fn hs2_adhfkz_sync_status_and_stalled_rebase_recovery_are_headless() {
     assert_eq!(status_json(a.path())["state"], "up_to_date");
 }
 
+/// HS2-6ACT5Y headless parity: a stale Git `index.lock` makes `hotsheet-cli sync` fail as
+/// `blocked`, naming the lock and the safe recovery, never as a ticket merge conflict or an
+/// unreachable remote; `sync --status --json` reports the same state; and the first sync
+/// after the lock is removed publishes the ticket saved meanwhile. Synthetic stores only.
+#[cfg(unix)]
+#[test]
+fn hs2_6act5y_sync_reports_a_stale_git_lock_as_blocked_headlessly() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn status_json(dir: &Path) -> serde_json::Value {
+        let out = hs(dir)
+            .args(["sync", "--status", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&out).unwrap()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    hs(a.path()).arg("sync").assert().success();
+    let slug = new_ticket(a.path(), "saved before the lock");
+    // An unpublished local commit the lock keeps from the remote.
+    std::fs::write(a.path().join("notes.txt"), "local\n").unwrap();
+    assert!(git(a.path(), &["add", "notes.txt"]));
+    assert!(git(a.path(), &["commit", "--quiet", "-m", "local notes"]));
+
+    let lock = a.path().join(".git").join("index.lock");
+    std::fs::write(&lock, "stale\n").unwrap();
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("State: blocked"))
+        .stderr(predicate::str::contains(".git/index.lock"))
+        .stderr(predicate::str::contains("no Git process is running"))
+        .stderr(predicate::str::contains("body change").not())
+        .stderr(predicate::str::contains("unreachable").not());
+    let blocked = status_json(a.path());
+    assert_eq!(blocked["state"], "blocked");
+    assert!(blocked["unpublished_commits"].as_u64().unwrap() >= 1);
+    assert!(
+        blocked["reason"]
+            .as_str()
+            .unwrap()
+            .contains(".git/index.lock")
+    );
+    assert!(lock.is_file(), "Hot Sheet never removes a lock by itself");
+
+    std::fs::remove_file(&lock).unwrap();
+    hs(a.path()).arg("sync").assert().success();
+    let synced = status_json(a.path());
+    assert_eq!(synced["state"], "synced");
+    assert_eq!(synced["unpublished_commits"], 0);
+    hs(a.path()).args(["show", &slug]).assert().success();
+}
+
 /// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
 /// start the project's default AI tool once, as a detached `hotsheet-cli trigger` that
 /// outlives the command and receives the repair prompt; a second `sync` starts nothing.

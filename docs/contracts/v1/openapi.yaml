@@ -22281,6 +22281,7 @@ components:
         - offline
         - rejected
         - conflict
+        - blocked
         - rebase_in_progress
         - history_recovery_required
     TicketStoreOversizedObject:

@@ -23,6 +23,11 @@
 //! HS2-QR1K8R), so a ticket write that lands during a replay can neither make Git
 //! reschedule a pick nor be committed onto a detached `HEAD`. An unfinished rebase that
 //! needs no judgment is continued by the next cycle.
+//!
+//! A Git lock file left by a crashed or killed Git process (`index.lock`, a ref's
+//! `.lock`) is [`SyncReport::Blocked`] (HS2-6ACT5Y), never a conflict or an outage: the
+//! cycle checks for the locks it needs before any Git step and reads lock failures from
+//! each step's output, naming the lock files in the health reason ([`crate::sync_locks`]).
 
 use std::io::Write as _;
 use std::path::Path;
@@ -34,8 +39,8 @@ use crate::sync_health::{
     record_attempt_start, record_outcome, recorded_conflict,
 };
 use crate::sync_replay::{
-    Continued, MAX_REPLAY_ATTEMPTS, ReplayError, continue_unfinished, isolated_replay_supported,
-    move_branch_to, replay_onto_upstream, unmerged_paths,
+    BranchMove, Continued, MAX_REPLAY_ATTEMPTS, ReplayError, continue_unfinished,
+    isolated_replay_supported, move_branch_to, replay_onto_upstream, unmerged_paths,
 };
 
 /// The outcome of one [`sync_once`] cycle.
@@ -57,6 +62,10 @@ pub enum SyncReport {
     /// The merge driver couldn't auto-resolve; the rebase was aborted so the working tree
     /// is clean, and the conflict is left for the user (the rare same-paragraph body case).
     Conflict,
+    /// A Git lock file in the store stopped a local step (HS2-6ACT5Y): a crashed or killed
+    /// Git process left `index.lock` or a ref's `.lock` behind, or another Git process is
+    /// running. Nothing was merged; the next cycle retries once the lock is gone.
+    Blocked,
     /// A rebase or merge is in progress or was abandoned in the store and needs a decision
     /// (HS2-ADHFKZ); the cycle did nothing so it never stacks a second replay on top of
     /// it. An unfinished rebase with nothing to decide is continued instead (HS2-QR1K8R).
@@ -167,6 +176,11 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
         let Ok(_lock) = lock_git_transaction(store_path) else {
             return failed(SyncReport::Offline, "could not lock the store for sync");
         };
+        // HS2-6ACT5Y: a stale Git lock fails every local step; say so before one starts,
+        // so a rebase never stops half-way on it and nothing reads as a merge conflict.
+        if let Some(blocked) = held_lock_failure(store_path) {
+            return blocked;
+        }
         // HS2-9TV6A2: every replay and continue below goes through the semantic merge
         // driver, whatever the merged trees' `.gitattributes` say.
         let driver = crate::merge_driver::ensure_registered(store_path, None);
@@ -181,12 +195,17 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
             }
             None => crate::sync_health::clear_continue_attempts(store_path),
         }
-        commit_pending(store_path);
+        if let Err(blocked) = commit_pending_checked(store_path) {
+            return blocked;
+        }
     }
 
     // Fetch; an unreachable remote is not an error — stay offline-tolerant.
     let fetch = git_run(store_path, &["fetch", "--quiet"]);
     if !fetch.ok {
+        if let Some(blocked) = lock_failure(store_path, "fetch", &fetch.stderr) {
+            return blocked;
+        }
         return failed(
             SyncReport::Offline,
             transport_reason("fetch", &fetch.stderr),
@@ -255,7 +274,7 @@ fn integrate(store_path: &Path, limits: SyncLimits) -> Result<(), (SyncReport, C
         // A Hot Sheet write that landed its file while fetch ran (or while an earlier
         // replay of this cycle ran) commits only once it takes the lock; commit it here
         // so the replay includes it.
-        commit_pending(store_path);
+        commit_pending_checked(store_path)?;
         let heads = current_heads(store_path);
         // HS2-ADHFKZ: the same divergence already failed to merge; replaying thousands
         // of local commits again cannot change the answer.
@@ -268,11 +287,15 @@ fn integrate(store_path: &Path, limits: SyncLimits) -> Result<(), (SyncReport, C
         match replay_onto_upstream(store_path) {
             Ok(tip) => {
                 let head = heads.as_ref().map_or("", |(head, _)| head.as_str());
-                if move_branch_to(store_path, head, &tip) {
-                    return Ok(());
+                match move_branch_to(store_path, head, &tip) {
+                    BranchMove::Moved => return Ok(()),
+                    BranchMove::Locked(locks) => {
+                        return Err(blocked(store_path, "the branch update", &locks));
+                    }
+                    // A write touched a path the incoming commits change. Nothing moved:
+                    // commit it and replay again.
+                    BranchMove::Refused => {}
                 }
-                // A write touched a path the incoming commits change. Nothing moved:
-                // commit it and replay again.
             }
             Err(ReplayError::Conflict) => return Err(conflict(heads)),
             Err(ReplayError::Unsupported(_)) => return live_rebase(store_path, heads),
@@ -291,8 +314,15 @@ fn live_rebase(
     store_path: &Path,
     heads: Option<(String, String)>,
 ) -> Result<(), (SyncReport, CycleDetail)> {
-    if git_ok(store_path, &["rebase", "--quiet", "@{u}"]) {
+    let rebase = git_run(store_path, &["rebase", "--quiet", "@{u}"]);
+    if rebase.ok {
         return Ok(());
+    }
+    // HS2-6ACT5Y: a lock another Git process took after the pre-check. Never abort here: an
+    // abort that cannot lock the branch leaves `HEAD` detached. A rebase Git started is
+    // continued by a later cycle once the lock is gone.
+    if let Some(blocked) = lock_failure(store_path, "the rebase", &rebase.stderr) {
+        return Err(blocked);
     }
     if unmerged_paths(store_path).is_empty() {
         return match integration_in_progress(store_path) {
@@ -366,6 +396,9 @@ fn classify_push_failure(
     stderr: &str,
     limits: SyncLimits,
 ) -> (SyncReport, CycleDetail) {
+    if let Some(blocked) = lock_failure(store_path, "push", stderr) {
+        return blocked;
+    }
     if !push_was_refused(stderr) {
         return failed(SyncReport::Offline, transport_reason("push", stderr));
     }
@@ -662,6 +695,8 @@ pub enum AdoptError {
          `hotsheet-cli sync --adopt` again once Hot Sheet commits them"
     )]
     Busy,
+    #[error("{reason} {action}", reason = .0, action = crate::sync_locks::LOCK_RECOVERY_ACTION)]
+    Locked(String),
     #[error("could not lock the store: {0}")]
     Lock(#[from] crate::StoreError),
     #[error(transparent)]
@@ -761,8 +796,16 @@ pub fn adopt_resolved_history(store_path: &Path, commit: &str) -> Result<Adopted
         });
     }
     let (_, backup_ref) = record_backup_ref(store_path)?;
-    if !move_branch_to(store_path, &head, &target) {
-        return Err(AdoptError::Busy);
+    match move_branch_to(store_path, &head, &target) {
+        BranchMove::Moved => {}
+        BranchMove::Refused => return Err(AdoptError::Busy),
+        BranchMove::Locked(locks) => {
+            return Err(AdoptError::Locked(crate::sync_locks::blocked_reason(
+                store_path,
+                "the branch update",
+                &locks,
+            )));
+        }
     }
     Ok(Adopted {
         backup_ref,
@@ -779,13 +822,67 @@ fn has_remote(store_path: &Path) -> bool {
 
 /// Auto-commit any pending working-tree changes (no-op when the tree is clean).
 pub(crate) fn commit_pending(store_path: &Path) {
-    let _ = git_ok(store_path, &["add", "-A"]);
+    let _ = commit_pending_checked(store_path);
+}
+
+/// [`commit_pending`], stopping with [`SyncReport::Blocked`] when a Git lock refused the
+/// stage or the commit (HS2-6ACT5Y). Other failures stay best-effort, as before.
+fn commit_pending_checked(store_path: &Path) -> Result<(), (SyncReport, CycleDetail)> {
+    let add = git_run(store_path, &["add", "-A"]);
+    if !add.ok
+        && let Some(blocked) = lock_failure(store_path, "the local commit", &add.stderr)
+    {
+        return Err(blocked);
+    }
     if !git_ok(store_path, &["diff", "--cached", "--quiet"]) {
-        let _ = git_ok(
+        let commit = git_run(
             store_path,
             &["commit", "--quiet", "-m", "Hot Sheet: sync local changes"],
         );
+        if !commit.ok
+            && let Some(blocked) = lock_failure(store_path, "the local commit", &commit.stderr)
+        {
+            return Err(blocked);
+        }
     }
+    Ok(())
+}
+
+/// How many times the pre-check looks again before it reports a held lock: a Git command
+/// that runs alongside sync (a `git status` refreshing the index) holds its lock for
+/// milliseconds, and should not make the pass fail.
+const HELD_LOCK_CHECKS: u32 = 4;
+const HELD_LOCK_RECHECK: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// [`SyncReport::Blocked`] when a lock the cycle needs is held now and stays held across a
+/// few brief re-checks.
+fn held_lock_failure(store_path: &Path) -> Option<(SyncReport, CycleDetail)> {
+    let mut locks = crate::sync_locks::held_locks(store_path);
+    for _ in 1..HELD_LOCK_CHECKS {
+        if locks.is_empty() {
+            return None;
+        }
+        std::thread::sleep(HELD_LOCK_RECHECK);
+        locks = crate::sync_locks::held_locks(store_path);
+    }
+    (!locks.is_empty()).then(|| blocked(store_path, "the pre-sync check", &locks))
+}
+
+/// [`SyncReport::Blocked`] when a failed Git step's output names a local lock file.
+fn lock_failure(store_path: &Path, step: &str, stderr: &str) -> Option<(SyncReport, CycleDetail)> {
+    let locks = crate::sync_locks::locks_in_output(stderr);
+    (!locks.is_empty()).then(|| blocked(store_path, step, &locks))
+}
+
+fn blocked(
+    store_path: &Path,
+    step: &str,
+    locks: &[std::path::PathBuf],
+) -> (SyncReport, CycleDetail) {
+    failed(
+        SyncReport::Blocked,
+        crate::sync_locks::blocked_reason(store_path, step, locks),
+    )
 }
 
 /// `(ahead, behind)` relative to the upstream — how many commits local has that the remote
@@ -850,6 +947,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(test)]
+mod lock_tests;
 #[cfg(test)]
 mod merge_driver_tests;
 #[cfg(test)]

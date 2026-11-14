@@ -64,6 +64,10 @@ pub enum SyncState {
     Rejected,
     /// A ticket body changed on both sides and the merge driver could not resolve it.
     Conflict,
+    /// A Git lock file in the store stopped the last cycle (HS2-6ACT5Y): a stale lock a
+    /// crashed Git process left, or one another running Git process holds. Not a merge
+    /// conflict; the loop retries with backoff and the reason names the lock files.
+    Blocked,
     /// A rebase or merge is in progress or was abandoned in the store; sync will not
     /// start another one until it is finished or aborted.
     RebaseInProgress,
@@ -81,6 +85,7 @@ impl SyncState {
             Self::Offline
                 | Self::Rejected
                 | Self::Conflict
+                | Self::Blocked
                 | Self::RebaseInProgress
                 | Self::HistoryRecoveryRequired
         )
@@ -97,6 +102,7 @@ impl SyncState {
             Self::Offline => "offline",
             Self::Rejected => "rejected",
             Self::Conflict => "conflict",
+            Self::Blocked => "blocked",
             Self::RebaseInProgress => "rebase_in_progress",
             Self::HistoryRecoveryRequired => "history_recovery_required",
         }
@@ -112,6 +118,7 @@ impl From<SyncReport> for SyncState {
             SyncReport::Offline => Self::Offline,
             SyncReport::Rejected => Self::Rejected,
             SyncReport::Conflict => Self::Conflict,
+            SyncReport::Blocked => Self::Blocked,
             SyncReport::RebaseInProgress => Self::RebaseInProgress,
             SyncReport::HistoryRecoveryRequired => Self::HistoryRecoveryRequired,
         }
@@ -289,6 +296,11 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
             "a history rewrite replaced the remote; recover this checkout before syncing"
                 .to_string(),
         );
+    } else if record.outcome == Some(SyncState::Blocked) {
+        // HS2-6ACT5Y: the lock stopped the last cycle before it could continue an
+        // unfinished rebase, so the lock is what needs fixing first.
+        health.state = SyncState::Blocked;
+        health.reason.clone_from(&record.reason);
     } else if integration_in_progress(store_path).is_some() {
         health.state = SyncState::RebaseInProgress;
         // The cycle that found it says why it was not continued (HS2-QR1K8R).
@@ -399,6 +411,7 @@ fn next_action(health: &SyncHealth) -> Option<String> {
              `hotsheet-cli sync`."
                 .to_string()
         }
+        SyncState::Blocked => crate::sync_locks::LOCK_RECOVERY_ACTION.to_string(),
         SyncState::RebaseInProgress => "Sync continues an unfinished rebase by itself when \
              nothing conflicts; this one needs a decision. Finish the rebase or merge in the \
              store, or run `hotsheet-cli sync --abort-stalled-rebase` to restore the local \

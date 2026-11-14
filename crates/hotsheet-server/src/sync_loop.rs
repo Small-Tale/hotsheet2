@@ -67,13 +67,14 @@ pub fn sync_all_with_sizes(
                 .and_then(|record| record.outcome);
             let report = sync_once(path);
             let after = SyncState::from(report);
-            // Offline becomes banner-worthy only once it persists, so that crossing is a
-            // change too.
-            let offline_became_persistent = after == SyncState::Offline
-                && hotsheet_ticketing::sync_health::read_record(path).is_some_and(|record| {
-                    record.consecutive_failures
-                        == hotsheet_ticketing::sync_health::PERSISTENT_OFFLINE_FAILURES
-                });
+            // Offline (and a Git lock, HS2-6ACT5Y) becomes banner-worthy only once it
+            // persists, so that crossing is a change too.
+            let offline_became_persistent =
+                matches!(after, SyncState::Offline | SyncState::Blocked)
+                    && hotsheet_ticketing::sync_health::read_record(path).is_some_and(|record| {
+                        record.consecutive_failures
+                            == hotsheet_ticketing::sync_health::PERSISTENT_OFFLINE_FAILURES
+                    });
             if report != SyncReport::NoRemote
                 && (before != Some(after) || offline_became_persistent)
             {
@@ -160,14 +161,18 @@ impl SizeLevels {
 }
 
 /// The delay before the next pass: the base interval when all is well, else an
-/// exponentially-backed-off delay (capped) while any store is `Offline` or `Rejected`
-/// (HS2-ADHFKZ: a refused push re-sends the same history, so it must not hammer the remote
-/// at the base cadence). A `Conflict` or stalled rebase is a user-action-needed state
+/// exponentially-backed-off delay (capped) while any store is `Offline`, `Rejected`, or
+/// `Blocked` (HS2-ADHFKZ: a refused push re-sends the same history, so it must not hammer
+/// the remote at the base cadence; HS2-6ACT5Y: a stale Git lock stays until someone removes
+/// it). A `Conflict` or stalled rebase is a user-action-needed state
 /// whose next pass is a cheap local check, so it does **not** back off.
 pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncReport)]) -> Duration {
-    let any_offline = reports
-        .iter()
-        .any(|(_, r)| matches!(r, SyncReport::Offline | SyncReport::Rejected));
+    let any_offline = reports.iter().any(|(_, r)| {
+        matches!(
+            r,
+            SyncReport::Offline | SyncReport::Rejected | SyncReport::Blocked
+        )
+    });
     if any_offline {
         (current * 2).clamp(base, MAX_BACKOFF)
     } else {
@@ -421,6 +426,18 @@ mod tests {
         assert_eq!(times, [0, 60, 180, 190, 220]);
     }
 
+    /// HS2-6ACT5Y: repeated passes over a stale Git lock back off like an outage instead of
+    /// re-running Git at the base cadence, and the pass after the lock is removed restores it.
+    #[test]
+    fn hs2_6act5y_blocked_passes_back_off_until_the_lock_is_removed() {
+        let report = |n: usize| match n {
+            0..=2 => SyncReport::Blocked,
+            _ => SyncReport::UpToDate,
+        };
+        let times = pass_times(&[(500, Gone)], report);
+        assert_eq!(times, [0, 60, 180, 420, 450, 480]);
+    }
+
     #[test]
     fn next_delay_backs_off_on_offline_and_resets_otherwise() {
         let base = Duration::from_secs(30);
@@ -441,6 +458,25 @@ mod tests {
         assert_eq!(next_delay(base, base * 2, &rejected), base * 4);
         let stalled = vec![("s".into(), SyncReport::RebaseInProgress)];
         assert_eq!(next_delay(base, base * 2, &stalled), base);
+        // HS2-6ACT5Y: a Git lock backs off pass after pass, capped, and a pass that syncs
+        // after the lock is removed returns to the base cadence.
+        let blocked = vec![("s".into(), SyncReport::Blocked)];
+        assert_eq!(next_delay(base, base, &blocked), base * 2);
+        assert_eq!(next_delay(base, base * 2, &blocked), base * 4);
+        assert_eq!(next_delay(base, MAX_BACKOFF, &blocked), MAX_BACKOFF);
+        let mixed = vec![
+            ("a".into(), SyncReport::UpToDate),
+            ("b".into(), SyncReport::Blocked),
+        ];
+        assert_eq!(next_delay(base, base, &mixed), base * 2);
+        let recovered = vec![(
+            "s".into(),
+            SyncReport::Synced {
+                pulled: true,
+                pushed: false,
+            },
+        )];
+        assert_eq!(next_delay(base, MAX_BACKOFF, &recovered), base);
     }
 
     /// HS2-KKFEY5: the loop announces each rise across a limit exactly once, re-announces

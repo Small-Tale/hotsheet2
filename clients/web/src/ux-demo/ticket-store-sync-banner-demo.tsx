@@ -46,6 +46,17 @@ const REPAIR_ASKED: TicketStoreSyncHealth = {
   ai_help: { outcome: 'started', mode: 'start', tool: 'codex', ticket: 'HS2-4KQ7RT', asked_at: '2026-11-13T08:00:00Z' },
 };
 
+const BLOCKED: TicketStoreSyncHealth = {
+  ...BASE,
+  state: 'blocked',
+  unpublished_commits: 2,
+  consecutive_failures: 3,
+  reason:
+    'a Git lock file blocked sync during the pre-sync check: .git/index.lock (created 3 hours ago). Git leaves a lock behind when one of its processes crashes or is killed; the store was not merged.',
+  next_action:
+    "No ticket merge conflict was found. Make sure no Git process is running in the store (an editor's Git integration, a terminal, or another Hot Sheet), then remove the stale lock file and run `hotsheet-cli sync`. Hot Sheet never removes a Git lock by itself.",
+};
+
 const OFFLINE: TicketStoreSyncHealth = {
   ...BASE,
   state: 'offline',
@@ -71,6 +82,13 @@ export function TicketStoreSyncBannerDemo() {
         viewport={{ width: 'full' }}
       >
         {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', STALLED]) })}
+      </CatalogExample>
+      <CatalogExample
+        label="Stale Git Lock"
+        note="A Git lock file a crashed Git process left behind has blocked several sync attempts (HS2-6ACT5Y)."
+        viewport={{ width: 'full' }}
+      >
+        {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', BLOCKED]) })}
       </CatalogExample>
       <CatalogExample
         label="AI Repair Started"

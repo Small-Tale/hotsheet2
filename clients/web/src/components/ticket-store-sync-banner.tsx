@@ -6,16 +6,17 @@ import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notificati
 import { formatBytes } from './repository-size';
 import { ShellBanner } from './shell-banner';
 
-/** Offline passes in a row before being offline is a persistent failure (mirrors the server's
- * `PERSISTENT_OFFLINE_FAILURES`), so a momentary network blip never raises the strip. */
+/** Offline (or Git-lock-blocked, HS2-6ACT5Y) passes in a row before the state is a persistent failure (mirrors
+ * the server's `PERSISTENT_OFFLINE_FAILURES`), so a momentary network blip or a Git command running beside sync
+ * never raises the strip. */
 export const PERSISTENT_OFFLINE_FAILURES = 3;
 
 type FailingStore = TicketStoreSyncReport['stores'][number];
 
 /**
  * The project's ticket stores whose changes are not reaching their remote (HS2-ADHFKZ): a push the
- * remote refused, a conflict, an unfinished rebase, a required history recovery, or an outage that
- * has persisted. A local-only store or one waiting for its next pass is not failing.
+ * remote refused, a conflict, an unfinished rebase, a required history recovery, or an outage or a Git lock
+ * (HS2-6ACT5Y) that has persisted. A local-only store or one waiting for its next pass is not failing.
  */
 export function failingTicketStores(
   report: TicketStoreSyncReport | undefined,
@@ -51,6 +52,7 @@ function isPublicationFailure(health: TicketStoreSyncHealth): boolean {
     case 'history_recovery_required':
       return true;
     case 'offline':
+    case 'blocked':
       return health.consecutive_failures >= PERSISTENT_OFFLINE_FAILURES;
     case 'not_repository':
     case 'no_remote':
@@ -75,6 +77,9 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
       return 'An unfinished rebase or merge in the store needs a decision before sync can continue.';
     case 'history_recovery_required':
       return "The remote's history was rewritten, so this copy must be recovered first.";
+    case 'blocked':
+      // HS2-6ACT5Y: the server's reason names the lock files and their age.
+      return health.reason ? sentence(health.reason) : 'A Git lock file in the store is blocking sync.';
     case 'offline':
     case 'not_repository':
     case 'no_remote':
@@ -100,6 +105,11 @@ export function aiHelpSentence(help: TicketStoreAiHelp): string {
     case 'ticket_only':
       return 'Hot Sheet could not ask an AI to repair it.';
   }
+}
+
+/** The server's reason as a sentence: its first letter capitalized. */
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function unpublishedSentence(count: number): string {

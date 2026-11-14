@@ -42,6 +42,15 @@ const REJECTED = health('rejected', {
   next_action: 'Move the oversized file to Git LFS, then run `hotsheet-cli sync`.',
 });
 
+const BLOCKED = health('blocked', {
+  unpublished_commits: 2,
+  consecutive_failures: PERSISTENT_OFFLINE_FAILURES,
+  reason:
+    'a Git lock file blocked sync during the pre-sync check: .git/index.lock (created 3 hours ago). Git leaves a lock behind when one of its processes crashes or is killed; the store was not merged.',
+  next_action:
+    "No ticket merge conflict was found. Make sure no Git process is running in the store (an editor's Git integration, a terminal, or another Hot Sheet), then remove the stale lock file and run `hotsheet-cli sync`. Hot Sheet never removes a Git lock by itself.",
+});
+
 describe('failingTicketStores (HS2-ADHFKZ)', () => {
   it('lists only stores whose publication is failing, across every state', () => {
     const states: Array<[TicketStoreSyncState, boolean]> = [
@@ -53,6 +62,7 @@ describe('failingTicketStores (HS2-ADHFKZ)', () => {
       ['offline', false],
       ['rejected', true],
       ['conflict', true],
+      ['blocked', false],
       ['rebase_in_progress', true],
       ['history_recovery_required', true],
     ];
@@ -66,6 +76,13 @@ describe('failingTicketStores (HS2-ADHFKZ)', () => {
     const at = health('offline', { consecutive_failures: PERSISTENT_OFFLINE_FAILURES });
     expect(failingTicketStores(report(['s', below]))).toEqual([]);
     expect(failingTicketStores(report(['s', at]))).toHaveLength(1);
+  });
+
+  it('treats a Git lock as failing once it has persisted, and clears when the lock is removed (HS2-6ACT5Y)', () => {
+    const once = health('blocked', { consecutive_failures: 1, reason: BLOCKED.reason });
+    expect(failingTicketStores(report(['s', once]))).toEqual([]);
+    expect(failingTicketStores(report(['s', BLOCKED]))).toHaveLength(1);
+    expect(failingTicketStores(report(['s', health('synced')]))).toEqual([]);
   });
 
   it('clears when the store recovers (failure, then synced)', () => {
@@ -88,6 +105,14 @@ describe('syncFailureSummary (HS2-ADHFKZ)', () => {
     expect(syncFailureSummary(health('history_recovery_required'))).toContain('must be recovered');
     expect(syncFailureSummary(health('offline', { consecutive_failures: 5 }))).toContain('5 sync attempts');
   });
+
+  it('names the Git lock from the server reason, never a conflict (HS2-6ACT5Y)', () => {
+    const summary = syncFailureSummary(BLOCKED);
+    expect(summary).toMatch(/^A Git lock file blocked sync/);
+    expect(summary).toContain('.git/index.lock (created 3 hours ago)');
+    expect(summary).not.toContain('merged automatically');
+    expect(syncFailureSummary(health('blocked'))).toBe('A Git lock file in the store is blocking sync.');
+  });
 });
 
 describe('TicketStoreSyncBanner (HS2-ADHFKZ)', () => {
@@ -107,6 +132,15 @@ describe('TicketStoreSyncBanner (HS2-ADHFKZ)', () => {
     expect(html).toContain('cloud-alert');
     // The raw Git output stays out of the strip; the CLI status shows it.
     expect(html).not.toContain('GH001');
+  });
+
+  it('shows a persistent Git lock with its file and the safe recovery (HS2-6ACT5Y)', () => {
+    const html = String(TicketStoreSyncBanner({ report: report(['web.hs2', BLOCKED]) }));
+    expect(html).toContain('Ticket store web.hs2 is not publishing changes');
+    expect(html).toContain('.git/index.lock');
+    expect(html).toContain('2 local changes are not published');
+    expect(html).toContain('no Git process is running');
+    expect(html).not.toContain('changed on both sides');
   });
 
   it('summarizes several failing stores', () => {

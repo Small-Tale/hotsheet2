@@ -695,7 +695,10 @@ pub(crate) fn cmd_sync(
         ),
         // HS2-ADHFKZ: failures that retrying cannot fix exit non-zero with the recorded
         // reason and next step, so a headless caller sees the same state as the app.
+        // HS2-6ACT5Y: a Git lock names the lock files and the safe recovery, never a
+        // ticket merge conflict.
         SyncReport::Rejected
+        | SyncReport::Blocked
         | SyncReport::RebaseInProgress
         | SyncReport::HistoryRecoveryRequired => {
             let health = hotsheet_ticketing::sync_health::health(path);

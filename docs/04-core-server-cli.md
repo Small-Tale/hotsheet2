@@ -257,8 +257,8 @@ HS2-QR1K8R). A stalled rebase or merge is aborted headlessly with
 asks an AI through the same workflow as the server and reports it in `ai_help`;
 `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
 (§2.12.4).
-`hotsheet-cli sync` exits non-zero for `rejected`, `rebase_in_progress`, and
-`history_recovery_required`. The background loop emits `ticket_store_sync` change
+`hotsheet-cli sync` exits non-zero for `rejected`, `blocked` (a Git lock file,
+HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
 
 **Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
