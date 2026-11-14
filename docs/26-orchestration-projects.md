@@ -2468,9 +2468,10 @@ person took over still runs, so it still counts until it stops.
 
 **Tool setup in the target checkout (HS2-WEFJV8).** The tool starts in the target
 checkout and reads its MCP, instruction and hook configuration from there. The
-drawer's launch path sets up the store of the server that serves it, which is a
+drawer's launch path once set up the store of the server that serves it, which is a
 different directory whenever the target checkout is not that store, so a target
-nobody had opened in a client started with none of its configuration. Before every
+nobody had opened in a client started with none of its configuration (the drawer's
+launch now sets up the checkout containing its `cwd` too, HS2-MBDKWQ). Before every
 launch the host therefore runs the target project's own headless setup for the one
 tool ([05](05-ai-tool-plugins.md) §5.1a, the same `setup` the CLI runs), in the
 checkout, with the MCP entry pointing at the checkout's linked Git ticket store (the

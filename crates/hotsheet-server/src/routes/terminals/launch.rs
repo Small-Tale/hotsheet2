@@ -232,10 +232,43 @@ fn terminal_launch(
         });
     };
     let root = state.store.root();
-    hotsheet_aitools::launch_safety::assert_no_hs1(root)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    hotsheet_plugins::run_setup_in(root, root, Some(tool), false, None, &state.plugin_dirs)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    // HS2-MBDKWQ: an AI terminal opened in a registered checkout (from the drawer, or by an
+    // orchestrator) starts with that checkout's own MCP, instruction and hook
+    // configuration, set up against the checkout's linked store, and the HS1 launch-safety
+    // check looks at that checkout. Without a cwd in a registered checkout the serving
+    // store is set up, as before.
+    let checkout = req
+        .cwd
+        .as_deref()
+        .and_then(|cwd| super::usage_store::checkout_containing(state, FsPath::new(cwd)));
+    match checkout {
+        Some(checkout) => {
+            let project = FsPath::new(&checkout.root);
+            hotsheet_aitools::launch_safety::assert_no_hs1(project)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+            let store = hotsheet_cli::orchestration::setup_store(&checkout, Some(root))
+                .ok_or_else(|| {
+                    ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "the checkout has no Git ticket store to set the tool up against",
+                    )
+                })?;
+            hotsheet_cli::setup::run_setup_in(
+                &store,
+                project,
+                Some(tool),
+                false,
+                &state.plugin_dirs,
+            )
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+        }
+        None => {
+            hotsheet_aitools::launch_safety::assert_no_hs1(root)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+            hotsheet_plugins::run_setup_in(root, root, Some(tool), false, None, &state.plugin_dirs)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+        }
+    }
     let plugin = hotsheet_plugins::find_in(tool, &state.plugin_dirs)
         .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, format!("unknown tool '{tool}'")))?;
     let launch = plugin.manifest.launch.as_ref().ok_or_else(|| {

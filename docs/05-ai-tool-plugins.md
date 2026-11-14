@@ -1097,11 +1097,14 @@ use to name AI tabs after the provider (HS2-HZK0NK). This is exactly
 the ticket's "initializing AI tools in terminals including setting up MCP and
 similar connections."
 
-That setup runs against the store the server serves, not the terminal's `cwd`. An
-orchestrator-started session in another checkout therefore runs the target
-checkout's own headless setup for its tool first, so the tool finds its
-configuration where it starts ([26](26-orchestration-projects.md) §26.16,
-HS2-WEFJV8); the same for a drawer terminal in another checkout is HS2-MBDKWQ.
+That setup runs in the registered checkout that contains the terminal's `cwd`, against
+that checkout's linked Git ticket store (or the serving store when it links none), and
+the HS1 launch-safety check looks at that checkout (HS2-MBDKWQ). A drawer AI terminal
+opened in another checkout therefore starts with that checkout's MCP, instruction and
+hook configuration, as an orchestrator-started session does, which runs the same setup
+before it launches ([26](26-orchestration-projects.md) §26.16, HS2-WEFJV8). Without a
+`cwd` in a registered checkout, the setup runs in the store the server serves, as
+before.
 
 A plugin may also declare **`[session_push]`** (`mechanism`, `port_args`, `password_env`) so the
 host can message the interactive session its `[launch]` started (HS2-PEJ962). The launch then

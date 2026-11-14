@@ -3161,6 +3161,11 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   names the checkout's own store and not the serving store, the worker id and
   terminal id are the hosted ones, a repeated start launches nothing, and an HS1
   store in the checkout refuses a new start.
+- `remote_servers/session_work.rs # hs2_mbdkwq` opens a drawer AI terminal
+  (`POST /terminals` with `connect` and `cwd`) in that checkout: it starts with the
+  checkout's instruction and MCP files, the MCP entry names the checkout's store, the
+  serving store gets no `.mcp.json`, and an HS1 store in the checkout refuses the
+  launch with 400 (HS2-MBDKWQ).
 - Not verified: a real AI tool reading the files (manual plan); a target on a second
   server (the same hosted code runs there); a headless host's setup through
   `LocalServerSessions` (it calls the same function).

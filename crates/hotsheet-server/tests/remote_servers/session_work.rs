@@ -858,3 +858,62 @@ async fn hs2_yc2p7k_an_orchestrator_started_session_works_its_step_end_to_end() 
         "{log:?}"
     );
 }
+
+/// HS2-MBDKWQ: an AI terminal a person opens from the drawer in another registered
+/// checkout starts with that checkout's own configuration, set up against its linked
+/// store, as an orchestrator-started session does; the serving store is not set up for
+/// it, and the HS1 launch-safety check looks at the checkout.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_mbdkwq_a_drawer_terminal_in_another_checkout_starts_with_its_configuration() {
+    let world = World::new(&[], "", "").await;
+    assert!(!world.project.join("AGENTS.md").exists());
+    assert!(!world.project.join(".mcp.json").exists());
+    let open = |id: &str, cwd: &Path| {
+        super::orchestration::api(
+            world.router.clone(),
+            "POST",
+            "/terminals",
+            json!({"id": id, "connect": REPORT_TOOL, "cwd": cwd}),
+            true,
+        )
+    };
+    let (status, opened) = open("drawer-mbdkwq", &world.project).await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    let report = launch_report(&world.reports, "drawer-mbdkwq");
+    assert_eq!(
+        Path::new(report["cwd"].as_str().unwrap()),
+        world.project.canonicalize().unwrap(),
+        "{report}"
+    );
+    assert_eq!(report["files"]["AGENTS.md"], true, "{report}");
+    assert_eq!(report["files"][".mcp.json"], true, "{report}");
+    // The checkout's MCP entry points at its own linked store, never the serving store,
+    // and the serving store's directory got no project configuration for this launch.
+    let mcp = std::fs::read_to_string(world.project.join(".mcp.json")).unwrap();
+    assert!(
+        mcp.contains(
+            world
+                .project_store
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        ),
+        "{mcp}"
+    );
+    assert!(!mcp.contains(world.server_store.to_str().unwrap()), "{mcp}");
+    assert!(!world.server_store.join(".mcp.json").exists());
+
+    // A checkout that holds an HS1 store is refused before anything launches there, even
+    // though the serving store is clean.
+    std::fs::create_dir_all(world.project.join(".hotsheet/db")).unwrap();
+    std::fs::write(world.project.join(".hotsheet/db/PG_VERSION"), "16").unwrap();
+    let (status, refused) = open("drawer-mbdkwq-hs1", &world.project).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    let names: Vec<Value> = drawer(&world.router)
+        .await
+        .into_iter()
+        .map(|tab| tab["id"].clone())
+        .collect();
+    assert!(!names.contains(&json!("drawer-mbdkwq-hs1")), "{names:?}");
+}
