@@ -12,12 +12,13 @@
 //! A peer without the route (an older server) leaves the gate to this machine's own
 //! adapter, as before. A peer that cannot be reached leaves the gate as it stands; the
 //! follower backs off instead of asking again at once.
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use hotsheet_jobs::GITHUB_ACTIONS_KIND;
 use hotsheet_ticketing::orchestration::{
-    CiScope, Gate, GateError, GateEvidence, GateKind, GateReading, GateState, TargetDestination,
-    TargetOpError, valid_commit,
+    AuditOutcome, AuditRecord, CiScope, Gate, GateError, GateEvidence, GateKind, GateReading,
+    GateState, TargetDestination, TargetOpError, valid_commit,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,6 +85,42 @@ pub(super) fn peer_unsupported(error: &OrchestrationError) -> bool {
         error,
         OrchestrationError::TargetOperation(TargetOpError::PeerUnsupported)
     )
+}
+
+/// HS2-K2YE6A: the audit action of a hosted watch this machine refused.
+pub const HOSTED_GATE_WATCH_ACTION: &str = "hosted_gate_watch";
+
+/// `owner/name` from a Git remote URL in any of its usual spellings, lowercased.
+fn repository_of(url: &str) -> Option<String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    let path = match trimmed.split_once("://") {
+        Some((_, rest)) => rest.split_once('/')?.1,
+        // The scp-like form: git@host:owner/name
+        None => trimmed.split_once(':')?.1,
+    };
+    let mut parts = path.rsplit('/');
+    let (name, owner) = (parts.next()?, parts.next()?);
+    (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}").to_ascii_lowercase())
+}
+
+/// HS2-K2YE6A: the repositories a hosted checkout's own Git remotes name. A checkout
+/// that is not a Git repository, or has no remote, names none.
+pub(super) fn checkout_repositories(root: &Path) -> Vec<String> {
+    let Ok(output) = hotsheet_ticketing::git::command_in(root)
+        .args(["config", "--get-regexp", r"^remote\..*\.url$"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.split_once(' ').map(|(_, url)| url))
+        .filter_map(repository_of)
+        .collect()
 }
 
 /// The gate a hosting machine reads for a request: its own adapter needs only the
@@ -154,14 +191,39 @@ impl OrchestrationRuntime {
     /// this machine's provider credentials. Idempotent like a local link: the same
     /// watch again starts nothing. Observing only, so it is ordinary authenticated
     /// data like the other hosted reads; the orchestrating machine passed its own gate.
+    ///
+    /// HS2-K2YE6A: the watch uses this machine's provider credentials, so it is only
+    /// for a repository the hosted checkout's own Git remotes name. Any other is
+    /// refused with `gate_repository_mismatch` and recorded in this checkout's audit
+    /// journal, before anything is started.
     pub fn hosted_gate_watch(
         &self,
         checkout_id: &str,
         watch: HostedGateWatch,
+        tx: &mut Transaction<'_>,
     ) -> Result<HostedGate, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
         let provider = self.hosted_ci_provider()?;
         let gate = hosted_record(&checkout.id, &watch)?;
+        let wanted = watch.repository.to_ascii_lowercase();
+        if !checkout_repositories(Path::new(&checkout.root)).contains(&wanted) {
+            let refused = GateError::RepositoryMismatch;
+            let _ = self.audit_record(
+                &checkout.id,
+                AuditRecord {
+                    at_ms: tx.clock.now_ms(),
+                    actor_role: None,
+                    actor_id: None,
+                    target_id: None,
+                    action: HOSTED_GATE_WATCH_ACTION.into(),
+                    operation_id: None,
+                    outcome: AuditOutcome::Denied,
+                    reason: Some(refused.code().into()),
+                    permission_id: None,
+                },
+            );
+            return Err(OrchestrationError::Gate(refused));
+        }
         // Before the start: a change in between is then seen by the next wait.
         let cursor = provider.cursor(&checkout.id);
         provider

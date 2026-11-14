@@ -1046,18 +1046,16 @@ test('HS2-WDQZ37 real hosted target gate responses match the OpenAPI contract', 
     expect(before.status).toBe(200);
     matches(gates, 'get', '200', before.body);
     expect(before.body).toMatchObject({ state: 'unknown', reason: 'not_watched' });
-    // Watching starts the Job here (no monitor runs in a test build) and is idempotent.
-    const started = await send('POST', hosted, watch);
-    expect(started.status).toBe(200);
-    matches(gates, 'post', '200', started.body);
-    expect(started.body.state).toBe('pending');
-    expect(typeof started.body.watch_ref).toBe('string');
-    const again = await send('POST', hosted, watch);
-    expect(again.body.watch_ref).toBe(started.body.watch_ref);
-    // An older cursor is answered at once; the current one waits for a change.
-    const replayed = await send('GET', `${hosted}?${query}&after=0&wait_ms=8000`);
+    // HS2-K2YE6A: the fixture checkout has no Git remote naming the repository, so the
+    // host refuses to watch it with its credentials, by the gate's own code.
+    const refused = await send('POST', hosted, watch);
+    expect(refused.status).toBe(409);
+    matches(gates, 'post', 'default', refused.body);
+    expect(refused.body.code).toBe('gate_repository_mismatch');
+    // Without a cursor the reading is answered at once; with the current one it waits.
+    const replayed = await send('GET', `${hosted}?${query}&wait_ms=8000`);
     matches(gates, 'get', '200', replayed.body);
-    expect(replayed.body.watch_ref).toBe(started.body.watch_ref);
+    expect(replayed.body.reason).toBe('not_watched');
     const cursor = replayed.body.cursor as number;
     const asked = Date.now();
     const waited = await send('GET', `${hosted}?${query}&after=${cursor}&wait_ms=300`);
@@ -1072,7 +1070,7 @@ test('HS2-WDQZ37 real hosted target gate responses match the OpenAPI contract', 
     expect(missing.status).toBe(400);
     matches(gates, 'get', 'default', missing.body);
     const odd = await send('POST', hosted, { ...watch, repository: 'not a repository' });
-    expect(odd.status).toBe(422);
+    expect(odd.status).toBe(409);
     matches(gates, 'post', 'default', odd.body);
   } finally {
     await server.stop();

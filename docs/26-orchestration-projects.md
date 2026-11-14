@@ -1794,7 +1794,13 @@ repository, workflow, branch, again}` starts or finds the watch Job in the hosti
   (`MAX_HOSTED_GATE_WAIT_MS`, under the transport's read timeout); an older cursor is
   answered at once, so a reconnect misses nothing. Neither starts anything but the
   watch and its observer. Both are ordinary authenticated project data: they only
-  observe, and the orchestrating machine passed its own gate (`gates_observe`) first.
+  observe, and the orchestrating machine passed its own gate (`gates_observe`) first. The watch
+  uses the hosting machine's provider credentials, so it is only for a repository
+  the hosted checkout's own Git remotes name (`owner/name`, any URL spelling, case
+  ignored). Any other is refused with `gate_repository_mismatch` (409) before
+  anything starts, and the refusal is recorded in that checkout's audit journal on
+  the host as `hosted_gate_watch` `denied` (HS2-K2YE6A); the orchestrating machine
+  answers its link with the same code.
 - **Orchestrating half.** `gate link` asks the host to watch; `gate sync` and the gate
   follower read through the hosted route and wait on the host's long poll instead of
   the local Job store. A reading is recorded exactly as a local adapter reading is

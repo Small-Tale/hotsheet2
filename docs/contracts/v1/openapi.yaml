@@ -3594,7 +3594,9 @@ paths:
     description:
       The hosted half of a remote target's CI gate (HS2-WDQZ37). The machine that hosts the target watches the gate's
       commit with its own provider credentials and Job monitor; a remote orchestrator starts the watch and follows it
-      with a cursor. Observing only; ordinary authenticated project data under the caller's device role.
+      with a cursor. Observing only; ordinary authenticated project data under the caller's device role. A watch
+      of a repository the hosted checkout's own Git remotes do not name is refused with `gate_repository_mismatch`
+      (409) and audited on the host (HS2-K2YE6A).
     post:
       operationId: watchHostedTargetGate
       requestBody:

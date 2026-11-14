@@ -5,7 +5,7 @@
 use std::time::{Duration, Instant};
 
 use hotsheet_jobs::JobStore;
-use hotsheet_ticketing::orchestration::{GateState, TargetAction};
+use hotsheet_ticketing::orchestration::{GateError, GateState, TargetAction};
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::json;
 
@@ -200,6 +200,17 @@ fn remote(tx: &mut Transaction<'_>) -> Remote {
     }
 }
 
+/// Give a hosted checkout a Git remote.
+fn git_remote(root: &Path, url: &str) {
+    for args in [&["init", "-q"][..], &["remote", "add", "origin", url][..]] {
+        let status = hotsheet_ticketing::git::command_in(root)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+}
+
 fn link(r: &Remote, commit: &str, tx: &mut Transaction<'_>) -> GateView {
     r.runtime
         .gate_link(
@@ -235,13 +246,43 @@ fn hs2_wdqz37_a_remote_targets_ci_gate_is_watched_on_its_host_and_followed_by_cu
     let (a, b) = (sha('a'), sha('b'));
     let host_checkout = r.peer.hosted.target.id.clone();
 
+    // HS2-K2YE6A: the host watches only a repository its own checkout names. Before
+    // the hosted checkout has that remote, the link is refused by the gate's own code,
+    // the host records the refusal and starts nothing.
+    let refused = r.runtime.gate_link(
+        &r.owner,
+        &r.run,
+        serde_json::from_value(json!({"commit": a})).unwrap(),
+        Some(&worker()),
+        &mut tx,
+    );
+    assert!(matches!(
+        refused,
+        Err(OrchestrationError::Gate(GateError::RepositoryMismatch))
+    ));
+    assert!(r.host_jobs().is_empty());
+    let audit =
+        hotsheet_ticketing::orchestration::AuditJournal::new(&r.peer.hosted.home, &host_checkout)
+            .unwrap()
+            .read(0, 50)
+            .unwrap();
+    assert!(audit.entries.iter().any(|entry| {
+        entry.record.action == "hosted_gate_watch"
+            && entry.record.outcome == hotsheet_ticketing::orchestration::AuditOutcome::Denied
+            && entry.record.reason.as_deref() == Some("gate_repository_mismatch")
+    }));
+    git_remote(
+        Path::new(&r.peer.hosted.target.root),
+        "git@github.com:Example/widgets.git",
+    );
+
     // Linking starts the watch on the hosting machine, with its credentials: the Job
     // lives in the host's store and the orchestrating machine keeps none.
     let linked = link(&r, &a, &mut tx);
     assert_eq!(linked.gate.state, GateState::Pending);
     let starts = r.calls("/target-gates");
-    assert_eq!(starts.len(), 1);
-    assert_eq!(starts[0].0, "POST");
+    assert_eq!(starts.len(), 2, "the refused start, then this one");
+    assert!(starts.iter().all(|(method, _)| method == "POST"));
     let jobs = r.host_jobs();
     assert_eq!(jobs.len(), 1);
     assert_eq!(linked.gate.watch_ref.as_deref(), Some(jobs[0].id.as_str()));

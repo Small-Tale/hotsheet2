@@ -488,6 +488,10 @@ mod e2e_failures;
 mod e2e_loop;
 #[path = "remote_servers/gates.rs"]
 mod gates;
+// HS2-K2YE6A: the host watches only its checkout's own repository.
+#[cfg(unix)]
+#[path = "remote_servers/hosted_gates.rs"]
+mod hosted_gates;
 #[path = "remote_servers/job_monitor.rs"]
 mod job_monitor;
 #[path = "remote_servers/orchestration.rs"]

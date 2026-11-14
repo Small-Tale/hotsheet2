@@ -615,7 +615,7 @@ impl OrchestrationRuntime {
             }
             // HS2-WDQZ37 hosted half: watch a CI gate here, and long-poll its reading.
             ("POST", ["checkouts", checkout, "target-gates"]) => {
-                value(self.hosted_gate_watch(checkout, decode(body)?)?)
+                value(self.hosted_gate_watch(checkout, decode(body)?, tx)?)
             }
             ("GET", ["checkouts", checkout, "target-gates"]) => {
                 let text = |key| {
