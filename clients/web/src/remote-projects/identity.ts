@@ -17,3 +17,12 @@ export function parseRemoteProjectId(value: string): { bindingId: string; checko
     return undefined;
   }
 }
+
+/** Whether a (possibly URL-encoded) project id names a cross-server tab (HS2-F04J42). */
+export function isRemoteProjectId(project: string): boolean {
+  try {
+    return decodeURIComponent(project).startsWith('remote:');
+  } catch {
+    return project.startsWith('remote:');
+  }
+}

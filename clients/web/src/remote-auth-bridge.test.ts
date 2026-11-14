@@ -390,6 +390,71 @@ describe('HS2-85W6BE / HS2-DXM0YN session grants on a remote-mode bridge', () =>
     expect(check).not.toHaveBeenCalled();
   });
 
+  it('HS2-F04J42 admits only a local-grant session to a cross-server tab and its change polls', async () => {
+    const remote = encodeURIComponent('remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:synthetic');
+    expect(remoteRouteKind(`/__hotsheet/project-api/${remote}/tickets`)).toBe('host');
+    expect(remoteRouteKind('/__hotsheet/project-api/remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:synthetic/tickets')).toBe('host');
+    expect(remoteRouteKind('/__hotsheet/project-api/local-checkout/tickets')).toBe('session');
+    function target(device: Record<string, unknown>) {
+      vi.stubEnv('HOTSHEET_BROWSER_AUTH_MODE', 'remote');
+      const forward = vi.fn<(project: string) => Promise<Response>>(async () => Response.json({ events: [] }));
+      const defaults = Array.from({ length: 8 }, () => undefined) as [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ];
+      const bridge = createDevApp(true, undefined, undefined, ...defaults, forward, undefined, grants(device));
+      return { bridge, forward };
+    }
+    // Plain and admin-only sessions never reach the host owner's peer credentials.
+    for (const device of [{}, { admin: true }]) {
+      const { bridge, forward } = target(device);
+      const tab = await bridge.request(`${ORIGIN}/__hotsheet/project-api/${remote}/tickets`, { headers: { cookie } });
+      expect(tab.status).toBe(404);
+      expect(await tab.text()).not.toContain('Project session is not open');
+      const muxed = await bridge.request(`${ORIGIN}/__hotsheet/change-mux/poll`, {
+        method: 'POST',
+        headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          version: 1,
+          client: 'tab',
+          polls: [
+            { project: decodeURIComponent(remote), timeout_ms: 0 },
+            { project: 'local-checkout', timeout_ms: 0 },
+          ],
+        }),
+      });
+      expect(muxed.status).toBe(200);
+      const { results } = (await muxed.json()) as { results: Array<{ project: string; status: number }> };
+      expect(results.map((result) => [result.project, result.status])).toEqual([
+        [decodeURIComponent(remote), 404],
+        ['local-checkout', 200],
+      ]);
+      expect(forward.mock.calls.map(([project]) => project)).toEqual(['local-checkout']);
+    }
+    // The local grant reaches the tab (no session is open here, so the proxy itself answers).
+    const { bridge, forward } = target({ local: true });
+    const tab = await bridge.request(`${ORIGIN}/__hotsheet/project-api/${remote}/tickets`, { headers: { cookie } });
+    expect(tab.status).toBe(404);
+    expect(await tab.json()).toEqual({ error: 'Project session is not open.' });
+    const muxed = await bridge.request(`${ORIGIN}/__hotsheet/change-mux/poll`, {
+      method: 'POST',
+      headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        version: 1,
+        client: 'tab',
+        polls: [{ project: decodeURIComponent(remote), timeout_ms: 0 }],
+      }),
+    });
+    expect(muxed.status).toBe(200);
+    expect(forward.mock.calls.map(([project]) => project)).toEqual([decodeURIComponent(remote)]);
+  });
+
   it('HS2-HBM3JN admits only a local-grant session to the cross-server desktop registry', async () => {
     for (const path of ['/__hotsheet/remotes', '/__hotsheet/remotes/pair', '/__hotsheet/remotes/synthetic/checkouts'])
       expect(remoteRouteKind(path), path).toBe('host');

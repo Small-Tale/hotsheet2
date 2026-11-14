@@ -82,6 +82,13 @@ and unpaired origins, a missing CSRF cookie, or a dead session;
 `remote-auth-server-integration.test.ts` repeats the proxied open against the real
 server's paired origin.
 
+HS2-F04J42: `clients/web/src/remote-auth-bridge.test.ts` classifies `remote:*` project-api paths as
+host routes and admits only a local-grant session to a cross-server tab and to its HTTP change-mux
+members (plain and admin-only sessions get 404 without forwarding);
+`clients/web/src/terminal-ws-bridge-remote-grant.test.ts` refuses a remote project socket and closes
+a remote change-mux subscription for a plain session, and resolves it for a local session. Manual:
+open a paired server's project from Safari on a remote-mode host.
+
 HS2-H4REBS: `clients/web/src/remote-projects/host.test.ts` accepts an address without a port, refuses
 paths and credentials, and pairs over HTTPS without a CA or a pre-session identity read.
 `clients/web/src/peer-gateway.test.ts` pins the gateway prefixes to the Rust router, forwards a

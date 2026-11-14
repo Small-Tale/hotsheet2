@@ -228,8 +228,11 @@ On a remote-mode host the `/__hotsheet/remotes` routes are host-only: a session
 with the **local** grant manages the registry like the host's own browser, and
 any other session gets 404 and is never offered Remote Project (HS2-HBM3JN). The
 dialog shows the host's JSON error or a readable message for its status. It never
-shows a raw parser error for a reply that is not JSON. Opening a paired server's
-projects from a remote-mode host is HS2-F04J42.
+shows a raw parser error for a reply that is not JSON. The same session opens a
+paired server's projects there: `/__hotsheet/project-api/remote:*`, the remote members
+of both change multiplexers and their WebSockets need the local grant, because a
+cross-server tab rides the host owner's peer credentials. Any other session gets 404,
+a closed subscription or a refused upgrade (HS2-F04J42).
 
 **Remote project open (HS2-3HC9HT).** A remote browser opens projects through
 `POST /__hotsheet/remote/projects/open` rather than the local

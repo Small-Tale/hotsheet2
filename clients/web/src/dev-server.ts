@@ -47,6 +47,7 @@ import {
   selectRemoteProject,
   unselectRemoteProject,
 } from './remote-projects/host';
+import { isRemoteProjectId } from './remote-projects/identity';
 
 /** A remote session's polls ride the browser's own session cookie, as its project-api requests
  * do; the proxy adds the CSRF header from it and never forwards a loopback secret (HS2-ZVSMTZ). */
@@ -61,6 +62,10 @@ export function changePollSessionHeaders(browser: Headers): Headers {
  * (`session`), the admin grant (`management`), or the local grant (`host`). */
 export function remoteRouteKind(path: string): 'session' | 'management' | 'host' {
   if (path.startsWith('/__hotsheet/remote-auth/owner')) return 'management';
+  // A cross-server tab rides this host owner's peer credentials, so it needs the local grant
+  // (HS2-F04J42).
+  const project = /^\/__hotsheet\/project-api\/([^/]+)/.exec(path)?.[1];
+  if (project !== undefined && isRemoteProjectId(project)) return 'host';
   const remote =
     path === '/__hotsheet/checkouts' ||
     path === REMOTE_PROJECT_OPEN_PATH ||
@@ -69,6 +74,15 @@ export function remoteRouteKind(path: string): 'session' | 'management' | 'host'
     path.startsWith('/__hotsheet/project-api/') ||
     ['/__hotsheet/remote-auth/me', '/__hotsheet/remote-auth/rotate', '/__hotsheet/remote-auth/logout'].includes(path);
   return remote ? 'session' : 'host';
+}
+
+/** The local grant the bridge middleware verified for a request on a remote-mode host (HS2-F04J42). */
+const verifiedLocalGrant = new WeakSet<Request>();
+
+/** Whether this request may reach a cross-server tab: always on a local-mode host, otherwise only
+ * when its session carries the local grant. */
+export function mayUseRemoteProjects(request: Request): boolean {
+  return !remoteBrowserAuthRequired() || verifiedLocalGrant.has(request);
 }
 
 /** The grants the bridge reads from a `/remote-auth/me` answer; anything missing is not granted. */
@@ -133,6 +147,7 @@ export function createDevApp(
       return context.json({ error: 'Remote session required.' }, 401);
     }
     const device = remoteSessionGrants(await checked.json().catch(() => undefined));
+    if (device.local) verifiedLocalGrant.add(context.req.raw);
     // Device management needs the admin grant (HS2-DXM0YN); the server checks it again.
     if (route === 'management' && !device.admin) return context.json({ error: 'Administrator access required.' }, 403);
     // Host-only routes (folder chooser, open by path, setup) need the local grant.
@@ -441,7 +456,11 @@ export function createDevApp(
     const request = parseChangeMuxRequest(body);
     if (typeof request === 'string') return context.json({ error: request }, 400);
     const browser = context.req.raw.headers;
-    const forward: ChangeMuxForward = (project, path, signal) => forwardChangePoll(project, path, signal, browser);
+    const remoteAllowed = mayUseRemoteProjects(context.req.raw);
+    const forward: ChangeMuxForward = (project, path, signal) =>
+      !remoteAllowed && isRemoteProjectId(project)
+        ? Promise.resolve(Response.json({ error: 'Project session is not open.' }, { status: 404 }))
+        : forwardChangePoll(project, path, signal, browser);
     return context.json(await multiplexChangePolls(request, forward, context.req.raw.signal));
   });
   app.all('/__hotsheet/project-api/:project/*', async (context) => {
