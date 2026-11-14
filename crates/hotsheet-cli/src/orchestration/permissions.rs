@@ -92,6 +92,70 @@ pub struct Remembered {
     pub also_allowed: Vec<String>,
 }
 
+/// HS2-E16FWJ: the directory a runtime touches whenever its permission ledger changes
+/// (a request filed, answered, remembered or forgotten), so a server on this machine
+/// shows a request a headless CLI filed, or settles one it answered, without waiting
+/// for a client to read the pending permissions.
+pub const PERMISSION_SIGNAL_DIRECTORY: &str = "orchestration-permission-signal";
+
+/// The permission signal's directory under a machine home.
+pub fn permission_signal_directory(home: &std::path::Path) -> std::path::PathBuf {
+    home.join(PERMISSION_SIGNAL_DIRECTORY)
+}
+
+/// The permission signal's current token; `None` before the first change.
+pub fn permission_signal_token(home: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(permission_signal_directory(home).join("token")).ok()
+}
+
+/// HS2-E16FWJ: waits for the permission signal to change. It holds one platform file
+/// watcher for its lifetime; every wait also re-checks the token locally at least once
+/// a second, so a missed file event cannot strand it. It never makes a request.
+pub struct PermissionSignalWaiter {
+    home: std::path::PathBuf,
+    seen: Option<String>,
+    waiter: hotsheet_jobs::ChangeWaiter,
+}
+
+impl std::fmt::Debug for PermissionSignalWaiter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PermissionSignalWaiter")
+            .field("seen", &self.seen)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PermissionSignalWaiter {
+    /// Start watching `home`'s permission signal; a change already written counts as
+    /// seen.
+    pub fn new(home: &std::path::Path) -> std::io::Result<Self> {
+        let waiter = hotsheet_jobs::ChangeWaiter::new(&permission_signal_directory(home))?;
+        Ok(Self {
+            home: home.to_path_buf(),
+            seen: permission_signal_token(home),
+            waiter,
+        })
+    }
+
+    /// Wait at most `timeout` for the signal to change since the last change seen.
+    /// Returns whether it changed.
+    pub fn wait(&mut self, timeout: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let token = permission_signal_token(&self.home);
+            if token != self.seen {
+                self.seen = token;
+                return true;
+            }
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            self.waiter.wait(remaining);
+        }
+    }
+}
+
 /// The sentence for an action on a target, by identifiers and labels only.
 pub fn permission_summary(
     action: PermissionAction,
@@ -121,6 +185,30 @@ impl OrchestrationRuntime {
     pub fn with_permission_prompt(mut self, prompt: Arc<dyn PermissionPrompt>) -> Self {
         self.prompt = prompt;
         self
+    }
+
+    /// HS2-E16FWJ: the directory this runtime's permission signal is written in.
+    pub fn permission_signal_dir(&self) -> std::path::PathBuf {
+        permission_signal_directory(&self.home)
+    }
+
+    /// HS2-E16FWJ: the permission signal's current token; `None` before any change.
+    pub fn permission_signal_now(&self) -> Option<String> {
+        permission_signal_token(&self.home)
+    }
+
+    /// HS2-E16FWJ: a waiter on this runtime's permission signal.
+    pub fn permission_signal_waiter(&self) -> std::io::Result<PermissionSignalWaiter> {
+        PermissionSignalWaiter::new(&self.home)
+    }
+
+    /// HS2-E16FWJ: tell every server on this machine that the permission ledger
+    /// changed. Best effort: a missed signal is caught up by the next client read.
+    pub(super) fn permission_signal(&self) {
+        let directory = permission_signal_directory(&self.home);
+        if std::fs::create_dir_all(&directory).is_ok() {
+            let _ = std::fs::write(directory.join("token"), ulid::Ulid::new().to_string());
+        }
     }
 
     /// Labels of the owner and of one of its targets. A target that is no longer
@@ -294,6 +382,7 @@ impl OrchestrationRuntime {
             }
             // HS2-XHQ1EH: an answer is news to a scheduler that was waiting on it.
             Self::scheduler_wake_at(&self.home);
+            self.permission_signal();
         }
         Ok(answered)
     }
@@ -344,6 +433,7 @@ impl OrchestrationRuntime {
             if !also_allowed.is_empty() {
                 Self::scheduler_wake_at(&self.home);
             }
+            self.permission_signal();
         }
         Ok(Remembered {
             rule: self.rule_view(rule),
@@ -381,6 +471,7 @@ impl OrchestrationRuntime {
                 permission_id: Some(rule.rule_id.clone()),
             },
         )?;
+        self.permission_signal();
         Ok(rule)
     }
 

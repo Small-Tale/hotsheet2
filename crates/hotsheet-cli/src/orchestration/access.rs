@@ -397,9 +397,14 @@ impl OrchestrationRuntime {
             each_time: each_time(action),
         };
         let asked = self.permission_ledger().ask(&ask, tx)?;
-        if let Asked::Pending { request, .. } = &asked {
+        if let Asked::Pending { request, filed } = &asked {
             // Shown on every ask: a bridge that restarted shows it again.
             self.show_permission(target, request);
+            // HS2-E16FWJ: a request filed here (perhaps by a headless CLI) reaches the
+            // servers on this machine without waiting for a client read.
+            if *filed {
+                self.permission_signal();
+            }
         }
         Ok(decision_of(Some(asked)))
     }

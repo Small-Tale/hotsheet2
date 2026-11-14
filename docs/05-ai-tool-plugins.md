@@ -1468,7 +1468,8 @@ the encrypted vault; `GET /permissions/rules` merges them in (and
 HS2-4K43DK), `DELETE
 /permissions/rules` forgets one, and editing one is refused with 400. Pending
 orchestrator requests are brought in line with the ledger whenever a client reads
-`GET /permissions`, so one filed by a headless CLI appears then.
+`GET /permissions`, and whenever the runtime's permission signal changes (HS2-E16FWJ),
+so one filed or answered by a headless CLI reaches connected clients without a read.
 See [26](26-orchestration-projects.md) §26.7 and §26.28.
 
 **Rule reach, origin, and lifetime (HS2-J6009Z).** These are separate concepts.

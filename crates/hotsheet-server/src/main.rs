@@ -536,6 +536,9 @@ async fn main() -> Result<()> {
     // Follow and reconcile orchestration runs left unfinished by the last run of this
     // server (HS2-WBREDM). Idle when there are none.
     state.spawn_run_recovery();
+    // Show orchestrator permission requests filed by a headless CLI without waiting
+    // for a client read (HS2-E16FWJ). Idle when nothing is filed.
+    state.spawn_permission_follower();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
     // a quiescent restart) stops accepting and tells long waits to finish; open connections

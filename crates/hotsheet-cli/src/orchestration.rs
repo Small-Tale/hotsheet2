@@ -47,8 +47,9 @@ pub use gates::{
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
 pub use permissions::{
-    AnswerPermission, NoPrompt, PermissionList, PermissionPrompt, PromptRequest,
-    RememberPermission, Remembered, RuleView, permission_summary,
+    AnswerPermission, NoPrompt, PERMISSION_SIGNAL_DIRECTORY, PermissionList, PermissionPrompt,
+    PermissionSignalWaiter, PromptRequest, RememberPermission, Remembered, RuleView,
+    permission_signal_directory, permission_signal_token, permission_summary,
 };
 pub use planning::{
     GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,

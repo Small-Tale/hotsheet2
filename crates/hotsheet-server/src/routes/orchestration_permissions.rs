@@ -133,6 +133,67 @@ pub(crate) async fn sync_waiting(state: &AppState) {
     }
 }
 
+impl AppState {
+    /// HS2-E16FWJ: show orchestrator requests that another process on this machine
+    /// filed (a headless CLI, another server), and settle cards it answered, without
+    /// waiting for a client to read `GET /permissions`. One thread per server waits on
+    /// the runtime's permission signal with the platform file watcher; when the signal
+    /// changes it brings the bridge in line with the ledger, which publishes the
+    /// ordinary `permission_asked` and `permission_resolved` nudges. Idle, it makes no
+    /// request and contacts nothing: a local token read at most once per second. It
+    /// ends when the server stops. Call inside the runtime, once per serving process.
+    pub fn spawn_permission_follower(&self) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let (wake_tx, mut wake_rx) = tokio::sync::mpsc::channel::<()>(1);
+        let watcher = self.clone();
+        let watch_handle = handle.clone();
+        let spawned = std::thread::Builder::new()
+            .name("orchestration-permission-signal".into())
+            .spawn(move || {
+                let Ok(runtime) =
+                    crate::routes::orchestration::server_runtime(&watcher, watch_handle)
+                else {
+                    return;
+                };
+                let Ok(mut waiter) = runtime.permission_signal_waiter() else {
+                    return;
+                };
+                // Short waits, so a stopping server ends the thread promptly.
+                while !watcher.is_stopping() && !wake_tx.is_closed() {
+                    if !waiter.wait(std::time::Duration::from_secs(1)) {
+                        continue;
+                    }
+                    // A full channel already holds a pending sync, which reads the
+                    // whole ledger; one more adds nothing.
+                    if let Err(tokio::sync::mpsc::error::TrySendError::Closed(())) =
+                        wake_tx.try_send(())
+                    {
+                        break;
+                    }
+                }
+            });
+        if spawned.is_err() {
+            return;
+        }
+        let state = self.clone();
+        handle.spawn(async move {
+            loop {
+                tokio::select! {
+                    woke = wake_rx.recv() => {
+                        if woke.is_none() {
+                            break;
+                        }
+                        sync_waiting(&state).await;
+                    }
+                    () = state.stopping() => break,
+                }
+            }
+        });
+    }
+}
+
 /// `POST /permissions/{id}` for an orchestrator request: Allow Once (`allow`/`once`),
 /// Always Allow (`allow`/`always`) or Deny (`deny`/`once`). Chat and session answers
 /// and rule review do not apply to it.

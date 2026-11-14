@@ -981,3 +981,112 @@ fn hs2_5jbypv_authorize_reads_again_after_losing_a_race_to_a_concurrent_resolve(
         DenialReason::TargetUnavailable
     );
 }
+
+/// HS2-E16FWJ: every change to the permission ledger writes the permission signal a
+/// server on this machine waits on: a request filed, answered, remembered ahead and
+/// forgotten. Asking again for a request already waiting, reading, and a repeated
+/// answer change nothing and signal nothing. A waiter sees each change once.
+#[test]
+fn hs2_e16fwj_every_ledger_change_signals_the_servers_on_this_machine() {
+    let f = fixture();
+    let mut rng = Rng(400);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let target = reference(&f);
+    bind_local(&f, &mut tx);
+    let token = || f.runtime.permission_signal_now();
+    assert_eq!(token(), None);
+    let mut waiter = f.runtime.permission_signal_waiter().unwrap();
+    assert!(!waiter.wait(std::time::Duration::ZERO));
+    assert_eq!(
+        f.runtime.permission_signal_dir(),
+        f.home.join(PERMISSION_SIGNAL_DIRECTORY)
+    );
+    let ask = |operation: &str, tx: &mut Transaction<'_>| {
+        permission_request(f.runtime.authorize(
+            &target,
+            Some(&ai("worker-1")),
+            act(TargetAction::TicketsWrite, None, op(operation)),
+            tx,
+        ))
+    };
+    // Filing signals; asking again for the same operation does not.
+    let first = ask("op-1", &mut tx);
+    let filed = token().expect("a filed request signals");
+    assert!(waiter.wait(std::time::Duration::ZERO));
+    assert!(!waiter.wait(std::time::Duration::ZERO));
+    assert_eq!(ask("op-1", &mut tx), first);
+    f.runtime.permission_list(&f.owner.id, &mut tx).unwrap();
+    assert_eq!(token().as_deref(), Some(filed.as_str()));
+    assert!(!waiter.wait(std::time::Duration::ZERO));
+    // Answering signals once; the same answer again changes nothing.
+    answer(
+        &f.runtime,
+        &f.owner.id,
+        &first,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
+    let answered = token().unwrap();
+    assert_ne!(answered, filed);
+    answer(
+        &f.runtime,
+        &f.owner.id,
+        &first,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
+    assert_eq!(token().as_deref(), Some(answered.as_str()));
+    // Interleaved: two operations filed, then a rule remembered ahead allows both.
+    ask("op-2", &mut tx);
+    ask("op-3", &mut tx);
+    let before = token().unwrap();
+    let remembered = f
+        .runtime
+        .permission_remember(
+            &f.owner.id,
+            RememberPermission {
+                target_id: target.target_id.clone(),
+                action: PermissionAction::TicketsWrite,
+                tool: None,
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(remembered.also_allowed.len(), 2);
+    let after_remember = token().unwrap();
+    assert_ne!(after_remember, before);
+    // Remembering the same key again is not a change.
+    f.runtime
+        .permission_remember(
+            &f.owner.id,
+            RememberPermission {
+                target_id: target.target_id.clone(),
+                action: PermissionAction::TicketsWrite,
+                tool: None,
+            },
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(token().as_deref(), Some(after_remember.as_str()));
+    // Forgetting signals; the waiter coalesces everything since its last wait.
+    f.runtime
+        .permission_forget(
+            &f.owner.id,
+            &remembered.rule.rule.rule_id,
+            Some(&human()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_ne!(token().as_deref(), Some(after_remember.as_str()));
+    assert!(waiter.wait(std::time::Duration::ZERO));
+    assert!(!waiter.wait(std::time::Duration::from_millis(50)));
+    // Empty then refill: a new operation after the rule is gone asks and signals.
+    let refilled = ask("op-4", &mut tx);
+    assert_ne!(refilled, first);
+    assert!(waiter.wait(std::time::Duration::ZERO));
+}

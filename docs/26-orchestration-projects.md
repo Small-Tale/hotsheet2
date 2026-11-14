@@ -4200,8 +4200,16 @@ is needed to answer one.
   be revoked there; editing its match, decision or scope is disabled.
 - **Settling.** A request answered anywhere else (the CLI, another client, a rule
   remembered ahead) settles the card with `permission_resolved`. A request filed by
-  a headless CLI while no server ran appears when a client next reads the pending
-  permissions.
+  a headless CLI while no server ran appears when the server starts or a client next
+  reads the pending permissions.
+- **Live from the CLI** (HS2-E16FWJ). Every change to the ledger (a request filed,
+  answered, remembered or forgotten) writes a fresh token to
+  `${HOTSHEET_HOME}/orchestration-permission-signal/token`. Each server waits on it
+  with the platform file watcher and, when it changes, brings its bridge in line
+  with the ledger. A request a headless CLI files therefore reaches connected
+  clients as the ordinary `permission_asked` nudge, and a CLI answer settles the
+  card, without any client reading `GET /permissions`. Idle, the follower publishes
+  nothing and makes no request; it reads the local token at most once a second.
 
 Remembered orchestrator rules live in the machine-local orchestration ledger, not in
 the encrypted AI permission vault; `GET /permissions/rules` merges them into the

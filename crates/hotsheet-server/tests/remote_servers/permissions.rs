@@ -802,3 +802,128 @@ async fn hs2_4k43dk_orchestrator_rules_stay_listed_while_the_vault_is_locked_or_
         );
     }
 }
+
+/// The next permission nudge on the server's event bus, if one arrives within `wait`.
+async fn next_permission_event(
+    events: &mut tokio::sync::broadcast::Receiver<hotsheet_server::ChangeEvent>,
+    wait: std::time::Duration,
+) -> Option<String> {
+    tokio::time::timeout(wait, async {
+        loop {
+            match events.recv().await {
+                Ok(event) if event.kind.starts_with("permission_") => return event.kind,
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    return String::new();
+                }
+            }
+        }
+    })
+    .await
+    .ok()
+}
+
+/// HS2-E16FWJ: a request a headless CLI files reaches the server's bridge, and so its
+/// clients, without any client reading `GET /permissions`; a CLI answer settles the
+/// card the same way. Idle, the follower publishes nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_e16fwj_a_cli_filed_request_reaches_clients_without_a_read() {
+    let fixture = self_target().await;
+    let home = fixture.root_path.join("home");
+    let source = fixture.root_path.join("store");
+    let mut events = fixture.host.subscribe();
+    fixture.host.spawn_permission_follower();
+    let orchestrator_cards = || {
+        fixture
+            .host
+            .permission_bridge()
+            .pending()
+            .into_iter()
+            .filter(|request| request.orchestrator.is_some())
+            .collect::<Vec<_>>()
+    };
+    // Idle: nothing is published.
+    let quiet = std::time::Duration::from_millis(1_500);
+    assert_eq!(next_permission_event(&mut events, quiet).await, None);
+    let ai_cli = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "worker-1",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let human_cli = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let file = |operation: &str| {
+        cli_failure(
+            &home,
+            &ai_cli,
+            &[
+                "ticket",
+                "create",
+                "--project",
+                &fixture.checkout_id,
+                "--ticket",
+                &fixture.goal,
+                "--target",
+                TARGET,
+                "--connection",
+                &fixture.connection,
+                "--operation-id",
+                operation,
+                "--title",
+                "Headless work",
+            ],
+        )
+    };
+    let wait = std::time::Duration::from_secs(15);
+    assert!(file("op-cli-1").contains("permission_required"));
+    assert_eq!(
+        next_permission_event(&mut events, wait).await.as_deref(),
+        Some("permission_asked")
+    );
+    let cards = orchestrator_cards();
+    assert_eq!(cards.len(), 1);
+    let request_id = cards[0].orchestrator.as_ref().unwrap().request_id.clone();
+    // Asking again for the same operation files nothing and shows no second card.
+    assert!(file("op-cli-1").contains("permission_required"));
+    assert_eq!(next_permission_event(&mut events, quiet).await, None);
+    assert_eq!(orchestrator_cards().len(), 1);
+    // A CLI answer settles the card on its own.
+    cli_named(
+        &home,
+        &human_cli,
+        &[
+            "permission",
+            "answer",
+            &request_id,
+            "--project",
+            &fixture.checkout_id,
+            "--answer",
+            "deny",
+        ],
+    );
+    assert_eq!(
+        next_permission_event(&mut events, wait).await.as_deref(),
+        Some("permission_resolved")
+    );
+    assert!(orchestrator_cards().is_empty());
+    // Empty, then refilled by a new operation; then idle again.
+    assert!(file("op-cli-2").contains("permission_required"));
+    assert_eq!(
+        next_permission_event(&mut events, wait).await.as_deref(),
+        Some("permission_asked")
+    );
+    assert_eq!(orchestrator_cards().len(), 1);
+    assert_eq!(next_permission_event(&mut events, quiet).await, None);
+    fixture.host.begin_stopping();
+}
