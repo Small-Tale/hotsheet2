@@ -4,7 +4,12 @@ import { ApiHttpError } from '../api';
 import type { Project } from '../interactions/types';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { demoTimeline } from '../ux-demo/orchestration-fixtures';
-import { createServerPlanner, orchestrationPersonId, startOrchestrationTimelineStream } from './orchestration-view';
+import {
+  coalescedPlacement,
+  createServerPlanner,
+  orchestrationPersonId,
+  startOrchestrationTimelineStream,
+} from './orchestration-view';
 
 const versioned = (version: string): OrchestrationTimeline => ({ ...demoTimeline('running'), version });
 
@@ -115,5 +120,65 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     values.set('hotsheet.orchestrationPersonId', 'bad id with spaces');
     expect(orchestrationPersonId(storage)).toMatch(/^person-/);
     expect(orchestrationPersonId(undefined)).toMatch(/^person-/);
+  });
+});
+
+describe('placing the timeline after a resize (HS2-PJ3SE6)', () => {
+  const frames = () => {
+    const pending = new Map<number, () => void>();
+    let next = 0;
+    return {
+      schedule: (callback: () => void) => {
+        pending.set(++next, callback);
+        return next;
+      },
+      cancel: (handle: number) => {
+        pending.delete(handle);
+      },
+      flush: () => {
+        const run = [...pending.values()];
+        pending.clear();
+        for (const callback of run) callback();
+      },
+      size: () => pending.size,
+    };
+  };
+
+  it('keeps a forced request when a timeline update replaces its frame', () => {
+    const clock = frames();
+    const calls: boolean[] = [];
+    const placement = coalescedPlacement(clock.schedule, clock.cancel, (force) => {
+      calls.push(force);
+      return true;
+    });
+    placement.request(true); // the board's width changed
+    placement.request(); // a timeline update arrives before the frame runs
+    expect(clock.size()).toBe(1);
+    clock.flush();
+    expect(calls).toEqual([true]);
+    // Acted on: the next ordinary request is not forced.
+    placement.request();
+    clock.flush();
+    expect(calls).toEqual([true, false]);
+  });
+
+  it('stays forced until a frame can act, and cancels a pending frame', () => {
+    const clock = frames();
+    const calls: boolean[] = [];
+    let ready = false;
+    const placement = coalescedPlacement(clock.schedule, clock.cancel, (force) => {
+      calls.push(force);
+      return ready;
+    });
+    placement.request(true);
+    clock.flush(); // the board is not mounted yet
+    placement.request();
+    ready = true;
+    clock.flush();
+    expect(calls).toEqual([true, true]);
+    placement.request(true);
+    placement.cancel();
+    clock.flush();
+    expect(calls).toEqual([true, true]);
   });
 });

@@ -190,6 +190,34 @@ function parseDetails(
   };
 }
 
+/**
+ * One scheduled frame serves every placement request made before it runs (HS2-PJ3SE6). A request
+ * replaces the pending frame, but a forced request (the board's width changed) is kept until a
+ * frame acts on it: `place` returns false when it could not act yet, and the next frame is then
+ * still forced. Before this, a timeline update right after a resize replaced the resize's forced
+ * frame with an ordinary one that saw the layout already placed and left the old scroll position.
+ */
+export function coalescedPlacement(
+  schedule: (callback: () => void) => number,
+  cancel: (handle: number) => void,
+  place: (force: boolean) => boolean,
+): { request: (force?: boolean) => void; cancel: () => void } {
+  let handle = 0,
+    forced = false;
+  return {
+    request: (force = false) => {
+      forced ||= force;
+      cancel(handle);
+      handle = schedule(() => {
+        if (place(forced)) forced = false;
+      });
+    },
+    cancel: () => {
+      cancel(handle);
+    },
+  };
+}
+
 export function createOrchestrationViewController(dependencies: OrchestrationViewDependencies) {
   const planner = dependencies.planner;
   const clientFor =
@@ -317,7 +345,6 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
    * and again when the board's width changes (a window resize, the inspector opening).
    */
   const placed = new WeakMap<Element, string>();
-  let frame = 0;
   let observed: { track: HTMLElement; observer: ResizeObserver; width: number } | undefined;
   function observe(track: HTMLElement) {
     if (observed?.track === track || typeof ResizeObserver !== 'function') return;
@@ -334,29 +361,35 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     watch.observer.observe(track);
     observed = watch;
   }
-  function placeTimeline(again = false, tries = 8) {
-    if (typeof requestAnimationFrame !== 'function') return;
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => {
+  let tries = 0;
+  const placement = coalescedPlacement(
+    (callback) => requestAnimationFrame(callback),
+    (handle) => {
+      cancelAnimationFrame(handle);
+    },
+    (force) => {
       const view = timeline.value;
       const board = document.querySelector<HTMLElement>(
         '[data-orchestration-view="true"] [data-component="ticket-board"]',
       );
-      if (!view || !board) return;
+      if (!view || !board) return false;
       // A layout switch remounts the board after this frame; wait for the new one.
       if (board.dataset.layout !== (dependencies.mobile() ? 'paged' : 'grid')) {
-        if (tries > 0) placeTimeline(again, tries - 1);
-        return;
+        if (tries > 0) {
+          tries -= 1;
+          placement.request();
+        }
+        return false;
       }
       const columns = [...board.querySelectorAll<HTMLElement>('[data-component="ticket-board-column"]')];
-      if (columns.length === 0) return;
+      if (columns.length === 0) return false;
       let track: HTMLElement | null = columns[0].parentElement;
       while (track && track !== board && !/auto|scroll/.test(getComputedStyle(track).overflowX))
         track = track.parentElement;
-      if (!track || track === board) return;
+      if (!track || track === board) return false;
       observe(track);
       const layout = `${board.dataset.layout}:${columns.map((column) => column.dataset.columnId).join(',')}`;
-      if (!again && placed.get(track) === layout) return;
+      if (!force && placed.get(track) === layout) return true;
       placed.set(track, layout);
       const start = columns.find((column) => column.dataset.columnId === startColumnId(view));
       if (board.dataset.layout === 'paged' && start)
@@ -366,7 +399,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         const clipped = start ? start.getBoundingClientRect().left - track.getBoundingClientRect().left : 0;
         if (clipped < 0) track.scrollLeft += clipped;
       }
-    });
+      return true;
+    },
+  );
+  function placeTimeline(again = false) {
+    if (typeof requestAnimationFrame !== 'function') return;
+    tries = 8;
+    placement.request(again);
   }
   // A layout change (wide to phone and back) places the board again.
   disposers.push(
@@ -584,7 +623,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     dispose() {
       streamStop?.();
       labelReader?.reset();
-      cancelAnimationFrame(frame);
+      if (typeof cancelAnimationFrame === 'function') placement.cancel();
       observed?.observer.disconnect();
       for (const dispose of disposers.splice(0)) dispose();
     },
