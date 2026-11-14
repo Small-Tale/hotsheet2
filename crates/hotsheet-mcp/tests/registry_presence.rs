@@ -8,7 +8,6 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::Duration;
 
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
@@ -50,6 +49,51 @@ fn fake_server(listener: TcpListener, seen: mpsc::Sender<(String, String, String
     });
 }
 
+/// HS2-E5DPQT: what the fake server reports when the shim's stdout closes, which happens
+/// only when the shim (and any host wrapping it) has exited.
+const EXITED: &str = "EXITED";
+
+/// HS2-E5DPQT: report the child's exit on the same channel as the fake server's
+/// requests, by reading its stdout to the end. A wait for a request then ends either way:
+/// with the request, or with the exit that means none is coming. Reading the output also
+/// keeps the child from blocking on a full pipe.
+fn report_exit(child: &mut std::process::Child, seen: &mpsc::Sender<(String, String, String)>) {
+    let mut stdout = child.stdout.take().unwrap();
+    let seen = seen.clone();
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        let _ = stdout.read_to_end(&mut output);
+        let _ = seen.send((
+            EXITED.into(),
+            String::new(),
+            String::from_utf8_lossy(&output).into_owned(),
+        ));
+    });
+}
+
+/// HS2-E5DPQT: the next request the fake server answered, waiting on the request itself
+/// rather than a fixed deadline; the shim exiting first fails the test at once.
+fn next_request(seen: &mpsc::Receiver<(String, String, String)>) -> (String, String, String) {
+    let next = seen.recv().unwrap();
+    assert_ne!(
+        next.0, EXITED,
+        "the shim exited before its request: {}",
+        next.2
+    );
+    next
+}
+
+/// HS2-E5DPQT: the next request after the shim exited. A release request is answered
+/// before the shim can exit, so it is always reported; the exit may be reported first.
+fn request_after_exit(seen: &mpsc::Receiver<(String, String, String)>) -> (String, String, String) {
+    loop {
+        let next = seen.recv().unwrap();
+        if next.0 != EXITED {
+            return next;
+        }
+    }
+}
+
 #[test]
 fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_eof() {
     let home = tempfile::tempdir().unwrap();
@@ -58,7 +102,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();
-    fake_server(listener, tx);
+    fake_server(listener, tx.clone());
 
     let instances = home.path().join("instances");
     std::fs::create_dir(&instances).unwrap();
@@ -88,6 +132,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
+    report_exit(&mut child, &tx);
     let mut stdin = child.stdin.take().unwrap();
     writeln!(
         stdin,
@@ -96,7 +141,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
     .unwrap();
     stdin.flush().unwrap();
 
-    let (route, secret, body) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (route, secret, body) = next_request(&rx);
     assert_eq!(route, "POST /mcp-presence");
     assert_eq!(secret, "registry-secret");
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -106,7 +151,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
 
     drop(stdin);
     assert!(child.wait().unwrap().success());
-    let (route, secret, _) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (route, secret, _) = request_after_exit(&rx);
     assert_eq!(route, format!("DELETE /mcp-presence/{lease}"));
     assert_eq!(secret, "registry-secret");
 }
@@ -158,7 +203,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();
-    fake_server(listener, tx);
+    fake_server(listener, tx.clone());
     let instances = home.path().join("instances");
     std::fs::create_dir(&instances).unwrap();
     std::fs::write(
@@ -187,6 +232,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
+    report_exit(&mut child, &tx);
     let mut stdin = child.stdin.take().unwrap();
     writeln!(
         stdin,
@@ -195,7 +241,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     .unwrap();
     stdin.flush().unwrap();
 
-    let (route, secret, body) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (route, secret, body) = next_request(&rx);
     assert_eq!(route, "POST /mcp-presence");
     assert_eq!(secret, "live-secret");
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -204,7 +250,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
 
     drop(stdin);
     assert!(child.wait().unwrap().success());
-    let (route, secret, _) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (route, secret, _) = request_after_exit(&rx);
     assert_eq!(route, format!("DELETE /mcp-presence/{lease}"));
     assert_eq!(secret, "live-secret");
 }
@@ -221,7 +267,7 @@ fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();
-    fake_server(listener, tx);
+    fake_server(listener, tx.clone());
     let instances = home.path().join("instances");
     std::fs::create_dir(&instances).unwrap();
     std::fs::write(
@@ -258,6 +304,7 @@ fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
+    report_exit(&mut child, &tx);
     let mut stdin = child.stdin.take().unwrap();
     writeln!(
         stdin,
@@ -265,7 +312,7 @@ fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
     )
     .unwrap();
     stdin.flush().unwrap();
-    let (route, secret, body) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (route, secret, body) = next_request(&rx);
     assert_eq!(route, "POST /mcp-presence");
     drop(stdin);
     assert!(child.wait().unwrap().success());
