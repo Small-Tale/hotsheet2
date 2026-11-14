@@ -2658,6 +2658,11 @@ over the same home runs its own loop and followers at once (HS2-KM9CTG). A step 
   session change on another server (§26.9, HS2-257Q2Z);
 - when the time the last pass named in `retry_at_ms` has come.
 
+A change that publishes events and also moves the marker publishes first: defining a
+plan step writes its readiness events, then moves the marker (HS2-1JFVCJ). A follower
+woken by the marker before the event existed ran its pass as a `signal`, and the
+`event` pass that followed decided the same and logged nothing.
+
 Otherwise it waits on the journal and the marker themselves. There is no interval.
 A failed pass, such as an executor that cannot list its sessions, backs off from one
 second, doubling to a minute. A pass whose decisions equal the last logged ones logs

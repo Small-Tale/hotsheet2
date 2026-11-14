@@ -564,6 +564,7 @@ impl OrchestrationRuntime {
         // One gate answer per target project, however many of its tickets are named.
         let mut gates: Vec<(TargetRef, Authorized)> = Vec::new();
         let mut read: Vec<(RunTarget, TicketSeen)> = Vec::new();
+        let mut wake = false;
         let outcome = (|| {
             for target in &wanted {
                 if !gates
@@ -657,8 +658,9 @@ impl OrchestrationRuntime {
             }
             if changed {
                 // HS2-2FG91X: a changed requirement moves no level, so no readiness
-                // event would tell a running scheduler to look again.
-                self.scheduler_wake(owner_id);
+                // event would tell a running scheduler to look again. The wake is
+                // given below, after the levels are published (HS2-1JFVCJ).
+                wake = true;
                 self.readiness_audit(
                     owner_id,
                     &step.target.target_id,
@@ -678,7 +680,15 @@ impl OrchestrationRuntime {
             self.finish(reference, authorized, &outcome, tx)?;
         }
         let step = outcome?;
-        self.readiness_publish(owner_id, tx.clock.now_ms())?;
+        let published = self.readiness_publish(owner_id, tx.clock.now_ms());
+        // HS2-1JFVCJ: wake a running scheduler only once the step's readiness event is
+        // in the run event stream. Woken first, its pass read the new step from the
+        // plan as a `signal` before the event existed, and the `event` pass the event
+        // then caused decided the same and was not logged.
+        if wake {
+            self.scheduler_wake(owner_id);
+        }
+        published?;
         self.readiness(owner_id, &step.step_id, tx)
     }
 

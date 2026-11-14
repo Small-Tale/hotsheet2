@@ -1891,3 +1891,63 @@ fn hs2_sv4smy_scheduler_capacity_reads_are_audited_once_per_window() {
         [AuditOutcome::Allowed, AuditOutcome::Succeeded]
     );
 }
+
+/// HS2-1JFVCJ: a follower waiting while new work is planned is woken by the step's
+/// readiness event, never first by the wake marker. Woken by the marker first, its
+/// pass read the new step as a `signal` before the event existed, and the `event` pass
+/// the event then caused decided the same and logged nothing.
+#[test]
+fn hs2_1jfvcj_planning_new_work_wakes_a_waiting_follower_with_its_event() {
+    tx!(tx);
+    let s = setup(false, &mut tx);
+    let owner = s.owner();
+    set_policy(&s.m, policy(true), &mut tx);
+    let mut state = SchedulerFollowState::default();
+    let started =
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx);
+    assert_eq!(started.trigger, Some("start"));
+    assert_eq!(
+        s.m.runtime
+            .scheduler_follow_step(&owner, &mut state, 0, &mut tx)
+            .trigger,
+        None
+    );
+    let logged = s.log().len();
+    let woken = std::thread::scope(|scope| {
+        let follower = scope.spawn(|| {
+            let mut rng = Rng(900);
+            let mut tx = Transaction {
+                clock: &Clock,
+                rng: &mut rng,
+            };
+            let mut woken = None;
+            // Each step waits on the run event stream and the wake marker; a step that
+            // returns without a pass (a spurious wake-up) is simply taken again.
+            for _ in 0..20 {
+                woken =
+                    s.m.runtime
+                        .scheduler_follow_step(&owner, &mut state, 20_000, &mut tx)
+                        .trigger;
+                if woken.is_some() {
+                    break;
+                }
+            }
+            woken
+        });
+        s.ready("Planned while the follower waits", &mut tx);
+        follower.join().unwrap()
+    });
+    assert_eq!(woken, Some("event"));
+    // That pass read the new work and logged it under the event that caused it.
+    let log = s.log();
+    assert!(log.len() > logged);
+    assert!(
+        log[logged..].iter().all(|record| record.trigger == "event"),
+        "{:?}",
+        log[logged..]
+            .iter()
+            .map(|record| &record.trigger)
+            .collect::<Vec<_>>()
+    );
+}

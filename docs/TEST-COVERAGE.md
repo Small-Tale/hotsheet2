@@ -3066,6 +3066,10 @@ HS2-Y3N3PH` opens an added project's detail in the real shell against the real
   start and waking followers; wind-downs through the gate, by policy and under
   approval; a run's pending CI gate freeing its session; and the follower stepping
   on start, run events, the wake marker and a named retry time, and never otherwise.
+  `tests/scheduler.rs # hs2_1jfvcj` plans a step while a follower waits and shows it
+  is woken by the step's readiness event, never by the wake marker first, so the pass
+  that reads the new work is logged as `event` (HS2-1JFVCJ; it failed 3 of 3 before
+  the fix).
 - `remote_servers/scheduler.rs` uses the owned CLI process with no server running
   (capacity unknown, dry by default, applied with backoff under an automatic
   policy), then a real server behind its bearer: the routes, the loop starting when
