@@ -133,6 +133,35 @@ fn detach(command: &mut Command) {
 
     // Its own process group, so a Ctrl-C in the starting terminal does not reach it.
     command.process_group(0);
+    // HS2-WEYR63: the monitor outlives its launcher by up to its idle exit, so it must hold
+    // nothing of the launcher's but what it is given. On macOS the standard library sets
+    // close-on-exec on a new pipe in a second step, so a process spawned on another thread
+    // in that instant inherits the pipe; the launcher passed such a descriptor on, and a
+    // caller waiting for its output's end waited until the monitor exited. Every descriptor
+    // above stdio that is not close-on-exec is closed in the child before exec.
+    let limit = open_descriptor_limit();
+    // SAFETY: runs in the forked child before exec and makes only fcntl and close calls,
+    // which are async-signal-safe. Close-on-exec descriptors are left alone, so the
+    // standard library's own exec status pipe stays open.
+    unsafe {
+        command.pre_exec(move || {
+            for fd in 3..limit {
+                let flags = libc::fcntl(fd, libc::F_GETFD);
+                if flags >= 0 && flags & libc::FD_CLOEXEC == 0 {
+                    libc::close(fd);
+                }
+            }
+            Ok(())
+        });
+    }
+}
+
+/// The highest descriptor number worth checking, read before the fork.
+#[cfg(unix)]
+fn open_descriptor_limit() -> i32 {
+    // SAFETY: sysconf only reads a system limit.
+    let limit = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
+    i32::try_from(limit.clamp(256, 65_536)).unwrap_or(65_536)
 }
 
 #[cfg(windows)]

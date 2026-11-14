@@ -231,6 +231,53 @@ fn racing_starts_leave_exactly_one_monitor() {
     );
 }
 
+/// HS2-WEYR63: a descriptor the starting process holds without close-on-exec (on macOS a
+/// pipe another thread was creating while this process was spawned) is not passed on to
+/// the monitor. Before, the monitor kept the racing test's output pipe open, so that
+/// start's output ended only when the monitor idled out 30 s later.
+#[test]
+fn the_monitor_inherits_no_descriptor_from_its_starter() {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    let fx = Fixture::new();
+    let mut fds = [0; 2];
+    // SAFETY: pipe fills two new descriptors, which are owned below.
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    // SAFETY: both descriptors were just created by pipe and are owned exactly once.
+    let (read, write) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+    // The write end stays open across exec, as a leaked pipe does; the read end does not.
+    // SAFETY: plain descriptor flag calls on descriptors this test owns.
+    unsafe {
+        assert_eq!(libc::fcntl(write.as_raw_fd(), libc::F_SETFD, 0), 0);
+        assert_eq!(
+            libc::fcntl(read.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC),
+            0
+        );
+        let flags = libc::fcntl(read.as_raw_fd(), libc::F_GETFL);
+        assert_eq!(
+            libc::fcntl(read.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK),
+            0
+        );
+    }
+    let started = fx.start(&[]);
+    assert_eq!(started["started"], json!(true));
+    drop(write);
+    // The starter has exited; with the test's own end closed, only the monitor could still
+    // hold a writer. No writer left reads as end of file, a held one as "try again".
+    let mut byte = 0u8;
+    // SAFETY: reads at most one byte into a local buffer from a descriptor this test owns.
+    let read_bytes = unsafe { libc::read(read.as_raw_fd(), (&raw mut byte).cast(), 1) };
+    assert_eq!(
+        read_bytes,
+        0,
+        "the monitor holds the starter's descriptor: {}",
+        std::io::Error::last_os_error()
+    );
+    assert_eq!(
+        fx.json(&["job", "watch", "status"])["monitor"],
+        started["monitor"]
+    );
+}
+
 #[test]
 fn the_monitor_reports_a_watch_job_to_its_outcome_and_then_exits() {
     let fx = Fixture::new();
