@@ -8,6 +8,7 @@ pub(crate) mod checkout_tickets;
 pub(crate) mod checkout_workers;
 pub(crate) mod checkouts;
 pub(crate) mod claims;
+pub(crate) mod feedback_journal;
 pub(crate) mod feedback_session;
 pub(crate) mod groups;
 pub(crate) mod guidance;

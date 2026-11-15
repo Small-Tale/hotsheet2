@@ -457,6 +457,19 @@ PATCH on a synthetic Started GitHub issue: a human note returns a start offer wi
 exactly one provider write, a foreign session cannot be chosen, and an AI note does
 not notify.
 
+HS2-WKRFD5 covers the delivery journal in
+`crates/hotsheet-server/src/routes/feedback_journal.rs` (round trip, empty then
+refill, non-ULID ids, a corrupt entry refusing, write failure then restart then
+retry, and a restart mid-send reported as uncertain) and in
+`feedback_session.rs` (a queued drive turn journals nothing until it is sent, so a
+restart while queued may resend; a failed send clears the intent; an unwritable
+journal sends nothing). `hs2_wkrfd5_a_failed_delivery_record_never_resends_across_retry_and_restart`
+in `crates/hotsheet-server/tests/session_messages.rs` drives the real chooser POST
+with a fake push session while the store refuses note writes: the message is sent
+once, a same-process retry and a post-restart retry are refused, the restart
+reconciles the delivery note, an interrupted send is recorded as uncertain with the
+`feedback_delivery_uncertain` code, and the next note delivers normally.
+
 HS2-E9SR7R covers the Workers read projection, source-qualified and operation-aware merge and state
 grouping in `clients/web/src/worker-view-model.test.ts`; cursor replay, cancellation,
 and bounded failure backoff in `worker-view-stream.test.ts`; and shared summary,

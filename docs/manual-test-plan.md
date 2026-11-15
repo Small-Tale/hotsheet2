@@ -989,6 +989,10 @@ session. With two reachable terminals and no claim, confirm the note goes to the
 older (primary) terminal; close it and confirm the next note goes to the other
 (HS2-DB2FQ2). Confirm the chooser stays within the project/source, the start action
 opens a session, and a completed-ticket Not Working report remains separate.
+With the ticket store temporarily read-only, choose a session for a saved note:
+the session receives one reference, a retry is refused, and after restoring
+writes and restarting the server a retry still sends nothing while the ticket
+gains the delivery activity note (HS2-WKRFD5).
 
 ### Announcer audio on a real device (HS2-5PSQJQ)
 

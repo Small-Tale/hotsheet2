@@ -1299,3 +1299,204 @@ async fn hs2_db2fq2_an_exited_push_session_is_announced_so_clients_show_the_new_
     assert!(announced.is_ok(), "the exited session was never announced");
     let _ = send(&router, "DELETE", "/terminals/exits", None).await;
 }
+
+/// A Git-store app whose machine home (and so its feedback delivery journal) is `home`.
+fn journaled_app(
+    store_dir: &std::path::Path,
+    plugins: &std::path::Path,
+    home: &std::path::Path,
+) -> axum::Router {
+    app(
+        AppState::new(FsStore::open(store_dir).unwrap(), SECRET.into())
+            .unwrap()
+            .with_machine_home(home)
+            .with_plugin_dirs(vec![plugins.to_path_buf()]),
+    )
+}
+
+#[cfg(unix)] // Store write failure is injected through Unix file permissions.
+#[tokio::test]
+async fn hs2_wkrfd5_a_failed_delivery_record_never_resends_across_retry_and_restart() {
+    use std::os::unix::fs::PermissionsExt as _;
+    // Synthetic fake tools, tickets and notes only; no customer content.
+    let store_dir = tempfile::tempdir().unwrap();
+    FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(
+        plugins.path(),
+        "fake-push",
+        r#"
+[session_push]
+mechanism = "opencode-http"
+port_args = ["--port", "{port}"]
+password_env = "OPENCODE_SERVER_PASSWORD"
+"#,
+    );
+    let home = tempfile::tempdir().unwrap();
+    let router = journaled_app(store_dir.path(), plugins.path(), home.path());
+    let project = tempfile::tempdir().unwrap();
+    let root = project.path().canonicalize().unwrap();
+    let registration = serde_json::json!({
+        "root": root, "alias": "journal", "stores": [store_dir.path()]
+    })
+    .to_string();
+    let (status, json) = send(&router, "POST", "/checkouts", Some(&registration)).await;
+    assert!(status.is_success(), "{json}");
+    let (_, created) = send(
+        &router,
+        "POST",
+        "/checkouts/journal/tickets",
+        Some(r#"{"title":"Synthetic journal"}"#),
+    )
+    .await;
+    let path = format!(
+        "/checkouts/journal/tickets/{}",
+        created["qualified_id"].as_str().unwrap()
+    );
+    let (status, _) = send(&router, "PATCH", &path, Some(r#"{"status":"started"}"#)).await;
+    assert!(status.is_success());
+    // Two human notes saved while no session is open: each offers a start action.
+    let mut notes = Vec::new();
+    for text in ["Synthetic answer one", "Synthetic answer two"] {
+        let body = serde_json::json!({
+            "note": text, "actor": {"role": "human"}, "note_kind": "regular"
+        })
+        .to_string();
+        let (status, ticket) = send(&router, "PATCH", &path, Some(&body)).await;
+        assert!(status.is_success(), "{ticket}");
+        assert_eq!(ticket["feedback_delivery"]["status"], "start", "{ticket}");
+        notes.push(
+            ticket["feedback_delivery"]["note_id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    let journal = home.path().join("feedback-deliveries");
+    let entry = |note: &str| -> Option<serde_json::Value> {
+        std::fs::read(journal.join(format!("{note}.json")))
+            .ok()
+            .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+    };
+    let activity = |router: axum::Router, needle: String| {
+        let path = path.clone();
+        async move {
+            let (_, ticket) = send(&router, "GET", &path, None).await;
+            ticket["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|note| {
+                    note["text"]
+                        .as_str()
+                        .is_some_and(|text| text.contains(&needle))
+                })
+                .count()
+        }
+    };
+    let prompts = |seen: &Arc<Mutex<Vec<Seen>>>| {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| seen.route.ends_with("/prompt_async"))
+            .count()
+    };
+    let notify = |router: axum::Router, note: String, session: &'static str| {
+        let path = path.clone();
+        async move {
+            let body = serde_json::json!({ "connection_id": session }).to_string();
+            send(
+                &router,
+                "POST",
+                &format!("{path}/notes/{note}/notify"),
+                Some(&body),
+            )
+            .await
+        }
+    };
+
+    let (_, port, _) = launch_in(&router, "fake-push", "journal-1", Some(&root)).await;
+    let first = fake_opencode(port.parse().unwrap());
+    // The store refuses every note write, so the delivery note cannot be written.
+    let lock = store_dir.path().join(".hotsheet-note-mutation.lock");
+    if !lock.exists() {
+        std::fs::write(&lock, b"").unwrap();
+    }
+    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let (status, delivery) = notify(router.clone(), notes[0].clone(), "journal-1").await;
+    assert_eq!(status, StatusCode::OK, "{delivery}");
+    assert_eq!(delivery["status"], "sent", "{delivery}");
+    assert_eq!(prompts(&first), 1);
+    let pending = entry(&notes[0]).expect("the journal keeps the unrecorded delivery");
+    assert_eq!(pending["state"], "sent", "{pending}");
+    assert_eq!(pending["connection_id"], "journal-1");
+    // A retry in the same process is refused and sends nothing.
+    let (status, refused) = notify(router.clone(), notes[0].clone(), "journal-1").await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert_eq!(prompts(&first), 1);
+    assert!(
+        entry(&notes[0]).is_some(),
+        "still unrecorded while writes fail"
+    );
+
+    // The process stops mid-send of the second note: its intent is journaled, its outcome
+    // unknown.
+    std::fs::write(
+        journal.join(format!("{}.json", notes[1])),
+        serde_json::json!({
+            "note_id": notes[1],
+            "ticket_id": created["id"],
+            "store_root": store_dir.path(),
+            "connection_id": "journal-1",
+            "state": "sending",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let _ = send(&router, "DELETE", "/terminals/journal-1", None).await;
+
+    // Restart: a fresh process has no in-memory reservation, and writes work again.
+    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let restarted = journaled_app(store_dir.path(), plugins.path(), home.path());
+    let (_, port, _) = launch_in(&restarted, "fake-push", "journal-2", Some(&root)).await;
+    let second = fake_opencode(port.parse().unwrap());
+    let (status, refused) = notify(restarted.clone(), notes[0].clone(), "journal-2").await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert_eq!(prompts(&second), 0, "a delivered note is never resent");
+    assert!(entry(&notes[0]).is_none(), "reconciled into the ticket");
+    let sent = format!(
+        "HS2-25TP3N notified note {} through session journal-1",
+        notes[0]
+    );
+    assert_eq!(activity(restarted.clone(), sent).await, 1);
+    let (status, refused) = notify(restarted.clone(), notes[1].clone(), "journal-2").await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert!(
+        refused["code"] == "feedback_delivery_uncertain",
+        "the uncertain outcome is reported: {refused}"
+    );
+    assert_eq!(prompts(&second), 0, "an uncertain note is never resent");
+    assert!(entry(&notes[1]).is_none());
+    let uncertain = format!("HS2-25TP3N may have notified note {}", notes[1]);
+    assert_eq!(activity(restarted.clone(), uncertain).await, 1);
+    // Further retries change nothing.
+    for note in &notes {
+        let (status, _) = notify(restarted.clone(), note.clone(), "journal-2").await;
+        assert_eq!(status, StatusCode::CONFLICT);
+    }
+    assert_eq!(prompts(&second), 0);
+    // A new human note on the healthy store is delivered and recorded normally.
+    let body = serde_json::json!({
+        "note": "Synthetic answer three", "actor": {"role": "human"}, "note_kind": "regular"
+    })
+    .to_string();
+    let (status, ticket) = send(&restarted, "PATCH", &path, Some(&body)).await;
+    assert!(status.is_success(), "{ticket}");
+    assert_eq!(ticket["feedback_delivery"]["status"], "sent", "{ticket}");
+    assert_eq!(prompts(&second), 1);
+    assert!(
+        std::fs::read_dir(&journal).unwrap().next().is_none(),
+        "journal drained"
+    );
+    let _ = send(&restarted, "DELETE", "/terminals/journal-2", None).await;
+}

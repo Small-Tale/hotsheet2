@@ -810,6 +810,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/terminal_connection_attribution.rs # Pending trusted permission hook projection/events versus absent/wrong/correct MCP terminal leases, plus absent/stale hook ids without terminal guessing (HS2-HBA9Z8)
       src/routes/session_messages.rs # POST /connections/{id}/message (HS2-PEJ962): per-terminal SessionPush adapters, push-capable launch wiring (loopback port + random password), stable error codes, `message` connection action
       src/routes/feedback_session.rs # HS2-25TP3N: route committed human notes to the claimed or primary same-project AI session (HS2-DB2FQ2), queue busy drives, and return chooser/start fallbacks
+      src/routes/feedback_journal.rs # HS2-WKRFD5: per-note `${HOTSHEET_HOME}/feedback-deliveries/<note>.json` sending/sent journal that keeps delivery at most once when the activity write fails or the server restarts mid-send
       tests/session_messages.rs # E2E: fake push/no-push plugins launched in real PTYs, a loopback fake OpenCode API, prompt/command delivery, exit/reopen adapter replacement, unsupported/unreachable/ended errors
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
