@@ -1,4 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -37,5 +39,21 @@ describe('Playwright web server lifetime (HS2-F6F8MA)', () => {
       /^(exec )?node scripts\/owned-server\.mjs --exit-on-stdin-eof -- node node_modules\/vite\/bin\/vite\.js /u,
     );
     expect(server?.command.startsWith('exec ')).toBe(process.platform !== 'win32');
+  });
+});
+
+describe('Playwright bridge home isolation (HS2-9NB1KA)', () => {
+  it('gives the dev bridge its own Hot Sheet homes, never the developer real ones', () => {
+    const server = Array.isArray(config.webServer) ? config.webServer[0] : config.webServer;
+    const home = server?.env?.HOTSHEET_HOME,
+      legacy = server?.env?.HOTSHEET_LEGACY_HOME;
+    for (const directory of [home, legacy]) {
+      expect(directory).toBeTruthy();
+      expect(resolve(directory!).startsWith(resolve(tmpdir()))).toBe(true);
+      expect(existsSync(directory!)).toBe(true);
+    }
+    expect(home).not.toBe(legacy);
+    expect(home).not.toBe(resolve(homedir(), '.hotsheet2'));
+    expect(legacy).not.toBe(resolve(homedir(), '.hotsheet'));
   });
 });

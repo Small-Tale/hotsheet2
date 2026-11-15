@@ -1471,6 +1471,11 @@ server, including one with no id, answers 404. Before this check, a run that los
 to another run's starting server tested that server's worktree and lost its connection when the
 other run ended (`ERR_CONNECTION_REFUSED`).
 
+The Vite child also gets its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`, removed
+when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the developer's real remote
+registry, machine secrets, bootstrap server or HS1 data. A fixture server that needs a home names
+its own.
+
 A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
 `Process from config.webServer was not able to start`. Choose another port and rerun the whole
 affected set. A `--last-failed` pass after such a refusal is not a clean run. Runs never stop

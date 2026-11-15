@@ -2676,7 +2676,7 @@ discard flow remains covered by its existing real-router test.
 ### Browser-test server ownership and cleanup (HS2-BJ00D1, HS2-0BQ8J9)
 
 - Behavior: a browser-test Vite server answers only its run's identity, refuses an occupied port, and never stops another run. Its isolated cache is removed only after the owned child and inherited output pipes close, even if the parent already exited.
-- Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server.
+- Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server, and (HS2-9NB1KA) that the dev bridge runs with its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`.
 - End to end: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-BJ00D1` runs actual Vite servers on owned loopback ports, proves identity isolation and taken-port refusal, then stops one while the other keeps serving. This is a headless process test; no browser or user host is used.
 - Manual: none; lifecycle synchronization and isolation are automated.
 
