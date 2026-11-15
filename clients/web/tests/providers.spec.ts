@@ -40043,12 +40043,16 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     await summary.getByRole('textbox', { name: 'Timeline Summary' }).fill('Corrected headline');
     await summary.getByRole('button', { name: 'Save' }).click();
     await expect(summary).toHaveCount(0);
-    let updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)).toMatchObject({
-      summary: 'Corrected headline',
-      human_edited: true,
-      actor: { role: 'ai', id: 'synthetic-session' },
-    });
+    // HS2-MBMDKT: a closed dialog is not the proof of a write; wait on the server's stored note itself.
+    const noteOf = async (id: string) =>
+      (await server.request<FullTicket>(`/tickets/${created.id}`)).notes.find((note) => note.id === id);
+    await expect
+      .poll(() => noteOf(activity.id))
+      .toMatchObject({
+        summary: 'Corrected headline',
+        human_edited: true,
+        actor: { role: 'ai', id: 'synthetic-session' },
+      });
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
     await page
@@ -40057,16 +40061,14 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
       .fill('');
     await page.getByRole('dialog', { name: 'Edit timeline summary' }).getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('dialog', { name: 'Edit timeline summary' })).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.summary).toBeUndefined();
+    await expect.poll(async () => (await noteOf(activity.id))?.summary).toBeUndefined();
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
     const confidence = page.getByRole('dialog', { name: 'Correct confidence' });
     await confidence.getByRole('spinbutton', { name: 'Confidence' }).fill('65');
     await confidence.getByRole('button', { name: 'Save' }).click();
     await expect(confidence).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBe(65);
+    await expect.poll(async () => (await noteOf(activity.id))?.confidence).toBe(65);
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
     await page
@@ -40075,8 +40077,7 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
       .fill('');
     await page.getByRole('dialog', { name: 'Correct confidence' }).getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('dialog', { name: 'Correct confidence' })).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBeUndefined();
+    await expect.poll(async () => (await noteOf(activity.id))?.confidence).toBeUndefined();
     await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
     await page.setViewportSize({ width: 390, height: 800 });
     const readerCard = page.getByRole('dialog').locator(`article[data-note-id="${regular.id}"]`);
@@ -40102,11 +40103,7 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     }
     await kind.getByRole('button', { name: 'Save' }).click();
     await expect(kind).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === regular.id)).toMatchObject({
-      kind: 'feedback_needed',
-      feedback_request: true,
-    });
+    await expect.poll(() => noteOf(regular.id)).toMatchObject({ kind: 'feedback_needed', feedback_request: true });
     await expect(readerCard.getByRole('grid', { name: 'Feedback Choices' })).toBeVisible();
   } finally {
     await server.stop(page);
