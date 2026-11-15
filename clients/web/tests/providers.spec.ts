@@ -40113,6 +40113,77 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
   }
 });
 
+test('HS2-WZSFHK resends a note metadata edit after the ticket changed underneath it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic metadata drift' });
+    const withActivity = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: 'Completed synthetic work',
+      note_kind: 'activity',
+      note_summary: 'First headline',
+      note_confidence: 80,
+      actor: { role: 'ai', id: 'synthetic-session' },
+    });
+    const activity = withActivity.notes[0];
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await proxyFetch(route, {
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await proxyFetch(route, {
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const card = page.locator(`#app-right-rail article[data-note-id="${activity.id}"]`);
+    const noteOf = async () =>
+      (await server.request<FullTicket>(`/tickets/${created.id}`)).notes.find((note) => note.id === activity.id);
+    // Another writer advances the ticket's token while this client's copy is unchanged (the client gets no
+    // change event here), so each save meets a stale-token 409 and must resend its value.
+    const drift = (text: string) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+        note: text,
+        note_kind: 'regular',
+        actor: { role: 'ai', id: 'synthetic-other' },
+      });
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
+    const summary = page.getByRole('dialog', { name: 'Edit timeline summary' });
+    await summary.getByRole('textbox', { name: 'Timeline Summary' }).fill('');
+    await drift('Unrelated synthetic note one');
+    await summary.getByRole('button', { name: 'Save' }).click();
+    await expect(summary).toHaveCount(0);
+    expect((await noteOf())?.summary).toBeUndefined();
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
+    const confidence = page.getByRole('dialog', { name: 'Correct confidence' });
+    await confidence.getByRole('spinbutton', { name: 'Confidence' }).fill('65');
+    await drift('Unrelated synthetic note two');
+    await confidence.getByRole('button', { name: 'Save' }).click();
+    await expect(confidence).toHaveCount(0);
+    expect((await noteOf())?.confidence).toBe(65);
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback response through the real server', async ({
   page,
 }) => {

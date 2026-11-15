@@ -139,6 +139,52 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileTicketPatch(ticket(), ticket(), { note_confidence: 82 })).toEqual({ retry: {}, conflicts: [] });
   });
 
+  it('resends a note-metadata-only edit after unrelated token drift instead of dropping it (HS2-WZSFHK)', () => {
+    const activity = { ...ticket().notes[0], kind: 'activity' as const, summary: 'Headline', confidence: 80 };
+    const base = ticket({ notes: [activity] }),
+      drifted = ticket({
+        notes: [activity, { ...activity, id: 'N2', text: 'Unrelated AI note' }],
+        status: 'completed',
+      });
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_summary: null })).toEqual({
+      retry: { note_summary: null, note_id: 'N1' },
+      conflicts: [],
+    });
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_confidence: 65 })).toEqual({
+      retry: { note_confidence: 65, note_id: 'N1' },
+      conflicts: [],
+    });
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_kind: 'feedback_needed' })).toEqual({
+      retry: { note_kind: 'feedback_needed', note_id: 'N1' },
+      conflicts: [],
+    });
+    // Relinking a response stays scoped to the note instead of becoming a ticket-level field.
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', response_to: 'N0' })).toEqual({
+      retry: { response_to: 'N0', note_id: 'N1' },
+      conflicts: [],
+    });
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', response_to: null })).toEqual({
+      retry: {},
+      conflicts: [],
+    });
+    // Already saved remotely (or cleared there too): nothing to resend.
+    expect(reconcileTicketPatch(base, drifted, { note_id: 'N1', note_summary: 'Headline' })).toEqual({
+      retry: {},
+      conflicts: [],
+    });
+    const cleared = ticket({ notes: [{ ...activity, summary: undefined }] });
+    expect(reconcileTicketPatch(base, cleared, { note_id: 'N1', note_summary: null })).toEqual({
+      retry: {},
+      conflicts: [],
+    });
+    // A confirmed dialog value wins over a concurrent change to the same note field.
+    const theirs = ticket({ notes: [{ ...activity, summary: 'Their headline' }] });
+    expect(reconcileTicketPatch(base, theirs, { note_id: 'N1', note_summary: 'Mine' })).toEqual({
+      retry: { note_summary: 'Mine', note_id: 'N1' },
+      conflicts: [],
+    });
+  });
+
   it('covers active-draft interleavings without warning for remote-only or converged edits', () => {
     expect(reconcileActiveDraft('base', 'base', 'remote')).toEqual({
       kind: 'adopt-remote',

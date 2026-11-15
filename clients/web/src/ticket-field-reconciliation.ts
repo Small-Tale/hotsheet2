@@ -89,6 +89,16 @@ function ticketField(ticket: FullTicket, field: string, noteId?: string): unknow
   return ticket[field as keyof FullTicket];
 }
 
+/** Patch fields that set one existing note's metadata, keyed to the note property they write (HS2-WZSFHK). */
+const NOTE_METADATA_FIELDS = {
+  note_kind: 'kind',
+  note_summary: 'summary',
+  note_confidence: 'confidence',
+  response_to: 'response_to',
+} as const satisfies Record<string, keyof FullTicket['notes'][number]>;
+const isNoteMetadataField = (field: string): field is keyof typeof NOTE_METADATA_FIELDS =>
+  Object.hasOwn(NOTE_METADATA_FIELDS, field);
+
 /**
  * Compares only fields in a local patch. Whole-ticket token drift caused by unrelated
  * remote changes is safe to retry; concurrent edits to the same text or tag field are merged,
@@ -109,8 +119,17 @@ export function reconcileTicketPatch(
       field !== 'edit_feedback_prompt' &&
       field !== 'note_kind' &&
       field !== 'note_summary' &&
-      field !== 'note_confidence',
+      field !== 'note_confidence' &&
+      !(noteId && field === 'response_to'),
   );
+  // An edit of one existing note's metadata (Edit Timeline Summary, Correct Confidence, Change Type, Link
+  // as Feedback Response) is resent unless the server already holds the chosen value; an empty retry would
+  // report the edit as saved without writing it (HS2-WZSFHK). The user confirmed the value in a dialog,
+  // so it is last-write-wins for that note field.
+  const remoteNote = noteId ? remote.notes.find((note) => note.id === noteId) : undefined;
+  if (noteId && !Object.hasOwn(patch, 'note'))
+    for (const field of Object.keys(patch).filter(isNoteMetadataField))
+      if (!equal(remoteNote?.[NOTE_METADATA_FIELDS[field]], patch[field])) retry[field] = patch[field];
   for (const field of fields) {
     const logicalField = field === 'note' && noteId ? 'note' : field;
     const baseValue = ticketField(base, logicalField, noteId);
@@ -136,7 +155,8 @@ export function reconcileTicketPatch(
       theirs: display(remoteValue),
     });
   }
-  if (noteId && Object.hasOwn(retry, 'note')) retry.note_id = noteId;
+  if (noteId && Object.keys(retry).some((field) => field === 'note' || isNoteMetadataField(field)))
+    retry.note_id = noteId;
   // An explicit FEEDBACK NEEDED prompt edit stays explicit on retry (HS2-ZXGEFE).
   if (noteId && Object.hasOwn(retry, 'note') && patch.edit_feedback_prompt === true) retry.edit_feedback_prompt = true;
   if (Object.hasOwn(retry, 'note') && patch.note_kind !== undefined) retry.note_kind = patch.note_kind;
