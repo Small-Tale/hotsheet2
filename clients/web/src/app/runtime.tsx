@@ -141,6 +141,7 @@ import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
+import { createLinkedReaderSubjects } from '../features/linked-reader-subject';
 import { createNotificationSettings } from '../features/notification-settings';
 import { createPairingRequests, pairingRequestNotice } from '../features/pairing-requests';
 import { createPermissionsController } from '../features/permissions';
@@ -262,6 +263,7 @@ import {
   reconcileReaderNoteDraft,
   type TicketFieldConflict,
 } from '../ticket-field-reconciliation';
+import { followUpLinkAvailability } from '../ticket-follow-up-link';
 import { projectTicketGroupName } from '../ticket-group-state';
 import { clusterTicketsByGroup, ticketGroupValue } from '../ticket-groups';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
@@ -446,6 +448,7 @@ export async function startHotSheetWebClient() {
     codeReview,
     refreshCodeReview,
     showToast,
+    linkedReader: (frameId) => linkedReaderSubject(frameId),
   });
   const ticketScrollMemory = new TicketScrollMemory();
   const shellMode = signal<ProjectTabBarMode>('project'),
@@ -4512,6 +4515,7 @@ export async function startHotSheetWebClient() {
     linkedReaderFrame,
     linkedReaderAutosaves,
     replaceLinkedReaderFrame,
+    refreshLinkedCodeReview,
     linkedReaderSaves,
     flushLinkedReader,
     selectedRows,
@@ -4742,6 +4746,13 @@ export async function startHotSheetWebClient() {
     draftScope,
     ago,
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
+  });
+  // A linked reader frame's own ticket, project, and Code Review for reader edits (HS2-NXSMC7).
+  const linkedReaderSubject = createLinkedReaderSubjects({
+    linkedReaderStack: () => linkedReaderStack.value,
+    projects: () => projects.value,
+    refreshCodeReview: refreshLinkedCodeReview,
+    replaceFrame: replaceLinkedReaderFrame,
   });
   document.body.addEventListener('click', (event) => {
     const target = event.target;
@@ -5659,6 +5670,11 @@ export async function startHotSheetWebClient() {
     composingNote,
     duplicateTargetFor,
     expandedCodeReviewCommits,
+    followUpLinkFor: (projectId, connectionId) =>
+      followUpLinkAvailability(
+        defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId),
+      ),
+    followUpLinkDialogFor: (readerScope) => followUpLinkController.dialogFor(readerScope),
     fieldConflict,
     fieldConflictResolution,
     linkedReaderStack,
@@ -6773,6 +6789,7 @@ export async function startHotSheetWebClient() {
     tagsAutosave,
     beginDetailsEdit,
     linkedReaderFrame,
+    refreshLinkedCodeReview,
     replaceLinkedReaderFrame,
     linkedReaderSaves,
     readerDetailsAutosave,

@@ -91,6 +91,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   pointerDetailsFinish: DetailsFinishTask | undefined;
   readonly beginDetailsEdit: (reader?: boolean, frame?: TicketReaderFrame) => void;
   readonly linkedReaderFrame: (target: Element) => TicketReaderFrame | undefined;
+  /** Load a linked reader's Code Review tab from its own project (HS2-9Q4AFB). */
+  readonly refreshLinkedCodeReview: (frameId: string) => Promise<void>;
   readonly replaceLinkedReaderFrame: (id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) => void;
   readonly linkedReaderSaves: (id: string) => {
     details: DebouncedAutosave<string>;
@@ -193,6 +195,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     tagsAutosave,
     beginDetailsEdit,
     linkedReaderFrame,
+    refreshLinkedCodeReview,
     replaceLinkedReaderFrame,
     linkedReaderSaves,
     readerDetailsAutosave,
@@ -1686,24 +1689,6 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     ),
   );
-  /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
-  async function refreshLinkedCodeReview(frameId: string) {
-    const frame = linkedReaderStack.value.find((item) => item.id === frameId);
-    if (!frame || frame.codeReview?.loading) return;
-    const setReview = (codeReview: TicketReaderFrame['codeReview']) => {
-      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, codeReview }));
-    };
-    setReview({ review: frame.codeReview?.review, loading: true, message: '' });
-    try {
-      setReview({
-        review: await new Api(frame.apiPath).codeReview(frame.projectId, frame.ticket.qualified_id),
-        loading: false,
-        message: '',
-      });
-    } catch (reason) {
-      setReview({ loading: false, message: reason instanceof Error ? reason.message : String(reason) });
-    }
-  }
   /** Open a linked reader's commit in the diff tool against that reader's project (HS2-9Q4AFB). */
   function openLinkedCodeReview(frame: TicketReaderFrame, target: Element) {
     const reviewTarget = codeReviewTarget(data(target));

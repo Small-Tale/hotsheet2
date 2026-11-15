@@ -26,6 +26,11 @@ export interface TicketFollowUpLinkDialogState {
   searching?: boolean;
   submitting?: boolean;
   error?: string;
+  /**
+   * The reader frame that opened the dialog, which renders it inside that modal reader so it stays
+   * interactive (HS2-NXSMC7); absent when the Inspector opened it at the app root.
+   */
+  readerScope?: string;
 }
 
 /**

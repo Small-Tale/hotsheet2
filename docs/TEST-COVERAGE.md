@@ -655,6 +655,13 @@ HS2-MCGCPQ covers the Inspector's link-existing-follow-up flow:
 
 `follow-up-link.spec.ts` drives the real Inspector against a real server. It links an existing ticket, repeats the link idempotently, and checks the stored relation. It also checks the disabled reason for a non-Git provider.
 
+HS2-NXSMC7 extends that flow to the modal reader:
+
+- reader-scoped dialogs, the workspace reader, a linked frame's own source and Code Review refresh, and a closed frame (`features/follow-up-link.test.ts`);
+- linked-frame resolution, top-frame update rights, frame adoption, and the reader scope of an action (`features/linked-reader-subject.test.ts`).
+
+`follow-up-link.spec.ts` also drives the real reader against a real server. The dialog opens inside the reader, Escape closes only the dialog, linking refreshes the reader's Code Review, and a linked reader links to its own ticket. It captures the dialog and section at 1440, 1024, 390, and 1440 px, and checks the disabled reason for a non-Git provider in the reader. `providers.spec.ts` asserts that the Inspector and reader Code Review markup is identical, including the link action.
+
 HS2-CHH28E covers the Inspector's dependency-blocker editor and the shared cycle check:
 
 - `ops::tests::hs2_chh28e_blocker_cycles_are_refused_through_the_resolver` (direct and transitive cycles, a missing link, an already-cyclic store);

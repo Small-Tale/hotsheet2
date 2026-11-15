@@ -12,7 +12,7 @@ import { type DuplicateTarget, duplicateTargetKey } from './ticket-close';
 /** The ticket reference shape the link dialog's picker selects (shared with the close dialog). */
 export type FollowUpLinkTicket = DuplicateTarget;
 
-/** Whether the Inspector's Link Existing Ticket action is enabled for a source ticket. */
+/** Whether the Inspector's or reader's Link Existing Ticket action is enabled for a source ticket. */
 export interface FollowUpLinkAvailability {
   enabled: boolean;
   /** The truthful reason a disabled action shows; absent while enabled. */

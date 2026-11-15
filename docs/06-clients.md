@@ -2824,8 +2824,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).
   The Follow-Ups header's logical-end action, "Link Existing Ticket as Follow-Up…",
-  links a ticket that already exists (HS2-MCGCPQ). It appears only in the sidebar and
-  rail Inspector, and it shows even when the ticket has no follow-ups yet. It opens
+  links a ticket that already exists (HS2-MCGCPQ). It appears in the sidebar and rail
+  Inspector and in the modal ticket reader (HS2-NXSMC7), and it shows even when the
+  ticket has no follow-ups yet. It opens
   "Link Follow-Up to <slug>". The inspected ticket is the source. The person searches
   every open project for the target with `TicketReferencePicker`, the picker the close
   dialog's duplicate target also uses. Results never include the source. Link Follow-Up
@@ -2835,7 +2836,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   allowed: the dialog says linking again changes nothing, and the toast says the ticket
   was already a follow-up. A refusal stays in the dialog. Success refreshes Code Review.
   For a source whose provider is not Hot Sheet Git, the action stays mounted but
-  disabled, and its reason names the provider.
+  disabled, and its reason names the provider. In the reader the source is that reader
+  frame's ticket: the workspace reader's selected ticket, or a linked reader's own ticket
+  in its own project. The dialog renders inside that modal reader, as the change-evidence
+  popover does (HS2-EZ10RS), so it opens above the reader and stays interactive. Escape
+  closes only the dialog. Success refreshes that frame's Code Review.
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions

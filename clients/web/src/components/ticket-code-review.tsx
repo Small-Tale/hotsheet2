@@ -60,8 +60,8 @@ export interface TicketCodeReviewProps {
   /** False on a remote client: diff-tool actions render disabled with an explanation (HS2-TYS5SS). */
   hostActionsAvailable?: boolean;
   /**
-   * The Follow-Ups header's Link Existing Ticket action (HS2-MCGCPQ). Only the Inspector passes it;
-   * a disabled availability keeps the action mounted with its reason.
+   * The Follow-Ups header's Link Existing Ticket action (HS2-MCGCPQ). The Inspector and the modal
+   * reader pass it (HS2-NXSMC7); a disabled availability keeps the action mounted with its reason.
    */
   followUpLink?: FollowUpLinkAvailability;
 }

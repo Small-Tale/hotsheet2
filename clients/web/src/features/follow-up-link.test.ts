@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutTicketRows, CodeReview, FullTicket, TicketRow } from '../api';
 import type { Project } from '../interactions/types';
 import { createFollowUpLinkController } from './follow-up-link';
+import type { LinkedReaderSubject } from './linked-reader-subject';
 
 const calls = vi.hoisted(() => ({
   search: [] as { apiPath: string; checkout: string; text: string }[],
@@ -46,7 +47,7 @@ const row = (connection: string, native: string, slug: string) =>
     qualified_id: `${connection}:${native}`,
   }) as TicketRow;
 
-function setup(review?: CodeReview) {
+function setup(review?: CodeReview, linkedReader?: (frameId: string) => LinkedReaderSubject | undefined) {
   const alpha = project('alpha'),
     beta = project('beta'),
     projects = signal<Project[]>([alpha, beta]),
@@ -61,6 +62,7 @@ function setup(review?: CodeReview) {
     codeReview,
     refreshCodeReview,
     showToast,
+    linkedReader,
     searchDelayMs: 0,
   });
   return { controller, selectedTicket, refreshCodeReview, showToast };
@@ -207,5 +209,84 @@ describe('createFollowUpLinkController (HS2-MCGCPQ)', () => {
     await controller.submit();
     expect(controller.dialog.value).toBeUndefined();
     expect(calls.link).toHaveLength(2);
+  });
+
+  describe('from the modal reader (HS2-NXSMC7)', () => {
+    const linkedFrame = (refresh: () => Promise<void>): LinkedReaderSubject => ({
+      frameId: 'reader-2',
+      project: project('beta'),
+      ticket: row('git-b', 'two', 'HS2-TWO') as FullTicket,
+      capabilities: {} as LinkedReaderSubject['capabilities'],
+      canUpdate: true,
+      codeReview: {
+        commits: [],
+        ranges: [],
+        truncated: false,
+        follow_ups: [{ target: { project_id: 'alpha', connection_id: 'git-a', native_id: 'one' }, state: 'resolved' }],
+      },
+      refreshCodeReview: refresh,
+      adopt: vi.fn(),
+    });
+
+    it('opens the workspace reader dialog for the selected ticket, owned by that reader only', async () => {
+      const { controller, refreshCodeReview } = setup();
+      expect(controller.open('workspace-reader')).toBe(true);
+      expect(controller.dialog.value).toMatchObject({
+        source: { projectId: 'alpha', slug: 'HS2-SRC' },
+        readerScope: 'workspace-reader',
+      });
+      expect(controller.dialogFor('workspace-reader')).toBe(controller.dialog.value);
+      // The app root and other reader frames do not render a reader-owned dialog.
+      expect(controller.dialogFor(undefined)).toBeUndefined();
+      expect(controller.dialogFor('reader-2')).toBeUndefined();
+      controller.search('one');
+      await settle();
+      controller.select('alpha::git-a%3Aone');
+      await controller.submit();
+      expect(calls.link).toEqual([
+        expect.objectContaining({ checkout: 'alpha', source: '@alpha/git-a:src', target: '@alpha/git-a:one' }),
+      ]);
+      expect(refreshCodeReview).toHaveBeenCalledTimes(1);
+      // The Inspector's own dialog stays at the app root.
+      controller.open();
+      expect(controller.dialog.value?.readerScope).toBeUndefined();
+      expect(controller.dialogFor(undefined)).toBe(controller.dialog.value);
+      expect(controller.dialogFor('workspace-reader')).toBeUndefined();
+    });
+
+    it("links a linked reader frame's own ticket and refreshes that frame, not the Inspector", async () => {
+      const frameRefresh = vi.fn(async () => undefined),
+        frame = linkedFrame(frameRefresh),
+        { controller, refreshCodeReview, showToast } = setup(undefined, (id) =>
+          id === 'reader-2' ? frame : undefined,
+        );
+      expect(controller.open('reader-2')).toBe(true);
+      expect(controller.dialog.value).toMatchObject({
+        source: { projectId: 'beta', qualifiedId: 'git-b:two', slug: 'HS2-TWO' },
+        existing: ['alpha::git-a%3Aone'],
+        readerScope: 'reader-2',
+      });
+      controller.search('one');
+      await settle();
+      controller.select('alpha::git-a%3Aone');
+      await controller.submit();
+      expect(calls.link).toEqual([
+        {
+          apiPath: '/__hotsheet/project-api/alpha',
+          checkout: 'alpha',
+          source: '@beta/git-b:two',
+          target: '@alpha/git-a:one',
+        },
+      ]);
+      expect(showToast).toHaveBeenCalledWith('HS2-ONE was already a follow-up of HS2-TWO.');
+      expect(frameRefresh).toHaveBeenCalledTimes(1);
+      expect(refreshCodeReview).not.toHaveBeenCalled();
+    });
+
+    it('refuses a reader frame that has closed, without falling back to the selected ticket', () => {
+      const { controller } = setup(undefined, () => undefined);
+      expect(controller.open('reader-9')).toBe(false);
+      expect(controller.dialog.value).toBeUndefined();
+    });
   });
 });

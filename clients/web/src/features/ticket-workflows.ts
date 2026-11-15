@@ -1016,6 +1016,24 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function replaceLinkedReaderFrame(id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) {
     linkedReaderStack.value = updateTicketReaderFrame(linkedReaderStack.value, id, update);
   }
+  /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
+  async function refreshLinkedCodeReview(frameId: string) {
+    const frame = linkedReaderStack.value.find((item) => item.id === frameId);
+    if (!frame || frame.codeReview?.loading) return;
+    const setReview = (codeReview: TicketReaderFrame['codeReview']) => {
+      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, codeReview }));
+    };
+    setReview({ review: frame.codeReview?.review, loading: true, message: '' });
+    try {
+      setReview({
+        review: await new Api(frame.apiPath).codeReview(frame.projectId, frame.ticket.qualified_id),
+        loading: false,
+        message: '',
+      });
+    } catch (reason) {
+      setReview({ loading: false, message: reason instanceof Error ? reason.message : String(reason) });
+    }
+  }
   async function updateLinkedReader(frameId: string, patch: Record<string, unknown>, dismissedRequestId?: string) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
     if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
@@ -2868,6 +2886,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     linkedReaderFrame,
     linkedReaderAutosaves,
     replaceLinkedReaderFrame,
+    refreshLinkedCodeReview,
     linkedReaderSaves,
     flushLinkedReader,
     selectedRows,

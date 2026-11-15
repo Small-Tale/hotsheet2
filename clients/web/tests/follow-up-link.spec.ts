@@ -181,3 +181,142 @@ test('disables the follow-up link with its reason for a provider without relatio
     await server.stop();
   }
 });
+
+/** Open `slug` in the modal reader on its Code Review tab. */
+async function openReaderCodeReview(page: Page, slug: string) {
+  await page.locator(`[data-ticket-slug="${slug}"]`).click();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog', { name: `Read and edit ${slug}` });
+  await reader.getByRole('tab', { name: 'Code Review' }).click();
+  const section = reader.getByRole('region', { name: 'Follow-Up Tickets' });
+  await expect(section).toBeVisible({ timeout: 20_000 });
+  return { reader, section, link: section.getByRole('button', { name: 'Link Existing Ticket as Follow-Up…' }) };
+}
+
+const READER_WIDTHS = [
+  ['wide', 1440, 900],
+  ['medium', 1024, 800],
+  ['narrow', 390, 844],
+  ['wide-again', 1440, 900],
+] as const;
+
+test('links an existing follow-up from the modal reader and its linked frames (HS2-NXSMC7)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const server = await followUpServer();
+  try {
+    const source = await server.request<CreatedTicket>('/tickets', 'POST', {
+        title: 'Synthetic reader follow-up source',
+        category: 'feature',
+      }),
+      target = await server.request<CreatedTicket>('/tickets', 'POST', {
+        title: 'Synthetic reader follow-up target',
+        category: 'task',
+      }),
+      later = await server.request<CreatedTicket>('/tickets', 'POST', {
+        title: 'Synthetic later follow-up',
+        category: 'task',
+      });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server);
+    const { reader, section, link } = await openReaderCodeReview(page, source.slug);
+    await expect(link).toBeEnabled();
+
+    // The dialog opens inside the modal reader, above it and interactive.
+    await link.click();
+    const dialog = reader.locator('[data-dialog-component="ticket-follow-up-link-dialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('[data-dialog-component="ticket-follow-up-link-dialog"]')).toHaveCount(1);
+    await expect(dialog).toContainText(`Link Follow-Up to ${source.slug}`);
+    await expect(dialog.locator('[name="follow-up-link-target-search"]')).toBeFocused();
+    // Escape dismisses only the link dialog; the reader stays open.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(reader).toBeVisible();
+
+    await link.click();
+    await dialog.locator('[name="follow-up-link-target-search"]').pressSequentially('reader follow-up target');
+    const row = dialog.locator('[data-action="select-follow-up-link-target"]').filter({ hasText: target.slug });
+    await expect(row).toHaveCount(1, { timeout: 20_000 });
+    await row.click();
+    for (const [label, width, height] of READER_WIDTHS) {
+      await page.setViewportSize({ width, height });
+      await expect(dialog.getByRole('button', { name: 'Link Follow-Up' })).toBeInViewport();
+      await page.screenshot({ path: `target/visual-captures/hs2-nxsmc7-reader-link-dialog-${label}.png` });
+    }
+    await dialog.getByRole('button', { name: 'Link Follow-Up' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('.app-toast').filter({ hasText: `${target.slug} is now a follow-up of ${source.slug}.` }),
+    ).toBeVisible();
+    // Linking refreshes the reader's own Code Review.
+    const rows = section.locator('[data-action="open-follow-up-target"]');
+    await expect(rows).toHaveCount(1, { timeout: 20_000 });
+    await expect(rows).toContainText(target.slug);
+    for (const [label, width, height] of READER_WIDTHS) {
+      await page.setViewportSize({ width, height });
+      await expect(link).toBeInViewport();
+      await page.screenshot({ path: `target/visual-captures/hs2-nxsmc7-reader-linked-${label}.png` });
+    }
+
+    // A linked reader frame links follow-ups to its own ticket and refreshes its own Code Review.
+    await rows.click();
+    const linked = page.getByRole('dialog', { name: `Read and edit ${target.slug}` });
+    await expect(linked).toBeVisible({ timeout: 20_000 });
+    await linked.getByRole('tab', { name: 'Code Review' }).click();
+    const linkedSection = linked.getByRole('region', { name: 'Follow-Up Tickets' });
+    await expect(linkedSection).toBeVisible({ timeout: 20_000 });
+    await linkedSection.getByRole('button', { name: 'Link Existing Ticket as Follow-Up…' }).click();
+    const linkedDialog = linked.locator('[data-dialog-component="ticket-follow-up-link-dialog"]');
+    await expect(linkedDialog).toContainText(`Link Follow-Up to ${target.slug}`);
+    await expect(page.locator('[data-dialog-component="ticket-follow-up-link-dialog"]')).toHaveCount(1);
+    await linkedDialog.locator('[name="follow-up-link-target-search"]').pressSequentially('later follow-up');
+    const laterRow = linkedDialog
+      .locator('[data-action="select-follow-up-link-target"]')
+      .filter({ hasText: later.slug });
+    await expect(laterRow).toHaveCount(1, { timeout: 20_000 });
+    await laterRow.click();
+    await linkedDialog.getByRole('button', { name: 'Link Follow-Up' }).click();
+    await expect(linkedDialog).toHaveCount(0);
+    await expect(linkedSection.locator('[data-action="open-follow-up-target"]')).toContainText(later.slug, {
+      timeout: 20_000,
+    });
+    await page.screenshot({ path: 'target/visual-captures/hs2-nxsmc7-linked-reader-1440.png' });
+    const storedTarget = await server.request<StoredTicket>(`/tickets/${target.id}`),
+      storedSource = await server.request<StoredTicket>(`/tickets/${source.id}`);
+    expect(storedTarget.follow_ups).toEqual([
+      { project_id: server.checkoutId, connection_id: later.connection_id, native_id: later.native_id },
+    ]);
+    expect(storedSource.follow_ups).toEqual([
+      { project_id: server.checkoutId, connection_id: target.connection_id, native_id: target.native_id },
+    ]);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('disables the reader follow-up link with its reason for a provider without relations (HS2-NXSMC7)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await followUpServer();
+  try {
+    const source = await server.request<CreatedTicket>('/tickets', 'POST', { title: 'Synthetic reader provider' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, (body) =>
+      (body as Record<string, unknown>[]).map((item) => ({
+        ...item,
+        provider: 'github',
+        display_name: 'GitHub Issues',
+      })),
+    );
+    const { link } = await openReaderCodeReview(page, source.slug);
+    await expect(link).toBeDisabled();
+    await expect(link).toHaveAttribute(
+      'title',
+      'GitHub Issues tickets cannot record follow-up links. Only Hot Sheet Git tickets can.',
+    );
+    await page.screenshot({ path: 'target/visual-captures/hs2-nxsmc7-reader-unsupported-1440.png' });
+  } finally {
+    await server.stop();
+  }
+});

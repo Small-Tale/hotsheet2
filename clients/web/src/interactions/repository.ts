@@ -14,6 +14,7 @@ import { type CodeReviewComparison, codeReviewTarget } from '../components/ticke
 import { copyText } from '../copy-text';
 import { createCoalescedInput } from '../debounced-autosave';
 import type { FollowUpLinkController } from '../features/follow-up-link';
+import { readerScopeOf } from '../features/linked-reader-subject';
 import { HostOnlyActionError } from '../host-only-actions';
 import { REPOSITORY_ACTIONS, REPOSITORY_TARGETS } from '../interaction-attrs/repository';
 import { data } from './dom';
@@ -279,9 +280,10 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     followUpLinkSearchInput.cancel();
   });
   lifetime.add(
-    delegate(document.body, 'click', REPOSITORY_ACTIONS.openFollowUpLink.selector, () => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openFollowUpLink.selector, (_event, target) => {
       followUpLinkSearchInput.cancel();
-      if (followUpLink.open()) focusFollowUpLinkSearch();
+      // From the modal reader, the dialog opens for that reader frame's ticket and inside it (HS2-NXSMC7).
+      if (followUpLink.open(readerScopeOf(target))) focusFollowUpLinkSearch();
     }),
   );
   lifetime.add(

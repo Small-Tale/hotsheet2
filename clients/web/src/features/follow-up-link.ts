@@ -13,6 +13,7 @@ import {
   validateFollowUpLink,
 } from '../ticket-follow-up-link';
 import { searchTicketReferences, ticketReference } from '../ticket-reference-search';
+import { type LinkedReaderSubject, WORKSPACE_READER_SCOPE } from './linked-reader-subject';
 
 /** Live application bindings the follow-up link flow reads (HS2-MCGCPQ). */
 export interface FollowUpLinkDependencies {
@@ -22,20 +23,35 @@ export interface FollowUpLinkDependencies {
   codeReview: Signal<CodeReview | undefined>;
   refreshCodeReview: () => Promise<void>;
   showToast: (message: string) => void;
+  /**
+   * A linked reader frame's own ticket, project, and Code Review (HS2-NXSMC7). The Inspector and the
+   * workspace reader act on the selected ticket, so this returns undefined for them.
+   */
+  linkedReader?: (frameId: string) => LinkedReaderSubject | undefined;
   /** Search debounce after the coalesced input settles; tests pass 0. */
   searchDelayMs?: number;
+}
+
+/** The ticket a link dialog records follow-ups for, and how to refresh its Code Review. */
+interface FollowUpLinkSubject {
+  project: Project;
+  ticket: FullTicket;
+  codeReview?: CodeReview;
+  refreshCodeReview: () => Promise<void>;
 }
 
 export type FollowUpLinkController = ReturnType<typeof createFollowUpLinkController>;
 
 /**
- * The Inspector's Link Existing Ticket as Follow-Up flow (HS2-MCGCPQ): open the dialog for the
- * inspected ticket, search open projects for the target, and record the relation through the
- * idempotent `follow-up-links` route of the target's checkout. Success refreshes Code Review so
- * the new row appears; a refusal stays in the dialog where the person can correct it.
+ * The Link Existing Ticket as Follow-Up flow of the Inspector (HS2-MCGCPQ) and the modal reader
+ * (HS2-NXSMC7): open the dialog for the inspected or read ticket, search open projects for the
+ * target, and record the relation through the idempotent `follow-up-links` route of the target's
+ * checkout. Success refreshes that surface's Code Review so the new row appears; a refusal stays
+ * in the dialog where the person can correct it. A dialog opened from a reader frame carries its
+ * `readerScope` and renders inside that reader.
  */
 export function createFollowUpLinkController(dependencies: FollowUpLinkDependencies) {
-  const { project, projects, selectedTicket, codeReview, refreshCodeReview, showToast } = dependencies,
+  const { project, projects, selectedTicket, codeReview, refreshCodeReview, showToast, linkedReader } = dependencies,
     searchDelayMs = dependencies.searchDelayMs ?? 150,
     dialog = signal<TicketFollowUpLinkDialogState | undefined>(undefined);
   let generation = 0,
@@ -55,19 +71,35 @@ export function createFollowUpLinkController(dependencies: FollowUpLinkDependenc
     cancelSearch();
     dialog.value = undefined;
   }
-  /** Open the dialog for the inspected ticket; returns false when no ticket is inspected. */
-  function open(): boolean {
+  /** The ticket of the Inspector or workspace reader, or of the linked reader frame `readerScope`. */
+  function subject(readerScope?: string): FollowUpLinkSubject | undefined {
+    if (readerScope && readerScope !== WORKSPACE_READER_SCOPE) return linkedReader?.(readerScope);
     const current = project(),
       ticket = selectedTicket.value;
-    if (!current || !ticket) return false;
+    if (!current || !ticket) return undefined;
+    return { project: current, ticket, codeReview: codeReview.value, refreshCodeReview };
+  }
+  /**
+   * Open the dialog for the ticket of the surface that `readerScope` names (a reader frame id, or
+   * undefined for the Inspector); returns false when that surface shows no ticket.
+   */
+  function open(readerScope?: string): boolean {
+    const owner = subject(readerScope);
+    if (!owner) return false;
     cancelSearch();
     dialog.value = {
-      source: ticketReference(current, ticket),
-      existing: followUpEvidenceKeys(codeReview.value?.follow_ups),
+      source: ticketReference(owner.project, owner.ticket),
+      existing: followUpEvidenceKeys(owner.codeReview?.follow_ups),
       query: '',
       candidates: [],
+      ...(readerScope ? { readerScope } : {}),
     };
     return true;
+  }
+  /** The dialog state that surface renders: a reader frame id, or undefined for the app root. */
+  function dialogFor(readerScope?: string): TicketFollowUpLinkDialogState | undefined {
+    const state = dialog.value;
+    return state?.readerScope === readerScope ? state : undefined;
   }
   function search(query: string) {
     const state = dialog.value;
@@ -133,9 +165,9 @@ export function createFollowUpLinkController(dependencies: FollowUpLinkDependenc
       // The link is recorded even when the dialog was dismissed meanwhile, so always confirm it.
       if (openFor(state)) close();
       showToast(followUpLinkedMessage(state.source, target, isLinkedFollowUp(state.existing, target)));
-      const ticket = selectedTicket.value;
-      if (project()?.id === state.source.projectId && ticket?.qualified_id === state.source.qualifiedId)
-        await refreshCodeReview();
+      const surface = subject(state.readerScope);
+      if (surface?.project.id === state.source.projectId && surface.ticket.qualified_id === state.source.qualifiedId)
+        await surface.refreshCodeReview();
     } catch (reason) {
       const active = openFor(state);
       if (active)
@@ -146,5 +178,5 @@ export function createFollowUpLinkController(dependencies: FollowUpLinkDependenc
         };
     }
   }
-  return { dialog, open, search, select, clear, submit, close, cancelSearch };
+  return { dialog, dialogFor, open, search, select, clear, submit, close, cancelSearch };
 }

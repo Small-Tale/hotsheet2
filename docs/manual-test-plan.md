@@ -49,6 +49,9 @@ Follow-Ups action "Link Existing Ticket as Follow-Up…". Search another project
 ticket, link it, link it again (expect the "already a follow-up" notice and one
 row), and check the dialog at wide, medium, and narrow widths. On a GitHub, Jira,
 or GitLab ticket, confirm the action is disabled and its tooltip names the provider.
+For HS2-NXSMC7, repeat the link from the modal reader's Code Review tab and from a
+linked reader opened from a follow-up row. Confirm the dialog opens above the reader,
+Escape closes only the dialog, and the new row appears in that reader.
 For HS2-CHH28E, open a synthetic Git ticket's Info tab and use Blocked By's
 "Add Blocker…" to add a same-project ticket, then try the reverse dependency from
 the blocker (expect the dependency-cycle refusal in the dialog). Remove the blocker
