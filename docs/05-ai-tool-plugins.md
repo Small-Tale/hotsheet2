@@ -963,6 +963,28 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   falls back to `list`, which also carries no scrollback, so a long-lived older broker gets
   the same relief without a restart. MCP presence sweeps check lease pids with a direct
   `kill(pid, 0)` rather than spawning `kill -0`.
+- **Broker build hand-off (HS2-H0WFJG).** A broker outlives the server that started it, so
+  a server can find a live broker from another build. This happens when a development host
+  starts the machine server first and the pinned production host then restarts it onto its
+  snapshot (HS2-9AWEX5): the broker keeps running the development executable. On startup
+  the server asks the live broker for its `identity` (pid, executable, compiled build
+  revision, and hosted terminal count) and compares it with the broker it would launch
+  itself. It differs when the executables are different files or both builds carry
+  different revisions.
+  - **Idle: handed off.** A broker from another build that hosts no terminals is asked to
+    `retire_if_idle`. The broker decides in its serve loop, where the client count is
+    exact. It retires only with no terminals and no client other than the requester, then
+    stops accepting, exits, and removes its socket. The server then starts a broker from its
+    own build.
+  - **Live terminals: kept.** Live PTYs are never killed, restarted, or moved to another
+    process; a broker hosting any is adopted unchanged. The server logs that it kept a
+    broker from another build. After the user's last terminal closes, the ordinary idle
+    exit ends that broker and the next terminal request starts one from the current build.
+    The broker protocol's compatibility guarantee (unknown ops answer `bad request`, older
+    fields default) keeps a newer server working with the older broker meanwhile.
+  - **Unknown builds: adopted.** A broker that predates `identity`, or cannot name its
+    executable, is adopted as before. An embedded broker without an idle lifetime never
+    retires on request.
 - **Dead bootstrap namespace (HS2-CY01TZ, macOS).** A process inherits its Mach bootstrap
   port from whatever launched it. A long-lived broker can outlive that context and keep a
   dead port; every terminal it spawns then inherits it, and FSEvents watchers, DNS, Keychain,

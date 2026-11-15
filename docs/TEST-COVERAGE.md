@@ -457,6 +457,18 @@ PATCH on a synthetic Started GitHub issue: a human note returns a start offer wi
 exactly one provider write, a foreign session cannot be chosen, and an AI note does
 not notify.
 
+HS2-H0WFJG covers the broker build hand-off. In `crates/hotsheet-terminals/src/broker.rs`,
+`hs2_h0wfjg_retire_only_when_no_terminal_and_no_other_client` checks `identity` and that
+`retire_if_idle` refuses while a terminal lives or another client is connected, then
+retires once both are gone. An embedded broker never retires. In
+`crates/hotsheet-server/src/terminal_broker.rs`, a build-comparison matrix covers unknown,
+symlinked, other-file, and other-revision builds. A hand-off test against a real
+detached-lifetime broker keeps a live terminal and retires only the idle broker.
+`hs2_h0wfjg_a_pinned_server_keeps_a_dev_broker_with_terminals_and_replaces_it_when_idle`
+in `crates/hotsheet-server/tests/broker_startup.rs` runs two copies of the real server
+binary. The pinned copy keeps the dev broker and its terminal output, then replaces the
+idle dev broker with one from its own executable.
+
 HS2-WKRFD5 covers the delivery journal in
 `crates/hotsheet-server/src/routes/feedback_journal.rs` (round trip, empty then
 refill, non-ULID ids, a corrupt entry refusing, write failure then restart then
