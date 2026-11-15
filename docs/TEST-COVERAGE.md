@@ -2868,6 +2868,14 @@ discard flow remains covered by its existing real-router test.
 - End to end: `crates/hotsheet-server/tests/broker_startup.rs # long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_restart` retains its actual self-hosted broker, private short namespace, same-inode restart, PTY output persistence and owned cleanup assertions.
 - Manual: inspect the status/probe metadata if the historical failure recurs; no live user-host probe is required.
 
+### Detached broker startup follows the spawned process (HS2-KCM23W)
+
+- Behavior: a broker that is still running is waited for past the 2 s grace window up to a 30 s ceiling, at server startup and on a request-driven restart; an exited broker with an absent socket fails at once; an exited contender whose socket another broker owns keeps only the grace window.
+- Unit: `crates/hotsheet-server/src/terminal_broker_startup.rs # hs2_kcm23w_*` pins the wait decision for running, exited and unobservable contenders and the ceiling against the measured 3.6 s first launch.
+- Unit/real process: `crates/hotsheet-server/src/terminal_broker_startup_tests.rs # hs2_kcm23w_a_live_broker_that_binds_after_two_seconds_is_adopted, hs2_kcm23w_an_exited_broker_fails_without_waiting_out_the_window, hs2_kcm23w_a_live_broker_that_never_binds_fails_at_the_ceiling, hs2_kcm23w_a_restart_adopts_a_live_broker_that_binds_after_two_seconds, hs2_kcm23w_a_restart_whose_broker_exited_fails_fast` drive a live or exited synthetic child with a socket bound 2.5 s late, never bound, or absent.
+- End to end: `crates/hotsheet-server/tests/broker_startup.rs` keeps the real detached startup and restart path green; a real slow first launch is not reproduced in CI.
+- Manual: none; the slow first launch is driven by the delayed-bind fixtures.
+
 ### GitHub endpoint provenance and recovery (HS2-6H8ZY6)
 
 - Unit: `hotsheet-ticketing/src/github_endpoint` covers Explicit, Inferred and

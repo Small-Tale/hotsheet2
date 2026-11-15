@@ -1102,8 +1102,17 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
     the spawned PID, observed exit status or still-running state, and last probe error
     kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
     logged. A healthy Pong still succeeds even if this launch's contender exited; startup
-    does not change ownership or shorten/extend its readiness window. The intermittent
-    historical failure's cause remains tracked separately in HS2-2ETGGC.
+    does not change ownership. The intermittent historical failure's cause remains tracked
+    separately in HS2-2ETGGC.
+    The readiness window follows the spawned broker (HS2-KCM23W), at server startup and when
+    a request restarts an idle broker: every start gets the 2 s grace window (40 probes,
+    50 ms apart); after it the server keeps waiting only while the spawned process is still
+    running, up to a 30 s ceiling, because the first launch of a newly installed or copied
+    executable on macOS can wait more than 3.5 s in the host's assessment queue
+    (HS2-04D6DW). A broker process that has exited while nothing owns its socket fails at
+    once instead of waiting out the window; an exited contender whose socket another broker
+    owns keeps the grace window so it can still adopt that winner. A relayed broker's state
+    is read with a signal-0 probe. The failure text also names the elapsed wait.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
   child shells — HS1 §22.13.1). Every launched process also drops the inherited
   repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;

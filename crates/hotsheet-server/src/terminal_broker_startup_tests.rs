@@ -1,6 +1,11 @@
 //! HS2-C8J6WS: deterministic evidence retention, not a historical startup-cause reproduction.
+//! HS2-KCM23W: a live broker that binds after the original 2 s window is still adopted, and
+//! one that exited fails without waiting out the window.
 
-use super::{BrokerResponse, wait_for_broker_startup};
+use super::startup::{ContenderState, StartupContender, StartupWindow};
+use super::{
+    BrokerResponse, TerminalBroker, tracked_child_state, wait_for_broker_startup, wait_for_startup,
+};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -8,7 +13,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn exited_child(home: &Path) -> hotsheet_process_journal::TrackedChild {
     let mut command = hotsheet_ticketing::git::launch("/bin/sh");
@@ -135,11 +140,144 @@ fn hs2_c8j6ws_accepting_non_pong_retains_probe_kind_and_all_attempts() {
         .stderr(Stdio::null());
     let mut child = HeldChild(fixture_child(home.path(), &mut command));
     let peer = Peer::bind(home.path().join("non-pong.sock"), false);
-    let error = wait_for_broker_startup(&peer.path, &mut child.0)
-        .unwrap_err()
-        .to_string();
+    // The grace window alone: a live child is otherwise waited for up to the ceiling.
+    let window = StartupWindow {
+        grace_attempts: 40,
+        ceiling: Duration::ZERO,
+    };
+    let pid = child.0.id();
+    let error = wait_for_startup(&peer.path, pid, "spawned", window, || {
+        tracked_child_state(&mut child.0)
+    })
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("last probe: InvalidData"), "{error}");
     assert!(error.contains("os error None"), "{error}");
     assert!(error.contains("child still running"), "{error}");
     assert_eq!(peer.probes.load(Ordering::SeqCst), 40);
+}
+
+fn live_child(home: &Path) -> HeldChild {
+    // /bin/cat on a held stdin pipe stays alive until the fixture drops it.
+    let mut command = hotsheet_ticketing::git::launch("/bin/cat");
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    HeldChild(fixture_child(home, &mut command))
+}
+
+impl StartupContender for HeldChild {
+    fn state(&mut self) -> ContenderState {
+        tracked_child_state(&mut self.0)
+    }
+}
+
+/// Past the original 40 x 50 ms window, as a first macOS launch can be (HS2-04D6DW: 3.6 s).
+const SLOW_BIND: Duration = Duration::from_millis(2_500);
+
+#[test]
+fn hs2_kcm23w_a_live_broker_that_binds_after_two_seconds_is_adopted() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let mut child = live_child(home.path());
+    let socket = home.path().join("slow.sock");
+    let bind_at = socket.clone();
+    let binder = thread::spawn(move || {
+        thread::sleep(SLOW_BIND);
+        Peer::bind(bind_at, true)
+    });
+    let started = Instant::now();
+    let result = wait_for_broker_startup(&socket, &mut child.0);
+    let peer = binder.join().unwrap();
+    result.unwrap();
+    assert!(started.elapsed() >= SLOW_BIND);
+    assert!(peer.probes.load(Ordering::SeqCst) >= 1);
+}
+
+#[test]
+fn hs2_kcm23w_an_exited_broker_fails_without_waiting_out_the_window() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let mut child = exited_child(home.path());
+    let started = Instant::now();
+    let error = wait_for_broker_startup(&home.path().join("missing.sock"), &mut child)
+        .unwrap_err()
+        .to_string();
+    assert!(started.elapsed() < Duration::from_secs(1), "{error}");
+    assert!(error.contains("child exited: exit status: 17"), "{error}");
+}
+
+#[test]
+fn hs2_kcm23w_a_live_broker_that_never_binds_fails_at_the_ceiling() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let mut child = live_child(home.path());
+    let pid = child.0.id();
+    let window = StartupWindow {
+        grace_attempts: 2,
+        ceiling: Duration::from_millis(400),
+    };
+    let started = Instant::now();
+    let error = wait_for_startup(
+        &home.path().join("never.sock"),
+        pid,
+        "spawned",
+        window,
+        || tracked_child_state(&mut child.0),
+    )
+    .unwrap_err()
+    .to_string();
+    let elapsed = started.elapsed();
+    assert!(elapsed >= Duration::from_millis(400), "{elapsed:?}");
+    assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    assert!(error.contains("child still running"), "{error}");
+    assert!(error.contains("last probe: absent"), "{error}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_kcm23w_a_restart_adopts_a_live_broker_that_binds_after_two_seconds() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let socket = home.path().join("restart.sock");
+    let broker = TerminalBroker::at(&socket, "proj");
+    let bind_at = socket.clone();
+    let contender_home = home.path().to_owned();
+    let started = Instant::now();
+    let mut client = broker
+        .connect_or_restart(move || {
+            tokio::spawn(async move {
+                tokio::time::sleep(SLOW_BIND).await;
+                let listener = tokio::net::UnixListener::bind(&bind_at).unwrap();
+                hotsheet_terminals::serve_broker(
+                    listener,
+                    "proj".into(),
+                    Arc::new(hotsheet_terminals::TerminalManager::new()),
+                )
+                .await;
+            });
+            Ok(live_child(&contender_home))
+        })
+        .await
+        .unwrap();
+    assert!(started.elapsed() >= SLOW_BIND);
+    assert!(matches!(
+        client
+            .request(&hotsheet_terminals::BrokerRequest::Ping)
+            .await
+            .unwrap(),
+        BrokerResponse::Pong
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_kcm23w_a_restart_whose_broker_exited_fails_fast() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let broker = TerminalBroker::at(home.path().join("gone.sock"), "proj");
+    let contender_home = home.path().to_owned();
+    let started = Instant::now();
+    let error = broker
+        .connect_or_restart(move || Ok(HeldChild(exited_child(&contender_home))))
+        .await
+        .err()
+        .expect("an exited broker never comes up")
+        .to_string();
+    assert!(started.elapsed() < Duration::from_secs(1), "{error}");
+    assert!(error.contains("child exited: exit status: 17"), "{error}");
 }
