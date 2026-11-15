@@ -136,8 +136,19 @@ test('clears the halted terminal example from its menu at wide and phone widths 
     await page.goto('/ux-demo?component=terminal-dashboard');
     const tile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo:halted"]');
     await expect(tile).toHaveAttribute('data-halted', 'true');
-    await tile.getByRole('button', { name: 'More Actions' }).click();
-    await page.getByRole('menuitem', { name: 'Clear stopped state' }).click();
+    const trigger = tile.getByRole('button', { name: 'More Actions' });
+    await trigger.click();
+    const clear = page.getByRole('menuitem', { name: 'Clear stopped state' });
+    // The example frame is the containing block of the menu's fixed anchor; the demo must still anchor the
+    // menu at its trigger's viewport point, not offset by the frame's position and off screen (HS2-CY6A6K).
+    await expect(clear).toBeInViewport();
+    if (width === 1280) {
+      // The wide tile is in view without scrolling, so its trigger stays put while the menu opens below it.
+      const opener = (await trigger.boundingBox())!,
+        menu = (await page.getByRole('menu', { name: 'Terminal Actions' }).boundingBox())!;
+      expect(Math.abs(menu.y - (opener.y + opener.height))).toBeLessThanOrEqual(8);
+    }
+    await clear.click();
     await expect(tile).not.toHaveAttribute('data-halted', 'true');
     await expect(tile.locator('.terminal-tile__halt')).toHaveCount(0);
   }
