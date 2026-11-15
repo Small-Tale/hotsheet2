@@ -27,7 +27,18 @@ static SEEN: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 /// HS2-2EKDSM: changes this server is making to an owner's settings right now. The
 /// watcher compares only while none is in flight, so the server's own change, which it
 /// announces itself, is not announced a second time.
-static IN_FLIGHT: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+static IN_FLIGHT: OnceLock<Mutex<HashMap<String, Changes>>> = OnceLock::new();
+
+/// HS2-N8VRFC: the server's own changes of one owner: how many are in flight, and how
+/// many ever began. The watcher reads the count of begun changes before it reads the
+/// settings and records what it read only if no change began since, under the same
+/// lock, so a change that starts between its quiet check and its read is left to the
+/// server, which records and announces it.
+#[derive(Default)]
+struct Changes {
+    in_flight: usize,
+    begun: u64,
+}
 /// The longest the watcher defers to a change in flight before comparing anyway.
 const IN_FLIGHT_LIMIT: Duration = Duration::from_secs(30);
 
@@ -132,20 +143,20 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
 /// [`seen_after_change`] or [`change_failed`].
 pub(super) fn begin_change(state: &AppState, owner: &str) {
     let key = super::orchestration::loop_key(state, owner);
-    *IN_FLIGHT
-        .get_or_init(Default::default)
-        .lock_or_recover()
-        .entry(key)
-        .or_default() += 1;
+    begin(&key);
+}
+
+fn begin(key: &str) {
+    let mut changes = IN_FLIGHT.get_or_init(Default::default).lock_or_recover();
+    let changes = changes.entry(key.to_owned()).or_default();
+    changes.in_flight += 1;
+    changes.begun += 1;
 }
 
 fn end_change(key: &str) {
-    let mut in_flight = IN_FLIGHT.get_or_init(Default::default).lock_or_recover();
-    if let Some(count) = in_flight.get_mut(key) {
-        *count = count.saturating_sub(1);
-        if *count == 0 {
-            in_flight.remove(key);
-        }
+    let mut changes = IN_FLIGHT.get_or_init(Default::default).lock_or_recover();
+    if let Some(changes) = changes.get_mut(key) {
+        changes.in_flight = changes.in_flight.saturating_sub(1);
     }
 }
 
@@ -153,7 +164,35 @@ fn in_flight(key: &str) -> bool {
     IN_FLIGHT
         .get_or_init(Default::default)
         .lock_or_recover()
-        .contains_key(key)
+        .get(key)
+        .is_some_and(|changes| changes.in_flight > 0)
+}
+
+/// How many of the server's own changes of this owner ever began.
+fn begun(key: &str) -> u64 {
+    IN_FLIGHT
+        .get_or_init(Default::default)
+        .lock_or_recover()
+        .get(key)
+        .map_or(0, |changes| changes.begun)
+}
+
+/// Record `fingerprint` as seen unless a change of the server's own began after
+/// `since` (or is in flight); whether it differs from the last one seen. One lock
+/// orders this against [`begin_change`], so the server's change is not announced here
+/// too (HS2-N8VRFC).
+fn record_unless_changing(key: &str, since: u64, fingerprint: u64) -> bool {
+    let changes = IN_FLIGHT.get_or_init(Default::default).lock_or_recover();
+    if changes
+        .get(key)
+        .is_some_and(|changes| changes.in_flight > 0 || changes.begun != since)
+    {
+        return false;
+    }
+    SEEN.get_or_init(Default::default)
+        .lock_or_recover()
+        .insert(key.to_owned(), fingerprint)
+        .is_none_or(|before| before != fingerprint)
 }
 
 /// HS2-2EKDSM: the change [`begin_change`] announced failed; nothing to record.
@@ -246,15 +285,11 @@ fn follow(
             || (in_flight(key) && deferred.elapsed() < IN_FLIGHT_LIMIT)
         {}
         add_watches(&mut watcher, &mut watched, paths);
+        let since = begun(key);
         let Ok(fingerprint) = runtime.orchestration_fingerprint(owner) else {
             continue;
         };
-        let changed = SEEN
-            .get_or_init(Default::default)
-            .lock_or_recover()
-            .insert(key.to_owned(), fingerprint)
-            .is_none_or(|before| before != fingerprint);
-        if changed {
+        if record_unless_changing(key, since, fingerprint) {
             super::orchestration::note_orchestration_change(state, owner);
         }
     }
@@ -264,19 +299,42 @@ fn follow(
 mod tests {
     use super::*;
 
+    /// HS2-N8VRFC: a change of the server's own that begins between the watcher's quiet
+    /// check and its read keeps the watcher from recording or announcing what it read;
+    /// with no change since, it records once and reports a difference only once.
+    #[test]
+    fn hs2_n8vrfc_a_change_begun_after_the_check_is_left_to_the_server() {
+        let key = "hs2-n8vrfc-test|1";
+        let since = begun(key);
+        begin(key);
+        assert!(
+            !record_unless_changing(key, since, 7),
+            "a change is in flight"
+        );
+        end_change(key);
+        assert!(
+            !record_unless_changing(key, since, 7),
+            "a change began since the check"
+        );
+        assert!(
+            !SEEN
+                .get_or_init(Default::default)
+                .lock_or_recover()
+                .contains_key(key),
+            "nothing was recorded"
+        );
+        let since = begun(key);
+        assert!(record_unless_changing(key, since, 7), "a new fingerprint");
+        assert!(!record_unless_changing(key, since, 7), "the same one again");
+        assert!(record_unless_changing(key, since, 8));
+    }
+
     /// HS2-2EKDSM: changes in flight are counted per owner key, so two overlapping
     /// changes keep the watcher deferring until both are recorded, an end without a
     /// begin changes nothing, and other owners are unaffected.
     #[test]
     fn hs2_2ekdsm_in_flight_changes_are_counted_per_owner() {
         let key = |n: u8| format!("hs2-2ekdsm-test|{n}");
-        let begin = |key: &str| {
-            *IN_FLIGHT
-                .get_or_init(Default::default)
-                .lock_or_recover()
-                .entry(key.to_owned())
-                .or_default() += 1;
-        };
         assert!(!in_flight(&key(1)));
         begin(&key(1));
         begin(&key(1));

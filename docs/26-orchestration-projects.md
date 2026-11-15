@@ -4859,7 +4859,11 @@ never changes it) and publishes the same `orchestration_changed` event only when
 digest differs from the last one seen. A change the server makes itself is marked in
 flight before it runs and records the new digest before it announces; while one is in
 flight the watcher defers its comparison (at most 30 seconds), so the server's own
-change is announced once (HS2-2EKDSM). The watcher reads nothing on a timer and
+change is announced once (HS2-2EKDSM). A change that begins after the watcher's
+quiet check, while it reads the settings, is left to the server too: the watcher
+records and announces what it read only if no change of the server's own began since
+its check, decided under the same lock that starts a change (HS2-N8VRFC). The watcher
+reads nothing on a timer and
 ends when the server stops. The watched paths are `orchestration_watch_paths`.
 
 ### Headless surface
