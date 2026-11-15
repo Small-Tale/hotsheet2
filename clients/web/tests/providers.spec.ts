@@ -8695,7 +8695,10 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
     .toBe(true);
 });
 
-test('opening and closing a chat message menu keeps the reading position (HS2-BT9MD3)', async ({ page }, testInfo) => {
+// WebKit selects the word under a secondary click before `contextmenu`; the menu still opens (HS2-FZ4RQN).
+test('opening and closing a chat message menu keeps the reading position (HS2-BT9MD3) @ci-webkit', async ({
+  page,
+}, testInfo) => {
   await page.setViewportSize({ width: 1662, height: 1286 });
   await mockProject(page);
   await page.goto('/');

@@ -2312,8 +2312,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   exclusions get no marker. Right-clicking a selected message offers Copy and Download for
   the selection; right-clicking an unselected message offers those actions for only that
   message, leaving any selection intact. Shift+F10 and the Context Menu key open the same
-  menu on a focused message row; links, file controls, and selected text retain the native
-  browser menu. Opening and dismissing the menu preserve the transcript's reading position
+  menu on a focused message row; links, file controls, and text the reader selected before
+  the right-click retain the native browser menu. The word a secondary click itself selects
+  (WebKit and macOS select it before `contextmenu`) still opens the message menu (HS2-FZ4RQN). Opening and dismissing the menu preserve the transcript's reading position
   at desktop and phone widths (HS2-BT9MD3), including on a slow host where the menu renders
   before the browser dispatches the reader's scroll event, and after a resize recentres or
   narrows the dialog: only the selection bar's movement within the conversation is compensated
