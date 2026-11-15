@@ -159,3 +159,92 @@ fn hs2_m7ev18_a_detached_step_outlives_its_host_process_and_runs_once() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+#[test]
+fn hs2_bwapsx_a_detached_runner_is_shown_among_the_machines_jobs() {
+    use hotsheet_jobs::{JobStore, ProducerFamily, Status};
+    let m = machine(10, false, unsupported);
+    let runtime = m.runtime.clone().with_detached_validation();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let checkout = m.target.id.clone();
+    let root = Path::new(&m.target.root).to_path_buf();
+    let store = JobStore::at(&m.home);
+    let job_of = |execution: &str| {
+        store
+            .list(&checkout)
+            .unwrap()
+            .jobs
+            .into_iter()
+            .find(|job| job.external.as_ref().is_some_and(|e| e.id == execution))
+    };
+    let held = "while [ ! -f go ]; do sleep 0.05; done; exit 3";
+    runtime
+        .hosted_validation_start(&checkout, start(90, held, 0), &mut tx)
+        .unwrap();
+    // While the step runs, its runner holds a running owned Job of its own kind.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let running = loop {
+        if let Some(job) = job_of(&id(90)).filter(|job| job.status == Status::Running) {
+            break job;
+        }
+        assert!(Instant::now() < deadline, "the runner never showed a Job");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(
+        (
+            running.kind.family,
+            running.kind.name.as_str(),
+            running.title.as_str()
+        ),
+        (ProducerFamily::Owned, "validation-step", "Validation step")
+    );
+    assert!(running.lease.is_some());
+    // It ends; the Job ends with the step's end, by codes and numbers only.
+    std::fs::write(root.join("go"), "").unwrap();
+    let finished = runtime
+        .hosted_validation(&checkout, &id(90), MAX_VALIDATION_WAIT_MS)
+        .unwrap();
+    assert_eq!(finished.state, HostedExecutionState::Finished);
+    let job = job_of(&id(90)).unwrap();
+    assert_eq!(job.status, Status::Failed);
+    let outcome = job.outcome.unwrap();
+    assert_eq!(outcome.refs["exit_code"], "3");
+    assert_eq!(outcome.refs["end"], "exited");
+    // A cancelled step's Job reads cancelled; one Job per execution, however asked.
+    std::fs::remove_file(root.join("go")).unwrap();
+    runtime
+        .hosted_validation_start(&checkout, start(91, held, 0), &mut tx)
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while job_of(&id(91)).is_none_or(|job| job.status != Status::Running) {
+        assert!(
+            Instant::now() < deadline,
+            "the second runner never showed a Job"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    runtime
+        .hosted_validation_cancel(
+            &checkout,
+            HostedValidationCancel {
+                execution_id: id(91),
+                wait_ms: MAX_VALIDATION_WAIT_MS,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(job_of(&id(91)).unwrap().status, Status::Cancelled);
+    let kinds: Vec<_> = store
+        .list(&checkout)
+        .unwrap()
+        .jobs
+        .iter()
+        .filter(|job| job.kind.name == "validation-step")
+        .map(|job| job.id.clone())
+        .collect();
+    assert_eq!(kinds.len(), 2);
+}

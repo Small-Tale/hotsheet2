@@ -1559,10 +1559,15 @@ at most `wait_ms` (8,000) for it:
   host may therefore exit while a step runs; `validation run` still waits by default
   so its caller sees the result. The runner is used where its liveness can be
   checked by start time (Linux, macOS); elsewhere a step runs inside the hosting
-  process as before. A `hotsheet-jobs` owned Job was evaluated and not used: the Job
-  store has no owned-process runner, and a second record would duplicate the
-  registry's never-run-twice guarantee. Showing runners among the machine's Jobs is
-  HS2-BWAPSX.
+  process as before. The registry stays the one never-run-twice record. Each runner is
+  also shown among the machine's Jobs ([33](33-jobs.md), HS2-BWAPSX): an owned Job of
+  kind `validation-step` under the hosted checkout, keyed by the execution id and
+  titled "Validation step" or "Deployment to `<environment>`", running under a lease
+  the runner renews while the step runs, then `succeeded` (exit 0), `failed` or
+  `cancelled`, with the end, exit code and duration as its outcome. It carries no
+  output, no feed and no actions (a step is stopped through the orchestration's
+  cancel). A runner that dies stops renewing, so its Job reads stalled and then
+  lost.
 - A step runs as its own process group. While it runs, the record names that group
   and the hosting process, each by pid and start time (HS2-HTS89S). When a later
   host process starts serving (the server at start-up, a CLI host on its first

@@ -188,6 +188,7 @@ impl OrchestrationRuntime {
                     path: path.clone(),
                     commit: commit.clone(),
                 }),
+                title: format!("Deployment to {}", request.environment),
             }))
         };
         self.start_hosted(

@@ -12,10 +12,12 @@
 //! running step from one whose runner died (`execution_lost`). A cancel leaves a marker
 //! the runner waits on with a file watcher. Nothing polls a provider or a peer.
 //!
-//! Evaluated against a `hotsheet-jobs` owned Job: the Job store has no owned-process
-//! runner yet, and a Job record would duplicate the registry's never-run-twice record
-//! with a second state machine. The registry plus process identity gives the same
-//! guarantees with one record; showing a step among the machine's Jobs is HS2-BWAPSX.
+//! The registry stays the one never-run-twice record. HS2-BWAPSX: each runner is also
+//! shown among the machine's Jobs (docs/33) as an owned Job of kind `validation-step`
+//! under the hosted checkout, keyed by its execution id, which mirrors its state: running
+//! under a renewed lease while the step runs, then succeeded, failed or cancelled with
+//! codes and numbers only. A runner that dies stops renewing, so its Job reads stalled
+//! and then lost, as any owned Job whose producer is gone.
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -51,6 +53,147 @@ pub(super) struct StepSpec {
     /// HS2-G3VAK4: a checkout made for this execution, removed when it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<Worktree>,
+    /// HS2-BWAPSX: the title the runner's Job shows; ids and plain words only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+/// HS2-BWAPSX: the Job kind of a detached runner.
+pub const RUNNER_JOB_KIND: &str = "validation-step";
+
+/// The machine's Job that mirrors one runner while it runs.
+struct RunnerJob {
+    store: hotsheet_jobs::JobStore,
+    checkout_id: String,
+    job_id: String,
+    token: hotsheet_jobs::LeaseToken,
+    stop: std::sync::mpsc::Sender<()>,
+    heartbeat: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RunnerJob {
+    /// Show the runner among the machine's Jobs. Best effort: a Job store that cannot
+    /// be written never holds the step back.
+    fn publish(home: &Path, spec: &StepSpec) -> Option<Self> {
+        use hotsheet_jobs::{
+            Acquire, ActiveStatus, Capabilities, ExternalRef, JobKind, JobStore, NewJob,
+            ProducerFamily,
+        };
+        let store = JobStore::at(home);
+        let external = ExternalRef {
+            system: RUNNER_JOB_KIND.into(),
+            id: spec.execution_id.clone(),
+        };
+        let (job, _) = store
+            .find_or_create(
+                NewJob {
+                    checkout_id: spec.checkout_id.clone(),
+                    kind: JobKind {
+                        family: ProducerFamily::Owned,
+                        name: RUNNER_JOB_KIND.into(),
+                    },
+                    job_key: format!("{RUNNER_JOB_KIND}:{}", spec.checkout_id),
+                    title: spec
+                        .title
+                        .clone()
+                        .unwrap_or_else(|| "Validation step".into()),
+                    capabilities: Capabilities::default(),
+                    ticket: None,
+                    external: Some(external.clone()),
+                    retry_of: None,
+                    url: None,
+                },
+                |job| job.external.as_ref() == Some(&external),
+            )
+            .ok()?;
+        let (_, token) = store
+            .acquire(
+                &spec.checkout_id,
+                &job.id,
+                Acquire {
+                    owner: format!("runner-{}", std::process::id()),
+                    status: ActiveStatus::Running,
+                    launch_id: None,
+                    external: Some(external),
+                },
+            )
+            .ok()?;
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        // The lease is renewed at a third of its length while the step runs: a local
+        // file write, like the watch monitor's, never a request. Ending the step ends
+        // the wait at once.
+        let heartbeat = {
+            let (store, checkout_id, job_id, token) = (
+                store.clone(),
+                spec.checkout_id.clone(),
+                job.id.clone(),
+                token.clone(),
+            );
+            let every = Duration::from_millis((store.config().lease_ms / 3).max(100));
+            std::thread::spawn(move || {
+                while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                    stopped.recv_timeout(every)
+                {
+                    let _ = store.renew(&checkout_id, &job_id, &token);
+                }
+            })
+        };
+        Some(Self {
+            store,
+            checkout_id: spec.checkout_id.clone(),
+            job_id: job.id,
+            token,
+            stop,
+            heartbeat: Some(heartbeat),
+        })
+    }
+
+    /// Record how the step ended, by codes and numbers.
+    fn finish(mut self, outcome: &ExecutionOutcome) {
+        let _ = self.stop.send(());
+        if let Some(heartbeat) = self.heartbeat.take() {
+            let _ = heartbeat.join();
+        }
+        let end = serde_json::to_value(outcome.end)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let mut refs = std::collections::BTreeMap::from([
+            ("end".to_owned(), end.clone()),
+            ("duration_ms".to_owned(), outcome.duration_ms.to_string()),
+        ]);
+        if let Some(code) = outcome.exit_code {
+            refs.insert("exit_code".to_owned(), code.to_string());
+        }
+        let result = hotsheet_jobs::Outcome {
+            summary: Some(match outcome.exit_code {
+                Some(code) => format!("ended {end} with exit code {code}"),
+                None => format!("ended {end}"),
+            }),
+            refs,
+        };
+        let (checkout, job) = (&self.checkout_id, &self.job_id);
+        let _ = match outcome.end {
+            ExecutionEnd::Cancelled => {
+                self.store
+                    .confirm_cancel(checkout, job, &self.token, result)
+            }
+            ExecutionEnd::Exited if outcome.exit_code == Some(0) => self.store.finish(
+                checkout,
+                job,
+                &self.token,
+                hotsheet_jobs::FinalStatus::Succeeded,
+                result,
+            ),
+            _ => self.store.finish(
+                checkout,
+                job,
+                &self.token,
+                hotsheet_jobs::FinalStatus::Failed,
+                result,
+            ),
+        };
+    }
 }
 
 /// HS2-G3VAK4: a detached Git worktree of one commit, made for one execution so it runs
@@ -289,6 +432,8 @@ pub fn run_validation_step(
 }
 
 fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec) {
+    // HS2-BWAPSX: shown among the machine's Jobs while it runs.
+    let job = RunnerJob::publish(home, spec);
     let cancel = Arc::new(AtomicBool::new(false));
     let done = Arc::new(AtomicBool::new(false));
     let marker = file(home, &spec.checkout_id, &spec.execution_id, "cancel");
@@ -342,6 +487,9 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
     done.store(true, Ordering::SeqCst);
     if let Some(worktree) = &spec.worktree {
         worktree.remove();
+    }
+    if let Some(job) = job {
+        job.finish(&outcome);
     }
     let _ = registry.finish(
         &spec.checkout_id,

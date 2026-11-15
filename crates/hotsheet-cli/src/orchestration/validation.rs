@@ -57,6 +57,8 @@ pub(super) struct HostedCommand {
     pub retain: Option<PathBuf>,
     /// HS2-G3VAK4: a checkout made for this execution, removed when it ends.
     pub worktree: Option<super::validation_runner::Worktree>,
+    /// HS2-BWAPSX: what the machine's Job of a detached runner is titled.
+    pub title: String,
 }
 
 /// Start one execution on the machine that hosts the checkout, or return the one this
@@ -698,6 +700,7 @@ impl OrchestrationRuntime {
                     root: root.clone(),
                     retain: Some(retain.clone()),
                     worktree: None,
+                    title: "Validation step".into(),
                 }),
             )
         };
@@ -801,6 +804,7 @@ impl OrchestrationRuntime {
                                 output_limit: MAX_VALIDATION_OUTPUT_BYTES,
                                 retain: command.retain,
                                 worktree: command.worktree,
+                                title: Some(command.title),
                             },
                             &execution,
                         );

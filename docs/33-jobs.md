@@ -361,6 +361,17 @@ Job kind and external system are `gitlab-ci`.
   `HOTSHEET_GITLAB_API_URL` (default `https://gitlab.com/api/v4`), HTTPS except
   loopback HTTP for tests.
 
+## 33.12 Validation and deployment runners (HS2-BWAPSX)
+
+A hosted validation step or deployment that runs in a detached runner
+([26](26-orchestration-projects.md) §26.12, HS2-M7EV18) is shown as an owned Job of
+kind `validation-step` under the hosted checkout, found or created by its execution id
+(`external.system = validation-step`). The runner holds its lease, renews it at a third
+of the lease length while the step runs, and ends it as `succeeded` for exit 0,
+`failed` otherwise, or `cancelled`, with `end`, `exit_code` and `duration_ms` refs. The
+hosted-validation registry stays the record that keeps an execution from running
+twice; the Job only mirrors it. No output enters the Job, which declares no actions.
+
 ## 33.10 File watchers and change waiters (HS2-N1QDZW)
 
 Every wait in the command-line runtime that wakes on a file change starts its
