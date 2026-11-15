@@ -344,7 +344,8 @@ fn hs2_h0wfjg_a_pinned_server_keeps_a_dev_broker_with_terminals_and_replaces_it_
         "the idle dev broker retired"
     );
     assert_eq!(executable(&replaced), pinned);
-    assert_ne!(fs::metadata(&socket).unwrap().ino(), dev_socket);
+    // No inode check here (HS2-9CCPSQ): Linux may reuse the removed socket's inode
+    // number for the replacement, so the pid and executable prove the hand-over.
     let retired_pid = dev_broker["pid"].as_u64().unwrap() as i32;
     let deadline = Instant::now() + Duration::from_secs(5);
     // SAFETY: signal 0 only checks whether the retired broker's pid still exists.
