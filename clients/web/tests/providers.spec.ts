@@ -37092,6 +37092,9 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
       const response = await route.fetch({
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        // HS2-NWFZ7J: hyper closes an idle keep-alive socket after 30 s; a proxied read that reuses
+        // it at that moment gets ECONNRESET ("socket hang up"). Only idempotent reads are retried.
+        ...(route.request().method() === 'GET' ? { maxRetries: 2 } : {}),
         ...(requestBody?.follow_up_to || requestBody?.source || requestBody?.target
           ? {
               postData: JSON.stringify({
@@ -37149,15 +37152,22 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
     // HS2-Y4Y7V6: the follow-up uses the standard composer layout, so the title leads the first
     // row beside the category and no "Follow-up to …" line pushes it aside.
     await expect(dialog.getByText(`Follow-up to ${source.slug}`, { exact: true })).toHaveCount(0);
-    const [titleBox, categoryBox, formBox] = await Promise.all([
-      dialog.locator('.quick-ticket-composer__title').boundingBox(),
-      dialog.locator('.quick-ticket-composer__metadata').boundingBox(),
-      dialog.locator('form.quick-ticket-composer').boundingBox(),
-    ]);
-    expect(titleBox!.x - formBox!.x).toBeLessThan(24);
-    expect(categoryBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width - 1);
-    expect(Math.abs(categoryBox!.y + categoryBox!.height - (titleBox!.y + titleBox!.height))).toBeLessThan(24);
-    await page.waitForTimeout(300);
+    // HS2-NWFZ7J: Web Awesome scales the panel from 0.8 while its `show` class animates, so three
+    // separate boundingBox reads under load sampled different scales. Wait for Web Awesome to
+    // remove that class at animationend, then read every box in one frame.
+    await expect(dialog.locator('[part="dialog"]')).toBeVisible();
+    await expect(dialog.locator('[part="dialog"]')).not.toHaveClass(/(^|\s)show(\s|$)/);
+    const { titleBox, categoryBox, formBox } = await dialog.evaluate((host) => {
+      const box = (selector: string) => host.querySelector(selector)!.getBoundingClientRect().toJSON() as DOMRect;
+      return {
+        titleBox: box('.quick-ticket-composer__title'),
+        categoryBox: box('.quick-ticket-composer__metadata'),
+        formBox: box('form.quick-ticket-composer'),
+      };
+    });
+    expect(titleBox.x - formBox.x).toBeLessThan(24);
+    expect(categoryBox.x).toBeGreaterThan(titleBox.x + titleBox.width - 1);
+    expect(Math.abs(categoryBox.y + categoryBox.height - (titleBox.y + titleBox.height))).toBeLessThan(24);
     await page.screenshot({ path: testInfo.outputPath('hs2-2z11a5-composer-wide.png') });
     await page.screenshot({ path: 'target/visual-captures/hs2-y4y7v6-follow-up-wide.png' });
     await dialog.getByRole('button', { name: 'Create ticket' }).click();
@@ -37205,6 +37215,8 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
         .getByRole('heading', { name: 'Synthetic follow-up ticket', level: 1 }),
     ).toBeVisible();
   } finally {
+    // Requests still in flight must not reach the stopped server (ECONNREFUSED in a route handler).
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
