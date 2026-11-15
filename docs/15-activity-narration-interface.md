@@ -207,7 +207,8 @@ client adapter, never a server dependency; other clients can inject another
     `activity/recent/<YYYY-MM-DD>.jsonl` (per-device, gitignored — like metrics raw,
     §15.4); recording automatically removes files outside the 14-day calendar window.
   - The **timeline** consumer — `activity::timeline(store, TimelineFilter)` (by
-    ticket/session/min-importance, most-recent-capped), exposed as `GET /activity`; plus
+    ticket/session/min-importance, most-recent-capped), exposed as `GET /activity` and, for
+    one served store, `GET /stores/{store_id}/activity` (HS2-82A7A7); plus
     `POST /activity` to ingest an event (server stamps id/ts, defaults summary/importance).
   - The **`activity` plugin capability** — `Manifest.activity = ActivitySpec{source}`;
     codex declares `source="codex-transcript"`, claude `source="claude-hooks"`.

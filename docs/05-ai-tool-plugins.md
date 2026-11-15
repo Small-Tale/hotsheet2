@@ -2133,6 +2133,10 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
 >   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
 >   §4.4). The headless default. A running server's watcher still picks up its writes.
+>   After a tool call that committed to a store with a remote, the shim asks the host
+>   under `HOTSHEET_HOME` to sync that store (`POST /sync/kick`, HS2-4BG2QN). If no host
+>   accepts, the tool result gains a second text item saying the commits may be local
+>   only and naming `hotsheet-cli -C <store> sync`; the call is still a success.
 > - **`--server <url> --secret <s>` → proxy** a running `hotsheet-server` over HTTP,
 >   for index-backed reads + instant broadcast.
 

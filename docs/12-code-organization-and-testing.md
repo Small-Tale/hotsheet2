@@ -1157,9 +1157,10 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   test. Every test that needs a retry gets a follow-up bug ticket for its root cause; a test
   that keeps flaking is quarantined ([test-quarantine.md](test-quarantine.md)). Retries never
   replace a fix.
-  A separate bounded WebKit job runs the inspector popup-anchor regression marked
-  `@ci-webkit` (HS2-HASXWP) in WebKit as the default engine. That is 5 tests, not a
-  WebKit run of the suite.
+  A separate bounded WebKit job runs the tests marked `@ci-webkit` in WebKit as the default
+  engine: the inspector popup-anchor regression (HS2-HASXWP), the native prompt
+  replacements, and the chat message menu (HS2-FZ4RQN). That is 6 tests, not a WebKit run of
+  the suite.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
   formatter-padded Markdown cells, ignores table separators, and checks every feature row
   and evidence reference, including rejecting rows outside the matrix markers. Repository guidance

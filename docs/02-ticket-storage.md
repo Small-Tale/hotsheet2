@@ -1008,8 +1008,10 @@ engine** so the user effectively never runs git by hand:
   A kicked pass that finds its remote unreachable backs the loop off like a regular
   pass. While backed off, kicks wait for the deadline pass. No kick adds a timer or a
   poll. If no host accepts the kick, the CLI prints on stderr that the commits may be
-  local only and names `hotsheet-cli -C <store> sync`. Writes made through the
-  serverless MCP backend do not kick yet (HS2-4BG2QN); the host's regular pass covers them.
+  local only and names `hotsheet-cli -C <store> sync`. The serverless MCP backend
+  (`hotsheet-mcp --path`) does the same after each tool call that committed to a store
+  (HS2-4BG2QN). It reports a missing or refusing host as an extra text item in the tool
+  result with that local-only notice, and the call still succeeds.
 - **Offline-tolerant:** when the remote is unreachable, keep working locally and
   reconcile on reconnect; never block a local edit on the network.
 - **Surface a conflict only when the driver genuinely cannot resolve** (the rare

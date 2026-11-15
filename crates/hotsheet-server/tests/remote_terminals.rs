@@ -376,3 +376,215 @@ async fn remote_terminal_contract(dir: tempfile::TempDir, state: AppState) {
             .is_success()
     );
 }
+
+type Viewer =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// Pair a read-write device and return its cookie, CSRF token and device id, so one device can
+/// be revoked while another stays attached.
+async fn paired_device(router: &axum::Router) -> (String, String, String) {
+    let before = device_ids(router).await;
+    let (session, csrf) = paired(router, "read_write").await;
+    let id = device_ids(router)
+        .await
+        .into_iter()
+        .find(|id| !before.contains(id))
+        .expect("pairing added a device");
+    (session, csrf, id)
+}
+
+async fn device_ids(router: &axum::Router) -> Vec<String> {
+    let listed = json(
+        router
+            .clone()
+            .oneshot(owner("GET", "/remote-auth/owner", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    listed["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|device| device["id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+async fn revoke_device(router: &axum::Router, id: &str) {
+    assert_eq!(
+        status(
+            router,
+            owner("DELETE", &format!("/remote-auth/owner/devices/{id}"), None)
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+}
+
+/// Send a focused, interacting size claim for `viewer_id`.
+async fn claim(stream: &mut Viewer, viewer_id: &str, cols: u16, rows: u16) {
+    let claim = json!({"resize": {
+        "viewer_id": viewer_id, "cols": cols, "rows": rows,
+        "focus": true, "visible": true, "interacting": true,
+    }});
+    stream
+        .send(WsMessage::Text(claim.to_string().into()))
+        .await
+        .unwrap();
+}
+
+/// Read until a `{pty_size, driven_by}` frame matches, skipping output and other control
+/// frames. Fails when the stream ends or no match arrives in time.
+async fn expect_size(
+    stream: &mut Viewer,
+    cols: u16,
+    rows: u16,
+    driven_by: Option<&str>,
+    why: &str,
+) {
+    let wanted = (json!({"cols": cols, "rows": rows}), json!(driven_by));
+    let found = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while let Some(Ok(message)) = stream.next().await {
+            if let WsMessage::Text(text) = message
+                && let Ok(frame) = serde_json::from_str::<Value>(&text)
+                && frame.get("pty_size").is_some()
+                && (frame["pty_size"].clone(), frame["driven_by"].clone()) == wanted
+            {
+                return true;
+            }
+        }
+        false
+    })
+    .await;
+    assert_eq!(found, Ok(true), "{why}: no {wanted:?} size frame");
+}
+
+async fn expect_closed(stream: &mut Viewer, why: &str) {
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            match stream.next().await {
+                None | Some(Err(_)) => return,
+                Some(Ok(message)) if message.is_close() => return,
+                Some(Ok(_)) => {}
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "{why}: the stream stayed open");
+}
+
+/// HS2-3EDFG2: a remote viewer whose session is revoked must release its size claim, so the
+/// PTY size recomputes for the viewers that remain. Walks normal exit, revocation, a repeated
+/// attach and revoke, and revoking the last viewer.
+#[tokio::test]
+async fn hs2_3edfg2_revoked_viewer_releases_its_size_claim() {
+    let (dir, state) = fixture();
+    size_claim_release(dir, state).await;
+}
+
+/// The same transitions through the detached broker, which self-heals when its connection
+/// drops (HS2-ERT00F).
+#[tokio::test]
+async fn hs2_3edfg2_revoked_broker_viewer_releases_its_size_claim() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let broker = tempfile::tempdir().unwrap();
+    let socket = broker.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let (dir, state) = fixture();
+    let state = state.with_terminal_broker_at(TerminalBroker::at(&socket, "proj"));
+    size_claim_release(dir, state).await;
+}
+
+async fn size_claim_release(dir: tempfile::TempDir, state: AppState) {
+    let router = app(state.clone());
+    let workdir = dir.path().join("checkout");
+    std::fs::create_dir_all(&workdir).unwrap();
+    let workdir = workdir.canonicalize().unwrap().display().to_string();
+    let launched = router
+        .clone()
+        .oneshot(owner(
+            "POST",
+            "/terminals",
+            Some(json!({"id": "sized-cat", "command": "cat", "cwd": workdir})),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched.status(), StatusCode::OK);
+    let addr = serve_off_box(state.clone()).await;
+
+    // The remaining viewer drives first.
+    let (remaining, remaining_csrf, remaining_device) = paired_device(&router).await;
+    let mut stay = attach(addr, "sized-cat", &remaining, Some(&remaining_csrf))
+        .await
+        .unwrap();
+    claim(&mut stay, "viewer-stay", 90, 28).await;
+    expect_size(&mut stay, 90, 28, Some("viewer-stay"), "first claim").await;
+
+    // Normal exit: a newer driver takes over, then closes its socket.
+    let (driver, driver_csrf, driver_device) = paired_device(&router).await;
+    let mut drive = attach(addr, "sized-cat", &driver, Some(&driver_csrf))
+        .await
+        .unwrap();
+    claim(&mut drive, "viewer-drive-1", 120, 40).await;
+    expect_size(&mut stay, 120, 40, Some("viewer-drive-1"), "takeover").await;
+    drive.close(None).await.unwrap();
+    expect_size(&mut stay, 90, 28, Some("viewer-stay"), "normal exit").await;
+
+    // Revocation: the same takeover, but the driver's session is revoked under it.
+    let mut drive = attach(addr, "sized-cat", &driver, Some(&driver_csrf))
+        .await
+        .unwrap();
+    claim(&mut drive, "viewer-drive-2", 120, 40).await;
+    expect_size(
+        &mut stay,
+        120,
+        40,
+        Some("viewer-drive-2"),
+        "second takeover",
+    )
+    .await;
+    revoke_device(&router, &driver_device).await;
+    expect_closed(&mut drive, "revoked driver").await;
+    expect_size(&mut stay, 90, 28, Some("viewer-stay"), "revoked driver").await;
+
+    // Repeated attach and revoke with a newly paired device.
+    let (again, again_csrf, again_device) = paired_device(&router).await;
+    let mut drive = attach(addr, "sized-cat", &again, Some(&again_csrf))
+        .await
+        .unwrap();
+    claim(&mut drive, "viewer-drive-3", 100, 30).await;
+    expect_size(&mut stay, 100, 30, Some("viewer-drive-3"), "third takeover").await;
+    revoke_device(&router, &again_device).await;
+    expect_closed(&mut drive, "second revoked driver").await;
+    expect_size(
+        &mut stay,
+        90,
+        28,
+        Some("viewer-stay"),
+        "second revoked driver",
+    )
+    .await;
+
+    // The last viewer revoked: the held size is no longer driven by anyone, so a new viewer
+    // attaches to an undriven terminal instead of one held by a revoked claim.
+    revoke_device(&router, &remaining_device).await;
+    expect_closed(&mut stay, "last viewer").await;
+    let (late, late_csrf, _) = paired_device(&router).await;
+    let mut late_viewer = attach(addr, "sized-cat", &late, Some(&late_csrf))
+        .await
+        .unwrap();
+    expect_size(&mut late_viewer, 90, 28, None, "last viewer revoked").await;
+
+    assert!(
+        status(&router, owner("DELETE", "/terminals/sized-cat", None))
+            .await
+            .is_success()
+    );
+}

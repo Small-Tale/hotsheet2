@@ -28,6 +28,12 @@ pub trait Backend {
     }
     fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError>;
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError>;
+    /// Notices to append to a tool result once its call has finished, such as a serverless
+    /// write that no running host accepted to sync (HS2-4BG2QN). Never a failure: the call's
+    /// own outcome is already decided.
+    fn after_tool_call(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// A failed backend call: an HTTP status (when the server answered) + a message.
@@ -610,10 +616,21 @@ fn call_tool(
     }
 
     // Tool-level failures are reported as an `isError` result, not an RPC error.
-    Ok(match dispatch(name, &args, backend) {
+    let mut result = match dispatch(name, &args, backend) {
         Ok(value) => tool_text(&render_result(&value), false),
         Err(message) => tool_text(&message, true),
-    })
+    };
+    // HS2-4BG2QN: a notice is an extra text item, so the first item stays the tool's own
+    // result and `isError` keeps the call's outcome.
+    if let Some(content) = result["content"].as_array_mut() {
+        content.extend(
+            backend
+                .after_tool_call()
+                .into_iter()
+                .map(|notice| json!({ "type": "text", "text": notice })),
+        );
+    }
+    Ok(result)
 }
 
 /// Above this many bytes the pretty-printer's indentation is pure token overhead (a
@@ -1581,7 +1598,7 @@ mod core_backend {
         move_between, ops,
     };
     use serde_json::Value;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use time::OffsetDateTime;
 
@@ -1632,6 +1649,9 @@ mod core_backend {
         /// calls leave this absent and retain legacy store-owned settings behavior.
         checkout: Option<hotsheet_ticketing::checkouts::Checkout>,
         checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
+        /// `HOTSHEET_HOME` whose running host is asked to sync each store this process
+        /// committed to with a headless push (HS2-4BG2QN). Off unless the binary enables it.
+        host_sync_home: Option<PathBuf>,
         now: Box<dyn Fn() -> Timestamp>,
         mint: Box<dyn Fn() -> Ulid>,
     }
@@ -1671,6 +1691,7 @@ mod core_backend {
                 orchestration_runtime: None,
                 checkout: None,
                 checkout_registry: checkout_registry(),
+                host_sync_home: None,
                 now: Box::new(default_now),
                 mint: Box::new(Ulid::new),
             }
@@ -1686,10 +1707,23 @@ mod core_backend {
                 remote_runtime: self.remote_runtime.clone(),
                 orchestration_runtime: self.orchestration_runtime.clone(),
                 checkout_registry: self.checkout_registry.clone(),
+                host_sync_home: self.host_sync_home.clone(),
                 store,
                 now: Box::new(default_now),
                 mint: Box::new(Ulid::new),
             }
+        }
+
+        /// After each tool call, ask the running host under `home` to sync every store this
+        /// process committed to with a headless push, and report each store no host
+        /// accepted as a local-only notice naming `hotsheet-cli sync` (HS2-4BG2QN,
+        /// `docs/02-ticket-storage.md` §2.12). The serverless binary enables this. The
+        /// recorded stores are process-wide, so library callers that share a process with
+        /// other stores leave it off.
+        #[must_use]
+        pub fn with_host_sync_kick(mut self, home: PathBuf) -> Self {
+            self.host_sync_home = Some(home);
+            self
         }
 
         /// Resolve checkouts through this registry instead of `${HOTSHEET_HOME}`'s.
@@ -2375,6 +2409,16 @@ mod core_backend {
     impl Backend for CoreBackend {
         fn machine_local(&self) -> bool {
             true
+        }
+        fn after_tool_call(&self) -> Vec<String> {
+            let Some(home) = &self.host_sync_home else {
+                return Vec::new();
+            };
+            let stores = hotsheet_ticketing::take_headless_published_stores();
+            if stores.is_empty() {
+                return Vec::new();
+            }
+            hotsheet_cli::sync_kick::kick_after_writes(home, stores)
         }
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
             if let Some((reference, operation)) = crate::speculation_path(path) {
@@ -4663,6 +4707,51 @@ mod tests {
 
     fn req(method: &str, params: Value) -> Value {
         json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params })
+    }
+
+    /// HS2-4BG2QN: a backend's post-call notices follow the tool's own result as extra
+    /// text items and never turn a success into a failure (or the reverse).
+    #[test]
+    fn hs2_4bg2qn_post_call_notices_append_without_changing_the_outcome() {
+        struct Noticing {
+            fail: bool,
+        }
+        impl Backend for Noticing {
+            fn get(&self, _: &str, _: &[(String, String)]) -> Result<Value, BackendError> {
+                Ok(json!({ "slug": "HS-AAA111" }))
+            }
+            fn send(&self, _: &str, _: &str, _: &Value) -> Result<Value, BackendError> {
+                if self.fail {
+                    return Err(BackendError {
+                        status: Some(409),
+                        message: "synthetic refusal".into(),
+                    });
+                }
+                Ok(json!({ "slug": "HS-NEW999" }))
+            }
+            fn after_tool_call(&self) -> Vec<String> {
+                vec!["note: synthetic local-only notice".into()]
+            }
+        }
+        let call = req(
+            "tools/call",
+            json!({ "name": "hotsheet_create", "arguments": { "title": "t" } }),
+        );
+        let ok = handle_message(&call, &Noticing { fail: false }).unwrap();
+        assert_eq!(ok["result"]["isError"], false, "{ok}");
+        let content = ok["result"]["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2, "{ok}");
+        assert!(content[0]["text"].as_str().unwrap().contains("HS-NEW999"));
+        assert_eq!(content[1]["type"], "text");
+        assert_eq!(content[1]["text"], "note: synthetic local-only notice");
+
+        let failed = handle_message(&call, &Noticing { fail: true }).unwrap();
+        assert_eq!(failed["result"]["isError"], true, "{failed}");
+        assert_eq!(failed["result"]["content"].as_array().unwrap().len(), 2);
+
+        // The default hook adds nothing.
+        let plain = handle_message(&call, &FakeBackend::default()).unwrap();
+        assert_eq!(plain["result"]["content"].as_array().unwrap().len(), 1);
     }
 
     #[test]

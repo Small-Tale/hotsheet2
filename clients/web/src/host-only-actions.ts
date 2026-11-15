@@ -4,7 +4,14 @@ import { isRemoteClient } from './client-origin';
  * (HS2-F78B1S). On a remote or mobile client they would act on a screen nobody is looking at, so the
  * client refuses them with an explanation instead (inventory: HS2-E0HC6J). */
 export type HostOnlyAction =
-  'diff-tool' | 'open-file' | 'reveal-file' | 'choose-folder' | 'conversation-export' | 'conversation-open';
+  | 'diff-tool'
+  | 'open-file'
+  | 'reveal-file'
+  | 'choose-folder'
+  | 'conversation-export'
+  | 'conversation-open'
+  | 'git-source-link'
+  | 'git-source-relink';
 
 const ACTION_LABELS: Record<HostOnlyAction, string> = {
   'diff-tool': 'The diff tool opens',
@@ -13,7 +20,14 @@ const ACTION_LABELS: Record<HostOnlyAction, string> = {
   'choose-folder': 'The folder chooser opens',
   'conversation-export': 'Choosing an export folder happens',
   'conversation-open': 'Opening a saved conversation happens',
+  // HS2-CGXGWY: the server refuses these to a session without host access (HS2-S8R3PD).
+  'git-source-link': 'Linking a Git ticket repository happens',
+  'git-source-relink': 'Changing a Git ticket repository location happens',
 };
+
+/** The stable `code` the server answers a host-acting route with for a session without host access
+ * (HS2-S8R3PD). */
+export const HOST_ACCESS_REQUIRED_CODE = 'host_access_required';
 
 export class HostOnlyActionError extends Error {
   constructor(readonly action: HostOnlyAction) {

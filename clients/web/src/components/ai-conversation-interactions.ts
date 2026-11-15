@@ -56,6 +56,10 @@ function pickedMessage(target: Element) {
 /** Wire the AIConversation surface, composer, and AI menus under `root`. */
 export function wireAiConversation(root: HTMLElement, bindings: AiConversationBindings): () => void {
   const lifetime = createScope();
+  // The reader's text selection as it stood when the current secondary press went down (HS2-FZ4RQN).
+  // WebKit and macOS select the word under the pointer as part of a secondary click, before
+  // `contextmenu`, so only a selection that already existed at the press keeps the native menu.
+  let selectionBeforeSecondaryPress: string | undefined;
   const openMessageMenu = (target: Element, x: number, y: number) => {
     const { connectionId, messageId } = pickedMessage(target);
     if (!connectionId || !messageId) return;
@@ -101,7 +105,9 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
   );
   lifetime.add(
     delegate(root, 'contextmenu', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
-      if ((event.target as Element).closest(NESTED_MESSAGE_CONTROL) || window.getSelection()?.toString()) return;
+      const readerSelection = selectionBeforeSecondaryPress ?? window.getSelection()?.toString();
+      selectionBeforeSecondaryPress = undefined;
+      if ((event.target as Element).closest(NESTED_MESSAGE_CONTROL) || readerSelection) return;
       event.preventDefault();
       const pointer = event as MouseEvent;
       openMessageMenu(target, pointer.clientX, pointer.clientY);
@@ -117,16 +123,22 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       else bindings.downloadMessages(request.connectionId, request.messageIds);
     }),
   );
-  // Shift- and Cmd/Ctrl-clicks pick messages instead of extending the page's text selection.
+  // Shift- and Cmd/Ctrl-clicks pick messages instead of extending the page's text selection. A
+  // secondary press (right button, or Ctrl-click on macOS) records the selection before the press.
   lifetime.add(
     delegateCapture(root, 'mousedown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event) => {
-      const modifiers = conversationSelectionModifiers(event as MouseEvent);
+      const press = event as MouseEvent;
+      if (press.button === 2 || (press.button === 0 && press.ctrlKey))
+        selectionBeforeSecondaryPress = window.getSelection()?.toString() ?? '';
+      const modifiers = conversationSelectionModifiers(press);
       if ((modifiers.extend || modifiers.toggle) && !(event.target as Element).closest(NESTED_MESSAGE_CONTROL))
         event.preventDefault();
     }),
   );
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
+      // A press that ends in a click (Ctrl-click off macOS) opened no context menu.
+      selectionBeforeSecondaryPress = undefined;
       const modifiers = conversationSelectionModifiers(event as MouseEvent);
       if ((event.target as Element).closest(NESTED_MESSAGE_CONTROL)) return;
       // A plain click that ends a text drag is reading, not picking; a modified click is always a pick.

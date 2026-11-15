@@ -33,6 +33,31 @@ pub(crate) fn scoped_entry(state: &AppState, store_id: &str) -> Result<StoreEntr
         .ok_or_else(|| ApiError::not_found(store_id))
 }
 
+/// The store a store-scoped project read addresses (HS2-82A7A7): a hosted store, else a Git
+/// store a registered checkout links, hosted again as [`AppState::hosted_source`] does after
+/// an unhost sweep. Any other id is 404, so the host alone decides which stores it serves.
+/// Reads the checkout registry, so call it off the async runtime.
+pub(crate) fn served_store_entry(state: &AppState, store_id: &str) -> Result<StoreEntry, ApiError> {
+    if let Some(entry) = state.host.get(store_id) {
+        return Ok(entry);
+    }
+    let checkouts = state
+        .checkout_registry
+        .list()
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    checkouts
+        .iter()
+        .flat_map(|checkout| checkout.sources.iter())
+        .find(|source| source.provider == "git" && source.connection_id == store_id)
+        .and_then(|source| state.hosted_source(source))
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                format!("this Hot Sheet host does not serve store '{store_id}'"),
+            )
+        })
+}
+
 pub(crate) async fn create_store_ticket(
     State(state): State<AppState>,
     Path(store_id): Path<String>,

@@ -283,6 +283,15 @@ the components take a `hostActionsAvailable` prop that defaults to
 refusal stays as a backstop. Browser-native replacements (in-page diff, attachment
 preview/download, server directory browser) are separate design work.
 
+Linking a Git ticket repository by path and changing a Git source's location are
+host-only too, because the server refuses them to a session without host access
+(HS2-S8R3PD). Ticket source setup disables **Create a Hot Sheet 2 git ticket
+repository**, and the Git source editor disables **Location**, its unverified-recovery
+checkbox and **Save location**, with the explanation as the field hint and the button
+tooltip. The source's color, ticket prefix, Remove and provider sources stay available.
+A `host_access_required` refusal that still arrives for any host-only action shows the
+same explanation (HS2-CGXGWY).
+
 ## 6.3 Web client and Tauri desktop host
 
 - **Durable controlled desktop close.** Before closing a native window or quitting,
@@ -2319,8 +2328,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   exclusions get no marker. Right-clicking a selected message offers Copy and Download for
   the selection; right-clicking an unselected message offers those actions for only that
   message, leaving any selection intact. Shift+F10 and the Context Menu key open the same
-  menu on a focused message row; links, file controls, and selected text retain the native
-  browser menu. Opening and dismissing the menu preserve the transcript's reading position
+  menu on a focused message row; links, file controls, and text the reader selected before
+  the right-click retain the native browser menu. The word a secondary click itself selects
+  (WebKit and macOS select it before `contextmenu`) still opens the message menu (HS2-FZ4RQN). Opening and dismissing the menu preserve the transcript's reading position
   at desktop and phone widths (HS2-BT9MD3), including on a slow host where the menu renders
   before the browser dispatches the reader's scroll event, and after a resize recentres or
   narrows the dialog: only the selection bar's movement within the conversation is compensated

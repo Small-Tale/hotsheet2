@@ -116,6 +116,80 @@ describe('wireAiConversation (HS2-RWY78R)', () => {
     expect(state.contextMessageIds).not.toHaveBeenCalled();
   });
 
+  it('opens the message menu over the word a WebKit secondary click selects, never over a prior selection (HS2-FZ4RQN)', () => {
+    const state = bindings(),
+      message = {
+        dataset: { messageId: 'first' },
+        closest: () => ({ dataset: { selectionId: 'chat-a' } }),
+      } as unknown as Element,
+      selection = { text: '' },
+      press = (init: Partial<MouseEvent>) =>
+        ({
+          button: 0,
+          ctrlKey: false,
+          metaKey: false,
+          shiftKey: false,
+          ...init,
+          target: { closest: () => null },
+          preventDefault: vi.fn(),
+        }) as unknown as Event,
+      menuEvent = () => {
+        const preventDefault = vi.fn();
+        return {
+          preventDefault,
+          event: { target: { closest: () => null }, clientX: 10, clientY: 20, preventDefault } as unknown as Event,
+        };
+      };
+    vi.stubGlobal('window', {
+      getSelection: () => ({ toString: () => selection.text }),
+      innerWidth: 800,
+      innerHeight: 600,
+    });
+    wireAiConversation({} as HTMLElement, state);
+    const mousedown = handler('mousedown', '[data-action="pick-conversation-message"]'),
+      contextmenu = handler('contextmenu', '[data-action="pick-conversation-message"]'),
+      click = handler('click', '[data-action="pick-conversation-message"]');
+    // Right press with no prior selection; WebKit then selects the word under the pointer.
+    mousedown(press({ button: 2 }), message);
+    selection.text = 'remains';
+    let menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).toHaveBeenCalledOnce();
+    expect(conversationContextMenu.value).toMatchObject({ connectionId: 'chat-a', messageIds: ['first'] });
+    conversationContextMenu.value = undefined;
+    // The recorded press is consumed: a later contextmenu without a press reads the live selection.
+    menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).not.toHaveBeenCalled();
+    // A selection the reader made before the right press keeps the native menu.
+    mousedown(press({ button: 2 }), message);
+    menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).not.toHaveBeenCalled();
+    expect(conversationContextMenu.value).toBeUndefined();
+    // Ctrl-click (the macOS secondary click) behaves the same way.
+    selection.text = '';
+    mousedown(press({ ctrlKey: true }), message);
+    selection.text = 'remains';
+    menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).toHaveBeenCalledOnce();
+    conversationContextMenu.value = undefined;
+    // A Ctrl-click that ends in a click (off macOS) opened no menu and leaves nothing recorded.
+    selection.text = '';
+    mousedown(press({ ctrlKey: true }), message);
+    click(press({ ctrlKey: true }), message);
+    selection.text = 'dragged';
+    menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).not.toHaveBeenCalled();
+    // A plain left press records nothing.
+    mousedown(press({}), message);
+    menu = menuEvent();
+    contextmenu(menu.event, message);
+    expect(menu.preventDefault).not.toHaveBeenCalled();
+  });
+
   it('delegates Enter-to-send to Kerf wireMessageComposers instead of an app keydown handler (HS2-94T958)', () => {
     const root = {} as HTMLElement;
     wireAiConversation(root, bindings());

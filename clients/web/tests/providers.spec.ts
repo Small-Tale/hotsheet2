@@ -4202,6 +4202,96 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   await expect(page.locator('[data-source-row][data-source-id="git-moved"]')).toBeVisible();
 });
 
+test('disables linking and relinking a Git ticket repository by path without host access (HS2-CGXGWY)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  // The default store is not linked yet, so only host access keeps its Create option from being offered.
+  await page.route('**/__hotsheet/checkouts', (route) =>
+    route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: ['/work/other.hs2'] }] }),
+  );
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: ['/work/other.hs2'] } }),
+  );
+  const hostWrites: string[] = [];
+  page.on('request', (request) => {
+    if (/\/sources\/[^/]+(?:\/relink)?$/.test(request.url()) && ['PUT', 'PATCH'].includes(request.method()))
+      hostWrites.push(`${request.method()} ${request.url()}`);
+  });
+  const linkReason =
+      "Linking a Git ticket repository happens on the computer running Hot Sheet, so it isn't available from this device.",
+    relinkReason =
+      "Changing a Git ticket repository location happens on the computer running Hot Sheet, so it isn't available from this device.";
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/?device=remote&store=demo-checkout');
+  await page.getByLabel('Settings View').click();
+  await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
+  const dialog = page.locator('[data-ticket-source-setup-dialog]');
+  const location = dialog.getByRole('textbox', { name: 'Location' }),
+    save = dialog.getByRole('button', { name: 'Save location' });
+  await expect(location).toBeDisabled();
+  await expect(dialog.getByText(relinkReason)).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute('title', relinkReason);
+  await expect(dialog.locator('input[type="checkbox"][name="review-unverified-recovery"]')).toBeDisabled();
+  // The source's color stays editable: the server does not gate it on host access.
+  await expect(dialog.getByRole('button', { name: 'Done' })).toBeEnabled();
+  for (const [label, width] of [
+    ['wide', 1280],
+    ['medium', 900],
+    ['narrow', 390],
+    ['wide-again', 1280],
+  ] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(save).toBeInViewport();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-cgxgwy-remote-relink-${label}.png`,
+      animations: 'disabled',
+    });
+  }
+  await save.click({ force: true });
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(dialog).not.toHaveAttribute('open');
+
+  await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
+  const create = dialog.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true });
+  await expect(create).toBeDisabled();
+  await expect(create).toHaveAttribute('title', linkReason);
+  await expect(create).toContainText('Create and link');
+  await expect(dialog.getByRole('button', { name: 'Connect GitHub Issues' })).toBeEnabled();
+  for (const [label, width] of [
+    ['wide', 1280],
+    ['narrow', 390],
+  ] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-cgxgwy-remote-link-${label}.png`,
+      animations: 'disabled',
+    });
+  }
+  await create.click({ force: true });
+  expect(hostWrites).toEqual([]);
+});
+
+test('shows a host-access refusal for a Git relink as the host-only explanation (HS2-CGXGWY)', async ({ page }) => {
+  await mockProject(page);
+  await page.route(/\/sources\/[^/]+\/relink$/, (route) =>
+    route.fulfill({ status: 403, json: { error: 'host access required', code: 'host_access_required' } }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
+  const dialog = page.locator('[data-ticket-source-setup-dialog]');
+  await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/renamed.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    "Changing a Git ticket repository location happens on the computer running Hot Sheet, so it isn't available from this device.",
+  );
+});
+
 test('requires review and keeps an unverified recovery visible for a moved legacy store (HS2-RAQSX7)', async ({
   page,
 }) => {
@@ -8695,7 +8785,10 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
     .toBe(true);
 });
 
-test('opening and closing a chat message menu keeps the reading position (HS2-BT9MD3)', async ({ page }, testInfo) => {
+// WebKit selects the word under a secondary click before `contextmenu`; the menu still opens (HS2-FZ4RQN).
+test('opening and closing a chat message menu keeps the reading position (HS2-BT9MD3) @ci-webkit', async ({
+  page,
+}, testInfo) => {
   await page.setViewportSize({ width: 1662, height: 1286 });
   await mockProject(page);
   await page.goto('/');
@@ -34767,6 +34860,83 @@ test('keeps the Permissions settings controls reachable by pointer while a reque
   await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);
   await popup.getByRole('button', { name: 'Ignore' }).click();
   await expect(popup).toHaveCount(0);
+});
+
+test('keeps the Settings work area at its resting x when a control takes focus at 760px (HS2-DYG55S)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+  const leftRail = page.locator('.kui-workbench__rail--left'),
+    rightRail = page.locator('.kui-workbench__rail--right'),
+    main = page.locator('.app-shell__main'),
+    workspace = page.locator('[data-component="settings-workspace"]'),
+    automation = page.locator('kui-select[name="permission-automation-action"]'),
+    delay = page.locator('kui-select[name="permission-automation-delay"]');
+  // Each rail's sliding content box, read as its on-screen extent; the rails themselves are layout tracks.
+  const panelExtent = (rail: typeof leftRail) =>
+    rail.locator('.kui-workbench__panel-content').evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { left: Math.round(box.left), right: Math.round(box.right) };
+    });
+  const restingX = () =>
+    page.evaluate(() => {
+      const x = (selector: string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
+      // Any horizontally scrolled ancestor would carry the whole work area sideways.
+      const scrolled = [...document.querySelectorAll<HTMLElement>('body *')]
+        .filter((node) => node.scrollLeft !== 0 && !node.classList.contains('kui-select__value'))
+        .map((node) => node.className);
+      return {
+        main: x('.app-shell__main'),
+        workspace: x('[data-component="settings-workspace"]'),
+        documentScroll: document.scrollingElement!.scrollLeft,
+        scrolled,
+      };
+    });
+  // Wide: the settings sidebar and the inspector are both docked beside the work area.
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'false');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'false');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.left)).toBe(0);
+  await expect(workspace).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-1280.png', animations: 'disabled' });
+  // Narrow: both rails collapse with Kerf's 200ms slide. Until it ends their surfaces still cover the
+  // work area's edges, which is the transient "shift" this ticket saw; the work area itself never moves.
+  await page.setViewportSize({ width: 760, height: 720 });
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'true');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'true');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.right <= 0)).toBe(true);
+  await expect.poll(() => panelExtent(rightRail).then((extent) => extent.left >= 760)).toBe(true);
+  const resting = await restingX();
+  expect(resting).toEqual({ main: 0, workspace: 16, documentScroll: 0, scrolled: [] });
+  await expect(main).toHaveJSProperty('scrollLeft', 0);
+  // A focused control, a pointer-opened Select, and a scrolled-into-view Select all leave it at rest.
+  await delay.locator('.kui-select__trigger').focus();
+  expect(await restingX()).toEqual(resting);
+  await automation.locator('.kui-select__trigger').click();
+  await expect(automation).toHaveAttribute('open', '');
+  expect(await restingX()).toEqual(resting);
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-760-open.png', animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await expect(automation).not.toHaveAttribute('open', '');
+  await delay.scrollIntoViewIfNeeded();
+  expect(await restingX()).toEqual(resting);
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-760.png', animations: 'disabled' });
+  // Wide again: the docked rails return and the work area sits beside the sidebar.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'false');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'false');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.left)).toBe(0);
+  await expect.poll(() => restingX().then((value) => value.scrolled)).toEqual([]);
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dyg55s-permissions-1280-return.png',
+    animations: 'disabled',
+  });
 });
 
 test('auto-allows during an Always review, then remembers the rule before showing the next request (HS2-WZK2QK)', async ({

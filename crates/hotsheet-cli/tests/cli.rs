@@ -2200,8 +2200,14 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let store = root.path().join("tickets");
-    hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
-        .unwrap();
+    // HS2-82A7A7: project reads name the store through its store-scoped route.
+    let store_id = hotsheet_ticketing::git_connection_id(
+        &hotsheet_ticketing::FsStore::init_git(
+            &store,
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap(),
+    );
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
     std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
@@ -2217,28 +2223,36 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     )
     .unwrap();
     let requests = [
-        ("GET", "/analytics/tickets", 200, r#"{"total":2}"#),
         (
             "GET",
-            "/activity?ticket=HS-1&session=agent%201&min_importance=high&limit=5",
+            format!("/stores/{store_id}/analytics/tickets"),
+            200,
+            r#"{"total":2}"#,
+        ),
+        (
+            "GET",
+            format!(
+                "/stores/{store_id}/activity?ticket=HS-1&session=agent%201&min_importance=high&limit=5"
+            ),
             200,
             r#"[{"id":"activity-1"}]"#,
         ),
         (
             "GET",
-            "/notifications?checkout=web&store=git&ticket=HS-1&recipient=reviewer%40example.com",
+            "/notifications?checkout=web&store=git&ticket=HS-1&recipient=reviewer%40example.com"
+                .to_string(),
             200,
             r#"[{"id":"notice-1","acknowledged":false}]"#,
         ),
         (
             "POST",
-            "/notifications/notice-1/ack",
+            "/notifications/notice-1/ack".to_string(),
             200,
             r#"{"id":"notice-1","acknowledged":true}"#,
         ),
         (
             "POST",
-            "/notifications/missing/ack",
+            "/notifications/missing/ack".to_string(),
             404,
             r#"{"error":"unknown notification"}"#,
         ),
@@ -11849,6 +11863,9 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     let hs = |dir: &Path| {
         let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
         command.arg("-C").arg(dir);
+        // HS2-XTQHPK: this Linux-only test drives a fake `secret-tool` shim on PATH,
+        // never a real keyring, so it lifts the cargo-forced keychain deny.
+        command.env_remove("HOTSHEET_NATIVE_SECRETS");
         command
     };
     use std::os::unix::fs::PermissionsExt;
@@ -13662,8 +13679,9 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
 }
 
 /// HS2-VG3E8N: a project store with no per-store host reaches the machine host anchored on
-/// `<home>/server-bootstrap.hs2`; store-default reads refuse that host instead of reporting
-/// the bootstrap store's data; with no host at all the error names the machine host.
+/// `<home>/server-bootstrap.hs2`; with no host at all the error names the machine host.
+/// Project reads through the machine host are covered by
+/// `hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host`.
 #[test]
 fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
     use std::io::{BufRead, BufReader, Write};
@@ -13742,13 +13760,158 @@ fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
     );
     assert!(String::from_utf8_lossy(&status.stdout).contains("\"quiescent\": true"));
     server.join().unwrap();
+}
 
-    // A store-default read refuses before sending any request to that host.
-    let flow = cli(&["ticket-flow"]);
-    assert!(!flow.status.success());
-    let message = String::from_utf8_lossy(&flow.stderr);
-    assert!(message.contains("machine host"), "{message}");
-    assert!(message.contains("analytics/tickets"), "{message}");
+/// HS2-82A7A7: against a real machine host anchored on the empty bootstrap store,
+/// `ticket-flow` and `activity` print the selected project's data through the store-scoped
+/// routes, a store no checkout links is refused by the host, and a host-wide command needs
+/// no `-C` store.
+#[cfg(unix)]
+#[test]
+fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{ActivityEvent, ActivityKind, FsStore, StoreMetadata};
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let mut host = TemporaryLaunchHost::new(&home);
+    let bootstrap = home.join("server-bootstrap.hs2");
+    FsStore::init(&bootstrap, &StoreMetadata::new("BT")).unwrap();
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let store_path = root.path().join("project.hs2");
+    let store = FsStore::init_git(&store_path, &StoreMetadata::new("PJ")).unwrap();
+    for (title, category) in [("first", "bug"), ("second", "task"), ("third", "task")] {
+        hotsheet_ticketing::ops::create(
+            &store,
+            Ulid::new(),
+            "PJ",
+            Timestamp::new("2026-11-01T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: title.into(),
+                category: category.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let ts = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let mut event = ActivityEvent::new(
+        "project-activity-1",
+        ts,
+        "fake-tool",
+        ActivityKind::Note,
+        serde_json::json!({}),
+    );
+    event.session = Some("agent-1".into());
+    hotsheet_ticketing::activity::record(&store, &event).unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![store_path.clone()])
+        .unwrap();
+    // A store that no registered checkout links: the host does not serve it.
+    let stray = root.path().join("stray.hs2");
+    FsStore::init_git(&stray, &StoreMetadata::new("ST")).unwrap();
+
+    // The machine host, anchored on the bootstrap store, exactly as headless launch starts it.
+    let cli_bin = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let mut serve = std::process::Command::new(&cli_bin)
+        .arg("--test-fixture-credentials")
+        .arg("-C")
+        .arg(&bootstrap)
+        .args(["serve", "--bind", "127.0.0.1:0"])
+        .env("HOTSHEET_HOME", &home)
+        .env(
+            "HOTSHEET_TEST_SERVER_OWNER_PID",
+            std::process::id().to_string(),
+        )
+        .env("CODEX_HOME", home.join("codex-home"))
+        .env("CLAUDE_CONFIG_DIR", home.join("claude-home"))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut ready = false;
+    for _ in 0..200 {
+        if hotsheet_cli::external_launch::discover_running_server(&bootstrap, &home).is_ok() {
+            ready = true;
+            break;
+        }
+        assert!(
+            serve.try_wait().unwrap().is_none(),
+            "machine host exited during startup"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(ready, "machine host did not become ready");
+    assert!(
+        hotsheet_cli::external_launch::discover_running_server(&store_path, &home).is_err(),
+        "the project store must have no per-store host"
+    );
+
+    let cli = |store: &Path, args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .current_dir(root.path())
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let json = |output: std::process::Output| -> serde_json::Value {
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+
+    let flow = json(cli(&store_path, &["ticket-flow"]));
+    assert_eq!(flow["total"], 3, "{flow}");
+    assert_eq!(flow["open"], 3, "{flow}");
+    assert_eq!(flow["current_by_category"]["task"], 2, "{flow}");
+    assert_eq!(flow["current_by_category"]["bug"], 1, "{flow}");
+
+    let activity = json(cli(&store_path, &["activity", "--session", "agent-1"]));
+    let ids: Vec<&str> = activity
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|event| event["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["project-activity-1"], "{activity}");
+    let filtered = json(cli(&store_path, &["activity", "--session", "someone-else"]));
+    assert_eq!(filtered, serde_json::json!([]));
+
+    for args in [&["ticket-flow"][..], &["activity"][..]] {
+        let refused = cli(&stray, args);
+        assert!(!refused.status.success(), "{args:?}");
+        let message = String::from_utf8_lossy(&refused.stderr);
+        assert!(message.contains("does not serve store"), "{message}");
+    }
+
+    // A host-wide command needs no store: no -C, no link, no $HOTSHEET_STORE.
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let status = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", &home)
+        .env_remove("HOTSHEET_STORE")
+        .current_dir(&elsewhere)
+        .args(["lifecycle", "status"])
+        .output()
+        .unwrap();
+    assert!(
+        json(status).get("quiescing").is_some(),
+        "lifecycle status must answer from the machine host"
+    );
+
+    host.stop();
+    let _ = serve.wait();
 }
 
 /// Headless parity for Ticket sources' "review its location" recovery (HS2-47AFBK): a Git

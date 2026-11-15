@@ -18,6 +18,7 @@ import type { Confirm } from '../confirmation';
 import { githubAccountEndpoint } from '../github-account-endpoint';
 import { githubAttachmentSettings } from '../github-attachment-settings';
 import { githubSignInOrigin } from '../github-sign-in-origin';
+import { assertHostAction } from '../host-only-actions';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
 import { localBridge, REMOTE_MIGRATION_JOBS_PATH } from '../local-bridge-client';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
@@ -480,6 +481,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     ticketSourceSetupError.value = '';
     loading.value = true;
     try {
+      // Linking the new store names a host path, which needs host access (HS2-CGXGWY).
+      assertHostAction('git-source-link');
       let location: string | undefined;
       if (custom) {
         const chosen = await localBridge.chooseFolder('Could not choose a ticket repository folder.');
