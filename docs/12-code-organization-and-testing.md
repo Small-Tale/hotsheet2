@@ -1605,6 +1605,12 @@ for the mocked project and refuses it (1006). The page then runs only on its lon
 fallback, so under parallel load live events such as a terminal halt arrived late. Such a
 test calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before stopping the server, so
 the fallback poll that follows the socket's close does not fail the test.
+Every proxied request goes through `proxyFetch(route, options)` in the same fixture, never
+a raw `route.fetch` (HS2-6E87E4). Playwright reuses keep-alive sockets, and the server closes
+an idle connection after 30 s, so a request that picks up a closing socket fails with
+`socket hang up` (HS2-NWFZ7J). `proxyFetch` retries GET and HEAD twice and never replays
+POST, PUT, PATCH, or DELETE. The `HS2-6E87E4` case in `src/eslint-policy.test.ts` rejects a
+raw `.fetch(` anywhere under `tests/` outside that helper.
 
 ### Local Playwright parallelism and timeouts
 

@@ -6,7 +6,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { FullTicket } from '../src/api';
-import { type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
+import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 /**
  * Ticket groups in the real app against a private real server (HS2-3XNTSD): rendering in the list
@@ -96,7 +96,7 @@ async function open(
   await page.route(`**${apiPath}/**`, async (route) => {
     const incoming = new URL(route.request().url());
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,

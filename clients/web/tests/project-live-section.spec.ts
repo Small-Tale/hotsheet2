@@ -4,7 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
@@ -21,7 +21,7 @@ async function openProject(page: Page, server: Server, beforeLoad?: () => Promis
     const incoming = new URL(route.request().url()),
       path = incoming.pathname.slice(apiPath.length);
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,

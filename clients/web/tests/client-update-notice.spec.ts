@@ -1,5 +1,6 @@
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
+import { proxyFetch } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
 
 /**
@@ -136,7 +137,7 @@ async function installHost(page: Page, withTicket = false) {
       path = new URL(request.url()).pathname;
     if (request.resourceType() === 'document' && host.documentBuild) {
       // The "new bundle" a restarted host serves: the same document, stamped with its build id.
-      const response = await route.fetch();
+      const response = await proxyFetch(route);
       const html = (await response.text()).replace(
         /(<meta name="hotsheet-client-build" content=")[^"]*(")/u,
         `$1${host.documentBuild}$2`,

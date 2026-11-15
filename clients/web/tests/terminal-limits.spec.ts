@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 interface Limits {
@@ -27,7 +27,7 @@ test('saves machine-wide terminal limits and updates mounted terminals', async (
     await installTerminalFixture(page);
     // Only the limits route reaches the real server; the project and terminals stay fixtures.
     await page.route('**/terminal-limits', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/terminal-limits`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -105,7 +105,7 @@ test('shows Terminal memory settings on a fresh phone viewport (HS2-ZWVDTZ)', as
     await page.setViewportSize({ width: 390, height: 844 });
     await installTerminalFixture(page);
     await page.route('**/terminal-limits', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/terminal-limits`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });

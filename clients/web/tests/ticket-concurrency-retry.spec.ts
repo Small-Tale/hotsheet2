@@ -5,7 +5,7 @@ import {
   expectPendingInspectorResize,
   releaseInspectorResizeDelivery,
 } from './inspector-resize-delivery';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-9S8CV1: a real Markdown checkout 409 names the ticket in its message (`ticket '<slug>' changed
 // since it was read`), so the editors recognize the stale-token refusal by its typed `code`. Every
@@ -48,7 +48,7 @@ async function openRealProject(
       patch = request.method() === 'PATCH' && /\/checkouts\/[^/]+\/tickets\/[^/]+$/u.test(path);
     try {
       if (patch) await beforePatch(attempts.length, decodeURIComponent(path));
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,

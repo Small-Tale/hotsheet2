@@ -20,7 +20,7 @@ import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
-import { realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
@@ -40,7 +40,7 @@ test('routes live server notices into the project inbox and bell (HS2-ZP869N)', 
         const path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         const query = new URLSearchParams(incoming.search);
         if (path === '/notifications') query.set('checkout', server.checkoutId);
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${query.size ? `?${query}` : ''}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -547,7 +547,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
       const incoming = new URL(route.request().url());
       incoming.searchParams.set('connection_id', realGitSource!);
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 35_000,
@@ -559,7 +559,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
       }
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -640,7 +640,7 @@ test('HS2-1Z3T0Z shows workers-first and late registration from real coordinatio
       const incoming = new URL(route.request().url());
       incoming.searchParams.set('connection_id', source!);
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 35_000,
@@ -651,7 +651,7 @@ test('HS2-1Z3T0Z shows workers-first and late registration from real coordinatio
       }
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -1542,7 +1542,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -4090,7 +4090,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
     await mockProject(page);
     const writes: string[] = [];
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -4101,7 +4101,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
       async (route) => {
         const connection = new URL(route.request().url()).pathname.split('/').at(-2)!;
         writes.push(route.request().postData() ?? '');
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/sources/${connection}/ticket-prefix`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -9929,7 +9929,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       await page.route(pattern, async (route) => {
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -10017,7 +10017,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -10177,7 +10177,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -10430,7 +10430,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -11542,7 +11542,7 @@ test('shares a terminal rename with other devices and restores it through the re
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -17065,7 +17065,7 @@ test('serves the repository Quality commands from a real server and queues Every
     await mockProject(page);
     await page.route('**/__hotsheet/project-api/demo-checkout/commands', async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/checkouts/${server.checkoutId}/commands`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -17464,7 +17464,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
       const incoming = new URL(route.request().url()),
         path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -17523,7 +17523,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
       const incoming = new URL(route.request().url()),
         path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -19287,7 +19287,7 @@ test('validates and applies the dedicated match editor through a real permission
     expect(await ask).toEqual({ decision: 'allow' });
     await mockProject(page);
     await page.route('**/permissions/rules', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/permissions/rules`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -21152,7 +21152,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await mockProject(page);
     await page.route(/\/corrupt-tickets$/, async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/checkouts/${server.checkoutId}/corrupt-tickets`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -30288,7 +30288,7 @@ test('measures real local Git board performance for a 100-ticket verification an
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -30297,7 +30297,7 @@ test('measures real local Git board performance for a 100-ticket verification an
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37032,7 +37032,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37040,7 +37040,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     });
     // Capabilities come from the real server so its connection id matches the real ticket rows.
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37120,12 +37120,9 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
         source?: string;
         target?: string;
       } | null;
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-        // HS2-NWFZ7J: hyper closes an idle keep-alive socket after 30 s; a proxied read that reuses
-        // it at that moment gets ECONNRESET ("socket hang up"). Only idempotent reads are retried.
-        ...(route.request().method() === 'GET' ? { maxRetries: 2 } : {}),
         ...(requestBody?.follow_up_to || requestBody?.source || requestBody?.target
           ? {
               postData: JSON.stringify({
@@ -37159,7 +37156,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37281,14 +37278,14 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37386,14 +37383,14 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37500,14 +37497,14 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37605,14 +37602,14 @@ test('quiets AI-created ticket summaries in the real list and column views (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37718,14 +37715,14 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37822,14 +37819,14 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
         );
       if (path.endsWith('/repository/size')) sizeRequests += 1;
       if (path.endsWith('/confidence-report')) calibrationRequests += 1;
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38250,14 +38247,14 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38310,7 +38307,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
           `/checkouts/${server.checkoutId}`,
         );
       if (incoming.searchParams.has('status')) boardRequests.push(incoming);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38373,7 +38370,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38894,7 +38891,7 @@ test('surfaces a real server permission request through the live stream with no 
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         forwarded.push(`${route.request().method()} ${path}`);
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 0,
@@ -39701,7 +39698,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
             '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
             `/checkouts/${server.checkoutId}`,
           );
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -39709,7 +39706,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
       });
     }
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -39862,14 +39859,14 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -39954,14 +39951,14 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -40086,14 +40083,14 @@ test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback resp
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -40214,14 +40211,14 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -40346,7 +40343,7 @@ test('keeps the list Needs review marker aligned with details after a kind corre
         const path = prefix.startsWith('/checkouts/')
           ? incoming.pathname.replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', prefix)
           : prefix;
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -40489,7 +40486,7 @@ test('records shell and AI command launches through the real server and lists th
           server.checkoutId,
           `${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
         ),
-        response = await route.fetch({
+        response = await proxyFetch(route, {
           url: `${server.url}${path}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -40676,7 +40673,7 @@ async function proxyRealServer(page: Page, server: Awaited<ReturnType<typeof rea
       return route.fulfill({ status: 503, json: { error: 'synthetic write failure' } });
     }
     if (method !== 'GET' && hold.next) await hold.next;
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}${path}${incoming.search}`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
     });
@@ -40690,7 +40687,7 @@ async function proxyRealServer(page: Page, server: Awaited<ReturnType<typeof rea
     await route.fulfill({ response });
   });
   await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}/providers`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
     });
@@ -41266,7 +41263,7 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     // Only unrelated shell/repository-choice surfaces remain mocked. Accounts, create, persistence
     // and the resulting provider read use the real isolated server and actual HTTP transport.
     await page.route('**/accounts', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${actual.url}/accounts`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
       });
@@ -41276,7 +41273,7 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     await page.route('**/provider-connections', async (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       // Forward the actual submitted body unchanged; only the synthetic checkout URL is adapted.
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${actual.url}/checkouts/${actual.checkoutId}/provider-connections`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
       });

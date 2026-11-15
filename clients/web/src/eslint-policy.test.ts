@@ -33,6 +33,31 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-6E87E4 proxies routed browser requests only through the shared idempotent-retry helper', () => {
+    // A raw `route.fetch` on a reused keep-alive socket fails with ECONNRESET when the server closes
+    // it idle (HS2-NWFZ7J); `proxyFetch` retries only GET and HEAD.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]s$/.test(entry.name)) {
+          const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          const calls = source.match(/\.fetch\(/g)?.length ?? 0;
+          const allowed = entry.name === 'real-ticket-server.ts' ? 1 : 0;
+          // `bridge.fetch(request)` is an APIRequestContext, not a routed request (HS2-ZMVQR4).
+          const contexts = source.match(/\bbridge\.fetch\(/g)?.length ?? 0;
+          if (calls - contexts !== allowed) offenders.push(relative(tests, path).split(sep).join('/'));
+        }
+      }
+    };
+    scan(tests);
+    expect(offenders).toEqual([]);
+    const helper = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    expect(helper).toMatch(/const idempotent = method === 'GET' \|\| method === 'HEAD';/);
+  });
+
   it('HS2-3TWWWD bounds the type-aware ESLint heap so it does not depend on machine memory', () => {
     // Typed linting of the client peaks near 3.3 GB and needs about 2.5 GB of heap. Node's default
     // heap limit is derived from RAM, so the 7 GB macOS runner aborted at about 2 GB. Pin an explicit,

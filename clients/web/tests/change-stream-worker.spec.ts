@@ -1,5 +1,7 @@
 import { expect, type Page, test, type WebSocketRoute, type Worker } from '@playwright/test';
 
+import { proxyFetch } from './real-ticket-server';
+
 /**
  * HS2-SH9179: the shared change-stream worker, opted in through its local setting, follows two
  * projects' live streams from a dedicated worker while the user switches, searches, and updates.
@@ -548,7 +550,7 @@ test('a worker-owned bridge socket relays the host client build to the newer-ver
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.resourceType() === 'document') {
-      const response = await route.fetch();
+      const response = await proxyFetch(route);
       const html = (await response.text()).replace(
         /(<meta name="hotsheet-client-build" content=")[^"]*(")/u,
         `$1${STAMPED}$2`,

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 interface Config {
@@ -20,7 +20,7 @@ async function routeNotifierApi(page: Page, server: Awaited<ReturnType<typeof re
       const url = new URL(route.request().url()),
         at = url.pathname.search(NOTIFIER_PATHS),
         path = `${url.pathname.slice(at)}${url.search}`;
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });

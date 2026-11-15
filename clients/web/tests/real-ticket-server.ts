@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import type { Page } from '@playwright/test';
+import type { APIResponse, Page, Route } from '@playwright/test';
 import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
@@ -139,6 +139,26 @@ export async function realTicketServer(
     await stop();
     throw error;
   }
+}
+
+/** Retries for an idempotent proxied read whose reused keep-alive socket was just closed. */
+const idempotentProxyRetries = 2;
+
+/**
+ * Forward a routed browser request upstream: the one place browser tests call `route.fetch`
+ * (HS2-6E87E4). Playwright reuses keep-alive sockets for it, and the server (hyper) closes an idle
+ * connection after 30 s; a request that picks up the socket as it closes fails with
+ * `socket hang up` / `ECONNRESET` and the page never gets its answer (HS2-NWFZ7J). Idempotent
+ * methods (GET, HEAD) are retried; a POST, PUT, PATCH, or DELETE is never replayed, because the
+ * server may already have applied it. Stop proxying (`unrouteAll({ behavior: 'ignoreErrors' })`)
+ * before stopping the server it targets.
+ */
+export function proxyFetch(route: Route, options: Parameters<Route['fetch']>[0] = {}): Promise<APIResponse> {
+  const method = (options.method ?? route.request().method()).toUpperCase();
+  const idempotent = method === 'GET' || method === 'HEAD';
+  return route.fetch(
+    idempotent && options.maxRetries === undefined ? { ...options, maxRetries: idempotentProxyRetries } : options,
+  );
 }
 
 /**

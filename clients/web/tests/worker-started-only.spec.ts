@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
@@ -17,7 +17,7 @@ async function openProject(page: Page, server: Server) {
   );
   await page.route(`**${apiPath}/**`, async (route) => {
     const incoming = new URL(route.request().url());
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       timeout: 60_000,

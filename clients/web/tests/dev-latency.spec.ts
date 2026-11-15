@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 interface Report {
   kind: string;
@@ -66,7 +66,7 @@ for (const viewport of [
         if (slowTicket && route.request().method() === 'GET' && path.includes(slowTicket) && !path.includes('/ws/'))
           await new Promise((resolve) => setTimeout(resolve, 400));
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,

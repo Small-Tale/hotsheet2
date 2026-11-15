@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-9DF0DA: on a live project, another writer's change refreshes the open list. That refresh used
 // to fetch only the first 200 rows and replace the list, so rows appended by Load more flashed and
@@ -39,7 +39,7 @@ test('keeps rows appended by Load more when a concurrent change refreshes the li
       if (/\/tickets$/.test(path) && route.request().method() === 'GET')
         ticketRequests.push(incoming.searchParams.get('page_size') ?? '');
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
