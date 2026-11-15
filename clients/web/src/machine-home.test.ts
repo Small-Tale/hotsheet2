@@ -48,6 +48,13 @@ describe('HS2-N2HB7G machine home resolution', () => {
     // A blank home used to resolve the latency log against the working directory.
     expect(devLatencyLogPath({ HOTSHEET_HOME: '   ' })).not.toBe(resolve('   ', 'logs', 'dev-latency.jsonl'));
     expect(devLatencyLogPath({ HOTSHEET_HOME: '   ' })).toBe(resolve(hotsheetHome({}), 'logs', 'dev-latency.jsonl'));
+    // HS2-GVSJ5Y: a blank latency-log override counts as unset; any other value is used as given.
+    for (const blank of ['', ' ', '\t\n '])
+      expect(devLatencyLogPath({ HOTSHEET_HOME: '/h2', HOTSHEET_DEV_LATENCY_LOG: blank })).toBe(
+        resolve('/h2', 'logs', 'dev-latency.jsonl'),
+      );
+    expect(devLatencyLogPath({ HOTSHEET_DEV_LATENCY_LOG: 'relative.jsonl' })).toBe('relative.jsonl');
+    expect(devLatencyLogPath({ HOTSHEET_DEV_LATENCY_LOG: '/logs/latency.jsonl' })).toBe('/logs/latency.jsonl');
     // The vitest config isolates HOTSHEET_HOME, so the default is the per-run temporary home.
     expect(clientDiscoveryPath()).toBe(resolve(hotsheetHome(), 'client.json'));
   });

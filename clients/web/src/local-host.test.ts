@@ -13,6 +13,7 @@ import { CLIENT_BUILD_META_NAME } from './client-build';
 import { DESKTOP_STORAGE_PATH } from './desktop-storage-contract';
 import {
   binaryRevisionStatus,
+  clientReadyFile,
   createLocalHostApp,
   desktopStorageDirectoryFrom,
   mcpBinaryEnvironment,
@@ -166,6 +167,16 @@ describe.skipIf(process.platform === 'win32')('revision probe of a slow first la
       HOTSHEET_MIGRATE_BIN: resolve(repo, 'target/release/hotsheet-migrate'),
       HOT_SHEET_BUILD_REVISION: revision,
     });
+  });
+});
+
+describe('client ready file (HS2-GVSJ5Y)', () => {
+  it('treats unset, empty, and whitespace-only values as no ready file and uses any other as given', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: blank })).toBeUndefined();
+    expect(clientReadyFile({})).toBeUndefined();
+    expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: 'relative/ready.json' })).toBe('relative/ready.json');
+    expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: '/tmp/ready.json' })).toBe('/tmp/ready.json');
   });
 });
 
@@ -364,6 +375,27 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
       HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
     });
   });
+
+  it('HS2-GVSJ5Y selects a binary for an unset, empty, or whitespace-only override and keeps any other', () => {
+    const all = built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate');
+    const selected = {
+      HOTSHEET_SERVER_BIN: release('hotsheet-server'),
+      HOTSHEET_CLI_BIN: release('hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+    };
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      const environment = { HOTSHEET_SERVER_BIN: blank, HOTSHEET_CLI_BIN: blank, HOTSHEET_MIGRATE_BIN: blank };
+      expect(releaseBinaryEnvironment(root, environment, all, current)).toEqual(selected);
+    }
+    for (const explicit of ['relative/hotsheet-cli', '/custom/hotsheet-cli']) {
+      expect(releaseBinaryEnvironment(root, { HOTSHEET_CLI_BIN: explicit }, all, current)).toEqual({
+        HOTSHEET_SERVER_BIN: release('hotsheet-server'),
+        HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+        HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+      });
+    }
+  });
 });
 
 describe('pinned production artifacts (HS2-6VQ5RV)', () => {
@@ -560,6 +592,16 @@ describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
   it('keeps an explicit override and selects nothing when no shim is built', () => {
     expect(mcpBinaryEnvironment(root, undefined, { HOTSHEET_MCP_BIN: '/custom/mcp' }, present(debug))).toEqual({});
     expect(mcpBinaryEnvironment(root, server('debug'), {}, present())).toEqual({});
+  });
+
+  it('HS2-GVSJ5Y treats a blank override as unset and keeps a relative or absolute one', () => {
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      expect(mcpBinaryEnvironment(root, server('debug'), { HOTSHEET_MCP_BIN: blank }, present(debug))).toEqual({
+        HOTSHEET_MCP_BIN: debug,
+      });
+    }
+    for (const explicit of ['relative/hotsheet-mcp', '/custom/hotsheet-mcp'])
+      expect(mcpBinaryEnvironment(root, server('debug'), { HOTSHEET_MCP_BIN: explicit }, present(debug))).toEqual({});
   });
 
   it('keeps the native executable extension when a Windows server selects its MCP shim (HS2-NRYAXT)', () => {

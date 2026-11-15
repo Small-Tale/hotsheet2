@@ -10,6 +10,7 @@ import { scanBrowserDependencies } from './src/browser-dependency-scan';
 import { CLIENT_BUILD_META_NAME } from './src/client-build';
 import { localClientUrl, publishClientUrl } from './src/client-discovery';
 import { devServerRouteExclude } from './src/dev-server-routes';
+import { nonBlank } from './src/machine-home';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
 import { warmClientModuleGraph } from './src/vite-module-warmup';
 
@@ -23,9 +24,10 @@ export function viteDependencyIsolation(
   environment: NodeJS.ProcessEnv = process.env,
   browserDependencies: () => string[] = () => scanBrowserDependencies(fileURLToPath(new URL('.', import.meta.url))),
 ): Pick<UserConfig, 'cacheDir' | 'optimizeDeps'> {
-  const cacheDir = environment.HOTSHEET_VITE_CACHE_DIR;
+  // A blank cache directory counts as unset (HS2-GVSJ5Y).
+  const cacheDir = nonBlank(environment.HOTSHEET_VITE_CACHE_DIR);
   return {
-    ...(cacheDir ? { cacheDir } : {}),
+    ...(cacheDir === undefined ? {} : { cacheDir }),
     ...(environment.HOTSHEET_WEB_STABLE_DEV === '1'
       ? { optimizeDeps: { noDiscovery: true, include: browserDependencies() } }
       : {}),

@@ -115,7 +115,8 @@ const executableName = (name: string, platform = process.platform) => `${name}${
  * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
  * server is built, each binary prefers its current release build and falls back to its current
  * debug build independently. A local binary is eligible only when its embedded revision matches
- * the current workspace source and the selected server revision.
+ * the current workspace source and the selected server revision. A blank override counts as unset
+ * and gets a selected binary (HS2-GVSJ5Y).
  */
 export function releaseBinaryEnvironment(
   repositoryRoot: string,
@@ -129,7 +130,7 @@ export function releaseBinaryEnvironment(
   const chosen: Record<string, string> = {};
   let expectedRevision: string | undefined;
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
-    if (environment[variable]) continue;
+    if (nonBlank(environment[variable]) !== undefined) continue;
     let selected: { path: string; revision: string } | undefined;
     for (const path of [release(name), debug(name)]) {
       const revision = exists(path) ? currentRevision(inspect(path)) : undefined;
@@ -167,7 +168,7 @@ export function mcpBinaryEnvironment(
   exists: (path: string) => boolean = existsSync,
   platform = process.platform,
 ): Record<string, string> {
-  if (environment.HOTSHEET_MCP_BIN) return {};
+  if (nonBlank(environment.HOTSHEET_MCP_BIN) !== undefined) return {};
   const profiles =
     serverBinary && /[\\/]target[\\/]release[\\/]/.test(serverBinary) ? ['release', 'debug'] : ['debug', 'release'];
   for (const profile of profiles) {
@@ -188,7 +189,7 @@ export function snapshotLocalHostArtifacts(
   const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
     environment = { ...binaryEnvironment },
     dispose = () => {
-      const stable = environment.HOTSHEET_HOOK_CLI_BIN,
+      const stable = nonBlank(environment.HOTSHEET_HOOK_CLI_BIN),
         pinnedCli = resolve(snapshotRoot, 'bin', executableName('hotsheet-cli', platform));
       if (stable && existsSync(stable) && existsSync(pinnedCli)) {
         // Sessions opened before a setup refresh may still hold this snapshot path. Leave a
@@ -215,8 +216,8 @@ export function snapshotLocalHostArtifacts(
     cpSync(distRoot, pinnedDistRoot, { recursive: true, dereference: true });
     mkdirSync(resolve(snapshotRoot, 'bin'));
     for (const [variable, name] of Object.entries(HOST_BINARIES)) {
-      const source = environment[variable];
-      if (!source || !isAbsolute(source)) continue;
+      const source = nonBlank(environment[variable]);
+      if (source === undefined || !isAbsolute(source)) continue;
       const pinned = resolve(snapshotRoot, 'bin', executableName(name, platform));
       copyFileSync(source, pinned);
       chmodSync(pinned, statSync(source).mode & 0o777);
@@ -290,6 +291,11 @@ export function stampBrowserAuthMode(html: string, remote = remoteBrowserAuthReq
  */
 export function desktopStorageDirectoryFrom(environment: MachineHomeEnvironment = process.env): string | undefined {
   return nonBlank(environment.HOTSHEET_DESKTOP_STORAGE_DIRECTORY);
+}
+
+/** The file the desktop shell waits on for the host URL; a blank value means none (HS2-GVSJ5Y). */
+export function clientReadyFile(environment: MachineHomeEnvironment = process.env): string | undefined {
+  return nonBlank(environment.HOTSHEET_CLIENT_READY_FILE);
 }
 
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
@@ -377,12 +383,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
   // A packaged desktop host supplies all binaries from its own resources. It has no
   // source checkout or target directory to inspect (HS2-5R706Q).
-  const release = Object.keys(HOST_BINARIES).every((variable) => process.env[variable])
+  // A blank override counts as unset (HS2-GVSJ5Y).
+  const release = Object.keys(HOST_BINARIES).every((variable) => nonBlank(process.env[variable]) !== undefined)
     ? {}
     : releaseBinaryEnvironment(developmentRepositoryRoot());
   const selected: Record<string, string> = { ...release };
   for (const variable of Object.keys(HOST_BINARIES)) {
-    if (process.env[variable]) selected[variable] = process.env[variable];
+    const explicit = nonBlank(process.env[variable]);
+    if (explicit !== undefined) selected[variable] = explicit;
   }
   // Announce the selection before the snapshot copies several hundred megabytes of binaries, so a
   // slow start shows which phase it is in (HS2-SNH42P).
@@ -411,8 +419,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   server.once('close', snapshot.dispose);
   const address = server.address(),
     listening = typeof address === 'object' && address ? address.port : port;
-  const readyFile = process.env.HOTSHEET_CLIENT_READY_FILE;
-  if (readyFile)
+  const readyFile = clientReadyFile();
+  if (readyFile !== undefined)
     writeFileSync(readyFile, JSON.stringify({ url: localClientUrl(host, listening), pid: process.pid }), {
       mode: 0o600,
     });
@@ -421,7 +429,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const stop = () => {
     if (stopping) return;
     stopping = true;
-    if (readyFile) rmSync(readyFile, { force: true });
+    if (readyFile !== undefined) rmSync(readyFile, { force: true });
     // Upgraded terminal sockets can keep server.close pending after the desktop
     // window disappears. Bound bridge teardown; the Rust server stays detached.
     const finish = async () => {

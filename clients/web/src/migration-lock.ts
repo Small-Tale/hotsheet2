@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { spawn } from './child-process';
+import { nonBlank } from './machine-home';
 import { developmentRepositoryRoot } from './repository-root';
 
 export type MigrationLock = (paths: string[]) => Promise<() => Promise<void>>;
@@ -12,7 +13,7 @@ export type MigrationLock = (paths: string[]) => Promise<() => Promise<void>>;
  * checkout comes from `HOTSHEET_REPO_ROOT` or the working directory, never from this module's own
  * location: the stable dev host serves a snapshot under the user cache directory, where a
  * module-relative path resolved to `…/Library/Caches/target/debug/hotsheet-migrate` and every HS1
- * import failed with a spawn ENOENT (HS2-KFKE8W).
+ * import failed with a spawn ENOENT (HS2-KFKE8W). A blank override counts as unset (HS2-GVSJ5Y).
  */
 export function migrationLockBinary(
   environment: Readonly<Record<string, string | undefined>> = process.env,
@@ -20,7 +21,7 @@ export function migrationLockBinary(
   platform = process.platform,
 ): string {
   return (
-    environment.HOTSHEET_MIGRATE_BIN ||
+    nonBlank(environment.HOTSHEET_MIGRATE_BIN) ??
     resolve(
       developmentRepositoryRoot(cwd, environment),
       'target/debug',

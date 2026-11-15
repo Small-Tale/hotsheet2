@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
+import { migrationJobsDirectory } from './migration-job-bridge';
 import {
   authenticatedServerUrl,
   authenticatedTerminalWebSocketUrl,
@@ -22,6 +23,7 @@ import {
   folderChooserCommand,
   forgetVerifiedServer,
   hasHs1Registrations,
+  hookCliBinary,
   hs1ChannelSlug,
   hs1MigrationArgs,
   isStableLocalHost,
@@ -29,6 +31,8 @@ import {
   listServerCheckouts,
   localStoreInitArgs,
   mayReplaceServer,
+  migrateBinary,
+  migratorScript,
   openServerLog,
   PINNED_SERVER_LAUNCHER,
   preserveHs1Entry,
@@ -51,6 +55,7 @@ import {
   revealCommand,
   runGitCommand,
   safelyRestartServer,
+  serverBinary,
   serverLauncherLabel,
   serverNeedsOwnership,
   serverNeedsSelectedBuild,
@@ -59,6 +64,7 @@ import {
   setupRefreshNotices,
   storeNeedsServerUpgrade,
   superviseServer,
+  toolBinary,
 } from './project-bridge';
 
 // HS2-R4XTCB: Windows has no POSIX modes; Node reports 0o666 for a writable private entry.
@@ -198,6 +204,57 @@ describe('developmentRepositoryRoot', () => {
 
   it('retains the normal clients/web fallback for hot development', () => {
     expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', {})).toBe(resolve('/work/hotsheet2'));
+  });
+
+  it('HS2-GVSJ5Y treats an empty or whitespace-only root as unset, never as the working directory', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', { HOTSHEET_REPO_ROOT: blank })).toBe(
+        resolve('/work/hotsheet2'),
+      );
+    expect(developmentRepositoryRoot('/work/elsewhere', { HOTSHEET_REPO_ROOT: 'relative/checkout' })).toBe(
+      resolve('relative/checkout'),
+    );
+    expect(developmentRepositoryRoot('/work/elsewhere', { HOTSHEET_REPO_ROOT: '/srv/checkout' })).toBe(
+      resolve('/srv/checkout'),
+    );
+  });
+});
+
+describe('bridge binary overrides (HS2-GVSJ5Y)', () => {
+  const root = resolve('/work/hotsheet2');
+  const resolvers = [
+    ['HOTSHEET_CLI_BIN', toolBinary, developmentBinaryPath(root, 'hotsheet-cli')],
+    ['HOTSHEET_MIGRATE_BIN', migrateBinary, developmentBinaryPath(root, 'hotsheet-migrate')],
+    ['HOTSHEET_SERVER_BIN', serverBinary, developmentBinaryPath(root, 'hotsheet-server')],
+    ['HOTSHEET_MIGRATOR', migratorScript, resolve(root, 'migrator/src/export.mjs')],
+  ] as const;
+
+  it('falls back to the checkout for an unset, empty, or whitespace-only override', () => {
+    for (const [variable, resolver, fallback] of resolvers)
+      for (const blank of [undefined, '', ' ', '\t\n '])
+        expect(resolver({ [variable]: blank, HOTSHEET_REPO_ROOT: root }), variable).toBe(fallback);
+  });
+
+  it('uses a relative or absolute override as given', () => {
+    for (const [variable, resolver] of resolvers)
+      for (const explicit of ['relative/override', '/pinned/override'])
+        expect(resolver({ [variable]: explicit, HOTSHEET_REPO_ROOT: root }), variable).toBe(explicit);
+  });
+
+  it('reports no hook CLI for a blank value and keeps any other', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(hookCliBinary({ HOTSHEET_HOOK_CLI_BIN: blank })).toBeUndefined();
+    expect(hookCliBinary({ HOTSHEET_HOOK_CLI_BIN: 'relative/cli' })).toBe('relative/cli');
+    expect(hookCliBinary({ HOTSHEET_HOOK_CLI_BIN: '/stable/cli' })).toBe('/stable/cli');
+  });
+
+  it('places migration jobs under the machine home unless a non-blank directory is named', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(migrationJobsDirectory({ HOTSHEET_HOME: '/h2', HOTSHEET_MIGRATION_JOBS: blank })).toBe(
+        resolve('/h2', 'migration-jobs'),
+      );
+    expect(migrationJobsDirectory({ HOTSHEET_MIGRATION_JOBS: 'relative/jobs' })).toBe('relative/jobs');
+    expect(migrationJobsDirectory({ HOTSHEET_MIGRATION_JOBS: '/srv/jobs' })).toBe('/srv/jobs');
   });
 });
 

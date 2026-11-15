@@ -19,7 +19,7 @@ import {
   requireHs1Backup,
 } from './hs1-backup';
 import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
-import { hotsheetHome, hotsheetLegacyHome } from './machine-home';
+import { hotsheetHome, hotsheetLegacyHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
 import type { RegisteredProject } from './registered-projects-model';
@@ -262,16 +262,42 @@ export function developmentBinaryPath(root: string, name: string, platform = pro
   return resolve(root, 'target/debug', `${name}${platform === 'win32' ? '.exe' : ''}`);
 }
 
-function toolBinary() {
-  return process.env.HOTSHEET_CLI_BIN || developmentBinaryPath(developmentRepositoryRoot(), 'hotsheet-cli');
+/*
+ * The bridge's binaries and migrator script: an explicit override wins, else the checkout's debug
+ * build. An unset, empty, or whitespace-only override counts as unset (HS2-GVSJ5Y), so a failed
+ * `$(…)` substitution never names a binary of spaces in the working directory.
+ */
+export function toolBinary(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_CLI_BIN) ??
+    developmentBinaryPath(developmentRepositoryRoot(process.cwd(), environment), 'hotsheet-cli')
+  );
 }
 
-function migrateBinary() {
-  return process.env.HOTSHEET_MIGRATE_BIN || developmentBinaryPath(developmentRepositoryRoot(), 'hotsheet-migrate');
+export function migrateBinary(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_MIGRATE_BIN) ??
+    developmentBinaryPath(developmentRepositoryRoot(process.cwd(), environment), 'hotsheet-migrate')
+  );
 }
 
-function migratorScript() {
-  return process.env.HOTSHEET_MIGRATOR || resolve(developmentRepositoryRoot(), 'migrator/src/export.mjs');
+export function migratorScript(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_MIGRATOR) ??
+    resolve(developmentRepositoryRoot(process.cwd(), environment), 'migrator/src/export.mjs')
+  );
+}
+
+export function serverBinary(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_SERVER_BIN) ??
+    developmentBinaryPath(developmentRepositoryRoot(process.cwd(), environment), 'hotsheet-server')
+  );
+}
+
+/** The durable hook CLI a snapshot host keeps outside its temporary directory, if any. */
+export function hookCliBinary(environment: MachineHomeEnvironment = process.env): string | undefined {
+  return nonBlank(environment.HOTSHEET_HOOK_CLI_BIN);
 }
 
 const HS1_MARKER = '.hotsheet/db/PG_VERSION';
@@ -532,7 +558,7 @@ export async function refreshLocalProjectSetup(
     if (error instanceof SetupTemplatesChangedSinceHostStartError) return {};
     throw error;
   }
-  await restoreLegacyCodexHookCli(root, process.env.HOTSHEET_HOOK_CLI_BIN);
+  await restoreLegacyCodexHookCli(root, hookCliBinary());
   const output = await runner(
     toolBinary(),
     ['-C', store, 'setup', '--refresh', '--project', root, '--json'],
@@ -1344,7 +1370,7 @@ export function openServerLog(home: string = hotsheetHome(), maxBytes = SERVER_L
 
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
-  const binary = process.env.HOTSHEET_SERVER_BIN || developmentBinaryPath(repoRoot, 'hotsheet-server');
+  const binary = serverBinary();
   let exited: string | undefined;
   return {
     discover: () => instanceFor(store),

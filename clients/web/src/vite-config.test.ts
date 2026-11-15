@@ -38,6 +38,14 @@ describe('Vite dependency isolation', () => {
     expect(viteDependencyIsolation({})).toEqual({});
   });
 
+  it('HS2-GVSJ5Y ignores a blank cache directory and keeps a relative or absolute one', () => {
+    for (const blank of ['', ' ', '\t\n '])
+      expect(viteDependencyIsolation({ HOTSHEET_VITE_CACHE_DIR: blank })).toEqual({});
+    expect(viteDependencyIsolation({ HOTSHEET_VITE_CACHE_DIR: 'relative/cache' })).toEqual({
+      cacheDir: 'relative/cache',
+    });
+  });
+
   it('disables HMR only in the frozen stable-dev snapshot (HS2-8JV12R)', () => {
     expect(stableDevHmr({ HOTSHEET_WEB_STABLE_DEV: '1' })).toBe(false);
     expect(stableDevHmr({})).toBeUndefined();

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { spawn } from '../child-process';
-import { hotsheetHome } from '../machine-home';
+import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from '../machine-home';
 import { developmentRepositoryRoot } from '../repository-root';
 import { remoteRequest, type RemoteTls } from './transport';
 
@@ -75,8 +75,12 @@ export interface RemoteTlsFiles {
 const pendingPairs = new Map<string, PendingPair>();
 const MAX_CLI_OUTPUT = 2 * 1024 * 1024;
 
-function cliBinary(): string {
-  return process.env.HOTSHEET_CLI_BIN || `${developmentRepositoryRoot()}/target/debug/hotsheet-cli`;
+/** `HOTSHEET_CLI_BIN`, else the checkout's debug CLI; a blank override counts as unset (HS2-GVSJ5Y). */
+export function cliBinary(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_CLI_BIN) ??
+    `${developmentRepositoryRoot(process.cwd(), environment)}/target/debug/hotsheet-cli`
+  );
 }
 
 export function normalizeRemoteAddress(value: string): string {

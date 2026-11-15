@@ -334,6 +334,54 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual(['src/machine-home.ts']);
   });
 
+  it('HS2-GVSJ5Y reads every other path-valued HOTSHEET_* variable through nonBlank', () => {
+    // `||`, `??`, and truthiness kept whitespace-only overrides as paths, and `??` resolved an empty
+    // HOTSHEET_REPO_ROOT against the working directory. Every read from an environment record, by
+    // name or through `[variable]`, must be the direct argument of `nonBlank` (HS2-N2HB7G's rule).
+    const names = [
+      'HOTSHEET_REPO_ROOT',
+      'HOTSHEET_CLI_BIN',
+      'HOTSHEET_MIGRATE_BIN',
+      'HOTSHEET_SERVER_BIN',
+      'HOTSHEET_HOOK_CLI_BIN',
+      'HOTSHEET_MCP_BIN',
+      'HOTSHEET_MIGRATOR',
+      'HOTSHEET_MIGRATION_JOBS',
+      'HOTSHEET_CLIENT_READY_FILE',
+      'HOTSHEET_DEV_LATENCY_LOG',
+      'HOTSHEET_VITE_CACHE_DIR',
+      'HOTSHEET_DESKTOP_STORAGE_DIRECTORY',
+    ].join('|');
+    const read = new RegExp(
+      String.raw`\b(?:process\.env|environment|env)(?:\.\s*(?:${names})\b|\[\s*['"\x60](?:${names})['"\x60]\s*\]|\[\s*variable\s*\])`,
+      'g',
+    );
+    const offenders: string[] = [];
+    const check = (path: string) => {
+      const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+      const file = relative(join(import.meta.dirname, '..'), path)
+        .split(sep)
+        .join('/');
+      for (const match of source.matchAll(read)) {
+        const before = source.slice(0, match.index),
+          after = source.slice(match.index + match[0].length);
+        if (/^\s*=(?!=)/.test(after)) continue;
+        if (!/\bnonBlank\(\s*$/.test(before)) offenders.push(`${file}: ${match[0]}`);
+      }
+    };
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[jt]sx?$/.test(entry.name)) check(path);
+      }
+    };
+    scan(import.meta.dirname);
+    for (const name of ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'])
+      check(join(import.meta.dirname, '..', name));
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");

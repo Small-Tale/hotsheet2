@@ -2109,6 +2109,14 @@ falls back to `~/Library/LaunchAgents`, a blank `HOME` is an error rather than a
 `Library/LaunchAgents`, a blank `launchctl` override runs `/bin/launchctl`, and a blank
 journal home disables broker provenance.
 
+The web client's other path-valued overrides read through the same `nonBlank` (HS2-GVSJ5Y):
+`HOTSHEET_REPO_ROOT`, `HOTSHEET_CLI_BIN`, `HOTSHEET_MIGRATE_BIN`, `HOTSHEET_SERVER_BIN`,
+`HOTSHEET_HOOK_CLI_BIN`, `HOTSHEET_MCP_BIN`, `HOTSHEET_MIGRATOR`, `HOTSHEET_MIGRATION_JOBS`,
+`HOTSHEET_CLIENT_READY_FILE`, `HOTSHEET_DEV_LATENCY_LOG`, and `HOTSHEET_VITE_CACHE_DIR`. A blank
+binary override selects the checkout's (or the production host's selected) binary, and a blank
+`HOTSHEET_REPO_ROOT` resolves to the checkout two levels above the working directory, as an unset
+one does, rather than to the working directory itself.
+
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:

@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
-import { hotsheetHome } from './machine-home';
+import { hotsheetHome, nonBlank } from './machine-home';
 
 /**
  * The dev bridge's durable log of slow interactions and requests reported by the browser's
@@ -20,7 +20,9 @@ export interface DevLatencyLogEntry {
 
 /** Default log path: `${HOTSHEET_HOME:-~/.hotsheet2}/logs/dev-latency.jsonl`. */
 export function devLatencyLogPath(environment: NodeJS.ProcessEnv = process.env): string {
-  return environment.HOTSHEET_DEV_LATENCY_LOG || resolve(hotsheetHome(environment), 'logs', 'dev-latency.jsonl');
+  return (
+    nonBlank(environment.HOTSHEET_DEV_LATENCY_LOG) ?? resolve(hotsheetHome(environment), 'logs', 'dev-latency.jsonl')
+  );
 }
 
 /** Reports kept in memory for `GET /__hotsheet/dev/latency`. */
