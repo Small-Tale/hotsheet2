@@ -561,6 +561,86 @@ async fn releasing_the_last_claim_reports_the_project_stopped_after_the_grace() 
     );
 }
 
+/// HS2-04NWYT: the router reads a ticket when it routes the event. Under load it can route
+/// `claimed` only after the claim, its completion and its release were all written, and
+/// then reads the ticket released. The claim still opened an active period: its stop is
+/// reported after the grace with the completed ticket, once. The events are routed here by
+/// hand after every write, as a lagging router would route them.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_claim_routed_after_its_release_still_reports_the_stop() {
+    let mut h = harness();
+    let router = app(h.state.clone());
+    configure(&router, json!(["project.stopped"])).await;
+    let (_, created) = call(&router, "POST", "/tickets", Some(json!({"title":"Quick"}))).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/claim"),
+        Some(json!({"worker":"w-fast"})),
+    )
+    .await;
+    call(
+        &router,
+        "PATCH",
+        &format!("/tickets/{id}"),
+        Some(json!({"status":"completed"})),
+    )
+    .await;
+    call(
+        &router,
+        "POST",
+        &format!("/tickets/{id}/release"),
+        Some(json!({"worker":"w-fast"})),
+    )
+    .await;
+    let event = |kind: &str| hotsheet_server::ChangeEvent {
+        live: None,
+        cursor: None,
+        store: h.store_id.clone(),
+        kind: kind.into(),
+        id: id.clone(),
+        slug: slug.clone(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    };
+    let events = [event("claimed"), event("updated"), event("released")];
+    let state = h.state.clone();
+    let store = h.store_id.clone();
+    let records = tokio::task::spawn_blocking(move || {
+        for event in &events {
+            hotsheet_server::notification_router::route_change_event(&state, event);
+        }
+        let later = time::OffsetDateTime::now_utc() + time::Duration::seconds(5);
+        let records =
+            hotsheet_server::notification_router::check_project_activity(&state, &store, later);
+        // One report per active period.
+        assert!(
+            hotsheet_server::notification_router::check_project_activity(
+                &state,
+                &store,
+                later + time::Duration::seconds(5)
+            )
+            .is_empty()
+        );
+        records
+    })
+    .await
+    .unwrap();
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert_eq!(records[0].event, hotsheet_notify::EventKind::ProjectStopped);
+    let sent = next(&mut h).await;
+    assert_eq!(
+        header(&sent, "Title"),
+        Some("Hot Sheet project demo has stopped working on tickets")
+    );
+    let body = String::from_utf8(sent.body).unwrap();
+    assert!(body.contains(&format!("Completed: {slug}.")), "{body}");
+}
+
 /// HS2-2MM07G: a lease that expires without renewal reports the project stalled, naming
 /// the ticket and worker; the clock is driven directly so the test needs no real expiry.
 #[tokio::test(flavor = "multi_thread")]

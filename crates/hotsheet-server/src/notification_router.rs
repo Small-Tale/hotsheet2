@@ -790,6 +790,26 @@ pub fn observe_ticket(
             .as_ref()
             .and_then(hotsheet_model::Timestamp::instant),
     );
+    // HS2-04NWYT: the router reads the ticket when it routes the event, not when the event
+    // was written. A claim whose work and release all landed before its `claimed` event was
+    // routed is read already released, so the claim is taken from the ticket's own claim
+    // history; it still opened (and ends) an active period.
+    let missed_claim = (event.kind == "claimed" && claim.is_none())
+        .then(|| {
+            ticket
+                .claim_history
+                .iter()
+                .rev()
+                .find(|entry| entry.kind == hotsheet_model::ClaimEventKind::Claim)
+        })
+        .flatten()
+        .and_then(|entry| {
+            let expires = entry
+                .lease_expires_at
+                .as_ref()
+                .and_then(hotsheet_model::Timestamp::instant)?;
+            Some((entry.worker.clone(), expires))
+        });
     let fingerprint = progress_fingerprint(ticket);
     let previous = state
         .notification_delivery
@@ -822,6 +842,21 @@ pub fn observe_ticket(
     let (report, next) = {
         let mut activity = state.notification_delivery.activity.lock_or_recover();
         let (report, _) = activity.check(&event.store, now);
+        if let Some(missed) = missed_claim
+            && !activity.holds_claim(&event.store, &event.id)
+        {
+            activity.observe(
+                &event.store,
+                ClaimObservation {
+                    ticket: event.id.clone(),
+                    slug: ticket.slug.clone(),
+                    claim: Some(missed),
+                    completed: false,
+                    progressed: false,
+                },
+                now,
+            );
+        }
         let next = activity.observe(&event.store, observation, now);
         (report, next)
     };

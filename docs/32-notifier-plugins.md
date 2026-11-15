@@ -353,7 +353,10 @@ ended is reported rather than continued. The tracker is seeded from each store's
 when the router starts. It runs with or without a rule, because it also feeds the live
 state (§32.8.3); messages are sent only when an enabled rule names `project.stopped`.
 Grace and lease deadlines are one event-driven server timer per store; no request polls.
-Sessions that never claim tickets produce no signal.
+Sessions that never claim tickets produce no signal. The router reads a ticket when it
+routes the change, so a claim whose work and release were all written before its
+`claimed` change was routed is read already released. That claim is taken from the
+ticket's own claim history and still opens (and ends) an active period (HS2-04NWYT).
 
 Two stuck signals cover sessions that still hold claims (HS2-P57XHV):
 

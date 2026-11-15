@@ -568,6 +568,13 @@ impl ProjectActivity {
     /// [`Self::check`] for this store (a lease expiry or the end of the idle grace).
     /// Callers run `check` first, so a period whose grace already ended is reported before
     /// a new claim starts the next one.
+    /// Whether this tracker holds `ticket`'s claim in `store`.
+    pub fn holds_claim(&self, store: &str, ticket: &str) -> bool {
+        self.stores
+            .get(store)
+            .is_some_and(|activity| activity.claims.contains_key(ticket))
+    }
+
     pub fn observe(
         &mut self,
         store: &str,
