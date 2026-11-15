@@ -348,13 +348,17 @@ test('HS2-HWMW0D keeps the real Workers view and edit through worker updates and
         if (await showInspector.isVisible()) await showInspector.click();
         await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
         const detailsButton = inspector.getByRole('button', { name: 'Edit Ticket details' });
+        // Collapsing the rail at a narrower width blurs the editor, which saves the draft and swaps the
+        // textbox for the preview button. Read whichever one is present in a single bounded step: a
+        // count followed by an unbounded inputValue() hung on the removed textbox (HS2-3JPQZH, HS2-DE8BDH).
         await expect
-          .poll(async () =>
-            (await editor.count())
-              ? await editor.inputValue()
-              : (await detailsButton.count())
-                ? await detailsButton.textContent()
-                : '',
+          .poll(() =>
+            editor
+              .or(detailsButton)
+              .evaluate((node) => (node instanceof HTMLTextAreaElement ? node.value : node.textContent), undefined, {
+                timeout: 1_000,
+              })
+              .catch(() => ''),
           )
           .toContain('Unsaved synthetic worker edit');
         await expect(inspector.getByRole('combobox', { name: 'Category' })).toBeVisible();
@@ -365,7 +369,8 @@ test('HS2-HWMW0D keeps the real Workers view and edit through worker updates and
         });
       }
     }
-    if (await editor.count()) await editor.blur();
+    // The same save can still be removing the textbox; never wait unbounded on it (HS2-3JPQZH).
+    if (await editor.count()) await editor.blur({ timeout: 1_000 }).catch(() => undefined);
     await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
     await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
     const longWorker = columns.getByRole('region', { name: `${workerId} Worker Column` });
