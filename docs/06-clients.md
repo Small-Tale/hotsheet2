@@ -3806,8 +3806,20 @@ borderless Kerf search icon (collapsible `SearchField` in its own toolbar group)
 field when activated and searches the selected terminal with xterm's search addon (HS2-TWZSZF):
 typing selects the next match incrementally and scrolls it into view, Enter and Shift-Enter step
 to the next and previous match, an emptied field clears the selection, and Escape or blur on an
-empty field collapses it back to the icon. Only the active match is highlighted; match
-decorations need xterm's proposed API, which stays off. Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
+empty field collapses it back to the icon. Every match is highlighted and the active one more
+strongly (HS2-M5QPED), in the `--hs-terminal-search-match` and `--hs-terminal-search-active-match`
+theme tokens (`light-dark()` pairs resolved to the `#rrggbb` form xterm decorations need, and
+repainted when the color scheme changes). While matches are highlighted, xterm's
+`minimumContrastRatio` is 4.5 so text stays legible on them (the DOM renderer misses
+inverse-video default-color text: `HS2-1930X3`). A borderless text control in its own Kerf `ToolbarControlGroup` after the open field shows the count (clicking it steps to the next match, Shift-click to the previous one, and keeps typing in the field; it is disabled with no matches):
+"3 of 12", "No matches", or "1000+ matches" past the addon's 1000-match highlight limit. The count
+follows query edits and re-counts when output arrives while the search is open. Emptying the field
+(typing or Clear) or closing it removes the highlights and the count. Selecting another terminal
+moves the search there and clears the terminal it left, including a terminal whose runtime loads
+or is restored from the parked pool after the switch. Decorations are xterm's proposed API, so a
+terminal turns on `allowProposedApi` at its first search; Hot Sheet calls no other proposed API.
+The count sits beside the field rather than inside it because SearchField's trailing zone holds
+only a compact control and the rail's end zone accepts only controls (Kerf gap `KF-8CDT8B`). Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action

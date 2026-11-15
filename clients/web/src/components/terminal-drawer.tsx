@@ -125,6 +125,10 @@ export interface TerminalDrawerProps {
 export interface TerminalDrawerSearch {
   model: SearchFieldModel;
   open: boolean;
+  /** The searched terminal's match count ("3 of 12", "No matches"; HS2-M5QPED); omitted while nothing is searched. */
+  count?: string;
+  /** Whether the search has a match to step to; the count control is disabled without one. */
+  hasMatches?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -487,6 +491,23 @@ export function TerminalDrawer({
                         expanded={search.open}
                         expandLabel="Search Terminal"
                       />
+                    </ToolbarControlGroup>
+                  )}
+                  {selectedSession && search?.open && search.count && (
+                    // The match count beside the open field (HS2-M5QPED), as a borderless text control that
+                    // steps to the next match (Enter does the same in the field). SearchField has no in-field
+                    // result readout and the rail's end zone holds only controls (KF-8CDT8B).
+                    <ToolbarControlGroup appearance="borderless" single content="text">
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.nextTerminalSearchMatch.attrs}
+                        data-terminal-search-count=""
+                        disabled={!search.hasMatches}
+                        aria-label={`Next Match, ${search.count}`}
+                        title="Next match"
+                      >
+                        {search.count}
+                      </button>
                     </ToolbarControlGroup>
                   )}
                   <ToolbarControlGroup

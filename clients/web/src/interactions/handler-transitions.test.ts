@@ -418,6 +418,9 @@ it('closes a project from Project Settings through the same entry point as its t
   let current: Pick<Project, 'id'> | undefined = { id: 'b' };
   wireTerminalInteractions({
     terminalSearchModel: createSearchFieldModel(),
+    terminalSearchOpen: signal(false),
+    terminalSearchResults: signal(undefined),
+    terminalDrawerSelected: signal('grid'),
     requestProjectClose: (ids: readonly string[]) => {
       requested.push([...ids]);
     },
@@ -456,6 +459,9 @@ it('keeps LAN visibility identities stable on rename and distinct after delete/r
     menu = signal<{ id: string; x: number; y: number } | undefined>(undefined);
   wireTerminalInteractions({
     terminalSearchModel: createSearchFieldModel(),
+    terminalSearchOpen: signal(false),
+    terminalSearchResults: signal(undefined),
+    terminalDrawerSelected: signal('grid'),
     terminalVisibility: state,
     terminalVisibilityNamePrompt: prompt,
     terminalVisibilityContextMenu: menu,

@@ -93,6 +93,55 @@ export function resolveTerminalTheme(element: HTMLElement): ITheme {
   }
 }
 
+/** A computed sRGB color as `#rrggbb` (xterm decorations take only that form); alpha is dropped. */
+export function hexColor(value: string): string | undefined {
+  const rgba = parseComputedColor(value);
+  if (!rgba) return undefined;
+  const channel = (component: number) =>
+    Math.round(Math.min(255, Math.max(0, component)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${channel(rgba[0])}${channel(rgba[1])}${channel(rgba[2])}`;
+}
+
+/** The highlight colors of terminal search matches (HS2-M5QPED), in xterm's decoration shape. */
+export interface TerminalSearchDecorationColors {
+  matchBackground: string;
+  matchOverviewRuler: string;
+  activeMatchBackground: string;
+  activeMatchColorOverviewRuler: string;
+}
+
+/** Light-scheme fallbacks, used when a token does not resolve to an sRGB color. */
+const SEARCH_MATCH_FALLBACK = '#fde68a',
+  SEARCH_ACTIVE_MATCH_FALLBACK = '#f59e0b';
+
+/**
+ * Resolve the search highlight tokens (`--hs-terminal-search-match`, `--hs-terminal-search-active-match`)
+ * for `element`'s color scheme, as {@link resolveTerminalTheme} resolves the surface tokens.
+ */
+export function resolveTerminalSearchDecorations(element: HTMLElement): TerminalSearchDecorationColors {
+  const probe = element.ownerDocument.createElement('span');
+  probe.hidden = true;
+  element.append(probe);
+  try {
+    const resolve = (token: string, fallback: string) => {
+      probe.style.color = `var(${token}, ${fallback})`;
+      return hexColor(getComputedStyle(probe).color) ?? fallback;
+    };
+    const match = resolve('--hs-terminal-search-match', SEARCH_MATCH_FALLBACK),
+      active = resolve('--hs-terminal-search-active-match', SEARCH_ACTIVE_MATCH_FALLBACK);
+    return {
+      matchBackground: match,
+      matchOverviewRuler: match,
+      activeMatchBackground: active,
+      activeMatchColorOverviewRuler: active,
+    };
+  } finally {
+    probe.remove();
+  }
+}
+
 /**
  * Call `apply` whenever the app's light/dark appearance may have changed: the system preference, or the
  * root's theme attribute/class (the explicit `data-theme` choice and Web Awesome's `wa-dark`). Returns

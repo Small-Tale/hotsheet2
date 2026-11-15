@@ -66,6 +66,11 @@
      ANSI palette from them. */
   --hs-terminal-background: light-dark(var(--wa-color-surface-default), #000);
   --hs-terminal-foreground: var(--wa-color-text-normal);
+  /* Terminal search highlights (HS2-M5QPED): every match and, stronger, the active one. xterm paints
+     them as opaque cell backgrounds under the text, so each pair keeps the terminal text legible on its
+     own scheme. terminal-theme.ts resolves them to the #rrggbb form xterm decorations require. */
+  --hs-terminal-search-match: light-dark(#fde68a, #5c4813);
+  --hs-terminal-search-active-match: light-dark(#f59e0b, #b45309);
   /* Opaque floating controls remain legible over transparent and light content after Kerf
      beta.76 made the default neutral fill translucent (HS2-170JC3). */
   --hs-floating-control-surface: #3a3a3c;

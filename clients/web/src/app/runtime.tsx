@@ -248,6 +248,7 @@ import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers
 import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
+import { type TerminalSearchResults } from '../terminal-search';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
@@ -639,7 +640,9 @@ export async function startHotSheetWebClient() {
   const guidanceSearchOpen = signal(false);
   // The terminal drawer's collapsible search (HS2-TWZSZF): Kerf owns the text, clear, and open state.
   const terminalSearchModel = createSearchFieldModel(),
-    terminalSearchOpen = signal(false);
+    terminalSearchOpen = signal(false),
+    // The searched terminal's match count (HS2-M5QPED), published by the terminal interactions.
+    terminalSearchResults = signal<TerminalSearchResults | undefined>(undefined);
   const guidanceSearchModel = createGuidanceSearchModel(() => guidanceOverview.value);
   const guidanceOwnerFilter = signal('');
   const guidanceTagFilter = signal('');
@@ -5546,7 +5549,7 @@ export async function startHotSheetWebClient() {
         mobileMagnifiedTerminal,
         viewportMobile,
         coarsePointer,
-        terminalSearch: { model: terminalSearchModel, open: terminalSearchOpen },
+        terminalSearch: { model: terminalSearchModel, open: terminalSearchOpen, results: terminalSearchResults },
       },
       conversations: {
         conversationStates,
@@ -6700,6 +6703,7 @@ export async function startHotSheetWebClient() {
     guidanceSearchOpen,
     terminalSearchOpen,
     terminalSearchModel,
+    terminalSearchResults,
     workspaceSearchModel,
     guidanceSearchModel,
     guidanceSearchActive: () => viewMode.value === 'settings' && settingsCategory() === 'guidance',

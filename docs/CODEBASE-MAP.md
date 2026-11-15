@@ -424,7 +424,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/host-health-resource.ts # One server's host-health signal: reads on start, on `host_health` change events (cursor-deduped across project streams) and on resync, coalesced; never polls (HS2-DTAVQA)
     src/terminal-limits.ts  #   Client terminal history / warm-cap limits resolved from /terminal-limits and pushed to mounted emulators; conservative defaults on another device or a phone (HS2-Y5DYC0, HS2-ZWVDTZ)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
-    src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
+    src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C); terminal search highlight colors (HS2-M5QPED)
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, live scrollback limit updates, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-replay-stream.ts # Opt-in attach replay negotiation: URL parameters, frame headers, ordered async deflate-raw decoding, stream positions for resume, tail-first default by host (HS2-K93QHA)
     src/terminal-query-replies.ts # Which viewer answers the program's terminal queries (server-named `answered_by`, fail-open) and xterm's user-input label that separates replies from typed input (HS2-0GZZHV)

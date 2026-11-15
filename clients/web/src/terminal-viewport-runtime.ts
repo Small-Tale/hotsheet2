@@ -45,8 +45,21 @@ import {
   terminalReplayMaxBytes,
   type TerminalStreamPosition,
 } from './terminal-replay-stream';
-import { TERMINAL_SEARCH_EVENT, type TerminalSearchDetail } from './terminal-search';
-import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
+import {
+  TERMINAL_SEARCH_EVENT,
+  TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
+  TERMINAL_SEARCH_MINIMUM_CONTRAST,
+  TERMINAL_SEARCH_READY_EVENT,
+  TERMINAL_SEARCH_RESULTS_EVENT,
+  type TerminalSearchDetail,
+  type TerminalSearchResults,
+} from './terminal-search';
+import {
+  followTerminalTheme,
+  resolveTerminalSearchDecorations,
+  resolveTerminalTheme,
+  watchTerminalScheme,
+} from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import { createTouchSelectionController } from './terminal-touch-selection';
@@ -1086,6 +1099,8 @@ function initializeTerminalViewport(
     } else {
       claim();
     }
+    // HS2-M5QPED: a terminal restored into the drawer joins an open terminal search.
+    if (!scaledPreview) element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_READY_EVENT, { bubbles: true }));
     if (!webglParked) return;
     // Paint the first frame with the DOM renderer, then restore WebGL off the critical path.
     webglParked = false;
@@ -1602,24 +1617,57 @@ function initializeTerminalViewport(
       element.removeEventListener(TERMINAL_PASTE_EVENT, paste);
     });
     // Terminal search (HS2-TWZSZF): xterm's search addon loads on the first query. It selects the active
-    // match and scrolls it into view; match decorations would need xterm's proposed API, which stays off.
-    let searchAddon: SearchAddon | undefined;
+    // match and scrolls it into view, and (HS2-M5QPED) highlights every match with theme-token
+    // decorations and reports the active index and match count, including re-counts after new output.
+    // Decorations are xterm's proposed API, so only a searched terminal turns it on; nothing else here
+    // calls a proposed API (registerDecoration, markers, unicode, character joiners).
+    let searchAddon: SearchAddon | undefined,
+      searchQuery = '',
+      contrastBeforeSearch: number | undefined;
+    const searchOptions = (incremental: boolean) => ({
+      incremental,
+      decorations: resolveTerminalSearchDecorations(element),
+    });
     const search = (event: Event) => {
       const detail = (event as CustomEvent<TerminalSearchDetail>).detail;
+      searchQuery = detail.query;
       if (!detail.query) {
-        if (searchAddon) terminal.clearSelection();
+        if (searchAddon) {
+          searchAddon.clearDecorations();
+          terminal.clearSelection();
+        }
+        if (contrastBeforeSearch !== undefined) {
+          terminal.options.minimumContrastRatio = contrastBeforeSearch;
+          contrastBeforeSearch = undefined;
+        }
         detail.found = false;
         return;
       }
-      if (!searchAddon) {
-        searchAddon = new SearchAddon();
-        terminal.loadAddon(searchAddon);
+      // A highlight replaces the cell background under text of any color (the DOM renderer misses inverse
+      // default-color text, HS2-1930X3), so while matches are highlighted xterm raises text contrast to AA.
+      if (contrastBeforeSearch === undefined) {
+        contrastBeforeSearch = terminal.options.minimumContrastRatio ?? 1;
+        terminal.options.minimumContrastRatio = TERMINAL_SEARCH_MINIMUM_CONTRAST;
       }
-      const options = { incremental: detail.incremental },
+      if (!searchAddon) {
+        terminal.options.allowProposedApi = true;
+        const addon = new SearchAddon({ highlightLimit: TERMINAL_SEARCH_HIGHLIGHT_LIMIT });
+        searchAddon = addon;
+        terminal.loadAddon(addon);
+        const resultsListener = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
+          const results: TerminalSearchResults = { resultIndex, resultCount };
+          element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_RESULTS_EVENT, { bubbles: true, detail: results }));
+        });
+        own(() => {
+          resultsListener.dispose();
+        });
+      }
+      const addon = searchAddon,
+        options = searchOptions(detail.incremental),
         step = () =>
           detail.direction === 'previous'
-            ? searchAddon!.findPrevious(detail.query, options)
-            : searchAddon!.findNext(detail.query, options);
+            ? addon.findPrevious(detail.query, options)
+            : addon.findNext(detail.query, options);
       // Stepping back from the only match reports no match and drops the selection once before the addon
       // wraps, so a manual step retries once; a query that is really absent fails both times.
       detail.found = step() || (!detail.incremental && step());
@@ -1628,6 +1676,17 @@ function initializeTerminalViewport(
     own(() => {
       element.removeEventListener(TERMINAL_SEARCH_EVENT, search);
     });
+    // A scheme change repaints the highlights in the new scheme's colors, keeping the active match.
+    own(
+      watchTerminalScheme(() => {
+        if (!searchAddon || !searchQuery || !element.isConnected) return;
+        searchAddon.clearDecorations();
+        searchAddon.findNext(searchQuery, searchOptions(true));
+      }),
+    );
+    // An open search reaches a terminal whose runtime loaded after the query was typed (and, from
+    // `resume`, one restored from the parked pool into the drawer after the selection changed).
+    element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_READY_EVENT, { bubbles: true }));
   }
   connect();
   if (autoFocus) {

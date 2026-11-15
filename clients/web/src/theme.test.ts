@@ -76,6 +76,8 @@ describe('shared client theme', () => {
       '--hs-terminal-background',
       '--hs-terminal-foreground',
       '--hs-terminal-control-border',
+      '--hs-terminal-search-match',
+      '--hs-terminal-search-active-match',
       '--hs-floating-control-surface',
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
@@ -126,9 +128,13 @@ describe('shared client theme', () => {
     // CommandNavigation sets its palette color inline (`--command-color: var(--hs-command-<palette>)`),
     // so the palette tokens are referenced from TSX rather than CSS (HS2-SAXCMZ).
     const inlineCommandPalette = (token: string) => token.startsWith('--hs-command-') && token !== '--hs-command-on';
+    // The terminal search highlights are resolved for xterm in terminal-theme.ts, not CSS (HS2-M5QPED).
     const cssReferences = required.filter(
       (token) =>
-        !token.startsWith('--hs-priority-') && !inlineCommandPalette(token) && token !== '--hs-category-fallback',
+        !token.startsWith('--hs-priority-') &&
+        !inlineCommandPalette(token) &&
+        token !== '--hs-category-fallback' &&
+        !token.startsWith('--hs-terminal-search-'),
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));

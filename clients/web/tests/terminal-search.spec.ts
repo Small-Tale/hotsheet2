@@ -115,3 +115,116 @@ test('HS2-SW2YAZ double-clicking in the terminal search field never maximizes th
   await doubleClickRail();
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
 });
+
+type SearchSocketWindow = typeof window & {
+  __terminalFeedbackSockets: Array<EventTarget & { url: string; readyState: number }>;
+};
+
+/** Write output to a terminal through its newest open fake socket, as the PTY would. */
+async function writeTerminalOutput(page: Page, terminalId: string, output: string) {
+  await page.evaluate(
+    ({ terminalId, output }) => {
+      const socket = (window as SearchSocketWindow).__terminalFeedbackSockets
+        .filter((item) => item.url.includes(`/terminals/${terminalId}/`) && item.readyState === 1)
+        .at(-1)!;
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+    },
+    { terminalId, output },
+  );
+}
+
+test('HS2-M5QPED terminal search highlights every match and counts them through edits, output, clearing, closing, and terminal switches', async ({
+  page,
+}) => {
+  const { drawer, viewport } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    trigger = group.getByRole('button', { name: 'Search Terminal' }),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    // xterm draws one decoration per match plus one more over the active match (addon-search 0.16 marks
+    // neither with its active class), so N matches render N + 1 decorations.
+    highlights = (target = viewport) => target.locator('.xterm-find-result-decoration'),
+    replaceQuery = async (query: string) => {
+      await editor.click();
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.press('Backspace');
+      if (query) await page.keyboard.type(query);
+    };
+  await trigger.click();
+  await expect(editor).toBeFocused();
+  // An open, empty field shows no count.
+  await expect(count).toHaveCount(0);
+
+  // One match: highlighted as the active match, counted beside the field.
+  await page.keyboard.type('Justify');
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights()).toHaveCount(2);
+  // The count sits after the search group and before the Clear and Hide actions.
+  const searchBox = (await group.boundingBox())!,
+    countBox = (await count.boundingBox())!,
+    clearBox = (await drawer.getByRole('button', { name: 'Clear Terminal', exact: true }).boundingBox())!;
+  expect(countBox.width).toBeGreaterThan(0);
+  expect(countBox.x).toBeGreaterThanOrEqual(searchBox.x + searchBox.width - 1);
+  expect(countBox.x + countBox.width).toBeLessThanOrEqual(clearBox.x + 1);
+
+  // Query edits re-count: several matches, stepped with Enter and Shift-Enter.
+  await replaceQuery('File');
+  await expect(count).toHaveText(/^1 of \d+$/);
+  const total = Number((await count.textContent())!.split(' of ')[1]);
+  expect(total).toBeGreaterThanOrEqual(2);
+  await expect(highlights()).toHaveCount(total + 1);
+  await page.keyboard.press('Enter');
+  await expect(count).toHaveText(`2 of ${total}`);
+  await page.keyboard.press('Shift+Enter');
+  await expect(count).toHaveText(`1 of ${total}`);
+  await expect(highlights()).toHaveCount(total + 1);
+  // The count is a control too: a click steps to the next match and keeps typing in the field.
+  await count.click();
+  await expect(count).toHaveText(`2 of ${total}`);
+  await expect(editor).toBeFocused();
+  await count.click({ modifiers: ['Shift'] });
+  await expect(count).toHaveText(`1 of ${total}`);
+
+  // No match: the count says so and nothing is highlighted.
+  await page.keyboard.type('-absent');
+  await expect(count).toHaveText('No matches');
+  await expect(count).toBeDisabled();
+  await expect(highlights()).toHaveCount(0);
+
+  // Output arriving while the search is open re-counts the matches.
+  await replaceQuery('Justify');
+  await expect(count).toHaveText('1 of 1');
+  await writeTerminalOutput(page, 'terminal-new', '\u001b[6;1HJustify once more, Justify twice');
+  await expect(count).toHaveText(/^\d of 3$/);
+  await expect(highlights()).toHaveCount(4);
+  await page.screenshot({ path: test.info().outputPath('hs2-m5qped-matches-1280.png') });
+
+  // Clearing the field removes the highlights and the count; refilling brings them back.
+  await group.getByRole('button', { name: 'Clear Terminal Search' }).click();
+  await expect(editor).toBeFocused();
+  await expect(count).toHaveCount(0);
+  await expect(highlights()).toHaveCount(0);
+  await page.keyboard.type('Justify');
+  await expect(count).toHaveText(/^\d of 3$/);
+
+  // Switching terminals moves the search: the left terminal's highlights go, the new one is counted.
+  await drawer.locator('[data-tab-id="nano"] [data-action="select-drawer-item"]').click();
+  const nano = drawer.locator('[data-component="terminal-session"]:not([hidden]) [data-terminal-id="nano"]');
+  await expect(nano).toHaveAttribute('data-connection', 'connected');
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights(nano)).toHaveCount(2);
+  await expect(highlights(viewport)).toHaveCount(0);
+  await drawer.locator('[data-tab-id="terminal-new"] [data-action="select-drawer-item"]').click();
+  // Back on the first terminal (its fake PTY redrew the nano screen on resume, so one match again), the
+  // search follows and the second terminal's highlights go.
+  await expect(highlights()).toHaveCount(2);
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights(nano)).toHaveCount(0);
+
+  // Closing (empty the field, then Escape) removes the highlights and the count.
+  await replaceQuery('');
+  await page.keyboard.press('Escape');
+  await expect(group).toHaveAttribute('data-expanded', 'false');
+  await expect(count).toHaveCount(0);
+  await expect(highlights()).toHaveCount(0);
+});

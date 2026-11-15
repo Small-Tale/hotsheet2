@@ -102,7 +102,11 @@ terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-vie
 terminals	delegate	document.body	'mousedown'	'[data-action="clear-terminal"]'
 terminals	delegate	document.body	'click'	'[data-action="clear-terminal"]'
 terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-viewport"]'
+terminals	delegate	document.body	TERMINAL_SEARCH_RESULTS_EVENT	'[data-component="terminal-viewport"]'
+terminals	delegate	document.body	TERMINAL_SEARCH_READY_EVENT	'[data-component="terminal-viewport"]'
 terminals	delegateCapture	document.body	'keydown'	'[data-search-field-editor="terminal-search"]'
+terminals	delegate	document.body	'mousedown'	'[data-action="next-terminal-search-match"]'
+terminals	delegate	document.body	'click'	'[data-action="next-terminal-search-match"]'
 terminals	wireTerminalClipboardActions	document.body
 terminals	wireTerminalClipboardSheets	document.body
 terminals	delegateCapture	document.body	'close'	'[data-dialog-component="terminal-paste-dialog"]'

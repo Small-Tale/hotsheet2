@@ -21,6 +21,8 @@ export const TERMINALS_ACTIONS = {
   copyTerminalSelection: action('copy-terminal-selection'),
   pasteTerminalText: action('paste-terminal-text'),
   clearTerminal: action('clear-terminal'),
+  /** The drawer's terminal search match count, which steps to the next match (HS2-M5QPED). */
+  nextTerminalSearchMatch: action('next-terminal-search-match'),
   confirmTerminalCopy: action('confirm-terminal-copy'),
   closeTerminalCopy: action('close-terminal-copy'),
   submitTerminalPaste: action('submit-terminal-paste'),

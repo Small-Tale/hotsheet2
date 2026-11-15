@@ -441,6 +441,36 @@ describe('TerminalDrawer', () => {
     expect(drawer('grid', false)).not.toContain('terminal-search');
     expect(drawer('one', undefined)).not.toContain('terminal-search');
   });
+  it('HS2-M5QPED shows the match count as a next-match control after the open search, and only then', () => {
+    const drawer = (selectedId: string, open: boolean, count?: string, hasMatches = true) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId,
+          search: { model: createSearchFieldModel(), open, hasMatches, ...(count === undefined ? {} : { count }) },
+        }),
+      );
+    // Its own borderless text group between the search group and the Clear and Hide actions.
+    const counted = drawer('one', true, '3 of 12');
+    expect(counted).toMatch(
+      /data-content="search"[\s\S]*data-search-field-id="terminal-search"[\s\S]*data-appearance="borderless"[^>]*data-content="text"[^>]*><button type="button" data-action="next-terminal-search-match" data-terminal-search-count="" aria-label="Next Match, 3 of 12" title="Next match">3 of 12<\/button>[\s\S]*terminal-drawer__actions/,
+    );
+    expect(counted).not.toMatch(/next-terminal-search-match"[^>]*disabled/);
+    // No matches: the count says so and there is nothing to step to.
+    expect(drawer('one', true, 'No matches', false)).toMatch(
+      /data-action="next-terminal-search-match"[^>]*disabled[^>]*>No matches<\/button>/,
+    );
+    // Nothing searched yet, a closed field, or the grid: no count.
+    expect(drawer('one', true)).not.toContain('data-terminal-search-count');
+    expect(drawer('one', false, '3 of 12')).not.toContain('data-terminal-search-count');
+    expect(drawer('grid', true, '3 of 12')).not.toContain('data-terminal-search-count');
+  });
   it('HS2-N2AG8V offers Clear Terminal before Hide only while a terminal is selected', () => {
     const terminal = render('one');
     // A native button in the existing borderless end group, with a Lucide eraser and an accessible name.

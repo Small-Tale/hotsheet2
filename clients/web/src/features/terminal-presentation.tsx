@@ -26,6 +26,7 @@ import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
 import { type ServerClocks, serverClocks } from '../server-clock';
+import { terminalSearchCountText, type TerminalSearchResults } from '../terminal-search';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityType } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
@@ -74,7 +75,12 @@ export interface TerminalPresentationDependencies {
     /** Whether the primary pointer is coarse (touch-first device), for desktop-width Copy/Paste (HS2-5DHHPV). */
     coarsePointer: Signal<boolean>;
     /** The drawer's collapsible terminal search (HS2-TWZSZF). */
-    terminalSearch: { model: SearchFieldModel; open: Signal<boolean> };
+    terminalSearch: {
+      model: SearchFieldModel;
+      open: Signal<boolean>;
+      /** The searched terminal's match count (HS2-M5QPED). */
+      results: Signal<TerminalSearchResults | undefined>;
+    };
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -353,7 +359,12 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
       mobile: viewportMobile.value,
       touchClipboard: touchClipboard(),
-      search: { model: terminalSearch.model, open: terminalSearch.open.value },
+      search: {
+        model: terminalSearch.model,
+        open: terminalSearch.open.value,
+        count: terminalSearchCountText(terminalSearch.results.value),
+        hasMatches: (terminalSearch.results.value?.resultCount ?? 0) > 0,
+      },
     };
   }
 
