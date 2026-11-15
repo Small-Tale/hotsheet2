@@ -286,7 +286,9 @@ impl ProcessJournal {
     }
 
     /// Read recent records in start order. An unended record after its supervisor disappears
-    /// is evidence for investigation, not proof that the child exited.
+    /// is evidence for investigation, not proof that the child exited. Launches that start in
+    /// the same millisecond list in launch-id order (HS2-ZKP7HW): deterministic, but a random
+    /// same-millisecond ULID does not record which of them started first.
     pub fn list(&self) -> io::Result<Vec<ProcessRecord>> {
         self.reject_non_directory()?;
         let entries = match fs::read_dir(&self.dir) {
@@ -599,8 +601,75 @@ mod tests {
         assert_eq!(restarted.pid, first.pid);
         let recovered = ProcessJournal::at(home.path()).list().unwrap();
         assert_eq!(recovered.len(), 2);
-        assert_eq!(recovered[1].exit_reason, None);
-        assert_eq!(recovered[1].session_id.as_deref(), Some("session-1"));
+        // HS2-ZKP7HW: both launches can start in the same millisecond, and a random
+        // same-millisecond ULID orders them either way, so find each launch by its id.
+        let by_id = |id: &str| recovered.iter().find(|r| r.launch_id == id).unwrap();
+        assert_eq!(by_id(&first.launch_id), &ended);
+        let recovered_restart = by_id(&restarted.launch_id);
+        assert_eq!(recovered_restart.exit_reason, None);
+        assert_eq!(recovered_restart.session_id.as_deref(), Some("session-1"));
+    }
+
+    /// HS2-ZKP7HW: launches that start in the same millisecond list in launch-id order,
+    /// whatever order the directory returns them in, so `list()` is deterministic.
+    #[test]
+    fn hs2_zkp7hw_same_millisecond_launches_list_by_launch_id() {
+        let home = tempfile::tempdir().unwrap();
+        let journal = ProcessJournal::at(home.path());
+        journal.prepare_dir().unwrap();
+        let started = now_ms();
+        let mut ids: Vec<String> = (0..8).map(|_| ulid::Ulid::new().to_string()).collect();
+        // Write in descending id order so directory order never happens to match.
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        for (pid, launch_id) in ids.iter().enumerate() {
+            let record = ProcessRecord {
+                launch_id: launch_id.clone(),
+                pid: u32::try_from(pid).unwrap(),
+                supervisor_pid: 7,
+                supervisor: "test-host".into(),
+                purpose: Purpose::AiChannel,
+                project_id: None,
+                session_id: None,
+                binary_revision: None,
+                started_ms: started,
+                ended_ms: None,
+                exit_reason: None,
+            };
+            fs::write(
+                journal.path(&record.launch_id),
+                serde_json::to_vec(&record).unwrap(),
+            )
+            .unwrap();
+        }
+        // An earlier launch still lists first, ahead of any same-millisecond tie.
+        let earlier = ProcessRecord {
+            launch_id: ulid::Ulid::new().to_string(),
+            pid: 99,
+            supervisor_pid: 7,
+            supervisor: "test-host".into(),
+            purpose: Purpose::AiChannel,
+            project_id: None,
+            session_id: None,
+            binary_revision: None,
+            started_ms: started - 1,
+            ended_ms: None,
+            exit_reason: None,
+        };
+        fs::write(
+            journal.path(&earlier.launch_id),
+            serde_json::to_vec(&earlier).unwrap(),
+        )
+        .unwrap();
+        let listed: Vec<String> = journal
+            .list()
+            .unwrap()
+            .into_iter()
+            .map(|r| r.launch_id)
+            .collect();
+        ids.sort_unstable();
+        let mut expected = vec![earlier.launch_id];
+        expected.extend(ids);
+        assert_eq!(listed, expected);
     }
 
     #[test]
