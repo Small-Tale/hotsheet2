@@ -1873,8 +1873,8 @@ for a local target, the reviewed transport for a remote one):
   `deployment_start_unconfirmed`, and the same request sends it again as a
   continuation of the decision already made, so nobody is asked twice.
 - A provider name no adapter serves is still recorded as `unknown` with
-  `deployment_executor_unavailable`: allowed, and not run. Reading a hosted
-  deployment during run reconciliation is HS2-WZ0NKH; per-target secret variables
+  `deployment_executor_unavailable`: allowed, and not run. Run reconciliation reads
+  a hosted deployment from its host (§26.14, HS2-WZ0NKH). Per-target secret variables
   for the script are not provided.
 
 ### Watched where the target lives (HS2-WDQZ37)
@@ -2037,10 +2037,16 @@ target, and only a finished one is watched again.
 ### Deployments (HS2-BYEB60)
 
 The deployment source reads the run's standing deployment gates by their retained
-operation ids. A `target-script` deployment runs on the target's machine
-(§26.13, HS2-G3VAK4) and is not yet read from there during reconciliation
-(HS2-WZ0NKH); for a provider no adapter serves, the only thing reconciliation can
-verify is that nothing was executed, and it says so in the finding's reason:
+operation ids. A `target-script` deployment runs on the target's machine (§26.13,
+HS2-G3VAK4), and reconciliation asks that machine (HS2-WZ0NKH): for a gate that is
+`pending`, or `unknown` with `deployment_starting` or `deployment_start_unconfirmed`, it
+reads the execution (`GET target-deployments`, no wait, starting nothing) under a
+continuing `deployments_run` gate, so nobody is asked again. Still running is live work
+under the operation id; an end the host recorded is written to the gate as a sync
+would write it; an execution the host does not know is `recorded_work_missing`; a host
+that cannot be asked leaves the source unverifiable with its code. For a provider no
+adapter serves, the only thing reconciliation can verify is that nothing was executed,
+and it says so in the finding's reason:
 
 | A standing deployment gate                                 | Finding                                      |
 | ---------------------------------------------------------- | -------------------------------------------- |

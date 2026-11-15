@@ -298,3 +298,99 @@ fn hs2_g3vak4_a_remote_targets_script_runs_on_its_host_not_here() {
     assert!(!r.runtime.home.join(DEPLOYMENT_WORKTREES_DIRECTORY).exists());
     let _ = sha('a');
 }
+
+#[test]
+fn hs2_wz0nkh_reconciliation_asks_the_host_about_a_hosted_deployment() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(
+        &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
+        &mut tx,
+    );
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m.runtime.clone().with_gate_provider(ci.clone());
+    let owner = m.owner.id.clone();
+    let root = Path::new(&m.target.root).to_path_buf();
+    let log = m.home.join("deploys.log");
+    let release = m.home.join("release");
+    git(&root, &["init", "-q"]);
+    // A deployment that runs until the test releases it.
+    let commit = commit_script(
+        &root,
+        &format!(
+            "while [ ! -f '{}' ]; do sleep 0.05; done; echo held",
+            release.display()
+        ),
+        0,
+        &log,
+    );
+    m.runtime
+        .gate_link(&owner, &run, link(&commit, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    ci.set(
+        &commit,
+        verdict(CI, GateState::Passed, 1, &commit, Coverage::Exact),
+    );
+    m.runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let started = m
+        .runtime
+        .gate_deploy(
+            &owner,
+            &run,
+            deploy("deploy-held", false),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(started.gate.state, GateState::Pending);
+    // While it runs, reconciliation finds it live on the host, by its operation id.
+    let live = m
+        .runtime
+        .run_deployment_work(&owner, &run, Some(&worker()), &mut tx);
+    assert!(
+        matches!(&live, hotsheet_ticketing::orchestration::Observed::Verified(work)
+            if work.live.as_deref() == Some("deploy-held")),
+        "{live:?}"
+    );
+    // It ends; the next reconciliation records the host's answer on the gate.
+    std::fs::write(&release, "").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let answer = m
+            .runtime
+            .run_deployment_work(&owner, &run, Some(&worker()), &mut tx);
+        let gate = m.runtime.gate(&owner, &started.gate.gate_id).unwrap();
+        if gate.state == GateState::Passed {
+            assert!(
+                matches!(&answer, hotsheet_ticketing::orchestration::Observed::Verified(work)
+                    if work.live.is_none()),
+                "{answer:?}"
+            );
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the deployment never ended: {gate:?}"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // Asked under the original decision as a continuation: nobody was asked again.
+    assert!(
+        m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+}

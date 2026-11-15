@@ -256,15 +256,20 @@ fn hs2_byeb60_reconciliation_reads_deployments_by_their_operation_id() {
         )
     );
     assert_eq!(disposition(&view), Disposition::HoldUnverified);
-    // The executor goes away: an execution nothing can confirm.
+    // The executor goes away. HS2-WZ0NKH: a `target-script` deployment is then asked of
+    // the machine that hosts its target, which never ran this execution (the adapter
+    // that did is gone), so the recorded work is reported missing there.
     let mut bare = OrchestrationRuntime::clone(&m.runtime);
     bare.gate_providers
         .retain(|provider| provider.kind() == GateKind::Ci);
-    assert_eq!(
-        bare.run_deployment_work(&owner, &run),
-        hotsheet_ticketing::orchestration::Observed::Unverifiable(
-            "deployment_executor_unavailable".into()
-        )
+    let asked = bare.run_deployment_work(&owner, &run, Some(&worker()), &mut tx);
+    assert!(
+        matches!(
+            &asked,
+            hotsheet_ticketing::orchestration::Observed::Verified(work)
+                if work.recorded.is_some() && work.live.is_none()
+        ),
+        "{asked:?}"
     );
     // The execution finishes: nothing is in flight any more.
     executor.set(

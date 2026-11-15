@@ -4,15 +4,17 @@
 //! pure and lives in the core (`reconcile_sources.rs`); this module only reads.
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AttemptAnswer, AttemptRecord, ExternalWork, GateError, GateFilter, GateKind, GateObservation,
-    GateState, NOTE_WAITING_ON_GATE, NOTE_WAITING_ON_VALIDATION, Observations, Observed,
-    OrchestratedSession, ResultUpdate, Run, RunState, SafePointBlocker, SessionNeed, SessionOwner,
-    TargetAction, TargetFacts, ValidationResult, ValidationState, ValidationStep, ci_work,
-    deployment_work, evaluate, session_work, validation_attempt, validation_work,
+    AttemptAnswer, AttemptRecord, ExternalWork, Gate, GateError, GateFilter, GateKind,
+    GateObservation, GateReading, GateState, NOTE_WAITING_ON_GATE, NOTE_WAITING_ON_VALIDATION,
+    Observations, Observed, OrchestratedSession, ResultUpdate, Run, RunState, SafePointBlocker,
+    SessionNeed, SessionOwner, TargetAction, TargetFacts, ValidationResult, ValidationState,
+    ValidationStep, ci_work, deployment_work, evaluate, session_work, validation_attempt,
+    validation_work,
 };
 
 use super::sessions::StopSession;
 
+use super::gates::TARGET_SCRIPT_PROVIDER;
 use super::tickets::encode;
 use super::validation::{HostedExecutionState, HostedValidation};
 
@@ -33,7 +35,7 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Observations {
         let ci = self.run_ci_work(owner_id, &run.run_id);
-        let deployment = self.run_deployment_work(owner_id, &run.run_id);
+        let deployment = self.run_deployment_work(owner_id, &run.run_id, actor, tx);
         // Validation first: it may record that an attempt ended, which changes whether
         // the run still waits on one.
         let validation = self.run_validation_work(owner_id, &run.run_id, actor, tx);
@@ -89,15 +91,115 @@ impl OrchestrationRuntime {
     }
 
     /// HS2-BYEB60: the deployments started for a run, for reconciliation, by their
-    /// retained operation ids. No deployment executor ships (HS2-G3VAK4), so for an
-    /// approved request this verifies, from this machine's records, that nothing was
-    /// executed (`deployment_not_executed`). An execution a registered executor
-    /// recorded is read from that executor's own records.
-    pub fn run_deployment_work(&self, owner_id: &str, run_id: &str) -> Observed<ExternalWork> {
+    /// retained operation ids. For an approved request no adapter serves, this verifies
+    /// from this machine's records that nothing was executed
+    /// (`deployment_not_executed`). An execution a registered executor recorded is read
+    /// from that executor's own records. HS2-WZ0NKH: a `target-script` deployment
+    /// (HS2-G3VAK4) is asked of the machine that hosts its target, without waiting and
+    /// without starting anything, under a continuing `deployments_run` gate as `actor`,
+    /// and what the host observed is recorded as a gate sync would record it.
+    pub fn run_deployment_work(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Observed<ExternalWork> {
         match self.gate_readings(owner_id, run_id, GateKind::Deployment) {
-            Ok(readings) => deployment_work(&readings),
+            Ok(readings) => {
+                let readings = readings
+                    .into_iter()
+                    .map(|(gate, reading)| {
+                        let reading = match reading {
+                            Err(_) if self.hosted_deployment(&gate) => {
+                                self.hosted_deployment_reading(owner_id, &gate, actor, tx)
+                            }
+                            other => other,
+                        };
+                        (gate, reading)
+                    })
+                    .collect::<Vec<_>>();
+                deployment_work(&readings)
+            }
             Err(_) => Observed::Unverifiable(GATE_RECORDS_UNREADABLE.into()),
         }
+    }
+
+    /// Whether reconciliation asks a deployment gate's host: a `target-script` gate no
+    /// registered adapter serves, whose execution was (or may have been) started.
+    fn hosted_deployment(&self, gate: &Gate) -> bool {
+        gate.provider == TARGET_SCRIPT_PROVIDER
+            && self.gate_provider(&gate.provider, gate.kind).is_none()
+            && (gate.state == GateState::Pending
+                || (gate.state == GateState::Unknown
+                    && matches!(
+                        gate.reason.as_deref(),
+                        Some("deployment_starting" | "deployment_start_unconfirmed")
+                    )))
+    }
+
+    /// HS2-WZ0NKH: one hosted deployment's reading, for reconciliation. The host's
+    /// answer is recorded on the gate (a finished execution settles it, a lost one is
+    /// `execution_lost`); for the comparison an execution the host does not know reads
+    /// as `execution_not_found`, so the recorded work is reported missing.
+    fn hosted_deployment_reading(
+        &self,
+        owner_id: &str,
+        gate: &Gate,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<GateReading, String> {
+        let target =
+            Self::target_ref(owner_id, &gate.target_id).map_err(|e| e.code().to_owned())?;
+        let operation = gate
+            .deployment
+            .as_ref()
+            .map_or_else(|| gate.gate_id.clone(), |scope| scope.operation_id.clone());
+        let production = gate
+            .deployment
+            .as_ref()
+            .is_some_and(|scope| scope.production);
+        // Continuing the request the deployment belongs to: nobody is asked again.
+        let authorized = self
+            .authorize(
+                &target,
+                actor,
+                ActionRequest {
+                    irreversible: production,
+                    ..ActionRequest::new(TargetAction::DeploymentsRun)
+                        .operation(operation)
+                        .continuing()
+                },
+                tx,
+            )
+            .map_err(|error| error.code().to_owned())?;
+        let destination = Self::destination(&authorized)
+            .cloned()
+            .map_err(|error| error.code().to_owned())?;
+        let reply = self
+            .hosted_call_at(
+                &destination,
+                "/target-deployments",
+                "GET",
+                &format!("?execution_id={}&wait_ms=0", encode(&gate.gate_id)),
+                None,
+                tx,
+            )
+            .and_then(|reply| {
+                serde_json::from_value::<HostedValidation>(reply)
+                    .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+            });
+        let _ = self.finish(&target, &authorized, &reply, tx);
+        let reply = reply.map_err(|error| error.code().to_owned())?;
+        let reading =
+            super::hosted_deployments::deployment_reading(gate, &reply, tx.clock.now_ms());
+        let _ = self.gate_record(gate.clone(), reading.clone(), tx);
+        Ok(if reply.state == HostedExecutionState::Unknown {
+            GateReading::new(GateState::Unknown)
+                .reason(hotsheet_ticketing::orchestration::EXECUTION_NOT_FOUND)
+        } else {
+            reading
+        })
     }
 
     /// HS2-G5H9FQ: the validation attempts that name a run, for reconciliation. Each
