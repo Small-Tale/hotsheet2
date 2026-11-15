@@ -181,20 +181,24 @@ impl OrchestrationRuntime {
         wait_ms: u64,
         tx: &mut Transaction<'_>,
     ) -> WatchStep {
-        let runs: Vec<Run> = self
-            .run_list(owner_id, false)
-            .unwrap_or_default()
-            .into_iter()
-            // A run a person took over is still followed: it may be handed back or finish.
-            .filter(|run| run.target.target_id == target_id && !run.state.is_terminal())
-            .collect();
+        let followed_runs = || -> Vec<Run> {
+            self.run_list(owner_id, false)
+                .unwrap_or_default()
+                .into_iter()
+                // A run a person took over is still followed: it may be handed back or finish.
+                .filter(|run| run.target.target_id == target_id && !run.state.is_terminal())
+                .collect()
+        };
         // HS2-257Q2Z: the owner's unfinished sessions on this target, by the host's id.
-        let sessions: Vec<OrchestratedSession> = self
-            .session_list(owner_id, true)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|session| session.target_id == target_id)
-            .collect();
+        let followed_sessions = || -> Vec<OrchestratedSession> {
+            self.session_list(owner_id, true)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|session| session.target_id == target_id)
+                .collect()
+        };
+        let runs = followed_runs();
+        let sessions = followed_sessions();
         // HS2-TMA4YA: the tickets of this target an unfinished plan step names.
         let (tickets, planner) = self.plan_tickets(owner_id, target_id);
         let planner = planner
@@ -298,6 +302,14 @@ impl OrchestrationRuntime {
                 return step;
             }
         };
+        // HS2-VN8PDA: the wait can last MAX_TARGET_EVENT_WAIT_MS. A run dispatched, a
+        // session started or a step planned meanwhile is matched against this page as
+        // well: the page's events are not offered again, so a run read before the wait
+        // would miss the claim that makes it dispatched until some unrelated change.
+        let runs = followed_runs();
+        let sessions = followed_sessions();
+        let (tickets, _) = self.plan_tickets(owner_id, target_id);
+        let all: Vec<&Run> = runs.iter().collect();
         let first = state.cursor.is_none();
         // A cursor that goes backwards means the host restarted its stream.
         let reset = state.cursor.is_some_and(|cursor| page.cursor < cursor);

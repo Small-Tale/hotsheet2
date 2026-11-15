@@ -23,6 +23,8 @@ struct Feed {
     calls: Mutex<Vec<(Option<u64>, u64)>>,
     failing: std::sync::atomic::AtomicBool,
     overflow: std::sync::atomic::AtomicBool,
+    /// HS2-VN8PDA: work done on the host while the next request waits.
+    during: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 impl Feed {
     fn push(&self, connection: &str, ticket: &Ticket) {
@@ -67,6 +69,14 @@ impl TargetEvents for Feed {
             .push((since, wait_ms));
         if self.failing.load(Ordering::SeqCst) {
             return Err(OrchestrationError::TargetOperation(TargetOpError::Failed));
+        }
+        let during = self
+            .during
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(during) = during {
+            during();
         }
         let cursor = self.cursor.load(Ordering::SeqCst) as u64;
         Ok(TargetEventPage {
@@ -172,6 +182,88 @@ fn kinds(
             )
         })
         .collect()
+}
+
+/// HS2-VN8PDA: a run dispatched while the follower's request waits is matched against
+/// the page that request returns. Its claim arrives on that page and is not offered
+/// again, so a run list read before the wait left the run queued until some unrelated
+/// change; the two-server loop test stayed `queued` for that reason.
+#[test]
+fn hs2_vn8pda_a_run_dispatched_during_the_wait_is_synced_from_that_page() {
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let first = target_ticket(&m, "First");
+    let second = target_ticket(&m, "Second");
+    let run_one = dispatch(&m, &orchestration, &first, "op-1", "worker-a");
+    let mut state = WatchState::default();
+    let handshake = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert_eq!(handshake.synced, std::slice::from_ref(&run_one));
+    // While the next request waits, a second run is dispatched and its ticket changes.
+    let (runtime, owner, owner_connection, target_connection) = (
+        m.runtime.clone(),
+        m.owner.id.clone(),
+        m.owner_connection(),
+        m.target_connection(),
+    );
+    let (during_feed, orchestration_id, second_ticket) =
+        (feed.clone(), orchestration.id.to_string(), second.clone());
+    let (dispatched, recorded) = std::sync::mpsc::channel();
+    *feed
+        .during
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Box::new(move || {
+        let mut rng = Rng(7_007);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        let run = runtime
+            .run_dispatch(
+                &owner,
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": owner_connection, "native_id": orchestration_id},
+                    "target_id": id(1), "connection_id": target_connection,
+                    "native_id": second_ticket.id.to_string(), "operation_id": "op-during",
+                    "worker_id": "worker-b",
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .run
+            .run_id;
+        during_feed.push(&target_connection, &second_ticket);
+        dispatched.send(run).unwrap();
+    }));
+    let step = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    let run_two = recorded.try_recv().unwrap();
+    assert_eq!(step.synced, std::slice::from_ref(&run_two));
+    assert!(
+        m.runtime
+            .run_events(&m.owner.id, 0, 500, Some(&run_two), 0)
+            .unwrap()
+            .entries
+            .iter()
+            .any(|entry| entry.record.kind == RunEventKind::Observed),
+        "the run dispatched during the wait was never observed"
+    );
 }
 
 #[test]
