@@ -9241,6 +9241,20 @@ test('exposes a General app-settings entry in the settings navigator', async ({ 
   await expect(interactive.getByText('App Settings', { exact: true })).toBeVisible();
 });
 
+test('keeps element ids unique across the command settings editor examples', async ({ page }) => {
+  // The ready, loading, and failed-load examples each mount an editor dialog; they once shared
+  // `command-editor-dialog` (HS2-CP5F46).
+  await page.goto('/ux-demo?component=command-settings-editor');
+  await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(3);
+  await expect(page.locator('[data-command-editor-dialog]')).toHaveCount(3);
+  const duplicates = await page.evaluate(() => {
+    const counts = new Map<string, number>();
+    for (const element of document.querySelectorAll('[id]')) counts.set(element.id, (counts.get(element.id) ?? 0) + 1);
+    return [...counts].filter(([, count]) => count > 1).map(([id]) => id);
+  });
+  expect(duplicates).toEqual([]);
+});
+
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
@@ -9261,7 +9275,8 @@ test('edits custom command color and icon in the command settings editor', async
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
   await verifyRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-  const dialog = editor.locator('#command-editor-dialog');
+  // The id is unique on the page now that each demo editor names its own dialog (HS2-CP5F46).
+  const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   const commandHeadingGroup = dialog
     .locator('[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-component="toolbar-control-group"]')
@@ -10595,7 +10610,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
   await publishRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-  const dialog = editor.locator('#command-editor-dialog');
+  const dialog = page.locator('#command-editor-dialog');
   const label = dialog.getByRole('heading', { name: 'AI Configuration', exact: true });
   await expect(label).toBeVisible();
   expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);

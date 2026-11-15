@@ -119,6 +119,10 @@ describe('CommandSettingsEditor', () => {
     };
     const closed = String(CommandSettingsEditor(props));
     expect(closed).toContain(`id="${COMMAND_EDITOR_DIALOG_ID}"`);
+    // A second editor on one page names its own dialog (HS2-CP5F46).
+    const second = String(CommandSettingsEditor({ ...props, dialogId: 'command-editor-dialog-second' }));
+    expect(second).toContain('id="command-editor-dialog-second"');
+    expect(second).not.toContain(`id="${COMMAND_EDITOR_DIALOG_ID}"`);
     expect(closed).not.toContain('name="command"');
     expect(closed).not.toContain('data-editing="true"');
 

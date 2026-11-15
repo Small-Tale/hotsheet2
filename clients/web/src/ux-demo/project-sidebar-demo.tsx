@@ -331,15 +331,17 @@ export function CommandSettingsEditorDemo() {
         />
         <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
       </CatalogExample>
-      {/* Before the project's first command settings read answers, and after it fails (HS2-BZKTDC). */}
+      {/* Before the project's first command settings read answers, and after it fails (HS2-BZKTDC). Each
+          extra editor names its own dialog so the page keeps unique ids (HS2-CP5F46). */}
       <CatalogExample label="Loading" viewport={{ width: 'full' }}>
-        <CommandSettingsEditor commands={[]} loadState="loading" />
+        <CommandSettingsEditor commands={[]} loadState="loading" dialogId="command-editor-dialog-loading" />
       </CatalogExample>
       <CatalogExample label="Load Failed" viewport={{ width: 'full' }}>
         <CommandSettingsEditor
           commands={[]}
           loadState="failed"
           loadError="Hot Sheet could not reach the server."
+          dialogId="command-editor-dialog-load-failed"
           message={commandEditorMessage.value}
         />
       </CatalogExample>

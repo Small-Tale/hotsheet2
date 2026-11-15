@@ -62,6 +62,11 @@ export interface CommandSettingsEditorProps {
   message?: string;
   aiTools?: readonly AiToolDescriptor[];
   aiDefaults?: AiToolDefaults;
+  /**
+   * DOM id of this editor's popover dialog. Production mounts one editor and keeps the default; a page
+   * that mounts several (the ux-demo loading and failed-load examples) gives each its own (HS2-CP5F46).
+   */
+  dialogId?: string;
 }
 
 const kind = (command: CommandDefinition) => command.kind ?? 'program';
@@ -424,6 +429,7 @@ export function CommandSettingsEditor({
   message = '',
   aiTools = [],
   aiDefaults = { tool: 'codex' },
+  dialogId = COMMAND_EDITOR_DIALOG_ID,
 }: CommandSettingsEditorProps) {
   const editing = editingId ? commands.find((command) => command.id === editingId) : undefined;
   const selection = new Set(selectedIds);
@@ -467,7 +473,7 @@ export function CommandSettingsEditor({
       </footer>
       {/* Kerf's PopoverDialogSurface owns the native popover="auto" chrome, size, and backdrop (HS2-T1MVPV). */}
       <PopoverDialogSurface
-        id={COMMAND_EDITOR_DIALOG_ID}
+        id={dialogId}
         label="Edit Command"
         bodyLayout="fill"
         rootAttributes={{ 'data-command-editor-dialog': 'true' }}

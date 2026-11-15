@@ -1080,6 +1080,8 @@ real-server browser test in `tests/native-prompt-replacements.spec.ts` that hold
 fails the open's command-groups read, asserts loading then the failed banner with the
 actions still disabled, then retries through a held read back to the loaded empty
 state with both actions enabled, capturing wide, medium, narrow and wide-return.
+HS2-CP5F46 adds the `dialogId` markup test and the `tests/ux-demo.spec.ts` guard that
+the command settings demo's three editors keep every element id unique.
 
 HS2-TVASVW covers bounded direct change-poll fallback in
 `change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker
