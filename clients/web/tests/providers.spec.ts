@@ -34738,6 +34738,83 @@ test('keeps the Permissions settings controls reachable by pointer while a reque
   await expect(popup).toHaveCount(0);
 });
 
+test('keeps the Settings work area at its resting x when a control takes focus at 760px (HS2-DYG55S)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions', exact: true }).click();
+  const leftRail = page.locator('.kui-workbench__rail--left'),
+    rightRail = page.locator('.kui-workbench__rail--right'),
+    main = page.locator('.app-shell__main'),
+    workspace = page.locator('[data-component="settings-workspace"]'),
+    automation = page.locator('kui-select[name="permission-automation-action"]'),
+    delay = page.locator('kui-select[name="permission-automation-delay"]');
+  // Each rail's sliding content box, read as its on-screen extent; the rails themselves are layout tracks.
+  const panelExtent = (rail: typeof leftRail) =>
+    rail.locator('.kui-workbench__panel-content').evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return { left: Math.round(box.left), right: Math.round(box.right) };
+    });
+  const restingX = () =>
+    page.evaluate(() => {
+      const x = (selector: string) => Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
+      // Any horizontally scrolled ancestor would carry the whole work area sideways.
+      const scrolled = [...document.querySelectorAll<HTMLElement>('body *')]
+        .filter((node) => node.scrollLeft !== 0 && !node.classList.contains('kui-select__value'))
+        .map((node) => node.className);
+      return {
+        main: x('.app-shell__main'),
+        workspace: x('[data-component="settings-workspace"]'),
+        documentScroll: document.scrollingElement!.scrollLeft,
+        scrolled,
+      };
+    });
+  // Wide: the settings sidebar and the inspector are both docked beside the work area.
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'false');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'false');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.left)).toBe(0);
+  await expect(workspace).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-1280.png', animations: 'disabled' });
+  // Narrow: both rails collapse with Kerf's 200ms slide. Until it ends their surfaces still cover the
+  // work area's edges, which is the transient "shift" this ticket saw; the work area itself never moves.
+  await page.setViewportSize({ width: 760, height: 720 });
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'true');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'true');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.right <= 0)).toBe(true);
+  await expect.poll(() => panelExtent(rightRail).then((extent) => extent.left >= 760)).toBe(true);
+  const resting = await restingX();
+  expect(resting).toEqual({ main: 0, workspace: 16, documentScroll: 0, scrolled: [] });
+  await expect(main).toHaveJSProperty('scrollLeft', 0);
+  // A focused control, a pointer-opened Select, and a scrolled-into-view Select all leave it at rest.
+  await delay.locator('.kui-select__trigger').focus();
+  expect(await restingX()).toEqual(resting);
+  await automation.locator('.kui-select__trigger').click();
+  await expect(automation).toHaveAttribute('open', '');
+  expect(await restingX()).toEqual(resting);
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-760-open.png', animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await expect(automation).not.toHaveAttribute('open', '');
+  await delay.scrollIntoViewIfNeeded();
+  expect(await restingX()).toEqual(resting);
+  await page.screenshot({ path: 'target/visual-captures/hs2-dyg55s-permissions-760.png', animations: 'disabled' });
+  // Wide again: the docked rails return and the work area sits beside the sidebar.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(leftRail).toHaveAttribute('data-collapsed', 'false');
+  await expect(rightRail).toHaveAttribute('data-collapsed', 'false');
+  await expect.poll(() => panelExtent(leftRail).then((extent) => extent.left)).toBe(0);
+  await expect.poll(() => restingX().then((value) => value.scrolled)).toEqual([]);
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dyg55s-permissions-1280-return.png',
+    animations: 'disabled',
+  });
+});
+
 test('auto-allows during an Always review, then remembers the rule before showing the next request (HS2-WZK2QK)', async ({
   page,
 }) => {
