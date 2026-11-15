@@ -392,12 +392,17 @@ pub fn server_identity(
         let value: RemoteIdentity =
             serde_json::from_slice(&bytes).map_err(|_| RemoteError::Corrupt)?;
         value.validate().map_err(RemoteError::Verification)?;
-        return Ok(value);
+        // The machine name is live display metadata (HS2-HGG426), never a stored identity.
+        return Ok(RemoteIdentity {
+            host_name: None,
+            ..value
+        });
     }
     let value = RemoteIdentity {
         generation: "hs2".into(),
         protocol: REMOTE_PROTOCOL_VERSION,
         server_id: mint(),
+        host_name: None,
     };
     value.validate().map_err(RemoteError::Verification)?;
     atomic_write(

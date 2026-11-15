@@ -183,8 +183,11 @@ export function ProjectTab({
       closable={closable && !pending}
       draggable={draggable && !pending}
       pending={pending}
-      // Kerf ellipsizes the name before the strip scrolls (HS2-A7QPW4) and paints the drop-target
-      // state the drag handler marks (HS2-T67Z3N); no app class on the root.
+      // Kerf ellipsizes a local name before the strip scrolls (HS2-A7QPW4). A remote name
+      // (`<host> · <project>`) never collapses: it keeps its full width and the strip scrolls
+      // instead (HS2-08P0V5). Kerf also paints the drop-target state the drag handler marks
+      // (HS2-T67Z3N); no app class on the root.
+      nameOverflow={location === 'remote' ? 'visible' : 'ellipsis'}
       selectAction="select-project-tab"
       closeAction="close-project-tab"
       closeIcon={<LucideIcon icon={X} name="x" />}

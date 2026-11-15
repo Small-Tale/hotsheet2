@@ -27,12 +27,17 @@ if (webkitGuard.refuse) throw new Error(webkitGuard.refuse);
 const port = playwrightServerPort(process.env);
 const serverId = randomUUID();
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));
+// The dev bridge never sees the developer's real Hot Sheet homes: their remote registry, machine
+// secrets, bootstrap server, or HS1 data (HS2-9NB1KA). Fixture servers name their own homes.
+const bridgeHome = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-home-'));
+const bridgeLegacyHome = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-legacy-home-'));
 // Legacy visual captures remain easy to inspect, with portable package-relative paths.
 // These are separate from Playwright's rotated output and safe alongside Kerf doctor scans.
 for (const directory of ['claude', 'claude-501'])
   mkdirSync(join('target', 'visual-captures', directory), { recursive: true });
 process.once('exit', () => {
-  rmSync(viteCacheDir, { recursive: true, force: true });
+  for (const directory of [viteCacheDir, bridgeHome, bridgeLegacyHome])
+    rmSync(directory, { recursive: true, force: true });
 });
 
 export default defineConfig({
@@ -67,7 +72,13 @@ export default defineConfig({
     command: `${process.platform === 'win32' ? '' : 'exec '}node scripts/owned-server.mjs --exit-on-stdin-eof -- node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/__hotsheet-test-server/${serverId}`,
     reuseExistingServer: false,
-    env: { HOTSHEET_VITE_CACHE_DIR: viteCacheDir, HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: serverId },
+    env: {
+      HOTSHEET_VITE_CACHE_DIR: viteCacheDir,
+      HOTSHEET_WEB_STABLE_DEV: '1',
+      HOTSHEET_WEB_TEST_SERVER_ID: serverId,
+      HOTSHEET_HOME: bridgeHome,
+      HOTSHEET_LEGACY_HOME: bridgeLegacyHome,
+    },
   },
   use: { baseURL: `http://127.0.0.1:${port}` },
 });

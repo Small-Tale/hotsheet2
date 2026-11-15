@@ -54,7 +54,17 @@ pub(crate) async fn identity(
 ) -> Result<Json<RemoteIdentity>, ApiError> {
     let home = state.machine_home().to_path_buf();
     blocking(move || {
-        hotsheet_ticketing::remote_servers::server_identity(&home, || ulid::Ulid::new().to_string())
+        let identity = hotsheet_ticketing::remote_servers::server_identity(&home, || {
+            ulid::Ulid::new().to_string()
+        })?;
+        // HS2-HGG426: name this machine so a paired client can label its project tabs.
+        Ok(RemoteIdentity {
+            host_name: crate::host_health::host_name().filter(|name| {
+                name.len() <= hotsheet_ticketing::remote_servers::MAX_REMOTE_HOST_NAME
+                    && !name.chars().any(char::is_control)
+            }),
+            ..identity
+        })
     })
     .await
 }

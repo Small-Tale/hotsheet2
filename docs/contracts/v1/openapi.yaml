@@ -25182,6 +25182,10 @@ components:
           const: 1
         server_id:
           type: string
+        host_name:
+          type: string
+          maxLength: 255
+          description: Optional live machine name for display (HS2-HGG426). Never part of trust; older peers omit it.
       additionalProperties: true
     RemoteSource:
       type: object
@@ -25333,6 +25337,9 @@ components:
             - 'null'
           items:
             $ref: '#/components/schemas/RemoteCheckout'
+        host_name:
+          type: string
+          description: The peer's self-reported machine name from this live discovery (HS2-HGG426); absent on failure or from older peers.
       additionalProperties: true
     RemoteCredentials:
       type: object

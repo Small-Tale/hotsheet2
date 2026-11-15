@@ -550,7 +550,22 @@ machine-local selected pairs and private credential store. On a phone browser
 connected to one host, confirm `+` still offers only that host's checkout list.
 Inspect the rebuilt app at wide, medium and phone widths and after returning
 to wide; verify the source choice, address form, project list and tab states
-without clipping. Remote terminals are outside this ticket's data-only scope.
+without clipping.
+
+### Remote project terminals (HS2-PPHJMZ, HS2-JJKVJJ)
+
+Use two disposable synthetic hosts; on one, register two checkouts, and give the
+other a checkout with the same id. Approve the desktop's session read-write on
+both. Open all three remote tabs plus a local project. In one remote tab create a
+shell and an AI terminal from the drawer: each connects, `pwd` prints that
+checkout's directory on its host, and typing echoes. Confirm the new terminals
+appear only in that tab's drawer and grid, not in the second checkout on the same
+host, the equal checkout id on the other host, or the local project; repeat from
+each tab. Reload the desktop and confirm each terminal reattaches in its own tab.
+Revoke the desktop's session on one host (or remove its binding) and confirm that
+host's terminal panes disconnect within a few seconds while the other host's
+terminals keep streaming. Re-approve the device read-only and confirm terminals
+list but creating one reports the server's read-only refusal.
 
 ### Real-device mTLS enrollment
 

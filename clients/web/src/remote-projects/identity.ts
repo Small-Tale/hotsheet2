@@ -26,3 +26,19 @@ export function isRemoteProjectId(project: string): boolean {
     return project.startsWith('remote:');
   }
 }
+
+/** A remote project tab names the remote machine, then the project (HS2-HGG426). The peer's live
+ * `host_name` comes first; an older peer that omits it falls back to the reviewed origin's host,
+ * never to the label this device gave itself while pairing. */
+export function remoteProjectTabName(hostName: string | null | undefined, origin: string, projectName: string): string {
+  const reported = hostName?.trim();
+  let host = reported;
+  if (!host) {
+    try {
+      host = new URL(origin).hostname || origin;
+    } catch {
+      host = origin;
+    }
+  }
+  return `${host} · ${projectName}`;
+}

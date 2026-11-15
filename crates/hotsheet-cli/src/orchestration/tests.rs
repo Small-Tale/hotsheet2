@@ -203,6 +203,7 @@ impl RemoteTransport for Peer {
                 generation: "hs2".into(),
                 protocol: 1,
                 server_id: id(99),
+                host_name: None,
             },
             checkouts: vec![RemoteCheckout {
                 id: self.projection.checkout_id.clone(),

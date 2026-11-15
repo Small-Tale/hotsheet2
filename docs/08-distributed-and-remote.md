@@ -45,7 +45,7 @@ The model carried from HS1's shipped remote-client work (§112) already fits:
 **Orchestration is live-mount only** (maintainer decision, 2026-08-19). A client
 reaches another machine's project by **attaching to that machine's running server**
 over an explicitly selected HTTP, HTTPS, or mTLS listener (real-time). Remote
-ticket data ships first; remote terminals remain deferred below.
+ticket data shipped first; remote terminals follow (O6 below, HS2-PPHJMZ).
 
 > **Decisions (resolved 2026-08-19).**
 >
@@ -266,11 +266,34 @@ Each tab uses a composite browser id, so equal checkout ids on two servers
 remain separate. The trusted bridge translates that id to the reviewed server's
 native checkout, applies only that server's private session to REST and change
 WebSocket requests, and rechecks the local binding revision before dispatch.
-The picker shows server labels and schemes; tabs show server labels and
+The picker shows server labels and schemes. A remote project tab reads
+`<remote host name> · <project name>` (HS2-HGG426): `/remote-identity` adds the
+peer machine's optional short `host_name` (the hostname with `.local` removed),
+and a live discovery passes it on as `RemoteDiscovery.host_name`. It is display
+metadata only: it never enters `remotes.json` or `server-identity.json` and is not
+part of trust. When the peer predates the field or does not report a name, the tab
+falls back to the binding origin's host (the DNS name or IP the user entered),
+never to the label this device gave itself while pairing. Tabs also show
 connection failures. Editing a binding requires fresh host approval and explicit registry review;
 removing one disables its selected projects and closes that host's active desktop
 streams without disturbing another server. A failed discovery has a deliberate
-retry path. Remote ticket data is in this scope; remote PTYs stay deferred.
+retry path. Remote ticket data is in this scope.
+
+**Remote terminals (HS2-PPHJMZ, HS2-JJKVJJ).** A remote tab's terminals are that
+server's PTYs. The bridge rechecks the binding, then upgrades
+`/terminals/{id}/attach` on the reviewed server with the same private session,
+Origin, CSRF proof and TLS material it uses for the change WebSocket; removing or
+changing the binding closes the tab's terminal streams. The remote server applies
+its own rules: listing needs any approved session, while creating, writing to,
+renaming, killing or attaching a terminal needs a **read-write** session with its
+paired Origin and CSRF proof. A read-only approval therefore shows terminals but
+cannot open them, and no new grant is added: a terminal is a shell on the remote
+host, so the host owner decides by approving read-write access. Revocation ends a
+live attach within the server's one-second recheck. The bridge launches a
+terminal in the remote checkout's root, never at the composite browser id, and
+gives each tab only the terminals launched in its checkout (the most specific open
+checkout on that server), so tabs on one server and equal checkout ids on two
+servers stay separate. See [06](06-clients.md) §6.2.
 
 ## 8.3 Mobile (iOS) configuration & connection
 
@@ -304,10 +327,11 @@ The ticket asks how mobile devices connect to one or more servers. Directions:
 >   backgrounded-iPhone push (permission waiting / worker finished) needs APNs — new
 >   infrastructure (a push relay). In-app + on-sync notifications first; **design the
 >   event bus so a push relay can attach later** without rework.
-> - **O6 — remote terminals over `wss://`: deferred past v1** (resolved 2026-08-19).
->   Streaming a remote project's PTYs is heavier than data sync (HS1 §112.9 O4
->   deferred it too). Land remote **ticket data** first; a remote project shows
->   tickets before it shows terminals.
+> - **O6 — remote terminals over `wss://`: shipped for the desktop bridge**
+>   (originally deferred past v1 on 2026-08-19; reversed by the maintainer's UX
+>   review, HS2-PPHJMZ). Remote ticket data landed first. A desktop remote tab now
+>   attaches to its server's PTYs through the paired session (§8.2.3); a phone
+>   still drives no terminals of its own (§6.4).
 
 ## 8.4 Security posture
 

@@ -31,6 +31,8 @@ export interface RemoteCheckoutView {
 export interface RemoteDiscoveryView {
   remote: RemoteServerView;
   checkouts: RemoteCheckoutView[] | null;
+  /** The peer's live machine name (HS2-HGG426); older peers and failed probes omit it. */
+  host_name?: string;
 }
 
 export interface PrivateRemoteCredential {

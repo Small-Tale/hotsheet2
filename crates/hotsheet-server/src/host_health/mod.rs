@@ -133,7 +133,7 @@ impl HostIdentity {
 }
 
 #[cfg(unix)]
-fn host_name() -> Option<String> {
+pub(crate) fn host_name() -> Option<String> {
     let mut buffer = [0_u8; 256];
     // SAFETY: the buffer is writable for its full length, which is what we pass.
     let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
@@ -148,7 +148,7 @@ fn host_name() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn host_name() -> Option<String> {
+pub(crate) fn host_name() -> Option<String> {
     std::env::var("COMPUTERNAME")
         .ok()
         .filter(|name| !name.is_empty())

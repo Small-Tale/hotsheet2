@@ -387,7 +387,7 @@ the Rust server separate. Developer ID signing instructions are in
 > focus-follows · assignment = git email + committed `people.json` + one control +
 > soft review · orchestration **live-mount only** (no auto-clone) · multi-machine =
 > **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Kerf (`kerfjs`) + Web Awesome Core** (validated custom-element stack; see 06 §6.3 / 09 §9.5) · deferred
-> past v1: cross-server views, iOS push, remote terminals, iOS local stores. The HS1
+> past v1: cross-server views, iOS push, iOS local stores (remote terminals later shipped for the desktop bridge, HS2-PPHJMZ). The HS1
 > feature inventory is complete (doc 11); only implementation-time details remain open.
 >
 > **Round-3 confirmation (2026-08-20):** AI-tool **setup/instructions/skills/MCP and

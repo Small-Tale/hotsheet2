@@ -547,6 +547,10 @@ describe('application shell components', () => {
     expect(String(ProjectTab({ id: 'focus', name: 'Focus', location: 'local' }))).toMatch(
       /class="kui-tab-bar-item" data-component="tab-bar-item"[^>]*data-name-overflow="ellipsis"/,
     );
+    // HS2-08P0V5: a remote `<host> · <project>` name never collapses; the strip scrolls instead.
+    expect(
+      String(ProjectTab({ id: 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:p', name: 'studio · hotsheet2', location: 'remote' })),
+    ).toMatch(/class="kui-tab-bar-item" data-component="tab-bar-item"[^>]*data-name-overflow="visible"/);
     expect(projectCss).not.toContain('.project-tab:has(.kui-tab-bar-item__close)');
     expect(barCss).toMatch(
       /\.project-tab-bar \{[^}]*--kui-tab-bar-strip-margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*--kui-tab-bar-strip-padding: var\(--kui-space-2xs\);/,

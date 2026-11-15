@@ -118,6 +118,21 @@ route, WebSocket revocation, and responsive pairing screen. No customer
 content was copied into fixtures. Follow-up tickets own network transport,
 TLS, and remote workspace selection.
 
+HS2-PPHJMZ / HS2-JJKVJJ (remote terminals): `hotsheet-server/tests/remote_terminals.rs`
+runs a real off-box listener, in process and through the detached broker: a read-only
+session lists but cannot open or attach, a read-write session needs CSRF for both,
+input echoes through the attached PTY, and revoking the session ends the live stream
+and refuses a reattach. `clients/web/src/remote-projects/terminals.test.ts` covers the
+launch-directory translation and per-server ownership (most specific checkout, legacy
+composite launches, no lone-tab claim of a stray terminal);
+`remote-projects/transport.test.ts` drives the bridge against two synthetic servers:
+each tab attaches with its own session, a reconnect re-resolves, removing one binding
+closes only its terminal streams, a revoked registry entry is refused before any
+upgrade, a launch reaches the server with the checkout root, another tab's id is
+refused, and two checkouts on one server and equal checkout ids on two servers list
+disjoint terminals. Unit and integration only; the remote drawer browser E2E is HS2-NHB2XF.
+No customer content was copied into fixtures.
+
 HS2-85W6BE / HS2-DXM0YN: `hotsheet-server/src/remote_auth.rs` tests the 15-minute
 boundary, admin and local grants through approve, redeem, reopen and change, reject,
 a pre-grant catalog, the change cursor (visible changes only) and the long-poll wait.
@@ -2767,7 +2782,7 @@ discard flow remains covered by its existing real-router test.
 ### Browser-test server ownership and cleanup (HS2-BJ00D1, HS2-0BQ8J9)
 
 - Behavior: a browser-test Vite server answers only its run's identity, refuses an occupied port, and never stops another run. Its isolated cache is removed only after the owned child and inherited output pipes close, even if the parent already exited.
-- Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server.
+- Unit/lifecycle: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-0BQ8J9` gates a real descendant's final cache write behind an explicit release, covering running and already-exited parents without sleeps or removal retries. `clients/web/src/playwright-config.test.ts # HS2-BJ00D1` pins identity readiness and refusal to reuse a server, and (HS2-9NB1KA) that the dev bridge runs with its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`.
 - End to end: `clients/web/scripts/playwright-server-identity.e2e.test.mjs # HS2-BJ00D1` runs actual Vite servers on owned loopback ports, proves identity isolation and taken-port refusal, then stops one while the other keeps serving. This is a headless process test; no browser or user host is used.
 - Manual: none; lifecycle synchronization and isolation are automated.
 

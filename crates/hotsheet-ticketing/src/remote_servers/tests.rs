@@ -89,6 +89,7 @@ fn snapshot(server_id: &str) -> RemoteSnapshot {
             generation: "hs2".into(),
             protocol: 1,
             server_id: server_id.into(),
+            host_name: None,
         },
         checkouts: vec![RemoteCheckout {
             id: "synthetic-checkout".into(),
@@ -645,4 +646,84 @@ fn hs2_h4rebs_publicly_trusted_https_pins_nothing_and_http_never_pins() {
     assert_ne!(pinned, disk);
     std::fs::write(&registry.path, pinned).unwrap();
     assert!(matches!(registry.list(), Err(RemoteError::Corrupt)));
+}
+
+#[test]
+fn hs2_hgg426_live_discovery_reports_the_peer_host_name_without_persisting_it() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = RemoteRegistry::new(home.path().join("remotes.json"));
+    let secrets = Memory::default();
+    let peer = Peer::default();
+    let mut named = snapshot(PEER);
+    named.identity.host_name = Some("synthetic-studio".into());
+    *peer.result.lock_or_recover() = Ok(named.clone());
+    let registered = registry.register(request(), &secrets, &peer, 1).unwrap();
+    assert_eq!(registered.host_name.as_deref(), Some("synthetic-studio"));
+    let live = registry.discover(ID, &secrets, &peer, 2).unwrap();
+    assert_eq!(live.host_name.as_deref(), Some("synthetic-studio"));
+    // Display metadata only: never stored in the registry or offered from a cached view.
+    let disk = std::fs::read_to_string(&registry.path).unwrap();
+    assert!(!disk.contains("synthetic-studio"));
+    assert!(
+        !serde_json::to_string(&registry.list().unwrap())
+            .unwrap()
+            .contains("synthetic-studio")
+    );
+    // An older peer omits the field; a failed probe has no live name.
+    *peer.result.lock_or_recover() = Ok(snapshot(PEER));
+    let older = registry.discover(ID, &secrets, &peer, 3).unwrap();
+    assert!(older.host_name.is_none());
+    assert!(!serde_json::to_string(&older).unwrap().contains("host_name"));
+    *peer.result.lock_or_recover() = Err(RemoteFailure::Unreachable);
+    assert!(
+        registry
+            .discover(ID, &secrets, &peer, 4)
+            .unwrap()
+            .host_name
+            .is_none()
+    );
+    // A malformed name is a bounded protocol error, not display text.
+    named.identity.host_name = Some("bad\nname".into());
+    *peer.result.lock_or_recover() = Ok(named.clone());
+    let refused = registry.discover(ID, &secrets, &peer, 5).unwrap();
+    assert!(refused.host_name.is_none());
+    assert_eq!(
+        refused.remote.last_failure,
+        Some(RemoteFailure::InvalidResponse)
+    );
+    named.identity.host_name = Some("x".repeat(MAX_REMOTE_HOST_NAME + 1));
+    assert_eq!(
+        named.identity.validate(),
+        Err(RemoteFailure::InvalidResponse)
+    );
+    // Older peers' identity JSON (no host_name) still parses.
+    let legacy: RemoteIdentity = serde_json::from_str(&format!(
+        r#"{{"generation":"hs2","protocol":1,"server_id":"{PEER}"}}"#
+    ))
+    .unwrap();
+    assert!(legacy.validate().is_ok() && legacy.host_name.is_none());
+}
+
+#[test]
+fn hs2_hgg426_stored_server_identity_never_carries_a_host_name() {
+    let home = tempfile::tempdir().unwrap();
+    let minted = server_identity(home.path(), || PEER.into()).unwrap();
+    assert!(minted.host_name.is_none());
+    let path = home.path().join("server-identity.json");
+    assert!(
+        !std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("host_name")
+    );
+    std::fs::write(
+        &path,
+        format!(r#"{{"generation":"hs2","protocol":1,"server_id":"{PEER}","host_name":"stale"}}"#),
+    )
+    .unwrap();
+    assert!(
+        server_identity(home.path(), || OTHER.into())
+            .unwrap()
+            .host_name
+            .is_none()
+    );
 }
