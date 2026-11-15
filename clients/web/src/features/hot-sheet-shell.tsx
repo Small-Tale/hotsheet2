@@ -22,6 +22,7 @@ import { ClientUpdateNoticeBanner } from '../components/client-update-notice-ban
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { corruptTicketKey } from '../components/corrupt-ticket-row';
+import { GroupRegistrySyncBanner } from '../components/group-registry-sync-banner';
 import {
   Hs1CleanupBanner,
   Hs1JobBanner,
@@ -95,6 +96,7 @@ import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import { canBulkUpdate } from '../ticket-bulk-operations';
+import { projectGroupRegistrySync } from '../ticket-group-state';
 import {
   ALL_TICKETS_SCOPE,
   canCreateTicketInView,
@@ -673,6 +675,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               projectId: current.id,
             })}
             {TicketStoreSyncBanner({ report: ticketStoreSyncReport(current.id) })}
+            {GroupRegistrySyncBanner({ status: projectGroupRegistrySync.value[current.id] })}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

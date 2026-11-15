@@ -1008,6 +1008,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "group-registry-sync-banner",
+      "name": "GroupRegistrySyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while the project's group registry is not publishing (blocked or failed), repeating the server's one-line detail and saying that other clones do not see new or renamed groups (HS2-VFYSQK).",
+      "useWhen": [
+        "The group list for the open project reports a registry_sync state of blocked or failed."
+      ],
+      "avoidWhen": [
+        "A linked ticket store is not publishing; TicketStoreSyncBanner owns that warning."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/group-registry-sync-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",

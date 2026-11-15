@@ -7,6 +7,7 @@ import { type BulkTicketAction, ticketGroupDisabledReason } from '../ticket-bulk
 import {
   collapsedTicketGroupKeys,
   projectTicketGroups,
+  storeGroupRegistrySync,
   ticketGroupCollapsed,
   ticketGroupDialog,
   ticketGroupDropTarget,
@@ -113,7 +114,10 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     const dialog = ticketGroupDialog.value;
     if (dialog?.projectId === projectId) ticketGroupDialog.value = { ...dialog, groups: dialogNames(dialog.group) };
   }
-  /** Ask the server for the project's groups; an older server or a failed read keeps the last list. */
+  /**
+   * Ask the server for the project's groups and the registry's publication status (HS2-VFYSQK);
+   * a failed read keeps the last list and status.
+   */
   function refreshGroups(): Promise<void> {
     const current = project();
     if (!current) return Promise.resolve();
@@ -122,6 +126,7 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
       .checkoutGroups(current.id)
       .then((result) => {
         storeSummaries(current.id, result.groups);
+        storeGroupRegistrySync(current.id, result.registrySync);
       })
       .catch(() => undefined);
   }

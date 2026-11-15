@@ -1,10 +1,11 @@
-import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
-import { realTicketServer } from './real-ticket-server';
+import { type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 /**
  * Ticket groups in the real app against a private real server (HS2-3XNTSD): rendering in the list
@@ -714,4 +715,85 @@ test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) 
     await run('group:missing');
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(0);
   }, page);
+});
+
+/** A Git work tree for the code checkout whose pre-commit hook refuses every commit (HS2-VFYSQK). */
+function refusingCheckout({ root, env }: RealTicketFixtureContext): Promise<void> {
+  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { env, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  const hooks = join(root, '.git', 'hooks');
+  mkdirSync(hooks, { recursive: true });
+  // Pin the hooks path so a developer's global core.hooksPath cannot bypass the refusing hook.
+  git('config', 'core.hooksPath', hooks);
+  writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\necho "synthetic hook refused the commit" >&2\nexit 1\n', {
+    mode: 0o755,
+  });
+  return Promise.resolve();
+}
+
+const registrySyncState = (server: Server) =>
+  server
+    .request<{ registry_sync?: { state: string } }>(`/checkouts/${server.checkoutId}/groups`)
+    .then((body) => body.registry_sync?.state ?? 'none');
+
+test('HS2-VFYSQK warns in the project shell while the group registry cannot publish, and clears after', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ autoCommit: true, seed: refusingCheckout });
+  try {
+    // Seeding names groups in the registry; the server's background commit is refused by the hook.
+    await seed(server);
+    await expect.poll(() => registrySyncState(server), { timeout: 30_000 }).toBe('failed');
+    await open(page, server);
+    // The real shell renders it in its header banner slot, beside the other application banners.
+    const banner = page.locator('.app-shell__banner [data-component="group-registry-sync-banner"]');
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute('data-tone', 'warning');
+    await expect(banner).toContainText('Ticket groups are not publishing changes');
+    await expect(banner).toContainText('Could not commit the group registry');
+    await expect(banner).toContainText('synthetic hook refused the commit');
+    await expect(banner).toContainText('other clones do not see new or renamed groups');
+    await expect(banner).toContainText('Hot Sheet tries again on its next sync.');
+    const shots = join('target', 'visual-captures', 'hs2-vfysqk');
+    mkdirSync(shots, { recursive: true });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 900],
+      ['narrow', 420],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await expect(banner, label).toBeVisible();
+      const box = await banner.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return { left: rect.left, right: window.innerWidth - rect.right };
+      });
+      expect(box.left, `${label}: inside the viewport`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${label}: inside the viewport`).toBeGreaterThanOrEqual(0);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `${label}: no horizontal page scroll`).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: join(shots, `group-registry-sync-banner-${label}-${width}.png`) });
+    }
+
+    // Once the hook stops refusing, the next registry write commits (no upstream: local_only)...
+    rmSync(join(server.root, '.git', 'hooks', 'pre-commit'));
+    await server.request(`/checkouts/${server.checkoutId}/groups`, 'POST', { name: 'Recovered' });
+    await expect.poll(() => registrySyncState(server), { timeout: 30_000 }).toBe('local_only');
+    // ...but the client has no timer: the banner stays until a group operation rereads the list.
+    await expect(banner).toBeVisible();
+    const view = list(page),
+      menu = page.locator('[data-ticket-group-menu="true"]'),
+      dialog = page.locator('[data-dialog-component="ticket-group-dialog"]');
+    await group(view, BOARD).locator('[data-component="list-header"]').click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Rename Group…' }).click();
+    await dialog.getByLabel('Group Name').fill('Board polish');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(banner).toHaveCount(0);
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
 });

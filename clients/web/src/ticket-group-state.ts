@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
 
 import type { TicketGroupDialogState } from './components/ticket-group-dialog';
-import type { CheckoutGroupSummary } from './server-response-parsers';
+import type { CheckoutGroupSummary, GroupRegistrySync } from './server-response-parsers';
 import {
   ticketGroupCollapseKey,
   ticketGroupDisplayName,
@@ -89,6 +89,22 @@ export const ticketGroupDialog = signal<TicketGroupDialogSession | undefined>(un
  * paginated view can leave a group's members unloaded, and only the registry knows an id's name.
  */
 export const projectTicketGroups = signal<Readonly<Partial<Record<string, readonly CheckoutGroupSummary[]>>>>({});
+
+/**
+ * The group registry's last Git publication status the server reported per project (HS2-9EGWC4,
+ * HS2-VFYSQK), read with the group summaries; a project without one is absent. The shell's
+ * GroupRegistrySyncBanner shows it while it is `blocked` or `failed`.
+ */
+export const projectGroupRegistrySync = signal<Readonly<Partial<Record<string, GroupRegistrySync>>>>({});
+
+/** Record one project's reported registry status, dropping the entry when the server sent none. */
+export function storeGroupRegistrySync(projectId: string, status: GroupRegistrySync | undefined): void {
+  const current = projectGroupRegistrySync.value;
+  if (current[projectId] === status || (status === undefined && !(projectId in current))) return;
+  projectGroupRegistrySync.value = status
+    ? { ...current, [projectId]: status }
+    : Object.fromEntries(Object.entries(current).filter(([id]) => id !== projectId));
+}
 
 /** The display name of a stored group value in one project, from its last reported summaries. */
 export function projectTicketGroupName(projectId: string | undefined, value: string): string {

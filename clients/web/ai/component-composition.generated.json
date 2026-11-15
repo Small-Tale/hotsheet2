@@ -3022,6 +3022,76 @@
       }
     },
     {
+      "key": "hotsheet-web:group-registry-sync-banner",
+      "package": "hotsheet-web",
+      "id": "group-registry-sync-banner",
+      "name": "GroupRegistrySyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while the project's group registry is not publishing (blocked or failed), repeating the server's one-line detail and saying that other clones do not see new or renamed groups (HS2-VFYSQK).",
+      "publicExports": [
+        {
+          "name": "GroupRegistrySyncBanner"
+        },
+        {
+          "name": "groupRegistryNeedsAttention"
+        },
+        {
+          "name": "groupRegistrySyncSentence"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/group-registry-sync-banner.tsx"
+      ],
+      "source": "src/components/group-registry-sync-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/group-registry-sync-banner.tsx",
+        "composition": "src/components/group-registry-sync-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:guidance-settings",
       "package": "hotsheet-web",
       "id": "guidance-settings",

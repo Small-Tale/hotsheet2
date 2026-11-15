@@ -190,6 +190,7 @@ describe('UX demo catalog', () => {
       'client-update-notice-banner',
       'repository-size-banner',
       'ticket-store-sync-banner',
+      'group-registry-sync-banner',
       'notifications-paused-banner',
       'provider-icon',
       'ticket-source-setup-dialog',

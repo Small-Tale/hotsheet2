@@ -346,6 +346,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('client-update-notice-banner', ['shell-banner']),
       cataloged('repository-size-banner', ['shell-banner']),
       cataloged('ticket-store-sync-banner', ['shell-banner']),
+      cataloged('group-registry-sync-banner', ['shell-banner']),
       cataloged('notifications-paused-banner', ['shell-banner']),
       cataloged('provider-icon'),
       cataloged('ticket-source-setup-dialog', ['content-transition', 'list-item', 'provider-icon']),
