@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { FullTicket } from '../src/api';
 import { type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
@@ -719,7 +720,8 @@ test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) 
 
 /** A Git work tree for the code checkout whose pre-commit hook refuses every commit (HS2-VFYSQK). */
 function refusingCheckout({ root, env }: RealTicketFixtureContext): Promise<void> {
-  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { env, stdio: 'pipe' });
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-C', root, ...args], { env: withoutGitRepositoryEnv(env), stdio: 'pipe' });
   git('init', '-q', '-b', 'main');
   const hooks = join(root, '.git', 'hooks');
   mkdirSync(hooks, { recursive: true });
