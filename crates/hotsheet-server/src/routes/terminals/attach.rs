@@ -97,6 +97,23 @@ impl<T> Drop for AttachTask<T> {
     }
 }
 
+/// The viewport size claim an attached viewer holds, released when the attach ends however it
+/// ends. A remote attach is cancelled mid-`await` when its session is revoked, so a release
+/// written after the loop never runs and the revoked viewer would keep driving the PTY size
+/// (HS2-3EDFG2). Dropping the claim lets the size recompute for the remaining viewers.
+struct ViewerSizeClaim {
+    term: std::sync::Arc<hotsheet_terminals::Terminal>,
+    viewer: Option<String>,
+}
+
+impl Drop for ViewerSizeClaim {
+    fn drop(&mut self) {
+        if let Some(viewer) = self.viewer.take() {
+            self.term.drop_viewer(&viewer, term_now_ms());
+        }
+    }
+}
+
 async fn remote_session_ended(state: AppState, headers: HeaderMap) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
     loop {
@@ -301,7 +318,8 @@ fn queue_pong(control: &mpsc::Sender<Message>, seq: u64) -> bool {
 /// Drive one attached viewer: send the attach preamble (replay, size, liveness hello), then
 /// run output on a pump and a writer task while this task reads the viewer's input and size
 /// claims, so input reaches the PTY however far behind the viewer's output is (HS2-J52ZJ7).
-/// On disconnect the viewport's size claim is dropped so the size self-heals.
+/// When the attach ends, including a remote attach cancelled by revocation, the viewport's size
+/// claim is dropped so the size self-heals (HS2-3EDFG2).
 async fn terminal_attach_loop(
     mut socket: WebSocket,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
@@ -314,7 +332,12 @@ async fn terminal_attach_loop(
     let (snapshot, rx) = term.subscribe_with_replay();
     let (_, mut notification_rx) = term.subscribe_with_scrollback();
     let size_rx = term.subscribe_size();
-    let mut my_viewer: Option<String> = None;
+    // Declared before the output tasks so it is dropped after them on every exit path,
+    // cancellation by revocation included (HS2-3EDFG2).
+    let mut size_claim = ViewerSizeClaim {
+        term: term.clone(),
+        viewer: None,
+    };
 
     // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
     // atomically clear stale emulator state without blanking while waiting for a payload.
@@ -386,7 +409,7 @@ async fn terminal_attach_loop(
                     match classify_terminal_text(&t) {
                         // A size claim: feed the arbiter (it resizes + broadcasts if the size changed).
                         TerminalText::Resize(r) => {
-                            my_viewer = Some(r.viewer_id.clone());
+                            size_claim.viewer = Some(r.viewer_id.clone());
                             let now = term_now_ms();
                             term.claim_size(
                                 hotsheet_terminals::ViewportClaim {
@@ -419,12 +442,10 @@ async fn terminal_attach_loop(
             },
         }
     }
+    // Self-heal: stop the output tasks, then drop this viewport's claim so the PTY size
+    // recomputes for the rest. The guard does the same when a revocation cancels this loop.
     drop((pump, notification_pump, writer));
-
-    // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
-    if let Some(v) = my_viewer {
-        term.drop_viewer(&v, term_now_ms());
-    }
+    drop(size_claim);
 }
 
 /// Forward a broker attach's frames to a viewer's queue (HS2-J52ZJ7). It reads the broker

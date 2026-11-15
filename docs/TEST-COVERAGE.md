@@ -52,7 +52,10 @@ HS2-PPHJMZ / HS2-JJKVJJ (remote terminals): `hotsheet-server/tests/remote_termin
 runs a real off-box listener, in process and through the detached broker: a read-only
 session lists but cannot open or attach, a read-write session needs CSRF for both,
 input echoes through the attached PTY, and revoking the session ends the live stream
-and refuses a reattach. `clients/web/src/remote-projects/terminals.test.ts` covers the
+and refuses a reattach. HS2-3EDFG2 adds the size arbiter's transitions there: a
+driver's normal exit, a revoked driver, a repeated attach and revoke, and a revoked last
+viewer each release the claim, so the size recomputes for the remaining viewer and a
+later attach sees an undriven size. `clients/web/src/remote-projects/terminals.test.ts` covers the
 launch-directory translation and per-server ownership (most specific checkout, legacy
 composite launches, no lone-tab claim of a stray terminal);
 `remote-projects/transport.test.ts` drives the bridge against two synthetic servers:

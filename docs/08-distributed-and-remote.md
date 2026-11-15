@@ -292,7 +292,8 @@ renaming, killing or attaching a terminal needs a **read-write** session with it
 paired Origin and CSRF proof. A read-only approval therefore shows terminals but
 cannot open them, and no new grant is added: a terminal is a shell on the remote
 host, so the host owner decides by approving read-write access. Revocation ends a
-live attach within the server's one-second recheck. The bridge launches a
+live attach within the server's one-second recheck and releases that viewer's size
+claim, so the PTY size recomputes for the viewers that remain (HS2-3EDFG2). The bridge launches a
 terminal in the remote checkout's root, never at the composite browser id, and
 gives each tab only the terminals launched in its checkout (the most specific open
 checkout on that server), so tabs on one server and equal checkout ids on two
