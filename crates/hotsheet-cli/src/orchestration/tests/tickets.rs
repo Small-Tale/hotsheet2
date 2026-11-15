@@ -1019,6 +1019,7 @@ impl RemoteTransport for RemotePeer {
                 generation: "hs2".into(),
                 protocol: 1,
                 server_id: id(99),
+                host_name: None,
             },
             checkouts: vec![RemoteCheckout {
                 id: self.hosted.target.id.clone(),
