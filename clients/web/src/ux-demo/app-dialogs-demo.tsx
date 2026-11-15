@@ -9,6 +9,7 @@ import { ConversationExportDialog } from '../components/conversation-export-dial
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { focusProjectCloseDialogDefault, ProjectCloseDialog } from '../components/project-close-dialog';
 import { SavedViewDialog } from '../components/saved-view-dialog';
+import { TicketBlockerDialog } from '../components/ticket-blocker-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketFollowUpLinkDialog } from '../components/ticket-follow-up-link-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
@@ -310,6 +311,39 @@ export function TicketFollowUpLinkDialogDemo() {
   );
 }
 
+/** The Info tab's Add Blocker dialog: searching, chosen, already blocking, and a refused cycle (HS2-CHH28E). */
+export function TicketBlockerDialogDemo() {
+  const source = followUpSource,
+    candidate = followUpCandidates[0];
+  return (
+    <>
+      <CatalogExample label="Searching">
+        <TicketBlockerDialog state={{ source, existing: [], query: 'stability', candidates: followUpCandidates }} />
+      </CatalogExample>
+      <CatalogExample label="Selected">
+        <TicketBlockerDialog state={{ source, existing: [], query: '', candidates: [], selected: candidate }} />
+      </CatalogExample>
+      <CatalogExample label="Already Blocking">
+        <TicketBlockerDialog
+          state={{ source, existing: [candidate.nativeId], query: '', candidates: [], selected: candidate }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Dependency Cycle">
+        <TicketBlockerDialog
+          state={{
+            source,
+            existing: [],
+            query: '',
+            candidates: [],
+            selected: candidate,
+            error: `${candidate.slug} already depends on ${source.slug}, so it cannot also block ${source.slug} (dependency cycle)`,
+          }}
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
 /** The shared existing-ticket picker in its results, empty, and selected states (HS2-MCGCPQ). */
 export function TicketReferencePickerDemo() {
   const props = {
@@ -338,6 +372,7 @@ export const demoModule: DemoModule = {
   entries: {
     'ticket-close-dialog': { catalogExamples: true, Demo: TicketCloseDialogDemo },
     'ticket-follow-up-link-dialog': { catalogExamples: true, Demo: TicketFollowUpLinkDialogDemo },
+    'ticket-blocker-dialog': { catalogExamples: true, Demo: TicketBlockerDialogDemo },
     'ticket-reference-picker': { catalogExamples: true, Demo: TicketReferencePickerDemo },
     'project-close-dialog': { catalogExamples: true, Demo: ProjectCloseDialogDemo },
     'conversation-export-dialog': { catalogExamples: true, Demo: ConversationExportDialogDemo },

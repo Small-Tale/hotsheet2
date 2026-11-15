@@ -997,6 +997,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
+hotsheet edit HS-7f3k9q --add-blocked-by HS-abc123                      # add one blocker
+hotsheet edit HS-7f3k9q --remove-blocked-by HS-abc123                   # remove one blocker
 hotsheet batch HS-7f3k9q HS-abc123 --priority high --note-file update.md # one update, per-ticket results
 hotsheet delete-note HS-7f3k9q <note-ulid>                                # remove a git ticket note
 hotsheet claim-next --worker worker-1                       # self-select + claim + start
@@ -1422,7 +1424,17 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 `hotsheet_create` / `hotsheet_update` and the server's `POST` / `PATCH /tickets` — on
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
-resolved on close.
+resolved on close. `edit --add-blocked-by` and `--remove-blocked-by` (repeatable) change
+one blocker at a time against the stored set, like the web Inspector's Add Blocker and
+Remove actions (HS2-CHH28E). Removal also accepts the raw ULID of a blocker that no longer
+exists. They conflict with `--blocked-by` and `--clear-blocked-by`. The shared resolver
+also refuses a **dependency cycle** (HS2-CHH28E): when a new blocker already depends on
+the edited ticket, directly or through its own blockers, every surface fails with
+"`<blocker>` already depends on `<ticket>`, so it cannot also block `<ticket>` (dependency
+cycle)". The server answers 400, and MCP answers a bad request. The walk follows the
+blockers' stored `blocked_by` through the same resolver, ends a branch at a ticket that no
+longer resolves, and terminates on an already-cyclic store. A create has no target yet,
+so it cannot close a cycle.
 `follow_ups` is a separate durable relation from a source ticket to tickets created as
 follow-ups (HS2-2Z11A5). `hotsheet new --follow-up-to <source> --project <checkout-id>`
 creates a target and then records its project, connection, and native identity on the

@@ -133,6 +133,7 @@ impl From<OpError> for ApiError {
             | OpError::NotInTrash(_)) => ApiError::new(StatusCode::CONFLICT, other.to_string()),
             other @ (OpError::DuplicateNeedsTarget
             | OpError::SelfBlock(_)
+            | OpError::BlockerCycle { .. }
             | OpError::EmptyNotWorkingReport
             | OpError::InvalidEta(_)) => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
             other @ OpError::UnknownTicket(_) => {

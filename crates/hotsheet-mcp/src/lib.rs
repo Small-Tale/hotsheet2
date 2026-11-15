@@ -4200,10 +4200,10 @@ mod core_backend {
     fn op_err(e: OpError) -> BackendError {
         match e {
             OpError::Store(s) => store_err(s),
-            e
-            @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_) | OpError::InvalidEta(_)) => {
-                bad_request(e.to_string())
-            }
+            e @ (OpError::DuplicateNeedsTarget
+            | OpError::SelfBlock(_)
+            | OpError::BlockerCycle { .. }
+            | OpError::InvalidEta(_)) => bad_request(e.to_string()),
             e @ OpError::UnknownTicket(_) => not_found(&e.to_string()),
             other => BackendError {
                 status: Some(409),

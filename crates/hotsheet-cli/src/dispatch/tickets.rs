@@ -932,6 +932,38 @@ pub(crate) fn cmd_attachment_actor(
     Ok(())
 }
 
+/// The ticket's blocker set after `--remove-blocked-by`, then `--add-blocked-by`
+/// (HS2-CHH28E). Removal matches a slug or ULID that resolves, or the raw ULID of a blocker
+/// that no longer exists. Kept blockers stay as stored; additions pass the shared
+/// self-block and dependency-cycle checks.
+fn adjusted_blockers(
+    store: &FsStore,
+    ticket: &hotsheet_model::Ticket,
+    add: &[String],
+    remove: &[String],
+) -> Result<Vec<Ulid>> {
+    let mut removed = Vec::with_capacity(remove.len());
+    for needle in remove {
+        removed.push(match ops::resolve(store, needle)? {
+            Some(found) => found.id,
+            None => Ulid::from_string(needle)
+                .map_err(|_| anyhow::anyhow!("no ticket matching '{needle}'"))?,
+        });
+    }
+    let mut ids: Vec<Ulid> = ticket
+        .blocked_by
+        .iter()
+        .filter(|id| !removed.contains(id))
+        .copied()
+        .collect();
+    for id in ops::resolve_blockers(store, Some(&ticket.id), add)? {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
 pub(crate) fn cmd_edit(
     actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &PathBuf,
@@ -950,6 +982,8 @@ pub(crate) fn cmd_edit(
         tags,
         blocked_by,
         clear_blocked_by,
+        add_blocked_by,
+        remove_blocked_by,
         blocked_reason,
         clear_blocked_reason,
         group,
@@ -991,6 +1025,13 @@ pub(crate) fn cmd_edit(
     // neither leaves it unchanged.
     let blocked_by = if clear_blocked_by {
         Some(Vec::new())
+    } else if !add_blocked_by.is_empty() || !remove_blocked_by.is_empty() {
+        Some(adjusted_blockers(
+            &store,
+            &ticket,
+            &add_blocked_by,
+            &remove_blocked_by,
+        )?)
     } else if blocked_by.is_empty() {
         None
     } else {
@@ -1410,11 +1451,22 @@ pub(crate) struct TicketEditArgs {
     #[arg(long = "tag")]
     tags: Vec<String>,
     /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
-    #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
+    #[arg(
+        long = "blocked-by",
+        conflicts_with_all = ["clear_blocked_by", "add_blocked_by", "remove_blocked_by"]
+    )]
     blocked_by: Vec<String>,
     /// Clear all blockers.
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["add_blocked_by", "remove_blocked_by"])]
     clear_blocked_by: bool,
+    /// Add a blocker (slug or ULID) to the existing set, repeatable; one already in the set
+    /// is kept once. A dependency cycle is refused (HS2-CHH28E).
+    #[arg(long = "add-blocked-by")]
+    add_blocked_by: Vec<String>,
+    /// Remove a blocker (slug or ULID) from the existing set, repeatable; one that is not in
+    /// the set changes nothing (HS2-CHH28E).
+    #[arg(long = "remove-blocked-by")]
+    remove_blocked_by: Vec<String>,
     /// Set the user-facing explanation for why this ticket is blocked.
     #[arg(long, conflicts_with = "clear_blocked_reason")]
     blocked_reason: Option<String>,
@@ -1592,6 +1644,9 @@ pub(crate) struct TicketEdit {
     tags: Vec<String>,
     blocked_by: Vec<String>,
     clear_blocked_by: bool,
+    /// Incremental blocker changes applied to the current set (HS2-CHH28E).
+    add_blocked_by: Vec<String>,
+    remove_blocked_by: Vec<String>,
     blocked_reason: Option<String>,
     clear_blocked_reason: bool,
     /// Absent leaves the group; `Some(None)` clears it (HS2-PDSHNN).
@@ -1649,6 +1704,8 @@ impl TicketEdit {
             tags: args.tags,
             blocked_by: args.blocked_by,
             clear_blocked_by: args.clear_blocked_by,
+            add_blocked_by: args.add_blocked_by,
+            remove_blocked_by: args.remove_blocked_by,
             blocked_reason: args.blocked_reason,
             clear_blocked_reason: args.clear_blocked_reason,
             group: if args.clear_group {

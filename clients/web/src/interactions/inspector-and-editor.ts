@@ -28,6 +28,7 @@ import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
+import type { TicketBlockersController } from '../features/ticket-blockers';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
@@ -161,6 +162,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly inspectorTab: Signal<InspectorTab>;
   readonly codeReviewMessage: Signal<string>;
   readonly codeReview: Signal<CodeReview | undefined>;
+  /** The Info tab's Blocked By section and Add Blocker dialog (HS2-CHH28E). */
+  readonly ticketBlockers: TicketBlockersController;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -1606,6 +1609,82 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
             codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
         });
     }),
+  );
+  // HS2-CHH28E: the field keeps the live query; the dialog state and search catch up per typing pause.
+  const { ticketBlockers } = dependencies;
+  const blockerSearchInput = createCoalescedInput<string>((query) => {
+    ticketBlockers.search(query);
+  });
+  const focusBlockerSearch = () => {
+    queueMicrotask(() =>
+      document.querySelector<Control>(INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector)?.focus(),
+    );
+  };
+  const closeBlockerDialog = () => {
+    blockerSearchInput.cancel();
+    ticketBlockers.close();
+  };
+  lifetime.add(() => {
+    blockerSearchInput.cancel();
+    ticketBlockers.dispose();
+  });
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openBlockerDialog.selector, () => {
+      blockerSearchInput.cancel();
+      if (ticketBlockers.open()) focusBlockerSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.removeBlocker.selector, (_event, target) => {
+      const nativeId = data(target).blockerId;
+      if (nativeId) void ticketBlockers.remove(nativeId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector, (_event, target) => {
+      blockerSearchInput.schedule((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector, () => {
+      blockerSearchInput.flush();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.selectBlocker.selector, (_event, target) => {
+      blockerSearchInput.cancel();
+      ticketBlockers.select(data(target).itemId ?? '');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.clearBlocker.selector, () => {
+      blockerSearchInput.cancel();
+      ticketBlockers.clear();
+      focusBlockerSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.submitBlocker.selector, (event) => {
+      event.preventDefault();
+      blockerSearchInput.cancel();
+      void ticketBlockers.submit();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelBlocker.selector, () => {
+      closeBlockerDialog();
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'kui-request-close',
+      INSPECTOR_AND_EDITOR_TARGETS.blockerDialog.selector,
+      (event, target) => {
+        if (event.composedPath()[0] !== target) return;
+        closeBlockerDialog();
+      },
+    ),
   );
   /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
   async function refreshLinkedCodeReview(frameId: string) {

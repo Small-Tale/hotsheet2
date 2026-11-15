@@ -174,6 +174,7 @@ import { createTerminalOperationsSurface } from '../features/terminal-operations
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
+import { createTicketBlockersController } from '../features/ticket-blockers';
 import { createTicketGroupsController } from '../features/ticket-groups';
 import { createTicketStoreSync } from '../features/ticket-store-sync';
 import { createTicketViewSurface } from '../features/ticket-view-surface';
@@ -1924,6 +1925,17 @@ export async function startHotSheetWebClient() {
     canUseAttachments() && Boolean(selectedTicket.value && attachmentsRemovableFor(selectedTicket.value.connection_id));
   const capabilitiesFor = (connectionId: string) => providerCapabilities.value[connectionId];
   const defaultProvider = () => defaultProviders.value[selectedProjectId.value];
+  // The Info tab's Blocked By editor (HS2-CHH28E).
+  const ticketBlockersController = createTicketBlockersController({
+    project: () => project(),
+    selectedTicket,
+    tickets,
+    capabilitiesFor: (connectionId) => providerCapabilities.value[connectionId],
+    sourceName: (projectId, connectionId) =>
+      defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId)?.name,
+    canUpdateSelected: () => canUpdateSelected(),
+    showToast,
+  });
   const newTicketSource = () =>
     resolveNewTicketSource(
       defaultProvider(),
@@ -5537,6 +5549,7 @@ export async function startHotSheetWebClient() {
       attachmentFilenameEditing,
       attachmentMessage,
       attachmentsEditableFor,
+      blockers: () => ticketBlockersController.sectionProps(),
       blockedReasonDraft,
       blockedReasonEditing,
       canAddNotes,
@@ -6016,6 +6029,7 @@ export async function startHotSheetWebClient() {
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
     followUpLinkDialog: followUpLinkController.dialog,
+    ticketBlockerDialog: ticketBlockersController.dialog,
     ticketCloseDialog,
     ticketCollectionState,
     ticketLinkChoice,
@@ -6287,6 +6301,7 @@ export async function startHotSheetWebClient() {
     selectedTicket,
     codeReviewMessage,
     followUpLink: followUpLinkController,
+    ticketBlockers: ticketBlockersController,
     openProject,
     currentRememberedProjectRoots,
     persistDrawerTabOrder,

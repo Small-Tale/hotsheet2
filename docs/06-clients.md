@@ -912,6 +912,23 @@ same explanation (HS2-CGXGWY).
   that editor on double-click. Existing blocked reasons and ordinary notes do not add
   redundant per-item Edit buttons; their content surfaces support pointer plus
   Enter/Space keyboard entry instead.
+  Below the blocked reason, the sidebar and rail Inspector's Info tab shows a **Blocked By**
+  section for dependency blockers (HS2-CHH28E). A Kerf `ListHeader` holds the count and a
+  logical-end action, "Add Blocker…". Each blocker is a Kerf `ListActionRow` showing its
+  number and title. A blocker that is completed or verified shows a Done status, and one
+  that no longer resolves says it is unavailable. The row's primary action opens the
+  blocker through the qualified `@project/connection:native` route. Its trailing button,
+  "Remove <number> as a blocker of <number>", removes that dependency and reports a
+  failure in a toast. "Add Blocker…" opens "Add Blocker to <slug>". The dialog searches
+  the inspected project with the shared `TicketReferencePicker` and offers only other
+  tickets from the same ticket source, because `blocked_by` holds native ids from the
+  ticket's own source. It refuses an existing blocker locally. A server refusal, such as
+  a self-block or a dependency cycle, stays in the dialog. Every write rereads the ticket
+  and replaces `blocked_by` through the checkout ticket route with its `expected_token`,
+  retrying once after a concurrent edit, so another client's blocker is kept. A source
+  without the `dependencies` capability, or a ticket the person cannot update, keeps the
+  action mounted but disabled, and its reason names the provider. The modal reader does
+  not edit blockers yet (HS2-15PE59).
   Rendered Markdown fields — ticket details and editable notes, in the inspector and the
   reader alike — enter their editor on a **single click** (or tap), with Enter/Space as
   the keyboard entry (HS2-H1K9YY). A click that starts on a link, ticket reference,

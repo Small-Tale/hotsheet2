@@ -7343,6 +7343,90 @@ fn blocked_by_set_clear_and_reject() {
         .stdout(predicate::str::contains("blocked_by").not());
 }
 
+/// HS2-CHH28E: `--add-blocked-by` and `--remove-blocked-by` change one blocker at a time,
+/// matching the Inspector's Add Blocker and Remove actions, and a dependency cycle is refused
+/// with the same message the server and MCP return.
+#[test]
+fn hs2_chh28e_edit_adds_and_removes_single_blockers_and_refuses_cycles() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let a = new_ticket(p, "first blocker");
+    let b = new_ticket(p, "second blocker");
+    let target = new_ticket(p, "blocked ticket");
+    let ulid = |slug: &str| {
+        let out = hs(p).args(["show", slug]).assert().success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("id: "))
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    let blockers = |slug: &str| {
+        let out = hs(p).args(["show", slug]).assert().success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        stdout
+            .lines()
+            .skip_while(|line| !line.starts_with("blocked_by:"))
+            .skip(1)
+            .take_while(|line| line.starts_with("- "))
+            .map(|line| line.trim_start_matches("- ").trim().to_string())
+            .collect::<Vec<_>>()
+    };
+    let (a_id, b_id) = (ulid(&a), ulid(&b));
+
+    hs(p)
+        .args(["edit", &target, "--add-blocked-by", &a])
+        .assert()
+        .success();
+    hs(p)
+        .args([
+            "edit",
+            &target,
+            "--add-blocked-by",
+            &b,
+            "--add-blocked-by",
+            &a,
+        ])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![a_id.clone(), b_id.clone()]);
+
+    // a now waits on the target's own blocker chain: target -> a closes a cycle.
+    hs(p)
+        .args(["edit", &a, "--add-blocked-by", &target])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "{target} already depends on {a}, so it cannot also block {a} (dependency cycle)"
+        )));
+    assert!(blockers(&a).is_empty(), "a refused cycle writes nothing");
+
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", &a])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![b_id.clone()]);
+    // Removing a ticket that is not a blocker changes nothing.
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", &a])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![b_id]);
+    // Replacing and incrementing the set at once is ambiguous and refused by the parser.
+    hs(p)
+        .args(["edit", &target, "--blocked-by", &a, "--add-blocked-by", &b])
+        .assert()
+        .failure();
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", "HS-NOPE00"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no ticket matching"));
+}
+
 #[test]
 fn hs2_bsyw6f_blocked_filters_use_reason_not_dependency_completion() {
     let dir = tempfile::tempdir().unwrap();

@@ -59,6 +59,7 @@ import {
   TerminalVisibilityNameDialog,
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
+import { TicketBlockerDialog, type TicketBlockerDialogState } from '../components/ticket-blocker-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import {
   TicketFollowUpLinkDialog,
@@ -228,6 +229,8 @@ export interface HotSheetAppDependencies {
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
   /** The Inspector's Link Existing Ticket as Follow-Up dialog (HS2-MCGCPQ). */
   followUpLinkDialog: Signal<TicketFollowUpLinkDialogState | undefined>;
+  /** The Info tab's Add Blocker dialog (HS2-CHH28E). */
+  ticketBlockerDialog: Signal<TicketBlockerDialogState | undefined>;
   ticketCollectionState: Signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>;
   ticketLinkChoice: Signal<{ kind: 'choose'; reference: TicketLinkReference; matches: TicketLinkMatch[] } | undefined>;
   ticketRenderScheduled: () => boolean;
@@ -372,6 +375,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     terminalVisibilityNamePrompt,
     ticketCloseDialog,
     followUpLinkDialog,
+    ticketBlockerDialog,
     ticketCollectionState,
     ticketLinkChoice,
     ticketRenderScheduled,
@@ -586,6 +590,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <TicketGroupDialog state={ticketGroupDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
         <TicketFollowUpLinkDialog state={followUpLinkDialog.value} />
+        <TicketBlockerDialog state={ticketBlockerDialog.value} />
         <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer
           expanded={composerExpanded.value}

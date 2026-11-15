@@ -10424,6 +10424,125 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
     );
 }
 
+/// HS2-CHH28E: the Inspector edits blockers through the checkout route the web client uses.
+/// The route replaces the set with native ids, honors `expected_token`, and refuses a
+/// dependency cycle and a self-block with a message the dialog shows as-is; a refused write
+/// changes nothing.
+#[tokio::test]
+async fn hs2_chh28e_checkout_blockers_set_remove_and_refuse_cycles() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let send = |method: &'static str, path: String, body: Option<serde_json::Value>| {
+        let router = router.clone();
+        async move {
+            let body = body.map(|value| value.to_string());
+            router
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let create = |title: &'static str| {
+        send(
+            "POST",
+            format!("/checkouts/{checkout_id}/tickets"),
+            Some(serde_json::json!({ "title": title })),
+        )
+    };
+    let blocker = body_json(create("Blocker").await).await;
+    let blocked = body_json(create("Blocked").await).await;
+    let ticket_path = |ticket: &serde_json::Value| {
+        format!(
+            "/checkouts/{checkout_id}/tickets/{}",
+            ticket["qualified_id"].as_str().unwrap()
+        )
+    };
+    let blocker_native = blocker["native_id"].as_str().unwrap();
+    let blocked_native = blocked["native_id"].as_str().unwrap();
+
+    let set = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({
+            "blocked_by": [blocker_native],
+            "expected_token": blocked["concurrency_token"],
+        })),
+    )
+    .await;
+    assert_eq!(set.status(), StatusCode::OK);
+    let set = body_json(set).await;
+    assert_eq!(set["blocked_by"], serde_json::json!([blocker_native]));
+
+    // The reverse dependency closes a cycle: refused with both ticket numbers.
+    let cycle = send(
+        "PATCH",
+        ticket_path(&blocker),
+        Some(serde_json::json!({ "blocked_by": [blocked_native] })),
+    )
+    .await;
+    assert_eq!(cycle.status(), StatusCode::BAD_REQUEST);
+    let message = body_json(cycle).await.to_string();
+    assert!(
+        message.contains(&format!(
+            "{} already depends on {}",
+            blocked["slug"].as_str().unwrap(),
+            blocker["slug"].as_str().unwrap()
+        )) && message.contains("dependency cycle"),
+        "{message}"
+    );
+    let unchanged = body_json(send("GET", ticket_path(&blocker), None).await).await;
+    assert_eq!(unchanged["blocked_by"], serde_json::json!([]));
+
+    let own = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({ "blocked_by": [blocked_native] })),
+    )
+    .await;
+    assert!(own.status().is_client_error(), "{}", own.status());
+    assert!(
+        body_json(own)
+            .await
+            .to_string()
+            .contains("cannot block itself")
+    );
+
+    // Removing the only blocker is a replacement with the empty set.
+    let removed = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({
+            "blocked_by": [],
+            "expected_token": set["concurrency_token"],
+        })),
+    )
+    .await;
+    assert_eq!(removed.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(removed).await["blocked_by"],
+        serde_json::json!([])
+    );
+}
+
 #[tokio::test]
 async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     let (_primary, st) = state();

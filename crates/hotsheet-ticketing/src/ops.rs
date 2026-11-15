@@ -38,6 +38,12 @@ pub enum OpError {
     UnknownTicket(String),
     #[error("a ticket cannot block itself ({0})")]
     SelfBlock(String),
+    /// The blocker already depends, directly or through other blockers, on the ticket it
+    /// would block (HS2-CHH28E).
+    #[error(
+        "{blocker} already depends on {target}, so it cannot also block {target} (dependency cycle)"
+    )]
+    BlockerCycle { blocker: String, target: String },
     #[error(
         "Not Working can only be reported for a completed, verified, or archived ticket (found {0:?})"
     )]
@@ -671,6 +677,7 @@ pub fn resolve_blockers_with(
     mut resolve: impl FnMut(&str) -> Result<Option<Ticket>, StoreError>,
 ) -> Result<Vec<Ulid>, OpError> {
     let mut ids = Vec::with_capacity(needles.len());
+    let mut blockers = Vec::with_capacity(needles.len());
     for n in needles {
         let t = resolve(n)?.ok_or_else(|| OpError::UnknownTicket(n.clone()))?;
         if target == Some(&t.id) {
@@ -678,9 +685,45 @@ pub fn resolve_blockers_with(
         }
         if !ids.contains(&t.id) {
             ids.push(t.id);
+            blockers.push(t);
         }
     }
+    if let Some(target) = target {
+        refuse_blocker_cycle(target, &blockers, &mut resolve)?;
+    }
     Ok(ids)
+}
+
+/// Refuse a blocker set that would close a dependency cycle (HS2-CHH28E): walk each new
+/// blocker's own `blocked_by` chain through the caller's resolver, and fail when it reaches
+/// `target`. A blocker that no longer resolves ends its branch rather than failing the write,
+/// and the visited set bounds the walk on an already-cyclic store.
+fn refuse_blocker_cycle(
+    target: &Ulid,
+    blockers: &[Ticket],
+    resolve: &mut impl FnMut(&str) -> Result<Option<Ticket>, StoreError>,
+) -> Result<(), OpError> {
+    for blocker in blockers {
+        let mut visited = HashSet::from([blocker.id]);
+        let mut pending: Vec<Ulid> = blocker.blocked_by.clone();
+        while let Some(id) = pending.pop() {
+            if &id == target {
+                let target_slug =
+                    resolve(&id.to_string())?.map_or_else(|| id.to_string(), |ticket| ticket.slug);
+                return Err(OpError::BlockerCycle {
+                    blocker: blocker.slug.clone(),
+                    target: target_slug,
+                });
+            }
+            if !visited.insert(id) {
+                continue;
+            }
+            if let Some(next) = resolve(&id.to_string())? {
+                pending.extend(next.blocked_by.iter().copied());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Create + write a ticket with a caller-minted id, at time `now`, with no recorded creator.
@@ -3536,6 +3579,87 @@ mod tests {
         copy.slug = low.slug.clone();
         store.write_ticket(&copy).unwrap();
         assert_eq!(resolve(&store, &low.slug).unwrap().unwrap().id, low.id);
+    }
+
+    /// HS2-CHH28E: a blocker that already depends on the target, directly or through other
+    /// blockers, is refused on every surface; a missing link ends its branch, and an
+    /// already-cyclic store still terminates.
+    #[test]
+    fn hs2_chh28e_blocker_cycles_are_refused_through_the_resolver() {
+        let (_dir, store) = store();
+        let a = titled(&store, "a");
+        let b = titled(&store, "b");
+        let c = titled(&store, "c");
+        let block = |id: &Ulid, on: Vec<Ulid>| {
+            update(
+                &store,
+                id,
+                ts("2026-10-15T00:01:00Z"),
+                TicketPatch {
+                    blocked_by: Some(on),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        // b waits on a; a cannot then wait on b.
+        block(&b.id, vec![a.id]);
+        let direct = resolve_blockers(&store, Some(&a.id), std::slice::from_ref(&b.slug));
+        assert!(
+            matches!(&direct, Err(OpError::BlockerCycle { blocker, target }) if *blocker == b.slug && *target == a.slug),
+            "{direct:?}"
+        );
+        assert_eq!(
+            direct.unwrap_err().to_string(),
+            format!(
+                "{} already depends on {}, so it cannot also block {} (dependency cycle)",
+                b.slug, a.slug, a.slug
+            )
+        );
+        // c waits on b, which waits on a: a cannot wait on c either.
+        block(&c.id, vec![b.id]);
+        assert!(matches!(
+            resolve_blockers(&store, Some(&a.id), std::slice::from_ref(&c.slug)),
+            Err(OpError::BlockerCycle { blocker, .. }) if blocker == c.slug
+        ));
+        // Unrelated directions stay allowed, and create-time (no target) never walks.
+        assert_eq!(
+            resolve_blockers(&store, Some(&c.id), std::slice::from_ref(&a.slug)).unwrap(),
+            vec![a.id]
+        );
+        assert_eq!(
+            resolve_blockers(&store, None, std::slice::from_ref(&c.slug)).unwrap(),
+            vec![c.id]
+        );
+        // A blocker whose chain names a ticket that no longer resolves is not a cycle.
+        let missing = Ulid::new();
+        let mut asked = Vec::new();
+        let mut d = titled(&store, "d");
+        d.blocked_by = vec![missing];
+        let ids = resolve_blockers_with(Some(&a.id), &["d".into()], |needle| {
+            asked.push(needle.to_string());
+            Ok((needle == "d").then(|| d.clone()))
+        })
+        .unwrap();
+        assert_eq!(ids, vec![d.id]);
+        assert_eq!(asked, vec!["d".to_string(), missing.to_string()]);
+        // A store that already holds a cycle (written by an older client) still terminates.
+        let mut e = titled(&store, "e");
+        let mut f = titled(&store, "f");
+        e.blocked_by = vec![f.id];
+        f.blocked_by = vec![e.id];
+        let (e2, f2) = (e.clone(), f.clone());
+        let ids = resolve_blockers_with(Some(&a.id), &["e".into()], move |needle| {
+            Ok(if needle == "e" || needle == e2.id.to_string() {
+                Some(e2.clone())
+            } else if needle == f2.id.to_string() {
+                Some(f2.clone())
+            } else {
+                None
+            })
+        })
+        .unwrap();
+        assert_eq!(ids, vec![e.id]);
     }
 
     #[test]

@@ -43,6 +43,13 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   retryProviderOutbox: action('retry-provider-outbox'),
   discardProviderOutbox: action('discard-provider-outbox'),
   openTicketTagPopover: action('open-ticket-tag-popover'),
+  /** The Info tab's Blocked By section and its Add Blocker dialog (HS2-CHH28E). */
+  openBlockerDialog: action('open-blocker-dialog'),
+  removeBlocker: action('remove-blocker'),
+  selectBlocker: action('select-blocker'),
+  clearBlocker: action('clear-blocker'),
+  submitBlocker: action('submit-blocker'),
+  cancelBlocker: action('cancel-blocker'),
 } as const;
 
 /**
@@ -71,4 +78,7 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   ticketInspectorHeader: attr('data-component', 'ticket-inspector-header'),
   ticketInspectorBody: attr('data-component', 'ticket-inspector-body'),
   noteMetadataDialog: attr('data-key', 'note-metadata-dialog'),
+  /** The Add Blocker dialog's search field and root (HS2-CHH28E). */
+  blockerSearchField: attr('name', 'blocker-target-search'),
+  blockerDialog: attr('data-dialog-component', 'ticket-blocker-dialog'),
 } as const;

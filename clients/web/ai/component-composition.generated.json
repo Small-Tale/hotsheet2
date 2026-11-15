@@ -8296,6 +8296,142 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-blocker-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-blocker-dialog",
+      "name": "TicketBlockerDialog",
+      "kind": "component",
+      "purpose": "Add a same-source dependency blocker to the inspected ticket with the shared ticket picker, validation, and in-dialog refusals such as a dependency cycle (HS2-CHH28E).",
+      "publicExports": [
+        {
+          "name": "TicketBlockerDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-blocker-dialog.tsx"
+      ],
+      "source": "src/components/ticket-blocker-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-blocker-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-blocker-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blocker-dialog.tsx",
+        "composition": "src/components/ticket-blocker-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-blockers",
+      "package": "hotsheet-web",
+      "id": "ticket-blockers",
+      "name": "TicketBlockers",
+      "kind": "component",
+      "purpose": "The Info tab's Blocked By section: blocker rows that open and remove, with an Add Blocker header action disabled with a reason where the source lacks dependencies (HS2-CHH28E).",
+      "publicExports": [
+        {
+          "name": "TicketBlockers"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-blockers.tsx"
+      ],
+      "source": "src/components/ticket-blockers.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-blockers"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-blockers"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blockers.tsx",
+        "composition": "src/components/ticket-blockers.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-board",
       "package": "hotsheet-web",
       "id": "ticket-board",

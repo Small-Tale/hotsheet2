@@ -625,6 +625,17 @@ HS2-MCGCPQ covers the Inspector's link-existing-follow-up flow:
 
 `follow-up-link.spec.ts` drives the real Inspector against a real server. It links an existing ticket, repeats the link idempotently, and checks the stored relation. It also checks the disabled reason for a non-Git provider.
 
+HS2-CHH28E covers the Inspector's dependency-blocker editor and the shared cycle check:
+
+- `ops::tests::hs2_chh28e_blocker_cycles_are_refused_through_the_resolver` (direct and transitive cycles, a missing link, an already-cyclic store);
+- `cli::hs2_chh28e_edit_adds_and_removes_single_blockers_and_refuses_cycles` (`--add-blocked-by`, `--remove-blocked-by`, cycle refusal, flag conflicts);
+- `http::hs2_chh28e_checkout_blockers_set_remove_and_refuse_cycles` (the checkout route the client writes, with `expected_token`);
+- pure availability, rows, validation, and set logic (`ticket-blockers.test.ts`);
+- controller transitions: add, refusal then retry, concurrent-edit retry, local refusals, row resolution, and removal (`features/ticket-blockers.test.ts`);
+- the section and dialog renders (`components/ticket-blockers.test.ts`, `components/ticket-blocker-dialog.test.ts`).
+
+`ticket-blockers.spec.ts` drives the real Inspector against a real server. It adds a blocker, shows the cycle refusal in the dialog, removes the blocker, opens a blocker from its row across widths, and checks the disabled reason for a source without dependencies.
+
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the
 `providers.spec.ts` browser flow that links both slugs in an inspector blocked reason,

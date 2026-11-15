@@ -25,6 +25,7 @@ import type { AdvisoryClaimNoticeProps } from '../components/advisory-claim-noti
 import { type MarkdownEditorMode } from '../components/markdown-editor';
 import type { NotWorkingSurface } from '../components/reader-overlay-surfaces';
 import { type TicketStatus } from '../components/status-badge';
+import type { TicketBlockersProps } from '../components/ticket-blockers';
 import { type InspectorTab, type TicketInspectorProps } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
@@ -46,6 +47,8 @@ export interface InspectorSurfaceDependencies {
   attachmentFilenameEditing?: Signal<AttachmentFilenameEditing | undefined>;
   attachmentMessage: Signal<string>;
   attachmentsEditableFor: (connectionId: string) => boolean;
+  /** The selected ticket's Blocked By section (HS2-CHH28E). */
+  blockers: () => TicketBlockersProps | undefined;
   blockedReasonDraft: Signal<string>;
   blockedReasonEditing: Signal<boolean>;
   canAddNotes: () => boolean;
@@ -128,6 +131,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     attachmentFilenameEditing,
     attachmentMessage,
     attachmentsEditableFor,
+    blockers,
     blockedReasonDraft,
     blockedReasonEditing,
     canAddNotes,
@@ -265,6 +269,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       blockedReason: ticket.blocked_reason,
       blockedReasonEditing: blockedReasonEditing.value,
       blockedReasonDraft: blockedReasonDraft.value,
+      blockers: blockers(),
       providerName: 'Hot Sheet Git',
       updatedLabel: `Updated ${ago(ticket.updated_at)}`,
       activeTab: inspectorTab.value,
