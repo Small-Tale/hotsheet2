@@ -1113,14 +1113,10 @@ pub fn machine_plugins_dir() -> PathBuf {
 
 /// HS2's machine-local state home: `$HOTSHEET_HOME`, else `~/.hotsheet2`. Kept off
 /// `~/.hotsheet` on purpose so HS2 never writes into HS1's data dir.
+/// An unset, empty, or whitespace-only `HOTSHEET_HOME` falls back to the default
+/// (HS2-1D4DQF); see [`hotsheet_ticketing::machine_home`].
 pub fn hotsheet_home() -> PathBuf {
-    if let Some(h) = std::env::var_os("HOTSHEET_HOME") {
-        return PathBuf::from(h);
-    }
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join(".hotsheet2")
+    hotsheet_ticketing::machine_home::hotsheet_home()
 }
 
 #[cfg(test)]

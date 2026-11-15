@@ -3980,12 +3980,7 @@ mod core_backend {
     }
 
     fn checkout_registry() -> hotsheet_ticketing::checkouts::CheckoutRegistry {
-        let home = std::env::var_os("HOTSHEET_HOME")
-            .map(std::path::PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME").map(|v| std::path::PathBuf::from(v).join(".hotsheet2"))
-            })
-            .unwrap_or_else(std::env::temp_dir);
+        let home = hotsheet_ticketing::machine_home::hotsheet_home();
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
     }
 

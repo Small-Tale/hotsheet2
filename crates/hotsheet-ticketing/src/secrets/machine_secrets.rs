@@ -45,15 +45,7 @@ struct Envelope {
 pub(super) fn with_machine_store<T>(
     f: impl FnOnce(&MachineSecrets<NativeKeychain>) -> Result<T, SecretError>,
 ) -> Result<T, SecretError> {
-    let home = std::env::var_os("HOTSHEET_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(std::env::temp_dir)
-                .join(".hotsheet2")
-        });
-    with_machine_store_at(home, f)
+    with_machine_store_at(crate::machine_home::hotsheet_home(), f)
 }
 
 pub(super) fn with_machine_store_at<T>(

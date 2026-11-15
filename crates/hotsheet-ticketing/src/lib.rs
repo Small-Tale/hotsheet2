@@ -31,6 +31,7 @@ pub mod host_health_disks;
 pub mod identity;
 pub mod image_crop;
 pub mod live_history;
+pub mod machine_home;
 pub mod merge;
 pub mod merge_driver;
 pub mod metrics;

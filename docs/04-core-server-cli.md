@@ -2089,6 +2089,14 @@ and writes their values to `.hotsheet2`; it never treats an unmarked HS1 setting
 HS2 input and does not delete the compatibility source. The machine-wide default was
 already `${HOTSHEET_HOME:-~/.hotsheet2}` and is unchanged.
 
+Every binary resolves that machine home through one resolver,
+`hotsheet_ticketing::machine_home` (HS2-1D4DQF). An unset, empty, or whitespace-only
+`HOTSHEET_HOME` counts as unset and falls back to `~/.hotsheet2`; a blank `HOME` falls
+back to `<temp>/.hotsheet2`, so a failed `HOTSHEET_HOME=$(mktemp -d)` substitution never
+writes the index, settings, or checkout registry into the working directory. A non-empty
+relative value is an explicit choice and is used as given, relative to the working
+directory. `HOTSHEET_CACHE_DIR` follows the same blank-means-unset rule.
+
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:

@@ -24,14 +24,10 @@ fn access<T>(
     account: &str,
     action: impl FnOnce(PathBuf) -> Result<T, SecretError>,
 ) -> Result<T, SecretError> {
-    let home = std::env::var_os("HOTSHEET_HOME")
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            SecretError::Unavailable(
-                "synthetic credentials require an explicit HOTSHEET_HOME".into(),
-            )
-        })?;
-    let directory = PathBuf::from(home).join("test-native-credentials");
+    let home = crate::machine_home::env_path("HOTSHEET_HOME").ok_or_else(|| {
+        SecretError::Unavailable("synthetic credentials require an explicit HOTSHEET_HOME".into())
+    })?;
+    let directory = home.join("test-native-credentials");
     fs::create_dir_all(&directory)?;
     if fs::symlink_metadata(&directory)?.file_type().is_symlink() {
         return Err(SecretError::Backend(

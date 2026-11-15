@@ -78,7 +78,7 @@ fn agent(program: &Path) -> Result<hotsheet_terminals::launch_agent::RelayAgent>
     // has its home, derives the same key.
     std::fs::create_dir_all(&home)
         .with_context(|| format!("cannot create Hot Sheet home {}", home.display()))?;
-    let default_home = std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".hotsheet2"));
+    let default_home = hotsheet_ticketing::machine_home::default_hotsheet_home();
     let agents = hotsheet_terminals::launch_agent::default_agents_dir()?;
     Ok(hotsheet_terminals::launch_agent::RelayAgent::for_home(
         &home,
