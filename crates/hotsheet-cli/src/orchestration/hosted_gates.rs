@@ -42,6 +42,10 @@ pub struct HostedGateWatch {
     /// HS2-TQG6AT: the artifact a green verdict records, by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact: Option<String>,
+    /// HS2-2222QP: the CI provider, `gitlab-ci`; absent means `github-actions`, so a
+    /// GitHub watch reads the same to a host that predates the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
     /// Watch again after a verdict that failed or a watch that was stopped.
     #[serde(default)]
     pub again: bool,
@@ -83,7 +87,7 @@ pub(super) struct HostedRefresh {
 pub(super) fn hosted_on(destination: &TargetDestination, gate: &Gate) -> bool {
     match gate.kind {
         GateKind::Ci => {
-            gate.provider == GITHUB_ACTIONS_KIND
+            hotsheet_jobs::CiProvider::from_kind(&gate.provider).is_some()
                 && gate.ci.is_some()
                 && matches!(destination, TargetDestination::Remote { .. })
         }
@@ -110,7 +114,9 @@ pub(super) fn peer_unsupported(error: &OrchestrationError) -> bool {
 /// HS2-K2YE6A: the audit action of a hosted watch this machine refused.
 pub const HOSTED_GATE_WATCH_ACTION: &str = "hosted_gate_watch";
 
-/// `owner/name` from a Git remote URL in any of its usual spellings, lowercased.
+/// The repository path from a Git remote URL in any of its usual spellings,
+/// lowercased: `owner/name` on GitHub, the full `group/[subgroup/…]project` path on
+/// GitLab (HS2-2222QP).
 fn repository_of(url: &str) -> Option<String> {
     let trimmed = url.trim().trim_end_matches('/');
     let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
@@ -119,9 +125,19 @@ fn repository_of(url: &str) -> Option<String> {
         // The scp-like form: git@host:owner/name
         None => trimmed.split_once(':')?.1,
     };
-    let mut parts = path.rsplit('/');
-    let (name, owner) = (parts.next()?, parts.next()?);
-    (!owner.is_empty() && !name.is_empty()).then(|| format!("{owner}/{name}").to_ascii_lowercase())
+    let path = path.trim_start_matches('/');
+    (path.split('/').count() >= 2 && path.split('/').all(|segment| !segment.is_empty()))
+        .then(|| path.to_ascii_lowercase())
+}
+
+/// HS2-2222QP: the provider a hosted watch names, `github-actions` when it names none.
+fn watch_provider(watch: &HostedGateWatch) -> Result<&'static str, OrchestrationError> {
+    match watch.provider.as_deref() {
+        None => Ok(GITHUB_ACTIONS_KIND),
+        Some(kind) => hotsheet_jobs::CiProvider::from_kind(kind)
+            .map(hotsheet_jobs::CiProvider::kind)
+            .ok_or(OrchestrationError::Gate(GateError::ProviderUnsupported)),
+    }
 }
 
 /// HS2-K2YE6A: the repositories a hosted checkout's own Git remotes name. A checkout
@@ -154,7 +170,7 @@ fn hosted_record(checkout_id: &str, watch: &HostedGateWatch) -> Result<Gate, Orc
         run_id: "hosted".into(),
         target_id: "hosted".into(),
         kind: GateKind::Ci,
-        provider: GITHUB_ACTIONS_KIND.into(),
+        provider: watch_provider(watch)?.into(),
         commit,
         ci: Some(CiScope {
             repository: watch.repository.clone(),
@@ -200,8 +216,11 @@ fn answer(
 }
 
 impl OrchestrationRuntime {
-    fn hosted_ci_provider(&self) -> Result<Arc<dyn GateProvider>, OrchestrationError> {
-        self.gate_provider(GITHUB_ACTIONS_KIND, GateKind::Ci)
+    fn hosted_ci_provider(
+        &self,
+        watch: &HostedGateWatch,
+    ) -> Result<Arc<dyn GateProvider>, OrchestrationError> {
+        self.gate_provider(watch_provider(watch)?, GateKind::Ci)
             .cloned()
             .ok_or(OrchestrationError::Gate(GateError::ProviderUnsupported))
     }
@@ -224,7 +243,7 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<HostedGate, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
-        let provider = self.hosted_ci_provider()?;
+        let provider = self.hosted_ci_provider(&watch)?;
         let gate = hosted_record(&checkout.id, &watch)?;
         let wanted = watch.repository.to_ascii_lowercase();
         if !checkout_repositories(Path::new(&checkout.root)).contains(&wanted) {
@@ -268,7 +287,7 @@ impl OrchestrationRuntime {
             return Err(OrchestrationError::Invalid("wait_ms must be at most 8000"));
         }
         let checkout = self.owner(checkout_id)?;
-        let provider = self.hosted_ci_provider()?;
+        let provider = self.hosted_ci_provider(watch)?;
         let gate = hosted_record(&checkout.id, watch)?;
         let mut cursor = provider.cursor(&checkout.id);
         if after == Some(cursor) && wait_ms > 0 {
@@ -324,6 +343,7 @@ impl OrchestrationRuntime {
                     workflow: scope.workflow.clone(),
                     branch: scope.branch.clone(),
                     artifact: scope.artifact.clone(),
+                    provider: (gate.provider != GITHUB_ACTIONS_KIND).then(|| gate.provider.clone()),
                     again,
                 })
                 .map_err(|_| OrchestrationError::Corrupt)?;
@@ -343,6 +363,9 @@ impl OrchestrationRuntime {
                 }
                 if let Some(artifact) = &scope.artifact {
                     query.push_str(&format!("&artifact={}", encode(artifact)));
+                }
+                if gate.provider != GITHUB_ACTIONS_KIND {
+                    query.push_str(&format!("&provider={}", encode(&gate.provider)));
                 }
                 self.hosted_call_at(destination, "/target-gates", "GET", &query, None, tx)?
             }

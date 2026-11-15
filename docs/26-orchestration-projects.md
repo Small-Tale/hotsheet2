@@ -1711,8 +1711,10 @@ client polls. A `gitlab-ci` gate takes the project's full path as `repository`
 (`group/[subgroup/…]project`, or the path a declared non-GitHub identity names) and
 a pipeline `name` as `workflow`, by default `*` (any push pipeline of the branch);
 the same coverage rules apply. GitLab's API exposes no artifact digest, so a GitLab
-verdict records no artifact. Watching a GitLab gate on the target's own server is
-HS2-2222QP; other providers are HS2-17HVNP.
+verdict records no artifact. A GitLab gate of a target on another machine is watched
+on that machine like a GitHub one (HS2-2222QP): the hosted `target-gates` route takes
+`provider` (absent means `github-actions`), and the host's repository check compares
+the full project path with its checkout's remotes. Other providers are HS2-17HVNP.
 
 ### Coverage
 

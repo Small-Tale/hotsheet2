@@ -3735,6 +3735,13 @@ paths:
           schema:
             type: string
             maxLength: 100
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum:
+              - github-actions
+              - gitlab-ci
         - name: artifact
           in: query
           schema:
@@ -25125,6 +25132,12 @@ components:
           description: The artifact a green verdict records, by name (HS2-TQG6AT).
           type: string
           pattern: ^[A-Za-z0-9._-]{1,160}$
+        provider:
+          description: The CI provider, `gitlab-ci` (HS2-2222QP); absent means `github-actions`.
+          type: string
+          enum:
+            - github-actions
+            - gitlab-ci
         again:
           description: Watch again after a failed verdict or a stopped watch.
           type: boolean

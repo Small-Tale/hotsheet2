@@ -650,6 +650,7 @@ impl OrchestrationRuntime {
                     workflow: text("workflow")?,
                     branch: text("branch")?,
                     artifact: query_text(path, "artifact")?,
+                    provider: query_text(path, "provider")?,
                     again: false,
                 };
                 let after = match query_text(path, "after")? {

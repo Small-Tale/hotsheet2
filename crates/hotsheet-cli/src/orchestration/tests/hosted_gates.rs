@@ -338,6 +338,7 @@ fn hs2_wdqz37_a_remote_targets_ci_gate_is_watched_on_its_host_and_followed_by_cu
         workflow: "CI".into(),
         branch: "main".into(),
         artifact: None,
+        provider: None,
         again: false,
     };
     let hosted = &r.peer.hosted.runtime;
@@ -437,5 +438,76 @@ fn hs2_wdqz37_a_remote_targets_ci_gate_is_watched_on_its_host_and_followed_by_cu
         !r.runtime
             .gate_follow_step(&r.owner, &mut follow, 0, &mut tx)
             .active
+    );
+}
+
+#[test]
+fn hs2_2222qp_a_remote_targets_gitlab_gate_is_watched_on_its_host() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    let a = sha('a');
+    let host_checkout = r.peer.hosted.target.id.clone();
+    let gitlab = |project: &str, tx: &mut Transaction<'_>| {
+        r.runtime.gate_link(
+            &r.owner,
+            &r.run,
+            serde_json::from_value(json!({"commit": a, "provider": "gitlab-ci",
+                "repository": project}))
+            .unwrap(),
+            Some(&worker()),
+            tx,
+        )
+    };
+    // The host's checkout names a nested GitLab project; another project is refused
+    // there before anything starts (HS2-K2YE6A).
+    git_remote(
+        Path::new(&r.peer.hosted.target.root),
+        "git@gitlab.example.test:Acme/Platform/Widgets.git",
+    );
+    assert!(matches!(
+        gitlab("acme/other", &mut tx),
+        Err(OrchestrationError::Gate(GateError::RepositoryMismatch))
+    ));
+    assert!(r.host_jobs().is_empty());
+    // The project it names is watched on the host, with the host's credentials.
+    let linked = gitlab("acme/platform/widgets", &mut tx).unwrap();
+    assert_eq!(linked.gate.provider, "gitlab-ci");
+    let jobs = r.host_jobs();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].kind.name, "gitlab-ci");
+    assert_eq!(
+        r.own_jobs(),
+        0,
+        "nothing is watched on the orchestrating machine"
+    );
+    let posts = r.calls("/target-gates");
+    assert!(posts.iter().all(|(method, _)| method == "POST"));
+    // The host's monitor judges it green; the orchestrator reads it from the host.
+    judge(
+        &r.peer.hosted.home,
+        &host_checkout,
+        &jobs[0].id,
+        "green",
+        &a,
+        41,
+    );
+    sync(&r, 0, &mut tx);
+    // The refused link stands as its own (unwatched) gate; this one is green.
+    let green = r.runtime.gate(&r.owner, &linked.gate.gate_id).unwrap();
+    assert_eq!(green.state, GateState::Passed, "{green:?}");
+    let evidence = green.evidence.unwrap();
+    assert_eq!(
+        (evidence.provider.as_str(), evidence.reference.as_str()),
+        ("gitlab-ci", "41")
+    );
+    assert!(
+        r.calls("/target-gates?")
+            .iter()
+            .any(|(_, path)| path.contains("&provider=gitlab-ci")),
+        "the hosted read names the provider"
     );
 }
