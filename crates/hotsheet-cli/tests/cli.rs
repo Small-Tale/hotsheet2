@@ -10274,14 +10274,20 @@ fn hs2_6act5y_sync_reports_a_stale_git_lock_as_blocked_headlessly() {
     hs(a.path()).args(["show", &slug]).assert().success();
 }
 
-/// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
-/// start the project's default AI tool once, as a detached `hotsheet-cli trigger` that
-/// outlives the command and receives the repair prompt; a second `sync` starts nothing.
-/// The tool is the `repair-fixture` plugin (a `/bin/sh` spawn drive that records its
-/// prompt) in an isolated machine home; no AI tool runs.
+/// A store `a` with a real sync `conflict` against its remote, whose default AI tool is the
+/// `repair-fixture` plugin (a `/bin/sh` spawn drive that records its prompt to
+/// `received-prompts.txt` in the isolated machine home and then runs `then`). No AI tool
+/// runs. HS2-QR1K8R, HS2-SPVT6W.
 #[cfg(unix)]
-#[test]
-fn hs2_qr1k8r_headless_sync_starts_one_detached_session_with_the_prompt() {
+struct HeadlessRepairFixture {
+    home: tempfile::TempDir,
+    a: tempfile::TempDir,
+    _bare: tempfile::TempDir,
+    peer: tempfile::TempDir,
+}
+
+#[cfg(unix)]
+impl HeadlessRepairFixture {
     fn git(dir: &Path, args: &[&str]) -> bool {
         hotsheet_ticketing::git::command()
             .current_dir(dir)
@@ -10290,103 +10296,209 @@ fn hs2_qr1k8r_headless_sync_starts_one_detached_session_with_the_prompt() {
             .unwrap()
             .success()
     }
-    let home = tempfile::tempdir().unwrap();
-    let cli = |dir: &Path| {
+
+    fn cli(&self) -> Command {
         let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
-        cmd.env("HOTSHEET_HOME", home.path())
+        cmd.env("HOTSHEET_HOME", self.home.path())
             .env_remove("HOTSHEET_ACTOR_ROLE")
             .env_remove("HOTSHEET_ACTOR_ID")
             .arg("-C")
-            .arg(dir);
+            .arg(self.a.path());
         cmd
-    };
-    let received = home.path().join("received-prompts.txt");
-    let plugin = home.path().join("plugins").join("repair-fixture");
-    std::fs::create_dir_all(&plugin).unwrap();
-    std::fs::write(plugin.join("instructions.md"), "## Hot Sheet\n").unwrap();
-    let script = format!("printf '%s\\n----\\n' \"$0\" >> '{}'", received.display());
-    std::fs::write(
-        plugin.join("manifest.toml"),
-        format!(
-            "id = \"repair-fixture\"\ndisplay_name = \"Repair Fixture\"\nproduct_name = \"Repair \
-             Fixture\"\ntier = \"cli-agent\"\n[detection]\nbinaries = [\"sh\"]\n[instructions]\n\
-             target = \"AGENTS.md\"\nsection = \"instructions.md\"\n[mcp]\ntarget = \".mcp.json\"\n\
-             format = \"claude-json\"\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = \
-             [\"--path\", \"{{store}}\"]\n[drive]\ntransport = \"spawn\"\nprogram = \"/bin/sh\"\nargs = \
-             [\"-c\", {script:?}]\ncontent = \"arg\"\ninterrupt = false\n"
-        ),
-    )
-    .unwrap();
+    }
 
-    let bare = tempfile::tempdir().unwrap();
-    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
-    let bare_url = bare.path().to_str().unwrap();
-    let a_dir = tempfile::tempdir().unwrap();
-    let a = a_dir.path();
-    cli(a).arg("init").assert().success();
-    git(a, &["config", "user.email", "a@example.com"]);
-    git(a, &["config", "user.name", "A"]);
-    git(a, &["remote", "add", "origin", bare_url]);
-    // The store is its own project here: set up for the tool, which is its default.
-    std::fs::write(
-        a.join(".mcp.json"),
-        r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
-    )
-    .unwrap();
-    hotsheet_ticketing::Settings::for_project(a)
-        .set(
-            "ai.defaults",
-            serde_json::json!({ "tool": "repair-fixture" }),
-            hotsheet_ticketing::Scope::Shared,
+    fn received(&self) -> std::path::PathBuf {
+        self.home.path().join("received-prompts.txt")
+    }
+
+    fn new(then: &str) -> Self {
+        let git = Self::git;
+        let home = tempfile::tempdir().unwrap();
+        let plugin = home.path().join("plugins").join("repair-fixture");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(plugin.join("instructions.md"), "## Hot Sheet\n").unwrap();
+        let script = format!(
+            "printf '%s\\n----\\n' \"$0\" >> '{}'; {then}",
+            home.path().join("received-prompts.txt").display()
+        );
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            format!(
+                "id = \"repair-fixture\"\ndisplay_name = \"Repair Fixture\"\nproduct_name = \"Repair \
+                 Fixture\"\ntier = \"cli-agent\"\n[detection]\nbinaries = [\"sh\"]\n[instructions]\n\
+                 target = \"AGENTS.md\"\nsection = \"instructions.md\"\n[mcp]\ntarget = \".mcp.json\"\n\
+                 format = \"claude-json\"\nserver_name = \"hotsheet\"\ncommand = \"hotsheet-mcp\"\nargs = \
+                 [\"--path\", \"{{store}}\"]\n[drive]\ntransport = \"spawn\"\nprogram = \"/bin/sh\"\nargs = \
+                 [\"-c\", {script:?}]\ncontent = \"arg\"\ninterrupt = false\n"
+            ),
         )
         .unwrap();
-    cli(a).arg("sync").assert().success();
-    let peer_dir = tempfile::tempdir().unwrap();
-    let peer = peer_dir.path().join("peer");
-    assert!(git(
-        peer_dir.path(),
-        &["clone", "--quiet", bare_url, peer.to_str().unwrap()]
-    ));
-    git(&peer, &["config", "user.email", "p@example.com"]);
-    git(&peer, &["config", "user.name", "P"]);
-    std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
-    assert!(git(&peer, &["add", "notes.txt"]));
-    assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
-    assert!(git(&peer, &["push", "--quiet"]));
-    std::fs::write(a.join("notes.txt"), "local\n").unwrap();
-    assert!(git(a, &["add", "notes.txt"]));
-    assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
 
-    cli(a)
+        let bare = tempfile::tempdir().unwrap();
+        assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+        let bare_url = bare.path().to_str().unwrap().to_string();
+        let fixture = Self {
+            home,
+            a: tempfile::tempdir().unwrap(),
+            _bare: bare,
+            peer: tempfile::tempdir().unwrap(),
+        };
+        let a = fixture.a.path();
+        fixture.cli().arg("init").assert().success();
+        git(a, &["config", "user.email", "a@example.com"]);
+        git(a, &["config", "user.name", "A"]);
+        git(a, &["remote", "add", "origin", &bare_url]);
+        // The store is its own project here: set up for the tool, which is its default.
+        std::fs::write(
+            a.join(".mcp.json"),
+            r#"{"mcpServers":{"hotsheet":{"command":"hotsheet-mcp","args":[]}}}"#,
+        )
+        .unwrap();
+        hotsheet_ticketing::Settings::for_project(a)
+            .set(
+                "ai.defaults",
+                serde_json::json!({ "tool": "repair-fixture" }),
+                hotsheet_ticketing::Scope::Shared,
+            )
+            .unwrap();
+        fixture.cli().arg("sync").assert().success();
+        let peer = fixture.peer.path().join("peer");
+        assert!(git(
+            fixture.peer.path(),
+            &["clone", "--quiet", &bare_url, peer.to_str().unwrap()]
+        ));
+        git(&peer, &["config", "user.email", "p@example.com"]);
+        git(&peer, &["config", "user.name", "P"]);
+        std::fs::write(peer.join("notes.txt"), "peer\n").unwrap();
+        assert!(git(&peer, &["add", "notes.txt"]));
+        assert!(git(&peer, &["commit", "--quiet", "-m", "peer notes"]));
+        assert!(git(&peer, &["push", "--quiet"]));
+        std::fs::write(a.join("notes.txt"), "local\n").unwrap();
+        assert!(git(a, &["add", "notes.txt"]));
+        assert!(git(a, &["commit", "--quiet", "-m", "local notes"]));
+        fixture
+    }
+
+    /// The `sync --status` text once the ask leaves `started`.
+    fn status_after_session(&self) -> String {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let out = self.cli().args(["sync", "--status"]).output().unwrap();
+            let text = String::from_utf8_lossy(&out.stdout).into_owned();
+            if text.contains("AI asked: ") && !text.contains("AI asked: started") {
+                return text;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the session end was never recorded:\n{text}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+}
+
+/// HS2-QR1K8R stage 2, headless with no server: a real `conflict` makes `hotsheet-cli sync`
+/// start the project's default AI tool once, as a detached `hotsheet-cli sync --run-repair`
+/// that outlives the command and receives the repair prompt; a second `sync` starts nothing.
+/// HS2-SPVT6W: the detached process records the end, so the ask reads `finished`.
+#[cfg(unix)]
+#[test]
+fn hs2_qr1k8r_headless_sync_starts_one_detached_session_with_the_prompt() {
+    let fixture = HeadlessRepairFixture::new("exit 0");
+    fixture
+        .cli()
         .arg("sync")
         .assert()
         .failure()
         .stderr(predicate::str::contains("Hot Sheet started repair-fixture"));
-    // The detached session outlives the command and receives the prompt.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-    while !std::fs::read_to_string(&received).is_ok_and(|text| text.contains("\n----\n")) {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the session never ran"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
-    cli(a)
+    // The detached session outlives the command, receives the prompt, and records its end.
+    let status = fixture.status_after_session();
+    assert!(
+        status.contains("AI asked: finished (start, repair-fixture"),
+        "{status}"
+    );
+    assert!(
+        status.contains("session Hot Sheet started has ended"),
+        "{status}"
+    );
+    fixture
+        .cli()
         .arg("sync")
         .assert()
         .failure()
         .stderr(predicate::str::contains("Hot Sheet started").not());
-    cli(a)
-        .args(["sync", "--status"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "AI asked: started (start, repair-fixture",
-        ));
-    let prompts = std::fs::read_to_string(&received).unwrap();
+    let prompts = std::fs::read_to_string(fixture.received()).unwrap();
     assert_eq!(prompts.matches("\n----\n").count(), 1, "{prompts}");
     assert!(prompts.contains("State: conflict"), "{prompts}");
     assert!(prompts.contains("hotsheet-cli -C . show"), "{prompts}");
+}
+
+/// HS2-SPVT6W: a headless repair session that fails at once (here the tool exits 3, as
+/// when it rejects its credentials) is recorded `failed` with the reason, and no second
+/// session starts.
+#[cfg(unix)]
+#[test]
+fn hs2_spvt6w_headless_sync_records_a_failed_repair_session() {
+    let fixture = HeadlessRepairFixture::new("exit 3");
+    fixture
+        .cli()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started repair-fixture"));
+    let status = fixture.status_after_session();
+    assert!(
+        status.contains("AI asked: failed (start, repair-fixture"),
+        "{status}"
+    );
+    assert!(
+        status.contains("ended with an error: the tool exited with status 3"),
+        "{status}"
+    );
+    let json = fixture
+        .cli()
+        .args(["sync", "--status", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(json["ai_help"]["outcome"], "failed", "{json}");
+    assert!(json["ai_help"]["finished_at"].is_string(), "{json}");
+    fixture
+        .cli()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Hot Sheet started").not());
+    let prompts = std::fs::read_to_string(fixture.received()).unwrap();
+    assert_eq!(prompts.matches("\n----\n").count(), 1, "{prompts}");
+}
+
+/// HS2-SPVT6W: the hidden `--run-repair` runs only the store's current started ask, so a
+/// stale or invented stall starts nothing and changes no record.
+#[test]
+fn hs2_spvt6w_run_repair_refuses_a_stall_that_is_not_the_started_ask() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path()).arg("init").assert().success();
+    hs(dir.path())
+        .args([
+            "sync",
+            "--run-repair",
+            "conflict:invented",
+            "--prompt",
+            "repair",
+            "--project",
+        ])
+        .arg(dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "conflict:invented is not this store's started repair session",
+        ));
+    // The internal flags travel together.
+    hs(dir.path())
+        .args(["sync", "--run-repair", "conflict:invented"])
+        .assert()
+        .failure();
 }
 
 /// HS2-QR1K8R stage 2, headless: a real `conflict` asks for help (here no AI tool is

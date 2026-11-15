@@ -89,6 +89,58 @@ export function ownHooks(path, source, siblingCss = '', { queried = false } = {}
   return { classes: [...classes].sort(), routes: path.endsWith('.css') ? [] : routeHooks(source) };
 }
 
+/**
+ * HS2-MZJQYD: specs locate composed components by `[data-component="…"]` rather than by class. The
+ * multi-word `data-component` names a module renders literally are part of its surface (single-word
+ * names such as `list` would match prose, as for classes).
+ */
+export function dataComponentNames(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/data-component=(?:\{\s*)?(['"`])([a-z][a-z0-9-]*)\1/g))
+    if (!match[2].startsWith('kui-') && (match[2].match(CLASS_TOKEN) ?? [])[0] === match[2]) names.add(match[2]);
+  return [...names].sort();
+}
+
+/** The props a component forwards to its root `data-component`, as in `data-component={component}`. */
+export function forwardedDataComponentProps(source) {
+  return [...new Set([...source.matchAll(/data-component=\{\s*([A-Za-z_$][\w$]*)\s*\}/g)].map((match) => match[1]))];
+}
+
+/** The PascalCase components a module exports, which its importers render as JSX tags. */
+export function exportedComponents(source) {
+  return [
+    ...new Set(
+      [...source.matchAll(/^export\s+(?:default\s+)?(?:function|const)\s+([A-Z][\w$]*)/gm)].map((match) => match[1]),
+    ),
+  ];
+}
+
+/**
+ * The literal values a module passes as `prop="…"` to each `<Tag …>` it renders. Only the tag's own
+ * attributes count: braced expressions (render callbacks, nested JSX) are blanked first.
+ */
+export function jsxPropLiterals(source, tag, prop) {
+  const values = new Set();
+  for (const open of source.matchAll(new RegExp(`<${escape(tag)}(?![\\w$.])`, 'g'))) {
+    let depth = 0;
+    let quote = null;
+    let attributes = '';
+    for (let at = open.index + open[0].length; at < source.length; at++) {
+      const char = source[at];
+      if (quote) {
+        if (char === quote && source[at - 1] !== '\\') quote = null;
+      } else if (char === '{') depth++;
+      else if (char === '}') depth--;
+      else if (depth === 0 && (char === '"' || char === "'")) quote = char;
+      else if (depth === 0 && char === '>') break;
+      attributes += depth > 0 && char !== '{' ? ' ' : char;
+    }
+    for (const match of attributes.matchAll(new RegExp(`(?:^|\\s)${escape(prop)}=(['"])([^'"]+)\\1`, 'g')))
+      values.add(match[2]);
+  }
+  return [...values].sort();
+}
+
 const hookCount = (hooks) => hooks.classes.length + hooks.routes.length;
 const mergeHooks = (...all) => ({
   classes: [...new Set(all.flatMap((hooks) => hooks.classes))].sort(),
@@ -313,6 +365,31 @@ export function exerciseIndex(changes, { sources, specs }) {
       imports.set(path, targets);
       for (const target of targets) importers.set(target, [...(importers.get(target) ?? []), path]);
     }
+  // HS2-MZJQYD: the `data-component` names each module renders. A component that forwards its root
+  // `data-component` from a prop (ShellBanner's `component`) renders the names its shipped parents
+  // pass, and each parent renders the names it passes, so a spec that locates
+  // `[data-component="hs1-cleanup-banner"]` reaches both ShellBanner and hs1-migration.tsx. Demo
+  // and test importers are not shipped parents.
+  const componentNames = new Map();
+  const addNames = (path, names) => {
+    if (names.length) componentNames.set(path, new Set([...(componentNames.get(path) ?? []), ...names]));
+  };
+  for (const [path, text] of sources)
+    if (MODULE.test(path) && !isTest(path)) {
+      addNames(path, dataComponentNames(text));
+      const props = forwardedDataComponentProps(text);
+      if (!props.length) continue;
+      const tags = exportedComponents(text);
+      for (const parent of importers.get(path) ?? []) {
+        if (isTest(parent) || UX_DEMO.test(parent)) continue;
+        const parentText = sources.get(parent) ?? '';
+        const names = tags
+          .flatMap((tag) => props.flatMap((prop) => jsxPropLiterals(parentText, tag, prop)))
+          .filter((name) => (name.match(CLASS_TOKEN) ?? [])[0] === name && !name.startsWith('kui-'));
+        addNames(parent, names);
+        addNames(path, names);
+      }
+    }
   const siblingCss = (path) => sources.get(path.replace(/\.tsx?$/, '.css')) ?? '';
   const own = (path, options) =>
     ownHooks(path, sources.get(path) ?? '', path.endsWith('.css') ? '' : siblingCss(path), options);
@@ -375,6 +452,14 @@ export function exerciseIndex(changes, { sources, specs }) {
       }
       via = found.sort();
       hooks = mergeHooks(...found.map(own));
+    }
+    // HS2-MZJQYD: the changed module's `data-component` names only add to the surface found above.
+    // They neither stop the walk to a hookless module's parents nor make a parent count as hooked,
+    // so the selection stays a superset of the class- and route-based one.
+    const names = [...(componentNames.get(module) ?? [])];
+    if (names.length) {
+      hooks = mergeHooks(hooks, { classes: names, routes: [] });
+      if (!via.includes(module)) via = [...via, module];
     }
     // HS2-EWF0FT escape: a demo file, or a fixture it exports, reaches the specs only through the
     // catalog entries that render it, which tests open as `/ux-demo?component=<id>`. Demo code is

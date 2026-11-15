@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::api_error::ApiError;
 use crate::multistore::StoreEntry;
 use crate::routes::checkout_tickets::checkout_ticket_owner;
+use crate::routes::feedback_journal::{self, Admission, Journal, JournalEntry, JournalState};
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::{permissions, session_messages, terminals};
 use crate::{AppState, now};
@@ -48,8 +49,8 @@ pub(crate) enum Route {
     Start,
 }
 
-/// A short-lived reservation, removed after a durable delivery activity note is written.
-/// The activity note itself guards retry after a server restart.
+/// A short-lived in-process reservation held while one attempt delivers a note. Across a
+/// restart the delivery journal and the activity note guard retry (HS2-WKRFD5).
 pub(crate) type Reservations = Arc<Mutex<HashSet<String>>>;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -226,35 +227,35 @@ async fn candidates(state: &AppState, checkout: &Checkout, source: &str) -> Vec<
     result
 }
 
+/// The `code` of the 409 refusing to resend a note whose earlier delivery may have happened
+/// (HS2-WKRFD5).
+pub(crate) const DELIVERY_UNCERTAIN_CODE: &str = "feedback_delivery_uncertain";
+
+/// The per-note delivery journal under the machine home (HS2-WKRFD5).
+fn journal(state: &AppState) -> Journal {
+    Journal::at(state.machine_home().join("feedback-deliveries"))
+}
+
 fn delivery_recorded(ticket: &Ticket, note_id: &str) -> bool {
-    let marker = format!("HS2-25TP3N notified note {note_id} ");
-    ticket
-        .notes
-        .iter()
-        .any(|note| note.kind == NoteKind::Activity && note.text.starts_with(&marker))
+    ticket.notes.iter().any(|note| {
+        note.kind == NoteKind::Activity && feedback_journal::records_delivery(&note.text, note_id)
+    })
 }
 
-fn reserve(state: &AppState, entry: &StoreEntry, ticket_id: &Ulid, note_id: &str) -> bool {
-    let mut pending = state.feedback_notification_reservations.lock_or_recover();
-    if pending.contains(note_id)
-        || entry
-            .store
-            .read_ticket(ticket_id)
-            .is_ok_and(|ticket| delivery_recorded(&ticket, note_id))
-    {
-        return false;
-    }
-    pending.insert(note_id.to_string())
+fn release(state: &AppState, note_id: &str) {
+    state
+        .feedback_notification_reservations
+        .lock_or_recover()
+        .remove(note_id);
 }
 
-fn record_delivery(
+fn write_activity(
     state: &AppState,
     entry: &StoreEntry,
     ticket_id: &Ulid,
-    note_id: &str,
-    connection_id: &str,
-) {
-    let result = ops::add_note_with_metadata(
+    text: String,
+) -> Result<(), hotsheet_ticketing::StoreError> {
+    let ticket = ops::add_note_with_metadata(
         &entry.store,
         ticket_id,
         Ulid::new(),
@@ -269,18 +270,158 @@ fn record_delivery(
             }),
             ..Default::default()
         },
-        format!("HS2-25TP3N notified note {note_id} through session {connection_id}."),
-    );
-    match result {
-        Ok(ticket) => {
-            state.changed_in(entry, "updated", &ticket);
-            state
-                .feedback_notification_reservations
-                .lock_or_recover()
-                .remove(note_id);
-        }
-        Err(error) => tracing::warn!(%error, note_id, "recording feedback delivery failed"),
+        text,
+    )?;
+    state.changed_in(entry, "updated", &ticket);
+    Ok(())
+}
+
+/// Write the activity note a journal entry stands for (HS2-WKRFD5). The caller holds the
+/// note's reservation, so no concurrent attempt writes it twice.
+fn reconcile_entry(state: &AppState, entry: &StoreEntry, pending: &JournalEntry) {
+    let Ok(ticket_id) = Ulid::from_string(&pending.ticket_id) else {
+        return;
+    };
+    let recorded = entry
+        .store
+        .read_ticket(&ticket_id)
+        .is_ok_and(|ticket| delivery_recorded(&ticket, &pending.note_id));
+    if let Err(error) = feedback_journal::reconcile(&journal(state), pending, recorded, |text| {
+        write_activity(state, entry, &ticket_id, text)
+    }) {
+        tracing::warn!(%error, note_id = pending.note_id, "reconciling feedback delivery failed");
     }
+}
+
+/// Record every journaled delivery of this store that no attempt in this process holds,
+/// once a store write has just succeeded (HS2-WKRFD5).
+fn reconcile_store(state: &AppState, entry: &StoreEntry) {
+    for pending in journal(state).for_store(entry.store.root()) {
+        if !state
+            .feedback_notification_reservations
+            .lock_or_recover()
+            .insert(pending.note_id.clone())
+        {
+            continue;
+        }
+        reconcile_entry(state, entry, &pending);
+        release(state, &pending.note_id);
+    }
+}
+
+/// Admit one delivery of `note_id`, or explain why it was refused. A journal entry left by an
+/// earlier attempt (a failed activity write, or a restart mid-send) is reconciled here and
+/// never resent (HS2-WKRFD5).
+fn reserve(
+    state: &AppState,
+    entry: &StoreEntry,
+    ticket_id: &Ulid,
+    note_id: &str,
+) -> Result<(), ApiError> {
+    let refused = |message: &str| Err(ApiError::new(StatusCode::CONFLICT, message.to_string()));
+    let admission = {
+        let mut pending = state.feedback_notification_reservations.lock_or_recover();
+        if pending.contains(note_id) {
+            return refused("feedback notification already delivered or in progress");
+        }
+        let admission = feedback_journal::admit(&journal(state), note_id, || {
+            entry
+                .store
+                .read_ticket(ticket_id)
+                .is_ok_and(|ticket| delivery_recorded(&ticket, note_id))
+        });
+        if matches!(admission, Admission::Send | Admission::Reconcile(_)) {
+            pending.insert(note_id.to_string());
+        }
+        admission
+    };
+    match admission {
+        Admission::Send => Ok(()),
+        Admission::Recorded => refused("feedback notification already delivered or in progress"),
+        Admission::Reconcile(pending) => {
+            reconcile_entry(state, entry, &pending);
+            release(state, note_id);
+            match pending.state {
+                JournalState::Sent => refused("feedback notification already delivered"),
+                JournalState::Sending => Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "feedback notification outcome is uncertain after an interrupted delivery; \
+                     it was not resent",
+                )
+                .with_code(DELIVERY_UNCERTAIN_CODE)),
+            }
+        }
+        Admission::Unreadable => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "feedback delivery state is unreadable; the notification was not resent",
+        )
+        .with_code(DELIVERY_UNCERTAIN_CODE)),
+    }
+}
+
+/// Journal the intent, run `send`, and record the outcome (HS2-WKRFD5). Without a Git record
+/// the send is best-effort (HS2-H9Z9KZ). A failed intent write means nothing is sent; a
+/// failed activity write leaves a `sent` entry that refuses resends and is reconciled later.
+async fn send_recorded(
+    state: &AppState,
+    record: Option<(&StoreEntry, Ulid)>,
+    note_id: &str,
+    connection_id: &str,
+    send: impl std::future::Future<Output = Result<(), ApiError>>,
+) -> Result<(), ApiError> {
+    let Some((entry, ticket_id)) = record else {
+        return send.await;
+    };
+    let journal = journal(state);
+    let mut pending = JournalEntry {
+        note_id: note_id.to_string(),
+        ticket_id: ticket_id.to_string(),
+        store_root: entry.store.root().to_path_buf(),
+        connection_id: connection_id.to_string(),
+        state: JournalState::Sending,
+    };
+    if let Err(error) = journal.write(&pending) {
+        tracing::warn!(%error, note_id, "recording feedback delivery intent failed");
+        release(state, note_id);
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "could not record the feedback delivery; the AI session was not notified",
+        ));
+    }
+    if let Err(error) = send.await {
+        // A leftover entry is later reported as uncertain, never resent.
+        if let Err(error) = journal.remove(note_id) {
+            tracing::warn!(%error, note_id, "clearing a failed feedback delivery intent failed");
+        }
+        release(state, note_id);
+        return Err(error);
+    }
+    pending.state = JournalState::Sent;
+    if let Err(error) = journal.write(&pending) {
+        // The `sending` entry stays, which still refuses a resend.
+        tracing::warn!(%error, note_id, "confirming feedback delivery in the journal failed");
+    }
+    match write_activity(
+        state,
+        entry,
+        &ticket_id,
+        feedback_journal::sent_text(note_id, connection_id),
+    ) {
+        Ok(()) => {
+            if let Err(error) = journal.remove(note_id) {
+                tracing::warn!(%error, note_id, "clearing a recorded feedback delivery failed");
+            }
+            release(state, note_id);
+            reconcile_store(state, entry);
+        }
+        Err(error) => {
+            // The journal keeps the delivery; a retry or the next successful delivery to this
+            // store reconciles it.
+            tracing::warn!(%error, note_id, "recording feedback delivery failed");
+            release(state, note_id);
+        }
+    }
+    Ok(())
 }
 
 /// Send one notification. `record` names the Git store and ticket that receive a durable
@@ -293,22 +434,18 @@ async fn deliver(
     candidate: Candidate,
     text: String,
 ) -> Result<Delivery, ApiError> {
-    if let Some((entry, ticket_id)) = record
-        && !reserve(state, entry, &ticket_id, note_id)
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "feedback notification already delivered or in progress",
-        ));
+    if let Some((entry, ticket_id)) = record {
+        reserve(state, entry, &ticket_id, note_id)?;
     }
     let connection_id = candidate.id;
     let result = match candidate.channel {
         Channel::Terminal => {
-            let adapter = session_messages::adapter(state, &connection_id).ok_or_else(|| {
-                ApiError::new(StatusCode::NOT_FOUND, "AI session is no longer reachable")
-            });
-            match adapter {
-                Ok(adapter) => tokio::task::spawn_blocking(move || {
+            let adapter = session_messages::adapter(state, &connection_id);
+            send_recorded(state, record, note_id, &connection_id, async move {
+                let adapter = adapter.ok_or_else(|| {
+                    ApiError::new(StatusCode::NOT_FOUND, "AI session is no longer reachable")
+                })?;
+                tokio::task::spawn_blocking(move || {
                     adapter.message(&PushMessage::Prompt { text, banner: None })
                 })
                 .await
@@ -316,9 +453,9 @@ async fn deliver(
                     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                 })?
                 .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))
-                .map(|_| ()),
-                Err(error) => Err(error),
-            }
+                .map(|_| ())
+            })
+            .await
         }
         Channel::Drive => match state.client_drives.get(&connection_id) {
             Ok(info) if info.busy => {
@@ -331,36 +468,25 @@ async fn deliver(
                     let mut events = state.subscribe();
                     loop {
                         let Ok(info) = state.client_drives.get(&id) else {
-                            state
-                                .feedback_notification_reservations
-                                .lock_or_recover()
-                                .remove(&note_id);
+                            release(&state, &note_id);
                             break;
                         };
                         if !info.busy {
-                            match permissions::send_feedback_turn(
+                            // Nothing is journaled while queued: a restart before this point
+                            // never sent the turn, so a later retry may send it (HS2-WKRFD5).
+                            let send = permissions::send_feedback_turn(
                                 state.clone(),
                                 id.clone(),
                                 text.clone(),
-                            )
-                            .await
+                            );
+                            let record = record
+                                .as_ref()
+                                .map(|(entry, ticket_id)| (entry, *ticket_id));
+                            if let Err(error) =
+                                send_recorded(&state, record, &note_id, &id, send).await
                             {
-                                Ok(()) => {
-                                    if let Some((entry, ticket_id)) = &record {
-                                        record_delivery(&state, entry, ticket_id, &note_id, &id);
-                                    }
-                                }
-                                Err(error) => {
-                                    tracing::warn!(
-                                        ?error,
-                                        note_id,
-                                        "queued feedback delivery failed"
-                                    );
-                                    state
-                                        .feedback_notification_reservations
-                                        .lock_or_recover()
-                                        .remove(&note_id);
-                                }
+                                tracing::warn!(?error, note_id, "queued feedback delivery failed");
+                                release(&state, &note_id);
                             }
                             break;
                         }
@@ -369,10 +495,7 @@ async fn deliver(
                             Ok(Ok(_))
                             | Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => {}
                             _ => {
-                                state
-                                    .feedback_notification_reservations
-                                    .lock_or_recover()
-                                    .remove(&note_id);
+                                release(&state, &note_id);
                                 break;
                             }
                         }
@@ -384,22 +507,17 @@ async fn deliver(
                 });
             }
             Ok(_) => {
-                permissions::send_feedback_turn(state.clone(), connection_id.clone(), text).await
+                let send =
+                    permissions::send_feedback_turn(state.clone(), connection_id.clone(), text);
+                send_recorded(state, record, note_id, &connection_id, send).await
             }
-            Err(error) => Err(ApiError::new(StatusCode::NOT_FOUND, error.to_string())),
+            Err(error) => {
+                release(state, note_id);
+                Err(ApiError::new(StatusCode::NOT_FOUND, error.to_string()))
+            }
         },
     };
-    if let Err(error) = result {
-        state
-            .feedback_notification_reservations
-            .lock_or_recover()
-            .remove(note_id);
-        return Err(error);
-    }
-    if let Some((entry, ticket_id)) = record {
-        record_delivery(state, entry, &ticket_id, note_id, &connection_id);
-    }
-    Ok(Delivery::Sent {
+    result.map(|()| Delivery::Sent {
         note_id: note_id.into(),
         connection_id,
     })
@@ -789,6 +907,119 @@ mod tests {
                 "{status:?} {kind:?} {role:?} {request_human}"
             );
         }
+    }
+
+    /// A synthetic Started ticket in a fresh Git store, with a state rooted at `home`.
+    fn journaled_state(dir: &std::path::Path) -> (AppState, StoreEntry, Ulid) {
+        let store = hotsheet_ticketing::FsStore::init_git(
+            dir.join("t.hs2"),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let at = hotsheet_model::Timestamp::new("2026-11-15T00:00:00Z");
+        let mut ticket = Ticket::new(Ulid::new(), "HS-1", "Synthetic", "task", at.clone(), at);
+        ticket.status = Status::Started;
+        store.write_ticket(&ticket).unwrap();
+        let state = AppState::new(store, "test-secret".into())
+            .unwrap()
+            .with_machine_home(dir.join("home"));
+        let entry = state.default_entry();
+        (state, entry, ticket.id)
+    }
+
+    #[tokio::test]
+    async fn hs2_wkrfd5_queued_turns_journal_only_when_sent_and_a_restart_while_queued_resends() {
+        let dir = tempfile::tempdir().unwrap();
+        let (state, entry, ticket_id) = journaled_state(dir.path());
+        let note = Ulid::new().to_string();
+        let journal_file = dir
+            .path()
+            .join("home/feedback-deliveries")
+            .join(format!("{note}.json"));
+        // Queued behind a busy drive: only the in-memory reservation exists.
+        reserve(&state, &entry, &ticket_id, &note).unwrap();
+        assert!(!journal_file.exists(), "nothing is journaled while queued");
+        assert_eq!(
+            reserve(&state, &entry, &ticket_id, &note)
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
+        );
+        // The server restarts while the turn is queued: it was never sent, so it may be.
+        let restarted = state.clone().with_machine_home(dir.path().join("home"));
+        restarted
+            .feedback_notification_reservations
+            .lock_or_recover()
+            .clear();
+        reserve(&restarted, &entry, &ticket_id, &note).unwrap();
+        // The drive becomes idle but the turn fails: no journal, no reservation, retry allowed.
+        let failed = send_recorded(
+            &restarted,
+            Some((&entry, ticket_id)),
+            &note,
+            "drive-1",
+            async {
+                assert!(
+                    journal_file.exists(),
+                    "the intent is journaled before the send"
+                );
+                Err(ApiError::new(StatusCode::BAD_GATEWAY, "drive went away"))
+            },
+        )
+        .await;
+        assert!(failed.is_err());
+        assert!(!journal_file.exists());
+        reserve(&restarted, &entry, &ticket_id, &note).unwrap();
+        // The turn is sent and recorded: the journal is cleared and resends are refused.
+        send_recorded(
+            &restarted,
+            Some((&entry, ticket_id)),
+            &note,
+            "drive-1",
+            async { Ok(()) },
+        )
+        .await
+        .unwrap();
+        assert!(!journal_file.exists());
+        let ticket = entry.store.read_ticket(&ticket_id).unwrap();
+        assert!(delivery_recorded(&ticket, &note));
+        assert_eq!(
+            reserve(&restarted, &entry, &ticket_id, &note)
+                .unwrap_err()
+                .status,
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[cfg(unix)] // The write failure is injected through Unix directory permissions.
+    #[tokio::test]
+    async fn hs2_wkrfd5_an_unwritable_journal_sends_nothing() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let (state, entry, ticket_id) = journaled_state(dir.path());
+        // A readable but read-only journal directory: admission works, every intent write fails.
+        let journal_dir = dir.path().join("home/feedback-deliveries");
+        std::fs::create_dir_all(&journal_dir).unwrap();
+        std::fs::set_permissions(&journal_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let note = Ulid::new().to_string();
+        reserve(&state, &entry, &ticket_id, &note).unwrap();
+        let sent = std::sync::atomic::AtomicBool::new(false);
+        let result = send_recorded(
+            &state,
+            Some((&entry, ticket_id)),
+            &note,
+            "session-1",
+            async {
+                sent.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .await;
+        assert_eq!(result.unwrap_err().status, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(!sent.load(std::sync::atomic::Ordering::SeqCst));
+        // The reservation is released, so a later attempt (once the journal works) may send.
+        std::fs::set_permissions(&journal_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        reserve(&state, &entry, &ticket_id, &note).unwrap();
     }
 
     #[test]

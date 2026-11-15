@@ -473,6 +473,38 @@ pub fn completion_day_starts(
         .collect()
 }
 
+/// The hosted-provider sources a checkout-wide read merges, in link order: every non-git
+/// source unless the caller restricted the read to git (`source=git`), and never a
+/// disabled connection, which is left out of the merged view rather than failing it
+/// (HS2-SF6W34). The server and the serverless MCP backend both select through here, so
+/// their cursor source sets (and therefore cursors) agree (HS2-DX78E7).
+///
+/// # Errors
+/// Whatever `disabled` returns for an unreadable connection registry.
+pub fn merged_external_sources<E>(
+    checkout: &crate::checkouts::Checkout,
+    git_only: bool,
+    mut disabled: impl FnMut(&str) -> Result<bool, E>,
+) -> Result<Vec<&crate::checkouts::TicketSource>, E> {
+    let mut sources = Vec::new();
+    for source in checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider != "git" && !git_only)
+    {
+        if !disabled(&source.connection_id)? {
+            sources.push(source);
+        }
+    }
+    Ok(sources)
+}
+
+/// One `source_errors` entry: the omitted connection id and a sanitized reason.
+#[must_use]
+pub fn source_error(connection_id: &str, message: &str) -> String {
+    format!("{connection_id}: {message}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,5 +803,45 @@ mod tests {
                 CheckoutPageError::InvalidSummaryDays
             );
         }
+    }
+
+    /// HS2-DX78E7: the server and the serverless backend select the same hosted sources,
+    /// so their cursor source sets agree; disabled connections and `source=git` reads
+    /// leave external sources out instead of reporting them as omitted.
+    #[test]
+    fn hs2_dx78e7_merged_external_sources_skip_git_disabled_and_git_only_reads() {
+        let checkout: crate::checkouts::Checkout = serde_json::from_value(json!({
+            "id": "project-0000",
+            "root": "/synthetic/project",
+            "alias": "project",
+            "sources": [
+                {"connection_id": "local", "provider": "git", "locator": "/synthetic/store"},
+                {"connection_id": "gh-on", "provider": "github", "locator": "acme/one"},
+                {"connection_id": "gh-off", "provider": "github", "locator": "acme/two"},
+                {"connection_id": "jira-on", "provider": "jira", "locator": "ENG"}
+            ]
+        }))
+        .unwrap();
+        let disabled = |id: &str| Ok::<_, ()>(id == "gh-off");
+        let ids = |sources: Vec<&crate::checkouts::TicketSource>| {
+            sources
+                .into_iter()
+                .map(|source| source.connection_id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            ids(merged_external_sources(&checkout, false, disabled).unwrap()),
+            ["gh-on", "jira-on"]
+        );
+        assert!(
+            merged_external_sources(&checkout, true, disabled)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            merged_external_sources(&checkout, false, |_| Err::<bool, _>("unreadable")),
+            Err("unreadable")
+        );
+        assert_eq!(source_error("gh-on", "offline"), "gh-on: offline");
     }
 }

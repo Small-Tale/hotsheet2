@@ -600,6 +600,9 @@ agent reruns that browser gate through approved unsandboxed execution. Without
 that approval or a browser, the gate remains blocked and is never reported as
 passing. Setup renders this recovery path into the shared instructions and the
 Claude/Codex worklist skills; it does not widen filesystem access automatically.
+A Rulesync-owned project receives the same section, and every other bundled section
+no selected rule carries, as a generated `.rulesync/rules/.curated/hotsheet-bundled-<section>.md`
+input, which `scripts/check-rulesync-generation.mjs` materializes identically (HS2-6FSJCV).
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
@@ -743,7 +746,7 @@ and per-ticket commit hygiene — while explicitly **leaving the push/PR decisio
 repository** rather than mandating it. The four first-party blocks share one body; the
 `every_builtin_carries_the_full_default_guidance` test pins that content.
 
-**Human ticket feedback delivery (HS2-25TP3N).** On a Started Git ticket, the web client's human note write uses checkout-scoped ticket PATCH with `actor: {role: "human"}`. After the note commits, the server sends a short ticket reference to the reachable session holding the live claim. If no live claim names a reachable session, or that session is unreachable, it uses the project's **primary AI session** (HS2-DB2FQ2): the oldest live terminal in the checkout whose reported session accepts pushed messages, by terminal connection start time and then id. The primary is derived, never stored, so closing it promotes the next oldest and opening another terminal never takes the role; a failed send drops that session and tries the next primary. `GET /terminals` marks it with `feedback_primary: true`, and an exited push-capable session is announced as a `terminal_ai_connection` change so clients refetch without polling. Only when no terminal is reachable does the server use one same-project/source client drive, return an inline chooser among several drives, or return a start action. The chooser has its own note notification POST. The server records delivery as an activity note; a driven chat already busy receives the reference after its turn. This path does not invoke the completed-ticket Not Working report.
+**Human ticket feedback delivery (HS2-25TP3N).** On a Started Git ticket, the web client's human note write uses checkout-scoped ticket PATCH with `actor: {role: "human"}`. After the note commits, the server sends a short ticket reference to the reachable session holding the live claim. If no live claim names a reachable session, or that session is unreachable, it uses the project's **primary AI session** (HS2-DB2FQ2): the oldest live terminal in the checkout whose reported session accepts pushed messages, by terminal connection start time and then id. The primary is derived, never stored, so closing it promotes the next oldest and opening another terminal never takes the role; a failed send drops that session and tries the next primary. `GET /terminals` marks it with `feedback_primary: true`, and an exited push-capable session is announced as a `terminal_ai_connection` change so clients refetch without polling. Only when no terminal is reachable does the server use one same-project/source client drive, return an inline chooser among several drives, or return a start action. The chooser has its own note notification POST. The server records delivery as an activity note; a driven chat already busy receives the reference after its turn. Delivery is at most once (HS2-WKRFD5): before a Git ticket's reference is sent, the server durably writes a per-note `sending` entry under `${HOTSHEET_HOME}/feedback-deliveries/`, marks it `sent` after the send, and removes it once the activity note commits. If the intent cannot be written nothing is sent (503). If the activity write fails, the entry stays and refuses every resend; a retry, or the next successful delivery to that store, writes the missing activity note. A `sending` entry found after a restart means the outcome is unknown: the reference is never resent, the retry gets a 409 with code `feedback_delivery_uncertain`, and the ticket records a "may have notified" activity note. A turn queued behind a busy drive is journaled only when it is sent, so a restart while it waits loses it and a later retry may deliver it. This path does not invoke the completed-ticket Not Working report.
 
 **External-provider tickets (HS2-H9Z9KZ).** A human note (including a FEEDBACK NEEDED answer) on a Started GitHub, GitLab or Jira ticket uses the same checkout PATCH and routing, best-effort and immediately. Authorship comes from the write request, because providers such as GitHub read comments back without an actor. A safe Jira advisory claim (remote-verified, not provisional or conflicted, exactly one live claim) selects the claimed session; other providers fall back to one reachable session, the chooser, or Start. Nothing beyond the human note is persisted, so there is no delivery activity record and no duplicate guard across restarts. A failed send returns `not_shared`, and the client shows a brief toast; the saved note reaches the AI when it next reads the ticket. The chooser's notify POST also accepts provider tickets.
 
@@ -960,6 +963,28 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   falls back to `list`, which also carries no scrollback, so a long-lived older broker gets
   the same relief without a restart. MCP presence sweeps check lease pids with a direct
   `kill(pid, 0)` rather than spawning `kill -0`.
+- **Broker build hand-off (HS2-H0WFJG).** A broker outlives the server that started it, so
+  a server can find a live broker from another build. This happens when a development host
+  starts the machine server first and the pinned production host then restarts it onto its
+  snapshot (HS2-9AWEX5): the broker keeps running the development executable. On startup
+  the server asks the live broker for its `identity` (pid, executable, compiled build
+  revision, and hosted terminal count) and compares it with the broker it would launch
+  itself. It differs when the executables are different files or both builds carry
+  different revisions.
+  - **Idle: handed off.** A broker from another build that hosts no terminals is asked to
+    `retire_if_idle`. The broker decides in its serve loop, where the client count is
+    exact. It retires only with no terminals and no client other than the requester, then
+    stops accepting, exits, and removes its socket. The server then starts a broker from its
+    own build.
+  - **Live terminals: kept.** Live PTYs are never killed, restarted, or moved to another
+    process; a broker hosting any is adopted unchanged. The server logs that it kept a
+    broker from another build. After the user's last terminal closes, the ordinary idle
+    exit ends that broker and the next terminal request starts one from the current build.
+    The broker protocol's compatibility guarantee (unknown ops answer `bad request`, older
+    fields default) keeps a newer server working with the older broker meanwhile.
+  - **Unknown builds: adopted.** A broker that predates `identity`, or cannot name its
+    executable, is adopted as before. An embedded broker without an idle lifetime never
+    retires on request.
 - **Dead bootstrap namespace (HS2-CY01TZ, macOS).** A process inherits its Mach bootstrap
   port from whatever launched it. A long-lived broker can outlive that context and keep a
   dead port; every terminal it spawns then inherits it, and FSEvents watchers, DNS, Keychain,

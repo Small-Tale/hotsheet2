@@ -12,7 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse, BrokerTermInfo};
+use hotsheet_terminals::{
+    BrokerClient, BrokerIdentity, BrokerRequest, BrokerResponse, BrokerTermInfo,
+};
 
 /// A project's broker coordinates: the Unix socket + the project id the broker serves.
 #[derive(Debug, Clone)]
@@ -52,7 +54,9 @@ impl TerminalBroker {
         let socket = Self::socket_for(&project)?;
 
         let spawned = match is_live(&socket) {
-            Ok(true) => {
+            // HS2-H0WFJG: an idle broker from another build is handed over to this server's
+            // build; a broker hosting terminals is always adopted, never restarted.
+            Ok(true) if !hand_off_other_build(&socket, &own_broker_build()) => {
                 warn_on_dead_namespace(&socket, "adopted");
                 return Ok(Self {
                     socket,
@@ -61,7 +65,7 @@ impl TerminalBroker {
                     legacy_list_only: Arc::default(),
                 });
             }
-            Ok(false) => {
+            Ok(_) => {
                 if hotsheet_terminals::bootstrap::probe().is_dead() {
                     tracing::warn!(
                         "this server's macOS bootstrap namespace is dead; a terminal broker it \
@@ -290,6 +294,122 @@ fn broker_health(socket: &Path) -> std::io::Result<Option<hotsheet_terminals::Bo
         Ok(other) => Err(unexpected(other)),
         Err(error) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
     }
+}
+
+/// One request/response round trip on a fresh blocking probe connection, bounded so an
+/// unresponsive broker cannot stall startup.
+fn probe_request(socket: &Path, request: &BrokerRequest) -> std::io::Result<BrokerResponse> {
+    use std::io::{BufRead, Write};
+    let mut stream = hotsheet_terminals::broker_socket::connect_probe(socket)?;
+    let timeout = Some(std::time::Duration::from_millis(500));
+    stream.set_read_timeout(timeout)?;
+    stream.set_write_timeout(timeout)?;
+    let mut line = serde_json::to_string(request)?;
+    line.push('\n');
+    stream.write_all(line.as_bytes())?;
+    let mut reply = String::new();
+    std::io::BufReader::new(stream).read_line(&mut reply)?;
+    serde_json::from_str(&reply)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+}
+
+/// The build a server starts its brokers from (HS2-H0WFJG).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrokerBuild {
+    pub(crate) executable: PathBuf,
+    pub(crate) revision: Option<String>,
+}
+
+fn own_broker_build() -> BrokerBuild {
+    BrokerBuild {
+        executable: broker_launch(std::env::current_exe().ok()).0,
+        revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+    }
+}
+
+/// Whether a running broker comes from another build than `own` (HS2-H0WFJG). An unknown
+/// executable (a broker that predates `identity`) counts as the same build: the broker
+/// protocol stays compatible across versions, so adopting it is safe.
+pub(crate) fn runs_other_build(identity: &BrokerIdentity, own: &BrokerBuild) -> bool {
+    let Some(executable) = identity.executable.as_deref().map(Path::new) else {
+        return false;
+    };
+    let same_file = executable == own.executable
+        || executable
+            .canonicalize()
+            .ok()
+            .zip(own.executable.canonicalize().ok())
+            .is_some_and(|(theirs, ours)| theirs == ours);
+    !same_file
+        || matches!(
+            (identity.revision.as_deref(), own.revision.as_deref()),
+            (Some(theirs), Some(ours)) if theirs != ours
+        )
+}
+
+/// HS2-H0WFJG: when the live broker on `socket` runs another build than `own` (for example a
+/// development build that started the machine server before the pinned production host
+/// adopted it) and hosts no terminals, ask it to retire and wait for its socket to go, so
+/// the caller starts a broker from its own build. Returns whether it retired.
+///
+/// Live terminals are never ended or moved: a broker hosting any keeps running, and the
+/// next server request after its ordinary idle exit starts a broker from the current build.
+fn hand_off_other_build(socket: &Path, own: &BrokerBuild) -> bool {
+    let identity = match probe_request(socket, &BrokerRequest::Identity) {
+        Ok(BrokerResponse::Identity { identity }) => identity,
+        Ok(BrokerResponse::Err { message }) if message.starts_with("bad request") => {
+            return false;
+        }
+        Ok(other) => {
+            tracing::debug!(?other, "unexpected terminal broker identity reply");
+            return false;
+        }
+        Err(error) => {
+            tracing::debug!(%error, "terminal broker identity probe failed");
+            return false;
+        }
+    };
+    if !runs_other_build(&identity, own) {
+        return false;
+    }
+    let keep = |terminals: usize| {
+        tracing::info!(
+            broker_pid = identity.pid,
+            broker_executable = identity.executable.as_deref().unwrap_or_default(),
+            terminals,
+            "keeping a terminal broker from another build because it hosts live terminals; \
+             it is replaced after its idle exit (HS2-H0WFJG)"
+        );
+        false
+    };
+    if identity.terminals > 0 {
+        return keep(identity.terminals);
+    }
+    // The probe connections just made, or a previous server's streams, may still be closing.
+    for _ in 0..20 {
+        match probe_request(socket, &BrokerRequest::RetireIfIdle) {
+            Ok(BrokerResponse::Retired) => {
+                for _ in 0..100 {
+                    if matches!(is_live(socket), Ok(false)) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                tracing::info!(
+                    broker_pid = identity.pid,
+                    broker_executable = identity.executable.as_deref().unwrap_or_default(),
+                    "replaced an idle terminal broker from another build (HS2-H0WFJG)"
+                );
+                return true;
+            }
+            Ok(BrokerResponse::Busy { terminals, .. }) if terminals > 0 => return keep(terminals),
+            Ok(BrokerResponse::Busy { .. }) => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(_) | Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// A missing/refused socket is confirmed absent. Connect timeout, permission errors,
@@ -825,5 +945,123 @@ mod tests {
         let sibling = dir.path().join("hotsheet-terminal-broker");
         std::fs::write(&sibling, "").unwrap();
         assert_eq!(broker_launch(Some(server)), (sibling, false));
+    }
+
+    #[test]
+    fn hs2_h0wfjg_only_a_known_other_executable_or_revision_is_another_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let pinned = dir.path().join("pinned/hotsheet-server");
+        let dev = dir.path().join("dev/hotsheet-server");
+        for path in [&pinned, &dev] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "").unwrap();
+        }
+        let link = dir.path().join("link-to-pinned");
+        std::os::unix::fs::symlink(&pinned, &link).unwrap();
+        let own = BrokerBuild {
+            executable: pinned.clone(),
+            revision: Some("r2".into()),
+        };
+        let identity = |executable: Option<&Path>, revision: Option<&str>| BrokerIdentity {
+            pid: 1,
+            executable: executable.map(|path| path.display().to_string()),
+            revision: revision.map(str::to_owned),
+            terminals: 0,
+        };
+        // (broker executable, broker revision, another build)
+        let cases: [(Option<&Path>, Option<&str>, bool); 7] = [
+            // A broker that predates `identity` or cannot name its executable: adopt.
+            (None, None, false),
+            (None, Some("r1"), false),
+            (Some(&pinned), Some("r2"), false),
+            (Some(&pinned), None, false),
+            // The same file through a symlink is the same build.
+            (Some(&link), Some("r2"), false),
+            (Some(&dev), Some("r2"), true),
+            // Rebuilt in place: same path, another stamped revision.
+            (Some(&pinned), Some("r1"), true),
+        ];
+        for (executable, revision, expected) in cases {
+            assert_eq!(
+                runs_other_build(&identity(executable, revision), &own),
+                expected,
+                "{executable:?} {revision:?}"
+            );
+        }
+        // An unstamped server compares executables only.
+        let unstamped = BrokerBuild {
+            revision: None,
+            ..own
+        };
+        assert!(!runs_other_build(
+            &identity(Some(&pinned), Some("r1")),
+            &unstamped
+        ));
+    }
+
+    /// HS2-H0WFJG: the server-side hand-off against a real detached-lifetime broker. A broker
+    /// of this build is adopted; one of another build is kept while it hosts a terminal and
+    /// retired once it is idle.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hs2_h0wfjg_hand_off_keeps_live_terminals_and_retires_only_an_idle_other_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let task = tokio::spawn(hotsheet_terminals::serve_broker_with_idle(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+            Some(std::time::Duration::from_secs(3600)),
+        ));
+        let this_build = BrokerBuild {
+            executable: std::env::current_exe().unwrap(),
+            revision: None,
+        };
+        let other_build = BrokerBuild {
+            executable: dir.path().join("pinned/hotsheet-server"),
+            revision: None,
+        };
+        let blocking = |socket: PathBuf, build: BrokerBuild| {
+            tokio::task::spawn_blocking(move || hand_off_other_build(&socket, &build))
+        };
+        // Same build: adopted, never retired.
+        assert!(!blocking(socket.clone(), this_build).await.unwrap());
+        // Another build hosting a live terminal: kept, and the terminal keeps running.
+        let mut client = BrokerClient::connect(&socket).await.unwrap();
+        client
+            .request(&BrokerRequest::Open {
+                id: "live".into(),
+                kind: Default::default(),
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+                replay_bytes: None,
+                push: None,
+            })
+            .await
+            .unwrap();
+        drop(client);
+        assert!(!blocking(socket.clone(), other_build.clone()).await.unwrap());
+        let mut client = BrokerClient::connect(&socket).await.unwrap();
+        match client.request(&BrokerRequest::List).await.unwrap() {
+            BrokerResponse::List { terminals } => {
+                assert_eq!(terminals.len(), 1);
+                assert!(terminals[0].alive);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // The terminal ends: the idle broker of another build is retired and its socket goes.
+        client
+            .request(&BrokerRequest::Kill { id: "live".into() })
+            .await
+            .unwrap();
+        drop(client);
+        assert!(blocking(socket.clone(), other_build).await.unwrap());
+        tokio::time::timeout(std::time::Duration::from_secs(3), task)
+            .await
+            .expect("the retired broker stopped serving")
+            .unwrap();
+        assert!(matches!(is_live(&socket), Ok(false)));
     }
 }

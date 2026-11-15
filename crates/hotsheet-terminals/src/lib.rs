@@ -36,9 +36,9 @@ pub mod wire_bytes;
 
 pub use bootstrap::BootstrapHealth;
 pub use broker::{
-    BrokerClient, BrokerPushState, BrokerStream, BrokerStreamReader, BrokerStreamWriter,
-    BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse,
-    SocketCleanup, StreamIn, StreamOut, run_broker_process,
+    BrokerClient, BrokerIdentity, BrokerPushState, BrokerStream, BrokerStreamReader,
+    BrokerStreamWriter, BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest,
+    Response as BrokerResponse, SocketCleanup, StreamIn, StreamOut, run_broker_process,
 };
 #[cfg(unix)]
 pub use broker::{serve_broker, serve_broker_with_idle};

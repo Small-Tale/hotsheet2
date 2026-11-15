@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createBrowserToastClearance,
   createToastClearance,
+  findToastObstacle,
+  GALLERY_FOOTER_SELECTOR,
+  TERMINAL_DRAWER_RESTORE_SELECTOR,
   TOAST_CLEARANCE_PROPERTY,
   type ToastClearanceEnvironment,
   type ToastClearanceHost,
@@ -154,7 +157,17 @@ describe('toast clearance (HS2-DSW9TY)', () => {
     const globals = globalThis as { window?: unknown; ResizeObserver?: unknown };
     const originalWindow = globals.window,
       originalObserver = globals.ResizeObserver;
-    globals.window = { innerHeight: 844 };
+    const listeners = new Set<() => void>();
+    const fakeWindow = {
+      innerHeight: 844,
+      addEventListener: (type: string, listener: () => void) => {
+        if (type === 'resize') listeners.add(listener);
+      },
+      removeEventListener: (type: string, listener: () => void) => {
+        if (type === 'resize') listeners.delete(listener);
+      },
+    };
+    globals.window = fakeWindow;
     globals.ResizeObserver = class {
       observe(target: unknown) {
         observed.push(target);
@@ -168,11 +181,60 @@ describe('toast clearance (HS2-DSW9TY)', () => {
       clearance.track();
       expect(observed).toEqual([footer.node]);
       expect(value()).toBe('50px');
+      // A window resize moves a bottom-anchored obstacle without resizing it (HS2-T90WCZ).
+      fakeWindow.innerHeight = 900;
+      footer.resize(850, 50);
+      for (const listener of listeners) listener();
+      expect(value()).toBe('50px');
+      footer.resize(700, 50);
+      for (const listener of listeners) listener();
+      expect(value()).toBe('200px');
       clearance.stop();
+      expect(listeners.size).toBe(0);
       expect(value()).toBe('');
     } finally {
       globals.window = originalWindow;
       globals.ResizeObserver = originalObserver;
     }
+  });
+});
+
+describe('toast obstacle (HS2-T90WCZ)', () => {
+  const root = (present: Record<string, string>) => ({
+    querySelector: (selector: string) => present[selector] ?? null,
+  });
+
+  it('clears the collapsed terminal drawer restore button when no gallery is open', () => {
+    expect(findToastObstacle(root({ [TERMINAL_DRAWER_RESTORE_SELECTOR]: 'restore' }))).toBe('restore');
+  });
+
+  it('prefers the open gallery footer, which covers the restore button beneath it', () => {
+    expect(
+      findToastObstacle(root({ [GALLERY_FOOTER_SELECTOR]: 'footer', [TERMINAL_DRAWER_RESTORE_SELECTOR]: 'restore' })),
+    ).toBe('footer');
+  });
+
+  it('finds nothing while the drawer is open and no gallery shows', () => {
+    expect(findToastObstacle(root({}))).toBeNull();
+  });
+
+  it('then lifts the stack above the restore button and drops it once the drawer opens', () => {
+    const { host, value } = fakeHost();
+    const button = strip(844, 40);
+    let collapsed = true;
+    const clearance = createToastClearance(host, {
+      findObstacle: () =>
+        findToastObstacle({
+          querySelector: (selector) =>
+            collapsed && selector === TERMINAL_DRAWER_RESTORE_SELECTOR ? button.node : null,
+        }),
+      viewportHeight: () => 900,
+      observeResize: () => ({ observe() {}, disconnect() {} }),
+    });
+    clearance.track();
+    expect(value()).toBe('56px');
+    collapsed = false;
+    clearance.track();
+    expect(value()).toBe('');
   });
 });

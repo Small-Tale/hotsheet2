@@ -6,6 +6,7 @@ import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
+import type { SafeHtml } from 'kerfjs';
 
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -77,6 +78,11 @@ export interface SettingsWorkspaceProps {
     locked?: boolean;
     rulesRefreshFailed?: boolean;
     legacy?: PermissionRulesSettingsProps['legacy'];
+    /**
+     * The pending permission request's popup, laid out in flow above the automation controls while this
+     * category shows, instead of floating over them (HS2-84XE8Q).
+     */
+    pendingRequest?: SafeHtml;
   };
   columns: { hideVerified: boolean };
   developmentStrategy?: DevelopmentStrategySettingsProps;
@@ -153,45 +159,52 @@ export function SettingsWorkspace({
             </List>
           )}
           {category === 'permissions' && (
-            <List gap="xs">
-              <Grid minColumnWidth={rem(15)} gap="m">
-                <Select
-                  name="permission-automation-action"
-                  label="Automatic Decision"
-                  value={permissions.automation.action}
-                  choices={[
-                    { value: 'off', label: 'Off' },
-                    { value: 'allow', label: 'Auto-Allow' },
-                    { value: 'deny', label: 'Auto-Deny' },
-                  ]}
+            // A pending request sits above the form as its own region (24px), keyed so its arrival or
+            // dismissal never re-creates the form's controls (HS2-84XE8Q).
+            <List gap="l">
+              {permissions.pendingRequest && (
+                <div data-key="permission-pending-request">{permissions.pendingRequest}</div>
+              )}
+              <List gap="xs" rootAttributes={{ 'data-key': 'permission-automation' }}>
+                <Grid minColumnWidth={rem(15)} gap="m">
+                  <Select
+                    name="permission-automation-action"
+                    label="Automatic Decision"
+                    value={permissions.automation.action}
+                    choices={[
+                      { value: 'off', label: 'Off' },
+                      { value: 'allow', label: 'Auto-Allow' },
+                      { value: 'deny', label: 'Auto-Deny' },
+                    ]}
+                  />
+                  <Select
+                    name="permission-automation-delay"
+                    label="After Visible For"
+                    value={String(permissions.automation.delayMs)}
+                    disabled={permissions.automation.action === 'off'}
+                    choices={permissions.delays
+                      .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
+                      .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
+                  />
+                </Grid>
+                <Text tone="quiet" size="compact" data-permission-note="true">
+                  Runs only while this project's permission popup is visible. Ignore pauses the timer; Stop auto-allow
+                  or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds allows
+                  each request without showing the popup; it is still recorded in Notifications.
+                </Text>
+                <PermissionRulesSettings
+                  rules={permissions.rules ?? []}
+                  owner={permissions.owner}
+                  editor={permissions.editor}
+                  dialog={permissions.dialog}
+                  preview={permissions.preview}
+                  revoking={permissions.revoking}
+                  message={permissions.rulesMessage}
+                  legacy={permissions.legacy}
+                  locked={permissions.locked}
+                  refreshFailed={permissions.rulesRefreshFailed}
                 />
-                <Select
-                  name="permission-automation-delay"
-                  label="After Visible For"
-                  value={String(permissions.automation.delayMs)}
-                  disabled={permissions.automation.action === 'off'}
-                  choices={permissions.delays
-                    .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
-                    .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
-                />
-              </Grid>
-              <Text tone="quiet" size="compact" data-permission-note="true">
-                Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
-                auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0
-                seconds allows each request without showing the popup; it is still recorded in Notifications.
-              </Text>
-              <PermissionRulesSettings
-                rules={permissions.rules ?? []}
-                owner={permissions.owner}
-                editor={permissions.editor}
-                dialog={permissions.dialog}
-                preview={permissions.preview}
-                revoking={permissions.revoking}
-                message={permissions.rulesMessage}
-                legacy={permissions.legacy}
-                locked={permissions.locked}
-                refreshFailed={permissions.rulesRefreshFailed}
-              />
+              </List>
             </List>
           )}
           {category === 'columns' && (

@@ -18,7 +18,11 @@ hotsheet-cli guidance --project . apply
 
 Repeat `--rule` or add `--skill` to select more entries. This path materializes
 `.rulesync/rules/.curated` and `.hotsheet2/rulesync.generated.jsonc`, then invokes
-Rulesync. Review the generated `AGENTS.md` before committing because Rulesync owns
+Rulesync. Hot Sheet's bundled managed sections (for example launched-session sandbox
+recovery) that no selected rule carries are written there as
+`hotsheet-bundled-<section>.md`, so Rulesync projects receive the same bundled guidance
+as built-in ones; selecting a rule with the same section marker supersedes the bundled
+copy (HS2-6FSJCV). Review the generated `AGENTS.md` before committing because Rulesync owns
 the whole file. The example configuration and migration steps below remain useful
 when a project manages Rulesync inputs directly rather than through the picker.
 

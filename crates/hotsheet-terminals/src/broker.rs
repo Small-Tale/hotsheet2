@@ -62,6 +62,15 @@ pub enum Request {
     /// The broker's macOS bootstrap namespace state, answered with [`Response::Health`]
     /// (HS2-CY01TZ). Brokers that predate it answer `Err { "bad request: …" }`.
     Health,
+    /// Which build this broker runs and how many terminals it hosts, answered with
+    /// [`Response::Identity`] (HS2-H0WFJG). Brokers that predate it answer
+    /// `Err { "bad request: …" }`, which callers treat as an unknown build.
+    Identity,
+    /// Exit now, but only when the broker hosts no terminals and the requester is its only
+    /// client (HS2-H0WFJG): answered with [`Response::Retired`] or [`Response::Busy`]. A server
+    /// running another build uses it to replace an idle broker from its own build. It never
+    /// ends a terminal; a broker with terminals keeps running until its ordinary idle exit.
+    RetireIfIdle,
     /// Open (or reattach to) a terminal `id` running `command`.
     Open {
         id: String,
@@ -199,6 +208,18 @@ pub enum Response {
     Health {
         bootstrap: crate::bootstrap::BootstrapHealth,
     },
+    /// Reply to [`Request::Identity`].
+    Identity {
+        identity: BrokerIdentity,
+    },
+    /// Reply to [`Request::RetireIfIdle`]: the broker stops accepting and exits.
+    Retired,
+    /// Reply to [`Request::RetireIfIdle`]: the broker keeps running because it hosts
+    /// terminals or serves other clients.
+    Busy {
+        terminals: usize,
+        clients: usize,
+    },
     PushInfo {
         push: BrokerPushState,
     },
@@ -223,6 +244,35 @@ pub enum Response {
     Err {
         message: String,
     },
+}
+
+/// The build a broker process runs (HS2-H0WFJG). A broker outlives the server that started
+/// it, so a server compares this with its own broker build before adopting it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrokerIdentity {
+    pub pid: u32,
+    /// The broker process's own executable, when the platform reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
+    /// The build revision compiled into the broker, when the build stamped one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    /// Terminals hosted right now, exited ones not yet reaped included.
+    pub terminals: usize,
+}
+
+impl BrokerIdentity {
+    /// This process's identity, hosting `terminals`.
+    pub fn current(terminals: usize) -> Self {
+        Self {
+            pid: std::process::id(),
+            executable: std::env::current_exe()
+                .ok()
+                .map(|path| path.display().to_string()),
+            revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
+            terminals,
+        }
+    }
 }
 
 /// Sensitive launch details kept only in the detached broker and its Unix socket protocol.
@@ -385,19 +435,48 @@ pub async fn serve_broker_with_idle(
         .map(|grace| grace.min(Duration::from_millis(250)))
         .unwrap_or(Duration::from_millis(250));
     let mut housekeeping = tokio::time::interval(tick);
+    // HS2-H0WFJG: retire requests are decided here, where the client count is exact: every
+    // connection is counted on accept in this loop, so "only the requester" leaves no other
+    // connection that could be opening a terminal.
+    let (retire_tx, mut retire_rx) = tokio::sync::mpsc::channel::<RetireReply>(4);
+    let mut retiring: Option<tokio::time::Instant> = None;
     loop {
+        if let Some(deadline) = retiring {
+            // Draining: accept nothing; exit once the requester has read its reply.
+            if clients.load(Ordering::SeqCst) == 0 || tokio::time::Instant::now() >= deadline {
+                break;
+            }
+        }
         tokio::select! {
-            accepted = listener.accept() => {
+            accepted = listener.accept(), if retiring.is_none() => {
                 let Ok((stream, _addr)) = accepted else { continue };
                 clients.fetch_add(1, Ordering::SeqCst);
                 let (manager, project, clients, pushes) =
                     (manager.clone(), project.clone(), clients.clone(), pushes.clone());
+                let retire = idle_grace.is_some().then(|| retire_tx.clone());
                 tokio::spawn(async move {
-                    let _ = handle_connection(stream, &project, &manager, &pushes).await;
+                    let _ = handle_connection(stream, &project, &manager, &pushes, retire).await;
                     clients.fetch_sub(1, Ordering::SeqCst);
                 });
             }
+            Some(reply) = retire_rx.recv(), if retiring.is_none() => {
+                manager.reap();
+                let (terminals, connected) = (manager.count(), clients.load(Ordering::SeqCst));
+                if terminals == 0 && connected <= 1 {
+                    retiring = Some(tokio::time::Instant::now() + Duration::from_secs(2));
+                    let _ = reply.send(Response::Retired);
+                } else {
+                    let _ = reply.send(Response::Busy {
+                        terminals,
+                        clients: connected.saturating_sub(1),
+                    });
+                }
+            }
             _ = housekeeping.tick(), if idle_grace.is_some() => {
+                if retiring.is_some() {
+                    // Wake to re-check the drain above.
+                    continue;
+                }
                 manager.reap();
                 prune_exited_pushes(&pushes);
                 if manager.count() == 0 && clients.load(Ordering::SeqCst) == 0 {
@@ -412,12 +491,17 @@ pub async fn serve_broker_with_idle(
     }
 }
 
+/// The serve loop's answer to one [`Request::RetireIfIdle`].
+#[cfg(unix)]
+type RetireReply = tokio::sync::oneshot::Sender<Response>;
+
 #[cfg(unix)]
 async fn handle_connection(
     stream: UnixStream,
     project: &str,
     manager: &Arc<TerminalManager>,
     pushes: &Pushes,
+    retire: Option<tokio::sync::mpsc::Sender<RetireReply>>,
 ) -> std::io::Result<()> {
     let (read, mut write) = stream.into_split();
     let mut lines = BufReader::new(read).lines();
@@ -429,6 +513,27 @@ async fn handle_connection(
             // Attach switches this connection into streaming mode for the rest of its life.
             Ok(Request::Attach { id, bytes }) => {
                 return stream_terminal(lines, write, project, manager, id, bytes).await;
+            }
+            Ok(Request::RetireIfIdle) => {
+                // A broker without an idle lifetime (embedded) never retires on request.
+                let (reply, answer) = tokio::sync::oneshot::channel();
+                let resp = match &retire {
+                    Some(retire) if retire.send(reply).await.is_ok() => {
+                        answer.await.unwrap_or(Response::Busy {
+                            terminals: manager.count(),
+                            clients: 0,
+                        })
+                    }
+                    _ => Response::Busy {
+                        terminals: manager.count(),
+                        clients: 0,
+                    },
+                };
+                let retired = matches!(resp, Response::Retired);
+                write_line(&mut write, &resp).await?;
+                if retired {
+                    return Ok(());
+                }
             }
             Ok(req) => {
                 let resp = handle_request(project, manager, pushes, req).await;
@@ -593,6 +698,17 @@ async fn handle_request(
         Request::Ping => Response::Pong,
         Request::Health => Response::Health {
             bootstrap: crate::bootstrap::probe(),
+        },
+        Request::Identity => {
+            manager.reap();
+            Response::Identity {
+                identity: BrokerIdentity::current(manager.count()),
+            }
+        }
+        // Answered in `handle_connection`, where the serve loop decides it.
+        Request::RetireIfIdle => Response::Busy {
+            terminals: manager.count(),
+            clients: 0,
         },
         Request::Open {
             id,
@@ -1877,6 +1993,141 @@ mod tests {
             .await
             .expect("broker exits after its final terminal is killed")
             .unwrap();
+    }
+
+    fn open_cat(id: &str) -> Request {
+        Request::Open {
+            id: id.into(),
+            kind: TerminalKind::Shell,
+            command: "cat".into(),
+            args: vec![],
+            cwd: None,
+            env: vec![],
+            replay_bytes: None,
+            push: None,
+        }
+    }
+
+    /// HS2-H0WFJG: `retire_if_idle` never ends a terminal and never races another client.
+    /// Long idle grace, so only an explicit retirement can end the serve task.
+    #[tokio::test]
+    async fn hs2_h0wfjg_retire_only_when_no_terminal_and_no_other_client() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let manager = Arc::new(TerminalManager::new());
+        let task = tokio::spawn(serve_broker_with_idle(
+            listener,
+            "proj".into(),
+            manager.clone(),
+            Some(Duration::from_secs(3600)),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        // The identity names this process's build and counts hosted terminals.
+        let Response::Identity { identity } = client.request(&Request::Identity).await.unwrap()
+        else {
+            panic!("identity reply expected");
+        };
+        assert_eq!(identity.pid, std::process::id());
+        assert_eq!(
+            identity.executable.as_deref(),
+            std::env::current_exe()
+                .ok()
+                .map(|path| path.display().to_string())
+                .as_deref()
+        );
+        assert_eq!(identity.terminals, 0);
+
+        // A live terminal: refused, and the terminal keeps running.
+        client.request(&open_cat("live")).await.unwrap();
+        assert!(matches!(
+            client.request(&Request::RetireIfIdle).await.unwrap(),
+            Response::Busy { terminals: 1, .. }
+        ));
+        let Response::Identity { identity } = client.request(&Request::Identity).await.unwrap()
+        else {
+            panic!("identity reply expected");
+        };
+        assert_eq!(identity.terminals, 1);
+        assert!(
+            manager
+                .get(&("proj".to_string(), "live".to_string()))
+                .is_some_and(|t| t.is_alive())
+        );
+        assert!(!task.is_finished());
+
+        // The terminal is gone, but another client is connected: still refused.
+        assert!(matches!(
+            client
+                .request(&Request::Kill { id: "live".into() })
+                .await
+                .unwrap(),
+            Response::Ok
+        ));
+        let other = BrokerClient::connect(&sock).await.unwrap();
+        // The other connection is counted as soon as the serve loop accepts it.
+        let mut refused = None;
+        for _ in 0..40 {
+            match client.request(&Request::RetireIfIdle).await.unwrap() {
+                Response::Busy {
+                    terminals: 0,
+                    clients,
+                } if clients >= 1 => {
+                    refused = Some(clients);
+                    break;
+                }
+                Response::Retired => panic!("retired while another client was connected"),
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+        assert_eq!(refused, Some(1));
+        assert!(!task.is_finished());
+
+        // Empty, refilled, then emptied again: only now does it retire.
+        drop(other);
+        let mut retired = false;
+        for _ in 0..40 {
+            match client.request(&Request::RetireIfIdle).await.unwrap() {
+                Response::Retired => {
+                    retired = true;
+                    break;
+                }
+                Response::Busy { terminals: 0, .. } => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                other => panic!("unexpected reply {other:?}"),
+            }
+        }
+        assert!(retired);
+        drop(client);
+        tokio::time::timeout(Duration::from_secs(3), task)
+            .await
+            .expect("a retired broker stops serving")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn hs2_h0wfjg_an_embedded_broker_without_an_idle_lifetime_never_retires() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let task = tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        assert!(matches!(
+            client.request(&Request::RetireIfIdle).await.unwrap(),
+            Response::Busy { terminals: 0, .. }
+        ));
+        // The connection still serves requests afterwards.
+        assert!(matches!(
+            client.request(&Request::Ping).await.unwrap(),
+            Response::Pong
+        ));
+        assert!(!task.is_finished());
+        task.abort();
     }
 
     #[test]

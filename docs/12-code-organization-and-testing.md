@@ -802,6 +802,15 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.
+- **Keychain kill switch (HS2-XTQHPK):** fixture activation is opt-in per process, so a
+  test that spawns `hotsheet-cli` or `hotsheet-server` without it used to reach the
+  maintainer's real keychain. The keychain is per user, not per `HOTSHEET_HOME`, and every
+  rebuilt binary prompts again. `HOTSHEET_NATIVE_SECRETS=deny` makes the native credential
+  port refuse every set, get and delete with an error naming HS2-XTQHPK, without calling
+  the OS. `.cargo/config.toml` forces it for every process cargo or nextest launches, and
+  the Playwright and Vitest configs set it before workers and servers start, and `scripts/check.sh` sets it for every gate stage. The switch
+  only refuses; it never activates fixture credentials, so tests that need credentials
+  still opt into synthetic ones.
 - **Machine-home isolation (HS2-T9VXEP):** tests and repros must never write the real
   `~/.hotsheet2` (`checkouts.json`, `settings.json`, `settings-locks`). Hot Sheet-launched
   agent shells export `HOTSHEET_HOME` as that real home, so inheriting the environment is
@@ -821,7 +830,14 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   without an injected plugin path (HS2-SDPD95). The migrator suite's `globalSetup`
   (`migrator/test/isolated-home.mjs`) gives its spawned binaries a throwaway home, guarded
   by `migrator/test/isolated-home.test.mjs`; the web real-server fixtures already pass
-  temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
+  temp homes. `clients/web/vitest.config.ts` also forces, for every project's workers, a
+  per-run `hotsheet-vitest-home-*` temporary root for `HOTSHEET_HOME`,
+  `HOTSHEET_LEGACY_HOME`, `HOTSHEET_CACHE_DIR`, `HOTSHEET_CLAUDE_USER_CONFIG` and
+  `HOTSHEET_LAUNCH_AGENTS_DIR` (`isolateMachineHome` in
+  `clients/web/scripts/test-ai-tool-isolation.mjs`), so a unit test that misses an injected
+  seam cannot start or write the real server and stores; the unit guard in
+  `scripts/test-ai-tool-isolation.test.mjs` and the jsdom guard
+  `src/machine-home-isolation.dom.test.ts` fail without it (HS2-34QFBQ). Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
 - **Global Git config isolation (HS2-M269HC):** `.cargo/config.toml` forces
@@ -961,7 +977,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   commit, which is the same commit as `guidance/ai-playbook.lock.json`. The root `package.json`
   pins Rulesync 38.0.0. `node scripts/check-rulesync-generation.mjs --fetch`, or `--source <checkout>`:
   - lays out the same `.rulesync/rules/.curated/`, local rule and `agentsmd` config that
-    `hotsheet-cli guidance apply` writes, in a temporary project;
+    `hotsheet-cli guidance apply` writes, in a temporary project, including a generated
+    `hotsheet-bundled-<section>.md` input for each bundled Hot Sheet section in
+    `plugins/shared/` that no selected rule carries (HS2-6FSJCV);
   - runs the pinned generator there;
   - requires byte equality with the committed file, and otherwise names the first differing line.
 
@@ -970,6 +988,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   all fail. Temporary Git, generator and fake-provider fixture children clear repository-local
   Git hook variables through the shared `withoutGitRepositoryEnv` helper. The real child-flow
   regression preserves an owned caller repository's index, configuration and HEAD.
+  `guidance_sources::tests::hs2_6fsjcv_apply_materializes_the_same_inputs_as_the_rulesync_check`
+  runs apply's materialization on a Rulesync fixture and the script's `materialize` through
+  node, and requires byte-identical inputs (HS2-6FSJCV).
 
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
   `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin

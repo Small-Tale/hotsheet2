@@ -18,7 +18,8 @@
 //! successful cycle reuses the first ask, so no second session starts while the first is
 //! unresolved. A stall after a successful cycle is a new stall. The caller supplies how an
 //! AI is reached ([`AiReach`]): the server pushes into its terminals and drives a session
-//! through its permission bridge; the headless CLI starts `hotsheet-cli trigger`.
+//! through its permission bridge; the headless CLI starts a detached
+//! `hotsheet-cli sync --run-repair` that records the end itself (HS2-SPVT6W).
 //!
 //! The record (`<git-dir>/hotsheet-sync-ai.json`) and the ticket hold ids, counts, states,
 //! and a store-relative reference only, never ticket content or machine paths.

@@ -34605,9 +34605,8 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const automation = page.locator('kui-select[name="permission-automation-action"]');
-  // The floating popup overlaps this form on desktop since the compact header (HS2-9R1F91), so open
-  // the Select with a dispatched trigger click; pointer reachability is tracked separately.
-  await automation.locator('.kui-select__trigger').dispatchEvent('click');
+  // Settings → Permissions lays the popup out above this form, so a real pointer reaches it (HS2-84XE8Q).
+  await automation.locator('.kui-select__trigger').click();
   await expect(automation).toHaveAttribute('open', '');
   await expect(page.locator('[data-component="permission-rules-settings"]')).toContainText('https://rules-loaded.test');
   await resetRenderMetrics(page);
@@ -34627,6 +34626,147 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.getByRole('button', { name: /Notifications View/ }).click();
   await page.locator('[data-component="notification-center"]').getByRole('button', { name: 'Allow Once' }).click();
   await expect.poll(() => answers).toBe(1);
+});
+
+test('keeps the Permissions settings controls reachable by pointer while a request is pending (HS2-84XE8Q)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.route('**/connections', (route) =>
+    route.fulfill({
+      json: [{ id: 'codex-session', tool: 'Codex', project: '/work/demo', role: 'worker', busy: true }],
+    }),
+  );
+  await page.route('**/permissions', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 8,
+          connection: 'codex-session',
+          tool: 'item/commandExecution/requestApproval',
+          action: 'npm test',
+          always_allow_supported: true,
+        },
+      ],
+    }),
+  );
+  await page.route('**/permissions/rules', (route) =>
+    route.fulfill({
+      json: [
+        {
+          project: `checkout:${project.id}`,
+          tool: 'WebFetch',
+          action: rememberedActionKey('https://rules-loaded.test'),
+          exact_action: 'https://rules-loaded.test',
+          decision: 'allow',
+          scope: 'always',
+        },
+      ],
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'hotsheet.project.demo-checkout.permission-automation',
+      JSON.stringify({ action: 'allow', delayMs: 60_000 }),
+    );
+  });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toContainText('Auto-allow in');
+  await expect(popup).toHaveAttribute('data-layer', 'top');
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const workspace = page.locator('[data-component="settings-workspace"]');
+  const automation = page.locator('kui-select[name="permission-automation-action"]');
+  const delay = page.locator('kui-select[name="permission-automation-delay"]');
+  // Settings → Permissions lays the one pending popup out above its automation controls, still counting.
+  await expect(popup).toHaveCount(1);
+  await expect(workspace.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'flow');
+  await expect(popup).toContainText('Auto-allow in');
+  const popupBox = (await popup.boundingBox())!,
+    automationBox = (await automation.boundingBox())!;
+  expect(popupBox.y + popupBox.height).toBeLessThanOrEqual(automationBox.y);
+  await page.screenshot({ path: 'target/visual-captures/hs2-84xe8q-permissions-after-1280.png' });
+  // A real pointer reaches both controls while the request is pending.
+  await automation.locator('.kui-select__trigger').click();
+  await expect(automation).toHaveAttribute('open', '');
+  await page.keyboard.press('Escape');
+  await expect(automation).not.toHaveAttribute('open', '');
+  await delay.locator('.kui-select__trigger').click();
+  await expect(delay).toHaveAttribute('open', '');
+  await page.keyboard.press('Escape');
+  await expect(popup).toContainText('Auto-allow in');
+  // A Permissions modal returns the popup to the top layer, where it stays interactive (HS2-MAE27T).
+  await page.getByRole('button', { name: 'Show all 1 answer' }).click();
+  const rulesDialog = page.getByRole('dialog', { name: 'Remembered answers', exact: true });
+  await expect(rulesDialog).toBeVisible();
+  await expect(popup).toHaveAttribute('data-layer', 'top');
+  // As over any modal, the popup lifts once editing focus leaves the dialog's search field.
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+  await expect(popup.getByRole('button', { name: 'Ignore' })).toBeVisible();
+  // The lifted popup is modal above the dialog by design, so dispatch the dialog's own Close.
+  await rulesDialog.getByRole('button', { name: 'Close' }).first().dispatchEvent('click');
+  await expect(rulesDialog).toHaveCount(0);
+  await expect(workspace.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'flow');
+  // Leaving Permissions floats it again.
+  await page.getByRole('button', { name: 'Ticket sources' }).click();
+  await expect(popup).toHaveAttribute('data-layer', 'top');
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await expect(workspace.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'flow');
+  // Medium and phone widths: the one popup still sits above the controls, which stay pointer-reachable,
+  // and it never returns to a floating overlay while Permissions shows.
+  for (const viewport of [
+    { width: 1024, height: 720 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    if (viewport.width === 390)
+      await expect
+        .poll(() =>
+          page.locator('.app-shell__main').evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            return { x: Math.round(box.x), width: Math.round(box.width) };
+          }),
+        )
+        .toEqual({ x: 0, width: 390 });
+    await expect(popup).toHaveCount(1);
+    await expect(workspace.locator('[data-component="permission-request-popup"]')).toHaveAttribute(
+      'data-layer',
+      'flow',
+    );
+    await expect
+      .poll(async () => {
+        const popupBox = (await popup.boundingBox())!,
+          automationBox = (await automation.boundingBox())!;
+        return popupBox.y + popupBox.height <= automationBox.y;
+      })
+      .toBe(true);
+    await automation.locator('.kui-select__trigger').click();
+    await expect(automation).toHaveAttribute('open', '');
+    await page.keyboard.press('Escape');
+    await expect(automation).not.toHaveAttribute('open', '');
+    await popup.evaluate((element) => {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-84xe8q-permissions-after-${viewport.width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(popup).toHaveCount(1);
+  // Stop and Ignore still act from the in-flow copy.
+  await popup.getByRole('button', { name: 'Stop auto-allow Countdown' }).click();
+  await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);
+  await popup.getByRole('button', { name: 'Ignore' }).click();
+  await expect(popup).toHaveCount(0);
 });
 
 test('auto-allows during an Always review, then remembers the rule before showing the next request (HS2-WZK2QK)', async ({

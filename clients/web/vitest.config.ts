@@ -4,16 +4,27 @@ import { join } from 'node:path';
 
 import { configDefaults, defineConfig } from 'vitest/config';
 
-import { isolateAiToolProbes, isolateHostHealthSampler } from './scripts/test-ai-tool-isolation.mjs';
+import {
+  isolateAiToolProbes,
+  isolateHostHealthSampler,
+  isolateMachineHome,
+  isolateNativeSecrets,
+} from './scripts/test-ai-tool-isolation.mjs';
 import { BINARY_SUITES } from './scripts/vitest-binary-suites.mjs';
 
 // Before any worker starts: spawned servers and CLIs never run installed AI tools (HS2-F6R2HQ).
 isolateAiToolProbes();
 isolateHostHealthSampler();
+isolateNativeSecrets();
 
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-vitest-vite-'));
+// Every project's workers inherit a per-run machine home, never the real or an inherited
+// `~/.hotsheet2` (HS2-34QFBQ).
+const machineHomeRoot = mkdtempSync(join(tmpdir(), 'hotsheet-vitest-home-'));
+isolateMachineHome(machineHomeRoot);
 process.once('exit', () => {
   rmSync(viteCacheDir, { recursive: true, force: true });
+  rmSync(machineHomeRoot, { recursive: true, force: true });
 });
 
 const testFiles = ['src/**/*.test.ts', 'scripts/**/*.test.mjs'];

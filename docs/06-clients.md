@@ -1160,6 +1160,9 @@ preview/download, server directory browser) are separate design work.
   the gallery footer (also as the footer changes height when markup finishes), so the toast never
   covers the zoom or markup toolbars at wide or phone widths; each new toast also reopens the stack
   so it draws above a modal opened since the previous one (HS2-DSW9TY).
+  With no gallery open, the stack instead rises above the collapsed terminal drawer's round restore
+  button, which shares its bottom-end corner, and follows that button through window resizes, so
+  the button never covers the toast's first words (HS2-T90WCZ).
   Toasts stay dismissible over modal surfaces (HS2-M2G31B): a modal `<dialog>` makes everything
   outside it inert, so while a toast shows the stack lives inside the topmost open modal dialog
   (in an app-inserted `data-morph-preserve` host, `display: contents`, that Kerf re-renders keep)
@@ -1190,9 +1193,9 @@ preview/download, server directory browser) are separate design work.
   pairing requests and paired browsers (`components/remote-devices-settings.tsx`). Each row's
   "…" menu, also opened by the row itself and by right-click, holds its commands: a request
   offers Approve Read-Write, Approve Read-Only and Reject; a device offers its read role
-  (Make Read-Only or Allow Changes), Administrator, Host Access and Revoke. Host Access is
-  disabled, with the reason, unless the caller is the trusted host or itself has the local
-  grant. The caller's own row is marked This Device. The request row shows the request id so
+  (Make Read-Only or Allow Changes), Administrator, Host Access and Revoke. Every caller
+  that may open the category may change Host Access, an administrator without it included
+  (HS2-KTHQE5). The caller's own row is marked This Device. The request row shows the request id so
   the owner can compare it with the id on the requesting browser. While the category shows,
   `features/remote-devices.ts` keeps one long poll on `/__hotsheet/remote-auth/owner/changes`
   (cursor replay, 1 s to 30 s failure backoff, no fixed interval) and stops when it hides. A
@@ -1234,6 +1237,10 @@ preview/download, server directory browser) are separate design work.
   away from Safari's bookmark editor, application settings, and browser tab/tab-group commands.
   Every shortcut remains rebindable, and the bare
   `c` (like other non-modifier chords) never fires while a text field is focused (HS2-9SHYWD).
+  Option/Alt chords match the physical letter or digit: macOS Option composes the reported key
+  (⌘⌥S arrives as `ß`, ⌘⌥⇧B as `ı`), so when Alt is held and the key is not a plain letter or
+  digit, matching and recording fall back to `KeyboardEvent.code`; without Alt the printed key
+  stays authoritative for non-QWERTY layouts (HS2-F0BT8E).
   The settings surface follows Kerf's spacing rhythm: 24px between major groups, 16px
   between peer regions, 8px within rows and controls, and 4px inside tight metadata clusters
   (HS2-4Y6SM9).
@@ -3322,7 +3329,13 @@ watcher opens, so it paints in the browser top layer above the Workbench's main-
 or maximized terminal drawer, and the rails; its decision controls stay hit-testable over the
 drawer. It keeps its placement at the top-right of the main column through CSS anchor positioning
 (`anchor-name: --app-shell-main`), falling back to the viewport corner where anchors are
-unavailable, and uses the full-width phone placement below 672px (HS2-ZESCM2). The popup is a
+unavailable, and uses the full-width phone placement below 672px (HS2-ZESCM2). While Settings →
+Permissions shows, the shell does not float the popup over the form; the category lays the same
+popup out in flow above its Automatic Decision and After Visible For controls, 24px apart, so a
+pointer reaches those controls while a request waits and the countdown keeps running because the
+popup stays visible. Opening a Permissions modal (remembered answers, the match editor, or the legacy
+discard review), leaving the category, or opening a chat returns the popup to its usual host
+(HS2-84XE8Q). The popup is a
 `<dialog>`: while any other modal dialog is open (such as the Create ticket composer or a Web
 Awesome drawer), which would leave a popover painted on top but inert, the watcher lifts it with
 `showModal()` above that modal so its decision controls receive clicks, re-lifts it when a newer

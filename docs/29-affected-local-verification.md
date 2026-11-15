@@ -109,6 +109,18 @@ gate edit. It works from three kinds of hooks:
   `app/`, `main.tsx`, and `ux-demo/` are never walked through, because they import
   nearly everything. A module reached only through them keeps the existing
   shared-infrastructure rules.
+- **Its `data-component` names (HS2-MZJQYD).** Specs often locate a composed
+  component as `[data-component="…"]` rather than by class. A module's surface
+  includes the multi-word names it renders literally (`data-component="hs1-job-banner"`).
+  It also includes the names that flow through a forwarding component. ShellBanner
+  renders `data-component={component}`, and `hs1-migration.tsx` passes
+  `component="hs1-cleanup-banner"`. That name belongs both to the forwarding child
+  and to each shipped parent that passes it; demo and test importers do not count.
+  The HS2-YCB15Z escape showed why: a ShellBanner change selected no
+  `hs1-migration.spec.ts` test, though that spec asserts
+  `[data-component=hs1-cleanup-banner] > [data-component=state-banner]`. Names are
+  added only after the class-based surface and the parent walk above, so they
+  widen a selection and never narrow one.
 
 Each spec is split into top-level test, `test.describe`, and helper blocks. A hook
 selects specs as follows:

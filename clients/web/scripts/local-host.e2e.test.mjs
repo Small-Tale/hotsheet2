@@ -736,9 +736,10 @@ it.concurrent(
         clearTimeout(force);
       }
       await stopMachineServer(home);
-      // The dev-launched server started the detached terminal broker from the dev binary under this
-      // home. Brokers deliberately outlive server stops and restarts (they idle-exit later), so stop
-      // this test's broker explicitly rather than leaving it to its idle timeout.
+      // A detached terminal broker runs under this home: the dev-launched server started one from the
+      // dev binary, and the pinned server replaced it with its own build while it was idle (HS2-H0WFJG).
+      // Brokers deliberately outlive server stops and restarts (they idle-exit later), so stop this
+      // test's broker explicitly rather than leaving it to its idle timeout.
       for (const line of await processesUsing(home))
         if (line.includes('--terminal-broker-process')) process.kill(Number(line.split(/\s+/)[0]), 'SIGTERM');
       const deadline = Date.now() + 10_000;

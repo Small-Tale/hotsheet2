@@ -1,3 +1,6 @@
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -5,7 +8,34 @@ import {
   HOST_HEALTH_SAMPLER_ENV,
   isolateAiToolProbes,
   isolateHostHealthSampler,
+  isolateMachineHome,
+  isolateNativeSecrets,
+  MACHINE_HOME_ENV,
+  NATIVE_SECRETS_ENV,
 } from './test-ai-tool-isolation.mjs';
+
+describe('HS2-34QFBQ machine-home isolation', () => {
+  it('runs every worker under one per-run temporary machine home, never the real one', () => {
+    const names = Object.keys(MACHINE_HOME_ENV);
+    const root = dirname(resolve(process.env.HOTSHEET_HOME ?? ''));
+    expect(resolve(process.env.HOTSHEET_HOME ?? '')).not.toBe(resolve(homedir(), '.hotsheet2'));
+    expect(resolve(process.env.HOTSHEET_LEGACY_HOME ?? '')).not.toBe(resolve(homedir(), '.hotsheet'));
+    expect(root.startsWith(resolve(tmpdir(), 'hotsheet-vitest-home-'))).toBe(true);
+    for (const name of names) expect(process.env[name], name).toBe(join(root, MACHINE_HOME_ENV[name]));
+  });
+
+  it('overrides an inherited real home and leaves other variables alone', () => {
+    const env = { PATH: '/usr/bin', HOTSHEET_HOME: join(homedir(), '.hotsheet2') };
+    expect(isolateMachineHome('/run', env)).toEqual({
+      PATH: '/usr/bin',
+      HOTSHEET_HOME: join('/run', 'hotsheet-home'),
+      HOTSHEET_LEGACY_HOME: join('/run', 'hotsheet-legacy-home'),
+      HOTSHEET_CACHE_DIR: join('/run', 'hotsheet-cache'),
+      HOTSHEET_CLAUDE_USER_CONFIG: join('/run', 'claude-user-config', '.claude.json'),
+      HOTSHEET_LAUNCH_AGENTS_DIR: join('/run', 'launch-agents'),
+    });
+  });
+});
 
 describe('HS2-F6R2HQ AI-tool probe isolation', () => {
   it('runs every worker with installed AI-tool probes off', () => {
@@ -26,5 +56,16 @@ describe('HS2-DTAVQA host health sampler isolation', () => {
   it('turns the sampler off in a given environment without touching other variables', () => {
     const env = { PATH: '/usr/bin' };
     expect(isolateHostHealthSampler(env)).toEqual({ PATH: '/usr/bin', [HOST_HEALTH_SAMPLER_ENV]: 'off' });
+  });
+});
+
+describe('HS2-XTQHPK native keychain isolation', () => {
+  it('runs every worker, and every server or CLI it spawns, with the OS keychain denied', () => {
+    expect(process.env[NATIVE_SECRETS_ENV]).toBe('deny');
+  });
+
+  it('only ever sets the refusing value', () => {
+    const env = { PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'allow' };
+    expect(isolateNativeSecrets(env)).toEqual({ PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'deny' });
   });
 });

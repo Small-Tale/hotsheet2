@@ -161,7 +161,7 @@ export function RemoteDevicesSettingsDemo() {
           formatTime={time}
         />
       </CatalogExample>
-      <CatalogExample label="Administrator Without Host Access">
+      <CatalogExample label="Seen From an Administrator Device">
         <RemoteDevicesSettings
           state="ready"
           list={{ ...fixtureList(), manager: { device_id: '01SYNTHETICDEVICE00000002', local: false } }}

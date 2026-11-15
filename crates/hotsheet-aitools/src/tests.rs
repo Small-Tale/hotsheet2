@@ -1978,3 +1978,26 @@ interrupt = true
     assert!(svc.prestart().is_ok());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// HS2-SPVT6W: the server and the headless `sync --run-repair` record a repair session's
+/// end from the same mapping.
+#[test]
+fn hs2_spvt6w_session_result_names_why_a_turn_did_not_complete() {
+    assert_eq!(DoneReason::Completed.session_result(), Ok(()));
+    assert_eq!(
+        DoneReason::Interrupted.session_result(),
+        Err("the session was interrupted".to_string())
+    );
+    assert_eq!(
+        DoneReason::Failed {
+            exit_code: 3,
+            message: None
+        }
+        .session_result(),
+        Err("the tool exited with status 3".to_string())
+    );
+    assert_eq!(
+        DoneReason::failed(1, "  credentials rejected ").session_result(),
+        Err("credentials rejected".to_string())
+    );
+}

@@ -304,3 +304,129 @@ fn the_detached_broker_inherits_no_descriptor_from_the_server() {
     server.stop_server_only();
     no_writer_left(&read).expect("the detached broker holds the server's descriptor");
 }
+
+/// The `identity` the live broker on `socket` reports (HS2-H0WFJG).
+fn broker_identity(socket: &Path) -> Value {
+    use std::io::{BufRead, Write};
+    let mut stream = std::os::unix::net::UnixStream::connect(socket).unwrap();
+    stream.write_all(b"{\"op\":\"identity\"}\n").unwrap();
+    let mut reply = String::new();
+    std::io::BufReader::new(stream)
+        .read_line(&mut reply)
+        .unwrap();
+    let reply: Value = serde_json::from_str(&reply).unwrap();
+    assert_eq!(reply["result"], "identity", "{reply}");
+    reply["identity"].clone()
+}
+
+#[test]
+fn hs2_h0wfjg_a_pinned_server_keeps_a_dev_broker_with_terminals_and_replaces_it_when_idle() {
+    // A development build starts the machine server and its detached broker; the pinned host
+    // then restarts the server from its own snapshot. Synthetic store and `cat` terminals only.
+    let fixture = tempfile::tempdir().unwrap();
+    let home = fixture.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let store = fixture.path().join("store");
+    FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
+    let project = hotsheet_tls::project_id(&store);
+    let socket = hotsheet_terminals::broker_socket::socket_path(&home, &project).unwrap();
+    let _socket_files = SocketFiles(socket.clone());
+    // Copy only the server, so each build self-hosts its broker from its own executable.
+    let copy = |dir: &str| {
+        let binary = fixture.path().join(dir).join("hotsheet-server");
+        fs::create_dir(binary.parent().unwrap()).unwrap();
+        fs::copy(env!("CARGO_BIN_EXE_hotsheet-server"), &binary).unwrap();
+        binary.canonicalize().unwrap()
+    };
+    let (dev, pinned) = (copy("dev"), copy("pinned"));
+    let executable = |identity: &Value| {
+        Path::new(identity["executable"].as_str().unwrap())
+            .canonicalize()
+            .unwrap()
+    };
+
+    let mut dev_server = TestServer::start(&dev, &home, &store, fixture.path().join("dev.log"));
+    let dev_info = dev_server.ready();
+    let dev_broker = broker_identity(&socket);
+    assert_eq!(executable(&dev_broker), dev);
+    assert_eq!(
+        request(
+            &dev_info,
+            "POST",
+            "/terminals",
+            Some(json!({"id":"live", "command":"/bin/cat"}))
+        )["alive"],
+        true
+    );
+    request(
+        &dev_info,
+        "POST",
+        "/terminals/live/input",
+        Some(json!({"data":"before-adoption\n"})),
+    );
+    let dev_socket = fs::metadata(&socket).unwrap().ino();
+    dev_server.stop_server_only();
+
+    // The pinned server adopts the dev broker as is: it hosts a live terminal.
+    let mut pinned_server =
+        TestServer::start(&pinned, &home, &store, fixture.path().join("pinned.log"));
+    let pinned_info = pinned_server.ready();
+    assert_eq!(fs::metadata(&socket).unwrap().ino(), dev_socket);
+    let kept = broker_identity(&socket);
+    assert_eq!(kept["pid"], dev_broker["pid"], "the dev broker was kept");
+    assert_eq!(kept["terminals"], 1);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let terminal = request(&pinned_info, "GET", "/terminals/live", None);
+        assert_eq!(terminal["alive"], true, "{terminal}");
+        if terminal["scrollback"]
+            .as_str()
+            .unwrap()
+            .contains("before-adoption")
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "terminal output lost: {terminal}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    // The user closes the terminal; the broker is now idle.
+    request(&pinned_info, "DELETE", "/terminals/live", None);
+    pinned_server.stop_server_only();
+
+    // The next pinned start hands the idle dev broker over to a broker from its own build.
+    let mut restarted =
+        TestServer::start(&pinned, &home, &store, fixture.path().join("restarted.log"));
+    let restarted_info = restarted.ready();
+    let replaced = broker_identity(&socket);
+    assert_ne!(
+        replaced["pid"], dev_broker["pid"],
+        "the idle dev broker retired"
+    );
+    assert_eq!(executable(&replaced), pinned);
+    assert_ne!(fs::metadata(&socket).unwrap().ino(), dev_socket);
+    let retired_pid = dev_broker["pid"].as_u64().unwrap() as i32;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    // SAFETY: signal 0 only checks whether the retired broker's pid still exists.
+    while unsafe { libc::kill(retired_pid, 0) } == 0 {
+        assert!(
+            Instant::now() < deadline,
+            "the retired dev broker kept running"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    // Terminals work on the replacement broker.
+    assert_eq!(
+        request(
+            &restarted_info,
+            "POST",
+            "/terminals",
+            Some(json!({"id":"after", "command":"/bin/cat"}))
+        )["alive"],
+        true
+    );
+    request(&restarted_info, "DELETE", "/terminals/after", None);
+    restarted.stop_server_only();
+}

@@ -13,6 +13,7 @@ import {
   resolveChord,
   saveShortcutOverrides,
   type ShortcutChord,
+  type ShortcutKeyEvent,
 } from './keyboard-shortcuts';
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -283,5 +284,92 @@ describe('override persistence (transition + adversarial)', () => {
     state = loadShortcutOverrides(storage);
     expect(state).toEqual({});
     expect(resolveChord('redo', state)).toEqual({ key: 'z', mod: true, shift: true });
+  });
+});
+
+describe('every default shortcut matches the event a real keyboard sends (HS2-F0BT8E)', () => {
+  // The event a browser reports for a chord. On macOS (US layout) Option composes `key` even with
+  // Command held: ⌥S reports `ß`, ⌥⇧B reports `ı`, ⌥E reports the `Dead` key; `code` stays physical.
+  const macOptionCharacters: Record<string, string> = { s: 'ß', b: '∫', e: 'Dead', k: '˚' };
+  const macShiftOptionCharacters: Record<string, string> = { b: 'ı', s: 'Í' };
+  const mac = (over: Partial<ShortcutKeyEvent>): ShortcutKeyEvent => ({
+    key: 'a',
+    code: 'KeyA',
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    ...over,
+  });
+  function realEvent(chord: ShortcutChord, apple: boolean): ShortcutKeyEvent {
+    const letter = /^[a-z]$/.test(chord.key),
+      digit = /^[0-9]$/.test(chord.key);
+    let reported = chord.key.length === 1 && chord.shift ? chord.key.toUpperCase() : chord.key;
+    if (apple && chord.alt && letter)
+      reported = (chord.shift ? macShiftOptionCharacters : macOptionCharacters)[chord.key] ?? reported;
+    return {
+      key: reported,
+      code: letter ? `Key${chord.key.toUpperCase()}` : digit ? `Digit${chord.key}` : chord.key,
+      metaKey: Boolean(chord.meta || (apple && chord.mod)),
+      ctrlKey: Boolean(chord.ctrl || (!apple && chord.mod)),
+      shiftKey: Boolean(chord.shift),
+      altKey: Boolean(chord.alt),
+    };
+  }
+
+  for (const apple of [true, false])
+    for (const shortcut of KEYBOARD_SHORTCUTS)
+      it(`${shortcut.id} on ${apple ? 'Apple' : 'non-Apple'}`, () => {
+        const event = realEvent(shortcut.defaultChord, apple);
+        expect(matchesShortcut(shortcut.id, event, {}, apple)).toBe(true);
+        // Dropping any held modifier must not still match.
+        for (const modifier of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey'] as const)
+          if (event[modifier])
+            expect(matchesShortcut(shortcut.id, { ...event, [modifier]: false }, {}, apple), modifier).toBe(false);
+      });
+
+  it('matches ⌘⌥S and ⌘⌥⇧B by physical key when Option composes the character', () => {
+    expect(
+      matchesShortcut('view-settings', mac({ key: 'ß', code: 'KeyS', metaKey: true, altKey: true }), {}, true),
+    ).toBe(true);
+    expect(
+      matchesShortcut(
+        'toggle-right-sidebar',
+        mac({ key: 'ı', code: 'KeyB', metaKey: true, shiftKey: true, altKey: true }),
+        {},
+        true,
+      ),
+    ).toBe(true);
+    // Without Option, `key` stays authoritative: a non-QWERTY layout's printed letter wins over `code`.
+    expect(matchesShortcut('open-search', mac({ key: 'k', code: 'KeyV', metaKey: true }), {}, true)).toBe(true);
+    expect(matchesShortcut('open-search', mac({ key: 'v', code: 'KeyK', metaKey: true }), {}, true)).toBe(false);
+    // A plain letter under Alt (Windows/Linux) still matches by `key`, not `code`.
+    const altS = mac({ key: 's', code: 'KeyO', ctrlKey: true, altKey: true });
+    expect(matchesChord(altS, { key: 's', mod: true, alt: true }, false)).toBe(true);
+    expect(matchesChord(altS, { key: 'o', mod: true, alt: true }, false)).toBe(false);
+    // An event without `code` (synthetic callers) keeps the `key` comparison.
+    expect(matchesChord(key({ key: 'ß', metaKey: true, altKey: true }), { key: 's', mod: true, alt: true }, true)).toBe(
+      false,
+    );
+  });
+
+  it('records an Option chord by its physical letter, not the composed character', () => {
+    expect(chordFromEvent(mac({ key: 'ß', code: 'KeyS', metaKey: true, altKey: true }), true)).toEqual({
+      key: 's',
+      mod: true,
+      shift: false,
+      alt: true,
+    });
+    expect(chordFromEvent(mac({ key: 'Dead', code: 'KeyE', altKey: true }), true)).toEqual({
+      key: 'e',
+      mod: false,
+      shift: false,
+      alt: true,
+    });
+    // A recorded chord round-trips through the matcher with the composed event.
+    const composed = mac({ key: 'ı', code: 'KeyB', metaKey: true, shiftKey: true, altKey: true });
+    const chord = chordFromEvent(composed, true);
+    expect(formatChord(chord, true)).toBe('⌘⌥⇧B');
+    expect(matchesChord(composed, chord, true)).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
@@ -15,6 +15,7 @@ const TERMINAL = 'codex-question-synthetic';
 test('shows a Codex rollout question in the app and clears it on terminal input (HS2-D0QTGB)', async ({
   context,
   baseURL,
+  browserName,
 }) => {
   test.setTimeout(120_000);
   const app = await desktopApp(context, baseURL!);
@@ -77,7 +78,11 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     ] as const) {
       await page.setViewportSize({ width, height: 844 });
       await expect(popup).toBeVisible();
+      await expectFooterActionsApart(popup, width);
       await page.screenshot({ path: test.info().outputPath(`hs2-d0qtgb-codex-question-${label}.png`) });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-5ev4n9-question-footer-${label}-${browserName}.png`,
+      });
     }
 
     // The user answers in the terminal: Codex records the user input and the prompt goes away.
@@ -100,3 +105,25 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     await app.stop();
   }
 });
+
+// HS2-5EV4N9: the question notice's footer actions wrap instead of overlapping, and stay on screen.
+async function expectFooterActionsApart(popup: Locator, width: number) {
+  const boxes = await Promise.all(
+    ['Dismiss', 'Pause Notifications', 'Answer in terminal'].map(async (name) => {
+      const button = popup.getByRole('button', { name, exact: true });
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box, name).not.toBeNull();
+      return { name, ...box! };
+    }),
+  );
+  for (const box of boxes) {
+    expect(box.x, box.name).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, box.name).toBeLessThanOrEqual(width);
+  }
+  for (const [index, a] of boxes.entries())
+    for (const b of boxes.slice(index + 1)) {
+      const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+      expect(apart, `${a.name} overlaps ${b.name}`).toBe(true);
+    }
+}

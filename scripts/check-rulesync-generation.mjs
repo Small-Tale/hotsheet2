@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Rulesync regeneration check (HS2-VA97HW). The committed AGENTS.md must equal a fresh run of the
 // pinned Rulesync over the same inputs Hot Sheet's guidance apply materializes: the selected rules at
-// the pinned ai-playbook commit (`.rulesync/rules/.curated/`), the committed local rule, and the
+// the pinned ai-playbook commit (`.rulesync/rules/.curated/`), the bundled Hot Sheet sections no
+// selected rule carries (`plugins/shared/*.md`, HS2-6FSJCV), the committed local rule, and the
 // generated `agentsmd` rules config. Hand-edited or stale instruction output fails here.
 //
 //   node scripts/check-rulesync-generation.mjs --fetch                 # CI: fetch the pinned commit
@@ -32,11 +33,37 @@ export function readSelection(text) {
   return selection;
 }
 
+/**
+ * Bundled Hot Sheet sections a Rulesync project receives as generated rule inputs (HS2-6FSJCV), as
+ * `[stem, content]` pairs. Mirrors `rulesync_bundled_sections` in crates/hotsheet-plugins/src/setup.rs:
+ * every current (non-legacy) `plugins/shared/*.md` section whose marker no selected rule carries.
+ */
+export function bundledSections(selectedRuleTexts, shared = path.join(root, 'plugins/shared')) {
+  return fs
+    .readdirSync(shared)
+    .filter((file) => file.endsWith('.md') && !file.startsWith('legacy-'))
+    .sort()
+    .map((file) => {
+      const body = fs.readFileSync(path.join(shared, file), 'utf8').trim();
+      const name = /^<!-- hotsheet:begin section=([a-z0-9-]+) v=\d+ -->/.exec(body)?.[1];
+      if (name === undefined) throw new Error(`plugins/shared/${file} does not open with a section marker`);
+      return { name, body };
+    })
+    .filter(({ name }) => !selectedRuleTexts.some((text) => text.includes(`<!-- hotsheet:begin section=${name} v=`)))
+    .map(({ name, body }) => [
+      `hotsheet-bundled-${name}`,
+      `---\nroot: true\ntargets: ["*"]\ndescription: "Hot Sheet bundled ${name} guidance"\n---\n\n${body}\n`,
+    ]);
+}
+
 /** Lay out a Rulesync project exactly as guidance apply does, without touching the repository. */
-export function materialize(project, { rules, readRule, localRule }) {
+export function materialize(project, { rules, readRule, localRule, shared }) {
   const curated = path.join(project, '.rulesync/rules/.curated');
   fs.mkdirSync(curated, { recursive: true });
-  for (const name of rules) fs.writeFileSync(path.join(curated, `${name}.md`), readRule(name));
+  const texts = rules.map((name) => readRule(name));
+  rules.forEach((name, index) => fs.writeFileSync(path.join(curated, `${name}.md`), texts[index]));
+  for (const [stem, content] of bundledSections(texts, shared))
+    fs.writeFileSync(path.join(curated, `${stem}.md`), content);
   fs.writeFileSync(path.join(project, '.rulesync/rules/project-local.md'), localRule);
   fs.mkdirSync(path.join(project, '.hotsheet2'), { recursive: true });
   fs.writeFileSync(path.join(project, '.hotsheet2/rulesync.generated.jsonc'), GENERATED_CONFIG);
@@ -101,7 +128,9 @@ export function main(args) {
           'Edit .rulesync/rules/project-local.md or the selection, then regenerate; never hand-edit AGENTS.md.',
       );
     }
-    console.log(`AGENTS.md equals the Rulesync regeneration of ${selection.rules.length} pinned rules + local rule.`);
+    console.log(
+      `AGENTS.md equals the Rulesync regeneration of ${selection.rules.length} pinned rules + bundled sections + local rule.`,
+    );
   } finally {
     fs.rmSync(project, { recursive: true, force: true });
     if (source.temporary) fs.rmSync(source.directory, { recursive: true, force: true });

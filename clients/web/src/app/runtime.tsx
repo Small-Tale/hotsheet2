@@ -293,7 +293,7 @@ import {
   type TicketView,
   ticketViewQuery,
 } from '../ticket-views';
-import { createBrowserToastClearance } from '../toast-clearance';
+import { createBrowserToastClearance, findToastObstacle } from '../toast-clearance';
 import { createToastLifetime } from '../toast-lifetime';
 import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
@@ -921,10 +921,9 @@ export async function startHotSheetWebClient() {
       item.replaceChildren(text);
     },
   });
-  // While a toast shows it rises above the media gallery's footer controls (HS2-DSW9TY).
-  const toastClearance = createBrowserToastClearance(toastHost, () =>
-    document.querySelector('[data-component="attachment-gallery"] .attachment-gallery__footer'),
-  );
+  // While a toast shows it rises above the media gallery's footer controls (HS2-DSW9TY) or, with no
+  // gallery open, the collapsed terminal drawer's restore button (HS2-T90WCZ).
+  const toastClearance = createBrowserToastClearance(toastHost, () => findToastObstacle(document));
   // While a toast shows it lives inside the topmost open modal dialog, so it stays clickable over the
   // gallery, and it moves (and re-measures its clearance) when a modal opens or closes (HS2-M2G31B).
   const toastModalHost = createBrowserToastModalHost(toastHost, () => {
@@ -1337,6 +1336,7 @@ export async function startHotSheetWebClient() {
     permissionRulesChanged,
     updatePermissionTimer,
     permissionPopupSurface,
+    permissionSettingsModalOpen,
     notificationsPaused,
     setNotificationsPaused,
   } = permissionsController;
@@ -5076,6 +5076,22 @@ export async function startHotSheetWebClient() {
       },
     },
   });
+  /**
+   * Settings → Permissions lays the pending request's popup out above its automation controls instead of
+   * floating it over them, so a pointer reaches those controls while a request waits (HS2-84XE8Q). A chat
+   * keeps hosting its own sidecar, and an open Permissions modal returns the popup to the top layer.
+   */
+  const permissionPopupInSettings = () => {
+    const current = project();
+    return Boolean(
+      current &&
+      shellMode.value === 'project' &&
+      viewMode.value === 'settings' &&
+      settingsCategory() === 'permissions' &&
+      !conversationOpen.value &&
+      !permissionSettingsModalOpen(current.id),
+    );
+  };
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   // Project Settings → General → Project Type and Settings → Orchestration (HS2-W27N1D).
   const orchestrationSurface = createOrchestrationSettingsSurface({
@@ -5113,6 +5129,7 @@ export async function startHotSheetWebClient() {
     settingsCategory: () => settingsCategory(),
     projectGeneral: (projectId) => orchestrationSurface.projectGeneral(projectId),
     orchestration: (current) => orchestrationSurface.orchestration(current),
+    pendingPermissionRequest: () => (permissionPopupInSettings() ? permissionPopupSurface('flow') : undefined),
     developmentStrategy: (projectId) => {
       const current = projects.value.find((item) => item.id === projectId),
         gitSources =
@@ -5877,6 +5894,7 @@ export async function startHotSheetWebClient() {
         }),
     },
     permissionPopupSurface,
+    permissionPopupInSettings,
     project,
     projectRestoreFailures,
     projectRestoreRank,

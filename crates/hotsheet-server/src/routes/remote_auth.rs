@@ -1,7 +1,8 @@
 //! HS2-7DBJMS remote browser auth endpoints. Device management (`/remote-auth/owner/*`)
 //! accepts the machine-local secret from the trusted host, or an admin browser session with
-//! its paired Origin and CSRF proof on every change (HS2-DXM0YN). Only a host-trusted caller
-//! (the secret or a `local` session) may grant or remove host access (HS2-85W6BE).
+//! its paired Origin and CSRF proof on every change (HS2-DXM0YN). Any manager, an admin
+//! session included, may grant or remove host access (`local`, HS2-85W6BE), as the
+//! maintainer decided in HS2-KTHQE5.
 
 use crate::AppState;
 use crate::api_error::ApiError;
@@ -58,7 +59,8 @@ pub(crate) struct Manager {
     /// The managing browser's own device id; absent for the trusted host.
     #[serde(skip_serializing_if = "Option::is_none")]
     device_id: Option<String>,
-    /// Whether this caller may grant or remove host access.
+    /// Whether this caller itself has host access (the trusted host, or a `local` session).
+    /// Granting host access no longer depends on it (HS2-KTHQE5).
     local: bool,
 }
 
@@ -184,13 +186,6 @@ fn manager(
         device_id: Some(device.id),
         local: device.local,
     })
-}
-
-fn host_access_required() -> ApiError {
-    ApiError::new(
-        StatusCode::FORBIDDEN,
-        "only the host or a host-trusted device can change host access",
-    )
 }
 
 fn device_list(state: &AppState, manager: Manager) -> Result<DeviceList, ApiError> {
@@ -363,10 +358,7 @@ pub(crate) async fn approve(
     headers: HeaderMap,
     Json(request): Json<ApproveRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let manager = manager(&state, &headers, peer.as_ref(), true)?;
-    if request.local && !manager.local {
-        return Err(host_access_required());
-    }
+    manager(&state, &headers, peer.as_ref(), true)?;
     catalog(&state)?
         .approve(
             &request.id,
@@ -409,10 +401,7 @@ pub(crate) async fn change(
     Path(id): Path<String>,
     Json(request): Json<DeviceChange>,
 ) -> Result<Json<Device>, ApiError> {
-    let manager = manager(&state, &headers, peer.as_ref(), true)?;
-    if request.local.is_some() && !manager.local {
-        return Err(host_access_required());
-    }
+    manager(&state, &headers, peer.as_ref(), true)?;
     catalog(&state)?
         .change(&id, request)
         .map_err(|_| internal())?

@@ -512,6 +512,19 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     );
   }
 
+  /**
+   * Whether a Permissions settings modal (remembered answers, rule editor, or legacy discard) is open for
+   * the project. The pending popup then returns to the top layer so it stays interactive above that
+   * modal (HS2-MAE27T) instead of sitting inert in the settings flow (HS2-84XE8Q).
+   */
+  function permissionSettingsModalOpen(projectId: string) {
+    return (
+      permissionRulesDialog.value?.projectId === projectId ||
+      permissionRuleEditor.value?.projectId === projectId ||
+      legacyDiscard.value?.projectId === projectId
+    );
+  }
+
   function permissionRulesDialogFor(projectId: string, visible: boolean) {
     const current = permissionRulesDialog.value;
     if (current && (!visible || current.projectId !== projectId)) permissionRulesDialog.value = undefined;
@@ -1173,6 +1186,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,
+    permissionSettingsModalOpen,
     notificationsPaused,
     setNotificationsPaused,
     get permissionCountdown() {

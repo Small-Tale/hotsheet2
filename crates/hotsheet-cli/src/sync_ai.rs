@@ -6,9 +6,12 @@
 //! starts with the server's permission bridge (and `session` can push into a running
 //! terminal). Without a server, no session can receive a push, and `start` launches the
 //! project's
-//! default AI tool as a detached `hotsheet-cli -C <store> trigger <tool> --prompt …
-//! --project <checkout>` that outlives this command; its output goes to
-//! `<git-dir>/hotsheet-sync-ai.log`. That session runs in the tool's configured default
+//! default AI tool as a detached `hotsheet-cli -C <store> sync --run-repair <stall>
+//! --prompt … --project <checkout>` that outlives this command; its output goes to
+//! `<git-dir>/hotsheet-sync-ai.log`. That process ([`run_repair`]) runs the turn in-process
+//! like `hotsheet-cli trigger` and then records how the session ended with the same
+//! [`record_session_end`] the server calls (HS2-SPVT6W), so sync health shows `finished`
+//! or `failed` with the reason. The session runs in the tool's configured default
 //! permission mode with no permission bridge (the headless trigger default).
 
 use std::path::{Path, PathBuf};
@@ -16,8 +19,8 @@ use std::process::Stdio;
 
 use hotsheet_ticketing::Settings;
 use hotsheet_ticketing::sync_ai::{
-    AiReach, AskContext, AskOutcome, SessionDone, ask_ai_mode, ask_for_help, configured_ai_tool,
-    store_reference,
+    AiHelpOutcome, AiReach, AskContext, AskOutcome, SessionDone, ask_ai_mode, ask_for_help,
+    configured_ai_tool, read_ai_record, record_session_end, store_reference,
 };
 
 /// What `hotsheet-cli sync` did about a stall.
@@ -130,11 +133,12 @@ impl AiReach for CliReach {
         Ok(tool)
     }
 
-    /// The detached trigger is not watched, so `done` is never called; the ask stays
-    /// `started` until the store publishes again.
+    /// The detached `sync --run-repair` records the end itself, so `done` (which would run
+    /// in this short-lived process) is not called.
+    /// The child reads the tool from the recorded ask rather than its arguments.
     fn start_session(
         &self,
-        tool: &str,
+        _tool: &str,
         prompt: &str,
         _done: SessionDone,
     ) -> Result<String, String> {
@@ -150,6 +154,11 @@ impl AiReach for CliReach {
                     .join("hotsheet-sync-ai.log")
             })
             .ok_or_else(|| "the store is not a Git repository".to_string())?;
+        // `ask_for_help` records the started ask before the launch; the child names it.
+        let stall = read_ai_record(&self.store)
+            .filter(|record| record.outcome == AiHelpOutcome::Started)
+            .map(|record| record.stall)
+            .ok_or_else(|| "the started ask was not recorded".to_string())?;
         let output = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -161,7 +170,14 @@ impl AiReach for CliReach {
         command
             .arg("-C")
             .arg(&self.store)
-            .args(["trigger", tool, "--prompt", prompt, "--project"])
+            .args([
+                "sync",
+                "--run-repair",
+                &stall,
+                "--prompt",
+                prompt,
+                "--project",
+            ])
             .arg(&self.project.root)
             .stdin(Stdio::null())
             .stdout(output)
@@ -173,4 +189,46 @@ impl AiReach for CliReach {
         let child = command.spawn().map_err(|error| error.to_string())?;
         Ok(format!("cli-trigger-{}", child.id()))
     }
+}
+
+/// `hotsheet-cli sync --run-repair <stall>` (hidden): run the repair session that
+/// `hotsheet-cli sync` started for `stall`, in this process, and record how it ended
+/// (HS2-SPVT6W). It runs only while `stall` is the store's current `started` ask, with the
+/// tool that ask names, so it cannot start a second session or a different tool. Returns
+/// the session's result, also recorded in the store's ask.
+pub fn run_repair(
+    store: &Path,
+    stall: &str,
+    prompt: &str,
+    project: &Path,
+    on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
+) -> Result<(), String> {
+    let tool = read_ai_record(store)
+        .filter(|record| record.stall == stall && record.outcome == AiHelpOutcome::Started)
+        .and_then(|record| record.tool)
+        .ok_or_else(|| format!("{stall} is not this store's started repair session"))?;
+    let result = hotsheet_aitools::prepare_trigger(
+        store,
+        &tool,
+        Some(project.to_path_buf()),
+        None,
+        None,
+        vec![],
+        false,
+    )
+    .and_then(|trigger| {
+        let mut turns = hotsheet_aitools::ConnectionRegistry::new(30_000);
+        trigger.run_turn(
+            prompt,
+            None,
+            true,
+            format!("cli-sync-repair-{}", std::process::id()),
+            &mut turns,
+            on_event,
+        )
+    })
+    .map_err(|error| error.to_string())
+    .and_then(|done| done.reason.session_result());
+    record_session_end(store, stall, result.clone());
+    result
 }

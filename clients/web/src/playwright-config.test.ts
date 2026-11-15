@@ -57,3 +57,10 @@ describe('Playwright bridge home isolation (HS2-9NB1KA)', () => {
     expect(legacy).not.toBe(resolve(homedir(), '.hotsheet'));
   });
 });
+
+describe('Playwright native keychain isolation (HS2-XTQHPK)', () => {
+  it('denies the OS keychain to the runner, its workers, and the dev bridge they spawn', () => {
+    // The config sets it on process.env before the web server and workers start, so both inherit it.
+    expect(process.env.HOTSHEET_NATIVE_SECRETS).toBe('deny');
+  });
+});

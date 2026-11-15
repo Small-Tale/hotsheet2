@@ -1968,14 +1968,41 @@ request cannot tell them apart. A plain session keeps the remote route set. The
 grants persist in the catalog; a catalog written before them loads with both
 false.
 
+**Host-only server routes (HS2-S8R3PD).** The bridge forwards any project API path,
+so the server enforces the local grant itself. After authentication
+`require_secret` records the caller (machine-secret bearer, client certificate, or
+browser session with its local grant), and the shared `HostAccess` check in
+`routes/auth.rs` answers a browser session without local with 403 and
+`code: "host_access_required"` before the body is parsed or the checkout resolved.
+The checked routes either start a host program or name an arbitrary host path:
+
+| Route                                                                                                | Host effect                                          |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `POST /checkouts/{ref}/tickets/{id}/code-review`                                                     | `git difftool` for a ticket's commits or files       |
+| `POST /checkouts/{ref}/repository/review`                                                            | `git difftool` for the ahead range or worktree files |
+| `POST /checkouts/{ref}/repository/files/action`                                                      | open or reveal a repository file                     |
+| `POST /checkouts/{ref}/tickets/{id}/attachments/{aid}/action`, `…/attachments/by-name/{name}/action` | open, reveal, or report the attachment's host path   |
+| `POST /projects/open`, `POST /checkouts`                                                             | open or register a project at any host path          |
+| `POST /stores`                                                                                       | host a ticket store at any host path                 |
+| `PUT /checkouts/{ref}/sources/{id}` with `provider: "git"`                                           | host a Git source at its locator path                |
+| `PATCH /checkouts/{ref}/sources/{id}/relink`                                                         | re-point a Git source to another host path           |
+
+The machine-secret bearer, a client certificate, and a local session keep these
+routes. Reads, code-review discovery (`GET …/code-review`), attachment downloads,
+and provider (non-Git) source links stay remote features, as do terminals,
+command runs and AI launches, which run on the host by design. A unit-level
+policy test fails when a route handler calls a host launcher without `HostAccess`.
+
 Device management (`/remote-auth/owner`, `/owner/changes?after=<revision>`,
 `/owner/approve`, `/owner/reject`, `PATCH|DELETE /owner/devices/{id}`) accepts
 the machine secret from the trusted host or an admin session; a session change
 also needs its paired Origin and CSRF token, and the read role does not limit
-it. Only the trusted host or a local session may grant or remove local, so an
-admin cannot make itself host-trusted. `revoke-all` stays with the trusted host.
+it. Any manager may grant or remove local, an admin session included, even for
+itself (HS2-KTHQE5, a maintainer decision): the admin grant is therefore enough to
+gain host access, so grant admin only to devices you would trust with the host.
+`revoke-all` stays with the trusted host.
 The list answer names its change cursor and its caller (`manager.device_id`,
-`manager.local`); `/owner/changes` is a 25-second long poll that answers when
+`manager.local`, whether the caller itself has host access); `/owner/changes` is a 25-second long poll that answers when
 the cursor moves and re-authorizes after the wait. The headless equivalents are
 `remote sessions reject <request-id>` and `remote sessions update <device-id>
 [--role read_only|read_write] [--admin true|false] [--local true|false]`. A

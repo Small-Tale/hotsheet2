@@ -343,11 +343,13 @@ async fn hs2_7dbjms_origin_csrf_rotation_logout_and_restart() {
             .status(),
         StatusCode::FORBIDDEN
     );
+    // A write the session may make; `/stores` names a host path and needs host access since
+    // HS2-S8R3PD, so it no longer proves CSRF acceptance for a plain session.
     let allowed = router
         .clone()
         .oneshot(request(
             "POST",
-            "/stores",
+            "/checkouts/missing-checkout/close",
             Some(json!({})),
             Some(&session),
             Some(&csrf),
@@ -682,7 +684,8 @@ async fn hs2_85w6be_dxm0yn_admin_and_local_grants_gate_device_management() {
         .insert(header::ORIGIN, "https://attacker.invalid".parse().unwrap());
     assert_eq!(status(&router, foreign).await, StatusCode::UNAUTHORIZED);
 
-    // A non-local admin approves and changes admin, but never grants host access.
+    // HS2-KTHQE5: any admin, with or without host access itself, approves with and changes
+    // both grants.
     let admin_change = |method: &str, path: &str, body: Value| {
         request(
             method,
@@ -699,36 +702,33 @@ async fn hs2_85w6be_dxm0yn_admin_and_local_grants_gate_device_management() {
             admin_change(
                 "POST",
                 "/remote-auth/owner/approve",
-                json!({"id": target, "role": "read_write", "local": true}),
-            ),
-        )
-        .await,
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        status(
-            &router,
-            admin_change(
-                "POST",
-                "/remote-auth/owner/approve",
-                json!({"id": target, "role": "read_write", "admin": true}),
+                json!({"id": target, "role": "read_write", "admin": true, "local": true}),
             ),
         )
         .await,
         StatusCode::NO_CONTENT
     );
-    assert_eq!(
-        status(
-            &router,
-            admin_change("PATCH", &admin_path, json!({"local": true}))
-        )
-        .await,
-        StatusCode::FORBIDDEN
-    );
     let plain_path = format!(
         "/remote-auth/owner/devices/{}",
         plain_device["id"].as_str().unwrap()
     );
+    for local in [true, false] {
+        let changed = router
+            .clone()
+            .oneshot(admin_change("PATCH", &plain_path, json!({"local": local})))
+            .await
+            .unwrap();
+        assert_eq!(changed.status(), StatusCode::OK);
+        assert_eq!(json_body(changed).await["local"], json!(local));
+    }
+    // The admin may also grant host access to itself.
+    let own = router
+        .clone()
+        .oneshot(admin_change("PATCH", &admin_path, json!({"local": true})))
+        .await
+        .unwrap();
+    assert_eq!(own.status(), StatusCode::OK);
+    assert_eq!(json_body(own).await["local"], json!(true));
     let promoted = router
         .clone()
         .oneshot(admin_change("PATCH", &plain_path, json!({"admin": true})))

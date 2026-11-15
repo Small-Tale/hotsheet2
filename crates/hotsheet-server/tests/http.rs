@@ -26804,6 +26804,156 @@ async fn checkout_cursors_interchange_between_server_and_serverless_mcp() {
     );
 }
 
+/// HS2-DX78E7: with a hosted source linked, the serverless MCP backend keeps the server's
+/// source set (`provider:{connection id}`) and names the source it cannot read, so a
+/// cursor from a server page whose provider read failed continues serverlessly and the
+/// reverse, and both sides report the same omitted connection.
+#[tokio::test]
+async fn mixed_checkout_cursors_interchange_with_serverless_mcp_omitting_hosted_source() {
+    use hotsheet_mcp::Backend as _;
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    let ticket_store = workspace.path().join("mixed.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("MIX")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    // No scripted responses: every hosted read fails, as an unavailable source would.
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(VecDeque::new()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let router = app(st
+        .with_checkout_registry(&registry_path)
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            transport,
+        ))));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    for title in ["Charlie", "Alpha", "Bravo"] {
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(&serde_json::json!({"title":title}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    let connection = serde_json::json!({
+        "id":"github-mixed","provider":"github","locator":"acme/repo","name":"Issues",
+        "default":false,"settings":{"credential":{"secret":"github-fixture"}}
+    });
+    for (method, uri, body) in [
+        (
+            "POST",
+            "/provider-connections".to_owned(),
+            connection.to_string(),
+        ),
+        (
+            "PUT",
+            format!("/checkouts/{checkout_id}/sources/github-mixed"),
+            r#"{"provider":"github","locator":"acme/repo","make_default":false}"#.to_owned(),
+        ),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(authed(method, &uri, Some(&body)))
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "{uri}: {}",
+            response.status()
+        );
+    }
+    let serverless = hotsheet_mcp::CoreBackend::new(FsStore::open(&ticket_store).unwrap())
+        .with_checkout_registry(hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            &registry_path,
+        ));
+    let mcp_page = |cursor: Option<&str>| {
+        let mut pairs = vec![
+            ("sort".to_owned(), "title".to_owned()),
+            ("page_size".to_owned(), "2".to_owned()),
+        ];
+        if let Some(cursor) = cursor {
+            pairs.push(("cursor".to_owned(), cursor.to_owned()));
+        }
+        serverless
+            .get(&format!("/checkouts/{checkout_id}/tickets"), &pairs)
+            .unwrap()
+    };
+    let server_page = |cursor: Option<String>| {
+        let router = router.clone();
+        let uri = format!(
+            "/checkouts/{checkout_id}/tickets?sort=title&page_size=2{}",
+            cursor.map(|c| format!("&cursor={c}")).unwrap_or_default()
+        );
+        async move {
+            let response = router.oneshot(authed("GET", &uri, None)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            body_json(response).await
+        }
+    };
+    let titles = |page: &serde_json::Value| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["title"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let omitted = |page: &serde_json::Value| {
+        let errors = page["source_errors"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{page}"));
+        assert_eq!(errors.len(), 1, "{page}");
+        assert!(
+            errors[0].as_str().unwrap().starts_with("github-mixed: "),
+            "{page}"
+        );
+    };
+
+    // Server → serverless.
+    let first = server_page(None).await;
+    omitted(&first);
+    let second = mcp_page(first["next_cursor"].as_str());
+    omitted(&second);
+    assert_eq!(
+        first["counts"], second["counts"],
+        "both count only Git rows"
+    );
+    assert_eq!(
+        [titles(&first), titles(&second)].concat(),
+        ["Alpha", "Bravo", "Charlie"]
+    );
+
+    // Serverless → server.
+    let first = mcp_page(None);
+    omitted(&first);
+    let second = server_page(first["next_cursor"].as_str().map(str::to_owned)).await;
+    omitted(&second);
+    assert_eq!(
+        [titles(&first), titles(&second)].concat(),
+        ["Alpha", "Bravo", "Charlie"]
+    );
+}
+
 /// HS2-3JEFQT: store-level unpaged lists (`GET /tickets`, `GET /stores/{id}/tickets`) share
 /// the 500-row bound: implicit overflow fails, an explicit `limit` truncates with
 /// `x-hotsheet-truncated`, and `limit` + `page_after` keyset paging reaches every row.

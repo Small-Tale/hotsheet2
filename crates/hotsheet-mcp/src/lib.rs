@@ -37,6 +37,11 @@ pub struct BackendError {
     pub message: String,
 }
 
+/// The sanitized `source_errors` reason for a hosted source a serverless checkout read
+/// omits (HS2-DX78E7). It names no credential or provider response.
+const SERVERLESS_HOSTED_SOURCE_UNAVAILABLE: &str =
+    "hosted provider sources need a running Hot Sheet server in serverless MCP mode";
+
 /// HS2-9DV32Q: retain the historical array for a complete checkout read, but
 /// make an incomplete read impossible to mistake for one.
 fn checkout_array_result(value: Value, partial: bool, truncated: bool) -> Value {
@@ -1885,7 +1890,7 @@ mod core_backend {
                 .and_then(|rest| rest.split_once("/groups"))
                 && let Some(rest) = tail(rest)
             {
-                let (checkout, stores) = self.checkout_context(reference)?;
+                let (checkout, stores) = self.checkout_context(reference, false)?;
                 let registry = hotsheet_ticketing::groups::GroupRegistry::for_checkout(Path::new(
                     &checkout.root,
                 ));
@@ -1952,16 +1957,25 @@ mod core_backend {
                 .map_err(group_err)
         }
 
+        /// The checkout and its opened git stores. A checkout-wide listing also accepts a
+        /// checkout whose only sources are hosted providers, so it can name them as
+        /// omitted instead of failing (HS2-DX78E7).
         fn checkout_context(
             &self,
             reference: &str,
+            listing: bool,
         ) -> Result<(hotsheet_ticketing::checkouts::Checkout, Vec<FsStore>), BackendError> {
             let reference = decode_checkout_reference(reference)?;
             let checkout = self
                 .checkout_registry
                 .resolve(&reference)
                 .map_err(checkout_err)?;
-            if checkout.stores.is_empty() {
+            let external_only = listing
+                && checkout
+                    .sources
+                    .iter()
+                    .any(|source| source.provider != "git");
+            if checkout.stores.is_empty() && !external_only {
                 return Err(bad_request("checkout has no linked ticket stores"));
             }
             let stores = checkout
@@ -2084,10 +2098,42 @@ mod core_backend {
     }
 
     impl CoreBackend {
+        /// The hosted-provider sources the server would merge into this checkout read,
+        /// selected by the server's own rule (HS2-DX78E7). Serverless `--path` has no
+        /// trusted credential broker (`docs/16-external-sync-interface.md` §16.8.1), so
+        /// every one of them is omitted and named rather than silently skipped. An
+        /// unreadable connection registry counts a source as enabled, so it is reported
+        /// as omitted instead of hiding it.
+        fn omitted_external_sources<'a>(
+            &self,
+            checkout: &'a hotsheet_ticketing::checkouts::Checkout,
+            query: &[(String, String)],
+        ) -> Result<Vec<&'a hotsheet_ticketing::checkouts::TicketSource>, BackendError> {
+            let source = query
+                .iter()
+                .find(|(key, _)| key == "source")
+                .map(|(_, value)| value.as_str());
+            if source.is_some_and(|source| source != "git") {
+                return Err(bad_request("source must be git"));
+            }
+            let registry = hotsheet_ticketing::ProviderConfigRegistry::new(
+                self.store.root().join("providers.json"),
+            );
+            hotsheet_ticketing::checkout_page::merged_external_sources(
+                checkout,
+                source.is_some(),
+                |id| Ok::<_, std::convert::Infallible>(registry.disabled(id).unwrap_or(false)),
+            )
+            .map_err(|never| match never {})
+        }
+
         /// One bounded checkout page over file scans (HS2-JVF20F): the same shared value-
         /// keyset merge, v2 cursor, and `{items, next_cursor, counts}` envelope the server
-        /// returns, so a serverless agent can page a whole checkout. Cursors interchange
-        /// with the server's whenever the checkout's source set matches (git stores only).
+        /// returns, so a serverless agent can page a whole checkout. The source set
+        /// includes the checkout's hosted providers under their `provider:{connection id}`
+        /// keys, exactly as on the server, so cursors interchange; each hosted source is
+        /// read as exhausted and named in `source_errors`, and `counts` cover only the git
+        /// stores, as the server reports a failed source (HS2-DX78E7).
         fn checkout_page(
             &self,
             checkout: &hotsheet_ticketing::checkouts::Checkout,
@@ -2122,9 +2168,15 @@ mod core_backend {
                 .iter()
                 .map(hotsheet_ticketing::git_connection_id)
                 .collect::<Vec<_>>();
+            let external = self.omitted_external_sources(checkout, query)?;
             let source_keys = connections
                 .iter()
                 .map(|connection| checkout_page::git_source_key(connection))
+                .chain(
+                    external
+                        .iter()
+                        .map(|source| checkout_page::provider_source_key(&source.connection_id)),
+                )
                 .collect::<Vec<_>>();
             // Validate the cursor before paying for counts.
             checkout_page::decode_cursor(
@@ -2153,7 +2205,13 @@ mod core_backend {
             let contexts = auto_context::effective(&checkout.settings())
                 .map_err(|e| bad_request(e.to_string()))?;
             let fetch = |request: checkout_page::SourceFetch<'_>| {
-                let store = &stores[request.source];
+                let Some(store) = stores.get(request.source) else {
+                    // A hosted source: unreadable here, so it contributes no rows.
+                    return Ok(checkout_page::SourceBatch {
+                        exhausted: true,
+                        ..Default::default()
+                    });
+                };
                 let connection = &connections[request.source];
                 let mut source_query = build_query(query, store.root())?;
                 Self::resolve_group_filter(&mut source_query, Some(checkout));
@@ -2218,7 +2276,15 @@ mod core_backend {
                 items: page.items,
                 next_cursor: page.next_cursor,
                 counts: with_counts.then_some(counts),
-                source_errors: Vec::new(),
+                source_errors: external
+                    .iter()
+                    .map(|source| {
+                        checkout_page::source_error(
+                            &source.connection_id,
+                            crate::SERVERLESS_HOSTED_SOURCE_UNAVAILABLE,
+                        )
+                    })
+                    .collect(),
             }))
         }
     }
@@ -2394,7 +2460,7 @@ mod core_backend {
                 .and_then(|rest| rest.strip_suffix("/phase-report"))
             {
                 let bounds = phase_report_bounds(query)?;
-                let (_, stores) = self.checkout_context(checkout)?;
+                let (_, stores) = self.checkout_context(checkout, false)?;
                 let mut tickets = Vec::new();
                 for store in stores {
                     tickets.extend(store.list_tickets_resilient().map_err(store_err)?.tickets);
@@ -2405,7 +2471,7 @@ mod core_backend {
                 .strip_prefix("/checkouts/")
                 .and_then(|rest| rest.strip_suffix("/confidence-report"))
             {
-                let (_, stores) = self.checkout_context(checkout)?;
+                let (_, stores) = self.checkout_context(checkout, false)?;
                 let mut tickets = Vec::new();
                 for store in stores {
                     tickets.extend(store.list_tickets_resilient().map_err(store_err)?.tickets);
@@ -2531,7 +2597,7 @@ mod core_backend {
             }
             if let Some(reference) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = reference.split_once("/tickets") {
-                    let (checkout, stores) = self.checkout_context(checkout)?;
+                    let (checkout, stores) = self.checkout_context(checkout, suffix.is_empty())?;
                     if let Some(id) = suffix
                         .strip_prefix('/')
                         .and_then(|rest| rest.strip_suffix("/note-doctor"))
@@ -2561,6 +2627,7 @@ mod core_backend {
                         {
                             return self.checkout_page(&checkout, &stores, query);
                         }
+                        let partial = !self.omitted_external_sources(&checkout, query)?.is_empty();
                         let order = build_query(query, self.store.root())?;
                         let max = hotsheet_ticketing::checkout_order::CHECKOUT_READ_MAX_ROWS;
                         if order.limit.is_some_and(|limit| limit > max) {
@@ -2617,10 +2684,6 @@ mod core_backend {
                                 obj.insert("store".into(), store);
                             }
                         }
-                        let partial = checkout
-                            .sources
-                            .iter()
-                            .any(|source| source.provider != "git");
                         return Ok(checkout_array_result(Value::Array(all), partial, truncated));
                     }
                     let id = suffix.trim_start_matches('/');
@@ -2922,13 +2985,13 @@ mod core_backend {
                     return self.claim_checkout_next(reference, body);
                 }
                 if let Some(reference) = rest.strip_suffix("/follow-up-links") {
-                    let (checkout, stores) = self.checkout_context(reference)?;
+                    let (checkout, stores) = self.checkout_context(reference, false)?;
                     return self
                         .for_checkout(stores.into_iter().next().unwrap(), checkout)
                         .send(method, "/follow-up-links", body);
                 }
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
-                    let (checkout, stores) = self.checkout_context(checkout)?;
+                    let (checkout, stores) = self.checkout_context(checkout, false)?;
                     if method == "POST" && (suffix.is_empty() || suffix.starts_with('?')) {
                         let requested = suffix.split_once("store=").map(|(_, v)| v);
                         let store = match requested {
@@ -5076,6 +5139,174 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("sources were omitted")
+        );
+    }
+
+    /// HS2-DX78E7: a serverless checkout page keeps the server's source set, names each
+    /// enabled hosted source it cannot read in `source_errors`, and counts only the git
+    /// rows it read; a disabled connection is left out as on the server. An external-only
+    /// checkout answers with no rows and the omitted sources instead of failing.
+    #[test]
+    fn hs2_dx78e7_serverless_checkout_pages_name_omitted_hosted_sources() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let store_root = root.path().join("HS.hs2");
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
+        for title in ["Alpha", "Bravo", "Charlie"] {
+            ops::create(
+                &store,
+                hotsheet_model::Ulid::new(),
+                "HS",
+                hotsheet_model::Timestamp::new("2026-10-01T00:00:00Z"),
+                hotsheet_ticketing::NewTicket {
+                    title: title.into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &checkout_root,
+                Some("project"),
+                None,
+                vec![store_root.clone()],
+            )
+            .unwrap();
+        let backend = CoreBackend::new(FsStore::open(&store_root).unwrap()).with_checkout_registry(
+            hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+                root.path().join("home/checkouts.json"),
+            ),
+        );
+        let query = |checkout: &str, args: Value| {
+            let mut args = args;
+            args["checkout"] = Value::from(checkout);
+            call(&backend, "hotsheet_query", args)
+        };
+        let list = |checkout: &str, params: &[(&str, &str)]| {
+            backend.get(
+                &format!("/checkouts/{checkout}/tickets"),
+                &params
+                    .iter()
+                    .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let git_only = list(&checkout.id, &[("sort", "title"), ("page_size", "2")]).unwrap();
+        assert!(git_only.get("source_errors").is_none(), "{git_only}");
+        let git_cursor = git_only["next_cursor"].as_str().unwrap().to_owned();
+
+        // Synthetic connections in the store's own registry: one enabled, one disabled.
+        let providers =
+            hotsheet_ticketing::ProviderConfigRegistry::new(store_root.join("providers.json"));
+        let connection =
+            |id: &str, provider: &str, disabled: bool| hotsheet_ticketing::ProviderConnection {
+                id: id.into(),
+                provider: provider.into(),
+                locator: format!("synthetic/{id}"),
+                name: None,
+                default: false,
+                settings: json!({"credential":{"secret":"synthetic-key"}}),
+                disabled,
+            };
+        let enabled = connection("github-synthetic", "github", false);
+        let off = connection("jira-synthetic", "jira", true);
+        providers.save(&[enabled.clone(), off.clone()]).unwrap();
+        for linked in [&enabled, &off] {
+            registry
+                .add_registered_connection(&providers, &checkout.id, linked, false)
+                .unwrap();
+        }
+        let expected_error = format!("github-synthetic: {SERVERLESS_HOSTED_SOURCE_UNAVAILABLE}");
+        let titles = |page: &Value| {
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["title"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+
+        let first = query(&checkout.id, json!({"sort": "title", "page_size": 2}));
+        assert_eq!(titles(&first), ["Alpha", "Bravo"], "{first}");
+        assert_eq!(first["source_errors"], json!([expected_error]));
+        assert_eq!(first["counts"]["total"], 3);
+        // The cursor carries the server's source set, with the hosted source exhausted.
+        let cursor = first["next_cursor"].as_str().unwrap().to_owned();
+        let hex = cursor.strip_prefix("v2.").unwrap();
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap())
+            .collect::<Vec<_>>();
+        let decoded: Value = serde_json::from_slice(&bytes).unwrap();
+        let git_key = hotsheet_ticketing::checkout_page::git_source_key(
+            &hotsheet_ticketing::git_connection_id(&store),
+        );
+        assert_eq!(decoded["sources"].as_array().unwrap().len(), 2, "{decoded}");
+        assert_eq!(decoded["sources"][0]["key"], git_key.as_str());
+        assert_eq!(decoded["sources"][1]["key"], "provider:github-synthetic");
+        assert_eq!(decoded["sources"][1]["exhausted"], true);
+
+        let rest = query(
+            &checkout.id,
+            json!({"sort": "title", "page_size": 2, "cursor": cursor, "counts": false}),
+        );
+        assert_eq!(titles(&rest), ["Charlie"], "{rest}");
+        assert!(rest.get("next_cursor").is_none_or(Value::is_null));
+        assert_eq!(rest["counts"], Value::Null);
+        assert_eq!(rest["source_errors"], json!([expected_error]));
+        // A cursor computed for the git-only source set is stale, not reinterpreted.
+        let stale = list(
+            &checkout.id,
+            &[
+                ("sort", "title"),
+                ("page_size", "2"),
+                ("cursor", &git_cursor),
+            ],
+        );
+        assert!(stale.unwrap_err().message.contains("stale"));
+        // `source=git` restricts the read to git, as on the server, so nothing is omitted.
+        let git_rows = list(
+            &checkout.id,
+            &[("sort", "title"), ("page_size", "5"), ("source", "git")],
+        )
+        .unwrap();
+        assert_eq!(titles(&git_rows), ["Alpha", "Bravo", "Charlie"]);
+        assert!(git_rows.get("source_errors").is_none(), "{git_rows}");
+        assert!(
+            list(&checkout.id, &[("source", "github")])
+                .unwrap_err()
+                .message
+                .contains("source must be git")
+        );
+
+        // An external-only checkout reads as empty and partial rather than failing.
+        let external_root = root.path().join("external");
+        std::fs::create_dir(&external_root).unwrap();
+        let external = registry
+            .register(&external_root, Some("external"), None, Vec::new())
+            .unwrap();
+        registry
+            .add_registered_connection(&providers, &external.id, &enabled, false)
+            .unwrap();
+        let page = query(&external.id, json!({"page_size": 5}));
+        assert_eq!(page["items"], json!([]), "{page}");
+        assert_eq!(page["source_errors"], json!([expected_error]));
+        assert_eq!(page["counts"]["total"], 0);
+        let unpaged = query(&external.id, json!({}));
+        assert_eq!(unpaged["items"], json!([]), "{unpaged}");
+        assert_eq!(unpaged["partial"], true);
+        // Ticket reads by id still need a linked git store.
+        assert!(
+            backend
+                .get(&format!("/checkouts/{}/tickets/HS-1", external.id), &[])
+                .unwrap_err()
+                .message
+                .contains("no linked ticket stores")
         );
     }
 

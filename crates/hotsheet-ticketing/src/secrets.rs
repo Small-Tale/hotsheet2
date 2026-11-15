@@ -164,6 +164,9 @@ impl SecretStore for NativeKeychain {
         if cfg!(test) {
             return Err(native_unit_test_refusal());
         }
+        if native_secrets_denied() {
+            return Err(native_secrets_denied_refusal());
+        }
         platform_set(account, secret)
     }
 
@@ -174,6 +177,9 @@ impl SecretStore for NativeKeychain {
         }
         if cfg!(test) {
             return Err(native_unit_test_refusal());
+        }
+        if native_secrets_denied() {
+            return Err(native_secrets_denied_refusal());
         }
         platform_get(account)
     }
@@ -186,12 +192,34 @@ impl SecretStore for NativeKeychain {
         if cfg!(test) {
             return Err(native_unit_test_refusal());
         }
+        if native_secrets_denied() {
+            return Err(native_secrets_denied_refusal());
+        }
         platform_delete(account)
     }
 }
 
 fn native_unit_test_refusal() -> SecretError {
     SecretError::Unavailable("HS2-SFVWN5: unit tests must inject synthetic credentials; native adapter tests are explicit opt-in".into())
+}
+
+/// HS2-XTQHPK: the test environment's kill switch for the OS keychain. Every process cargo,
+/// Playwright, or Vitest launches sets it, so a spawned binary can never raise a keychain
+/// prompt. It only restricts: it never enables fixture credentials (HS2-SFVWN5).
+pub const NATIVE_SECRETS_ENV: &str = "HOTSHEET_NATIVE_SECRETS";
+
+fn native_secrets_denied() -> bool {
+    native_secrets_denied_by(std::env::var_os(NATIVE_SECRETS_ENV).as_deref())
+}
+
+fn native_secrets_denied_by(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some_and(|value| value == "deny")
+}
+
+fn native_secrets_denied_refusal() -> SecretError {
+    SecretError::Unavailable(format!(
+        "HS2-XTQHPK: {NATIVE_SECRETS_ENV}=deny refuses the OS keychain in test processes; pass --test-fixture-credentials or inject a synthetic store"
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -606,6 +634,29 @@ fn validate(provider: &str) -> Result<(), SecretError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hs2_xtqhpk_only_an_explicit_deny_value_refuses_the_os_keychain() {
+        use std::ffi::OsStr;
+        assert!(native_secrets_denied_by(Some(OsStr::new("deny"))));
+        assert!(!native_secrets_denied_by(None));
+        assert!(!native_secrets_denied_by(Some(OsStr::new(""))));
+        assert!(!native_secrets_denied_by(Some(OsStr::new("allow"))));
+        let message = native_secrets_denied_refusal().to_string();
+        assert!(message.contains("HS2-XTQHPK"));
+        assert!(message.contains(NATIVE_SECRETS_ENV));
+    }
+
+    #[test]
+    fn hs2_xtqhpk_cargo_test_processes_run_with_the_keychain_denied() {
+        // `.cargo/config.toml` forces this for every process cargo or nextest launches.
+        assert_eq!(
+            std::env::var(NATIVE_SECRETS_ENV).as_deref(),
+            Ok("deny"),
+            "HS2-XTQHPK: .cargo/config.toml must force {NATIVE_SECRETS_ENV}=deny"
+        );
+        assert!(native_secrets_denied());
+    }
 
     #[test]
     fn hs2_sfvwn5_unit_native_port_refuses_without_touching_os_credentials() {
