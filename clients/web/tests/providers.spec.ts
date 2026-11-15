@@ -23024,7 +23024,8 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   const inspector = page.locator('#app-right-rail'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
   await expect(info).toBeVisible();
-  await expect(info.locator('[data-component="list-header"]')).toHaveCount(4);
+  // Details, Blocked By (HS2-CHH28E), and the notes and tags sections each own a list header.
+  await expect(info.locator('[data-component="list-header"]')).toHaveCount(5);
   await expect(info.locator('[data-component="list-item"]')).toHaveCount(2);
   await expect(info.locator('.ticket-info-panel__details-section [data-component="list-header"]')).toHaveText(
     'Details',

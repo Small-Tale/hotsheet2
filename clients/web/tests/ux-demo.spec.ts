@@ -9233,10 +9233,12 @@ test('shows the chat model in the trigger and effort in the settings menu (HS2-X
 test('exposes a General app-settings entry in the settings navigator', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 800 });
   await page.goto('/ux-demo?component=settings-navigation');
-  const general = page.locator('[data-item-id="general"]');
+  // HS2-BZHMEV adds a second example (pairing requests waiting); this test reads the interactive navigator.
+  const interactive = page.getByRole('region', { name: 'Interactive' });
+  const general = interactive.locator('[data-item-id="general"]');
   await expect(general).toBeVisible();
   await expect(general).toContainText('General');
-  await expect(page.getByText('App Settings', { exact: true })).toBeVisible();
+  await expect(interactive.getByText('App Settings', { exact: true })).toBeVisible();
 });
 
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
