@@ -228,7 +228,7 @@ paths. Hot Sheet's server and CLI build scripts deliberately embed the worktree'
 `HOT_SHEET_LOCAL_SOURCE_ROOT`; a reused artifact carrying another checkout's root
 would defeat the source-revision safeguards. See the HS2-ZJXAXY findings in §12.7.9.
 
-Two other local environment effects look like regressions but are not:
+Three other local environment effects look like regressions but are not:
 
 - A shell that inherits the local host's `HOT_SHEET_BUILD_REVISION` pin builds an
   explicitly revisioned binary that monitors no source root. The server compatibility and
@@ -237,6 +237,13 @@ Two other local environment effects look like regressions but are not:
 - `terminal_ws` drives the workspace `hs-fake-agent` binary, which `-p hotsheet-server`
   alone does not build; run nextest with `--workspace` or first run
   `cargo build -p hotsheet-terminals --bin hs-fake-agent`.
+- macOS assesses a newly linked executable on its first launch, one queue for the whole
+  host: 40 fresh copies launched together waited 0.2 to 0.8 s each on an idle machine, and a
+  700-launch flood held a freshly relinked `hs-fake-agent` past the 5 s windows of the
+  `hotsheet-terminals` `fake_agent` tests, which then saw no output and no exit. Those tests
+  launch the binary once to completion before timing anything, so a busy host only slows
+  them (HS2-W00050). A test that times a freshly built binary's first output should do the
+  same.
 
 ### 12.6.2 Isolated Clippy artifacts
 
