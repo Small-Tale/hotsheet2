@@ -21,6 +21,23 @@ pub(crate) async fn ticket_flow_summary(
     Ok(Json(hotsheet_ticketing::analytics::ticket_flow(&tickets)))
 }
 
+/// `GET /stores/{store_id}/analytics/tickets`: the same summary for one store the host serves
+/// (HS2-82A7A7). The machine host is anchored on an empty bootstrap store, so a CLI read names
+/// the project's store instead of relying on the host's default.
+pub(crate) async fn store_ticket_flow_summary(
+    State(state): State<AppState>,
+    Path(store_id): Path<String>,
+) -> Result<Json<hotsheet_ticketing::analytics::TicketFlowSummary>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let entry = crate::routes::store_scoped::served_store_entry(&state, &store_id)?;
+        let tickets = ops::query(&entry.store, &TicketQuery::default())
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(Json(hotsheet_ticketing::analytics::ticket_flow(&tickets)))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
 /// One linked Git store's analytics. Keeping the store identity lets a client show project
 /// details while counting a store linked to two checkouts only once in cross-project totals.
 #[derive(Serialize)]

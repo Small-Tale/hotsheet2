@@ -239,6 +239,14 @@ and commits at the sibling `/repository/files` and `/repository/commits` endpoin
 current ticket-flow aggregates at
 `/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
 
+**Store-scoped project reads (HS2-82A7A7).** `GET /stores/{store_id}/analytics/tickets` and
+`GET /stores/{store_id}/activity` return the same ticket-flow summary and filtered activity
+window as the unprefixed routes for one store the host serves. `store_id` is the store's
+path-derived id (`git_connection_id`). A store that a registered checkout links is hosted
+again on demand, as checkout routes do after an unhost sweep (HS2-ARJ9J1); any other id is
+`404` ("this Hot Sheet host does not serve store …"). The unprefixed routes read the host's
+own store, which on the machine host is its empty bootstrap anchor.
+
 **Checkout analytics (HS2-38RJMK).** `GET /checkouts/{reference}/analytics` returns the
 current ticket-flow and settled-plus-live usage rollup for each distinct linked Git
 store, identified by store id. It lists non-Git ticket sources separately as
@@ -420,8 +428,10 @@ the current directory, and prints whether it applied; the server pushes it as th
 ([32](32-notifier-plugins.md) §32.8.5, HS2-M8HHEA). Activity accepts `--session`;
 notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipient`.
 An absent server fails with a start-server instruction. The ticket-flow summary covers
-the server's selected store; activity uses its persisted rolling window, and
-notifications use its bounded server-process feed. Acknowledgement uses the same id and
+the selected `-C` store and activity uses that store's persisted rolling window: both read
+`/stores/{store_id}/…`, so they work on the machine host as well as a per-store host, and a
+store the host does not serve fails with the host's `404` (HS2-82A7A7). Notifications use
+the server's bounded server-process feed. Acknowledgement uses the same id and
 authorization as the web client. A checkout read includes notices for its linked stores and
 filters recipient-scoped records by that checkout's Git user identity (HS2-ZP869N). Each
 record includes creation time; new records and acknowledgements emit live change events.
@@ -704,9 +714,11 @@ local server resolves its host through one helper, `external_launch::discover_lo
   selected store with `hotsheet-cli serve`.
 - Project commands (`live-state`, `commands`, `terminal message`, `ci report`,
   `notifications`, `ticket-flow`, `activity`, and the sync kick after a write) use a host anchored on the selected store
-  first, then the machine host. `ticket-flow` and `activity` read the host's own store, so
-  they refuse a host anchored on another store rather than report the bootstrap store's
-  data as the project's.
+  first, then the machine host. `ticket-flow` and `activity` name the selected store in a
+  store-scoped route, so the machine host reads the project rather than its bootstrap store
+  (HS2-82A7A7).
+- Host-wide commands need no store: without `-C`, a store link, or `$HOTSHEET_STORE` they
+  still reach the machine host.
 - A stale record (its pid is gone) does not count as a host. With no live host the error
   names the machine host and `hotsheet-cli serve`, and lists each record it looked for.
 

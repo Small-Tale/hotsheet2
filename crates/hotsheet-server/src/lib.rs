@@ -92,7 +92,8 @@ use routes::accounts::{
     wait_github_device_auth,
 };
 use routes::activity::{
-    checkout_activity, checkout_current_diff, ingest_activity, list_activity, post_announce,
+    checkout_activity, checkout_current_diff, ingest_activity, list_activity, list_store_activity,
+    post_announce,
 };
 use routes::auth::require_secret;
 use routes::checkout_tickets::{
@@ -159,8 +160,8 @@ use routes::project_tools::{
     list_commands, list_custom_views, list_notifications, phase_report, publish_notification,
     record_checkout_command_launch, record_command_launch, run_checkout_command, run_command,
     save_checkout_command_groups, save_checkout_commands, save_checkout_custom_views,
-    save_command_groups, save_commands, save_custom_views, synthesize_speech, ticket_flow_summary,
-    usage_metrics_summary,
+    save_command_groups, save_commands, save_custom_views, store_ticket_flow_summary,
+    synthesize_speech, ticket_flow_summary, usage_metrics_summary,
 };
 use routes::providers::{
     assign_provider_current_user, assign_provider_ticket, close_provider_ticket,
@@ -2152,6 +2153,13 @@ pub fn app(state: AppState) -> Router {
             post(interrupt_drive_turn),
         )
         .route("/analytics/tickets", get(ticket_flow_summary))
+        // Project-scoped reads for the machine host, which is anchored on an empty
+        // bootstrap store (HS2-82A7A7).
+        .route(
+            "/stores/{store_id}/analytics/tickets",
+            get(store_ticket_flow_summary),
+        )
+        .route("/stores/{store_id}/activity", get(list_store_activity))
         // Per-store live state for glance surfaces (HS2-JTTQMY).
         .route("/live-state", get(live_state::list_live_states))
         .route(

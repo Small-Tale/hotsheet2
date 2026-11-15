@@ -8894,6 +8894,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/analytics/tickets:
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: store_ticket_flow_summary
+      description: The ticket-flow summary of one store this host serves (HS2-82A7A7). A store that a registered
+        checkout links is hosted again on demand; any other id is 404. The CLI reads a project through this route
+        because the machine host's own store is its empty bootstrap anchor.
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketFlowSummary'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /stores/{store_id}/activity:
+    parameters:
+      - name: store_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: list_store_activity
+      description: The filtered activity window of one store this host serves (HS2-82A7A7), with the same filters as
+        GET /activity. A store that a registered checkout links is hosted again on demand; any other id is 404.
+      parameters:
+        - name: ticket
+          in: query
+          schema:
+            type: string
+        - name: session
+          in: query
+          schema:
+            type: string
+        - name: min_importance
+          in: query
+          schema:
+            enum:
+              - low
+              - normal
+              - high
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityEvent'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /live-history:
     get:
       operationId: get_live_history

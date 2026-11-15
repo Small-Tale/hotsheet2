@@ -97,27 +97,52 @@ pub(crate) async fn list_activity(
     State(state): State<AppState>,
     Query(params): Query<ActivityParams>,
 ) -> Result<Json<Vec<hotsheet_ticketing::ActivityEvent>>, ApiError> {
-    let min_importance = match params.min_importance.as_deref() {
-        None => None,
-        Some("low") => Some(hotsheet_ticketing::Importance::Low),
-        Some("normal") => Some(hotsheet_ticketing::Importance::Normal),
-        Some("high") => Some(hotsheet_ticketing::Importance::High),
-        Some(other) => {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                format!("invalid min_importance '{other}' (low|normal|high)"),
-            ));
-        }
-    };
+    store_timeline(&state.store, params).map(Json)
+}
+
+/// `GET /stores/{store_id}/activity` — the same window for one store the host serves
+/// (HS2-82A7A7), so a CLI read on the machine host names the project's store rather than the
+/// host's empty bootstrap store.
+pub(crate) async fn list_store_activity(
+    State(state): State<AppState>,
+    Path(store_id): Path<String>,
+    Query(params): Query<ActivityParams>,
+) -> Result<Json<Vec<hotsheet_ticketing::ActivityEvent>>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let entry = crate::routes::store_scoped::served_store_entry(&state, &store_id)?;
+        store_timeline(&entry.store, params).map(Json)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+fn parse_min_importance(
+    value: Option<&str>,
+) -> Result<Option<hotsheet_ticketing::Importance>, ApiError> {
+    match value {
+        None => Ok(None),
+        Some("low") => Ok(Some(hotsheet_ticketing::Importance::Low)),
+        Some("normal") => Ok(Some(hotsheet_ticketing::Importance::Normal)),
+        Some("high") => Ok(Some(hotsheet_ticketing::Importance::High)),
+        Some(other) => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("invalid min_importance '{other}' (low|normal|high)"),
+        )),
+    }
+}
+
+fn store_timeline(
+    store: &hotsheet_ticketing::FsStore,
+    params: ActivityParams,
+) -> Result<Vec<hotsheet_ticketing::ActivityEvent>, ApiError> {
     let filter = hotsheet_ticketing::TimelineFilter {
+        min_importance: parse_min_importance(params.min_importance.as_deref())?,
         ticket: params.ticket,
         session: params.session,
-        min_importance,
         limit: params.limit,
     };
-    let events = hotsheet_ticketing::activity::timeline(&state.store, &filter)
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(Json(events))
+    hotsheet_ticketing::activity::timeline(store, &filter)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// A retained event with its authoritative store identity. One store may be linked to several
@@ -141,18 +166,7 @@ pub(crate) async fn checkout_activity(
             .checkout_registry
             .resolve(&reference)
             .map_err(checkout_lookup_error)?;
-        let min_importance = match params.min_importance.as_deref() {
-            None => None,
-            Some("low") => Some(hotsheet_ticketing::Importance::Low),
-            Some("normal") => Some(hotsheet_ticketing::Importance::Normal),
-            Some("high") => Some(hotsheet_ticketing::Importance::High),
-            Some(other) => {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("invalid min_importance '{other}' (low|normal|high)"),
-                ));
-            }
-        };
+        let min_importance = parse_min_importance(params.min_importance.as_deref())?;
         let mut seen = BTreeSet::new();
         let mut events = Vec::new();
         for (store_id, entry) in checkout_entries(&state, &reference)? {

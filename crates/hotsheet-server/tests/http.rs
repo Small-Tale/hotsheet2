@@ -14634,6 +14634,83 @@ async fn analytics_endpoints_return_ticket_flow_and_usage_contracts() {
     assert_eq!(body_json(usage).await["events"], 0);
 }
 
+/// HS2-82A7A7: store-scoped ticket-flow and activity read the named store, not the host's
+/// default store; a store a registered checkout links is hosted again on demand, and any
+/// other id is 404.
+#[tokio::test]
+async fn hs2_82a7a7_store_scoped_flow_and_activity_read_the_named_store() {
+    let (_primary, st) = state();
+    let project_dir = tempfile::tempdir().unwrap();
+    let project_store_path = project_dir.path().join("project.hs2");
+    let project_store = FsStore::init_git(&project_store_path, &StoreMetadata::new("PJ")).unwrap();
+    for title in ["one", "two"] {
+        hotsheet_ticketing::ops::create(
+            &project_store,
+            hotsheet_model::Ulid::new(),
+            "PJ",
+            hotsheet_model::Timestamp::new("2026-11-01T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: title.into(),
+                category: "bug".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let mut event = hotsheet_ticketing::ActivityEvent::new(
+        "project-event",
+        "2026-11-01T00:00:00Z",
+        "fake-tool",
+        hotsheet_ticketing::ActivityKind::Note,
+        serde_json::json!({}),
+    );
+    event.session = Some("agent-1".into());
+    hotsheet_ticketing::activity::record(&project_store, &event).unwrap();
+    let checkout = project_dir.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry_path = project_dir.path().join("checkouts.json");
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register(&checkout, None, None, vec![project_store_path.clone()])
+        .unwrap();
+    let store_id = hotsheet_ticketing::git_connection_id(&project_store);
+    let app = app(st.with_checkout_registry(registry_path));
+    let get = |uri: String| {
+        let app = app.clone();
+        async move { app.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+
+    // The default store is empty; the project store is not hosted until it is named.
+    assert_eq!(
+        body_json(get("/analytics/tickets".into()).await).await["total"],
+        0
+    );
+    let flow = get(format!("/stores/{store_id}/analytics/tickets")).await;
+    assert_eq!(flow.status(), StatusCode::OK);
+    let flow = body_json(flow).await;
+    assert_eq!(flow["total"], 2, "{flow}");
+    assert_eq!(flow["current_by_category"]["bug"], 2, "{flow}");
+
+    let activity = get(format!("/stores/{store_id}/activity?session=agent-1")).await;
+    assert_eq!(activity.status(), StatusCode::OK);
+    let activity = body_json(activity).await;
+    assert_eq!(activity[0]["id"], "project-event", "{activity}");
+    assert_eq!(activity.as_array().unwrap().len(), 1);
+    let none = get(format!("/stores/{store_id}/activity?session=other")).await;
+    assert_eq!(body_json(none).await, serde_json::json!([]));
+    let invalid = get(format!("/stores/{store_id}/activity?min_importance=urgent")).await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    for uri in [
+        "/stores/0000000000000000/analytics/tickets",
+        "/stores/0000000000000000/activity",
+    ] {
+        let missing = get(uri.into()).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND, "{uri}");
+        let message = body_json(missing).await["error"].to_string();
+        assert!(message.contains("does not serve store"), "{message}");
+    }
+}
+
 /// HS2-38RJMK: checkout analytics identify each linked Git store and never fall back
 /// silently to the server's default store for an unknown checkout.
 #[tokio::test]
