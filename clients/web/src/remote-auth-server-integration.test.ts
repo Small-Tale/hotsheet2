@@ -385,6 +385,7 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     const target = await pending('Synthetic laptop');
     const woke = (await (await waiting).json()) as { pending: { id: string }[] };
     expect(woke.pending.map((entry) => entry.id)).toContain(target.id);
+    // HS2-KTHQE5: an admin may grant host access (local) when approving or updating a device.
     expect(
       (
         await request(
@@ -394,12 +395,13 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
           as(admin),
         )
       ).status,
-    ).toBe(403);
-    expect(
-      (await request('/remote-auth/owner/approve', 'POST', { id: target.id, role: 'read_only' }, as(admin))).status,
     ).toBe(204);
-    expect((await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: true }, as(admin))).status).toBe(
-      403,
+    const localized = await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: true }, as(admin));
+    expect(localized.status).toBe(200);
+    expect(((await localized.json()) as { local: boolean }).local).toBe(true);
+    // Later cases use this device as a session without host access, so take the grant back.
+    expect((await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: false }, as(admin))).status).toBe(
+      200,
     );
     const promoted = await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { admin: true }, as(host));
     expect(promoted.status).toBe(200);
