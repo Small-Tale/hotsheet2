@@ -163,6 +163,7 @@ describe('durable migration owner transitions', () => {
 
   it('retains failures, rejects stale retries, and reports a stopped owner as interrupted after restart', async () => {
     const directory = await mkdtemp(resolve(tmpdir(), 'migration-restart-'));
+    const owners: MigrationJobs[] = [];
     try {
       const locks = memoryLocks(),
         jobs = new MigrationJobs(
@@ -173,6 +174,7 @@ describe('durable migration owner transitions', () => {
           undefined,
           locks.lock,
         );
+      owners.push(jobs);
       const started = await jobs.start(owner);
       let failed = await jobs.watch(owner.root, started.revision);
       while (failed?.status === 'running') failed = await jobs.watch(owner.root, failed.revision);
@@ -187,6 +189,7 @@ describe('durable migration owner transitions', () => {
       expect(retryFailure?.status).toBe('failed');
       expect(retryFailure?.error).toBe('Disk full');
       const another = new MigrationJobs(directory, async () => new Promise(() => {}), undefined, locks.lock);
+      owners.push(another);
       const running = await another.start(owner, retried.attempt);
       locks.crash();
       const restarted = new MigrationJobs(
@@ -195,13 +198,22 @@ describe('durable migration owner transitions', () => {
         () => false,
         locks.lock,
       );
+      owners.push(restarted);
       const interrupted = await restarted.snapshot(owner.root);
       expect(interrupted?.status).toBe('interrupted');
       expect(interrupted?.revision).toBeGreaterThan(running.revision);
       const recovered = await restarted.start(owner, running.attempt);
       expect(recovered.attempt).not.toBe(running.attempt);
+      // HS2-9Q6VKM: the recovered runner settles after `start` returns and then
+      // writes its terminal checkpoint through a temporary file. Removing the
+      // directory before that write lands raced it (ENOTEMPTY under load), so
+      // observe the owner's terminal state; it is durable before subscribers see it.
+      let settled = await restarted.watch(owner.root, recovered.revision);
+      while (settled?.status === 'running') settled = await restarted.watch(owner.root, settled.revision);
+      expect(settled?.status).toBe('succeeded');
     } finally {
-      await new Promise((resolveDone) => setTimeout(resolveDone, 20));
+      // Every owner's queued checkpoint writes finish before the directory goes.
+      for (const migrationOwner of owners) await migrationOwner.flush();
       await rm(directory, { recursive: true, force: true });
     }
   });
