@@ -124,7 +124,11 @@ fn main() -> Result<()> {
     let mut _presence: Option<Presence> = None;
 
     let backend: Box<dyn Backend> = match (path, cli.server, project_server) {
-        (Some(path), None, None) => Box::new(CoreBackend::open(&path)?),
+        // HS2-4BG2QN: like a CLI command, each serverless write asks the running host to
+        // sync its store, or says the commits may be local only.
+        (Some(path), None, None) => Box::new(
+            CoreBackend::open(&path)?.with_host_sync_kick(hotsheet_plugins::hotsheet_home()),
+        ),
         (None, Some(server), None) => {
             let secret = cli
                 .secret

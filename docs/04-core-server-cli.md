@@ -272,7 +272,9 @@ path, `400` for a relative path, and `503` with code `sync_not_running` when the
 runs no loop. The kick queues one prompt sync of that store, coalesced with other kicks
 and with the regular pass ([02](02-ticket-storage.md) §2.12). When no host accepts, the
 CLI prints on stderr that the commits may be local only and names
-`hotsheet-cli -C <store> sync`.
+`hotsheet-cli -C <store> sync`. The serverless `hotsheet-mcp --path` backend sends the
+same kick after each tool call that committed (HS2-4BG2QN). It appends the local-only
+notice to the tool result as a second text item and never marks the call an error.
 
 **Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
 checkout's code repository and every linked ticket source. The CLI twin,
