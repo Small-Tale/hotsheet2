@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { KEYBOARD_SHORTCUTS, shortcutDef } from '../src/keyboard-shortcuts';
+
 // End-to-end coverage for the view/panel and tab-cycling keyboard shortcuts (HS2-9SHYWD). `ControlOrMeta`
 // maps to Cmd on macOS and Ctrl elsewhere — exactly the app's `mod` modifier — so the same presses
 // exercise the correct chord on either host.
@@ -225,6 +227,155 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await expect(search).toBeFocused();
   await page.keyboard.press('c');
   await expect(composer).toBeHidden();
+});
+
+// The trusted keydown a macOS keyboard sends for a chord (US layout). Option composes `key` even with
+// Command held (⌥S → `ß`, ⌥⇧B → `ı`); `code` names the physical key. Playwright's `keyboard.press`
+// always reports the base letter, which is why the HS2-9SHYWD flow above passed while ⌘⌥S and ⌘⌥⇧B
+// did nothing on a real Mac (HS2-F0BT8E). CDP sends the composed values Chromium receives from macOS.
+const macOption: Record<string, string> = { s: 'ß', b: '∫' };
+const macShiftOption: Record<string, string> = { b: 'ı', s: 'Í' };
+const arrowCodes: Record<string, number> = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 };
+async function pressMacChord(
+  cdp: import('@playwright/test').CDPSession,
+  chord: { key: string; mod?: boolean; shift?: boolean; alt?: boolean },
+) {
+  const letter = /^[a-z]$/.test(chord.key);
+  let key = letter && chord.shift ? chord.key.toUpperCase() : chord.key;
+  if (letter && chord.alt) key = (chord.shift ? macShiftOption : macOption)[chord.key] ?? key;
+  const modifiers = (chord.alt ? 1 : 0) | (chord.mod ? 4 : 0) | (chord.shift ? 8 : 0);
+  const code = letter ? `Key${chord.key.toUpperCase()}` : chord.key;
+  const windowsVirtualKeyCode = letter ? chord.key.toUpperCase().charCodeAt(0) : (arrowCodes[chord.key] ?? 0);
+  // A Command or Option chord produces no text input on macOS, so a raw keydown is faithful.
+  const plain = !chord.mod && !chord.alt;
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: plain ? 'keyDown' : 'rawKeyDown',
+    key,
+    code,
+    modifiers,
+    windowsVirtualKeyCode,
+    ...(plain ? { text: key } : {}),
+  });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode });
+}
+
+test('every editable default command shortcut reaches its handler from a macOS keyboard (HS2-F0BT8E)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'CDP key events are Chromium-only');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' });
+  });
+  await installFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
+    node.value = '/work/hotsheet2';
+  });
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const cdp = await page.context().newCDPSession(page);
+  const pressed = new Set<string>();
+  const press = (id: string) => {
+    const shortcut = shortcutDef(id);
+    if (!shortcut) throw new Error(`Unknown shortcut ${id}`);
+    pressed.add(id);
+    return pressMacChord(cdp, shortcut.defaultChord);
+  };
+
+  const list = page.locator('[data-component="ticket-list"]');
+  const board = page.locator('[data-component="ticket-board"]');
+  const appShell = page.locator('[data-component="app-shell"]');
+  const inspectorRegion = appShell.locator('#app-right-rail');
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  const composer = page.locator('[data-component="quick-ticket-composer"]');
+  const workspaceGrid = page.getByRole('button', { name: 'Workspace Grid', exact: true });
+  const allStats = page.getByRole('button', { name: 'Cross-Project Stats' });
+  const search = page.getByRole('searchbox', { name: 'Search tickets' });
+  await expect(list).toBeVisible();
+  await page.getByRole('button', { name: 'List View' }).click();
+
+  // Every chord below uses the event values a Mac keyboard really produces.
+  await press('view-settings');
+  await expect(page.getByRole('navigation', { name: 'Settings categories' })).toBeVisible();
+  // After capture of the rows the ticket reported (reached through the Mac ⌘⌥S chord itself).
+  await page.locator('#app-left-rail [data-item-id="keyboard"]').click();
+  const keyboardRow = (id: string) => page.locator(`[data-component="keyboard-settings"] li[data-shortcut-id="${id}"]`);
+  await expect(keyboardRow('view-settings')).toContainText('⌘⌥S');
+  await expect(keyboardRow('toggle-right-sidebar')).toContainText('⌘⌥⇧B');
+  await keyboardRow('view-settings').screenshot({ path: 'target/visual-captures/hs2-f0bt8e-settings-view-row.png' });
+  await keyboardRow('toggle-right-sidebar').screenshot({
+    path: 'target/visual-captures/hs2-f0bt8e-right-sidebar-row.png',
+  });
+  await press('view-notifications');
+  await expect(page.getByRole('navigation', { name: 'Settings categories' })).toHaveCount(0);
+  await press('view-board');
+  await expect(board).toBeVisible();
+  await press('view-list');
+  await expect(list).toBeVisible();
+
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'false');
+  await press('toggle-right-sidebar');
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'true');
+  await press('toggle-right-sidebar');
+  await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'false');
+  await press('toggle-left-sidebar');
+  await expect(appShell).toHaveAttribute('data-sidebar-visible', 'false');
+  await press('toggle-left-sidebar');
+  await expect(appShell).toHaveAttribute('data-sidebar-visible', 'true');
+  await press('toggle-bottom-drawer');
+  await expect(drawer).toBeVisible();
+  await press('toggle-bottom-drawer');
+  await expect(drawer).toHaveCount(0);
+  await press('drawer-tab-next');
+  await expect(drawer).toBeVisible();
+  await press('toggle-bottom-drawer');
+  await expect(drawer).toHaveCount(0);
+  await press('drawer-tab-previous');
+  await expect(drawer).toBeVisible();
+  await press('toggle-bottom-drawer');
+  await expect(drawer).toHaveCount(0);
+
+  // The global dashboards toggle, and a view chord returns from them to the project (HS2-76ZR5P note).
+  await press('view-workspace-grid');
+  await expect(workspaceGrid).toHaveAttribute('aria-pressed', 'true');
+  await press('view-list');
+  await expect(workspaceGrid).toHaveAttribute('aria-pressed', 'false');
+  await expect(list).toBeVisible();
+  await press('view-all-stats');
+  await expect(allStats).toHaveAttribute('aria-pressed', 'true');
+  await press('view-all-stats');
+  await expect(allStats).toHaveAttribute('aria-pressed', 'false');
+
+  await press('open-search');
+  await expect(search).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(search).toHaveCount(0);
+  await page.locator('.app-shell__work-area').focus();
+  await press('new-ticket');
+  await expect(composer).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(composer).toBeHidden();
+
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-project-source-choice]')).toHaveJSProperty('open', false);
+  await press('project-tab-previous');
+  await expect(page.getByRole('tab', { name: 'hotsheet2' })).toHaveAttribute('aria-selected', 'true');
+  await press('project-tab-next');
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+
+  // Every editable command chord was exercised, apart from the ticket history and clipboard chords that
+  // need ticket state; their plain-letter defaults are covered by the history and clipboard specs.
+  const historyAndClipboard = ['undo', 'redo', 'select-all-tickets', 'copy-tickets', 'cut-tickets', 'paste-tickets'];
+  expect(
+    KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.editable && !historyAndClipboard.includes(shortcut.id))
+      .map((shortcut) => shortcut.id)
+      .filter((id) => !pressed.has(id)),
+  ).toEqual([]);
 });
 
 for (const apple of [true, false]) {

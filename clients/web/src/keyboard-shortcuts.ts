@@ -441,16 +441,38 @@ export function resolveChord(id: string, overrides: Record<string, ShortcutChord
   return def.editable && Object.hasOwn(overrides, id) ? overrides[id] : def.defaultChord;
 }
 
+/** The keyboard event fields chord matching and capture read. `code` is optional for synthetic callers. */
+export type ShortcutKeyEvent = Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'> & {
+  readonly code?: string;
+};
+
+const PHYSICAL_CHARACTER_CODE = /^(?:Key[A-Z]|Digit[0-9])$/;
+
+/**
+ * The chord key for the physical key under an Option/Alt chord (HS2-F0BT8E). On macOS, and on
+ * layouts with an AltGr-style Option layer, Option composes `KeyboardEvent.key` into another character
+ * (⌥S is `ß`, ⌥⇧B is `ı`) or a `Dead` key, even with Command held, so a chord such as ⌘⌥S would never
+ * match by `key` alone. When Alt is held and `key` is not a plain letter or digit, fall back to the
+ * letter or digit the physical `code` names. Without Alt, `key` stays authoritative so non-QWERTY
+ * layouts keep their printed letters.
+ */
+function physicalAltKey(event: ShortcutKeyEvent): string | undefined {
+  if (!event.altKey || /^[a-z0-9]$/i.test(event.key)) return undefined;
+  const code = event.code ?? '';
+  return PHYSICAL_CHARACTER_CODE.test(code) ? code.slice(-1).toLowerCase() : undefined;
+}
+
 /** Whether a keyboard event matches a chord. `mod` maps to metaKey on Apple platforms and ctrlKey elsewhere. */
 export function matchesChord(
-  event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>,
+  event: ShortcutKeyEvent,
   chord: ShortcutChord | undefined,
   apple = isAppleShortcutPlatform(),
 ): boolean {
   if (!chord) return false;
-  const modifiers = chordModifiers(chord, apple);
+  const modifiers = chordModifiers(chord, apple),
+    chordKey = chord.key.toLowerCase();
   return (
-    event.key.toLowerCase() === chord.key.toLowerCase() &&
+    (event.key.toLowerCase() === chordKey || physicalAltKey(event) === chordKey) &&
     event.ctrlKey === modifiers.ctrl &&
     event.metaKey === modifiers.meta &&
     event.shiftKey === Boolean(chord.shift) &&
@@ -461,7 +483,7 @@ export function matchesChord(
 /** Resolve a shortcut id against the given overrides and test the event against its effective chord. */
 export function matchesShortcut(
   id: string,
-  event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>,
+  event: ShortcutKeyEvent,
   overrides: Record<string, ShortcutChord>,
   apple = isAppleShortcutPlatform(),
 ): boolean {
@@ -475,13 +497,11 @@ const MODIFIER_KEYS = new Set(['Control', 'Meta', 'Shift', 'Alt', 'AltGraph']);
  * lone modifier (keep waiting for the real key). Preserve the platform's primary command modifier
  * as `mod` for existing bindings, and retain the other physical modifier explicitly.
  */
-export function chordFromEvent(
-  event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>,
-  apple = isAppleShortcutPlatform(),
-): ShortcutChord | undefined {
+export function chordFromEvent(event: ShortcutKeyEvent, apple = isAppleShortcutPlatform()): ShortcutChord | undefined {
   if (MODIFIER_KEYS.has(event.key)) return undefined;
   const mod = apple ? event.metaKey : event.ctrlKey;
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  // Record the physical letter of an Option chord, not its composed character (HS2-F0BT8E).
+  const key = physicalAltKey(event) ?? (event.key.length === 1 ? event.key.toLowerCase() : event.key);
   return {
     key,
     mod,

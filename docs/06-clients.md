@@ -1230,6 +1230,10 @@ preview/download, server directory browser) are separate design work.
   away from Safari's bookmark editor, application settings, and browser tab/tab-group commands.
   Every shortcut remains rebindable, and the bare
   `c` (like other non-modifier chords) never fires while a text field is focused (HS2-9SHYWD).
+  Option/Alt chords match the physical letter or digit: macOS Option composes the reported key
+  (⌘⌥S arrives as `ß`, ⌘⌥⇧B as `ı`), so when Alt is held and the key is not a plain letter or
+  digit, matching and recording fall back to `KeyboardEvent.code`; without Alt the printed key
+  stays authoritative for non-QWERTY layouts (HS2-F0BT8E).
   The settings surface follows Kerf's spacing rhythm: 24px between major groups, 16px
   between peer regions, 8px within rows and controls, and 4px inside tight metadata clusters
   (HS2-4Y6SM9).
