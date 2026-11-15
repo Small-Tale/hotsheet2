@@ -20,6 +20,8 @@ import type {
 } from '../components/reader-overlay-surfaces';
 import { ReaderLayerSurface } from '../components/reader-overlay-surfaces';
 import { type TicketStatus } from '../components/status-badge';
+import type { TicketBlockerDialogState } from '../components/ticket-blocker-dialog';
+import type { TicketBlockersProps } from '../components/ticket-blockers';
 import type { TicketFollowUpLinkDialogState } from '../components/ticket-follow-up-link-dialog';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
@@ -73,6 +75,10 @@ export interface ReaderLayersSurfaceDependencies {
   followUpLinkFor: (projectId: string, connectionId: string) => FollowUpLinkAvailability;
   /** The follow-up link dialog a reader frame owns, which renders inside that reader (HS2-NXSMC7). */
   followUpLinkDialogFor: (readerScope: string) => TicketFollowUpLinkDialogState | undefined;
+  /** A reader frame's Blocked By section, edited against that frame's own ticket (HS2-15PE59). */
+  blockersFor: (readerScope: string) => TicketBlockersProps | undefined;
+  /** The Add Blocker dialog a reader frame owns, which renders inside that reader (HS2-15PE59). */
+  blockerDialogFor: (readerScope: string) => TicketBlockerDialogState | undefined;
   fieldConflict: Signal<TicketFieldConflict | undefined>;
   fieldConflictResolution: Signal<string>;
   linkedReaderStack: Signal<TicketReaderFrame[]>;
@@ -158,6 +164,8 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     expandedCodeReviewCommits,
     followUpLinkFor,
     followUpLinkDialogFor,
+    blockersFor,
+    blockerDialogFor,
     fieldConflict,
     fieldConflictResolution,
     linkedReaderStack,
@@ -344,6 +352,8 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         attachmentMenu={attachmentMenuSurfaceProps({ readerScope })}
         evidence={changeEvidenceSurfaceProps(readerScope)}
         followUpLinkDialog={followUpLinkDialogFor(readerScope)}
+        blockers={blockersFor(readerScope)}
+        blockerDialog={blockerDialogFor(readerScope)}
         readOnly={frame ? !capabilities!.update && !capabilities!.note_edit && !capabilities!.notes : !editable}
       />
     );

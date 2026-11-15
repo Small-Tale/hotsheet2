@@ -25,6 +25,11 @@ export interface TicketBlockerDialogState {
   searching?: boolean;
   submitting?: boolean;
   error?: string;
+  /**
+   * The reader frame that opened the dialog, which renders it inside that modal reader so it stays
+   * interactive (HS2-15PE59); absent when the Inspector opened it at the app root.
+   */
+  readerScope?: string;
 }
 
 /**

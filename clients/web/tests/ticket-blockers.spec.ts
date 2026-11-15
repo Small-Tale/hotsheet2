@@ -191,3 +191,117 @@ test('disables Add Blocker with its reason for a source without dependencies (HS
     await server.stop();
   }
 });
+
+const READER_WIDTHS = [
+  ['wide', 1440, 900],
+  ['medium', 1024, 800],
+  ['narrow', 390, 844],
+  ['wide-again', 1440, 900],
+] as const;
+
+test('adds, refuses a cycle for, and removes blockers in the modal reader and a linked reader (HS2-15PE59)', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const server = await realTicketServer();
+  try {
+    const blocker = await server.request<CreatedTicket>('/tickets', 'POST', {
+        title: 'Synthetic reader upstream dependency',
+        category: 'task',
+      }),
+      blocked = await server.request<CreatedTicket>('/tickets', 'POST', {
+        title: 'Synthetic reader downstream feature',
+        category: 'feature',
+      });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server);
+    await page.locator(`[data-ticket-slug="${blocked.slug}"]`).first().click();
+    await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
+    const reader = page.getByRole('dialog', { name: `Read and edit ${blocked.slug}` });
+    await reader.getByRole('tab', { name: 'Info' }).click();
+    const section = reader.getByRole('region', { name: 'Blocked By' });
+    await expect(section).toBeVisible({ timeout: 20_000 });
+    const add = section.getByRole('button', { name: 'Add Blocker…' });
+    await expect(add).toBeEnabled();
+
+    // The dialog opens inside the modal reader; Escape closes only the dialog.
+    await add.click();
+    const dialog = reader.locator('[data-dialog-component="ticket-blocker-dialog"]');
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('[data-dialog-component="ticket-blocker-dialog"]')).toHaveCount(1);
+    await expect(dialog).toContainText(`Add Blocker to ${blocked.slug}`);
+    await expect(dialog.locator('[name="blocker-target-search"]')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(reader).toBeVisible();
+
+    await add.click();
+    await dialog.locator('[name="blocker-target-search"]').pressSequentially('upstream');
+    const row = dialog
+      .locator('[aria-label="Matching tickets"] [data-action="select-blocker"]')
+      .filter({ hasText: blocker.slug });
+    await expect(row).toHaveCount(1, { timeout: 20_000 });
+    await row.click();
+    for (const [label, width, height] of READER_WIDTHS) {
+      await page.setViewportSize({ width, height });
+      await expect(dialog.getByRole('button', { name: 'Add Blocker' })).toBeInViewport();
+      await page.screenshot({ path: `target/visual-captures/hs2-15pe59-reader-blocker-dialog-${label}.png` });
+    }
+    await dialog.getByRole('button', { name: 'Add Blocker' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.locator('.app-toast').filter({ hasText: `${blocker.slug} now blocks ${blocked.slug}.` }),
+    ).toBeVisible();
+    const rows = section.locator(`[data-blocker-state][data-blocker-id="${blocker.id}"]`);
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText('Synthetic reader upstream dependency');
+    expect((await server.request<StoredTicket>(`/tickets/${blocked.id}`)).blocked_by).toEqual([blocker.id]);
+    for (const [label, width, height] of READER_WIDTHS) {
+      await page.setViewportSize({ width, height });
+      await section.scrollIntoViewIfNeeded();
+      await expect(rows).toBeInViewport();
+      await page.screenshot({ path: `target/visual-captures/hs2-15pe59-reader-blocked-by-${label}.png` });
+    }
+
+    // The blocker opens in a linked reader, whose own Blocked By refuses the reverse dependency.
+    await rows.locator('[data-action="open-duplicate-target"]').click();
+    const linked = page.getByRole('dialog', { name: `Read and edit ${blocker.slug}` });
+    await expect(linked).toBeVisible({ timeout: 20_000 });
+    await linked.getByRole('tab', { name: 'Info' }).click();
+    const linkedSection = linked.getByRole('region', { name: 'Blocked By' });
+    await expect(linkedSection).toBeVisible({ timeout: 20_000 });
+    await linkedSection.getByRole('button', { name: 'Add Blocker…' }).click();
+    const linkedDialog = linked.locator('[data-dialog-component="ticket-blocker-dialog"]');
+    await expect(linkedDialog).toContainText(`Add Blocker to ${blocker.slug}`);
+    await linkedDialog.locator('[name="blocker-target-search"]').pressSequentially('downstream');
+    const reverse = linkedDialog
+      .locator('[aria-label="Matching tickets"] [data-action="select-blocker"]')
+      .filter({ hasText: blocked.slug });
+    await expect(reverse).toHaveCount(1, { timeout: 20_000 });
+    await reverse.click();
+    await linkedDialog.getByRole('button', { name: 'Add Blocker' }).click();
+    await expect(linkedDialog.getByRole('alert')).toContainText(
+      `${blocked.slug} already depends on ${blocker.slug}, so it cannot also block ${blocker.slug} (dependency cycle)`,
+    );
+    await page.screenshot({ path: 'target/visual-captures/hs2-15pe59-linked-reader-cycle-1440.png' });
+    expect((await server.request<StoredTicket>(`/tickets/${blocker.id}`)).blocked_by).toEqual([]);
+    await linkedDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(linkedDialog).toHaveCount(0);
+    await expect(linked).toBeVisible();
+    await linked
+      .getByRole('button', { name: /^Close/ })
+      .first()
+      .click();
+    await expect(linked).toHaveCount(0);
+
+    // Remove the blocker from the workspace reader's row.
+    await section.getByRole('button', { name: `Remove ${blocker.slug} as a blocker of ${blocked.slug}` }).click();
+    await expect(
+      page.locator('.app-toast').filter({ hasText: `${blocker.slug} no longer blocks ${blocked.slug}.` }),
+    ).toBeVisible();
+    await expect(section.locator('[data-blocker-state]')).toHaveCount(0);
+    expect((await server.request<StoredTicket>(`/tickets/${blocked.id}`)).blocked_by).toEqual([]);
+  } finally {
+    await server.stop();
+  }
+});

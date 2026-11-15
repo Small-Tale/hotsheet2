@@ -593,7 +593,10 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <TicketFollowUpLinkDialog
           state={followUpLinkDialog.value?.readerScope === undefined ? followUpLinkDialog.value : undefined}
         />
-        <TicketBlockerDialog state={ticketBlockerDialog.value} />
+        {/* A dialog opened from the modal reader renders inside that reader instead (HS2-15PE59). */}
+        <TicketBlockerDialog
+          state={ticketBlockerDialog.value?.readerScope === undefined ? ticketBlockerDialog.value : undefined}
+        />
         <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer
           expanded={composerExpanded.value}

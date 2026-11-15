@@ -673,6 +673,14 @@ HS2-CHH28E covers the Inspector's dependency-blocker editor and the shared cycle
 
 `ticket-blockers.spec.ts` drives the real Inspector against a real server. It adds a blocker, shows the cycle refusal in the dialog, removes the blocker, opens a blocker from its row across widths, and checks the disabled reason for a source without dependencies.
 
+HS2-15PE59 extends the blocker editor to the modal reader. `features/ticket-blockers.test.ts` covers:
+
+- the workspace reader's dialog scope;
+- a linked frame's add and remove in its own checkout, with adoption into that frame and row resolution through its own route;
+- a read-only, unsupported, or closed frame.
+
+`ticket-blockers.spec.ts` also drives the real reader against a real server. The dialog opens inside the reader, and Escape closes only the dialog. It adds a blocker with captures at 1440, 1024, 390, and 1440 px. A linked reader opened from the blocker row shows the cycle refusal in its own dialog, and the blocker is removed from the reader row.
+
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the
 `providers.spec.ts` browser flow that links both slugs in an inspector blocked reason,

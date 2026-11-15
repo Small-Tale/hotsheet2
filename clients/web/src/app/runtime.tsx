@@ -1973,6 +1973,7 @@ export async function startHotSheetWebClient() {
       defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId)?.name,
     canUpdateSelected: () => canUpdateSelected(),
     showToast,
+    linkedReader: (frameId) => linkedReaderSubject(frameId),
   });
   const newTicketSource = () =>
     resolveNewTicketSource(
@@ -5675,6 +5676,8 @@ export async function startHotSheetWebClient() {
         defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId),
       ),
     followUpLinkDialogFor: (readerScope) => followUpLinkController.dialogFor(readerScope),
+    blockersFor: (readerScope) => ticketBlockersController.sectionProps(readerScope),
+    blockerDialogFor: (readerScope) => ticketBlockersController.dialogFor(readerScope),
     fieldConflict,
     fieldConflictResolution,
     linkedReaderStack,

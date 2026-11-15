@@ -912,8 +912,9 @@ same explanation (HS2-CGXGWY).
   that editor on double-click. Existing blocked reasons and ordinary notes do not add
   redundant per-item Edit buttons; their content surfaces support pointer plus
   Enter/Space keyboard entry instead.
-  Below the blocked reason, the sidebar and rail Inspector's Info tab shows a **Blocked By**
-  section for dependency blockers (HS2-CHH28E). A Kerf `ListHeader` holds the count and a
+  Below the blocked reason, the Info tab of the sidebar and rail Inspector and of the modal
+  ticket reader (HS2-15PE59) shows a **Blocked By** section for dependency blockers
+  (HS2-CHH28E). A Kerf `ListHeader` holds the count and a
   logical-end action, "Add Blocker…". Each blocker is a Kerf `ListActionRow` showing its
   number and title. A blocker that is completed or verified shows a Done status, and one
   that no longer resolves says it is unavailable. The row's primary action opens the
@@ -927,8 +928,12 @@ same explanation (HS2-CGXGWY).
   and replaces `blocked_by` through the checkout ticket route with its `expected_token`,
   retrying once after a concurrent edit, so another client's blocker is kept. A source
   without the `dependencies` capability, or a ticket the person cannot update, keeps the
-  action mounted but disabled, and its reason names the provider. The modal reader does
-  not edit blockers yet (HS2-15PE59).
+  action mounted but disabled, and its reason names the provider. In the reader the section
+  edits that reader frame's ticket: the workspace reader's selected ticket, or a linked
+  reader's own ticket, written to its own checkout and shown in that frame, as the reader's
+  other edits are (HS2-KRVWKF). Only the top reader can edit. The dialog renders inside that
+  modal reader, so it opens above the reader and stays interactive, and Escape closes only
+  the dialog.
   Rendered Markdown fields — ticket details and editable notes, in the inspector and the
   reader alike — enter their editor on a **single click** (or tap), with Enter/Space as
   the keyboard entry (HS2-H1K9YY). A click that starts on a link, ticket reference,

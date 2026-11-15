@@ -57,7 +57,9 @@ For HS2-CHH28E, open a synthetic Git ticket's Info tab and use Blocked By's
 the blocker (expect the dependency-cycle refusal in the dialog). Remove the blocker
 from its row, and check the section and dialog at wide, medium, and narrow widths.
 On a GitHub or GitLab ticket, confirm the action is disabled and its tooltip names
-the provider.
+the provider. For HS2-15PE59, repeat the add and remove from the modal reader's Info tab
+and from a linked reader opened from the blocker row. Confirm the dialog opens above
+the reader and the change shows in that reader.
 
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.

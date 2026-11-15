@@ -12,6 +12,7 @@ import { NotWorkingDialog } from './not-working-dialog';
 import { PermissionRequestPopup } from './permission-request-card';
 import { AppTabContextMenu } from './project-tab-context-menu';
 import { ChangeEvidenceDialog, RepositoryStatusPopover } from './repository-status-popover';
+import { TicketBlockerDialog, type TicketBlockerDialogState } from './ticket-blocker-dialog';
 import { TicketCloseDialog } from './ticket-close-dialog';
 import { TicketFollowUpLinkDialog, type TicketFollowUpLinkDialogState } from './ticket-follow-up-link-dialog';
 import { TicketGroupContextMenu, type TicketGroupContextMenuProps } from './ticket-group-context-menu';
@@ -36,12 +37,15 @@ export type ReaderLayerSurfaceProps = TicketReaderProps & {
   evidence?: ChangeEvidenceDialogProps;
   /** The follow-up link dialog this reader opened; it renders inside the modal reader (HS2-NXSMC7). */
   followUpLinkDialog?: TicketFollowUpLinkDialogState;
+  /** The Add Blocker dialog this reader opened; it renders inside the modal reader (HS2-15PE59). */
+  blockerDialog?: TicketBlockerDialogState;
 };
 
 export function ReaderLayerSurface({
   attachmentMenu,
   evidence,
   followUpLinkDialog,
+  blockerDialog,
   ...reader
 }: ReaderLayerSurfaceProps) {
   return (
@@ -52,6 +56,7 @@ export function ReaderLayerSurface({
           <AttachmentContextMenuSurface menu={attachmentMenu} />
           <ChangeEvidenceSurface evidence={evidence} />
           <TicketFollowUpLinkDialog state={followUpLinkDialog} />
+          <TicketBlockerDialog state={blockerDialog} />
         </>
       }
     />

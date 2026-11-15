@@ -20,6 +20,7 @@ import {
 import { duplicateTargetKey } from '../ticket-close';
 import { isTicketConcurrencyConflict } from '../ticket-field-reconciliation';
 import { searchTicketReferences, ticketReference } from '../ticket-reference-search';
+import { type LinkedReaderSubject, WORKSPACE_READER_SCOPE } from './linked-reader-subject';
 
 /** Live application bindings the Blocked By section and its dialog read (HS2-CHH28E). */
 export interface TicketBlockersDependencies {
@@ -32,14 +33,29 @@ export interface TicketBlockersDependencies {
   sourceName: (projectId: string, connectionId: string) => string | undefined;
   canUpdateSelected: () => boolean;
   showToast: (message: string) => void;
+  /**
+   * A linked reader frame's own ticket, project, and capabilities (HS2-15PE59). The Inspector and
+   * the workspace reader edit the selected ticket, so this returns undefined for them.
+   */
+  linkedReader?: (frameId: string) => LinkedReaderSubject | undefined;
   /** Search debounce after the coalesced input settles; tests pass 0. */
   searchDelayMs?: number;
 }
 
 export type TicketBlockersController = ReturnType<typeof createTicketBlockersController>;
 
+/** The ticket a Blocked By section edits, with where its writes go and how they are shown. */
+interface BlockerSubject {
+  project: Project;
+  ticket: FullTicket;
+  capabilities: Capabilities | undefined;
+  canUpdate: boolean;
+  /** Show the server's answer on this surface without waiting for the change stream. */
+  adopt: (updated: FullTicket) => void;
+}
+
 /**
- * The Inspector's Blocked By editor (HS2-CHH28E). It projects the selected ticket's
+ * The Blocked By editor of the Inspector (HS2-CHH28E) and the modal reader (HS2-15PE59). It projects the selected ticket's
  * `blocked_by` into rows, resolving blockers that are not loaded through the checkout route,
  * and adds or removes one blocker at a time. Each write rereads the ticket and replaces the set
  * with its concurrency token, retrying once after a concurrent edit, so a blocker another
@@ -47,24 +63,57 @@ export type TicketBlockersController = ReturnType<typeof createTicketBlockersCon
  * dialog; a failed removal is reported in a toast.
  */
 export function createTicketBlockersController(dependencies: TicketBlockersDependencies) {
-  const { project, selectedTicket, tickets, capabilitiesFor, sourceName, canUpdateSelected, showToast } = dependencies,
+  const { project, selectedTicket, tickets, capabilitiesFor, sourceName, canUpdateSelected, showToast, linkedReader } =
+      dependencies,
     searchDelayMs = dependencies.searchDelayMs ?? 150,
     dialog = signal<TicketBlockerDialogState | undefined>(undefined),
     /** Blockers resolved through the route, keyed by reference; `null` did not resolve. */
     resolved = signal<Record<string, BlockerSummary | null>>({}),
+    /** References (`@project/connection:native`) whose removal is in flight. */
     removing = signal<string[]>([]);
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined;
   const pending = new Set<string>();
 
-  function loadedRow(ticket: FullTicket, nativeId: string): TicketRow | undefined {
+  /** A blocker among the selected project's loaded rows; another project's frame always resolves. */
+  function loadedRow(current: Project, ticket: FullTicket, nativeId: string): TicketRow | undefined {
+    if (project()?.id !== current.id) return undefined;
     return tickets.value.find((row) => row.connection_id === ticket.connection_id && row.native_id === nativeId);
+  }
+  /** The Inspector's or workspace reader's selected ticket, or the linked reader frame `readerScope`. */
+  function subject(readerScope?: string): BlockerSubject | undefined {
+    if (readerScope && readerScope !== WORKSPACE_READER_SCOPE) {
+      const frame = linkedReader?.(readerScope);
+      if (!frame) return undefined;
+      return {
+        project: frame.project,
+        ticket: frame.ticket,
+        capabilities: frame.capabilities,
+        canUpdate: frame.canUpdate,
+        adopt: (updated) => {
+          frame.adopt(updated);
+          adopt(frame.project, updated);
+        },
+      };
+    }
+    const current = project(),
+      ticket = selectedTicket.value;
+    if (!current || !ticket) return undefined;
+    return {
+      project: current,
+      ticket,
+      capabilities: capabilitiesFor(ticket.connection_id),
+      canUpdate: canUpdateSelected(),
+      adopt: (updated) => {
+        adopt(current, updated);
+      },
+    };
   }
   /** Resolve the selected ticket's blockers that are not among the loaded rows. */
   function resolveMissing(current: Project, ticket: FullTicket) {
     for (const nativeId of ticket.blocked_by) {
       const reference = blockerReference(current.id, ticket.connection_id, nativeId);
-      if (loadedRow(ticket, nativeId) || reference in resolved.peek() || pending.has(reference)) continue;
+      if (loadedRow(current, ticket, nativeId) || reference in resolved.peek() || pending.has(reference)) continue;
       pending.add(reference);
       void new Api(current.apiPath)
         .checkoutTicket(current.id, `${ticket.connection_id}:${nativeId}`)
@@ -84,32 +133,41 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
     if (ticket && current && ticket.blocked_by.length > 0) resolveMissing(current, ticket);
   });
 
-  /** The Blocked By section's props for the inspected ticket. */
-  function sectionProps(): TicketBlockersProps | undefined {
-    const ticket = selectedTicket.value,
-      current = project();
-    if (!ticket || !current) return undefined;
-    const capabilities = capabilitiesFor(ticket.connection_id),
+  /**
+   * The Blocked By section's props for the Inspector's ticket, or for the reader frame that
+   * `readerScope` names (HS2-15PE59).
+   */
+  function sectionProps(readerScope?: string): TicketBlockersProps | undefined {
+    const owner = subject(readerScope);
+    if (!owner) return undefined;
+    const { project: current, ticket, capabilities } = owner,
       name = sourceName(current.id, ticket.connection_id) ?? ticket.connection_id,
-      cache = resolved.value;
+      cache = resolved.value,
+      inFlight = removing.value;
+    // The selected ticket resolves from an effect; a linked frame's ticket resolves as it renders.
+    if (readerScope && readerScope !== WORKSPACE_READER_SCOPE && ticket.blocked_by.length > 0)
+      resolveMissing(current, ticket);
     return {
       slug: ticket.slug,
       rows: blockerRows(
         ticket,
         current.id,
         (nativeId) =>
-          loadedRow(ticket, nativeId) ??
+          loadedRow(current, ticket, nativeId) ??
           cache[blockerReference(current.id, ticket.connection_id, nativeId)] ??
           undefined,
       ),
-      availability: blockerAvailability(capabilities ? { name, capabilities } : undefined, canUpdateSelected()),
-      removing: removing.value,
+      availability: blockerAvailability(capabilities ? { name, capabilities } : undefined, owner.canUpdate),
+      removing: ticket.blocked_by.filter((nativeId) =>
+        inFlight.includes(blockerReference(current.id, ticket.connection_id, nativeId)),
+      ),
     };
   }
 
   /** Reread the ticket and replace its blockers with `change` applied to the current set. */
-  async function writeBlockers(current: Project, ticket: FullTicket, change: (blockedBy: string[]) => string[]) {
-    const client = new Api(current.apiPath);
+  async function writeBlockers(owner: BlockerSubject, change: (blockedBy: string[]) => string[]) {
+    const { project: current, ticket } = owner,
+      client = new Api(current.apiPath);
     for (let attempt = 0; ; attempt += 1) {
       const fresh = (await client.checkoutTicket(current.id, ticket.qualified_id)).ticket;
       try {
@@ -119,7 +177,7 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
             ...(fresh.concurrency_token ? { expected_token: fresh.concurrency_token } : {}),
           })
         ).ticket;
-        adopt(current, updated);
+        owner.adopt(updated);
         return updated;
       } catch (reason) {
         if (attempt > 0 || !isTicketConcurrencyConflict(reason)) throw reason;
@@ -136,22 +194,25 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
     if (selected?.qualified_id === updated.qualified_id) selectedTicket.value = updated;
   }
 
-  async function remove(nativeId: string) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || removing.value.includes(nativeId)) return;
+  /** Remove one blocker from the Inspector's ticket, or from the reader frame `readerScope`'s ticket. */
+  async function remove(nativeId: string, readerScope?: string) {
+    const owner = subject(readerScope);
+    if (!owner) return;
+    const { project: current, ticket } = owner,
+      reference = blockerReference(current.id, ticket.connection_id, nativeId);
+    if (removing.value.includes(reference)) return;
     const name =
-      sectionProps()?.rows.find((row) => row.nativeId === nativeId)?.slug ??
-      loadedRow(ticket, nativeId)?.slug ??
+      sectionProps(readerScope)?.rows.find((row) => row.nativeId === nativeId)?.slug ??
+      loadedRow(current, ticket, nativeId)?.slug ??
       nativeId;
-    removing.value = [...removing.value, nativeId];
+    removing.value = [...removing.value, reference];
     try {
-      await writeBlockers(current, ticket, (blockedBy) => withoutBlocker(blockedBy, nativeId));
+      await writeBlockers(owner, (blockedBy) => withoutBlocker(blockedBy, nativeId));
       showToast(blockerRemovedMessage(ticket.slug, name));
     } catch (reason) {
       showToast(`Could not remove ${name}: ${reason instanceof Error ? reason.message : String(reason)}`);
     } finally {
-      removing.value = removing.value.filter((item) => item !== nativeId);
+      removing.value = removing.value.filter((item) => item !== reference);
     }
   }
 
@@ -169,23 +230,31 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
     cancelSearch();
     dialog.value = undefined;
   }
-  /** Open the dialog for the inspected ticket; returns false when it cannot record blockers. */
-  function open(): boolean {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || !sectionProps()?.availability.enabled) return false;
+  /**
+   * Open the dialog for the ticket of the surface that `readerScope` names (a reader frame id, or
+   * undefined for the Inspector); returns false when it cannot record blockers.
+   */
+  function open(readerScope?: string): boolean {
+    const owner = subject(readerScope);
+    if (!owner || !sectionProps(readerScope)?.availability.enabled) return false;
     cancelSearch();
     dialog.value = {
-      source: ticketReference(current, ticket),
-      existing: [...ticket.blocked_by],
+      source: ticketReference(owner.project, owner.ticket),
+      existing: [...owner.ticket.blocked_by],
       query: '',
       candidates: [],
+      ...(readerScope ? { readerScope } : {}),
     };
     return true;
   }
+  /** The dialog state that surface renders: a reader frame id, or undefined for the app root. */
+  function dialogFor(readerScope?: string): TicketBlockerDialogState | undefined {
+    const state = dialog.value;
+    return state?.readerScope === readerScope ? state : undefined;
+  }
   function search(query: string) {
     const state = dialog.value,
-      current = project();
+      current = state ? subject(state.readerScope)?.project : undefined;
     if (!state || !current) return;
     cancelSearch();
     const active = generation;
@@ -237,16 +306,15 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
       return;
     }
     const target = state.selected as BlockerTicket,
-      current = project(),
-      ticket = selectedTicket.value;
-    if (current?.id !== state.source.projectId || ticket?.qualified_id !== state.source.qualifiedId) {
+      owner = subject(state.readerScope);
+    if (owner?.project.id !== state.source.projectId || owner.ticket.qualified_id !== state.source.qualifiedId) {
       dialog.value = { ...state, error: `Select ${state.source.slug} again to add its blocker.` };
       return;
     }
     cancelSearch();
     dialog.value = { ...state, submitting: true, error: '' };
     try {
-      await writeBlockers(current, ticket, (blockedBy) => withBlocker(blockedBy, target.nativeId));
+      await writeBlockers(owner, (blockedBy) => withBlocker(blockedBy, target.nativeId));
       // The blocker is recorded even when the dialog was dismissed meanwhile, so always confirm it.
       if (openFor(state)) close();
       showToast(blockerAddedMessage(state.source, target));
@@ -264,5 +332,5 @@ export function createTicketBlockersController(dependencies: TicketBlockersDepen
     cancelSearch();
     stopResolving();
   }
-  return { dialog, sectionProps, open, search, select, clear, submit, close, remove, cancelSearch, dispose };
+  return { dialog, dialogFor, sectionProps, open, search, select, clear, submit, close, remove, cancelSearch, dispose };
 }

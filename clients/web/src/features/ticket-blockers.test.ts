@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiHttpError, type Capabilities, type CheckoutTicketRows, type FullTicket, type TicketRow } from '../api';
 import type { Project } from '../interactions/types';
 import { duplicateTargetKey } from '../ticket-close';
+import type { LinkedReaderSubject } from './linked-reader-subject';
 import { createTicketBlockersController } from './ticket-blockers';
 
 const server = vi.hoisted(() => ({
@@ -16,6 +17,8 @@ const server = vi.hoisted(() => ({
   concurrent: undefined as ((ticket: Record<string, unknown>) => void) | undefined,
   rows: [] as unknown[],
   searches: [] as string[],
+  /** The checkout of each update, in order (HS2-15PE59). */
+  updateCheckouts: [] as string[],
 }));
 
 type StoredTicket = FullTicket & { store: string };
@@ -31,8 +34,9 @@ vi.mock('../api', async (original) => {
         if (!ticket) throw new actual.ApiHttpError('not found', 404);
         return { store: 'git-a', ticket: structuredClone(ticket) as unknown as StoredTicket };
       };
-      override updateCheckoutTicket = async (_checkout: string, id: string, value: Record<string, unknown>) => {
+      override updateCheckoutTicket = async (checkout: string, id: string, value: Record<string, unknown>) => {
         server.writes.push({ id, value });
+        server.updateCheckouts.push(checkout);
         const failure = server.failures.shift();
         if (failure) throw failure;
         const ticket = server.tickets.get(id)!;
@@ -74,7 +78,14 @@ const row = (native: string, slug: string, status = 'not_started', connection = 
     concurrency_token: 't0',
   }) as unknown as TicketRow & { concurrency_token: string };
 
-function setup(options: { dependencies?: boolean; canUpdate?: boolean; loaded?: TicketRow[] } = {}) {
+function setup(
+  options: {
+    dependencies?: boolean;
+    canUpdate?: boolean;
+    loaded?: TicketRow[];
+    linkedReader?: (frameId: string) => LinkedReaderSubject | undefined;
+  } = {},
+) {
   const source = row('src', 'HS2-SRC'),
     selectedTicket = signal<FullTicket | null>(structuredClone(source) as unknown as FullTicket),
     tickets = signal<TicketRow[]>(options.loaded ?? [source]),
@@ -88,6 +99,7 @@ function setup(options: { dependencies?: boolean; canUpdate?: boolean; loaded?: 
     sourceName: () => 'Hot Sheet Git',
     canUpdateSelected: () => options.canUpdate ?? true,
     showToast,
+    linkedReader: options.linkedReader,
     searchDelayMs: 0,
   });
   return { controller, selectedTicket, tickets, showToast };
@@ -105,6 +117,7 @@ describe('createTicketBlockersController (HS2-CHH28E)', () => {
     server.failures.length = 0;
     server.concurrent = undefined;
     server.searches.length = 0;
+    server.updateCheckouts.length = 0;
     server.rows = [row('src', 'HS2-SRC'), row('one', 'HS2-ONE'), row('gh', 'GH-1', 'not_started', 'gh-a')];
     server.tickets.set('git-a:one', row('one', 'HS2-ONE') as unknown as Record<string, unknown>);
   });
@@ -220,5 +233,101 @@ describe('createTicketBlockersController (HS2-CHH28E)', () => {
     await controller.remove('two');
     expect(showToast).toHaveBeenLastCalledWith('Could not remove two: offline');
     expect(selectedTicket.value.blocked_by).toEqual(['two']);
+  });
+
+  describe('from the modal reader (HS2-15PE59)', () => {
+    const beta = { id: 'beta', name: 'Beta', apiPath: '/__hotsheet/project-api/beta' } as Project;
+    function linkedFrame(options: { canUpdate?: boolean; dependencies?: boolean } = {}) {
+      const ticket = structuredClone(row('far', 'HS2-FAR')) as unknown as FullTicket,
+        adopted: FullTicket[] = [];
+      server.tickets.set('git-a:far', structuredClone(ticket) as unknown as Record<string, unknown>);
+      const frame: LinkedReaderSubject = {
+        frameId: 'reader-2',
+        project: beta,
+        ticket,
+        capabilities: { dependencies: options.dependencies ?? true } as Capabilities,
+        canUpdate: options.canUpdate ?? true,
+        refreshCodeReview: async () => undefined,
+        adopt: (updated) => {
+          adopted.push(updated);
+          frame.ticket = updated;
+        },
+      };
+      return { frame, adopted };
+    }
+
+    it('edits the selected ticket from the workspace reader and renders the dialog only there', async () => {
+      const { controller, selectedTicket } = setup();
+      expect(controller.sectionProps('workspace-reader')?.slug).toBe('HS2-SRC');
+      expect(controller.open('workspace-reader')).toBe(true);
+      expect(controller.dialog.value?.readerScope).toBe('workspace-reader');
+      expect(controller.dialogFor('workspace-reader')).toBe(controller.dialog.value);
+      expect(controller.dialogFor(undefined)).toBeUndefined();
+      expect(controller.dialogFor('reader-2')).toBeUndefined();
+      controller.search('one');
+      await settle();
+      controller.select(duplicateTargetKey(controller.dialog.value!.candidates.find((c) => c.slug === 'HS2-ONE')!));
+      await controller.submit();
+      expect(server.updateCheckouts).toEqual(['alpha']);
+      expect(selectedTicket.value?.blocked_by).toEqual(['one']);
+      controller.open();
+      expect(controller.dialogFor(undefined)).toBe(controller.dialog.value);
+    });
+
+    it("adds and removes a linked frame's blocker in its own checkout and adopts the answer there", async () => {
+      const { frame, adopted } = linkedFrame(),
+        { controller, selectedTicket, tickets, showToast } = setup({
+          linkedReader: (id) => (id === 'reader-2' ? frame : undefined),
+        });
+      const section = controller.sectionProps('reader-2');
+      expect(section).toMatchObject({ slug: 'HS2-FAR', availability: { enabled: true }, rows: [] });
+      expect(controller.open('reader-2')).toBe(true);
+      expect(controller.dialog.value).toMatchObject({
+        source: { projectId: 'beta', qualifiedId: 'git-a:far' },
+        readerScope: 'reader-2',
+      });
+      controller.search('one');
+      await settle();
+      controller.select(duplicateTargetKey(controller.dialog.value!.candidates.find((c) => c.slug === 'HS2-ONE')!));
+      await controller.submit();
+      expect(server.updateCheckouts).toEqual(['beta']);
+      expect(server.writes.at(-1)).toEqual({ id: 'git-a:far', value: { blocked_by: ['one'], expected_token: 't0' } });
+      expect(adopted.at(-1)?.blocked_by).toEqual(['one']);
+      // The Inspector's selected ticket and another project's loaded rows are untouched.
+      expect(selectedTicket.value?.blocked_by).toEqual([]);
+      expect(tickets.value[0]?.blocked_by).toEqual([]);
+      expect(showToast).toHaveBeenCalledWith('HS2-ONE now blocks HS2-FAR.');
+
+      // A linked frame of another project resolves its blockers through its own route, not the loaded rows.
+      server.tickets.set('git-a:one', row('one', 'HS2-ONE') as unknown as Record<string, unknown>);
+      expect(controller.sectionProps('reader-2')?.rows).toEqual([
+        expect.objectContaining({ nativeId: 'one', state: 'unavailable' }),
+      ]);
+      await settle();
+      expect(controller.sectionProps('reader-2')?.rows).toEqual([
+        expect.objectContaining({ nativeId: 'one', slug: 'HS2-ONE', state: 'open' }),
+      ]);
+
+      await controller.remove('one', 'reader-2');
+      expect(server.updateCheckouts).toEqual(['beta', 'beta']);
+      expect(adopted.at(-1)?.blocked_by).toEqual([]);
+      expect(showToast).toHaveBeenLastCalledWith('HS2-ONE no longer blocks HS2-FAR.');
+    });
+
+    it('keeps a linked frame that cannot update, lacks dependencies, or has closed from editing', () => {
+      const readOnly = linkedFrame({ canUpdate: false });
+      let controller = setup({ linkedReader: () => readOnly.frame }).controller;
+      expect(controller.sectionProps('reader-2')?.availability).toEqual({
+        enabled: false,
+        disabledReason: 'This ticket cannot be edited.',
+      });
+      expect(controller.open('reader-2')).toBe(false);
+      const unsupported = linkedFrame({ dependencies: false });
+      controller = setup({ linkedReader: () => unsupported.frame }).controller;
+      expect(controller.sectionProps('reader-2')?.availability.enabled).toBe(false);
+      controller = setup({ linkedReader: () => undefined }).controller;
+      expect(controller.sectionProps('reader-9')).toBeUndefined();
+      expect(controller.open('reader-9')).toBe(false);
+    });
   });
 });

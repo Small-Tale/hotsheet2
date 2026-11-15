@@ -28,6 +28,7 @@ import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
+import { readerScopeOf } from '../features/linked-reader-subject';
 import type { TicketBlockersController } from '../features/ticket-blockers';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
@@ -1632,15 +1633,16 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     ticketBlockers.dispose();
   });
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openBlockerDialog.selector, () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openBlockerDialog.selector, (_event, target) => {
       blockerSearchInput.cancel();
-      if (ticketBlockers.open()) focusBlockerSearch();
+      // From the modal reader, the dialog opens for that reader frame's ticket and inside it (HS2-15PE59).
+      if (ticketBlockers.open(readerScopeOf(target))) focusBlockerSearch();
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.removeBlocker.selector, (_event, target) => {
       const nativeId = data(target).blockerId;
-      if (nativeId) void ticketBlockers.remove(nativeId);
+      if (nativeId) void ticketBlockers.remove(nativeId, readerScopeOf(target));
     }),
   );
   lifetime.add(
