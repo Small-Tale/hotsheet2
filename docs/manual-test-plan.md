@@ -196,6 +196,16 @@ result in the ticket.
 - In a project folder without Git, open Repository Status at wide and narrow widths. Initialize, enter an unavailable remote, retry with a valid remote, and confirm existing files remain untracked.
 - In a repository with more than one page of changed files or commits, scroll to load the next page. Switch projects while a page loads and check that the old result does not appear. Reset after an empty page and confirm new files appear.
 
+### Window chrome follows the pinned theme (HS2-15W35F)
+
+On the packaged macOS desktop app with the system in Light appearance, choose App
+Settings → General → Theme → Dark: the title bar and traffic-light area turn dark
+at once. Quit and relaunch: the window opens dark. Choose Light while the system
+is Dark, then Auto: the chrome follows the system again. Repeat in an installed
+Safari web app (Add to Dock) and confirm its title bar color follows the same
+choices. Automated coverage asserts the meta contents and the mocked Tauri call
+only; the native rendering needs this check.
+
 ### WebKit list scroll after ticket mutation (HS2-KTXBK2)
 
 At wide and phone widths, scroll a long ticket list deep into its rows, change a

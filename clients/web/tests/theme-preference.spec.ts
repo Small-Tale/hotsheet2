@@ -11,6 +11,28 @@ async function scheme(page: Page) {
   }));
 }
 
+/** HS2-15W35F: the PWA theme-color metas as [light media, dark media] contents. */
+async function themeColors(page: Page) {
+  return page.evaluate(() =>
+    ['light', 'dark'].map(
+      (scheme) =>
+        document
+          .querySelector(`meta[name="theme-color"][media="(prefers-color-scheme: ${scheme})"]`)
+          ?.getAttribute('content') ?? null,
+    ),
+  );
+}
+
+/** The theme-color the browser applies: the content of the meta whose media query matches now. */
+async function activeThemeColor(page: Page) {
+  return page.evaluate(
+    () =>
+      [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')]
+        .find((meta) => matchMedia(meta.media).matches)
+        ?.getAttribute('content') ?? null,
+  );
+}
+
 async function openGeneral(page: Page) {
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'General', exact: true }).click();
@@ -32,6 +54,7 @@ async function settled(page: Page) {
 
 // HS2-EFTHS6: App Settings → General → Theme chooses Auto (default, follows the system), Light, or Dark
 // for this browser; the choice pins the whole app's scheme, survives a reload, and Auto releases it.
+// HS2-15W35F: the PWA theme-color metas follow the same pin and return to their media under Auto.
 test.describe('App Settings theme (HS2-EFTHS6)', () => {
   test.use({ colorScheme: 'light' });
 
@@ -44,11 +67,16 @@ test.describe('App Settings theme (HS2-EFTHS6)', () => {
     // Auto is the default and follows the (light) system.
     await expect(radio('Auto')).toBeChecked();
     expect(await scheme(page)).toMatchObject({ colorScheme: 'light dark', classes: [], stored: null });
+    expect(await themeColors(page)).toEqual(['#ffffff', '#1c1c1e']);
+    expect(await activeThemeColor(page)).toBe('#ffffff');
 
     // Dark pins the scheme on a light system; a keyboard arrow moves within the group.
     await radio('Dark').check();
     await expect.poll(async () => (await scheme(page)).classes).toEqual(['kui-dark']);
     expect(await scheme(page)).toMatchObject({ colorScheme: 'dark', stored: 'dark' });
+    // HS2-15W35F: the browser and installed-app chrome color follows the pin on a light system.
+    expect(await themeColors(page)).toEqual(['#1c1c1e', '#1c1c1e']);
+    expect(await activeThemeColor(page)).toBe('#1c1c1e');
     await expect(radio('Dark')).toBeFocused();
     for (const [label, width] of [
       ['wide', 1280],
@@ -68,6 +96,7 @@ test.describe('App Settings theme (HS2-EFTHS6)', () => {
     await page.reload();
     const reopened = await openGeneral(page);
     expect(await scheme(page)).toMatchObject({ colorScheme: 'dark', classes: ['kui-dark'], stored: 'dark' });
+    expect(await themeColors(page)).toEqual(['#1c1c1e', '#1c1c1e']);
     await expect(reopened.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
 
     // Light pins light even when the system turns dark.
@@ -75,6 +104,8 @@ test.describe('App Settings theme (HS2-EFTHS6)', () => {
     await reopened.getByRole('radio', { name: 'Light', exact: true }).check();
     await expect.poll(async () => (await scheme(page)).classes).toEqual(['kui-light']);
     expect(await scheme(page)).toMatchObject({ colorScheme: 'light', stored: 'light' });
+    expect(await themeColors(page)).toEqual(['#ffffff', '#ffffff']);
+    expect(await activeThemeColor(page)).toBe('#ffffff');
     await settled(page);
     await page.screenshot({ path: 'target/visual-captures/hs2-efths6-theme-light-wide.png' });
 
@@ -82,6 +113,8 @@ test.describe('App Settings theme (HS2-EFTHS6)', () => {
     await reopened.getByRole('radio', { name: 'Auto', exact: true }).check();
     await expect.poll(async () => (await scheme(page)).classes).toEqual([]);
     expect(await scheme(page)).toMatchObject({ stored: null });
+    expect(await themeColors(page)).toEqual(['#ffffff', '#1c1c1e']);
+    expect(await activeThemeColor(page)).toBe('#1c1c1e');
     expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true);
     await settled(page);
     await page.screenshot({ path: 'target/visual-captures/hs2-efths6-theme-auto-system-dark-wide.png' });

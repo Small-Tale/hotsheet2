@@ -305,6 +305,13 @@ same explanation (HS2-CGXGWY).
   must prevent success acknowledgement. A durable recovery copy does not require a
   successful ordinary server save. Crash and force-termination guarantees remain outside this contract.
 
+- **Window chrome follows the app theme.** A pinned App Settings → General → Theme
+  (HS2-EFTHS6) sets the main window's native theme, so the macOS title bar and
+  traffic-light area match the document; Auto releases it to follow the system
+  (HS2-15W35F). The same choice sets both PWA `theme-color` metas to the pinned
+  scheme's color and restores their per-media colors under Auto. The choice applies
+  at startup and live on change; details are in `docs/ui-design-philosophy.md`.
+
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before
   adding its Tauri host. A `/ux-demo` route renders the real production components
   against deterministic mock service adapters for isolated and composed UX review. Its

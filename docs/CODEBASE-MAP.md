@@ -286,7 +286,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-live-summary.ts # Project sidebar Live section numbers: linked-store summary, compact chips, host callouts; rendered by components/project-live-section.tsx (HS2-F788GW)
     src/grid-sidebar-live.ts # Grid sidebar gauge/triage numbers per project group from live state, state words, hover titles, need order (HS2-E1AQE8)
     src/away-digest.ts       # While-you-were-away digest (HS2-JJ9RYN): request-free recorder of pushed live-state and host-health changes during standby, token-minute window, completion window count, silent-exit rule, row wording
-    src/theme-preference.ts  # App Settings → General → Theme (HS2-EFTHS6): auto/light/dark per browser (`hotsheet.theme`), applied as Kerf `.kui-light`/`.kui-dark` root scope
+    src/theme-preference.ts  # App Settings → General → Theme (HS2-EFTHS6): auto/light/dark per browser (`hotsheet.theme`), applied as Kerf `.kui-light`/`.kui-dark` root scope and to the PWA `theme-color` metas (HS2-15W35F)
+    src/desktop-window-theme.ts # Tauri window chrome follows the pinned theme through core `plugin:window|set_theme` (`null` under Auto) (HS2-15W35F)
     src/theme-tile-art.tsx   # Theme picker tile artwork: frozen light/dark palettes, stylized window, diagonal Auto split (HS2-EFTHS6)
     src/standby.ts           # Standby (HS2-EQVZTZ): /standby-settings contract + parser, scope by entry point, display model from live state (rows, amber alerts), clock/freshness labels, request-free idle timer
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)

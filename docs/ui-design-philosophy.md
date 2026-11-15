@@ -66,6 +66,16 @@ does not fork Kerf's guidance.
   shows a stylized Hot Sheet window in that scheme, after news-cloud2's Appearance
   picker. Kerf has no preview-tile choice, so the tiles are native radios with an
   app-owned frame (`components/theme-picker.css`) until `KF-C29WJ9` ships.
+  The pin also reaches the chrome outside the document (HS2-15W35F). Both
+  `theme-color` metas keep their `prefers-color-scheme` media queries; a pinned
+  choice gives both the pinned scheme's color (`#ffffff` or `#1c1c1e`), so the
+  browser toolbar and an installed web app's title bar match whatever the system
+  is, and Auto restores each meta's own color. In the packaged desktop app the
+  main window's native theme (macOS title bar and traffic-light area) is set
+  through Tauri's `set_theme` with `light` or `dark`, and Auto passes `null` so
+  the window follows the system again. The launch-origin capability grants only
+  `core:window:allow-set-theme` for this; a browser or a debug desktop build
+  without that capability skips the call.
 
 - Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) carry two interim
   decisions that wait on Kerf. A group's Rename and Ungroup actions open from a

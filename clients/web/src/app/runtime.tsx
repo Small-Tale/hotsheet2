@@ -122,6 +122,7 @@ import { createConversationUnreadTracker, trackDocumentVisibility } from '../con
 import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
+import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
@@ -602,6 +603,7 @@ export async function startHotSheetWebClient() {
   // App Settings → General → Theme (HS2-EFTHS6): pin the stored scheme before the first render.
   const themePreference = signal(readThemePreference(localStorage));
   applyThemePreference(document.documentElement, themePreference.value);
+  void syncDesktopWindowTheme(themePreference.value);
   const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
   const guidanceUpdates = signal<GuidanceSourceUpdate[]>([]);
   const guidanceUpdatesCheckedAt = signal<number | undefined>(undefined);

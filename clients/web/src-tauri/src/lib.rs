@@ -227,6 +227,8 @@ pub fn run() {
                         "remote": { "urls": [format!("{origin}/*")] },
                         "permissions": [
                             "allow-desktop-flush-complete",
+                            // HS2-15W35F: the window chrome follows the app's pinned theme.
+                            "core:window:allow-set-theme",
                             "notification:allow-is-permission-granted",
                             "notification:allow-request-permission",
                             "notification:allow-notify"

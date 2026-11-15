@@ -37,6 +37,7 @@ import { syncControlledOpen } from '../controlled-open';
 import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
+import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
@@ -909,6 +910,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       themePreference.value = preference;
       storeThemePreference(localStorage, preference);
       applyThemePreference(document.documentElement, preference);
+      void syncDesktopWindowTheme(preference);
     }),
   );
   lifetime.add(
