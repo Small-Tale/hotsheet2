@@ -9,7 +9,9 @@ import {
   isolateAiToolProbes,
   isolateHostHealthSampler,
   isolateMachineHome,
+  isolateNativeSecrets,
   MACHINE_HOME_ENV,
+  NATIVE_SECRETS_ENV,
 } from './test-ai-tool-isolation.mjs';
 
 describe('HS2-34QFBQ machine-home isolation', () => {
@@ -54,5 +56,16 @@ describe('HS2-DTAVQA host health sampler isolation', () => {
   it('turns the sampler off in a given environment without touching other variables', () => {
     const env = { PATH: '/usr/bin' };
     expect(isolateHostHealthSampler(env)).toEqual({ PATH: '/usr/bin', [HOST_HEALTH_SAMPLER_ENV]: 'off' });
+  });
+});
+
+describe('HS2-XTQHPK native keychain isolation', () => {
+  it('runs every worker, and every server or CLI it spawns, with the OS keychain denied', () => {
+    expect(process.env[NATIVE_SECRETS_ENV]).toBe('deny');
+  });
+
+  it('only ever sets the refusing value', () => {
+    const env = { PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'allow' };
+    expect(isolateNativeSecrets(env)).toEqual({ PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'deny' });
   });
 });

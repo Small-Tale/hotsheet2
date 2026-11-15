@@ -13,3 +13,5 @@ export declare const MACHINE_HOME_ENV: Readonly<
   >
 >;
 export declare function isolateMachineHome<T extends Record<string, string | undefined>>(root: string, env?: T): T;
+export declare const NATIVE_SECRETS_ENV: 'HOTSHEET_NATIVE_SECRETS';
+export declare function isolateNativeSecrets<T extends Record<string, string | undefined>>(env?: T): T;

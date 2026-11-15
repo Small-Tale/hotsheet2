@@ -802,6 +802,15 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.
+- **Keychain kill switch (HS2-XTQHPK):** fixture activation is opt-in per process, so a
+  test that spawns `hotsheet-cli` or `hotsheet-server` without it used to reach the
+  maintainer's real keychain. The keychain is per user, not per `HOTSHEET_HOME`, and every
+  rebuilt binary prompts again. `HOTSHEET_NATIVE_SECRETS=deny` makes the native credential
+  port refuse every set, get and delete with an error naming HS2-XTQHPK, without calling
+  the OS. `.cargo/config.toml` forces it for every process cargo or nextest launches, and
+  the Playwright and Vitest configs set it before workers and servers start. The switch
+  only refuses; it never activates fixture credentials, so tests that need credentials
+  still opt into synthetic ones.
 - **Machine-home isolation (HS2-T9VXEP):** tests and repros must never write the real
   `~/.hotsheet2` (`checkouts.json`, `settings.json`, `settings-locks`). Hot Sheet-launched
   agent shells export `HOTSHEET_HOME` as that real home, so inheriting the environment is

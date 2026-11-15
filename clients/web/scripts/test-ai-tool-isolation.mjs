@@ -22,6 +22,18 @@ export function isolateHostHealthSampler(env = process.env) {
   return env;
 }
 
+// HS2-XTQHPK: no test may reach the OS keychain. Servers and CLIs that browser and Node
+// suites spawn are not test builds, and the keychain is per user rather than per
+// HOTSHEET_HOME, so a credential read raises a macOS password prompt. The switch only
+// refuses native credentials; it never enables synthetic ones. Rust tests get it from
+// `.cargo/config.toml`.
+export const NATIVE_SECRETS_ENV = 'HOTSHEET_NATIVE_SECRETS';
+
+export function isolateNativeSecrets(env = process.env) {
+  env[NATIVE_SECRETS_ENV] = 'deny';
+  return env;
+}
+
 // HS2-34QFBQ: a unit test that misses an injected seam can reach code that resolves the
 // machine home from `HOTSHEET_HOME` (falling back to `~/.hotsheet2`), the HS1 home, the
 // platform cache, or Claude Code's user config, and could start or write the developer's

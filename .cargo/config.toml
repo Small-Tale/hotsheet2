@@ -50,3 +50,9 @@ HOTSHEET_LAUNCH_AGENTS_DIR = { value = "target/test-launch-agents", force = true
 # can start an installed AI tool with real credentials, whatever a shared test home's
 # `ai.defaults` names.
 HOTSHEET_SYNC_AI_ALLOWED_TOOLS = { value = "repair-fixture", force = true }
+# HS2-XTQHPK: no test may reach the OS keychain. Spawned hotsheet-cli and hotsheet-server
+# binaries are not `cfg(test)` builds, and the keychain is per user rather than per
+# HOTSHEET_HOME, so without this a test that forgets fixture credentials raises a macOS
+# password prompt. The switch only refuses; tests that need credentials still opt into
+# synthetic ones explicitly.
+HOTSHEET_NATIVE_SECRETS = { value = "deny", force = true }
