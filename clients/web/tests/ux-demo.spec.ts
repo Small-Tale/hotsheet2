@@ -596,7 +596,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['terminal-memory-settings', 6],
     ['permission-rules-settings', 5],
     ['project-sidebar', 1],
-    ['command-settings-editor', 1],
+    ['command-settings-editor', 3], // HS2-BZKTDC adds the loading and failed-load examples
     ['ai-tool-settings', 1],
     ['permission-request', 1],
     ['notification-center', 1],
@@ -9244,7 +9244,7 @@ test('exposes a General app-settings entry in the settings navigator', async ({ 
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
-  const editor = page.locator('[data-component="command-settings-editor"]');
+  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]');
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
   // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
@@ -10591,7 +10591,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   // The label used to share a Toolbar row with the menu trigger and truncate to "AI config…" (HS2-XZ6Q5A).
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
-  const editor = page.locator('[data-component="command-settings-editor"]');
+  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]');
   const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
   await publishRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
