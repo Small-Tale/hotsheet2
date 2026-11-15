@@ -125,6 +125,11 @@
   .notification-card[data-footer-layout='wrap'] .notification-card__footer {
     flex-wrap: wrap;
   }
+  /* The trailing slot wraps by its content width: a zero basis never forced a wrap, so its button
+     spilled left over the quiet actions at phone width (HS2-5EV4N9). */
+  .notification-card[data-footer-layout='wrap'] .notification-card__end-actions {
+    flex-basis: auto;
+  }
   .notification-card[data-footer-layout='stack'] .notification-card__footer {
     align-items: stretch;
     flex-direction: column;
