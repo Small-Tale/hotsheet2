@@ -39978,6 +39978,17 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     await kindSelect.locator('.kui-select__option[data-value="feedback_needed"]').click();
     await expect(kindSelect.locator('.kui-select__trigger')).toHaveAttribute('aria-expanded', 'false');
     await page.screenshot({ path: test.info().outputPath('hs2-q0gwxt-narrow-kind.png') });
+    // HS2-6T8C1D: an unsaved type choice survives re-renders of the open dialog.
+    for (const [label, width] of [
+      ['medium', 1100],
+      ['wide', 1440],
+      ['returned-narrow', 390],
+    ] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(kind).toBeVisible();
+      await expect(kindSelect).toHaveJSProperty('value', 'feedback_needed');
+      await page.screenshot({ path: test.info().outputPath(`hs2-6t8c1d-${label}.png`) });
+    }
     await kind.getByRole('button', { name: 'Save' }).click();
     await expect(kind).toHaveCount(0);
     updated = await server.request<FullTicket>(`/tickets/${created.id}`);

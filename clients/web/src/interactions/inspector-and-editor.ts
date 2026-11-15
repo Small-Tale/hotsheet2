@@ -122,6 +122,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly saveNoteMetadata: (form: HTMLFormElement) => Promise<void>;
   readonly dismissNoteMetadata: () => void;
   readonly chooseNoteResponseLink: (value: string) => void;
+  readonly chooseNoteKind: (value: string) => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
@@ -210,6 +211,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     saveNoteMetadata,
     dismissNoteMetadata,
     chooseNoteResponseLink,
+    chooseNoteKind,
     dismissFeedbackRequest,
     feedbackResponseDrafts,
     readerNoteAutosave,
@@ -1332,6 +1334,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     // HS2-J4G9GB: the response picker is controlled, so a re-render keeps the person's choice.
     delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.noteResponseLinkField.selector, (_event, target) => {
       chooseNoteResponseLink((target as HTMLSelectElement).value);
+    }),
+  );
+  lifetime.add(
+    // HS2-6T8C1D: the type picker is controlled, so a re-render keeps the person's choice.
+    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.noteKindField.selector, (_event, target) => {
+      chooseNoteKind((target as HTMLSelectElement).value);
     }),
   );
   lifetime.add(

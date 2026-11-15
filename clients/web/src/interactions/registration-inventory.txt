@@ -446,6 +446,7 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="dismiss-note-
 inspector-and-editor	delegate	document.body	'click'	'[data-action="edit-note-metadata"]'
 inspector-and-editor	delegate	document.body	'submit'	'[data-action="save-note-metadata"]'
 inspector-and-editor	delegate	document.body	'change'	'[name="note-metadata-response"]'
+inspector-and-editor	delegate	document.body	'change'	'[name="note-metadata-kind"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="cancel-note-metadata"]'
 inspector-and-editor	delegate	document.body	'wa-hide'	'[data-key="note-metadata-dialog"]'
 inspector-and-editor	delegate	document.body	'contextmenu'	'[data-component="note-card"][data-repairable="true"]'

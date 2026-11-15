@@ -6498,6 +6498,11 @@ export async function startHotSheetWebClient() {
       const state = noteMetadataDialog.peek();
       if (state?.mode === 'response') noteMetadataDialog.value = { ...state, responseChoice: value };
     },
+    chooseNoteKind: (value: string) => {
+      const state = noteMetadataDialog.peek(),
+        kindChoice = (['regular', 'activity', 'status', 'feedback_needed'] as const).find((kind) => kind === value);
+      if (state?.mode === 'kind' && kindChoice) noteMetadataDialog.value = { ...state, kindChoice };
+    },
     dismissFeedbackRequest,
     runCommand,
     commandDialogId,

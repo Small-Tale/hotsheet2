@@ -53,4 +53,15 @@ describe('NoteMetadataDialog', () => {
     expect(response).toContain('No new note is added.');
     expect(response).not.toContain('Confirm type change');
   });
+
+  it('HS2-6T8C1D renders the unsaved type choice instead of the stored kind', () => {
+    const stored = String(NoteMetadataDialog({ state: { ...state, kind: 'regular' } }));
+    expect(stored).toMatch(
+      /name="note-metadata-kind"[^>]*value="regular"|value="regular"[^>]*name="note-metadata-kind"/u,
+    );
+    const chosen = String(NoteMetadataDialog({ state: { ...state, kind: 'regular', kindChoice: 'status' } }));
+    expect(chosen).toMatch(
+      /name="note-metadata-kind"[^>]*value="status"|value="status"[^>]*name="note-metadata-kind"/u,
+    );
+  });
 });

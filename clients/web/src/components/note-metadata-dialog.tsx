@@ -30,6 +30,8 @@ export interface NoteMetadataDialogState {
   responseTargets?: ReadonlyArray<{ value: string; label: string }>;
   /** The picker's current, unsaved choice. */
   responseChoice?: string;
+  /** The Change Type picker's current, unsaved choice (HS2-6T8C1D). */
+  kindChoice?: NoteKind;
   submitting?: boolean;
   error?: string;
 }
@@ -63,7 +65,7 @@ export function NoteMetadataDialog({ state }: { state?: NoteMetadataDialogState 
           <List gap="m">
             {state.mode === 'kind' && (
               <>
-                <Select name="note-metadata-kind" label="Type" value={state.kind} choices={kinds} />
+                <Select name="note-metadata-kind" label="Type" value={state.kindChoice ?? state.kind} choices={kinds} />
                 {state.kind === 'feedback_needed' && !state.hasResponses && (
                   <Text size="compact" tone="danger">
                     Changing this type closes the unanswered feedback request. Save to confirm.

@@ -4797,7 +4797,8 @@ a confirmation dialog; an empty summary or confidence clears that value. A type
 change that closes an unanswered feedback request is called out before saving,
 and a request with linked responses cannot change type. Unsupported provider
 actions stay visible with a reason. Saves use the optimistic token and retain the
-original author and response links.
+original author and response links. The dialog keeps an unsaved type choice in its
+state, so a re-render such as a window resize does not reset it (HS2-6T8C1D).
 
 **Link as feedback response** (HS2-J4G9GB) opens the same dialog with a picker of the
 ticket's feedback requests created before the note, plus **Not a response** to remove
