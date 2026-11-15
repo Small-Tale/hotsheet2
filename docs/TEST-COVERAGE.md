@@ -438,6 +438,13 @@ fallbacks, language-filtered capped voice choices, menu entries, checks, icons, 
 the disabled empty clear) and `announcer.spec.ts` (no voice row, the settings button
 beside Audio, voice and speed applied to narration, reload persistence, server engine
 without a voice name, and clear history kept across reopening).
+HS2-CEZVSE is covered in `tts.rs` unit tests (`say -v '?'` parsing with spaced and
+parenthesized names, duplicates and malformed lines; a fake `say` command; provider
+routing), `tests/http.rs` (authenticated `/tts/voices`, default provider, 404 and
+503), `announcer-settings.test.ts` and `server-response-parsers.test.ts` (server voice
+menu entries and the response shape), and `announcer.spec.ts` (server voices read only
+for a server engine, language filtering, the chosen voice sent to `/tts/synthesize`,
+reload persistence, wide/medium/narrow/wide menu fit, and the return to browser voices).
 HS2-7YD7S9 is covered in `announcer.spec.ts`: the expanded card has no list or
 per-item buttons, its current-item area takes most of the card's height and fits a
 long item without scrolling, previous and next reach every item, and a short window

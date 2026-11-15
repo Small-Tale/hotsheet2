@@ -18,7 +18,7 @@ import {
   loadAnnouncerSettings,
   saveAnnouncerSettings,
 } from '../announcer-settings';
-import { type ActivityEvent, Api } from '../api';
+import { type ActivityEvent, Api, type TtsVoice } from '../api';
 import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
 import { regionCommitRoutes } from '../resizable-region-commits';
@@ -66,6 +66,23 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       rate: rate.peek(),
       clearedAt,
     });
+  };
+  // HS2-CEZVSE: the selected server engine's voices, read when the announcer opens or the
+  // engine changes. An engine that cannot list voices keeps only its default voice.
+  const serverVoices = signal<TtsVoice[]>([]);
+  let serverVoicesGeneration = 0;
+  const loadServerVoices = () => {
+    const generation = ++serverVoicesGeneration;
+    serverVoices.value = [];
+    const engine = provider.peek();
+    const primary = projects.peek().at(0);
+    if (engine === 'browser' || !primary) return;
+    void new Api(primary.apiPath).ttsVoices(engine).then(
+      (listed) => {
+        if (generation === serverVoicesGeneration) serverVoices.value = listed;
+      },
+      () => undefined,
+    );
   };
   const refreshVoices = () => {
     if (typeof speechSynthesis === 'undefined' || typeof speechSynthesis.getVoices !== 'function') return;
@@ -202,6 +219,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   async function loadDigest() {
     const generation = ++requestGeneration;
     const primary = projects.peek().at(0);
+    loadServerVoices();
     if (primary) {
       void new Api(primary.apiPath).ttsProviders().then(
         (available) => {
@@ -308,6 +326,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           provider.value = value;
           // A voice name belongs to its engine; the new engine starts at its default voice.
           voice.value = '';
+          loadServerVoices();
         }
         break;
       case 'voice':
@@ -379,7 +398,11 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           providers={providers.value}
           provider={provider.value}
           voice={voice.value}
-          voices={browserVoices.value}
+          voices={
+            provider.value === 'browser'
+              ? browserVoices.value
+              : announcerVoiceChoices(serverVoices.value, navigator.language, voice.value)
+          }
           rate={rate.value}
         />
       );

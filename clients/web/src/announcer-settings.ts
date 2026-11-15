@@ -53,7 +53,8 @@ export function saveAnnouncerSettings(storage: Pick<Storage, 'setItem'>, setting
 export const announcerRateLabel = (rate: number) => (rate === 1 ? 'Normal' : `${rate}×`);
 
 /**
- * The browser voices offered for the page's language, by name, capped at {@link ANNOUNCER_VOICE_LIMIT}.
+ * The voices offered for the page's language, by name, capped at {@link ANNOUNCER_VOICE_LIMIT}.
+ * Browser voices and server voices (HS2-CEZVSE) are chosen the same way.
  * The selected voice stays listed even when it falls outside the language or the cap.
  */
 export function announcerVoiceChoices(
@@ -91,7 +92,7 @@ export function announcerSettingsMenu({
 }: {
   providers: readonly string[];
   provider: string;
-  /** Browser voice names; ignored for a server provider, which offers only its default voice. */
+  /** The selected engine's voice names: browser voices, or the server provider's (HS2-CEZVSE). */
   voices: readonly string[];
   voice: string;
   rate: number;
@@ -104,7 +105,6 @@ export function announcerSettingsMenu({
     attributes: { 'data-announcer-setting': setting, 'data-announcer-value': value },
   });
   const engines = ['browser', ...providers.filter((id) => id !== 'browser')];
-  const voiceNames = provider === 'browser' ? voices : [];
   return [
     {
       label: 'Voice',
@@ -115,7 +115,7 @@ export function announcerSettingsMenu({
         { kind: 'divider' },
         { kind: 'heading', label: 'Voice' },
         choice('voice', '', 'Default voice', !voice),
-        ...voiceNames.map((name) => choice('voice', name, name, name === voice)),
+        ...voices.map((name) => choice('voice', name, name, name === voice)),
       ],
     },
     {

@@ -514,9 +514,13 @@ cursor-addressable stdout/stderr lines and cancellation. `/notifications` persis
 bounded server-process routing feed with checkout/store/ticket targets, deduplication, and
 acknowledgement while also publishing live events. `/tts/synthesize` accepts text,
 provider id, and voice only; provider adapters and their credential resolution remain in
-the server process. `/tts/providers` lists configured server adapters. On macOS the
-server supplies `macos-say`, passing narration through stdin and converting the
-temporary audio to WAV; the temporary files are removed after the response is built.
+the server process. `/tts/providers` lists configured server adapters, and
+`/tts/voices?provider=<id>` lists one adapter's voices as `{name, lang}` entries (an
+adapter that cannot list voices returns an empty list; an unknown provider is 404 and a
+failed listing 503, HS2-CEZVSE). On macOS the server supplies `macos-say`, passing
+narration through stdin and converting the temporary audio to WAV; the temporary files
+are removed after the response is built. Its voices come from `say -v '?'`, parsed by
+`tts::parse_say_voices`.
 
 #### Route reference: runs, views, lifecycle, bridge probe, announce
 

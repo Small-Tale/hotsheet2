@@ -45,7 +45,7 @@ export interface AnnouncerOverlayProps {
   providers?: readonly string[];
   provider?: string;
   voice?: string;
-  /** Browser voice names the settings menu offers (HS2-PRCC6V). */
+  /** The selected engine's voice names the settings menu offers (HS2-PRCC6V, HS2-CEZVSE). */
   voices?: readonly string[];
   /** Speech rate (HS2-PRCC6V). */
   rate?: number;

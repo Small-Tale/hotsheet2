@@ -9783,6 +9783,51 @@ paths:
                 type: array
                 items:
                   type: string
+  /tts/voices:
+    get:
+      operationId: list_tts_voices
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          description: Speech provider identifier; the first configured provider when omitted.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The voices the server speech provider offers; empty when it offers only its default voice.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - name
+                    - lang
+                  properties:
+                    name:
+                      type: string
+                    lang:
+                      type: string
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /tts/synthesize:
     post:
       operationId: synthesize_speech

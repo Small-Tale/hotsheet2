@@ -15567,6 +15567,85 @@ async fn tts_runs_behind_server_provider_boundary_without_client_secrets() {
     );
 }
 
+struct FakeVoicedTts(Result<Vec<hotsheet_server::tts::TtsVoice>, String>);
+impl hotsheet_server::tts::TtsProvider for FakeVoicedTts {
+    fn id(&self) -> &str {
+        "voiced"
+    }
+    fn synthesize(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<hotsheet_server::tts::TtsAudio, String> {
+        Err("not used".into())
+    }
+    fn voices(&self) -> Result<Vec<hotsheet_server::tts::TtsVoice>, String> {
+        self.0.clone()
+    }
+}
+
+#[tokio::test]
+async fn hs2_cezvse_tts_voices_list_the_named_provider_voices() {
+    let (_d, st) = state();
+    let voices = vec![hotsheet_server::tts::TtsVoice {
+        name: "Anna (German (Germany))".into(),
+        lang: "de-DE".into(),
+    }];
+    let app = app(st.with_tts_providers(vec![
+        std::sync::Arc::new(FakeTts),
+        std::sync::Arc::new(FakeVoicedTts(Ok(voices))),
+    ]));
+    let listed = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices?provider=voiced", None))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(listed).await,
+        serde_json::json!([{ "name": "Anna (German (Germany))", "lang": "de-DE" }])
+    );
+    // The first provider is the default, and one that cannot list voices offers none.
+    let default = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices", None))
+        .await
+        .unwrap();
+    assert_eq!(default.status(), StatusCode::OK);
+    assert_eq!(body_json(default).await, serde_json::json!([]));
+    let missing = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices?provider=missing", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let unauthenticated = app
+        .oneshot(
+            Request::builder()
+                .uri("/tts/voices?provider=voiced")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn hs2_cezvse_tts_voices_report_an_unavailable_listing() {
+    let (_d, st) = state();
+    let app = app(
+        st.with_tts_providers(vec![std::sync::Arc::new(FakeVoicedTts(Err(
+            "local speech voices are unavailable".into(),
+        )))]),
+    );
+    let resp = app
+        .oneshot(authed("GET", "/tts/voices?provider=voiced", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
 #[tokio::test]
 async fn create_get_update_close_and_query() {
     let (_d, st) = state();

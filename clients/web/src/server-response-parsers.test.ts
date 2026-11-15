@@ -51,6 +51,7 @@ import {
   parseTicketStoreSyncReport,
   parseTrashPurge,
   parseTrashSettings,
+  parseTtsVoices,
   type ResponseParser,
   ServerResponseShapeError,
 } from './server-response-parsers';
@@ -387,6 +388,10 @@ describe('server response parsers (HS2-34P6XY)', () => {
     });
     expect(parseGroupRename({ id: '7K3M9P2QXA', name: 'Sprint', updated: 0 }).id).toBe('7K3M9P2QXA');
     expect(parseStringList(['a'])).toEqual(['a']);
+    expect(parseTtsVoices([{ name: 'Anna (German (Germany))', lang: 'de-DE' }])).toEqual([
+      { name: 'Anna (German (Germany))', lang: 'de-DE' },
+    ]);
+    expect(parseTtsVoices([])).toEqual([]);
   });
 
   it.each([
@@ -416,6 +421,8 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['group create', () => parseGroupCreate({ id: 'X', name: 'Board' })],
     ['group rename', () => parseGroupRename({ id: 1, name: 'Board', updated: 0 })],
     ['string list', () => parseStringList(['a', 1])],
+    ['speech voice list', () => parseTtsVoices([{ name: 'Anna' }])],
+    ['speech voice list', () => parseTtsVoices({ name: 'Anna', lang: 'de-DE' })],
   ])('rejects a malformed %s body', (what, parse) => {
     expect(parse).toThrow(new ServerResponseShapeError(what));
   });

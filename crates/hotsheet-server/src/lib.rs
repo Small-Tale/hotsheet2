@@ -2230,6 +2230,7 @@ pub fn app(state: AppState) -> Router {
             "/tts/providers",
             get(routes::project_tools::list_tts_providers),
         )
+        .route("/tts/voices", get(routes::project_tools::list_tts_voices))
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.
         .route("/terminals", get(list_terminals).post(open_terminal))

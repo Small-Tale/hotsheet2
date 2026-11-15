@@ -81,6 +81,7 @@ import type {
   ToolSession,
   TrashPurgePreview,
   TrashSettings,
+  TtsVoice,
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
@@ -710,6 +711,9 @@ export const parseProviderDescriptor = shape<ProviderDescriptor>(
   { connection_id: isString, provider: isString, display_name: isString, locator: isString, capabilities: isObject },
   { default: isBoolean, color: isString, ticket_prefix: isString },
 );
+
+/** `GET /tts/voices` (HS2-CEZVSE). */
+export const parseTtsVoices = shape<TtsVoice>('speech voice', { name: isString, lang: isString }).list;
 
 /** `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` (HS2-8QJ6W3). */
 export const parseTicketPrefix = shape<{ ticket_prefix: string }>('ticket prefix', { ticket_prefix: isString });

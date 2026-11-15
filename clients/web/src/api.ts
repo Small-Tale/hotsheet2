@@ -104,6 +104,7 @@ import {
   parseTrashPurge,
   parseTrashPurgePreview,
   parseTrashSettings,
+  parseTtsVoices,
   type ResponseParser,
 } from './server-response-parsers';
 import { parseStandbySettings, type StandbySettingsView } from './standby';
@@ -346,6 +347,13 @@ export type Capabilities = Record<
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
+/** One voice a server speech provider offers (`GET /tts/voices`, HS2-CEZVSE). */
+export interface TtsVoice {
+  /** The value the provider accepts as a synthesis `voice`. */
+  name: string;
+  /** A BCP 47 language tag such as `en-US`. */
+  lang: string;
+}
 export interface ProviderDescriptor {
   connection_id: string;
   provider: string;
@@ -2060,6 +2068,8 @@ export class Api {
     this.parsed(parseClientNotification, `/notifications/${encodeURIComponent(id)}/ack`, { method: 'POST' });
   /** Configured server speech adapters; browser speech is a separate local choice (HS2-5PSQJQ). */
   ttsProviders = () => this.parsed(parseStringList, '/tts/providers');
+  /** One server speech provider's voices, for the announcer's Voice menu (HS2-CEZVSE). */
+  ttsVoices = (provider: string) => this.parsed(parseTtsVoices, `/tts/voices?provider=${encodeURIComponent(provider)}`);
   synthesizeSpeech = async (text: string, provider: string, voice?: string): Promise<Blob> => {
     const headers = new Headers({ 'Content-Type': 'application/json', 'X-Hotsheet-Secret': this.secret });
     const response = await fetch(`${this.origin}/tts/synthesize`, {
