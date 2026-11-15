@@ -675,6 +675,12 @@ enum Cmd {
         /// a backup ref; never pushes.
         #[arg(long, value_name = "COMMIT", conflicts_with = "status")]
         adopt: Option<String>,
+        /// Move aside the provably stale Git locks sync needs (HS2-T0V269): each one over
+        /// 10 minutes old while no process has the store's Git directory open. Prints what
+        /// it moved and kept; never deletes a lock, fetches, or pushes. Sync runs the same
+        /// check by itself before every pass.
+        #[arg(long, conflicts_with_all = ["status", "abort_stalled_rebase", "adopt"])]
+        recover_stale_locks: bool,
         /// Internal (HS2-SPVT6W): run the repair session a headless `sync` started for
         /// STALL in this process and record how it ended. Started by `sync` itself.
         #[arg(
@@ -682,7 +688,7 @@ enum Cmd {
             value_name = "STALL",
             hide = true,
             requires_all = ["repair_prompt", "repair_project"],
-            conflicts_with_all = ["status", "abort_stalled_rebase", "adopt"]
+            conflicts_with_all = ["status", "abort_stalled_rebase", "adopt", "recover_stale_locks"]
         )]
         run_repair: Option<String>,
         /// With `--run-repair`: the repair prompt.

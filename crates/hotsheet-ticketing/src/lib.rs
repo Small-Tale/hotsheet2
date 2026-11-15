@@ -60,6 +60,7 @@ pub mod sync_health;
 pub mod sync_locks;
 pub mod sync_replay;
 pub mod sync_saved_writes;
+pub mod sync_stale_locks;
 pub mod terminal_limits;
 pub mod wire;
 pub mod worklist;

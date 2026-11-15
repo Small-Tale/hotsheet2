@@ -266,7 +266,11 @@ asks an AI through the same workflow as the server and reports it in `ai_help`;
 `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
 (§2.12.4).
 `hotsheet-cli sync` exits non-zero for `rejected`, `blocked` (a Git lock file,
-HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. The background loop emits `ticket_store_sync` change
+HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. Each pass first moves
+aside a provably stale Git lock it needs and prints what it moved;
+`hotsheet-cli sync --recover-stale-locks` runs only that recovery, prints each moved and
+kept lock, and exits non-zero while one stays held ([02](02-ticket-storage.md) §2.12.2,
+HS2-T0V269). The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
 
 **Sync after headless writes (HS2-D9ZGAE).** The background loop also syncs every Git

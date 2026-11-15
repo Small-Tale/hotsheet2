@@ -28,6 +28,8 @@
 //! `.lock`) is [`SyncReport::Blocked`] (HS2-6ACT5Y), never a conflict or an outage: the
 //! cycle checks for the locks it needs before any Git step and reads lock failures from
 //! each step's output, naming the lock files in the health reason ([`crate::sync_locks`]).
+//! A lock the pre-check finds is moved aside first when it is provably stale: old, and no
+//! process has the store's Git directory open (HS2-T0V269, [`crate::sync_stale_locks`]).
 
 use std::io::Write as _;
 use std::path::Path;
@@ -118,8 +120,9 @@ pub(crate) fn sync_once_with(store_path: &Path, limits: SyncLimits) -> SyncRepor
         return SyncReport::NoRemote;
     }
     record_attempt_start(store_path);
-    let (report, detail) = cycle(store_path, limits);
+    let (report, detail, moved) = cycle(store_path, limits);
     record_outcome(store_path, report, detail);
+    crate::sync_health::record_stale_lock_recovery(store_path, moved);
     report
 }
 
@@ -148,7 +151,33 @@ fn failed(report: SyncReport, reason: impl Into<String>) -> (SyncReport, CycleDe
 pub const STALLED_INTEGRATION_REASON: &str = "a rebase or merge is in progress or was \
      abandoned in the store; sync will not start another until it is finished or aborted";
 
-fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
+/// One cycle, with the stale Git locks its pre-check moved aside (HS2-T0V269), which the
+/// reason names after whatever the cycle reports, so a failure still leads its reason.
+fn cycle(
+    store_path: &Path,
+    limits: SyncLimits,
+) -> (
+    SyncReport,
+    CycleDetail,
+    Vec<crate::sync_stale_locks::MovedLock>,
+) {
+    let mut moved = Vec::new();
+    let (report, mut detail) = cycle_steps(store_path, limits, &mut moved);
+    if !moved.is_empty() {
+        let line = crate::sync_stale_locks::moved_line(&moved);
+        detail.reason = Some(match detail.reason.take() {
+            Some(reason) => format!("{reason}\n{line}"),
+            None => line,
+        });
+    }
+    (report, detail, moved)
+}
+
+fn cycle_steps(
+    store_path: &Path,
+    limits: SyncLimits,
+    moved: &mut Vec<crate::sync_stale_locks::MovedLock>,
+) -> (SyncReport, CycleDetail) {
     // HS2-RFJ1GN: never replay an old local branch after compaction replaced origin.
     if crate::repository_compaction::recovery_required(store_path) {
         return failed(
@@ -178,7 +207,8 @@ fn cycle(store_path: &Path, limits: SyncLimits) -> (SyncReport, CycleDetail) {
         };
         // HS2-6ACT5Y: a stale Git lock fails every local step; say so before one starts,
         // so a rebase never stops half-way on it and nothing reads as a merge conflict.
-        if let Some(blocked) = held_lock_failure(store_path) {
+        // HS2-T0V269: a provably stale one is moved aside first, under this lock.
+        if let Some(blocked) = held_lock_failure(store_path, moved) {
             return blocked;
         }
         // HS2-9TV6A2: every replay and continue below goes through the semantic merge
@@ -357,8 +387,8 @@ fn conflict(heads: Option<(String, String)>) -> (SyncReport, CycleDetail) {
                 "a ticket body changed on both sides and could not be merged automatically"
                     .to_string(),
             ),
-            oversized: Vec::new(),
             conflict_heads: heads,
+            ..CycleDetail::default()
         },
     )
 }
@@ -413,7 +443,7 @@ fn classify_push_failure(
                 reason
             }),
             oversized,
-            conflict_heads: None,
+            ..CycleDetail::default()
         },
     )
 }
@@ -854,18 +884,79 @@ fn commit_pending_checked(store_path: &Path) -> Result<(), (SyncReport, CycleDet
 const HELD_LOCK_CHECKS: u32 = 4;
 const HELD_LOCK_RECHECK: std::time::Duration = std::time::Duration::from_millis(100);
 
-/// [`SyncReport::Blocked`] when a lock the cycle needs is held now and stays held across a
-/// few brief re-checks.
-fn held_lock_failure(store_path: &Path) -> Option<(SyncReport, CycleDetail)> {
+/// The locks the cycle needs that are held now and stay held across a few brief re-checks.
+fn settled_held_locks(store_path: &Path) -> Vec<std::path::PathBuf> {
     let mut locks = crate::sync_locks::held_locks(store_path);
     for _ in 1..HELD_LOCK_CHECKS {
         if locks.is_empty() {
-            return None;
+            break;
         }
         std::thread::sleep(HELD_LOCK_RECHECK);
         locks = crate::sync_locks::held_locks(store_path);
     }
-    (!locks.is_empty()).then(|| blocked(store_path, "the pre-sync check", &locks))
+    locks
+}
+
+/// [`SyncReport::Blocked`] when a lock the cycle needs stays held. Each held lock that is
+/// provably stale is moved aside once (HS2-T0V269) and added to `moved`; a lock still held
+/// after that (one never proven stale, or one another process took again) blocks the pass
+/// with the reason it was kept. The caller holds the Git transaction lock.
+fn held_lock_failure(
+    store_path: &Path,
+    moved: &mut Vec<crate::sync_stale_locks::MovedLock>,
+) -> Option<(SyncReport, CycleDetail)> {
+    let locks = settled_held_locks(store_path);
+    if locks.is_empty() {
+        return None;
+    }
+    let recovery = crate::sync_stale_locks::recover(store_path, &locks);
+    moved.extend(recovery.moved.iter().cloned());
+    let remaining = crate::sync_locks::held_locks(store_path);
+    if remaining.is_empty() {
+        return None;
+    }
+    let mut reason =
+        crate::sync_locks::blocked_reason(store_path, "the pre-sync check", &remaining);
+    for line in recovery.kept_lines() {
+        reason.push('\n');
+        reason.push_str(&line);
+    }
+    Some(failed(SyncReport::Blocked, reason))
+}
+
+/// What a headless stale-lock recovery found (HS2-T0V269).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StaleLockPass {
+    /// The locks the cycle needs that were held when the pass started.
+    pub held: Vec<String>,
+    pub recovery: crate::sync_stale_locks::Recovery,
+    /// The locks still held afterwards.
+    pub remaining: Vec<String>,
+}
+
+/// Move aside the provably stale locks a sync cycle needs, with the cycle's own checks and
+/// under the same store locks, without fetching, committing, or pushing (HS2-T0V269). The
+/// headless twin of the automatic recovery a sync pass runs first.
+pub fn recover_stale_locks(store_path: &Path) -> Result<StaleLockPass, crate::StoreError> {
+    let _history = lock_history_sync(store_path)?;
+    let _git = lock_git_transaction(store_path)?;
+    let shown = |locks: &[std::path::PathBuf]| {
+        locks
+            .iter()
+            .map(|lock| crate::sync_locks::display_path(store_path, lock))
+            .collect::<Vec<_>>()
+    };
+    let locks = settled_held_locks(store_path);
+    if locks.is_empty() {
+        return Ok(StaleLockPass::default());
+    }
+    let recovery = crate::sync_stale_locks::recover(store_path, &locks);
+    crate::sync_health::record_stale_lock_recovery(store_path, recovery.moved.clone());
+    Ok(StaleLockPass {
+        held: shown(&locks),
+        remaining: shown(&crate::sync_locks::held_locks(store_path)),
+        recovery,
+    })
 }
 
 /// [`SyncReport::Blocked`] when a failed Git step's output names a local lock file.
@@ -953,6 +1044,10 @@ mod lock_tests;
 mod merge_driver_tests;
 #[cfg(test)]
 mod saved_writes_tests;
+// The process scan these cycles rely on exists on Unix only (HS2-T0V269); Windows
+// refusal is covered in `sync_stale_locks`.
+#[cfg(all(test, unix))]
+mod stale_lock_tests;
 #[cfg(test)]
 mod stall_tests;
 

@@ -167,6 +167,16 @@ pub struct SyncRecord {
     /// When a cycle last registered the missing semantic merge driver (HS2-9TV6A2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_driver_repaired_at: Option<String>,
+    /// The last time sync moved provably stale Git locks aside, and which (HS2-T0V269).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_lock_recovery: Option<StaleLockRecovery>,
+}
+
+/// Stale Git locks one pass moved aside (HS2-T0V269).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StaleLockRecovery {
+    pub at: String,
+    pub moved: Vec<crate::sync_stale_locks::MovedLock>,
 }
 
 /// What a finished cycle reports into the record beyond its [`SyncReport`].
@@ -461,6 +471,23 @@ fn apply_outcome(record: &mut SyncRecord, report: SyncReport, detail: CycleDetai
     record.reason = detail.reason.map(|reason| sanitize_reason(&reason));
     record.oversized = detail.oversized;
     record.conflict_heads = detail.conflict_heads;
+}
+
+/// Remember the stale locks a cycle or `hotsheet-cli sync --recover-stale-locks` moved
+/// aside (HS2-T0V269). A no-op when none moved, so the last recovery stays recorded.
+pub(crate) fn record_stale_lock_recovery(
+    store_path: &Path,
+    moved: Vec<crate::sync_stale_locks::MovedLock>,
+) {
+    if moved.is_empty() {
+        return;
+    }
+    let mut record = read_record(store_path).unwrap_or_default();
+    record.stale_lock_recovery = Some(StaleLockRecovery {
+        at: now_string(),
+        moved,
+    });
+    let _ = write_record(store_path, &record);
 }
 
 /// Remember that a cycle registered the missing merge driver (HS2-9TV6A2).

@@ -10278,13 +10278,133 @@ fn hs2_6act5y_sync_reports_a_stale_git_lock_as_blocked_headlessly() {
             .unwrap()
             .contains(".git/index.lock")
     );
-    assert!(lock.is_file(), "Hot Sheet never removes a lock by itself");
+    assert!(
+        lock.is_file(),
+        "a young lock is never moved (HS2-T0V269 only moves provably stale ones)"
+    );
 
     std::fs::remove_file(&lock).unwrap();
     hs(a.path()).arg("sync").assert().success();
     let synced = status_json(a.path());
     assert_eq!(synced["state"], "synced");
     assert_eq!(synced["unpublished_commits"], 0);
+    hs(a.path()).args(["show", &slug]).assert().success();
+}
+
+/// HS2-T0V269: headless parity for stale-lock recovery. `sync --recover-stale-locks` moves
+/// an abandoned lock aside (never deletes it) and prints exactly what it moved; it keeps
+/// a young lock and exits non-zero naming it; and a plain `sync` moves an abandoned lock by
+/// itself, says so, and publishes. Synthetic stores only.
+#[cfg(unix)]
+#[test]
+fn hs2_t0v269_sync_recovers_stale_git_locks_headlessly() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn plant(lock: &Path, age_seconds: u64) {
+        std::fs::create_dir_all(lock.parent().unwrap()).unwrap();
+        std::fs::write(lock, "stale\n").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(lock)
+            .unwrap()
+            .set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(age_seconds),
+            )
+            .unwrap();
+    }
+    fn stashed(store: &Path) -> Vec<std::path::PathBuf> {
+        let mut found = Vec::new();
+        for dir in std::fs::read_dir(store.join(".git/hotsheet-stale-locks"))
+            .map(|dirs| dirs.flatten().map(|dir| dir.path()).collect::<Vec<_>>())
+            .unwrap_or_default()
+        {
+            for file in ["index.lock", "HEAD.lock"] {
+                if dir.join(file).is_file() {
+                    found.push(dir.join(file));
+                }
+            }
+        }
+        found
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    hs(a.path()).arg("sync").assert().success();
+    hs(a.path())
+        .args(["sync", "--recover-stale-locks"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "No Git lock that sync needs is held",
+        ));
+
+    // A ticket saved before the locks, which the recovered sync publishes.
+    let slug = new_ticket(a.path(), "saved before the locks");
+    // An abandoned index lock and a young HEAD lock.
+    let index = a.path().join(".git/index.lock");
+    plant(&index, 3600);
+    let head = a.path().join(".git/HEAD.lock");
+    plant(&head, 0);
+    hs(a.path())
+        .args(["sync", "--recover-stale-locks"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Moved .git/index.lock to .git/hotsheet-stale-locks/",
+        ))
+        .stdout(predicate::str::contains(
+            "Not moved automatically: .git/HEAD.lock is younger than 10 minutes",
+        ))
+        .stderr(predicate::str::contains("still held: .git/HEAD.lock"));
+    assert!(!index.exists());
+    assert!(head.is_file());
+    assert_eq!(stashed(a.path()).len(), 1, "moved, never deleted");
+
+    // A plain sync recovers it by itself once it is old, and publishes a new ticket.
+    plant(&head, 3600);
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Moved a stale Git lock aside: .git/HEAD.lock to .git/hotsheet-stale-locks/",
+        ));
+    assert!(!head.exists());
+    assert_eq!(stashed(a.path()).len(), 2);
+    let out = hs(a.path())
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let synced: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    // The ticket's own best-effort push may already have published it.
+    assert!(
+        synced["state"] == "synced" || synced["state"] == "up_to_date",
+        "{synced}"
+    );
+    assert_eq!(synced["unpublished_commits"], 0);
+    assert!(
+        synced["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("Moved a stale Git lock aside"),
+        "{synced}"
+    );
     hs(a.path()).args(["show", &slug]).assert().success();
 }
 
