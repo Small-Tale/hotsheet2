@@ -12,10 +12,12 @@ import { CHANGE_WS_MUX_PATH } from './change-ws-mux';
 import { CLIENT_BUILD_META_NAME } from './client-build';
 import { DESKTOP_STORAGE_PATH } from './desktop-storage-contract';
 import {
+  binaryRevisionStatus,
   createLocalHostApp,
   desktopStorageDirectoryFrom,
   mcpBinaryEnvironment,
   releaseBinaryEnvironment,
+  REVISION_PROBE_CEILING_MS,
   snapshotLocalHostArtifacts,
   stampBrowserAuthMode,
   startLocalHost,
@@ -104,6 +106,66 @@ describe('desktop storage directory override (HS2-1VF50T)', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('revision probe of a slow first launch (HS2-B74N07)', () => {
+  const revision = 'a'.repeat(40),
+    status = JSON.stringify({ build_revision: revision, source_revision: revision, source_stale: false });
+  let root: string;
+  beforeAll(async () => {
+    root = await mkdtemp(resolve(tmpdir(), 'hs-revision-probe-'));
+  });
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  /** A fake binary: a shell script in the temp dir, never a real Hot Sheet binary. */
+  const fake = async (path: string, body: string) => {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `#!/bin/sh\n${body}\n`);
+    await chmod(path, 0o755);
+    return path;
+  };
+  const timed = <T>(run: () => T) => {
+    const started = performance.now(),
+      value = run();
+    return { value, elapsed: performance.now() - started };
+  };
+
+  it('waits for a live child that is slow to start instead of a short deadline', async () => {
+    // macOS measured 3.6 s for a fresh copy's first launch under load; the old bound was 10 s.
+    expect(REVISION_PROBE_CEILING_MS).toBeGreaterThanOrEqual(60_000);
+    const slow = await fake(resolve(root, 'slow'), `sleep 1.5\necho '${status}'`);
+    const { value, elapsed } = timed(() => binaryRevisionStatus(slow));
+    expect(value).toEqual(JSON.parse(status));
+    expect(elapsed).toBeGreaterThanOrEqual(1_400);
+  });
+
+  it('fails fast once the child exits, and the ceiling still stops a child that never exits', async () => {
+    const failing = await fake(resolve(root, 'failing'), `echo '${status}'\nexit 3`);
+    const failed = timed(() => binaryRevisionStatus(failing));
+    expect(failed.value).toBeUndefined();
+    expect(failed.elapsed).toBeLessThan(5_000);
+    const garbage = await fake(resolve(root, 'garbage'), 'echo not-json');
+    expect(binaryRevisionStatus(garbage)).toBeUndefined();
+    expect(binaryRevisionStatus(resolve(root, 'missing'))).toBeUndefined();
+    const hung = await fake(resolve(root, 'hung'), 'exec sleep 30');
+    const stopped = timed(() => binaryRevisionStatus(hung, 300));
+    expect(stopped.value).toBeUndefined();
+    expect(stopped.elapsed).toBeLessThan(5_000);
+  });
+
+  it('selects a current binary whose first launch is slow through the shipped selection', async () => {
+    const repo = resolve(root, 'repo');
+    await fake(resolve(repo, 'target/release/hotsheet-server'), `sleep 1.5\necho '${status}'`);
+    await fake(resolve(repo, 'target/release/hotsheet-cli'), `echo '${status}'`);
+    await fake(resolve(repo, 'target/release/hotsheet-migrate'), `echo '${status}'`);
+    expect(releaseBinaryEnvironment(repo, {}, existsSync, undefined, 'linux')).toEqual({
+      HOTSHEET_SERVER_BIN: resolve(repo, 'target/release/hotsheet-server'),
+      HOTSHEET_CLI_BIN: resolve(repo, 'target/release/hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: resolve(repo, 'target/release/hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: revision,
+    });
   });
 });
 

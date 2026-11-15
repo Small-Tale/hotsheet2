@@ -667,7 +667,10 @@ same explanation (HS2-CGXGWY).
   before Rust installation or any server stop (HS2-R0XY7S). The production host prefers
   **release** binaries (HS2-D2JQ9A): when
   `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
-  release server only when current. It probes the CLI and migrator independently, preferring each
+  release server only when current. The `--revision-status` probe waits as long as the binary is
+  still running, up to the 90 s server start deadline, and fails at once when it exits, because on
+  macOS the first launch of a fresh build or copy can wait seconds in a host-wide assessment queue
+  (HS2-B74N07). It probes the CLI and migrator independently, preferring each
   current release binary and falling back to its current debug binary. Every chosen binary must
   match the workspace source and the selected server revision. If a required binary has no current
   build, startup requests a rebuild before project setup or migration can run. On Windows,

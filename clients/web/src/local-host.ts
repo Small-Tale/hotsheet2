@@ -38,7 +38,12 @@ import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
 import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
-import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
+import {
+  developmentRepositoryRoot,
+  LOCAL_HOST_SNAPSHOT_ENV,
+  remoteBrowserAuthRequired,
+  SERVER_START_DEADLINE_MS,
+} from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
@@ -64,11 +69,25 @@ export function parseBinaryRevisionStatus(value: unknown): BinaryRevisionStatus 
   return value;
 }
 
-function binaryRevisionStatus(path: string): BinaryRevisionStatus | undefined {
+/**
+ * Liveness-based ceiling for the `--revision-status` probe (HS2-B74N07). On macOS the first launch
+ * of a newly linked or copied executable waits in a host-wide assessment queue; a fresh copy took
+ * 3.6 s under load against 0.19 s idle, so a short deadline misreported a current binary as unknown.
+ * `spawnSync` returns as soon as the child exits, so the probe already fails fast on a crash or
+ * a non-zero exit; it waits only while the child is still alive. The ceiling only stops a binary
+ * that never exits, and is the server's own start deadline.
+ */
+export const REVISION_PROBE_CEILING_MS = SERVER_START_DEADLINE_MS;
+
+/** Run `<path> --revision-status`; anything but a zero exit with the expected JSON is unknown. */
+export function binaryRevisionStatus(
+  path: string,
+  ceilingMs = REVISION_PROBE_CEILING_MS,
+): BinaryRevisionStatus | undefined {
   try {
     const result = spawnSync(path, ['--revision-status'], {
       encoding: 'utf8',
-      timeout: 10_000,
+      timeout: ceilingMs,
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     return result.status === 0 ? parseBinaryRevisionStatus(parseJson(result.stdout.toString())) : undefined;

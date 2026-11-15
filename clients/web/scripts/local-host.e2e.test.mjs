@@ -286,7 +286,7 @@ it.concurrent(
             const destination = resolve(candidateBin, variable.toLowerCase());
             await copyFile(source, destination);
             await chmod(destination, (await stat(source)).mode & 0o777);
-            // The host probes these copies under a 10 s bound; launch each once first (HS2-04D6DW).
+            // Launch each copy once before the host probes it, so its startup window is not spent (HS2-04D6DW, HS2-B74N07).
             launchOnce(destination);
             return [variable, destination];
           }),
