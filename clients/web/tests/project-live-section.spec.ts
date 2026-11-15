@@ -134,7 +134,7 @@ test('project sidebar Live section is compact by default and remembers the detai
     await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -179,7 +179,7 @@ test('keeps 16px between the Live gauges and a host callout in both modes (HS2-0
     await expect(live.locator('button').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-0eqmzz-live-compact-callout-1440.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -211,7 +211,7 @@ test('Workers view choice names live workers and last progress (HS2-6B9S7P)', as
     await server.request(`/tickets/${ticket.id}/release`, 'POST', { worker: 'worker-a' });
     await expect(workers).toHaveAccessibleName('Workers View', { timeout: 30_000 });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 

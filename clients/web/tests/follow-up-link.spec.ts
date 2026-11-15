@@ -152,7 +152,7 @@ test('links an existing ticket as a follow-up from the Inspector, idempotently (
     await expect(page.locator('[data-dialog-component="ticket-follow-up-link-dialog"]')).toHaveCount(0);
     await expect(link).toBeEnabled();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -178,7 +178,7 @@ test('disables the follow-up link with its reason for a provider without relatio
     );
     await page.screenshot({ path: 'target/visual-captures/hs2-mcgcpq-code-review-unsupported-1440.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -290,7 +290,7 @@ test('links an existing follow-up from the modal reader and its linked frames (H
       { project_id: server.checkoutId, connection_id: target.connection_id, native_id: target.native_id },
     ]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -317,6 +317,6 @@ test('disables the reader follow-up link with its reason for a provider without 
     );
     await page.screenshot({ path: 'target/visual-captures/hs2-nxsmc7-reader-unsupported-1440.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

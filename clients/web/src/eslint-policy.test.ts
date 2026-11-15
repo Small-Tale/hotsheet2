@@ -35,27 +35,79 @@ describe('web ESLint policy', () => {
 
   it('HS2-6E87E4 proxies routed browser requests only through the shared idempotent-retry helper', () => {
     // A raw `route.fetch` on a reused keep-alive socket fails with ECONNRESET when the server closes
-    // it idle (HS2-NWFZ7J); `proxyFetch` retries only GET and HEAD.
+    // it idle (HS2-NWFZ7J); `proxyFetch` retries only GET and HEAD. HS2-QY232J moved the helper to
+    // the types-only `tests/proxy-fetch.ts` and extended the scan to `src/` files that drive Playwright.
     const tests = join(import.meta.dirname, '../tests');
     const offenders: string[] = [];
-    const scan = (directory: string) => {
+    const scan = (directory: string, playwrightOnly: boolean) => {
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         const path = join(directory, entry.name);
-        if (entry.isDirectory()) scan(path);
-        else if (/\.[cm]?[jt]s$/.test(entry.name)) {
+        if (entry.isDirectory()) scan(path, playwrightOnly);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && path !== import.meta.filename) {
           const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          if (playwrightOnly && !/from '(?:@playwright\/test|playwright(?:-core)?)'/.test(source)) continue;
           const calls = source.match(/\.fetch\(/g)?.length ?? 0;
-          const allowed = entry.name === 'real-ticket-server.ts' ? 1 : 0;
+          const allowed = path === join(tests, 'proxy-fetch.ts') ? 1 : 0;
           // `bridge.fetch(request)` is an APIRequestContext, not a routed request (HS2-ZMVQR4).
           const contexts = source.match(/\bbridge\.fetch\(/g)?.length ?? 0;
-          if (calls - contexts !== allowed) offenders.push(relative(tests, path).split(sep).join('/'));
+          if (calls - contexts !== allowed) offenders.push(relative(join(tests, '..'), path).split(sep).join('/'));
         }
       }
     };
-    scan(tests);
+    scan(tests, false);
+    scan(import.meta.dirname, true);
     expect(offenders).toEqual([]);
-    const helper = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    const helper = readFileSync(join(tests, 'proxy-fetch.ts'), 'utf8');
     expect(helper).toMatch(/const idempotent = method === 'GET' \|\| method === 'HEAD';/);
+    // Types only, so `src/` tests can import it without pulling in the real-server fixture.
+    expect(helper.match(/^import .*$/gm)).toEqual(["import type { APIResponse, Route } from '@playwright/test';"]);
+    expect(readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8')).toContain(
+      "export { proxyFetch } from './proxy-fetch.ts';",
+    );
+  });
+
+  it('HS2-QY232J removes proxy routes before stopping the real server they target', () => {
+    // A page still routing to a stopped server proxies its next poll to a closed port, and the
+    // route handler's rejection fails the test. `stop(page)` unroutes first.
+    const tests = join(import.meta.dirname, '../tests');
+    const fixture = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    expect(fixture).toMatch(
+      /const stop = async \(\.\.\.proxies: RouteOwner\[\]\) => \{\n\s+for \(const proxy of proxies\) await proxy\.unrouteAll\(\{ behavior: 'ignoreErrors' \}\);/,
+    );
+    const offenders: string[] = [];
+    for (const name of readdirSync(tests).filter((entry) => entry.endsWith('.ts'))) {
+      const source = readFileSync(join(tests, name), 'utf8');
+      if (!source.includes('proxyFetch(')) continue;
+      const lines = source.split('\n');
+      lines.forEach((line, index) => {
+        if (!/^\s*await \w+\.stop\(\);$/.test(line)) return;
+        // A bare stop is fine once the routes are gone or the page's context or browser is closed.
+        const before = lines.slice(Math.max(0, index - 4), index).join('\n');
+        if (!/unrouteAll\(|\.close\(\)/.test(before)) offenders.push(`${name}:${String(index + 1)}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('HS2-QY232J waits for the terminal drawer to finish opening before using New Drawer Item', () => {
+    // New Drawer Item slides with the ~220 ms drawer-open transition; under load a click during it
+    // timed out on an unstable element (HS2-S4FJ85). Wait for the shell's transition flag first.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    for (const name of readdirSync(tests).filter((entry) => entry.endsWith('.ts'))) {
+      const lines = readFileSync(join(tests, name), 'utf8').split('\n');
+      lines.forEach((line, index) => {
+        if (!line.includes("name: 'Show Terminal Drawer' }).click()")) return;
+        for (const next of lines.slice(index + 1, index + 6)) {
+          if (next.includes("'data-terminal-drawer-transitioning', 'false'")) return;
+          if (next.includes("name: 'New Drawer Item' })")) {
+            offenders.push(`${name}:${String(index + 1)}`);
+            return;
+          }
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('HS2-3TWWWD bounds the type-aware ESLint heap so it does not depend on machine memory', () => {

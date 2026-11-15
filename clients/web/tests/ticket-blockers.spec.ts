@@ -131,7 +131,7 @@ test('adds, refuses a cycle for, and removes ticket blockers in the real Inspect
     await expect(downstream.section.locator('[data-blocker-state]')).toHaveCount(0);
     expect((await server.request<StoredTicket>(`/tickets/${blocked.id}`)).blocked_by).toEqual([]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -165,7 +165,7 @@ test('opens a blocker from its row and keeps the layout across widths (HS2-CHH28
       .click();
     await expect(page.locator('#app-right-rail')).toContainText(blocker.slug, { timeout: 20_000 });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -188,7 +188,7 @@ test('disables Add Blocker with its reason for a source without dependencies (HS
     await expect(add).toHaveAttribute('title', 'GitHub Issues tickets cannot record blocking dependencies.');
     await page.screenshot({ path: 'target/visual-captures/hs2-chh28e-blocked-by-unsupported-1440.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -302,6 +302,6 @@ test('adds, refuses a cycle for, and removes blockers in the modal reader and a 
     await expect(section.locator('[data-blocker-state]')).toHaveCount(0);
     expect((await server.request<StoredTicket>(`/tickets/${blocked.id}`)).blocked_by).toEqual([]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

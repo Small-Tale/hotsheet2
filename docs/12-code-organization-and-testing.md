@@ -1610,14 +1610,24 @@ ticket server also routes the change WebSocket there with `routeProjectChangeSoc
 (HS2-B3Z8DS). Otherwise `/ws/sync` reaches the shared Vite bridge, which has no session
 for the mocked project and refuses it (1006). The page then runs only on its long-poll
 fallback, so under parallel load live events such as a terminal halt arrived late. Such a
-test calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before stopping the server, so
-the fallback poll that follows the socket's close does not fail the test.
-Every proxied request goes through `proxyFetch(route, options)` in the same fixture, never
-a raw `route.fetch` (HS2-6E87E4). Playwright reuses keep-alive sockets, and the server closes
-an idle connection after 30 s, so a request that picks up a closing socket fails with
+test removes its routes before stopping the server, so the fallback poll that follows the
+socket's close does not fail the test. `realTicketServer().stop(page)` does that: it calls
+`unrouteAll({ behavior: 'ignoreErrors' })` on each page or context it is given, then stops
+the server. The first `HS2-QY232J` case in `src/eslint-policy.test.ts` rejects a bare
+`await server.stop()` in a proxying spec unless the routes are already removed or the
+page's context or browser is already closed.
+Every proxied request goes through `proxyFetch(route, options)`, never a raw `route.fetch`
+(HS2-6E87E4). Playwright reuses keep-alive sockets, and the server closes an idle
+connection after 30 s, so a request that picks up a closing socket fails with
 `socket hang up` (HS2-NWFZ7J). `proxyFetch` retries GET and HEAD twice and never replays
-POST, PUT, PATCH, or DELETE. The `HS2-6E87E4` case in `src/eslint-policy.test.ts` rejects a
-raw `.fetch(` anywhere under `tests/` outside that helper.
+POST, PUT, PATCH, or DELETE. It lives in the types-only `tests/proxy-fetch.ts`, which
+`tests/real-ticket-server.ts` re-exports and vitest integration tests under `src/` import
+(HS2-QY232J). The `HS2-6E87E4` case rejects a raw `.fetch(` anywhere under `tests/`, and in
+any `src/` file that imports Playwright, outside that helper.
+A test that clicks `New Drawer Item` right after `Show Terminal Drawer` first waits for
+`.app-shell` to report `data-terminal-drawer-transitioning="false"`, because the button
+slides with the ~220 ms open transition (HS2-S4FJ85). The second `HS2-QY232J` policy case
+rejects the click without that wait.
 
 ### Local Playwright parallelism and timeouts
 

@@ -137,7 +137,7 @@ for (const viewport of [
         .poll(() => bridgePosts.flatMap((post) => post.reports).some((report) => report.kind === 'interaction'))
         .toBe(true);
     } finally {
-      await server.stop();
+      await server.stop(page);
     }
   });
 }

@@ -13,6 +13,7 @@ async function openDrawerTerminal(page: Page) {
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();

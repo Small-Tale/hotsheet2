@@ -118,7 +118,7 @@ test('HS2-KX87JC replays a short worker lease into the rebuilt Workers view with
     });
     await page.screenshot({ path: test.info().outputPath('workers-returned-wide-expired.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -227,6 +227,6 @@ test('HS2-KX87JC source failure must not leave a stale Available worker card', a
     await expect(page.locator('[data-worker-coverage-problems]')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('workers-same-cursor-recovered.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

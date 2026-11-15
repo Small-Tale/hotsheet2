@@ -198,6 +198,7 @@ for (const width of [390, 1280]) {
       }
       await page.screenshot({ path: testInfo.outputPath(`LAN-tickets-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       const drawer = page.locator('[data-component="terminal-drawer"]'),
         create = drawer.getByRole('button', { name: 'New Drawer Item' });
       for (let index = 0; index < 2; index++) {

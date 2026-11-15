@@ -95,7 +95,7 @@ test('saves machine-wide terminal limits and updates mounted terminals', async (
       .poll(() => mounted.evaluate((element) => element.dataset.scrollbackLimit))
       .toBe(String(initial.defaults.history_lines));
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -136,7 +136,7 @@ test('shows Terminal memory settings on a fresh phone viewport (HS2-ZWVDTZ)', as
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await page.screenshot({ path: 'target/visual-captures/hs2-zwvdzt-live-history-phone.png', animations: 'disabled' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 

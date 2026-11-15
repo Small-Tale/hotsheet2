@@ -153,7 +153,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     await page.waitForTimeout(250);
     await page.screenshot({ path: test.info().outputPath('development-strategy-dark-returned-wide.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -290,7 +290,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
     await expect(settings).toContainText('· project');
     await expect(settings).not.toContainText('· ticket');
   } finally {
-    await first.stop();
-    await second.stop();
+    await first.stop(page);
+    await second.stop(page);
   }
 });

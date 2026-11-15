@@ -74,6 +74,6 @@ test('keeps rows appended by Load more when a concurrent change refreshes the li
     await expect(rows).toHaveCount(230);
     await page.screenshot({ path: 'target/visual-captures/hs2-9df0da-archive-after-change-1280.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

@@ -114,6 +114,6 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     ).toBe(true);
     await page.screenshot({ path: test.info().outputPath('cadence-dark-returned-wide.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

@@ -171,6 +171,6 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     await expect(linkedSource).toBeVisible();
     await type('linked details', linkedSource);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

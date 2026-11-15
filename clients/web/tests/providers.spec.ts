@@ -576,7 +576,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
     expect(workerStatuses.every((status) => status === 200)).toBe(true);
   } finally {
     await page.goto('about:blank').catch(() => undefined);
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -1402,6 +1402,7 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -4164,7 +4165,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
     expect((await realProviders()).find((item) => item.connection_id === gitId)?.ticket_prefix).toBe('ACME');
   } finally {
     await page.goto('about:blank').catch(() => undefined);
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -7535,6 +7536,7 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7822,6 +7824,7 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   // A new chat launches with the provider's project default (Codex: never ask) and shows it on its tab.
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7927,6 +7930,7 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   // The chat tab keeps its permission shield at phone width.
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7962,6 +7966,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect(page.locator('kui-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8086,6 +8091,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8130,6 +8136,7 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8196,6 +8203,7 @@ test('names the AI shell after the only installed provider (HS2-3HT4PA)', async 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     menu = drawer.locator('[data-terminal-drawer-create]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -8223,6 +8231,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' });
@@ -8367,6 +8376,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -8428,6 +8438,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -8703,6 +8714,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9039,6 +9051,7 @@ test('selects and copies chat messages before saving that range without choosing
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -9255,6 +9268,7 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -9407,6 +9421,7 @@ test('selects single and non-contiguous messages with modifier keys in the drawe
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9434,6 +9449,7 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9500,6 +9516,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -9696,6 +9713,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -9773,6 +9791,7 @@ test('previews running project resources with shared menus and explicit keep-run
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -10544,6 +10563,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -10662,6 +10682,7 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -10720,6 +10741,7 @@ test('restores an AI transcript and resumes its durable session after client and
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -10774,6 +10796,7 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -11159,6 +11182,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
@@ -11675,6 +11699,7 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await handle.focus();
@@ -11725,6 +11750,7 @@ test('selects a drawer command after rapidly closing and reopening its popup', a
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     trigger = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]');
@@ -16381,6 +16407,7 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -17117,7 +17144,7 @@ test('serves the repository Quality commands from a real server and queues Every
         },
       ]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -17503,7 +17530,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     await expect(editor.getByText('No custom commands yet.')).toBeVisible();
     await expect.poll(storedGroups).toEqual([]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -17629,7 +17656,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     await openCommandSettings();
     await expect(editor.locator('.command-settings-editor__row', { hasText: 'Remote edit' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -21223,7 +21250,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await corrupt.getByRole('button', { name: `Open recovery for ${created.slug}` }).click();
     await expect(page.locator('[data-component="corrupt-ticket-inspector"]')).toContainText(`${created.id}.md`);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -22130,6 +22157,7 @@ for (const viewport of [
       const drawer = page.locator('[data-component="terminal-drawer"]');
       await sample('terminal-tab', () => drawer.locator('[data-tab-kind="terminal"]').first().click());
       if (ptyProfile) await expect.poll(() => ptyRoutes.length).toBeGreaterThan(0);
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       await sample('ai-chat-create', async () => {
         await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
         await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -24368,6 +24396,7 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   };
   // Drawer chat tab.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24530,6 +24559,7 @@ for (const width of [1280, 390] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     if (width >= 640) await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24549,6 +24579,7 @@ for (const width of [1280, 390] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     // Maximized at both widths: a six-row draft under the stuck banner is taller than the default phone drawer.
     await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
@@ -24701,6 +24732,7 @@ test("keeps the default-height drawer chat's last message clear of its composer 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   // The drawer stays at its default height, where the HS2-KMNQ21 capture showed the overlap.
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24894,6 +24926,7 @@ for (const width of [390, 1280] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     // The drawer keeps its default (not maximized) height.
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24991,6 +25024,7 @@ for (const [server, content] of [
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25070,6 +25104,7 @@ test('keeps a stopped turn ended when its interrupt reply arrives after the turn
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25119,6 +25154,7 @@ for (const [server, content] of [
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     let drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25174,6 +25210,7 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   const caretAt = (field: Locator) => field.evaluate((element: HTMLTextAreaElement) => element.selectionStart);
   // Drawer chat tab: send two messages, then browse them around an in-progress draft.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25253,6 +25290,7 @@ test('clears the sending dialog composer while the drawer chat stays mounted wit
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25283,6 +25321,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25422,6 +25461,7 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25471,6 +25511,7 @@ test('reflows the shell and drawer chat across the phone breakpoint without a re
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25547,6 +25588,7 @@ test('collapses streamed chat activity to its latest item and toggles it on clic
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25620,6 +25662,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -30487,7 +30530,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
     expect(measurement!.refillMs!).toBeLessThanOrEqual(100);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37085,7 +37128,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     await expect(page.locator('.app-toast')).toContainText(`${created.slug} closed as works as designed.`);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-closed-outcome.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37356,7 +37399,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await reader.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
     await reader.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-reader-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37464,7 +37507,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await card.scrollIntoViewIfNeeded();
     await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-cy4cwc-cleared-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37582,7 +37625,7 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     await expect(timeline).toContainText('Started');
     await expect(timeline).not.toContainText('AI-generated');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37691,7 +37734,7 @@ test('quiets AI-created ticket summaries in the real list and column views (HS2-
       })
       .toEqual({ role: 'human' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37789,7 +37832,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     );
     await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-global-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37867,7 +37910,7 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
     expect(pageOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-qf44t7-real-server-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38284,7 +38327,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     await inspector.locator('[data-inspector-tab="timeline"]').click();
     await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Completed');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38344,7 +38387,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
     expect(boardRequests).toHaveLength(beforeCachedReveal);
     await expect(more('Completed')).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38421,7 +38464,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await expect(row).toBeVisible();
     await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38946,6 +38989,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
     await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -38977,6 +39021,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39011,6 +39056,7 @@ test('keeps a delayed completion from an earlier turn out of the next turn (HS2-
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39040,6 +39086,7 @@ test('restores an idle server failure when a persisted conversation still has an
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39085,6 +39132,7 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -39135,6 +39183,7 @@ test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', a
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -39201,6 +39250,7 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39547,6 +39597,7 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   await expect(badge).toHaveCount(0);
   // Drawer chat tab: the reply settles while the drawer is hidden.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -39924,7 +39975,7 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
     await page.keyboard.press('ContextMenu');
     await expect(page.getByRole('menuitem', { name: 'AI Fix This Note' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40057,7 +40108,7 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     });
     await expect(readerCard.getByRole('grid', { name: 'Feedback Choices' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40186,7 +40237,7 @@ test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback resp
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40310,7 +40361,7 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
     await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
     await desktopCapture('wide-again', 1440);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40417,7 +40468,7 @@ test('keeps the list Needs review marker aligned with details after a kind corre
       await page.screenshot({ path: test.info().outputPath(`hs2-4zfb8k-${label}.png`) });
     }
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40594,7 +40645,7 @@ test('records shell and AI command launches through the real server and lists th
     await openHistory('Everything AI command');
     await expect(history.getByRole('link', { name: 'HS2-NEW001' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40809,7 +40860,7 @@ test('resolves a stale No Response Needed without a doomed write after its reque
     await expect(dismiss).toHaveCount(0);
     expect(writes).toHaveLength(1);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40899,7 +40950,7 @@ test('dismisses a legacy implicit feedback request through failure, retry, selec
     await expect(dismiss).toHaveCount(0);
     expect(writes).toHaveLength(2);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 

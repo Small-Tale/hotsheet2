@@ -10,6 +10,7 @@ import { chromium, type Page, type WebSocketRoute } from '@playwright/test';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
+import { proxyFetch } from '../tests/proxy-fetch';
 import { execFileAsync } from './child-process';
 import { createDevApp } from './dev-server';
 import { createLocalHostApp, startLocalHost } from './local-host';
@@ -536,7 +537,8 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
       });
       // A long-poll stream (direct or multiplexed) carries the same events in its answers.
       await context.route(/\/(?:ws|change-mux)\/poll/, async (route) => {
-        const response = await route.fetch(),
+        // HS2-QY232J: a long poll on a reused keep-alive socket can meet the host's idle close.
+        const response = await proxyFetch(route),
           body = await response.text();
         record(body);
         await route.fulfill({ response, body });

@@ -165,7 +165,7 @@ test('manages notifier channels and rules through App Settings → Notifications
     await expect(settings.getByText('Channel removed with 1 rule that used only it.')).toBeVisible();
     await expect(settings.getByText('No channels yet.')).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -274,7 +274,7 @@ test('chooses saved views, categories, and priorities in the rule dialog', async
     await expect(edit).toBeHidden();
     await expect.poll(filter).toEqual({ priorities: ['highest'] });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -381,7 +381,7 @@ test.describe('quiet hours follow the device', () => {
         .poll(async () => (await server.request<QuietConfig>('/notification-config')).channels[0])
         .not.toHaveProperty('quiet_hours');
     } finally {
-      await server.stop();
+      await server.stop(page);
     }
   });
 });
@@ -437,6 +437,6 @@ test('keeps a notifier choice setting across wide-narrow-wide re-renders', async
       .poll(async () => (await server.request<Config>('/notification-config')).channels[0]?.settings.priority)
       .toBe('low');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

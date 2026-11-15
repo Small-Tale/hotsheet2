@@ -218,6 +218,6 @@ test('HS2-R0E39D crashed worker lease expires before a synthetic claim is taken 
       worker.kill('SIGKILL');
       await exited;
     }
-    await server.stop();
+    await server.stop(page);
   }
 });

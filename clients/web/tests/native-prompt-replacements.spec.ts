@@ -375,6 +375,7 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
         await route.fulfill({ status: 500, json: { error: 'Synthetic launch refused.' } });
       });
       await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       const drawer = page.locator('[data-component="terminal-drawer"]');
       const open = async () => {
         await drawer.getByRole('button', { name: 'New Drawer Item' }).click();

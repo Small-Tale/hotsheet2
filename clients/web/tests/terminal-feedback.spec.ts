@@ -722,6 +722,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -945,6 +946,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -1124,6 +1126,7 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -1345,6 +1348,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -1459,6 +1463,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -1622,6 +1627,7 @@ test('recovers a drawer terminal whose socket closed on focus, typing, visibilit
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -1764,6 +1770,7 @@ test('shows a moved Nano terminal at scaled 80x24 in both grids across widths (H
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
