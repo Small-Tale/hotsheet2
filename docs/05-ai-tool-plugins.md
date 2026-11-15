@@ -1294,7 +1294,11 @@ may run `hotsheet-cli -C <store> claim-run <slug> --worker <id> -- <command>
 claim attempt before starting the local command, again from the persisted lease
 deadline while the command runs, and once more before reporting success. The
 supervisor watches the lease deadline while a renewal waits for the ticket lock;
-authority time is sampled inside that transaction after the lock is acquired. A
+authority time is sampled inside that transaction after the lock is acquired.
+Because the store refuses to renew an expired lease, a renewal result it has
+already delivered is read before the previous deadline applies, so a confirmed
+renewal is never reported as missed; a renewal not delivered by that deadline
+still fails, and the renewed lease must still be live (HS2-DG53Y3). A
 failed renewal, expired deadline, changed attempt or owner, or failed command
 returns an error. The guard stops its owned process tree, including descendants
 that inherited standard streams, before a blocking final check or on authority
