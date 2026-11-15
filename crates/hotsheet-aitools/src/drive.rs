@@ -83,6 +83,18 @@ impl DoneReason {
         }
     }
 
+    /// How a background session ended, as a sync repair ask records it (HS2-QR1K8R,
+    /// HS2-SPVT6W): `Ok` when the turn completed, otherwise the reason it did not.
+    pub fn session_result(&self) -> Result<(), String> {
+        match self {
+            Self::Completed => Ok(()),
+            Self::Interrupted => Err("the session was interrupted".to_string()),
+            Self::Failed { exit_code, message } => Err(message
+                .clone()
+                .unwrap_or_else(|| format!("the tool exited with status {exit_code}"))),
+        }
+    }
+
     /// The stable client fallback also marks failures with no provider diagnostic as halted.
     pub fn failure_message(&self) -> Option<String> {
         match self {

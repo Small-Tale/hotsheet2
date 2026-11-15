@@ -675,6 +675,22 @@ enum Cmd {
         /// a backup ref; never pushes.
         #[arg(long, value_name = "COMMIT", conflicts_with = "status")]
         adopt: Option<String>,
+        /// Internal (HS2-SPVT6W): run the repair session a headless `sync` started for
+        /// STALL in this process and record how it ended. Started by `sync` itself.
+        #[arg(
+            long,
+            value_name = "STALL",
+            hide = true,
+            requires_all = ["repair_prompt", "repair_project"],
+            conflicts_with_all = ["status", "abort_stalled_rebase", "adopt"]
+        )]
+        run_repair: Option<String>,
+        /// With `--run-repair`: the repair prompt.
+        #[arg(long = "prompt", hide = true, requires = "run_repair")]
+        repair_prompt: Option<String>,
+        /// With `--run-repair`: the checkout the session works in.
+        #[arg(long = "project", hide = true, requires = "run_repair")]
+        repair_project: Option<PathBuf>,
     },
     /// Check store health and print read-only first-run/setup/migration guidance.
     Doctor {

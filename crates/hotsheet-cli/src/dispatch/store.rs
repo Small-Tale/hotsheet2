@@ -82,7 +82,15 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             json,
             abort_stalled_rebase,
             adopt,
-        } => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
+            run_repair,
+            repair_prompt,
+            repair_project,
+        } => match (run_repair, repair_prompt, repair_project) {
+            (Some(stall), Some(prompt), Some(project)) => {
+                cmd_sync_run_repair(path, &stall, &prompt, &project)
+            }
+            _ => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
+        },
         Cmd::Doctor { project } => cmd_doctor(path, &project),
         Cmd::Reindex { index } => cmd_reindex(path, index),
         Cmd::Worklist => cmd_worklist(path, &ctx.cwd),
@@ -559,6 +567,19 @@ pub(crate) fn render_sync_health(health: &hotsheet_ticketing::SyncHealth) -> Str
         out.push_str(&format!("Next step: {action}\n"));
     }
     out
+}
+
+/// `hotsheet-cli sync --run-repair` (hidden, HS2-SPVT6W): the detached repair session a
+/// headless `sync` starts; its output goes to the sync AI log.
+fn cmd_sync_run_repair(path: &Path, stall: &str, prompt: &str, project: &Path) -> Result<()> {
+    hotsheet_cli::sync_ai::run_repair(
+        path,
+        stall,
+        prompt,
+        project,
+        &mut crate::dispatch::setup::stream_to_stdout,
+    )
+    .map_err(|error| anyhow::anyhow!("the sync repair session did not complete: {error}"))
 }
 
 pub(crate) fn cmd_sync(

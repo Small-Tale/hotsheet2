@@ -189,14 +189,7 @@ impl AiReach for ServerReach {
                     trigger.run_turn(&prompt, None, true, id.clone(), &mut turns, &mut |_| {});
                 state.drive_registry.lock_or_recover().unregister(&id);
                 let result = match result {
-                    Ok(done) => match done.reason {
-                        hotsheet_aitools::DoneReason::Completed => Ok(()),
-                        hotsheet_aitools::DoneReason::Interrupted => {
-                            Err("the session was interrupted".to_string())
-                        }
-                        hotsheet_aitools::DoneReason::Failed { exit_code, message } => Err(message
-                            .unwrap_or_else(|| format!("the tool exited with status {exit_code}"))),
-                    },
+                    Ok(done) => done.reason.session_result(),
                     Err(error) => Err(error.to_string()),
                 };
                 done(result);

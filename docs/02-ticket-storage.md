@@ -1292,12 +1292,15 @@ of being auto-approved. It shows in `GET /connections` as `sync-repair-<store id
 its end (finished or failed) is recorded and announced as a `ticket_store_sync` event.
 `hotsheet-cli sync` leaves the ask to a running server that hosts the store. With no
 server, `session` has no session to push into and leaves the ticket, and `start` launches
-`hotsheet-cli -C <store> trigger <tool> --prompt … --project <checkout>` detached in its
-own process group,
-logging to `<git-dir>/hotsheet-sync-ai.log`. That session runs in the tool's default
-permission mode with no permission bridge, the headless trigger default: Codex approvals
-are auto-approved inside its workspace-write sandbox. Its end is not watched, so the ask
-stays `started` until the store publishes again.
+the internal `hotsheet-cli -C <store> sync --run-repair <stall> --prompt … --project
+<checkout>` detached in its own process group, logging to
+`<git-dir>/hotsheet-sync-ai.log`. That process runs only while `<stall>` is the store's
+current `started` ask, with the tool the ask names. It runs the turn in-process like
+`hotsheet-cli trigger`, then records the end exactly as the server does, so the ask reads
+`finished`, or `failed` with the reason (for example `the tool exited with status 3`)
+(HS2-SPVT6W). That session runs in the tool's default permission mode with no permission
+bridge, the headless trigger default: Codex approvals are auto-approved inside its
+workspace-write sandbox.
 
 `HOTSHEET_SYNC_AI_ALLOWED_TOOLS`, when set, limits which tools a stall may start
 (comma-separated ids). Every process cargo launches gets `repair-fixture` only, so no test
