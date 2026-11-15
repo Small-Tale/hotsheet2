@@ -18,9 +18,13 @@ import {
 import {
   catalogSpecimenCount,
   catalogWalkingTitles,
+  dataComponentNames,
   demoEntryIds,
   exerciseIndex,
   exerciseIndexForRepo,
+  exportedComponents,
+  forwardedDataComponentProps,
+  jsxPropLiterals,
   ownHooks,
   routeHooks,
   specimenInventoryTitles,
@@ -1029,6 +1033,100 @@ test('HS2-N7EY18 shared spec setup, a fixture module and a direct import select 
   const stages = browserStages([web('src/components/badge-count.tsx')], false, [], {}, whole);
   assert.ok(stages.some((stage) => stage.command.includes("'tests/providers.spec.ts'")));
   assert.ok(!stages.some((stage) => stage.command.startsWith('npx playwright test tests/providers.spec.ts --grep ')));
+});
+
+test('HS2-MZJQYD a data-component forwarded through a shared banner selects the specs of every shipped parent', () => {
+  const banner = [
+    "import './shell-banner.css';",
+    'export function ShellBanner({ tone, component, ...banner }) {',
+    '  return <div class="shell-banner" data-component={component}><StateBanner {...banner} /></div>;',
+    '}',
+  ].join('\n');
+  const migration = [
+    "import { ShellBanner } from './shell-banner';",
+    'export function Hs1CleanupBanner({ onDismiss }) {',
+    '  return (',
+    '    <ShellBanner',
+    '      component="hs1-cleanup-banner"',
+    '      tone="warning"',
+    '      actions={<Button component="not-a-banner-name" onClick={() => onDismiss()} />}',
+    '    />',
+    '  );',
+    '}',
+    'export function Hs1JobBanner() {',
+    '  return <div data-component="hs1-job-banner" />;',
+    '}',
+  ].join('\n');
+  const demo = [
+    "import { ShellBanner } from '../components/shell-banner';",
+    'export const x = <ShellBanner component="shell-banner-demo" tone="info" />;',
+  ].join('\n');
+  const sources = new Map([
+    [web('src/components/shell-banner.tsx'), banner],
+    [web('src/components/shell-banner.css'), '.shell-banner { background: red; }\n'],
+    [web('src/components/hs1-migration.tsx'), migration],
+    [web('src/ux-demo/app-chrome-demo.tsx'), demo],
+  ]);
+  const specs = new Map([
+    [
+      web('tests/hs1-migration.spec.ts'),
+      [
+        "test('cleanup banner wraps its state banner', async ({ page }) => {",
+        '  const banner = page.locator(\'[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]\');',
+        '});',
+        "test('job banner reports progress', async ({ page }) => {",
+        '  await page.locator(\'[data-component="hs1-job-banner"]\').click();',
+        '});',
+      ].join('\n'),
+    ],
+    [web('tests/demo-only.spec.ts'), "test('demo', async () => { await locate('shell-banner-demo'); });\n"],
+    [web('tests/unrelated.spec.ts'), "test('other', async () => { await locate('not-a-banner-name'); });\n"],
+  ]);
+  // The changed shared banner names no hs1 surface itself; its parent passes the name.
+  const shell = exerciseIndex([web('src/components/shell-banner.tsx')], { sources, specs });
+  assert.deepEqual(shell.files, ['tests/hs1-migration.spec.ts']);
+  assert.ok(shell.reasons.some((reason) => reason.includes('hs1-cleanup-banner')));
+  // The stylesheet speaks for its component.
+  assert.deepEqual(exerciseIndex([web('src/components/shell-banner.css')], { sources, specs }).files, [
+    'tests/hs1-migration.spec.ts',
+  ]);
+  // The composing parent owns both the name it passes and the literal names it renders.
+  assert.deepEqual(exerciseIndex([web('src/components/hs1-migration.tsx')], { sources, specs }).files, [
+    'tests/hs1-migration.spec.ts',
+  ]);
+  // The real tree: the HS2-YCB15Z escape.
+  const stages = browserStages(
+    [web('src/components/shell-banner.tsx')],
+    false,
+    [],
+    {},
+    exerciseIndexForRepo(repoRoot, [web('src/components/shell-banner.tsx')]),
+  );
+  assert.ok(stages.some((stage) => stage.command.includes("'tests/hs1-migration.spec.ts'")));
+});
+
+test('HS2-MZJQYD data-component helpers read literal, forwarded and passed names', () => {
+  assert.deepEqual(
+    dataComponentNames(
+      '<div data-component="hs1-job-banner" /><p data-component={\'reader-pane\'} data-component="list" />',
+    ),
+    ['hs1-job-banner', 'reader-pane'],
+  );
+  assert.deepEqual(forwardedDataComponentProps('<div data-component={component} {...rest} />'), ['component']);
+  assert.deepEqual(
+    exportedComponents('export function ShellBanner() {}\nexport const Other = () => 1;\nfunction Private() {}'),
+    ['ShellBanner', 'Other'],
+  );
+  const parent = [
+    '<ShellBanner component="first-banner" render={() => <ShellBanner component="second-banner" />} />',
+    "<ShellBannerish component='not-this-one' />",
+    '<ShellBanner\n  tone="info"\n  component=\'third-banner\'\n>',
+  ].join('\n');
+  assert.deepEqual(jsxPropLiterals(parent, 'ShellBanner', 'component'), [
+    'first-banner',
+    'second-banner',
+    'third-banner',
+  ]);
 });
 
 test('HS2-N7EY18 route and class hooks come from template, regex and BEM sources', () => {
