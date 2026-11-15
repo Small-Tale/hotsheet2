@@ -490,9 +490,13 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('#app-bottom-drawer[data-collapsed="false"]')).toBeVisible();
-  expect(await geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
+  await expect.poll(() => geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
+  // The view switch renders on the next animation frame, not inside the click: until then the workspace
+  // is still the edge-to-edge board (no bottom padding). A one-shot read raced that frame under load
+  // (HS2-474BX8), so wait for the list presentation and then for its padding.
   await page.getByLabel('List View').click();
-  expect(await geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
+  await expect(page.locator('.app-shell__workspace')).toHaveAttribute('data-presentation', 'inset');
+  await expect.poll(() => geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
 });
 
 test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays without changing desktop preferences (HS2-KN79XP)', async ({
