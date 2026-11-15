@@ -229,3 +229,70 @@ test('HS2-M5QPED terminal search highlights every match and counts them through 
   await expect(count).toHaveCount(0);
   await expect(highlights()).toHaveCount(0);
 });
+
+test('HS2-HPDX81 the open search, its count, and Hide stay inside a phone-width drawer through wide-narrow-wide resizes', async ({
+  page,
+}) => {
+  const { drawer } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    status = drawer.locator('[data-terminal-search-count-status]'),
+    hide = drawer.getByRole('button', { name: 'Hide Terminal Drawer' }),
+    clear = drawer.getByRole('button', { name: 'Clear Terminal', exact: true });
+  // Every listed rail control lies inside the drawer's own box (no clipping past its right edge), once
+  // the shell's resize transitions have settled.
+  const expectInsideDrawer = async (...controls: ReturnType<typeof page.locator>[]) => {
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    );
+    const bounds = (await drawer.boundingBox())!;
+    for (const control of controls) {
+      const box = (await control.boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+
+  // Wide: the full count control sits beside the field.
+  await group.getByRole('button', { name: 'Search Terminal' }).click();
+  await page.keyboard.type('File');
+  await expect(count).toHaveText(/^1 of \d+$/);
+  const total = Number((await count.textContent())!.split(' of ')[1]);
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+
+  // Narrow: the count yields its room; screen readers still hear it through a polite status.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(count).toHaveCount(0);
+  await expect(status).toHaveText(`1 of ${total}`);
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect(editor).toBeFocused();
+  await expectInsideDrawer(group, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-count-390.png') });
+  // No matches, the state that pushed Clear and Hide out of the drawer before the fix.
+  await page.keyboard.type('-absent');
+  await expect(status).toHaveText('No matches');
+  await expectInsideDrawer(group, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-390.png') });
+
+  // Medium: the full count control returns beside the field, still inside the drawer.
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(count).toHaveText('No matches');
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-768.png') });
+
+  // Wide again: the full count control returns and everything still fits.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(count).toHaveText('No matches');
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-1280.png') });
+});

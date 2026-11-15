@@ -250,6 +250,7 @@ import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
 import { type TerminalSearchResults } from '../terminal-search';
+import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
@@ -644,7 +645,9 @@ export async function startHotSheetWebClient() {
   const terminalSearchModel = createSearchFieldModel(),
     terminalSearchOpen = signal(false),
     // The searched terminal's match count (HS2-M5QPED), published by the terminal interactions.
-    terminalSearchResults = signal<TerminalSearchResults | undefined>(undefined);
+    terminalSearchResults = signal<TerminalSearchResults | undefined>(undefined),
+    // The drawer rail has no room for the match count control (HS2-HPDX81); wireTerminalSearchCountFit measures it.
+    terminalSearchCountCompact = signal(false);
   const guidanceSearchModel = createGuidanceSearchModel(() => guidanceOverview.value);
   const guidanceOwnerFilter = signal('');
   const guidanceTagFilter = signal('');
@@ -5551,7 +5554,12 @@ export async function startHotSheetWebClient() {
         mobileMagnifiedTerminal,
         viewportMobile,
         coarsePointer,
-        terminalSearch: { model: terminalSearchModel, open: terminalSearchOpen, results: terminalSearchResults },
+        terminalSearch: {
+          model: terminalSearchModel,
+          open: terminalSearchOpen,
+          results: terminalSearchResults,
+          countCompact: terminalSearchCountCompact,
+        },
       },
       conversations: {
         conversationStates,
@@ -6158,6 +6166,10 @@ export async function startHotSheetWebClient() {
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
   const projectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
     projectTabActionCompact.value = compact;
+  });
+  // The drawer rail's search count yields its room at narrow widths (HS2-HPDX81).
+  const disposeTerminalSearchCountFit = wireTerminalSearchCountFit(appRoot, (compact) => {
+    terminalSearchCountCompact.value = compact;
   });
 
   const savedViewMenuRoot = document.createElement('div');
@@ -7175,6 +7187,7 @@ export async function startHotSheetWebClient() {
     disposeInteractions: () => {
       disposeToolbarVisibility();
       projectTabActionFit.dispose();
+      disposeTerminalSearchCountFit();
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();

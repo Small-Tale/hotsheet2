@@ -72,13 +72,21 @@ export function terminalSearchCountText(
 /**
  * The drawer's search prop from the field model, its open state, and the searched terminal's results
  * (HS2-M5QPED). Production and the catalog demo (HS2-174S6X) present the search through this one mapping.
+ * `countCompact` is the measured narrow-rail state from `wireTerminalSearchCountFit` (HS2-HPDX81).
  */
 export function terminalDrawerSearch(
   model: SearchFieldModel,
   open: boolean,
   results: TerminalSearchResults | undefined,
+  countCompact = false,
 ): TerminalDrawerSearch {
-  return { model, open, count: terminalSearchCountText(results), hasMatches: (results?.resultCount ?? 0) > 0 };
+  return {
+    model,
+    open,
+    count: terminalSearchCountText(results),
+    hasMatches: (results?.resultCount ?? 0) > 0,
+    countCompact,
+  };
 }
 
 export interface TerminalSearchSyncOptions {

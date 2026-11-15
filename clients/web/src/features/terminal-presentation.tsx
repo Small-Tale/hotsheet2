@@ -80,6 +80,8 @@ export interface TerminalPresentationDependencies {
       open: Signal<boolean>;
       /** The searched terminal's match count (HS2-M5QPED). */
       results: Signal<TerminalSearchResults | undefined>;
+      /** The rail has no room for the count control (HS2-HPDX81), measured by `wireTerminalSearchCountFit`. */
+      countCompact: Signal<boolean>;
     };
   };
   conversations: {
@@ -359,7 +361,12 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
       mobile: viewportMobile.value,
       touchClipboard: touchClipboard(),
-      search: terminalDrawerSearch(terminalSearch.model, terminalSearch.open.value, terminalSearch.results.value),
+      search: terminalDrawerSearch(
+        terminalSearch.model,
+        terminalSearch.open.value,
+        terminalSearch.results.value,
+        terminalSearch.countCompact.value,
+      ),
     };
   }
 

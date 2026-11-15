@@ -3829,7 +3829,15 @@ moves the search there and clears the terminal it left, including a terminal who
 or is restored from the parked pool after the switch. Decorations are xterm's proposed API, so a
 terminal turns on `allowProposedApi` at its first search; Hot Sheet calls no other proposed API.
 The count sits beside the field rather than inside it because SearchField's trailing zone holds
-only a compact control and the rail's end zone accepts only controls (Kerf gap `KF-8CDT8B`). Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
+only a compact control and the rail's end zone accepts only controls (Kerf gap `KF-8CDT8B`).
+The open field's width is capped (Kerf's `--kui-search-field-expanded-width`: 15rem, 9rem on a rail
+at or below 30rem); a longer query wraps inside the field. On a phone-width rail, and whenever a wider
+rail's end would still push Hide past the drawer's edge, the count control leaves the rail so the
+field, Clear, and Hide fit (HS2-HPDX81). The count stays available to screen readers as a visually
+hidden polite status, and Enter and Shift-Enter still step through the matches. The count control
+returns once the rail is wide enough again; `terminal-search-count-fit.ts` decides this from the
+app-owned rail wrapper and Hide button, with width hysteresis. A long query still wraps the field
+and widens Kerf's end zone beyond the field's width (Kerf gap `KF-X9A8X9`). Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action

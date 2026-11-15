@@ -471,6 +471,39 @@ describe('TerminalDrawer', () => {
     expect(drawer('one', false, '3 of 12')).not.toContain('data-terminal-search-count');
     expect(drawer('grid', true, '3 of 12')).not.toContain('data-terminal-search-count');
   });
+  it('HS2-HPDX81 moves a compact count off the rail into a visually hidden polite status', () => {
+    const drawer = (selectedId: string, open: boolean, count?: string) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 390,
+          height: 320,
+          fitAcross: 1,
+          fitHigh: 1,
+          selectedId,
+          search: {
+            model: createSearchFieldModel(),
+            open,
+            hasMatches: true,
+            countCompact: true,
+            ...(count === undefined ? {} : { count }),
+          },
+        }),
+      );
+    const compact = drawer('one', true, '3 of 12');
+    // No count control in the TabBar's end zone; the status sits in the rail header after the TabBar.
+    expect(compact).not.toContain('data-terminal-search-count=""');
+    expect(compact).toMatch(
+      /terminal-drawer__actions[\s\S]*<\/div><span class="wa-visually-hidden" role="status" data-terminal-search-count-status="">3 of 12<\/span><\/header>/,
+    );
+    // The status stays in place while nothing is counted yet, so the next count is announced.
+    expect(drawer('one', true)).toContain('data-terminal-search-count-status=""></span>');
+    // A closed field or the grid has no status.
+    expect(drawer('one', false, '3 of 12')).not.toContain('data-terminal-search-count-status');
+    expect(drawer('grid', true, '3 of 12')).not.toContain('data-terminal-search-count-status');
+  });
   it('HS2-N2AG8V offers Clear Terminal before Hide only while a terminal is selected', () => {
     const terminal = render('one');
     // A native button in the existing borderless end group, with a Lucide eraser and an accessible name.

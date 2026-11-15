@@ -254,6 +254,7 @@ describe('terminal drawer search prop (HS2-174S6X)', () => {
       open: false,
       count: undefined,
       hasMatches: false,
+      countCompact: false,
     });
     expect(terminalDrawerSearch(model, true, { resultIndex: 2, resultCount: 12 })).toMatchObject({
       open: true,
@@ -263,6 +264,11 @@ describe('terminal drawer search prop (HS2-174S6X)', () => {
     expect(terminalDrawerSearch(model, true, { resultIndex: -1, resultCount: 0 })).toMatchObject({
       count: 'No matches',
       hasMatches: false,
+    });
+    // HS2-HPDX81: the measured narrow-rail state passes through unchanged.
+    expect(terminalDrawerSearch(model, true, { resultIndex: 0, resultCount: 2 }, true)).toMatchObject({
+      count: '1 of 2',
+      countCompact: true,
     });
   });
 });

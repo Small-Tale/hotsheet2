@@ -2490,7 +2490,12 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     ai: state.ai,
     permissions,
     terminals: {
-      terminalSearch: { model: createSearchFieldModel(), open: signal(false), results: signal(undefined) },
+      terminalSearch: {
+        model: createSearchFieldModel(),
+        open: signal(false),
+        results: signal(undefined),
+        countCompact: signal(false),
+      },
       terminalGroups: groups,
       terminalGridFullscreen: signal(false),
       terminalDrawerPendingByProject: signal({}),

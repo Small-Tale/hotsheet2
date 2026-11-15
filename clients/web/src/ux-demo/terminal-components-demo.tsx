@@ -40,6 +40,7 @@ import {
   toggleTerminalModifier,
 } from '../terminal-keys';
 import { terminalDrawerSearch, type TerminalSearchDirection, type TerminalSearchResults } from '../terminal-search';
+import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import type { DemoModule, FormControl } from './demo-module';
@@ -98,7 +99,9 @@ const TERMINAL_SEARCH_DEMO_CHOICES: SelectChoice[] = Object.entries(TERMINAL_SEA
 export const terminalSearchDemoModel = createSearchFieldModel(),
   terminalSearchDemoOpen = signal(false),
   terminalSearchDemoState = signal<TerminalSearchDemoState>('collapsed'),
-  terminalSearchDemoResults = signal<TerminalSearchResults | undefined>(undefined);
+  terminalSearchDemoResults = signal<TerminalSearchResults | undefined>(undefined),
+  // Measured by production's wireTerminalSearchCountFit, not a setting: a narrow catalog compacts the count (HS2-HPDX81).
+  terminalSearchDemoCountCompact = signal(false);
 
 /** Put the terminal search demo in one of its states: the field's text, open state, and reported results. */
 export function applyTerminalSearchDemoState(state: TerminalSearchDemoState): void {
@@ -225,6 +228,7 @@ export function TerminalDrawerDemo() {
             terminalSearchDemoOpen.value && terminalSearchDemoModel.state.value.query
               ? terminalSearchDemoResults.value
               : undefined,
+            terminalSearchDemoCountCompact.value,
           )}
         />
       </CatalogExample>
@@ -683,6 +687,12 @@ export function TerminalRenameDialogDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  // The search specimen's count yields its room on a narrow rail through production's wiring (HS2-HPDX81).
+  demoListeners.add(
+    wireTerminalSearchCountFit(root, (compact) => {
+      terminalSearchDemoCountCompact.value = compact;
+    }),
+  );
   // Dashboard and long-press menus close with Web Awesome's own hide, an outside press, or Escape,
   // through the dismissal helper production's shell uses (HS2-AFCWNG).
   demoListeners.add(

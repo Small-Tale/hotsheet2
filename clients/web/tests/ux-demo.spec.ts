@@ -7608,6 +7608,9 @@ test('catalogs the terminal drawer search states with settings and reset (HS2-17
     field = drawer.locator('[data-component="search-field"][data-search-field-id="terminal-search"]'),
     editor = drawer.locator('[data-search-field-editor="terminal-search"]'),
     count = drawer.locator('[data-terminal-search-count]'),
+    // A phone-width rail shows the count as a visually hidden polite status instead (HS2-HPDX81).
+    status = drawer.locator('[data-terminal-search-count-status]'),
+    hide = drawer.getByRole('button', { name: 'Hide Terminal Drawer' }),
     inspector = page.getByRole('complementary', { name: 'TerminalDrawer Settings' }),
     state = inspector.locator('kui-select[name="search-state"]');
   const setState = async (next: string) => {
@@ -7622,10 +7625,32 @@ test('catalogs the terminal drawer search states with settings and reset (HS2-17
   };
   const noPageOverflow = () =>
     page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  // The rail's controls lie inside the drawer's own box: nothing is clipped past its edge (HS2-HPDX81).
+  const expectInsideDrawer = async (...controls: ReturnType<typeof page.locator>[]) => {
+    const bounds = (await drawer.boundingBox())!;
+    for (const control of controls) {
+      const box = (await control.boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+  // The count reads through the visible control on a wide rail and the compact status on a phone rail.
+  const expectCount = async (phone: boolean, text: string) => {
+    if (phone) {
+      await expect(count).toHaveCount(0);
+      await expect(status).toHaveText(text);
+      await expect(status).toHaveAttribute('role', 'status');
+    } else {
+      await expect(count).toHaveText(text);
+      await expect(status).toHaveCount(0);
+    }
+  };
   for (const [width, name] of [
     [1280, 'wide'],
     [390, 'phone'],
   ] as const) {
+    const phone = name === 'phone';
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=terminal-drawer');
     await expect(drawer).toBeVisible();
@@ -7648,33 +7673,38 @@ test('catalogs the terminal drawer search states with settings and reset (HS2-17
     // Open with a count: the count control steps forward, and Shift steps back.
     await setState('count');
     await expect(editor).toHaveText('root');
-    await expect(count).toHaveText('3 of 12');
-    await expect(count).toBeEnabled();
-    await expect(count).toHaveAccessibleName('Next Match, 3 of 12');
+    await expectCount(phone, '3 of 12');
     await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
     await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-count-${name}.png` });
-    await count.click();
-    await expect(count).toHaveText('4 of 12');
-    await count.click({ modifiers: ['Shift'] });
-    await expect(count).toHaveText('3 of 12');
+    if (!phone) {
+      await expect(count).toBeEnabled();
+      await expect(count).toHaveAccessibleName('Next Match, 3 of 12');
+      await count.click();
+      await expect(count).toHaveText('4 of 12');
+      await count.click({ modifiers: ['Shift'] });
+      await expect(count).toHaveText('3 of 12');
+    }
     // Enter in the field steps through matches instead of submitting, as in production.
     await editor.focus();
     await page.keyboard.press('Enter');
-    await expect(count).toHaveText('4 of 12');
+    await expectCount(phone, '4 of 12');
     await expect(editor).toBeFocused();
 
     // No matches: the count reads so and cannot step.
     await setState('none');
     await expect(editor).toHaveText('webpack');
-    await expect(count).toHaveText('No matches');
-    await expect(count).toBeDisabled();
+    await expectCount(phone, 'No matches');
+    if (!phone) await expect(count).toBeDisabled();
     await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
     await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-none-${name}.png` });
 
     // The highlight limit caps the count.
     await setState('limit');
-    await expect(count).toHaveText('1000+ matches');
-    await expect(count).toBeEnabled();
+    await expectCount(phone, '1000+ matches');
+    if (!phone) await expect(count).toBeEnabled();
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
 
     // Kerf's clear empties the real model, which clears the count as production's search does.
     await drawer.getByRole('button', { name: 'Clear Terminal Search' }).click();
@@ -7691,10 +7721,17 @@ test('catalogs the terminal drawer search states with settings and reset (HS2-17
     await expect(count).toHaveCount(0);
     // A further edit after Reset applies.
     await setState('none');
-    await expect(count).toHaveText('No matches');
+    await expectCount(phone, 'No matches');
     await setState('collapsed');
     await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(status).toHaveCount(0);
   }
+
+  // Wide again after the phone width (HS2-HPDX81): the full count control returns, inside the drawer.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await setState('none');
+  await expectCount(false, 'No matches');
+  await expectInsideDrawer(field, count, hide);
 });
 
 test('operates the project tab bar across pointer, keyboard, and responsive states', async ({ page }) => {
