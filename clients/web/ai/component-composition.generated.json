@@ -8639,6 +8639,74 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-follow-up-link-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-follow-up-link-dialog",
+      "name": "TicketFollowUpLinkDialog",
+      "kind": "component",
+      "purpose": "Link an existing ticket as a follow-up of the inspected ticket with qualified search, an idempotent repeat notice, and validation (HS2-MCGCPQ).",
+      "publicExports": [
+        {
+          "name": "TicketFollowUpLinkDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-follow-up-link-dialog.tsx"
+      ],
+      "source": "src/components/ticket-follow-up-link-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-follow-up-link-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-follow-up-link-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-follow-up-link-dialog.tsx",
+        "composition": "src/components/ticket-follow-up-link-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-group",
       "package": "hotsheet-web",
       "id": "ticket-group",
@@ -9331,6 +9399,74 @@
       "provenance": {
         "selection": "src/components/ticket-reader.tsx",
         "composition": "src/components/ticket-reader.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-reference-picker",
+      "package": "hotsheet-web",
+      "id": "ticket-reference-picker",
+      "name": "TicketReferencePicker",
+      "kind": "component",
+      "purpose": "Shared existing-ticket search with framed results and a selected-ticket banner, used by the close and follow-up link dialogs (HS2-MCGCPQ).",
+      "publicExports": [
+        {
+          "name": "TicketReferencePicker"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-reference-picker.tsx"
+      ],
+      "source": "src/components/ticket-reference-picker.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-reference-picker"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-reference-picker"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-reference-picker.tsx",
+        "composition": "src/components/ticket-reference-picker.tsx"
       }
     },
     {

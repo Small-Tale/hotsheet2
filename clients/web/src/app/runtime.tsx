@@ -131,6 +131,7 @@ import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
 import { createCorruptTicketRecoveryController } from '../features/corrupt-ticket-recovery';
 import { createDriveConversationsController } from '../features/drive-conversations';
+import { createFollowUpLinkController } from '../features/follow-up-link';
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createHotSheetApp } from '../features/hot-sheet-app';
@@ -431,6 +432,14 @@ export async function startHotSheetWebClient() {
     changeEvidenceSurfaceProps,
     changeEvidenceSurface,
   } = repositoryController;
+  const followUpLinkController = createFollowUpLinkController({
+    project: () => project(),
+    projects,
+    selectedTicket,
+    codeReview,
+    refreshCodeReview,
+    showToast,
+  });
   const ticketScrollMemory = new TicketScrollMemory();
   const shellMode = signal<ProjectTabBarMode>('project'),
     statsProjectId = signal<string | undefined>(undefined),
@@ -5968,6 +5977,7 @@ export async function startHotSheetWebClient() {
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
+    followUpLinkDialog: followUpLinkController.dialog,
     ticketCloseDialog,
     ticketCollectionState,
     ticketLinkChoice,
@@ -6238,6 +6248,7 @@ export async function startHotSheetWebClient() {
     changeEvidenceReader,
     selectedTicket,
     codeReviewMessage,
+    followUpLink: followUpLinkController,
     openProject,
     currentRememberedProjectRoots,
     persistDrawerTabOrder,

@@ -611,6 +611,15 @@ HS2-08EPQM adds `ticket-code-review.test.ts` row-composition checks and the
 `providers.spec.ts` browser assertion that follow-up rows stay inside the list,
 clip no text, and wrap long titles in the inspector (1440, 1024, 1440 px) and the
 reader (390 px and back to wide).
+HS2-MCGCPQ covers the Inspector's link-existing-follow-up flow:
+
+- pure availability, reference, validation, and already-linked logic (`ticket-follow-up-link.test.ts`);
+- the shared picker search (`ticket-reference-search.test.ts`);
+- controller transitions: open, search, stale search, select, clear, link, idempotent repeat, refusal, and retry (`features/follow-up-link.test.ts`);
+- the dialog render (`ticket-follow-up-link-dialog.test.ts`);
+- the enabled and disabled Follow-Ups header action (`ticket-code-review.test.ts`).
+
+`follow-up-link.spec.ts` drives the real Inspector against a real server. It links an existing ticket, repeats the link idempotently, and checks the stored relation. It also checks the disabled reason for a non-Git provider.
 
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the

@@ -1,6 +1,8 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
+import { GitBranch } from 'lucide';
 
 import { AiFeedbackDialog } from '../components/ai-feedback-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
@@ -8,7 +10,9 @@ import { ManualModelDialog } from '../components/manual-model-dialog';
 import { focusProjectCloseDialogDefault, ProjectCloseDialog } from '../components/project-close-dialog';
 import { SavedViewDialog } from '../components/saved-view-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
+import { TicketFollowUpLinkDialog } from '../components/ticket-follow-up-link-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
+import { TicketReferencePicker } from '../components/ticket-reference-picker';
 import type { DemoModule } from './demo-module';
 import { savedViewDemoSearchModel, ticketSearchDemoHelpIsOpen } from './ticket-search-field-demo';
 
@@ -249,10 +253,92 @@ function wireAppDialogsDemo(root: HTMLElement): () => void {
   };
 }
 
+const followUpSource = {
+  id: 'source',
+  slug: 'HS2-29MDFH',
+  title: 'Repeated UI stability diagnostics',
+  projectId: 'hotsheet2',
+  projectName: 'Hot Sheet 2',
+  connectionId: 'hs2-git',
+  nativeId: 'source',
+  qualifiedId: 'hs2-git:source',
+};
+const followUpCandidates = [
+  {
+    id: 'measure',
+    slug: 'HS2-8WG3W9',
+    title: 'Measure render cost after the stability fix',
+    projectId: 'hotsheet2',
+    projectName: 'Hot Sheet 2',
+    connectionId: 'hs2-git',
+    nativeId: 'measure',
+    qualifiedId: 'hs2-git:measure',
+  },
+  {
+    id: 'kerf',
+    slug: 'KF-4D1QZ2',
+    title: 'Stability diagnostics in the shared list component',
+    projectId: 'kerf',
+    projectName: 'Kerf',
+    connectionId: 'kerf-git',
+    nativeId: 'kerf',
+    qualifiedId: 'kerf-git:kerf',
+  },
+];
+
+/** The Inspector's Link Existing Ticket as Follow-Up dialog in its search and selected states (HS2-MCGCPQ). */
+export function TicketFollowUpLinkDialogDemo() {
+  return (
+    <>
+      <CatalogExample label="Searching">
+        <TicketFollowUpLinkDialog
+          state={{ source: followUpSource, existing: [], query: 'stability', candidates: followUpCandidates }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Already Linked">
+        <TicketFollowUpLinkDialog
+          state={{
+            source: followUpSource,
+            existing: ['hotsheet2::hs2-git%3Ameasure'],
+            query: '',
+            candidates: [],
+            selected: followUpCandidates[0],
+          }}
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
+/** The shared existing-ticket picker in its results, empty, and selected states (HS2-MCGCPQ). */
+export function TicketReferencePickerDemo() {
+  const props = {
+    fieldName: 'demo-ticket-reference-search',
+    selectAction: 'demo-select-ticket-reference',
+    clearAction: 'demo-clear-ticket-reference',
+    candidateIcon: <LucideIcon icon={GitBranch} name="git-branch" />,
+  };
+  return (
+    <>
+      <CatalogExample label="Results">
+        <TicketReferencePicker {...props} query="stability" candidates={followUpCandidates} />
+      </CatalogExample>
+      <CatalogExample label="No Matches">
+        <TicketReferencePicker {...props} query="nothing" candidates={[]} />
+      </CatalogExample>
+      <CatalogExample label="Selected">
+        <TicketReferencePicker {...props} query="" candidates={[]} selected={followUpCandidates[1]} />
+      </CatalogExample>
+    </>
+  );
+}
+
 /** The catalog entries this file renders: application dialogs rendered from deterministic production state (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'ticket-close-dialog': { catalogExamples: true, Demo: TicketCloseDialogDemo },
+    'ticket-follow-up-link-dialog': { catalogExamples: true, Demo: TicketFollowUpLinkDialogDemo },
+    'ticket-reference-picker': { catalogExamples: true, Demo: TicketReferencePickerDemo },
     'project-close-dialog': { catalogExamples: true, Demo: ProjectCloseDialogDemo },
     'conversation-export-dialog': { catalogExamples: true, Demo: ConversationExportDialogDemo },
     'saved-view-dialog': { catalogExamples: true, Demo: SavedViewDialogDemo },

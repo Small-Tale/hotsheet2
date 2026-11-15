@@ -2783,6 +2783,19 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).
+  The Follow-Ups header's logical-end action, "Link Existing Ticket as Follow-Up…",
+  links a ticket that already exists (HS2-MCGCPQ). It appears only in the sidebar and
+  rail Inspector, and it shows even when the ticket has no follow-ups yet. It opens
+  "Link Follow-Up to <slug>". The inspected ticket is the source. The person searches
+  every open project for the target with `TicketReferencePicker`, the picker the close
+  dialog's duplicate target also uses. Results never include the source. Link Follow-Up
+  posts both qualified `@project/connection:native` references to the target checkout's
+  idempotent `follow-up-links` route, which `hotsheet-cli link-follow-up` and MCP
+  `hotsheet_link_follow_up` also call. Choosing a ticket that is already a follow-up is
+  allowed: the dialog says linking again changes nothing, and the toast says the ticket
+  was already a follow-up. A refusal stays in the dialog. Success refreshes Code Review.
+  For a source whose provider is not Hot Sheet Git, the action stays mounted but
+  disabled, and its reason names the provider.
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions

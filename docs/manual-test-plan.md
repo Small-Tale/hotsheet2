@@ -44,6 +44,11 @@ and narrow widths, then return to wide: the count and qualified target link must
 remain readable and open the target. Remove the target in an isolated test store
 and confirm the source still opens with a missing-target diagnostic. Repeat with
 an external source ticket and confirm the unsupported relation write is explicit.
+For HS2-MCGCPQ, open a synthetic Git ticket's Code Review tab and use the
+Follow-Ups action "Link Existing Ticket as Follow-Up…". Search another project's
+ticket, link it, link it again (expect the "already a follow-up" notice and one
+row), and check the dialog at wide, medium, and narrow widths. On a GitHub, Jira,
+or GitLab ticket, confirm the action is disabled and its tooltip names the provider.
 
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.

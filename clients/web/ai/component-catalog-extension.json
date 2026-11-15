@@ -2859,6 +2859,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ticket-follow-up-link-dialog",
+      "name": "TicketFollowUpLinkDialog",
+      "kind": "component",
+      "purpose": "Link an existing ticket as a follow-up of the inspected ticket with qualified search, an idempotent repeat notice, and validation (HS2-MCGCPQ).",
+      "useWhen": [
+        "Hot Sheet needs to link an existing ticket as a follow-up of the inspected ticket."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketFollowUpLinkDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-follow-up-link-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-follow-up-link-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-group",
       "name": "TicketGroup",
       "kind": "component",
@@ -3100,6 +3123,29 @@
         "notes": [
           "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
         ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-reference-picker",
+      "name": "TicketReferencePicker",
+      "kind": "component",
+      "purpose": "Shared existing-ticket search with framed results and a selected-ticket banner, used by the close and follow-up link dialogs (HS2-MCGCPQ).",
+      "useWhen": [
+        "Hot Sheet needs the person to choose one existing ticket from any open project."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketReferencePicker behavior."
+      ],
+      "publicClasses": [
+        "ticket-reference-picker"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-reference-picker.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
       },
       "documentation": "../../docs/ux-components.md"
     },

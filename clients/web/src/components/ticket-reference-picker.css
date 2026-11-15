@@ -1,0 +1,7 @@
+/* Matching tickets: Kerf's framed, bounded List owns the frame and scroll bounds (KF-SHW2J9);
+   rows fill the box and align their icon to the first line through Kerf public tokens. */
+.ticket-reference-picker__results {
+  --kui-layout-inline-margin: 0;
+  --kui-list-item-padding-block: var(--kui-space-xs);
+  --kui-list-item-align-items: start;
+}

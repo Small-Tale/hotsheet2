@@ -643,6 +643,41 @@ export function TicketCodeReviewDemo() {
         <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
       </CatalogExample>
       <CatalogExample
+        label="Follow-Ups — Link Existing Ticket"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        {/* The Inspector's Follow-Ups header action opens the link dialog (HS2-MCGCPQ). */}
+        <TicketCodeReview
+          followUpLink={{ enabled: true }}
+          review={{
+            difftool: 'Meld',
+            truncated: false,
+            ranges: [],
+            commits: [],
+            follow_ups: [
+              {
+                target: { project_id: 'hotsheet2', connection_id: 'hs2-git', native_id: 'follow-up' },
+                state: 'resolved',
+                slug: 'HS2-8WG3W9',
+                title: 'Measure render cost after the stability fix',
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Follow-Ups — Unsupported Provider"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview
+          followUpLink={{
+            enabled: false,
+            disabledReason: 'GitHub Issues tickets cannot record follow-up links. Only Hot Sheet Git tickets can.',
+          }}
+          review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }}
+        />
+      </CatalogExample>
+      <CatalogExample
         label="Loading / Error"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >

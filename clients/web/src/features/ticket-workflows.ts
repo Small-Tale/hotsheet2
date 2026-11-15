@@ -79,7 +79,6 @@ import {
   type DuplicateTarget,
   duplicateTargetKey,
   parseDuplicateReference,
-  prioritizeExactDuplicateTargets,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -123,6 +122,7 @@ import {
   type TicketReaderFrame,
   updateTicketReaderFrame,
 } from '../ticket-reader-stack';
+import { searchTicketReferences } from '../ticket-reference-search';
 import { ticketTimelineEntries, timelineShares } from '../ticket-timeline-data';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import { copiedTicketPlacement, ticketClipboardText } from '../ticket-transfer';
@@ -2334,16 +2334,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     };
     if (!query.trim()) return;
     ticketCloseSearchTimer = window.setTimeout(() => {
-      void Promise.allSettled(
-        projects.value.map(async (project) => ({
-          project,
-          result: await new Api(project.apiPath).checkoutTickets(project.id, {
-            text: query,
-            compact: true,
-            limit: 500,
-          }),
-        })),
-      ).then((results) => {
+      void searchTicketReferences(projects.value, query, (project) =>
+        new Api(project.apiPath).checkoutTickets(project.id, { text: query, compact: true, limit: 500 }),
+      ).then(({ candidates, errors }) => {
         const active = ticketCloseDialog.value;
         if (
           generation !== ticketCloseSearchGeneration ||
@@ -2351,26 +2344,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           duplicateTargetKey(active.source) !== duplicateTargetKey(state.source)
         )
           return;
-        const candidates = new Map<string, DuplicateTarget>(),
-          errors: string[] = [];
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
-            continue;
-          }
-          if (result.value.result.partial || result.value.result.truncated)
-            errors.push(`Search results may be incomplete for ${result.value.project.name}.`);
-          for (const row of result.value.result.items) {
-            const candidate = duplicateTarget(result.value.project, row);
-            candidates.set(duplicateTargetKey(candidate), candidate);
-          }
-        }
-        ticketCloseDialog.value = {
-          ...active,
-          candidates: prioritizeExactDuplicateTargets([...candidates.values()], query).slice(0, 20),
-          searching: false,
-          error: errors.join(' · '),
-        };
+        ticketCloseDialog.value = { ...active, candidates, searching: false, error: errors.join(' · ') };
       });
     }, 150);
   }

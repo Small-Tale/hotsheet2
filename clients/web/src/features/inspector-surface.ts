@@ -31,6 +31,7 @@ import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type NotWorkingTarget, type Project } from '../interactions/types';
 import { type ProjectTicketSources } from '../new-ticket-source';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
+import { followUpLinkAvailability } from '../ticket-follow-up-link';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import type { StoredPendingAttachment } from '../workspace-session';
@@ -217,17 +218,18 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       current = project();
     if (!ticket || !current) return;
     const backlinks =
-      duplicateBacklinkState.value.key === `${current.id}:${ticket.qualified_id}`
-        ? duplicateBacklinkState.value
-        : undefined;
+        duplicateBacklinkState.value.key === `${current.id}:${ticket.qualified_id}`
+          ? duplicateBacklinkState.value
+          : undefined,
+      source = defaultProviders.value[current.id]?.sources.find(
+        (candidate) => candidate.connectionId === ticket.connection_id,
+      );
     return {
       slug: ticket.slug,
       feedbackDelivery:
         feedbackDelivery.value?.ticketId === ticket.qualified_id ? feedbackDelivery.value.delivery : undefined,
       feedbackTicketId: ticket.qualified_id,
-      source: defaultProviders.value[current.id]?.sources.find(
-        (source) => source.connectionId === ticket.connection_id,
-      ),
+      source,
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),
       advisoryClaim: advisoryClaimNotice(ticket),
@@ -282,6 +284,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       codeReviewLoading: codeReviewLoading.value,
       codeReviewMessage: codeReviewMessage.value,
       expandedCodeReviewCommits: expandedCodeReviewCommits.value,
+      followUpLink: followUpLinkAvailability(source),
       attachmentsEnabled: canUseAttachments(),
       attachmentsEditable: canEditAttachments(),
       attachmentsRemovable: canRemoveAttachments(),

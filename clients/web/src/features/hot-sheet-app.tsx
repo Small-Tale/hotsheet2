@@ -60,6 +60,10 @@ import {
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
+import {
+  TicketFollowUpLinkDialog,
+  type TicketFollowUpLinkDialogState,
+} from '../components/ticket-follow-up-link-dialog';
 import { TicketGroupDialog } from '../components/ticket-group-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
@@ -222,6 +226,8 @@ export interface HotSheetAppDependencies {
   terminalVisibilityDialogScope: Signal<string | undefined>;
   terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
+  /** The Inspector's Link Existing Ticket as Follow-Up dialog (HS2-MCGCPQ). */
+  followUpLinkDialog: Signal<TicketFollowUpLinkDialogState | undefined>;
   ticketCollectionState: Signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>;
   ticketLinkChoice: Signal<{ kind: 'choose'; reference: TicketLinkReference; matches: TicketLinkMatch[] } | undefined>;
   ticketRenderScheduled: () => boolean;
@@ -365,6 +371,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
     ticketCloseDialog,
+    followUpLinkDialog,
     ticketCollectionState,
     ticketLinkChoice,
     ticketRenderScheduled,
@@ -578,6 +585,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <BulkTicketDialog state={bulkTicketDialog.value} />
         <TicketGroupDialog state={ticketGroupDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
+        <TicketFollowUpLinkDialog state={followUpLinkDialog.value} />
         <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer
           expanded={composerExpanded.value}

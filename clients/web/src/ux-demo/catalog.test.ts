@@ -125,6 +125,8 @@ describe('UX demo catalog', () => {
       'markdown-preview',
       'attachment-gallery',
       'ticket-close-dialog',
+      'ticket-follow-up-link-dialog',
+      'ticket-reference-picker',
       'not-working-dialog',
       'bulk-ticket-dialog',
       'ticket-group-dialog',

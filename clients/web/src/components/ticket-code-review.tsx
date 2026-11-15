@@ -23,6 +23,7 @@ import {
   GitCommitHorizontal,
   GitCompare,
   GitCompareArrows,
+  Link,
   Tag,
 } from 'lucide';
 
@@ -30,6 +31,7 @@ import type { CodeReview, CodeReviewTarget, CommitRef, UnmergedSource } from '..
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import type { FollowUpLinkAvailability } from '../ticket-follow-up-link';
 import { MarkdownPreview } from './markdown-preview';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
@@ -57,6 +59,11 @@ export interface TicketCodeReviewProps {
   expandedCommits?: readonly string[];
   /** False on a remote client: diff-tool actions render disabled with an explanation (HS2-TYS5SS). */
   hostActionsAvailable?: boolean;
+  /**
+   * The Follow-Ups header's Link Existing Ticket action (HS2-MCGCPQ). Only the Inspector passes it;
+   * a disabled availability keeps the action mounted with its reason.
+   */
+  followUpLink?: FollowUpLinkAvailability;
 }
 
 export function TicketCodeReview({
@@ -72,6 +79,7 @@ export function TicketCodeReview({
   comparison,
   expandedCommits = [],
   hostActionsAvailable = hostActionsAvailableHere(),
+  followUpLink,
 }: TicketCodeReviewProps) {
   const enabled = Boolean(review?.difftool) && hostActionsAvailable,
     hostReason = hostOnlyDisabledReason('diff-tool', hostActionsAvailable);
@@ -92,16 +100,25 @@ export function TicketCodeReview({
           {loadingMessage}
         </Text>
       )}
-      {!loading && review && followUps.length > 0 && (
+      {!loading && (review || followUpLink) && (followUps.length > 0 || followUpLink) && (
         // Follow-ups reuse the inspector's ticket-reference rows (the Duplicates list): a wrapping Kerf
-        // ListItem with the number as its label and the title as its description (HS2-08EPQM).
+        // ListItem with the number as its label and the title as its description (HS2-08EPQM). The
+        // header's logical-end action links an existing ticket (HS2-MCGCPQ).
         <section aria-label="Follow-Up Tickets">
           <List gap="2xs" controlInsets="b">
-            <ListHeader
-              label="Follow-Ups"
-              count={followUps.length}
-              countLabel={`${followUps.length} ${followUps.length === 1 ? 'follow-up' : 'follow-ups'}`}
-            />
+            {followUpLink ? (
+              <ListHeader
+                label="Follow-Ups"
+                {...followUpCount(followUps.length)}
+                action={REPOSITORY_ACTIONS.openFollowUpLink.value}
+                actionLabel="Link Existing Ticket as Follow-Up…"
+                actionIcon={<LucideIcon icon={Link} name="link" />}
+                actionDisabled={!followUpLink.enabled}
+                disabledReason={followUpLink.disabledReason}
+              />
+            ) : (
+              <ListHeader label="Follow-Ups" {...followUpCount(followUps.length)} />
+            )}
             {followUps.map((item) => {
               const qualified = `@${item.target.project_id}/${item.target.connection_id}:${item.target.native_id}`;
               const resolved = item.state === 'resolved';
@@ -421,6 +438,11 @@ export function codeReviewTarget(data: DOMStringMap): CodeReviewTarget | undefin
   )
     return { mode: 'worktree_file', paths: [data.reviewPath], area: data.reviewArea };
   return undefined;
+}
+
+/** The Follow-Ups header's count; an empty section shows only its label and action. */
+function followUpCount(count: number): { count: number; countLabel: string } | Record<string, never> {
+  return count > 0 ? { count, countLabel: `${count} ${count === 1 ? 'follow-up' : 'follow-ups'}` } : {};
 }
 
 function commitBodyPreview(body: string): string {
