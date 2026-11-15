@@ -715,6 +715,13 @@ The source and generated Claude/Codex guidance names the MCP fallback for
 sibling-store `Operation not permitted (os error 1)`, plus approved unsandboxed
 browser-gate retry for EPERM or mach-port launch denials. The actual host
 sandbox behavior remains a manual launched-session check.
+HS2-6FSJCV delivers the bundled sections to Rulesync projects:
+`crates/hotsheet-plugins/src/guidance_sources.rs # hs2_6fsjcv_apply_materializes_the_same_inputs_as_the_rulesync_check`
+compares apply's materialized Rulesync inputs with the check script's byte for byte,
+`crates/hotsheet-plugins/src/setup.rs # hs2_6fsjcv_rulesync_check_discovers_exactly_the_bundled_sections`
+pins the script's section discovery, and
+`scripts/check-rulesync-generation.test.mjs # HS2-6FSJCV bundled sections reach the generated file`
+runs the real generator.
 HS2-2KNVV0 pins the launched MCP child's machine home and actor identity in
 Codex's isolated config and Claude's temporary config. The real-process CLI
 regression `hs2_2knvv0_mcp_child_cli_registers_only_in_its_pinned_home` runs with

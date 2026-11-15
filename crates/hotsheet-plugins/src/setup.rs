@@ -2165,6 +2165,34 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
     },
 ];
 
+/// File-name prefix of the generated Rulesync inputs that carry bundled sections (HS2-6FSJCV).
+pub(crate) const RULESYNC_BUNDLED_PREFIX: &str = "hotsheet-bundled-";
+
+/// Bundled managed sections a Rulesync project receives as generated rule inputs
+/// (HS2-6FSJCV), keyed by file stem. The built-in writer always installs every
+/// `GUIDANCE_SECTIONS` entry; Rulesync gets the same guidance except where a selected rule
+/// already carries that section's marker, which supersedes the bundled copy.
+/// `scripts/check-rulesync-generation.mjs` materializes byte-identical files.
+pub(crate) fn rulesync_bundled_sections(selected_bodies: &[&str]) -> Vec<(String, String)> {
+    GUIDANCE_SECTIONS
+        .iter()
+        .filter(|section| {
+            let marker = format!("<!-- hotsheet:begin section={} v=", section.name);
+            !selected_bodies.iter().any(|body| body.contains(&marker))
+        })
+        .map(|section| {
+            (
+                format!("{RULESYNC_BUNDLED_PREFIX}{}", section.name),
+                format!(
+                    "---\nroot: true\ntargets: [\"*\"]\ndescription: \"Hot Sheet bundled {} guidance\"\n---\n\n{}\n",
+                    section.name,
+                    section.current.trim()
+                ),
+            )
+        })
+        .collect()
+}
+
 fn guidance_bounds(contents: &str, name: &str) -> Option<(usize, usize)> {
     let begin = format!("<!-- hotsheet:begin section={name} v=");
     let end = format!("<!-- hotsheet:end section={name} -->");
@@ -7304,5 +7332,38 @@ args = []
             "{reports:?}"
         );
         assert!(layer.read().is_none());
+    }
+
+    /// `scripts/check-rulesync-generation.mjs` discovers bundled sections as the non-legacy
+    /// `plugins/shared/*.md` files; pin that set to `GUIDANCE_SECTIONS` (HS2-6FSJCV).
+    #[test]
+    fn hs2_6fsjcv_rulesync_check_discovers_exactly_the_bundled_sections() {
+        let shared = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/shared");
+        let mut discovered = std::fs::read_dir(&shared)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|file| file.ends_with(".md") && !file.starts_with("legacy-"))
+            .collect::<Vec<_>>();
+        discovered.sort();
+        let mut expected = GUIDANCE_SECTIONS
+            .iter()
+            .map(|section| {
+                let marker = format!("<!-- hotsheet:begin section={} v=", section.name);
+                assert!(section.current.starts_with(&marker), "{}", section.name);
+                format!("{}.md", section.name)
+            })
+            .collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(discovered, expected);
+
+        let all = rulesync_bundled_sections(&[]);
+        assert_eq!(all.len(), GUIDANCE_SECTIONS.len());
+        let covering = "<!-- hotsheet:begin section=sandbox-recovery v=7 -->\n\nx\n";
+        let rest = rulesync_bundled_sections(&[covering]);
+        assert!(
+            rest.iter()
+                .all(|(stem, _)| stem != "hotsheet-bundled-sandbox-recovery")
+        );
+        assert_eq!(rest.len(), GUIDANCE_SECTIONS.len() - 1);
     }
 }

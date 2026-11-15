@@ -1089,6 +1089,41 @@ pub fn select_item(
 /// Materialize the selected, already-pinned source files as Rulesync inputs, then let
 /// Rulesync own `AGENTS.md`. No ref is fetched by this operation.
 pub fn apply_rulesync(project: &Path) -> Result<(), GuidanceSourceError> {
+    let generated = materialize_rulesync(project)?;
+    let mut command = Command::new("rulesync");
+    command
+        .current_dir(project)
+        .arg("generate")
+        .arg("--delete")
+        .arg("--config")
+        .arg(&generated);
+    let output = guidance_process_context(hotsheet_process_journal::Purpose::Rulesync)
+        .output(&mut command)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                GuidanceSourceError::Invalid(
+                    "Rulesync is unavailable; install rulesync@38.0.0 and run `rulesync generate --delete --config .hotsheet2/rulesync.generated.jsonc` from the project root".into(),
+                )
+            } else {
+                GuidanceSourceError::Io(error)
+            }
+        })?;
+    if !output.status.success() {
+        return Err(GuidanceSourceError::Invalid(format!(
+            "Rulesync generation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    crate::setup::apply_selected_skills_in(project)
+        .map_err(|error| GuidanceSourceError::Invalid(error.to_string()))?;
+    Ok(())
+}
+
+/// Write every Rulesync input `apply_rulesync` generates from: the selected rules, the
+/// bundled Hot Sheet sections no selected rule carries (HS2-6FSJCV), and the generated
+/// config, whose path is returned. `scripts/check-rulesync-generation.mjs` lays out the
+/// same files, so its regeneration equals what apply writes.
+pub fn materialize_rulesync(project: &Path) -> Result<PathBuf, GuidanceSourceError> {
     let config = load(project)?;
     if !config.explicit_selection {
         return Err(GuidanceSourceError::Invalid(
@@ -1155,33 +1190,38 @@ pub fn apply_rulesync(project: &Path) -> Result<(), GuidanceSourceError> {
     if fs::read(&generated).ok().as_deref() != Some(bytes.as_slice()) {
         fs::write(&generated, bytes)?;
     }
-    let mut command = Command::new("rulesync");
-    command
-        .current_dir(project)
-        .arg("generate")
-        .arg("--delete")
-        .arg("--config")
-        .arg(&generated);
-    let output = guidance_process_context(hotsheet_process_journal::Purpose::Rulesync)
-        .output(&mut command)
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                GuidanceSourceError::Invalid(
-                    "Rulesync is unavailable; install rulesync@38.0.0 and run `rulesync generate --delete --config .hotsheet2/rulesync.generated.jsonc` from the project root".into(),
-                )
-            } else {
-                GuidanceSourceError::Io(error)
-            }
-        })?;
-    if !output.status.success() {
-        return Err(GuidanceSourceError::Invalid(format!(
-            "Rulesync generation failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
+    // Bundled sections are Hot Sheet-generated inputs in the ignored `.curated` cache, so a
+    // stale or superseded one is removed rather than preserved as a local edit.
+    let selected_bodies = config
+        .sources
+        .iter()
+        .flat_map(|source| {
+            source
+                .rules
+                .iter()
+                .filter(|rule| source.selected_rules.contains(&rule.name))
+                .map(|rule| chosen_rule(source, rule).body)
+        })
+        .collect::<Vec<_>>();
+    let bundled = crate::setup::rulesync_bundled_sections(&selected_bodies);
+    for entry in fs::read_dir(&curated)? {
+        let name = entry?.file_name();
+        let Some(stem) = name.to_str().and_then(|name| name.strip_suffix(".md")) else {
+            continue;
+        };
+        if stem.starts_with(crate::setup::RULESYNC_BUNDLED_PREFIX)
+            && !bundled.iter().any(|(wanted, _)| wanted == stem)
+        {
+            fs::remove_file(curated.join(&name))?;
+        }
     }
-    crate::setup::apply_selected_skills_in(project)
-        .map_err(|error| GuidanceSourceError::Invalid(error.to_string()))?;
-    Ok(())
+    for (stem, content) in &bundled {
+        let path = curated.join(format!("{stem}.md"));
+        if fs::read(&path).ok().as_deref() != Some(content.as_bytes()) {
+            fs::write(&path, content.as_bytes())?;
+        }
+    }
+    Ok(generated)
 }
 
 #[cfg(test)]
@@ -1684,5 +1724,185 @@ mod tests {
             .known_bodies
             .push("unmarked cached body".into());
         assert!(validate(&invalid).is_err());
+    }
+
+    /// Every file under `.rulesync/` plus the generated config, keyed by relative path.
+    fn rulesync_inputs(project: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+        fn walk(base: &Path, dir: &Path, out: &mut std::collections::BTreeMap<String, Vec<u8>>) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(base, &path, out);
+                } else {
+                    let key = path
+                        .strip_prefix(base)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    out.insert(key, fs::read(&path).unwrap());
+                }
+            }
+        }
+        let mut inputs = std::collections::BTreeMap::new();
+        walk(project, &project.join(".rulesync"), &mut inputs);
+        let config = ".hotsheet2/rulesync.generated.jsonc";
+        inputs.insert(config.into(), fs::read(project.join(config)).unwrap());
+        inputs
+    }
+
+    /// Lay out the same rules with `scripts/check-rulesync-generation.mjs`'s `materialize`.
+    fn check_script_inputs(
+        source: &Path,
+        local_rule: &str,
+        rules: &[&str],
+    ) -> std::collections::BTreeMap<String, Vec<u8>> {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let script = repository.join("scripts/check-rulesync-generation.mjs");
+        let checked = tempfile::tempdir().unwrap();
+        let local = checked.path().join("local-rule.md");
+        fs::write(&local, local_rule).unwrap();
+        let project = checked.path().join("project");
+        let program = "import fs from 'node:fs'; import path from 'node:path'; \
+            import { pathToFileURL } from 'node:url'; \
+            const [script, project, source, local, rules] = process.argv.slice(1); \
+            const { materialize } = await import(pathToFileURL(script).href); \
+            materialize(project, { rules: JSON.parse(rules), \
+              readRule: (name) => fs.readFileSync(path.join(source, 'rules', `${name}.md`), 'utf8'), \
+              localRule: fs.readFileSync(local, 'utf8') });";
+        let output = Command::new("node")
+            .args(["--input-type=module", "-e", program])
+            .arg(&script)
+            .arg(&project)
+            .arg(source)
+            .arg(&local)
+            .arg(serde_json::to_string(rules).unwrap())
+            .output()
+            .expect("node is required to compare apply with the Rulesync check (HS2-6FSJCV)");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        rulesync_inputs(&project)
+    }
+
+    #[test]
+    fn hs2_6fsjcv_apply_materializes_the_same_inputs_as_the_rulesync_check() {
+        let source = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        git(source.path(), &["init", "-q"]).unwrap();
+        let rules_dir = source.path().join("rules");
+        fs::create_dir_all(&rules_dir).unwrap();
+        let mut manifest = Vec::new();
+        for (name, section, text) in [
+            (
+                "rust-lint-and-format",
+                "rust-lint-and-format",
+                "Run clippy.",
+            ),
+            (
+                "hotsheet-sandbox-recovery",
+                "sandbox-recovery",
+                "Selected recovery text.",
+            ),
+        ] {
+            let body = format!(
+                "<!-- hotsheet:begin section={section} v=9 -->\n\n{text}\n\n<!-- hotsheet:end section={section} -->\n"
+            );
+            fs::write(
+                rules_dir.join(format!("{name}.md")),
+                format!(
+                    "---\nroot: true\ntargets: [\"*\"]\ndescription: \"{name}\"\n---\n\n{body}"
+                ),
+            )
+            .unwrap();
+            manifest.push(
+                serde_json::json!({"name": name, "path": format!("rules/{name}.md"),
+                "version": 9, "sha256": digest(body.as_bytes()), "tags": ["test"]}),
+            );
+        }
+        fs::write(
+            source.path().join("rules-manifest.json"),
+            serde_json::to_vec(&serde_json::json!({"schema_version": 1, "rules": manifest}))
+                .unwrap(),
+        )
+        .unwrap();
+        let pinned = commit(source.path());
+        register(
+            project.path(),
+            "test",
+            source.path().to_str().unwrap(),
+            &pinned,
+        )
+        .unwrap();
+        let local_rule = "---\nroot: true\ntargets: [\"*\"]\n---\n\n# Local rule\n";
+        fs::create_dir_all(project.path().join(".rulesync/rules")).unwrap();
+        fs::write(
+            project.path().join(".rulesync/rules/project-local.md"),
+            local_rule,
+        )
+        .unwrap();
+        let curated = project.path().join(".rulesync/rules/.curated");
+        let bundled_recovery = curated.join("hotsheet-bundled-sandbox-recovery.md");
+
+        // Only an unrelated rule is selected, so every bundled section is delivered, and a
+        // stale generated input for a section Hot Sheet no longer bundles is removed.
+        select(
+            project.path(),
+            "test",
+            &["rust-lint-and-format".into()],
+            &[],
+        )
+        .unwrap();
+        fs::create_dir_all(&curated).unwrap();
+        fs::write(curated.join("hotsheet-bundled-retired.md"), "stale").unwrap();
+        materialize_rulesync(project.path()).unwrap();
+        let applied = rulesync_inputs(project.path());
+        assert_eq!(
+            applied,
+            check_script_inputs(source.path(), local_rule, &["rust-lint-and-format"])
+        );
+        assert!(!curated.join("hotsheet-bundled-retired.md").exists());
+        assert!(
+            fs::read_to_string(&bundled_recovery)
+                .unwrap()
+                .contains(include_str!("../../../plugins/shared/sandbox-recovery.md").trim())
+        );
+        for section in [
+            "ticket-driven-work",
+            "testing-philosophy",
+            "requirements-documentation",
+            "visual-qa",
+        ] {
+            let key = format!(".rulesync/rules/.curated/hotsheet-bundled-{section}.md");
+            assert!(applied.contains_key(&key), "{key}");
+        }
+        materialize_rulesync(project.path()).unwrap();
+        assert_eq!(
+            rulesync_inputs(project.path()),
+            applied,
+            "re-apply is stable"
+        );
+
+        // A selected rule carrying the section marker supersedes the bundled copy.
+        let both = ["rust-lint-and-format", "hotsheet-sandbox-recovery"];
+        select(project.path(), "test", &both.map(String::from), &[]).unwrap();
+        materialize_rulesync(project.path()).unwrap();
+        assert!(!bundled_recovery.exists());
+        assert_eq!(
+            rulesync_inputs(project.path()),
+            check_script_inputs(source.path(), local_rule, &both)
+        );
+
+        // Deselecting it brings the bundled section back.
+        select(
+            project.path(),
+            "test",
+            &["rust-lint-and-format".into()],
+            &[],
+        )
+        .unwrap();
+        materialize_rulesync(project.path()).unwrap();
+        assert_eq!(rulesync_inputs(project.path()), applied);
     }
 }

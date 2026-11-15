@@ -600,6 +600,9 @@ agent reruns that browser gate through approved unsandboxed execution. Without
 that approval or a browser, the gate remains blocked and is never reported as
 passing. Setup renders this recovery path into the shared instructions and the
 Claude/Codex worklist skills; it does not widen filesystem access automatically.
+A Rulesync-owned project receives the same section, and every other bundled section
+no selected rule carries, as a generated `.rulesync/rules/.curated/hotsheet-bundled-<section>.md`
+input, which `scripts/check-rulesync-generation.mjs` materializes identically (HS2-6FSJCV).
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion

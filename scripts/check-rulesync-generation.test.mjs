@@ -10,7 +10,13 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
-import { firstDifference, generate, materialize, readSelection } from './check-rulesync-generation.mjs';
+import {
+  bundledSections,
+  firstDifference,
+  generate,
+  materialize,
+  readSelection,
+} from './check-rulesync-generation.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const json = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
@@ -63,6 +69,17 @@ test('HS2-VA97HW the committed selection pins the same ai-playbook commit as the
     assert.ok(agents.includes(`<!-- hotsheet:begin section=${name.slice('hotsheet-'.length)} `), name);
   assert.throws(() => readSelection('{"commit":"main","rules":["a"]}'), /full source commit/);
   assert.throws(() => readSelection(`{"commit":"${'a'.repeat(40)}","rules":["a","a"]}`), /repeats/);
+});
+
+test('HS2-6FSJCV bundled sections reach the generated file unless a selected rule carries their marker', () => {
+  const recovery = '<!-- hotsheet:begin section=sandbox-recovery v=';
+  const bundled = bundledSections([]);
+  assert.ok(bundled.some(([stem]) => stem === 'hotsheet-bundled-sandbox-recovery'));
+  const covering = rule('Selected recovery', `${recovery}9 -->\n\nSelected recovery body.\n`);
+  assert.equal(bundledSections([covering]).length, bundled.length - 1);
+  const generated = regenerate(['alpha-rule']);
+  assert.ok(generated.includes(recovery), 'the bundled sandbox-recovery section is generated');
+  assert.ok(readFileSync(join(root, 'AGENTS.md'), 'utf8').includes(recovery), 'and committed');
 });
 
 test('HS2-VA97HW isolates fixture and generator children from a hook repository', () => {
