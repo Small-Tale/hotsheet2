@@ -371,6 +371,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/conversation-unread.ts # Per-conversation AI chat read marks: settled-reply counting, visibility-driven reconcile, persisted marks, the project unread total for the sidebar chat badge (HS2-59CXAC), and the page-visibility signal that keeps hidden-window replies unread (HS2-1ZPD4A)
     src/turn-clock.ts        # Local render-only once-a-second clock while an AI turn runs; never issues requests (HS2-XV1VCR)
     src/conversation-history.ts # AI chat composer Up/Down sent-message recall: first/last-line key gating, ignoredups history, draft-preserving cursor steps (HS2-AJQKK0)
+    src/conversation-composers.ts # The mounted composers of one AI conversation, so a send clears its own field beside a mounted drawer chat (HS2-YNCQ36)
     src/conversation-selection.ts # AI chat message selection: plain/Cmd-Ctrl toggle/Shift range picks normalized per platform, displayed-order reads, and skipped-run gaps for copy (HS2-WV88W3)
     src/conversation-export.ts # Portable .hotsheet-chat selected-messages scope, manifest, transcript, summary, selected structured assets, collision-lineage, resume contract, and validated `skippedBefore` gap counts (HS2-BZB93V)
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary

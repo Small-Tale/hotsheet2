@@ -13,6 +13,7 @@ import { browserRandomId } from '../browser-id';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { Confirm } from '../confirmation';
 import { syncControlledOpen } from '../controlled-open';
+import { conversationComposers } from '../conversation-composers';
 import {
   type ConversationHistoryCursor,
   type ConversationHistoryDirection,
@@ -393,8 +394,9 @@ export function createDriveConversationsController(dependencies: DriveConversati
     const start = beginConversation(connectionId, draft);
     conversationHistoryCursors.delete(connectionId);
     conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
-    const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
-    if (composer) composer.value = '';
+    // Kerf keeps a focused field's live value through a render, so clear the field directly. Only this
+    // conversation's composers: the drawer chat can stay mounted beside the dialog (HS2-YNCQ36).
+    for (const composer of conversationComposers(document, connectionId)) composer.value = '';
     requestAnimationFrame(() => {
       syncConversationScroll(document, true);
     });

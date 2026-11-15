@@ -25246,6 +25246,36 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   await expect(dialogField).toHaveValue('');
 });
 
+test('clears the sending dialog composer while the drawer chat stays mounted with its own draft (HS2-YNCQ36)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const drawerField = drawer
+    .locator('[data-component="ai-conversation"]')
+    .getByRole('textbox', { name: 'Message Codex' });
+  await drawerField.fill('drawer draft kept');
+  // The drawer stays open, so its composer precedes the dialog's in the document.
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialogField = host.getByRole('textbox', { name: 'Message Codex' });
+  await expect(host).toBeVisible();
+  await dialogField.fill('What time is it in California?');
+  await dialogField.press('Enter');
+  await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute('data-status', 'completed');
+  await expect(dialogField).toHaveValue('');
+  await expect(drawerField).toHaveValue('drawer draft kept');
+});
+
 test('moves the chat model selector and export into the drawer and dialog toolbars (HS2-59F7WK, HS2-DMH8MX)', async ({
   page,
 }) => {
