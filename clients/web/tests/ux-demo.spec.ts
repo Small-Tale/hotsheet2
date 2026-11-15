@@ -9261,7 +9261,7 @@ test('edits custom command color and icon in the command settings editor', async
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
   await verifyRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-  const dialog = page.locator('#command-editor-dialog');
+  const dialog = editor.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   const commandHeadingGroup = dialog
     .locator('[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-component="toolbar-control-group"]')
@@ -10595,7 +10595,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
   await publishRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-  const dialog = page.locator('#command-editor-dialog');
+  const dialog = editor.locator('#command-editor-dialog');
   const label = dialog.getByRole('heading', { name: 'AI Configuration', exact: true });
   await expect(label).toBeVisible();
   expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
