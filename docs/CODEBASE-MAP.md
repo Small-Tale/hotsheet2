@@ -446,6 +446,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
     tests/typing-latency-profile.spec.ts # Opt-in (HOTSHEET_TYPING_PROFILE=1) real-server per-keystroke Event Timing profile of the search, title, details, note, and linked-reader details editors (HS2-EQTXTJ, HS2-WV0VPE)
+    tests/settings-medium-width.spec.ts # Real-server regression: settled App Settings content stays inside its column at 1280, 1024, 600, and wide again (HS2-21E07Y)
     tests/toast-drawer-clearance.spec.ts # Real-server regression: the app toast rises above the collapsed terminal drawer's restore button at 1440, 760, 390, and wide again (HS2-T90WCZ)
     tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
     tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models, rail labels share one edge, and the per-model breakdown table sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
