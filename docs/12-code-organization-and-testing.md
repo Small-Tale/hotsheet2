@@ -821,7 +821,14 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   without an injected plugin path (HS2-SDPD95). The migrator suite's `globalSetup`
   (`migrator/test/isolated-home.mjs`) gives its spawned binaries a throwaway home, guarded
   by `migrator/test/isolated-home.test.mjs`; the web real-server fixtures already pass
-  temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
+  temp homes. `clients/web/vitest.config.ts` also forces, for every project's workers, a
+  per-run `hotsheet-vitest-home-*` temporary root for `HOTSHEET_HOME`,
+  `HOTSHEET_LEGACY_HOME`, `HOTSHEET_CACHE_DIR`, `HOTSHEET_CLAUDE_USER_CONFIG` and
+  `HOTSHEET_LAUNCH_AGENTS_DIR` (`isolateMachineHome` in
+  `clients/web/scripts/test-ai-tool-isolation.mjs`), so a unit test that misses an injected
+  seam cannot start or write the real server and stores; the unit guard in
+  `scripts/test-ai-tool-isolation.test.mjs` and the jsdom guard
+  `src/machine-home-isolation.dom.test.ts` fail without it (HS2-34QFBQ). Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
 - **Global Git config isolation (HS2-M269HC):** `.cargo/config.toml` forces
