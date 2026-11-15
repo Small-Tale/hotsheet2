@@ -13304,6 +13304,12 @@ test('keeps change evidence interactive when launched from the modal ticket read
   await page.setViewportSize({ width: 390, height: 844 });
   const navigation = evidenceDialog.getByRole('navigation', { name: 'Change Evidence Views' }),
     detail = evidenceDialog.getByRole('list', { name: 'tests Change Evidence' });
+  // HS2-V462N2: name the state the geometry depends on, so a failure says which one never arrived:
+  // the compact device class re-renders the views above the files (only that layout has the
+  // "Views" list header inside the navigation), and both regions are rendered.
+  await expect(navigation.getByText('Views', { exact: true })).toBeVisible();
+  await expect(navigation).toBeVisible();
+  await expect(detail).toBeVisible();
   await expect
     .poll(async () => {
       const [navigationBounds, detailBounds] = await Promise.all([navigation.boundingBox(), detail.boundingBox()]);
