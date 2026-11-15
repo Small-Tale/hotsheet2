@@ -48,7 +48,7 @@ pub use input_queue::INPUT_BUDGET_BYTES;
 pub use limits::{REPLAY_BYTES_BOUNDS, physical_memory_bytes};
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
-pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
+pub use sizing::{Decision, SizeArbiter, SizeClaimOwner, SizePolicy, ViewportClaim};
 pub use terminal::{
     ProcessProvenance, Replay, SCROLLBACK_BYTES, StreamPosition, TermError, TermSpec, Terminal,
     TerminalKind, is_replay_rewritten, replay_after, replay_suffix,

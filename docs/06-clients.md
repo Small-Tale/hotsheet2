@@ -4301,6 +4301,11 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId, answeredBy: vie
   that disconnects leaves its interaction time behind (the last 64 are remembered), so the
   authority that reconnects under the same id regains the size after the hold, while a passive
   viewer that reconnects stays passive (**HS2-1YX5VS**).
+- A claim belongs to the attach connection that made it most recently. When an attach ends (a
+  close, a dropped socket, or a revoked remote session), the server and the detached broker
+  release only the claims that connection still owns, every viewer id it claimed included. A
+  viewer that reconnected under the same id before its old socket ended keeps driving
+  (**HS2-CCNRVW**).
 - **Exactly one viewer answers the program's terminal queries (HS2-0GZZHV).** Every attached
   xterm answers a query such as a cursor-position request (`ESC[6n`), device attributes, a mode
   or colour report, and reports focus changes. With several viewers the program read one reply

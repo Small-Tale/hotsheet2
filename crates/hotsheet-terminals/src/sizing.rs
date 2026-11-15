@@ -17,6 +17,21 @@
 //! it gets transition-matrix + adversarial-sequence tests directly.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// The attach connection that holds a viewport's claim (HS2-CCNRVW). A client that reconnects
+/// reuses its viewer id, so a viewer id alone cannot say which connection a claim belongs to;
+/// each connection takes a process-unique token and releases only the claims it still owns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SizeClaimOwner(u64);
+
+impl SizeClaimOwner {
+    /// A token no other connection in this process holds.
+    pub fn next() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
 
 /// Hold the current size for this long after a focus change before following the new
 /// viewport — debounces a rapid focus flip (`docs/06` §6.7 `SIZE_FOCUS_HOLD_MS`).
@@ -95,6 +110,9 @@ struct Seen {
 pub struct SizeArbiter {
     policy: SizePolicy,
     claims: HashMap<String, ViewportClaim>,
+    /// The connection that made each viewport's latest claim, when the caller named one, so a
+    /// late close of an older connection cannot release a reconnected viewport (HS2-CCNRVW).
+    owners: HashMap<String, SizeClaimOwner>,
     /// Per live viewport: its attach order (the final tiebreak) and when its last claim arrived
     /// (the lease clock for [`Self::expire`]).
     seen: HashMap<String, Seen>,
@@ -133,6 +151,7 @@ impl SizeArbiter {
         Self {
             policy,
             claims: HashMap::new(),
+            owners: HashMap::new(),
             seen: HashMap::new(),
             next_seq: 0,
             departed: HashMap::new(),
@@ -253,12 +272,39 @@ impl SizeArbiter {
                 claimed_at_ms: now_ms,
             },
         );
+        // An unowned claim takes the viewport from whichever connection held it.
+        self.owners.remove(&claim.viewer_id);
         self.claims.insert(claim.viewer_id.clone(), claim);
+    }
+
+    /// [`Self::upsert`] on behalf of one attach connection, which then owns the viewport's
+    /// claim until another connection claims the same viewer id (HS2-CCNRVW).
+    pub fn upsert_owned(&mut self, claim: ViewportClaim, owner: SizeClaimOwner, now_ms: u64) {
+        let viewer_id = claim.viewer_id.clone();
+        self.upsert(claim, now_ms);
+        self.owners.insert(viewer_id, owner);
+    }
+
+    /// Drop every viewport whose claim `owner` still holds (its connection ended), leaving any
+    /// viewport a newer connection reclaimed under the same id (HS2-CCNRVW). Returns how many
+    /// viewports were dropped.
+    pub fn release_owner(&mut self, owner: SizeClaimOwner) -> usize {
+        let owned: Vec<String> = self
+            .owners
+            .iter()
+            .filter(|(_, held_by)| **held_by == owner)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in &owned {
+            self.remove(id);
+        }
+        owned.len()
     }
 
     /// Drop a viewport (it disconnected). If it was the driver, the size recomputes
     /// immediately on the next `decide` (self-heal — no hold on a disconnect).
     pub fn remove(&mut self, viewer_id: &str) {
+        self.owners.remove(viewer_id);
         self.seen.remove(viewer_id);
         if let Some(gone) = self.claims.remove(viewer_id)
             && gone.activity_at_ms > 0
@@ -1116,6 +1162,79 @@ mod tests {
         );
         assert_eq!(a.viewer_count(), 1);
         assert!(a.claims.contains_key("busy"));
+    }
+
+    // HS2-CCNRVW: a connection releases only the claims it still owns.
+
+    /// A viewport reconnects under the same id; the old connection's late release leaves the
+    /// new connection driving, and the new connection's release still self-heals.
+    #[test]
+    fn a_late_release_of_an_old_connection_keeps_the_reconnected_claim() {
+        let (old, new) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        assert_ne!(old, new);
+        let mut a = SizeArbiter::default();
+        a.set_applied(80, 24);
+        a.upsert(interacting_claim("stay", 90, 28, true, 0), 1_000);
+        assert_eq!(a.decide(1_000).unwrap().driven_by.as_deref(), Some("stay"));
+        a.upsert_owned(interacting_claim("phone", 120, 40, true, 0), old, 2_000);
+        assert_eq!(a.decide(3_000).unwrap().driven_by.as_deref(), Some("phone"));
+        a.upsert_owned(interacting_claim("phone", 110, 36, true, 0), new, 4_000);
+        assert_eq!(a.decide(4_000).unwrap().cols, 110);
+
+        assert_eq!(a.release_owner(old), 0, "the old connection owns nothing");
+        assert_eq!(a.viewer_count(), 2);
+        assert!(a.decide(4_500).is_none(), "the size holds");
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("phone"));
+        // Repeating the late release changes nothing either.
+        assert_eq!(a.release_owner(old), 0);
+
+        assert_eq!(a.release_owner(new), 1);
+        let healed = a.decide(5_000).expect("the remaining viewport drives");
+        assert_eq!(
+            (healed.cols, healed.driven_by.as_deref()),
+            (90, Some("stay"))
+        );
+        assert_eq!(a.release_owner(new), 0, "a second release is a no-op");
+    }
+
+    /// One connection that claimed several viewer ids releases all of them, and only them.
+    #[test]
+    fn an_owner_release_drops_every_viewport_it_still_holds() {
+        let (conn, other) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        let mut a = SizeArbiter::default();
+        a.upsert_owned(claim("left", 80, 24, false, 0), conn, 0);
+        a.upsert_owned(claim("right", 80, 24, false, 0), conn, 0);
+        a.upsert_owned(claim("elsewhere", 80, 24, false, 0), other, 0);
+        a.upsert(claim("unowned", 80, 24, false, 0), 0);
+        assert_eq!(a.release_owner(conn), 2);
+        let mut left: Vec<&String> = a.claims.keys().collect();
+        left.sort();
+        assert_eq!(left, ["elsewhere", "unowned"]);
+    }
+
+    /// A plain claim, a removal, or an expiry ends ownership, so a stale owner never drops a
+    /// viewport it no longer holds, and an emptied-then-refilled id belongs to its new owner.
+    #[test]
+    fn unowned_claims_removal_and_expiry_end_ownership() {
+        let (first, second) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        let mut a = SizeArbiter::default();
+        a.upsert_owned(claim("v", 80, 24, true, 0), first, 0);
+        a.upsert(claim("v", 80, 24, true, 0), 100);
+        assert_eq!(a.release_owner(first), 0, "a plain claim took the viewport");
+
+        a.upsert_owned(claim("v", 80, 24, true, 0), first, 200);
+        a.remove("v");
+        a.upsert_owned(claim("v", 80, 24, true, 0), second, 300);
+        assert_eq!(
+            a.release_owner(first),
+            0,
+            "removed, then refilled by another"
+        );
+        assert_eq!(a.viewer_count(), 1);
+
+        assert_eq!(a.expire(10_000, 3_000), 1);
+        assert_eq!(a.release_owner(second), 0, "expiry ended its ownership");
+        assert_eq!(a.viewer_count(), 0);
     }
 
     // HS2-0GZZHV: exactly one viewport answers the program's terminal queries.

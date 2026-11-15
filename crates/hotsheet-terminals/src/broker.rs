@@ -32,7 +32,7 @@ pub struct SocketCleanup;
 #[cfg(unix)]
 use crate::manager::TerminalManager;
 #[cfg(unix)]
-use crate::sizing::ViewportClaim;
+use crate::sizing::{SizeClaimOwner, ViewportClaim};
 #[cfg(unix)]
 use crate::terminal::TermSpec;
 use crate::terminal::TerminalKind;
@@ -616,7 +616,9 @@ async fn stream_terminal(
     // once in either the replay or the live stream (HS2-5W0V9M).
     let (snapshot, out_rx) = term.subscribe_with_replay();
     let size_rx = term.subscribe_size();
-    let mut my_viewer: Option<String> = None;
+    // This connection's claims, released when it ends. A client that reconnected under the
+    // same viewer id keeps its newer claim (HS2-CCNRVW).
+    let owner = SizeClaimOwner::next();
 
     write_line(
         &mut write,
@@ -658,10 +660,10 @@ async fn stream_terminal(
                         match inbound {
                             StreamIn::Input { data } => { let _ = term.queue_input(data.into_vec()).await; }
                             StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting, answers_queries } => {
-                                my_viewer = Some(viewer_id.clone());
                                 let now = now_ms();
-                                term.claim_size(
+                                term.claim_size_owned(
                                     ViewportClaim { viewer_id, cols, rows, focus, visible, interacting, answers_queries, activity_at_ms: now },
+                                    owner,
                                     now,
                                 );
                             }
@@ -676,10 +678,9 @@ async fn stream_terminal(
     pump.abort();
     writer.abort();
 
-    // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
-    if let Some(v) = my_viewer {
-        term.drop_viewer(&v, now_ms());
-    }
+    // Self-heal: drop the claims this connection still owns so the PTY size recomputes for the
+    // rest.
+    term.release_owner(owner, now_ms());
     Ok(())
 }
 

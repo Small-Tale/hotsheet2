@@ -55,7 +55,11 @@ input echoes through the attached PTY, and revoking the session ends the live st
 and refuses a reattach. HS2-3EDFG2 adds the size arbiter's transitions there: a
 driver's normal exit, a revoked driver, a repeated attach and revoke, and a revoked last
 viewer each release the claim, so the size recomputes for the remaining viewer and a
-later attach sees an undriven size. `clients/web/src/remote-projects/terminals.test.ts` covers the
+later attach sees an undriven size. HS2-CCNRVW adds a reconnect under the same viewer id:
+a late normal close and a late revocation of the old connection leave the new connection
+driving, and the owner's own close still releases it; `SizeArbiter` unit tests in
+`hotsheet-terminals/src/sizing.rs` cover owner release, plain claims, removal and expiry
+ending ownership. `clients/web/src/remote-projects/terminals.test.ts` covers the
 launch-directory translation and per-server ownership (most specific checkout, legacy
 composite launches, no lone-tab claim of a stray terminal);
 `remote-projects/transport.test.ts` drives the bridge against two synthetic servers:

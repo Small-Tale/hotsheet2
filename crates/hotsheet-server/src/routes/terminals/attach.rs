@@ -11,7 +11,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use hotsheet_terminals::{PendingOutput, VIEWER_QUEUE_FRAMES, ViewerFrame, pump_viewer_output};
+use hotsheet_terminals::{
+    PendingOutput, SizeClaimOwner, VIEWER_QUEUE_FRAMES, ViewerFrame, pump_viewer_output,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -101,16 +103,18 @@ impl<T> Drop for AttachTask<T> {
 /// ends. A remote attach is cancelled mid-`await` when its session is revoked, so a release
 /// written after the loop never runs and the revoked viewer would keep driving the PTY size
 /// (HS2-3EDFG2). Dropping the claim lets the size recompute for the remaining viewers.
+///
+/// Claims are tagged with this connection's [`SizeClaimOwner`], so a late end of an older
+/// connection never releases a viewport that reconnected under the same viewer id
+/// (HS2-CCNRVW).
 struct ViewerSizeClaim {
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
-    viewer: Option<String>,
+    owner: SizeClaimOwner,
 }
 
 impl Drop for ViewerSizeClaim {
     fn drop(&mut self) {
-        if let Some(viewer) = self.viewer.take() {
-            self.term.drop_viewer(&viewer, term_now_ms());
-        }
+        self.term.release_owner(self.owner, term_now_ms());
     }
 }
 
@@ -334,9 +338,9 @@ async fn terminal_attach_loop(
     let size_rx = term.subscribe_size();
     // Declared before the output tasks so it is dropped after them on every exit path,
     // cancellation by revocation included (HS2-3EDFG2).
-    let mut size_claim = ViewerSizeClaim {
+    let size_claim = ViewerSizeClaim {
         term: term.clone(),
-        viewer: None,
+        owner: SizeClaimOwner::next(),
     };
 
     // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
@@ -409,9 +413,8 @@ async fn terminal_attach_loop(
                     match classify_terminal_text(&t) {
                         // A size claim: feed the arbiter (it resizes + broadcasts if the size changed).
                         TerminalText::Resize(r) => {
-                            size_claim.viewer = Some(r.viewer_id.clone());
                             let now = term_now_ms();
-                            term.claim_size(
+                            term.claim_size_owned(
                                 hotsheet_terminals::ViewportClaim {
                                     viewer_id: r.viewer_id,
                                     cols: r.cols,
@@ -422,6 +425,7 @@ async fn terminal_attach_loop(
                                     answers_queries: r.answers_queries,
                                     activity_at_ms: now,
                                 },
+                                size_claim.owner,
                                 now,
                             );
                         }

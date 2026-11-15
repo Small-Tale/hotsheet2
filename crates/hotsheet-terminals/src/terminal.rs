@@ -20,7 +20,7 @@ use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
 use crate::input_queue::InputQueue;
 use crate::osc::{OscScanner, TermState};
-use crate::sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
+use crate::sizing::{Decision, SizeArbiter, SizeClaimOwner, SizePolicy, ViewportClaim};
 
 /// How much recent PTY output to retain for a re-attaching viewer when no limit is
 /// configured (HS2-Y5DYC0 sizes new terminals from `crate::limits`).
@@ -749,6 +749,35 @@ impl Terminal {
         let decided = {
             let mut s = self.sizer.lock_or_recover();
             s.upsert(claim, now_ms);
+            Self::decide_or_notice(&mut s, now_ms)
+        };
+        self.apply_size(decided)
+    }
+
+    /// [`Self::claim_size`] for one attach connection, which owns the claim until another
+    /// connection claims the same viewer id (HS2-CCNRVW).
+    pub fn claim_size_owned(
+        &self,
+        claim: ViewportClaim,
+        owner: SizeClaimOwner,
+        now_ms: u64,
+    ) -> Option<Decision> {
+        let decided = {
+            let mut s = self.sizer.lock_or_recover();
+            s.upsert_owned(claim, owner, now_ms);
+            Self::decide_or_notice(&mut s, now_ms)
+        };
+        self.apply_size(decided)
+    }
+
+    /// An attach connection ended: drop the claims it still owns and recompute (self-heal). A
+    /// viewport a newer connection reclaimed under the same id keeps its claim (HS2-CCNRVW).
+    pub fn release_owner(&self, owner: SizeClaimOwner, now_ms: u64) -> Option<Decision> {
+        let decided = {
+            let mut s = self.sizer.lock_or_recover();
+            if s.release_owner(owner) == 0 {
+                return None;
+            }
             Self::decide_or_notice(&mut s, now_ms)
         };
         self.apply_size(decided)

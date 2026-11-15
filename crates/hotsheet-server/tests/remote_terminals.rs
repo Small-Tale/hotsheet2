@@ -588,3 +588,170 @@ async fn size_claim_release(dir: tempfile::TempDir, state: AppState) {
             .is_success()
     );
 }
+
+/// HS2-CCNRVW: a viewer that reconnects under the same viewer id must keep driving the size
+/// when its old connection ends late, by a normal close or by revocation. Only the connection
+/// that still owns a claim may release it; the current owner's own close still releases it.
+#[tokio::test]
+async fn hs2_ccnrvw_late_close_keeps_a_reconnected_viewers_size_claim() {
+    let (dir, state) = fixture();
+    reconnected_claim_survives_late_close(dir, state).await;
+}
+
+/// The same transitions through the detached broker, which releases a claim when its
+/// connection drops (HS2-ERT00F).
+#[tokio::test]
+async fn hs2_ccnrvw_late_broker_close_keeps_a_reconnected_viewers_size_claim() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let broker = tempfile::tempdir().unwrap();
+    let socket = broker.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let (dir, state) = fixture();
+    let state = state.with_terminal_broker_at(TerminalBroker::at(&socket, "proj"));
+    reconnected_claim_survives_late_close(dir, state).await;
+}
+
+/// Wait until the server has dropped the viewer's TCP connection, not just answered its close
+/// frame, so the attach that served it has finished.
+async fn expect_disconnected(stream: &mut Viewer, why: &str) {
+    use tokio::io::AsyncReadExt;
+    expect_closed(stream, why).await;
+    let mut buf = [0_u8; 256];
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            match stream.get_mut().read(&mut buf).await {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "{why}: the server kept the connection open");
+}
+
+/// Proving that nothing changed needs a window: the broker releases a claim on its own task
+/// after the server's broker connection ends, and a late release recomputes within
+/// milliseconds.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Assert that no size frame other than the held one reaches `stream` within [`SETTLE`].
+async fn expect_size_held(
+    stream: &mut Viewer,
+    cols: u16,
+    rows: u16,
+    driven_by: Option<&str>,
+    why: &str,
+) {
+    let held = (json!({"cols": cols, "rows": rows}), json!(driven_by));
+    let _ = tokio::time::timeout(SETTLE, async {
+        while let Some(Ok(message)) = stream.next().await {
+            if let WsMessage::Text(text) = message
+                && let Ok(frame) = serde_json::from_str::<Value>(&text)
+                && frame.get("pty_size").is_some()
+            {
+                let seen = (frame["pty_size"].clone(), frame["driven_by"].clone());
+                assert_eq!(seen, held, "{why}: the size moved");
+            }
+        }
+    })
+    .await;
+}
+
+/// A fresh viewer's attach preamble reports the size currently applied and its driver.
+async fn expect_applied(
+    addr: std::net::SocketAddr,
+    router: &axum::Router,
+    size: (u16, u16),
+    driven_by: Option<&str>,
+    why: &str,
+) {
+    let (session, csrf, device) = paired_device(router).await;
+    let mut probe = attach(addr, "reclaimed-cat", &session, Some(&csrf))
+        .await
+        .unwrap();
+    expect_size(&mut probe, size.0, size.1, driven_by, why).await;
+    probe.close(None).await.unwrap();
+    expect_disconnected(&mut probe, why).await;
+    revoke_device(router, &device).await;
+}
+
+async fn reconnected_claim_survives_late_close(dir: tempfile::TempDir, state: AppState) {
+    let router = app(state.clone());
+    let workdir = dir.path().join("checkout");
+    std::fs::create_dir_all(&workdir).unwrap();
+    let workdir = workdir.canonicalize().unwrap().display().to_string();
+    let launched = router
+        .clone()
+        .oneshot(owner(
+            "POST",
+            "/terminals",
+            Some(json!({"id": "reclaimed-cat", "command": "cat", "cwd": workdir})),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched.status(), StatusCode::OK);
+    let addr = serve_off_box(state.clone()).await;
+
+    let (remaining, remaining_csrf, _) = paired_device(&router).await;
+    let mut stay = attach(addr, "reclaimed-cat", &remaining, Some(&remaining_csrf))
+        .await
+        .unwrap();
+    claim(&mut stay, "viewer-stay", 90, 28).await;
+    expect_size(&mut stay, 90, 28, Some("viewer-stay"), "first claim").await;
+
+    // The phone drives, then reconnects under the same viewer id before its old socket ends.
+    let (phone, phone_csrf, phone_device) = paired_device(&router).await;
+    let mut old = attach(addr, "reclaimed-cat", &phone, Some(&phone_csrf))
+        .await
+        .unwrap();
+    claim(&mut old, "viewer-phone", 120, 40).await;
+    expect_size(&mut stay, 120, 40, Some("viewer-phone"), "phone takeover").await;
+    let mut reconnected = attach(addr, "reclaimed-cat", &phone, Some(&phone_csrf))
+        .await
+        .unwrap();
+    claim(&mut reconnected, "viewer-phone", 110, 36).await;
+    expect_size(&mut stay, 110, 36, Some("viewer-phone"), "reconnected").await;
+
+    // Late normal close of the old socket: the reconnected connection keeps driving.
+    old.close(None).await.unwrap();
+    expect_disconnected(&mut old, "late close").await;
+    expect_size_held(&mut stay, 110, 36, Some("viewer-phone"), "late close").await;
+    expect_applied(addr, &router, (110, 36), Some("viewer-phone"), "late close").await;
+
+    // The viewer moves to another paired device under the same id; revoking the device it
+    // left ends the older connection late, and the newer one keeps driving.
+    let (tablet, tablet_csrf, _) = paired_device(&router).await;
+    let mut moved = attach(addr, "reclaimed-cat", &tablet, Some(&tablet_csrf))
+        .await
+        .unwrap();
+    claim(&mut moved, "viewer-phone", 100, 30).await;
+    expect_size(&mut stay, 100, 30, Some("viewer-phone"), "moved").await;
+    revoke_device(&router, &phone_device).await;
+    expect_disconnected(&mut reconnected, "late revocation").await;
+    expect_size_held(&mut stay, 100, 30, Some("viewer-phone"), "late revocation").await;
+    expect_applied(
+        addr,
+        &router,
+        (100, 30),
+        Some("viewer-phone"),
+        "late revocation",
+    )
+    .await;
+
+    // The connection that owns the claim still releases it when it closes.
+    moved.close(None).await.unwrap();
+    expect_size(&mut stay, 90, 28, Some("viewer-stay"), "owner close").await;
+
+    assert!(
+        status(&router, owner("DELETE", "/terminals/reclaimed-cat", None))
+            .await
+            .is_success()
+    );
+}
