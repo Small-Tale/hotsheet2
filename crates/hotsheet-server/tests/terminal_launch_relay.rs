@@ -21,7 +21,14 @@ use hotsheet_terminals::bootstrap::{BootstrapHealth, null_bootstrap_for_child};
 use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse, TerminalKind};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
-const SERVER: &str = env!("CARGO_BIN_EXE_hotsheet-server");
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The server binary, launched once to completion before any window that times its child
+/// starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+}
 
 /// Kills its process group on drop, so a failed assertion leaves nothing running.
 struct Held {
@@ -95,7 +102,7 @@ impl Fixture {
     /// The stand-in for the launchd-started relay, in this (healthy) namespace.
     fn start_relay(&self) -> Held {
         let log = self.dir.path().join("relay.log");
-        let mut command = Command::new(SERVER);
+        let mut command = Command::new(server_binary());
         command
             .arg("--terminal-launch-relay")
             .arg(self.relay_socket());
@@ -125,7 +132,7 @@ impl Fixture {
     /// A real server whose bootstrap port is null: the 2026-10-29 dead-namespace state.
     fn start_dead_namespace_server(&self, name: &str) -> (Held, InstanceInfo) {
         let log = self.dir.path().join(format!("{name}.log"));
-        let mut command = Command::new(SERVER);
+        let mut command = Command::new(server_binary());
         command.arg("-C").arg(&self.store).args([
             "--bind",
             "127.0.0.1:0",
@@ -269,7 +276,7 @@ async fn hs2_hyf56y_dead_namespace_server_gets_a_live_broker_through_the_relay()
     );
 
     // Explicit kill-all recovery is unchanged.
-    let stop = Command::new(SERVER)
+    let stop = Command::new(server_binary())
         .arg("-C")
         .arg(&fixture.store)
         .args(["--stop", "--kill-all-terminals"])

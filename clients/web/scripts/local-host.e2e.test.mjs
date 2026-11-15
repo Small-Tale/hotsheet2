@@ -24,6 +24,7 @@ import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
+import { launchOnce } from './first-launch.mjs';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 // HS2-587N4D: `npm run prod` serves the built client through the same local bridge without Vite.
@@ -214,6 +215,8 @@ async function copyBinaries(directory) {
         await copyFile(source, staged);
         await chmod(staged, (await stat(source)).mode & 0o777);
         await rename(staged, destination);
+        // A fresh copy is a new executable to macOS; its first launch must not be timed (HS2-04D6DW).
+        launchOnce(destination);
         return [variable, destination];
       }),
     ),
@@ -283,6 +286,8 @@ it.concurrent(
             const destination = resolve(candidateBin, variable.toLowerCase());
             await copyFile(source, destination);
             await chmod(destination, (await stat(source)).mode & 0o777);
+            // The host probes these copies under a 10 s bound; launch each once first (HS2-04D6DW).
+            launchOnce(destination);
             return [variable, destination];
           }),
         ),

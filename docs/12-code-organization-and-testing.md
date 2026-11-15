@@ -242,8 +242,15 @@ Three other local environment effects look like regressions but are not:
   700-launch flood held a freshly relinked `hs-fake-agent` past the 5 s windows of the
   `hotsheet-terminals` `fake_agent` tests, which then saw no output and no exit. Those tests
   launch the binary once to completion before timing anything, so a busy host only slows
-  them (HS2-W00050). A test that times a freshly built binary's first output should do the
-  same.
+  them (HS2-W00050). A test that times a freshly built or freshly copied binary's first
+  output, readiness, or exit must do the same through the shared helper (HS2-04D6DW):
+  Rust integration tests include `crates/test-support/first_launch.rs` with
+  `#[path = "../../test-support/first_launch.rs"] mod first_launch;` and spawn
+  `first_launch::launched(exe, &["--version"])`; Node fixtures use `launchOnce` from
+  `clients/web/scripts/first-launch.mjs`, which `assertFixtureServer` and
+  `assertFixtureCli` already call before their 5 s capability probe. A copy is a new
+  executable to macOS, so launch each copy once after copying it. Do not raise the window
+  instead.
 
 ### 12.6.2 Isolated Clippy artifacts
 

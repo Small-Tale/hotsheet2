@@ -20,6 +20,15 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 use notify::{RecursiveMode, Watcher};
 use serde_json::json;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+}
+
 /// A drivable AI tool on the fixture `PATH` whose probe hangs during startup discovery.
 #[derive(Clone, Copy)]
 enum SlowTool {
@@ -137,7 +146,7 @@ impl Server {
             let file = fs::File::create(&log).unwrap();
             (file.try_clone().unwrap().into(), file.into())
         });
-        let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"));
+        let mut command = Command::new(server_binary());
         if slow_discovery.is_some() {
             // HS2-7W3D7V: the test environment disables tool probes; this fixture probes
             // only its own hanging tool, so it opts back in.
@@ -340,7 +349,7 @@ fn hs2_bnghkm_interrupted_test_owner_reaps_detached_broker() {
     let socket = fixture.path().join("broker.sock");
     let log = fixture.path().join("broker.log");
     let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
-    let mut broker = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let mut broker = Command::new(server_binary())
         .arg("--terminal-broker-process")
         .arg(&socket)
         .args(["--terminal-broker-project", "test-project"])

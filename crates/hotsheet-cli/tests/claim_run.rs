@@ -10,6 +10,15 @@ use hotsheet_model::{ClaimEventKind, Ticket, Timestamp, Ulid};
 use hotsheet_ticketing::{FsStore, NewTicket, StoreError, StoreMetadata, git as hotsheet_git, ops};
 use time::OffsetDateTime;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-cli` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn cli_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-cli"), &["--version"])
+}
+
 struct Fixture {
     root: tempfile::TempDir,
     store: FsStore,
@@ -39,7 +48,7 @@ impl Fixture {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"));
+        let mut command = Command::new(cli_binary());
         command
             .arg("-C")
             .arg(self.store.root())

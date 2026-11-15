@@ -15,6 +15,15 @@ use std::time::{Duration, Instant};
 use hotsheet_server::lifecycle::InstanceInfo;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+}
+
 const IDENTITY: [(&str, &str); 4] = [
     ("GIT_AUTHOR_NAME", "Hot Sheet test"),
     ("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid"),
@@ -182,7 +191,7 @@ fn hostile_server(root: &Path, sentinel: &Path) -> (Server, InstanceInfo, PathBu
 
     let git_dir = sentinel.join(".git");
     let mut server = Server(
-        Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        Command::new(server_binary())
             .arg("-C")
             .arg(&store)
             .args(["--bind", "127.0.0.1:0", "--secret", "iso-test"])

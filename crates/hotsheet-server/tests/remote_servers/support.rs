@@ -12,6 +12,9 @@ use hotsheet_ticketing::{FsStore, SecretError, SecretStore, StoreMetadata};
 use hotsheet_tls::Paths;
 use serde_json::Value;
 
+#[path = "../../../test-support/first_launch.rs"]
+mod first_launch;
+
 pub(super) const SECRET: &str = "synthetic-remote-bearer";
 pub(super) const ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
@@ -293,7 +296,11 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
     assert!(checked.status.success());
     let checked: Value = serde_json::from_slice(&checked.stdout).unwrap();
     assert_eq!(checked["isolated_native_credentials"], true);
-    let binary = sibling.with_file_name(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX));
+    // Launched once before the 15 s fixture window below starts (HS2-04D6DW).
+    let binary = first_launch::launched(
+        sibling.with_file_name(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX)),
+        &["--version"],
+    );
     let mut child = OwnedChild(Some(
         isolated_command(&binary, home)
             .args(backend)

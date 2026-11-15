@@ -13,6 +13,15 @@ use std::time::{Duration, Instant};
 use hotsheet_server::lifecycle::InstanceInfo;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+}
+
 struct Server {
     child: Child,
     home: PathBuf,
@@ -29,7 +38,7 @@ impl Server {
         let store = fixture.path().join("store");
         FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
         let log = fs::File::create(fixture.path().join("server.log")).unwrap();
-        let child = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        let child = Command::new(server_binary())
             .arg("-C")
             .arg(&store)
             .args(["--bind", "127.0.0.1:0", "--secret", "pinned-stop"])
@@ -94,7 +103,7 @@ impl Drop for Server {
 }
 
 fn stop_command(home: &Path, store: &Path, extra: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    Command::new(server_binary())
         .arg("-C")
         .arg(store)
         .arg("--stop")
@@ -156,7 +165,7 @@ fn dev_and_cli_launched_servers_stop_without_force() {
 
 #[test]
 fn force_without_stop_is_rejected() {
-    let output = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let output = Command::new(server_binary())
         .arg("--force")
         .output()
         .unwrap();

@@ -12,6 +12,15 @@ use serde_json::{Value, json};
 
 use super::http::{DEADLINE, SECRET};
 
+#[path = "../../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-mcp` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn mcp_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-mcp"), &["--version"])
+}
+
 pub(super) struct Project {
     _root: tempfile::TempDir,
     pub home: PathBuf,
@@ -111,7 +120,7 @@ impl Process {
         ] {
             std::fs::create_dir_all(home.join(dir)).unwrap();
         }
-        let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"));
+        let mut command = Command::new(mcp_binary());
         command
             .args(arguments)
             .current_dir(home)

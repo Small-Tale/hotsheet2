@@ -12,6 +12,15 @@ use std::time::{Duration, Instant};
 use hotsheet_server::lifecycle::InstanceInfo;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> &'static str {
+    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+}
+
 struct Group(Vec<Child>);
 
 impl Drop for Group {
@@ -36,6 +45,8 @@ fn simultaneous_starts_leave_exactly_one_registered_server() {
     let instance = home.join("instances").join(format!("{project}.json"));
     let lock = home.join("instances").join(format!("{project}.lock"));
 
+    // Every starter races from the barrier, not from the macOS first-launch queue.
+    let server = server_binary();
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(STARTERS));
     let mut group = Group(
         (0..STARTERS)
@@ -47,7 +58,7 @@ fn simultaneous_starts_leave_exactly_one_registered_server() {
                 std::thread::spawn(move || {
                     let output = fs::File::create(log).unwrap();
                     barrier.wait();
-                    Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+                    Command::new(server)
                         .arg("-C")
                         .arg(&store)
                         .args(["--bind", "127.0.0.1:0", "--no-terminal-broker"])

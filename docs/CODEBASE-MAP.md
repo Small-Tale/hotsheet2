@@ -610,6 +610,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts
   crates/
+    test-support/first_launch.rs # not a crate: integration tests include it by #[path]; launches a fresh or copied binary once before any timed window (macOS first-launch assessment, HS2-04D6DW); Node twin is clients/web/scripts/first-launch.mjs
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github_credential.rs #   shared account token resolution and HS2-6H8ZY6 owner-bound selected-source read context; read_tests.rs guards selected-source reads
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)

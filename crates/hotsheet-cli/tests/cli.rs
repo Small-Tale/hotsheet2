@@ -8,6 +8,9 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
 #[test]
 fn hs2_f1qj03_note_doctor_reads_real_store_and_filters_notes() {
     let root = tempfile::tempdir().unwrap();
@@ -2616,8 +2619,13 @@ const INHERITED_HOOK_SESSION_ENV: &[&str] = &[
 
 /// A `hotsheet-cli` child for permission-hook fixtures, without inherited session identity.
 /// Fixture-owned `.env(...)` calls after this still apply; toolchain and home settings stay.
+/// The binary is launched once first: the hook fixtures' fake servers time how long the hook
+/// takes to connect, and the macOS first-launch assessment must not count (HS2-04D6DW).
 fn hook_cli() -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(first_launch::launched(
+        env!("CARGO_BIN_EXE_hotsheet-cli"),
+        &["--version"],
+    ));
     for name in INHERITED_HOOK_SESSION_ENV {
         command.env_remove(name);
     }

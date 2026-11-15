@@ -7,25 +7,16 @@ use std::time::{Duration, Instant};
 
 use hotsheet_terminals::{Activity, TermSpec, Terminal, contains_spinner};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
 /// The `hs-fake-agent` binary, launched once to completion before a test times anything
-/// (HS2-W00050). macOS assesses a newly linked executable on its first launch, and that
-/// assessment is serialized system-wide: 40 fresh copies launched together waited 0.2 to
-/// 0.8 s each on an idle host. While other worktrees build and run their own fresh binaries,
-/// the queue can exceed the 5 s windows below, so the agent printed nothing and never exited
-/// in time although its PTY plumbing was fine. Paying the first launch here keeps those
-/// windows about the terminal-inference stack, not about the host's launch queue.
+/// (HS2-W00050, HS2-04D6DW). macOS assesses a newly linked executable on its first launch
+/// through one queue for the whole host; under load that queue exceeded the 5 s windows
+/// below, so the agent printed nothing and never exited in time although its PTY plumbing
+/// was fine.
 fn fake_agent() -> &'static str {
-    let exe = env!("CARGO_BIN_EXE_hs-fake-agent");
-    static WARMED: std::sync::Once = std::sync::Once::new();
-    WARMED.call_once(|| {
-        let status = std::process::Command::new(exe)
-            .args(["--exit", "0"])
-            .stdout(std::process::Stdio::null())
-            .status()
-            .expect("launch hs-fake-agent once");
-        assert!(status.success(), "hs-fake-agent warm-up exits 0: {status}");
-    });
-    exe
+    first_launch::launched(env!("CARGO_BIN_EXE_hs-fake-agent"), &["--exit", "0"])
 }
 
 fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {

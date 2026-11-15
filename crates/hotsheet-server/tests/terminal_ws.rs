@@ -10,6 +10,9 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
 const SECRET: &str = "test-secret";
 
 #[tokio::test]
@@ -127,6 +130,9 @@ async fn fake_agent_permission_round_trip_in_a_terminal_persists_always_rule() {
         "build the workspace hs-fake-agent binary at {} (run nextest with --workspace, or cargo build -p hotsheet-terminals --bin hs-fake-agent into the same target dir)",
         fake_agent.display()
     );
+    // The terminal's readiness windows below must not include the macOS first-launch
+    // assessment of a freshly linked fake agent (HS2-W00050, HS2-04D6DW).
+    let fake_agent = first_launch::launched(fake_agent, &["--exit", "0"]);
     std::fs::write(
         plugin.join("manifest.toml"),
         format!(
