@@ -633,6 +633,26 @@ describe('terminal dashboard transport', () => {
     );
     fetchMock.mockRestore();
   });
+
+  it('posts a shared clear and surfaces an older broker as unsupported (HS2-HA0Z3A)', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'the running terminal broker predates the shared clear' }), {
+          status: 501,
+        }),
+      );
+    const api = new Api('/api');
+    await expect(api.clearTerminal('agent/1')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/terminals/agent%2F1/clear',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    await expect(api.clearTerminal('agent/1')).rejects.toThrow();
+    fetchMock.mockRestore();
+  });
 });
 
 describe('terminal settings transport', () => {

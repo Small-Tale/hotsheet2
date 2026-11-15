@@ -934,6 +934,17 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   single chunk is accepted into an empty queue). `POST /terminals/{id}/input` and the broker
   `input` request await the write result asynchronously. Dropping a terminal discards its
   unwritten input.
+- **Shared clear (HS2-HA0Z3A).** `POST /terminals/{id}/clear` (broker op `clear_replay`) marks
+  a replay boundary instead of writing to the PTY or appending clear-screen bytes to the ring.
+  Under the ring lock it drops every retained byte before the cursor's line (the bytes after
+  the last newline at a parser-safe position; with no such newline the whole ring is that line),
+  gives the replay a new output-stream id so no viewer can `resume_from` across the clear, and
+  publishes an in-band rewrite marker (an empty chunk) on the live fan-out. Each viewer pump
+  resyncs on the marker and sends its existing replacement frame, so attached viewers in every
+  client clear in order with surrounding output; broker attaches carry it as a `scrollback`
+  frame. The shell is not told. The route answers `204`, `404` for an unknown terminal, and
+  `501` when a detached broker predates the op (it answers `bad request` and its terminal is
+  unchanged).
 - **A killed terminal never strands its input writer (HS2-RA494E).** The PTY master is
   non-blocking: the writer thread waits for input room in `poll(2)` with a short local
   timeout and, once the child has exited or the terminal is gone, fails the in-progress and

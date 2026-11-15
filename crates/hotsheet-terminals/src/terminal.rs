@@ -215,6 +215,28 @@ impl Ring {
     fn snapshot(&self) -> Vec<u8> {
         self.buf.iter().map(|byte| byte.value).collect()
     }
+    /// Whether a snapshot could start at retained index `index` (the end counts when the parser
+    /// is between sequences, so the next pushed byte starts cleanly).
+    fn safe_start_at(&self, index: usize) -> bool {
+        match self.buf.get(index) {
+            Some(byte) => byte.safe_start,
+            None => matches!(self.ansi, AnsiState::Ground),
+        }
+    }
+    /// A shared clear (HS2-HA0Z3A): drop every retained byte before the start of the cursor's
+    /// line, which is what xterm's `clear()` keeps, so a later replay shows the prompt line and
+    /// nothing before it. The line starts after the last newline that ends at a parser-safe
+    /// position; a newline inside an escape string does not count. Without one, the whole ring
+    /// is the cursor's line and stays (a prompt alone, a repeated clear, or a full-screen program
+    /// that addresses the cursor instead of writing newlines). The stream offset is unchanged: it
+    /// counts produced bytes, not retained ones.
+    fn clear_before_cursor_line(&mut self) {
+        let line_start = (0..self.buf.len())
+            .rev()
+            .find(|&index| self.buf[index].value == b'\n' && self.safe_start_at(index + 1))
+            .map_or(0, |index| index + 1);
+        self.buf.drain(..line_start);
+    }
     fn replay(&self, stream: u64) -> Replay {
         Replay {
             data: self.snapshot(),
@@ -291,14 +313,24 @@ pub fn replay_suffix(replay: &[u8], max: usize) -> &[u8] {
     &[]
 }
 
+/// Whether a chunk from a terminal's live output fan-out is the replay-rewritten marker
+/// (HS2-HA0Z3A): an empty chunk, which real output never is. It means the retained replay was
+/// rewritten by a shared clear; a viewer drops what it holds and resyncs from a fresh snapshot.
+/// It travels on the output channel itself, so it is ordered exactly with the output around it,
+/// and a byte consumer that does not know it (an OSC scanner) sees nothing.
+pub fn is_replay_rewritten(chunk: &[u8]) -> bool {
+    chunk.is_empty()
+}
+
 /// Owns retained and live output as one synchronization boundary. Publishing and taking a
 /// snapshot+subscription are mutually exclusive, so a chunk is either in the snapshot or in
 /// the receiver created with it, never both and never neither (HS2-5W0V9M).
 struct OutputReplay {
     ring: Mutex<Ring>,
     tx: broadcast::Sender<Vec<u8>>,
-    /// This PTY's output-stream id (HS2-K93QHA).
-    stream: u64,
+    /// The output-stream id of the retained replay (HS2-K93QHA). A shared clear starts a new
+    /// one (HS2-HA0Z3A), so no viewer resumes across it. Only changed under the ring lock.
+    stream: std::sync::atomic::AtomicU64,
 }
 
 impl OutputReplay {
@@ -306,16 +338,35 @@ impl OutputReplay {
         Self {
             ring: Mutex::new(Ring::new(bytes)),
             tx: broadcast::channel(chunks).0,
-            stream: new_stream_id(),
+            stream: std::sync::atomic::AtomicU64::new(new_stream_id()),
         }
     }
 
     fn publish(&self, bytes: &[u8]) {
+        // An empty chunk is the rewrite marker, never output.
+        if bytes.is_empty() {
+            return;
+        }
         let mut ring = self.ring.lock_or_recover();
         ring.push(bytes);
         // Broadcast while the ring lock is held. `subscribe_with_snapshot` takes the same
         // lock before subscribing, which makes the handoff sequence-exact.
         let _ = self.tx.send(bytes.to_vec());
+    }
+
+    /// Clear the retained replay back to the cursor's line, start a new stream id, and tell
+    /// live viewers to resync, all under the ring lock (HS2-HA0Z3A).
+    fn clear(&self) -> StreamPosition {
+        let mut ring = self.ring.lock_or_recover();
+        ring.clear_before_cursor_line();
+        let stream = new_stream_id();
+        self.stream
+            .store(stream, std::sync::atomic::Ordering::Relaxed);
+        let _ = self.tx.send(Vec::new());
+        StreamPosition {
+            stream,
+            end_offset: ring.end,
+        }
     }
 
     fn snapshot(&self) -> Vec<u8> {
@@ -336,7 +387,8 @@ impl OutputReplay {
     fn subscribe_with_replay(&self) -> (Replay, broadcast::Receiver<Vec<u8>>) {
         let ring = self.ring.lock_or_recover();
         let receiver = self.tx.subscribe();
-        (ring.replay(self.stream), receiver)
+        let stream = self.stream.load(std::sync::atomic::Ordering::Relaxed);
+        (ring.replay(stream), receiver)
     }
 }
 
@@ -862,6 +914,14 @@ impl Terminal {
         self.output.snapshot()
     }
 
+    /// Clear the terminal for every viewer (HS2-HA0Z3A): the replay ring keeps only the cursor's
+    /// line, the output stream gets a new id so no viewer resumes from before the clear, and
+    /// every attached viewer receives a replacement snapshot. The shell is not told. Returns the
+    /// new stream position.
+    pub fn clear_replay(&self) -> StreamPosition {
+        self.output.clear()
+    }
+
     /// How many bytes of recent output the scrollback ring retains (HS2-Y5DYC0).
     pub fn replay_capacity(&self) -> usize {
         self.output.ring.lock_or_recover().cap
@@ -1035,6 +1095,93 @@ mod tests {
         );
         assert_eq!(replay.after(8), Some(&b"ijk"[..]));
         assert_eq!(replay.after(7), None);
+    }
+
+    /// HS2-HA0Z3A: a shared clear keeps exactly the cursor's line, whatever surrounds it.
+    #[test]
+    fn hs2_ha0z3a_clear_keeps_only_the_cursor_line() {
+        let cleared = |chunks: &[&[u8]]| {
+            let mut ring = Ring::new(1024);
+            for chunk in chunks {
+                ring.push(chunk);
+            }
+            ring.clear_before_cursor_line();
+            ring.snapshot()
+        };
+        // The prompt after the last newline stays; everything above it goes.
+        assert_eq!(
+            cleared(&[b"one\r\ntwo\r\n\x1b[1m$ \x1b[0m"]),
+            b"\x1b[1m$ \x1b[0m"
+        );
+        // At the start of an empty line nothing is kept.
+        assert_eq!(cleared(&[b"one\r\ntwo\r\n"]), b"");
+        // An empty ring stays empty.
+        assert_eq!(cleared(&[]), b"");
+        // A newline inside an escape string is not a line start (OSC title with a newline).
+        assert_eq!(cleared(&[b"one\n\x1b]0;a\nb\x07$ "]), b"\x1b]0;a\nb\x07$ ");
+        // A trailing newline inside an unfinished escape string is not a line start either.
+        assert_eq!(cleared(&[b"one\n\x1b]0;a\n"]), b"\x1b]0;a\n");
+        // No newline at all: the whole ring is the cursor's line and stays.
+        assert_eq!(cleared(&[b"$ "]), b"$ ");
+        assert_eq!(
+            cleared(&[b"\x1b[Hscreen\x1b[38;5"]),
+            b"\x1b[Hscreen\x1b[38;5"
+        );
+        assert_eq!(cleared(&["é".as_bytes()]), "é".as_bytes());
+    }
+
+    /// HS2-HA0Z3A: clear then output, clear twice, and the stream offset across a clear.
+    #[test]
+    fn hs2_ha0z3a_clear_transitions_keep_offsets_and_later_output() {
+        let mut ring = Ring::new(1024);
+        ring.push(b"old\n$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ");
+        // The offset still counts produced bytes; the replay window starts after the clear.
+        let replay = ring.replay(9);
+        assert_eq!(replay.position.end_offset, 6);
+        assert_eq!(replay.after(4), Some(&b"$ "[..]));
+        assert_eq!(
+            replay.after(3),
+            None,
+            "a cleared byte cannot be resumed from"
+        );
+        ring.push(b"ls\nfile\n$ ");
+        assert_eq!(ring.snapshot(), b"$ ls\nfile\n$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ", "clearing twice is idempotent");
+        // Trimming after a clear still lands on safe starts.
+        ring.resize(4);
+        ring.push(b"\x1b[31mred");
+        assert_eq!(ring.snapshot(), b"red");
+    }
+
+    /// HS2-HA0Z3A: the clear marker reaches live receivers in order with output, a fresh
+    /// subscription after the clear sees only the cursor line on a new stream, and the marker is
+    /// never stored as output.
+    #[test]
+    fn hs2_ha0z3a_clear_marks_live_receivers_in_order_and_starts_a_new_stream() {
+        let output = OutputReplay::new(1024, 16);
+        output.publish(b"old\n$ ");
+        let (before, mut live) = output.subscribe_with_replay();
+        output.publish(b"x");
+        let position = output.clear();
+        output.publish(b"y");
+        assert_eq!(live.try_recv().unwrap(), b"x");
+        assert!(is_replay_rewritten(&live.try_recv().unwrap()));
+        assert_eq!(live.try_recv().unwrap(), b"y");
+        assert_ne!(position.stream, before.position.stream);
+        assert_eq!(position.end_offset, 7);
+        let (after, _) = output.subscribe_with_replay();
+        assert_eq!(after.data, b"$ xy");
+        assert_eq!(after.position.stream, position.stream);
+        assert_eq!(after.position.end_offset, 8);
+        // Publishing an empty chunk is not output and never looks like a clear.
+        output.publish(b"");
+        assert!(live.try_recv().is_err());
+        assert!(!is_replay_rewritten(b"x"));
     }
 
     #[test]

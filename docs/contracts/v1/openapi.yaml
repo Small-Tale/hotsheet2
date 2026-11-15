@@ -10289,6 +10289,41 @@ paths:
         required: true
         schema:
           type: string
+  /terminals/{id}/clear:
+    post:
+      operationId: clear_terminal
+      summary: Clear a terminal for every viewer
+      description:
+        The replay keeps only the cursor's line and starts a new output stream, and every attached viewer receives a
+        replacement; the shell is not told (HS2-HA0Z3A). A detached broker that predates the operation answers 501 and
+        its terminal is unchanged.
+      responses:
+        '204':
+          description: Completed with no response body.
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: The running terminal broker predates the shared clear.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /terminals/{id}/name:
     put:
       operationId: rename_terminal

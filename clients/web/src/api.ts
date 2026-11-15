@@ -2645,6 +2645,12 @@ export class Api {
     this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/halt?at=${encodeURIComponent(at)}`, {
       method: 'DELETE',
     });
+  /**
+   * Clear a terminal for every viewer (HS2-HA0Z3A): the server's replay keeps only the cursor's line,
+   * and attached viewports receive a replacement. Rejects with `501` when a detached broker predates it.
+   */
+  clearTerminal = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/clear`, { method: 'POST' });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
     this.parsed(parseTerminalName, `/terminals/${encodeURIComponent(id)}/name`, {

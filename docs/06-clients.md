@@ -3744,10 +3744,14 @@ fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). While a termin
 selected, the rail's borderless end group shows **Clear Terminal** (Lucide `eraser`) before the
 hide action (pressing it leaves keyboard focus in the terminal), and physical Command-K clears the focused terminal, like Command-K in macOS Terminal
 (HS2-N2AG8V). Inside a terminal, Command-K clears instead of opening search; Control-K still
-reaches the shell. Clearing is a view action in this client: every mounted viewport of that
-terminal (dedicated, grid preview, parked) drops its scrollback and screen but keeps the cursor
-line, and nothing is sent to the shell. The server replay ring is unchanged, so a reload or
-another client replays earlier output (shared clear: HS2-HA0Z3A). Beside them, a
+reaches the shell. Clearing is a view action: every mounted viewport of that terminal in this
+client (dedicated, grid preview, parked) drops its scrollback and screen at once but keeps the
+cursor line, and nothing is sent to the shell. The clear is then shared through
+`POST /terminals/{id}/clear` (HS2-HA0Z3A): the server's replay keeps only the cursor's line and
+starts a new output stream, so a reload, another client, or a remounted or reconnecting warm
+viewport no longer replays the cleared output, and every attached viewport in any client receives
+a replacement with that line. When the server cannot share it (an older server, or a detached
+broker that predates the op and answers `501`), the local clear still stands. Beside them, a
 borderless Kerf search icon (collapsible `SearchField` in its own toolbar group) expands into a
 field when activated and searches the selected terminal with xterm's search addon (HS2-TWZSZF):
 typing selects the next match incrementally and scrolls it into view, Enter and Shift-Enter step

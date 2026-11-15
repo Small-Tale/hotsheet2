@@ -112,3 +112,34 @@ test('HS2-N2AG8V Command-K clears a focused terminal instead of opening search; 
   await page.keyboard.press('ControlOrMeta+k');
   await expect.poll(() => workspaceSearchFocused(page)).toBe(true);
 });
+
+test('HS2-HA0Z3A the rail button and Command-K share the clear through the project server, and a server that cannot keeps the local clear', async ({
+  page,
+}) => {
+  const { drawer, viewport } = await openDrawerTerminal(page);
+  const shared: string[] = [];
+  let status = 204;
+  await page.route('**/terminals/terminal-new/clear', (route) => {
+    shared.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return route.fulfill(
+      status === 204
+        ? { status }
+        : { status, json: { error: 'the running terminal broker predates the shared clear' } },
+    );
+  });
+  await focusSettled(page, viewport);
+  const before = await sentInput(page);
+
+  await drawer.locator('.terminal-drawer__actions').getByRole('button', { name: 'Clear Terminal' }).click();
+  await expect.poll(() => shared.length).toBe(1);
+  expect(shared[0]).toMatch(/^POST .*\/terminals\/terminal-new\/clear$/);
+  await expect(viewport.locator('.xterm-rows')).not.toContainText('GNU nano 8.4');
+
+  // An older broker answers 501: the clear stays local and nothing reaches the shell.
+  status = 501;
+  await page.keyboard.press('Meta+k');
+  await expect.poll(() => shared.length).toBe(2);
+  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(viewport.locator('.xterm-rows')).not.toContainText('GNU nano 8.4');
+  expect(await sentInput(page)).toEqual(before);
+});

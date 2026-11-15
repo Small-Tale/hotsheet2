@@ -118,6 +118,11 @@ pub enum Request {
     Input { id: String, data: Vec<u8> },
     /// Kill + forget the terminal.
     Kill { id: String },
+    /// Clear the terminal for every viewer (HS2-HA0Z3A): the replay keeps only the cursor's line
+    /// and every attached stream receives a replacement [`StreamOut::Scrollback`]. Answered with
+    /// [`Response::Ok`] or [`Response::NotFound`]. Brokers that predate it answer
+    /// `Err { "bad request: …" }`, which callers report as unsupported; the terminal is unchanged.
+    ClearReplay { id: String },
     /// **Switch this connection into streaming mode** for terminal `id` (HS2-ERT00F item 4):
     /// the broker replays the scrollback then streams live output + size decisions as
     /// [`StreamOut`] frames, and reads [`StreamIn`] frames (input + size claims) until the
@@ -847,6 +852,13 @@ async fn handle_request(
                     message: e.to_string(),
                 },
             },
+            None => Response::NotFound,
+        },
+        Request::ClearReplay { id } => match manager.get(&key(&id)) {
+            Some(term) => {
+                term.clear_replay();
+                Response::Ok
+            }
             None => Response::NotFound,
         },
         Request::Kill { id } => match manager.kill(&key(&id)) {

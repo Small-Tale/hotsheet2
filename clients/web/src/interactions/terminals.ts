@@ -2,7 +2,7 @@ import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { type AiToolDefaults } from '../api';
+import { type AiToolDefaults, Api } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind } from '../components/project-tab-context-menu';
@@ -28,7 +28,7 @@ import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-orde
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
-import { clearTerminalViewports, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
+import { clearTerminalEverywhere, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
 import {
   pasteIntoTerminalViewport,
   readClipboardText,
@@ -469,9 +469,15 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // Clear Terminal (HS2-N2AG8V): the rail button clears the selected terminal, and Command-K clears the
   // focused one. The key is captured before xterm, so it never reaches the shell, and the global
   // dispatcher skips Open Search for the same chord inside a terminal (`terminalClearKeyTarget`).
+  // The clear is then shared through the project's server (HS2-HA0Z3A), so a reload or another client
+  // no longer replays the cleared output; if the server cannot share it, the local clear stands.
   const clearTerminal = (viewport: HTMLElement | null | undefined) => {
     const identity = viewport ? terminalViewportIdentity(viewport) : undefined;
-    if (identity) clearTerminalViewports(document, identity);
+    if (!identity) return;
+    void clearTerminalEverywhere(document, identity, ({ projectId, terminalId }) => {
+      const target = projects.peek().find((item) => item.id === projectId);
+      return target ? new Api(target.apiPath).clearTerminal(terminalId) : Promise.reject(new Error('unknown project'));
+    });
   };
   // Pressing Clear leaves the keyboard in the terminal, as the key bar does, so typing continues.
   lifetime.add(
