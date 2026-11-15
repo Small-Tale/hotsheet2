@@ -996,6 +996,11 @@ same explanation (HS2-CGXGWY).
   has supplied both revisions, so no write is sent without one. A refresh that read the server
   before a save started or settled is ignored for that save's revision and groups, so it cannot
   rewind the next write into a conflict with this tab's own save (HS2-A6K8D5).
+  Until that first read lands, the editor body shows Kerf's busy `EmptyState` ("Loading
+  Commands"), never the "No custom commands yet." empty state. If the first read fails, a danger
+  `StateBanner` ("Commands could not be loaded.") shows the reason with a `Retry` action, which
+  returns to the loading state and reads again; any later successful refresh also clears it. A
+  failure after the first load stays in the editor's status line (HS2-BZKTDC).
   Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.

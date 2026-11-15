@@ -169,6 +169,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly deleteCommandSetting: (projectId: string, id: string) => void;
   readonly addCommandGroup: (projectId: string) => void;
   readonly deleteCommandGroup: (projectId: string, group: string) => void;
+  /** Retry a project's failed first command settings read (HS2-BZKTDC). */
+  readonly retryCommandSettingsLoad: (projectId: string) => void;
   readonly selectCommandRow: (projectId: string, id: string, intent: { toggle?: boolean; range?: boolean }) => void;
   readonly commandSelection: (projectId?: string) => string[];
   readonly commandSettingsDefinitions: (projectId?: string) => CommandDefinition[];
@@ -337,6 +339,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     deleteCommandSetting,
     addCommandGroup,
     deleteCommandGroup,
+    retryCommandSettingsLoad,
     selectCommandRow,
     commandSelection,
     commandSettingsDefinitions,
@@ -833,6 +836,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       deleteGroup: (group) => {
         const current = projectId();
         if (current) deleteCommandGroup(current, group);
+      },
+      retryLoad: () => {
+        const current = projectId();
+        if (current) retryCommandSettingsLoad(current);
       },
       selection: () => {
         const current = projectId();

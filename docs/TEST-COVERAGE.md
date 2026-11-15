@@ -1052,6 +1052,13 @@ group or command save and arrives after it, the header-action test for disabled
 `Add group…`/`Add command…` before the first load, and the real-server browser test
 in `tests/native-prompt-replacements.spec.ts` that holds the open's command-groups
 read, asserts both actions are disabled, then saves two groups without a conflict.
+HS2-BZKTDC adds editor markup tests for the loading, failed-load and ready states,
+the controller transition test (loading, failed, retry, failed again, ready, and a
+later failure that stays in the status line), the Retry wiring test, and the
+real-server browser test in `tests/native-prompt-replacements.spec.ts` that holds and
+fails the open's command-groups read, asserts loading then the failed banner with the
+actions still disabled, then retries through a held read back to the loaded empty
+state with both actions enabled, capturing wide, medium, narrow and wide-return.
 
 HS2-TVASVW covers bounded direct change-poll fallback in
 `change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker

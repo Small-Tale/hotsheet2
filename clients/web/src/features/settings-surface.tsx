@@ -36,6 +36,9 @@ export interface SettingsSurfaceDependencies {
   commandSelection: (projectId: string) => Props['commands']['selectedIds'];
   commandIconSearch: Readable<Props['commands']['iconSearch']>;
   commandSettingsMessage: (projectId: string) => Props['commands']['message'];
+  /** The editor's first-load state and failure reason (HS2-BZKTDC). */
+  commandSettingsLoadState: (projectId: string) => Props['commands']['loadState'];
+  commandSettingsLoadError: (projectId: string) => Props['commands']['loadError'];
   trashCleanupDaysByProject: Readable<Record<string, number>>;
   trashSettingsMessagesByProject: Readable<Record<string, string>>;
   trashRetentionDraftsByProject: Readable<Record<string, TrashRetentionDraft>>;
@@ -106,6 +109,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     commandSelection,
     commandIconSearch,
     commandSettingsMessage,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
     trashRetentionDraftsByProject,
@@ -192,6 +197,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           selectedIds: commandSelection(current.id),
           iconSearch: commandIconSearch.value,
           message: commandSettingsMessage(current.id),
+          loadState: commandSettingsLoadState(current.id),
+          loadError: commandSettingsLoadError(current.id),
           aiTools: aiTools.value,
           aiDefaults: aiDefaults.value,
         }}

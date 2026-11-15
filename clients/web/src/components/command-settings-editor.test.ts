@@ -282,4 +282,34 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('No custom commands yet');
     expect(markup).not.toContain('data-action="save-command-settings"');
   });
+  it('shows a busy loading state, never the empty state, before the first read lands (HS2-BZKTDC)', () => {
+    const markup = String(CommandSettingsEditor({ commands: [], loadState: 'loading' }));
+    expect(markup).toContain('data-load-state="loading"');
+    expect(markup).toMatch(
+      /data-component="empty-state"[^>]*aria-busy="true"|aria-busy="true"[^>]*data-component="empty-state"/,
+    );
+    expect(markup).toContain('Loading Commands');
+    expect(markup).not.toContain('No custom commands yet');
+    expect(markup).not.toContain('data-action="retry-command-settings-load"');
+  });
+  it('shows a danger banner with Retry when the first read failed (HS2-BZKTDC)', () => {
+    const markup = String(CommandSettingsEditor({ commands: [], loadState: 'failed', loadError: 'offline' }));
+    expect(markup).toContain('data-load-state="failed"');
+    expect(markup).toMatch(/data-component="state-banner"/);
+    expect(markup).toContain('data-tone="danger"');
+    expect(markup).toContain('Commands could not be loaded.');
+    expect(markup).toContain('offline');
+    expect(markup).toContain('data-action="retry-command-settings-load"');
+    expect(markup).not.toContain('No custom commands yet');
+    // Without a reason the banner still explains the failure.
+    expect(String(CommandSettingsEditor({ commands: [], loadState: 'failed' }))).toContain(
+      "could not read this project's command settings",
+    );
+  });
+  it('renders loaded commands once ready, the default for existing callers (HS2-BZKTDC)', () => {
+    const markup = String(CommandSettingsEditor({ commands: [{ id: 'one', title: 'One', command: 'echo' }] }));
+    expect(markup).toContain('data-load-state="ready"');
+    expect(markup).toContain('aria-label="Custom commands"');
+    expect(markup).not.toContain('Loading Commands');
+  });
 });

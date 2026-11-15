@@ -45,6 +45,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   closeCommandEditor: action('close-command-editor'),
   deleteCommandSetting: action('delete-command-setting'),
   addCommandGroup: action('add-command-group'),
+  /** Settings → Commands: retry the project's failed first command settings read (HS2-BZKTDC). */
+  retryCommandSettingsLoad: action('retry-command-settings-load'),
   deleteCommandGroup: action('delete-command-group'),
   selectCommandIcon: action('select-command-icon'),
   selectCommandColor: action('select-command-color'),

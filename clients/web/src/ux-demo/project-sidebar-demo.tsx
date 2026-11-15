@@ -319,17 +319,31 @@ export function addCommandEditorSetting() {
 }
 export function CommandSettingsEditorDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
-      <CommandSettingsEditor
-        commands={commandEditorCommands.value}
-        extraGroups={commandEditorExtraGroups.value}
-        editingId={commandEditorEditingId.value}
-        selectedIds={commandEditorSelection.value}
-        iconSearch={commandEditorIconSearch.value}
-        message={commandEditorMessage.value}
-      />
-      <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor
+          commands={commandEditorCommands.value}
+          extraGroups={commandEditorExtraGroups.value}
+          editingId={commandEditorEditingId.value}
+          selectedIds={commandEditorSelection.value}
+          iconSearch={commandEditorIconSearch.value}
+          message={commandEditorMessage.value}
+        />
+        <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
+      </CatalogExample>
+      {/* Before the project's first command settings read answers, and after it fails (HS2-BZKTDC). */}
+      <CatalogExample label="Loading" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor commands={[]} loadState="loading" />
+      </CatalogExample>
+      <CatalogExample label="Load Failed" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor
+          commands={[]}
+          loadState="failed"
+          loadError="Hot Sheet could not reach the server."
+          message={commandEditorMessage.value}
+        />
+      </CatalogExample>
+    </>
   );
 }
 export function DriveControlDemo() {
@@ -874,6 +888,9 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
       deleteCommand: deleteCommandEditorSetting,
       addGroup: addCommandEditorGroup,
       deleteGroup: deleteCommandEditorGroup,
+      retryLoad: () => {
+        commandEditorMessage.value = 'Retry requested.';
+      },
       selection: () => commandEditorSelection.value,
       orderedIds: () => commandEditorCommands.value.map((command) => command.id),
       selectRow: selectCommandEditorRow,

@@ -1138,6 +1138,10 @@ export async function startHotSheetWebClient() {
     loadCommandRevisions,
     commandSettingsWriteVersion,
     commandSettingsReady,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
+    commandSettingsLoadFailed,
+    retryCommandSettingsLoad,
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
@@ -4272,7 +4276,9 @@ export async function startHotSheetWebClient() {
         setCommandSettingsDraft(current.id, JSON.stringify(definitions, null, 2));
       setCommandSettingsMessage(current.id, '');
     } catch (reason) {
-      if (active()) setCommandSettingsMessage(current.id, reason instanceof Error ? reason.message : String(reason));
+      const message = reason instanceof Error ? reason.message : String(reason);
+      // Before the first read succeeds, the editor shows a failed-load state with Retry (HS2-BZKTDC).
+      if (active() && !commandSettingsLoadFailed(current.id, message)) setCommandSettingsMessage(current.id, message);
     }
   }
   async function refreshCustomViews(current = project(), quiet = false) {
@@ -5146,6 +5152,8 @@ export async function startHotSheetWebClient() {
     commandSelection,
     commandIconSearch,
     commandSettingsMessage,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
     trashRetentionDraftsByProject,
@@ -6569,6 +6577,11 @@ export async function startHotSheetWebClient() {
     addCommandGroup,
     commandGroupDialog,
     deleteCommandGroup,
+    retryCommandSettingsLoad: (projectId: string) => {
+      retryCommandSettingsLoad(projectId);
+      const current = project();
+      if (current?.id === projectId) void refreshCommands(current);
+    },
     selectCommandRow,
     commandSelection,
     commandSettingsDefinitions,

@@ -29,6 +29,8 @@ export interface CommandSettingsEditorBindings {
   readonly deleteCommand: (id: string) => void;
   readonly addGroup: () => void;
   readonly deleteGroup: (group: string) => void;
+  /** Retry the failed first command settings read (HS2-BZKTDC). */
+  readonly retryLoad: () => void;
   /** The selected command ids. */
   readonly selection: () => readonly string[];
   /** Every command id in display order. */
@@ -128,6 +130,11 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.addCommandGroup.selector, () => {
       bindings.addGroup();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.retryCommandSettingsLoad.selector, () => {
+      bindings.retryLoad();
     }),
   );
   lifetime.add(

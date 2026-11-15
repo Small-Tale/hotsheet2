@@ -299,6 +299,68 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
     }
   });
 
+  test('shows loading, then a failed first command settings read with Retry, never an empty state (HS2-BZKTDC)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await launchedApp(context, baseURL!);
+    const commandGroupsRead = (method: string, path: string) => method === 'GET' && path.endsWith('/command-groups');
+    // Hold the open's real command-groups read, and fail it, so the editor's first load is observable.
+    let fails = true;
+    let held = app.pauseApi(commandGroupsRead);
+    app.failApiWhen((method, path) => fails && commandGroupsRead(method, path));
+    try {
+      await clickOpenProject(page);
+      await app.projectRemembered();
+      await held.started;
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const editor = page.locator('[data-component="command-settings-editor"]');
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const addCommand = page.getByRole('button', { name: 'Add command…', exact: true });
+      const loading = editor.locator('[data-component="empty-state"][aria-busy="true"]');
+      const failure = editor.getByRole('alert').filter({ hasText: 'Commands could not be loaded.' });
+      const retry = failure.getByRole('button', { name: 'Retry', exact: true });
+      // Loading: a busy state, never the empty state, while the read is outstanding.
+      await expect(editor).toHaveAttribute('data-load-state', 'loading');
+      await expect(loading).toContainText('Loading Commands');
+      await expect(editor).not.toContainText('No custom commands yet.');
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await captureWidths(page, editor, 'hs2-bzktdc-commands-loading');
+      // The first read fails: a danger banner with Retry replaces the loading state.
+      held.release();
+      await expect(editor).toHaveAttribute('data-load-state', 'failed');
+      await expect(failure).toBeVisible();
+      await expect(failure).toContainText('Synthetic operation rejected.');
+      await expect(loading).toHaveCount(0);
+      await expect(editor).not.toContainText('No custom commands yet.');
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await captureWidths(page, editor, 'hs2-bzktdc-commands-failed');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      // Retry: the editor shows loading again while the new read is held, then the loaded empty state.
+      fails = false;
+      held = app.pauseApi(commandGroupsRead);
+      await retry.click();
+      await held.started;
+      await expect(editor).toHaveAttribute('data-load-state', 'loading');
+      await expect(loading).toBeVisible();
+      await expect(failure).toHaveCount(0);
+      held.release();
+      await expect(editor).toHaveAttribute('data-load-state', 'ready');
+      await expect(editor).toContainText('No custom commands yet.');
+      await expect(loading).toHaveCount(0);
+      await expect(addGroup).toBeEnabled();
+      await expect(addCommand).toBeEnabled();
+    } finally {
+      fails = false;
+      held.release();
+      await page.close();
+      await app.stop();
+    }
+  });
+
   test('customizes a real drawer launch with whole-dialog cancel, defaults, validation and a subsequent launch @ci-smoke @ci-webkit', async ({
     context,
     baseURL,

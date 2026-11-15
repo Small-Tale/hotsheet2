@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ChoiceChips, type ChoiceChipsChoice } from '@kerfjs/ui/choice-chips';
 import { fillColor, foregroundColor, foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
@@ -12,6 +13,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
@@ -37,8 +39,18 @@ import { providerModelEffortEntries } from './provider-model-effort-menu';
 /** DOM id of the native "Edit command" popover dialog, opened imperatively from a row's edit action. */
 export const COMMAND_EDITOR_DIALOG_ID = 'command-editor-dialog';
 
+/**
+ * Whether the project's command settings have answered their first read (HS2-BZKTDC): `loading` before
+ * it lands, `failed` when it failed and no retry is under way, `ready` afterwards.
+ */
+export type CommandSettingsLoadState = 'loading' | 'failed' | 'ready';
+
 export interface CommandSettingsEditorProps {
   commands: CommandDefinition[];
+  /** Defaults to `ready`; before then the editor never claims the project has no commands. */
+  loadState?: CommandSettingsLoadState;
+  /** Why the first read failed, shown in the failed-load banner. */
+  loadError?: string;
   /** Group names added via "Add group" that may still be empty; pins their display order at the end. */
   extraGroups?: readonly string[];
   /** The command whose details dialog is open, if any. */
@@ -378,8 +390,33 @@ function CommandGroup({
   );
 }
 
+/**
+ * The body before the first read lands or after it fails, following Kerf's list workspace states recipe
+ * (HS2-BZKTDC): a busy EmptyState while loading, a danger StateBanner with Retry beside the failure.
+ */
+function commandSettingsLoadBody(loadState: Exclude<CommandSettingsLoadState, 'ready'>, loadError: string) {
+  return loadState === 'loading' ? (
+    <EmptyState title="Loading Commands" detail="This project's commands appear when they load." busy />
+  ) : (
+    <StateBanner
+      title="Commands could not be loaded."
+      detail={loadError || "Hot Sheet could not read this project's command settings."}
+      tone="danger"
+      urgency="alert"
+      copyLayout="stacked"
+      action={
+        <Button size="compact" shape="pill" action={COMMANDS_AND_AI_ACTIONS.retryCommandSettingsLoad.value}>
+          Retry
+        </Button>
+      }
+    />
+  );
+}
+
 export function CommandSettingsEditor({
   commands,
+  loadState = 'ready',
+  loadError = '',
   extraGroups = [],
   editingId,
   selectedIds = [],
@@ -396,6 +433,7 @@ export function CommandSettingsEditor({
     <div
       class="command-settings-editor"
       data-component="command-settings-editor"
+      data-load-state={loadState}
       data-icon-catalog={lucideCatalogVersion.value}
     >
       {/* The workspace toolbar titles the page (HS2-QEQ1YB) and carries its Add group… and Add
@@ -406,7 +444,9 @@ export function CommandSettingsEditor({
         Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
         automatically.
       </Text>
-      {sections.length > 0 ? (
+      {loadState !== 'ready' ? (
+        commandSettingsLoadBody(loadState, loadError)
+      ) : sections.length > 0 ? (
         <ul class="command-settings-editor__list" aria-label="Custom commands" aria-multiselectable="true">
           {sections.map((section) => (
             <CommandGroup
