@@ -550,7 +550,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board', 3],
     ['ticket-board-column', 1],
     ['ticket-search-field', 6],
-    ['ticket-code-review', 5],
+    ['ticket-code-review', 7], // HS2-MCGCPQ adds the follow-up link action examples
     ['ticket-attachments', 6],
     ['attachment-gallery', 1],
     ['ticket-info-panel', 2],

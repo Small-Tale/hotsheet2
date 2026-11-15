@@ -13185,7 +13185,15 @@ test('renders the exact shared Code Review component in the inspector and reader
   const sidebarReview = sidebar.locator('[data-component="ticket-code-review"]');
   await expect(sidebarReview).toContainText('Code reviews open in Glassbox');
   await expect(sidebarReview).toContainText('No commits referencing this ticket were found.');
-  const sharedMarkup = await sidebarReview.evaluate((element) => element.outerHTML);
+  // HS2-MCGCPQ: only the inspector offers "Link Existing Ticket as Follow-Up…" so far (the reader gains it in
+  // HS2-NXSMC7); compare everything else exactly and pin the follow-up section separately.
+  await expect(sidebarReview.getByRole('button', { name: 'Link Existing Ticket as Follow-Up…' })).toBeVisible();
+  const withoutFollowUps = (element: Element) => {
+    const copy = element.cloneNode(true) as Element;
+    copy.querySelector('section[aria-label="Follow-Up Tickets"]')?.remove();
+    return copy.outerHTML;
+  };
+  const sharedMarkup = await sidebarReview.evaluate(withoutFollowUps);
   await sidebar.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-inspector-after.png' });
   await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
@@ -13194,7 +13202,8 @@ test('renders the exact shared Code Review component in the inspector and reader
   await expect(readerReview).toContainText('Code reviews open in Glassbox');
   await expect(readerReview).toContainText('No commits referencing this ticket were found.');
   // Identical component markup; only the shared panel column carries its reader presentation variant (HS2-MGVE50).
-  expect(await readerReview.evaluate((element) => element.outerHTML)).toBe(
+  await expect(readerReview.locator('section[aria-label="Follow-Up Tickets"]')).toHaveCount(0);
+  expect(await readerReview.evaluate(withoutFollowUps)).toBe(
     sharedMarkup.replace(
       'class="ticket-inspector-panel ',
       'class="ticket-inspector-panel ticket-inspector-panel--reader ',
