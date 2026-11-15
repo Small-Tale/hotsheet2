@@ -23,7 +23,10 @@ for (const field of ['details', 'note'] as const) {
     await context.exposeFunction('recordClose', (ack: { request: string; success: boolean }) => acks.push(ack));
     await context.addInitScript(() => {
       const host = window as unknown as DesktopCloseHost & { recordClose(ack: unknown): Promise<unknown> };
-      host.__TAURI_INTERNALS__ = { invoke: async (_command, ack) => host.recordClose(ack) };
+      // Record only the close ACK; other shell calls (the HS2-15W35F window theme) are not ACKs.
+      host.__TAURI_INTERNALS__ = {
+        invoke: async (command, ack) => (command === 'desktop_flush_complete' ? host.recordClose(ack) : undefined),
+      };
     });
     const app = await desktopApp(context, baseURL!);
     let releaseOld = () => {},
@@ -105,7 +108,10 @@ for (const conflict of [false, true]) {
     await context.exposeFunction('recordClose', (ack: { request: string; success: boolean }) => acks.push(ack));
     await context.addInitScript(() => {
       const host = window as unknown as DesktopCloseHost & { recordClose(ack: unknown): Promise<unknown> };
-      host.__TAURI_INTERNALS__ = { invoke: async (_command, ack) => host.recordClose(ack) };
+      // Record only the close ACK; other shell calls (the HS2-15W35F window theme) are not ACKs.
+      host.__TAURI_INTERNALS__ = {
+        invoke: async (command, ack) => (command === 'desktop_flush_complete' ? host.recordClose(ack) : undefined),
+      };
     });
     const app = await desktopApp(context, baseURL!);
     let releaseOld = () => {},

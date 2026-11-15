@@ -51,7 +51,11 @@ for (const surface of ['inspector', 'reader', 'linked-reader', 'revert'] as cons
     });
     await context.addInitScript(() => {
       const host = window as unknown as DesktopCloseHost & { recordDesktopClose(value: unknown): Promise<void> };
-      host.__TAURI_INTERNALS__ = { invoke: async (_command, value) => host.recordDesktopClose(value) };
+      // Record only the close ACK; other shell calls (the HS2-15W35F window theme) are not ACKs.
+      host.__TAURI_INTERNALS__ = {
+        invoke: async (command, value) =>
+          command === 'desktop_flush_complete' ? host.recordDesktopClose(value) : undefined,
+      };
     });
     const app = await desktopApp(context, baseURL!);
     let release = () => {};
@@ -178,7 +182,11 @@ test('captures large unblurred composer recovery behind a held write before desk
   });
   await context.addInitScript(() => {
     const host = window as unknown as DesktopCloseHost & { recordDesktopClose(value: unknown): Promise<void> };
-    host.__TAURI_INTERNALS__ = { invoke: async (_command, value) => host.recordDesktopClose(value) };
+    // Record only the close ACK; other shell calls (the HS2-15W35F window theme) are not ACKs.
+    host.__TAURI_INTERNALS__ = {
+      invoke: async (command, value) =>
+        command === 'desktop_flush_complete' ? host.recordDesktopClose(value) : undefined,
+    };
   });
   const app = await desktopApp(context, baseURL!);
   let release = () => {};
@@ -251,7 +259,11 @@ test('keeps a failed large close open, saves ordinary preferences, and retries r
   });
   await context.addInitScript(() => {
     const host = window as unknown as DesktopCloseHost & { recordDesktopClose(value: unknown): Promise<void> };
-    host.__TAURI_INTERNALS__ = { invoke: async (_command, value) => host.recordDesktopClose(value) };
+    // Record only the close ACK; other shell calls (the HS2-15W35F window theme) are not ACKs.
+    host.__TAURI_INTERNALS__ = {
+      invoke: async (command, value) =>
+        command === 'desktop_flush_complete' ? host.recordDesktopClose(value) : undefined,
+    };
   });
   const app = await desktopApp(context, baseURL!);
   try {
