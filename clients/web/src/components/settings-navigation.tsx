@@ -1,5 +1,6 @@
 import '@kerfjs/ui/layout.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -141,8 +142,23 @@ export function settingsCategoryTitle(category: SettingsCategory): string {
   return category === 'keyboard' ? 'Keyboard Shortcuts' : item.label;
 }
 
+/** How the Devices category names its waiting pairing requests (HS2-BZHMEV). */
+export function pairingRequestsLabel(count: number): string {
+  return `${count} pairing request${count === 1 ? '' : 's'} waiting`;
+}
+
+export interface SettingsNavigationOptions {
+  selected: SettingsCategory;
+  /** Pairing requests waiting for approval; the Devices row shows the count (HS2-BZHMEV). */
+  pairingRequests?: number;
+}
+
 /** The settings navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
-export function settingsNavigationPanel({ selected }: { selected: SettingsCategory }): SidebarPanelParts {
+export function settingsNavigationPanel({
+  selected,
+  pairingRequests = 0,
+}: SettingsNavigationOptions): SidebarPanelParts {
+  const waiting = (id: SettingsCategory) => (id === 'devices' ? pairingRequests : 0);
   const renderGroup = (heading: string, items: readonly (typeof allCategories)[number][], actions?: SafeHtml) => (
     <section>
       <ListHeader label={heading} />
@@ -155,6 +171,23 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
               selected={selected === item.id}
               icon={<LucideIcon icon={item.icon} name={item.iconName} />}
               label={item.label}
+              {...(waiting(item.id) > 0
+                ? {
+                    accessibleLabel: `${item.label}, ${pairingRequestsLabel(waiting(item.id))}`,
+                    trailing: (
+                      <Badge
+                        tone="warning"
+                        appearance="solid"
+                        size="compact"
+                        title={pairingRequestsLabel(waiting(item.id))}
+                        rootAttributes={{ 'data-settings-pending': item.id }}
+                        ariaHidden
+                      >
+                        {waiting(item.id) > 99 ? '99+' : waiting(item.id)}
+                      </Badge>
+                    ),
+                  }
+                : {})}
             />
           ))}
         </List>
@@ -191,14 +224,14 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
 
 export function SettingsNavigation({
   selected,
+  pairingRequests = 0,
   collapseControl = false,
-}: {
-  selected: SettingsCategory;
+}: SettingsNavigationOptions & {
   collapseControl?: boolean;
 }) {
   return (
     <SidebarPane
-      parts={settingsNavigationPanel({ selected })}
+      parts={settingsNavigationPanel({ selected, pairingRequests })}
       className="settings-navigation"
       collapseControl={collapseControl}
     />

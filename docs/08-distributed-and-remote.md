@@ -229,7 +229,9 @@ from the hostname, peer address or forwarded headers, because Tailscale Serve
 reaches the host through the same loopback port the owner opens locally. See
 [04](04-core-server-cli.md) §4.6.1 for the grant rules. A grant changed or
 revoked elsewhere reaches an open page through the change channel without a
-reload (HS2-A3TDNH). The server issues a revocable,
+reload (HS2-A3TDNH). An admin or host page learns about a new pairing request
+the same way, and only device managers receive that event (HS2-BZHMEV). The
+server issues a revocable,
 server-side session and checks it on REST, polling and WebSocket routes;
 the browser-facing bridge authenticates before proxying and never passes its
 loopback secret for a remote request. The session catalog is private to each

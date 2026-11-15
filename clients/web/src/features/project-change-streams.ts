@@ -106,6 +106,15 @@ export interface ProjectChangeStreamsDependencies {
     applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
     resync: () => Promise<void>;
   };
+  /**
+   * Pairing requests waiting for this host's approval (HS2-BZHMEV): `pairing_requests` events, which
+   * reach only device managers, trigger one coalesced re-read and each stream resync re-reads them. No
+   * timer reads them.
+   */
+  pairingRequests?: {
+    applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
+    resync: () => Promise<void>;
+  };
   /** Stats' Overnight timeline (HS2-9AN4DN): each stream resync re-reads the recorded history once. */
   liveHistory?: { resync: () => Promise<void> };
   /**
@@ -280,6 +289,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     hostHealth,
     standbySettings,
     browserGrants,
+    pairingRequests,
     liveHistory,
     onStreamHealth,
   } = dependencies;
@@ -416,6 +426,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(hostHealth ? [hostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
               ...(browserGrants ? [browserGrants.resync()] : []),
+              ...(pairingRequests ? [pairingRequests.resync()] : []),
               ...(liveHistory ? [liveHistory.resync()] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
@@ -433,6 +444,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             void hostHealth?.applyEvents(response.events);
             void standbySettings?.applyEvents(response.events);
             void browserGrants?.applyEvents(response.events);
+            void pairingRequests?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));
             for (const event of response.events) {
               if (event.kind === 'permission_resolved') {

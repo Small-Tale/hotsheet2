@@ -67,6 +67,8 @@ export interface SidebarSurfaceDependencies {
   projectConversationUnread: (projectId: string) => number;
   project: () => Project | undefined;
   settingsCategory: () => SettingsCategory;
+  /** Pairing requests waiting for this host's approval (HS2-BZHMEV). */
+  pairingRequestCount?: () => number;
   projectPermissionHistory: (projectId: string) => ReadonlyArray<{ resolvedAt: number }>;
   projectPendingPermissions: (projectId: string) => readonly unknown[];
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
@@ -126,6 +128,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     projectConversationUnread,
     project,
     settingsCategory,
+    pairingRequestCount,
     projectPermissionHistory,
     projectPendingPermissions,
     projectTicketCounts,
@@ -153,7 +156,8 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
   }
   function sidebarSurfaceProps(statsSelected = false): SidebarSurfaceProps {
     const current = project()!;
-    if (!statsSelected && viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
+    if (!statsSelected && viewMode.value === 'settings')
+      return { kind: 'settings', selected: settingsCategory(), pairingRequests: pairingRequestCount?.() ?? 0 };
     if (!statsSelected && viewMode.value === 'notifications') {
       const history = projectPermissionHistory(current.id),
         notices = clientNotifications.items(current.id),

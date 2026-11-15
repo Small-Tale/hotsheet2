@@ -82,14 +82,17 @@ const CHANGES_WAIT: std::time::Duration = std::time::Duration::from_secs(25);
 /// The change event kind open pages re-read their own session grants on (HS2-A3TDNH).
 pub(crate) const BROWSER_GRANTS_EVENT: &str = "browser_grants";
 
-/// Announce that some browser session's grants or validity may have changed. It names no
-/// device and carries no values, so it tells other sessions nothing: each remote-mode page
-/// re-reads its own `GET /remote-auth/me`, which stays the one source of truth (HS2-A3TDNH).
-fn emit_grants_changed(state: &AppState) {
+/// The change event kind device managers re-read the pending pairing requests on
+/// (HS2-BZHMEV). Only subscribers that may manage devices receive it.
+pub(crate) const PAIRING_REQUESTS_EVENT: &str = "pairing_requests";
+
+/// Push one anonymous, cursored, machine-wide event of `kind`. It carries no store, id,
+/// label, origin or value, so it tells a receiver only that something of that kind changed.
+fn emit_anonymous(state: &AppState, kind: &str) {
     state.emit(ChangeEvent {
         cursor: None,
         store: String::new(),
-        kind: BROWSER_GRANTS_EVENT.into(),
+        kind: kind.into(),
         id: String::new(),
         slug: String::new(),
         message: None,
@@ -98,6 +101,56 @@ fn emit_grants_changed(state: &AppState) {
         turn: None,
         live: None,
     });
+}
+
+/// Announce that some browser session's grants or validity may have changed. It names no
+/// device and carries no values, so it tells other sessions nothing: each remote-mode page
+/// re-reads its own `GET /remote-auth/me`, which stays the one source of truth (HS2-A3TDNH).
+fn emit_grants_changed(state: &AppState) {
+    emit_anonymous(state, BROWSER_GRANTS_EVENT);
+}
+
+/// Announce that the requests waiting for approval changed (HS2-BZHMEV): one arrived, or one
+/// was approved or rejected. Device managers then re-read the admin-gated
+/// `/remote-auth/owner` list; the event names no request and carries no pairing secret.
+fn emit_pairing_requests_changed(state: &AppState) {
+    emit_anonymous(state, PAIRING_REQUESTS_EVENT);
+}
+
+/// Whether one change-stream subscriber may receive `event` (HS2-BZHMEV). Pairing-request
+/// events reach only device managers: the trusted host (`local`: machine secret or client
+/// certificate) or a browser session that holds the admin grant now, so a grant removed
+/// meanwhile stops them. Every other kind reaches every authorized subscriber.
+pub(crate) fn event_visible(
+    state: &AppState,
+    headers: &HeaderMap,
+    local: bool,
+    websocket: bool,
+    event: &ChangeEvent,
+) -> bool {
+    event.kind != PAIRING_REQUESTS_EVENT
+        || local
+        || session(state, headers, false, websocket).is_ok_and(|device| device.admin)
+}
+
+/// Drop the events this long-poll subscriber may not receive from one page (HS2-BZHMEV). The
+/// session is checked once per page, and only when the page holds a gated event. The page's
+/// cursor still advances past dropped events.
+pub(crate) fn retain_visible_events(
+    state: &AppState,
+    headers: &HeaderMap,
+    local: bool,
+    events: &mut Vec<ChangeEvent>,
+) {
+    let Some(gated) = events
+        .iter()
+        .find(|event| event.kind == PAIRING_REQUESTS_EVENT)
+    else {
+        return;
+    };
+    if !event_visible(state, headers, local, false, gated) {
+        events.retain(|event| event.kind != PAIRING_REQUESTS_EVENT);
+    }
 }
 
 fn now() -> i64 {
@@ -254,6 +307,7 @@ pub(crate) async fn pair(
         .request(&request.label, origin, now())
         .map_err(|_| internal())?
         .map_err(failed)?;
+    emit_pairing_requests_changed(&state);
     Ok((StatusCode::CREATED, Json(pair)))
 }
 
@@ -395,6 +449,7 @@ pub(crate) async fn approve(
         )
         .map_err(|_| internal())?
         .map_err(failed)?;
+    emit_pairing_requests_changed(&state);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -409,6 +464,7 @@ pub(crate) async fn reject(
         .reject(&request.id)
         .map_err(|_| internal())?
     {
+        emit_pairing_requests_changed(&state);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::new(

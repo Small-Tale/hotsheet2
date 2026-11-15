@@ -1124,7 +1124,13 @@ and the catalog's in-memory revision drives the `/remote-auth/owner/changes` lon
 (a `LongWait` route in `request_timing.rs`). Grant changes, revocations and sign-outs
 emit the anonymous `browser_grants` change event (HS2-A3TDNH), which
 `clients/web/src/features/browser-grants.ts` turns into one re-read of `/remote-auth/me`
-from `features/project-change-streams.ts`. In the browser,
+from `features/project-change-streams.ts`. A pairing request created, approved or
+rejected emits the anonymous `pairing_requests` event (HS2-BZHMEV);
+`routes/remote_auth.rs` `event_visible`/`retain_visible_events` deliver it on `/ws/sync`
+and `/ws/poll` only to the machine host or an admin session, and
+`clients/web/src/features/pairing-requests.ts` re-reads `/remote-auth/owner` to count the
+waiting requests on the Settings view-mode choice (`components/workspace-controls.tsx`) and
+the Devices category (`components/settings-navigation.tsx`). In the browser,
 `clients/web/src/components/remote-auth-screen.tsx` gates startup, proposes a device
 name (`device-name.ts`) and records the session grants in `client-origin.ts`, which
 decides same-device from the local grant on a remote-mode host;

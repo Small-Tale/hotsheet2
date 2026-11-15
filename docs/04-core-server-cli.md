@@ -1979,6 +1979,14 @@ false. Changing a device's grants, revoking one device or all of them, and a
 session signing out push a `browser_grants` change event on the cursored change
 channel (`/ws/sync`, `/ws/poll`). It names no store, device, or grant value;
 each open remote-mode page re-reads its own `GET /remote-auth/me` (HS2-A3TDNH).
+A new pairing request, and approving or rejecting one, push a `pairing_requests`
+change event on the same channel (HS2-BZHMEV). It names no request id, label,
+origin or challenge, and the server delivers it only to subscribers that may
+manage devices: the machine-secret or client-certificate host, or a browser
+session that holds the admin grant when the event is sent. `/ws/sync` checks
+that per event and `/ws/poll` per page, so a session without the grant never
+receives it (its cursor still advances past it). A device manager's page then
+re-reads `GET /remote-auth/owner`.
 
 **Host-only server routes (HS2-S8R3PD).** The bridge forwards any project API path,
 so the server enforces the local grant itself. After authentication

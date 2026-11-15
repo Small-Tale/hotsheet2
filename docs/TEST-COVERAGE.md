@@ -91,6 +91,23 @@ walks refused, regranted and repeatedly removed grants while the category shows;
 `remote-auth-server-integration.test.ts` changes a signed-in page's grants twice through
 the real CLI, then across a dropped change connection, then revokes it, checking App
 Settings → Devices and the Open Project flow without a reload at four widths.
+HS2-BZHMEV: `hotsheet-server/tests/remote_auth.rs`
+`hs2_bzhmev_pairing_request_events_reach_only_device_managers_over_poll` pins one anonymous
+`pairing_requests` event (no id, label, origin or challenge) per request, approval and
+rejection, none for a refused request or reject, delivery to the host and an admin session
+but not a plain one (whose cursor still advances), the grant re-checked per page, and a
+waiting poll woken by a gated event; `..._over_websocket` pins the same on `/ws/sync`.
+`features/pairing-requests.test.ts` walks the first silent read, announced arrivals,
+approved and expired requests, the local expiry timer, cursor deduplication, resync after a
+restart, coalescing, no grant, a grant lost mid-read, 401/403, 503, failed reads, the open
+Devices list feeding it, and clear-then-regain; `settings-navigation.test.ts` and
+`workspace-header.test.ts` pin the Devices and Settings counts and names;
+`runtime-split-controllers.test.ts` wires events and every resync kind;
+`tests/pairing-requests-notice.spec.ts` drives the shipped app (badge, notice, Devices row,
+reject clearing every badge, no idle reads) at three widths; and
+`remote-auth-server-integration.test.ts` pairs a real browser against the real server and
+checks an admin page's count and notice live while a plain session's channel never carries
+the event.
 HS2-S8R3PD: `hotsheet-server/tests/remote_host_access.rs` sends every host-acting
 server route (difftool, repository and attachment open/reveal, project open and
 checkout/store/Git-source registration and relink) as a plain session (403

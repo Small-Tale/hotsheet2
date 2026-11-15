@@ -424,6 +424,12 @@ async fn ws_loop(
             }
             event = rx.recv() => {
                 let Ok(event) = event else { break; };
+                // Pairing-request events reach only device managers (HS2-BZHMEV).
+                if let Some((state, headers)) = &remote {
+                    if !crate::routes::remote_auth::event_visible(state, headers, false, true, &event) {
+                        continue;
+                    }
+                }
                 let Ok(text) = serde_json::to_string(&event) else { continue; };
                 if socket.send(Message::Text(text.into())).await.is_err() { break; }
             }
@@ -498,11 +504,14 @@ pub(crate) async fn poll_events(
     // Subscribe BEFORE reading the log, so an event emitted in the gap isn't missed: it
     // either lands in the log we read, or wakes the receiver below.
     let mut rx = state.events.subscribe();
-    let (backlog, overflow, snapshot_cursor) = state.event_log.with_lock(|log| {
+    let (mut backlog, overflow, snapshot_cursor) = state.event_log.with_lock(|log| {
         let (events, overflow) = log.since(since);
         (events, overflow, log.seq)
     });
     if overflow || !backlog.is_empty() {
+        // Pairing-request events reach only device managers (HS2-BZHMEV); the cursor still
+        // advances past any this subscriber may not see.
+        crate::routes::remote_auth::retain_visible_events(&state, &headers, local, &mut backlog);
         return Json(PollResponse {
             cursor: snapshot_cursor,
             events: backlog,
@@ -527,7 +536,7 @@ pub(crate) async fn poll_events(
     if !local && crate::routes::remote_auth::session(&state, &headers, false, false).is_err() {
         return (StatusCode::UNAUTHORIZED, "remote session revoked").into_response();
     }
-    let (events, cursor, overflow) = match next {
+    let (mut events, cursor, overflow) = match next {
         // Re-read the ring rather than returning only the wake-up event. This atomically
         // captures every event + the exact cursor through that span, so a burst racing the
         // response cannot advance the cursor past an event the client never received.
@@ -548,6 +557,7 @@ pub(crate) async fn poll_events(
             (Vec::new(), state.event_cursor(), false)
         }
     };
+    crate::routes::remote_auth::retain_visible_events(&state, &headers, local, &mut events);
     Json(PollResponse {
         cursor,
         events,

@@ -90,6 +90,8 @@ export async function openDemoProject(
     liveState?: () => unknown;
     /** Machine-wide standby settings (HS2-EQVZTZ): `GET` answers `get()`, `PUT` answers `put(body)`. */
     standbySettings?: { get: () => unknown; put?: (body: unknown) => unknown };
+    /** The host's device-management bridge routes (`/__hotsheet/remote-auth/owner…`, HS2-BZHMEV). */
+    remoteAuthOwner?: (route: import('@playwright/test').Route) => Promise<void>;
     /** Fail `/ws/poll`, as when the server is unreachable. */
     pollDown?: () => boolean;
     /** Extra fields of the `projects/open` answer, such as banner triggers (HS2-YCB15Z). */
@@ -186,6 +188,8 @@ export async function openDemoProject(
     if (path.endsWith('/ai-tools') && populated.aiTools) return route.fulfill({ json: populated.aiTools });
     if (path.endsWith('/ai-settings') && populated.aiSettings) return route.fulfill({ json: populated.aiSettings });
     if (path.endsWith('/live-state') && populated.liveState) return route.fulfill({ json: populated.liveState() });
+    if (path.startsWith('/__hotsheet/remote-auth/owner') && populated.remoteAuthOwner)
+      return populated.remoteAuthOwner(route);
     if (path.endsWith('/standby-settings') && populated.standbySettings)
       return route.fulfill({
         json:

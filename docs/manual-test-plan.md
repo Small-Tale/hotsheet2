@@ -528,7 +528,10 @@ it, that its open Settings → Devices lists devices and can grant Host Access
 native folder chooser, again without a reload. Remove both grants and confirm the
 page returns to the refusal and the registered-project picker. A plain session sees "Administrator
 access required." Approve, reject and revoke from the Devices page and confirm
-another open Devices page updates without reload. Confirm a request still
+another open Devices page updates without reload. With both browsers on the ticket
+list, start pairing from a third device: the admin browser's Settings choice and
+Devices category show the count and a notice names the device, while the plain
+browser shows neither (HS2-BZHMEV); rejecting it clears the count. Confirm a request still
 redeems after 14 minutes and the proposed device name matches the browser and
 platform on an iPhone, an iPad, and a Mac.
 

@@ -487,6 +487,118 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     }
   }, 180_000);
 
+  it('HS2-BZHMEV tells an admin page about a new pairing request live, and a plain session nothing', async () => {
+    expect(granted.admin).toBeDefined();
+    expect(granted.plain).toBeDefined();
+    const bridge = createDevApp();
+    const cliRun = (args: string[]) =>
+      execFileAsync(cli, ['-C', store, 'remote', 'sessions', ...args], {
+        env: { ...process.env, HOTSHEET_HOME: home },
+      });
+    const request = (path: string, body: unknown) =>
+      bridge.request(`${origin}/__hotsheet${path}`, {
+        method: 'POST',
+        headers: { origin, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const pair = async (label: string) =>
+      (await (await request('/remote-auth/pair', { label })).json()) as { id: string; challenge: string };
+    // granted.plain has no admin grant here (the case after this one changes it). This case's one pairing
+    // request is the file's tenth within a minute, the host's limit: another pairing case needs its own host.
+    const reader = granted.plain;
+
+    const browser = await chromium.launch({ headless: true });
+    const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
+    const capture = (name: string) => join(captures, `hs2-bzhmev-${name}.png`);
+    /** One signed-in page with the project open, recording every change event and device-list read. */
+    const openAs = async (who: { session: string; csrf: string }) => {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await context.addCookies([
+        { name: 'hs2_remote_session', value: who.session, url: origin, httpOnly: true, sameSite: 'Strict' },
+        { name: 'hs2_remote_csrf', value: who.csrf, url: origin, sameSite: 'Strict' },
+      ]);
+      const kinds: string[] = [],
+        listReads: string[] = [];
+      let sockets = 0;
+      // Every page socket (the change stream runs in a worker) reaches the real host through a relay that
+      // records the kind of each change event the host sent this session.
+      const record = (text: string) => {
+        // An event may arrive nested (and escaped) inside a multiplexed envelope.
+        for (const match of text.matchAll(/\\?"kind\\?":\\?"([a-z_]+)/g)) kinds.push(match[1]);
+      };
+      await context.routeWebSocket(/.*/, (socket) => {
+        sockets += 1;
+        const server = socket.connectToServer();
+        server.onMessage((message) => {
+          if (typeof message === 'string') record(message);
+          socket.send(message);
+        });
+      });
+      // A long-poll stream (direct or multiplexed) carries the same events in its answers.
+      await context.route(/\/(?:ws|change-mux)\/poll/, async (route) => {
+        const response = await route.fetch(),
+          body = await response.text();
+        record(body);
+        await route.fulfill({ response, body });
+      });
+      const page = await context.newPage();
+      page.on('response', (response) => {
+        if (new URL(response.url()).pathname === '/__hotsheet/remote-auth/owner')
+          listReads.push(String(response.status()));
+      });
+      await page.goto(origin);
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.locator(`[data-checkout-root="${checkoutRoot}"]`).click();
+      await page.getByText('Open a Hot Sheet Project').waitFor({ state: 'detached', timeout: 20_000 });
+      return { page, kinds, listReads, sockets: () => sockets };
+    };
+    const settingsChoice = (page: Page) => page.locator('[data-segment-value="settings"]');
+    /** The Settings choice naming `count` waiting requests, as the admin page shows it. */
+    const settingsShowing = (page: Page, count: number) =>
+      page
+        .locator(
+          `[data-segment-value="settings"][aria-label="Settings View${count ? `, ${String(count)} pairing request${count === 1 ? '' : 's'} waiting` : ''}"]`,
+        )
+        .waitFor({ timeout: 15_000 });
+    // Earlier cases may leave requests waiting; the admin page counts those as well.
+    const waitingNow = async () =>
+      (JSON.parse((await cliRun(['status'])).stdout) as { pending: { approved: boolean }[] }).pending.filter(
+        (entry) => !entry.approved,
+      ).length;
+    try {
+      const baseline = await waitingNow();
+      const admin = await openAs(granted.admin);
+      const plain = await openAs(reader);
+      await settingsShowing(admin.page, baseline);
+
+      // A remote browser asks to pair: only the admin page hears of it, re-reads the list, and shows it.
+      const visitor = await pair('Synthetic visitor');
+      await settingsShowing(admin.page, baseline + 1);
+      await admin.page.locator('.app-toast', { hasText: '“Synthetic visitor” asks to pair' }).waitFor();
+      expect(admin.kinds).toContain('pairing_requests');
+      expect(admin.listReads.every((status) => status === '200')).toBe(true);
+      await settled(admin.page);
+      await admin.page.screenshot({ path: capture('live-admin-wide'), fullPage: true });
+
+      // Rejected headlessly: the admin page's count drops back live.
+      await cliRun(['reject', visitor.id]);
+      await settingsShowing(admin.page, baseline);
+
+      // A later grant change reaches every session, so the plain page's channel is past both pairing
+      // events by now; it carried neither, and the page never asked for the admin-only list.
+      // Rewriting the plain session's role to the value it already has leaves its grants as the next case expects.
+      await cliRun(['update', reader.id, '--role', 'read_write']);
+      expect(plain.sockets()).toBeGreaterThan(0);
+      await expect.poll(() => plain.kinds.includes('browser_grants'), { timeout: 15_000 }).toBe(true);
+      expect(plain.kinds).not.toContain('pairing_requests');
+      expect(plain.listReads).toEqual([]);
+      await expect(settingsChoice(plain.page).getAttribute('aria-label')).resolves.toBe('Settings View');
+      await expect(plain.page.locator('.app-toast', { hasText: 'asks to pair' }).count()).resolves.toBe(0);
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
+
   it('HS2-A3TDNH applies grants changed elsewhere to the open page, repeatedly and across a reconnect, without a reload', async () => {
     expect(granted.plain).toBeDefined();
     const who = granted.plain;

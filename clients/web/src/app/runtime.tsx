@@ -65,7 +65,7 @@ import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
 import { createClientNotifications } from '../client-notifications';
-import { isRemoteClient } from '../client-origin';
+import { canManageRemoteDevices, isRemoteClient } from '../client-origin';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -142,6 +142,7 @@ import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createNotificationSettings } from '../features/notification-settings';
+import { createPairingRequests, pairingRequestNotice } from '../features/pairing-requests';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -1686,6 +1687,34 @@ export async function startHotSheetWebClient() {
   effect(() => {
     if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
     else remoteDevices.stop();
+  });
+  // A new pairing request reaches an admin or host page without opening Devices (HS2-BZHMEV): badges on
+  // Settings and the Devices category, plus one notice per arrival unless Devices already shows it.
+  const pairingRequests = createPairingRequests({
+    onForbidden: () => void browserGrants.refresh(),
+    onArrival: (request) => {
+      if (viewMode.peek() === 'settings' && selectedSettingsCategory.peek() === 'devices') return;
+      showToast(pairingRequestNotice(request));
+    },
+  });
+  // The open Devices list already follows the host; its updates feed the badges without another read.
+  effect(() => {
+    const list = remoteDevices.list.value;
+    // Outside the effect, so a notice it raises subscribes this effect to nothing else.
+    if (list)
+      queueMicrotask(() => {
+        pairingRequests.observe(list.pending);
+      });
+  });
+  // A grant gained or lost elsewhere starts or drops the requests (HS2-A3TDNH); the first read comes from
+  // the change stream's initial resync. The device-list read itself runs after an await, untracked.
+  let managedDevices: boolean | undefined;
+  effect(() => {
+    const manages = canManageRemoteDevices(),
+      changed = managedDevices !== undefined && manages !== managedDevices;
+    managedDevices = manages;
+    if (!manages) pairingRequests.clear();
+    else if (changed) void pairingRequests.refresh();
   });
   // App Settings → Projects (HS2-R806FZ): the list loads each time the category opens; nothing polls.
   const registeredProjects = createRegisteredProjects();
@@ -4447,6 +4476,7 @@ export async function startHotSheetWebClient() {
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
     browserGrants,
+    pairingRequests,
     onStreamHealth: standby.streamHealth,
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
@@ -4994,6 +5024,7 @@ export async function startHotSheetWebClient() {
     projectConversationUnread,
     project: () => project(),
     settingsCategory: () => settingsCategory(),
+    pairingRequestCount: () => pairingRequests.waiting.value.length,
     projectPermissionHistory,
     projectPendingPermissions,
     projectTicketCounts,
@@ -5792,6 +5823,7 @@ export async function startHotSheetWebClient() {
     partialSourcesByProject,
     pendingPermissions,
     pendingRestoreEntries,
+    pairingRequestCount: () => pairingRequests.waiting.value.length,
     permissionCount: (projectId?: string) =>
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     workersLive: (projectId: string) =>

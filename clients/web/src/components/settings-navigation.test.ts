@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
-import { settingsCategoryTitle, SettingsNavigation } from './settings-navigation';
+import { pairingRequestsLabel, settingsCategoryTitle, SettingsNavigation } from './settings-navigation';
 
 describe('SettingsNavigation', () => {
+  it.each([0, 1, 2, 150])('counts %s waiting pairing requests on the Devices category only (HS2-BZHMEV)', (count) => {
+    const markup = String(SettingsNavigation({ selected: 'general', pairingRequests: count })),
+      devices = /<button[^>]*data-item-id="devices"[\s\S]*?<\/button>/.exec(markup)?.[0] ?? '';
+    expect(devices).toContain('Devices');
+    if (count === 0) {
+      expect(markup).not.toContain('data-settings-pending');
+      expect(devices).not.toContain('pairing request');
+      return;
+    }
+    expect(devices).toContain(`aria-label="Devices, ${pairingRequestsLabel(count)}"`);
+    expect(devices).toMatch(
+      new RegExp(
+        `data-settings-pending="devices"[^>]*data-component="badge"[^>]*data-tone="warning"[^>]*aria-hidden="true"[^>]*>${count > 99 ? '99\\+' : String(count)}<`,
+      ),
+    );
+    expect(markup.match(/data-settings-pending/g)).toHaveLength(1);
+  });
+
+  it('names one or several waiting pairing requests', () => {
+    expect(pairingRequestsLabel(1)).toBe('1 pairing request waiting');
+    expect(pairingRequestsLabel(4)).toBe('4 pairing requests waiting');
+  });
+
   it('renders every available category and exposes the current one', () => {
     const markup = String(SettingsNavigation({ selected: 'permissions', collapseControl: true }));
     expect(markup).toContain('aria-label="Settings categories"');

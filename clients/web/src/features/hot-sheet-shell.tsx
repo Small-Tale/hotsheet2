@@ -139,6 +139,8 @@ export interface HotSheetShellDependencies {
   pendingPermissions: () => PermissionItem[];
   pendingRestoreEntries: <T>(item: (root: string) => T) => { rank: number; item: T }[];
   permissionCount: (projectId?: string) => number;
+  /** Pairing requests waiting for this host's approval, counted on the Settings choice (HS2-BZHMEV). */
+  pairingRequestCount?: () => number;
   /** Live AI workers for the Workers view choice's name and title (HS2-6B9S7P). */
   workersLive?: (projectId: string) => WorkersLive | undefined;
   permissionPopupSurface: (layer?: 'flow' | 'top') => SafeHtml | undefined;
@@ -242,6 +244,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     pendingPermissions,
     pendingRestoreEntries,
     permissionCount,
+    pairingRequestCount = () => 0,
     workersLive,
     permissionPopupSurface,
     permissionPopupInSettings = () => false,
@@ -619,6 +622,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             sort={sort.value}
             sortDirection={sortDirection.value}
             notificationCount={permissionCount(current.id)}
+            settingsCount={pairingRequestCount()}
             workers={workersLive?.(current.id)}
             selectedTicketCount={selection.length}
             selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}

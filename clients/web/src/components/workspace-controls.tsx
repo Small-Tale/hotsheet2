@@ -40,6 +40,7 @@ import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection'
 import { type WorkersLive, workersLiveTitle } from '../project-live-summary';
 import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
+import { pairingRequestsLabel } from './settings-navigation';
 import { TicketSearchField } from './ticket-search-field';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'workers' | 'notifications' | 'settings';
@@ -120,6 +121,8 @@ export interface WorkspaceHeaderProps {
   sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
   notificationCount?: number;
+  /** Pairing requests waiting for this host's approval, counted on the Settings choice (HS2-BZHMEV). */
+  settingsCount?: number;
   /**
    * Live AI workers for the Workers view choice's accessible name and title (HS2-6B9S7P); the
    * visible count badge waits on Kerf KF-170258.
@@ -233,6 +236,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
 
 function workspaceModeChoices(
   count: number,
+  settingsCount: number,
   presentation: WorkspaceControlsPresentation,
   workers?: WorkersLive,
 ): ReadonlyArray<SegmentedControlChoice<WorkspaceViewMode>> {
@@ -248,11 +252,13 @@ function workspaceModeChoices(
       // The rail offers list, columns (paged), and notifications; settings stay in the main workspace (HS2-656Q43).
       .filter(({ value }) => presentation !== 'rail' || value !== 'settings')
       .map(({ value, label, icon, iconName }) => {
-        const badge = value === 'notifications' ? count : 0,
-          live = value === 'workers' ? workers : undefined;
+        const badge = value === 'notifications' ? count : value === 'settings' ? settingsCount : 0,
+          live = value === 'workers' ? workers : undefined,
+          // Settings counts pairing requests waiting for approval (HS2-BZHMEV).
+          pending = badge ? (value === 'settings' ? `, ${pairingRequestsLabel(badge)}` : `, ${badge} pending`) : '';
         return {
           value,
-          label: `${label} View${badge ? `, ${badge} pending` : ''}${live ? `, ${live.live} live` : ''}`,
+          label: `${label} View${pending}${live ? `, ${live.live} live` : ''}`,
           title: live ? workersLiveTitle(live) : `${label} view`,
           content: (
             <span class="view-mode-switcher__content">
@@ -329,6 +335,7 @@ function WorkspaceOverflowControls({
   sortDirection,
   visibleSortOptions,
   notificationCount,
+  settingsCount,
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
   presentation,
@@ -345,6 +352,7 @@ function WorkspaceOverflowControls({
   sortDirection: WorkspaceSortDirection;
   visibleSortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }>;
   notificationCount: number;
+  settingsCount: number;
   selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
   presentation: WorkspaceControlsPresentation;
@@ -359,7 +367,12 @@ function WorkspaceOverflowControls({
       icon: Bell,
       iconName: 'bell',
     },
-    { value: 'settings', label: 'Show Settings', icon: Settings, iconName: 'settings' },
+    {
+      value: 'settings',
+      label: `Show Settings${settingsCount ? ` (${pairingRequestsLabel(settingsCount)})` : ''}`,
+      icon: Settings,
+      iconName: 'settings',
+    },
   ];
   const overflowIcon = (icon: IconNode, name: string) => <LucideIcon icon={icon} name={name} />;
   const menu = (
@@ -484,6 +497,7 @@ export function WorkspaceControls({
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
   notificationCount = 0,
+  settingsCount = 0,
   workers,
   selectedTicketCount = 0,
   selectedTicketsUpNext = 'none',
@@ -515,7 +529,7 @@ export function WorkspaceControls({
         id="workspace-view-mode"
         label="View mode"
         value={mode}
-        choices={workspaceModeChoices(notificationCount, presentation, workers)}
+        choices={workspaceModeChoices(notificationCount, settingsCount, presentation, workers)}
         action="set-view-mode"
         appearance="toolbar"
         shape={rail ? 'rounded' : 'pill'}
@@ -591,6 +605,7 @@ export function WorkspaceControls({
       sortDirection={sortDirection}
       visibleSortOptions={visibleSortOptions}
       notificationCount={notificationCount}
+      settingsCount={settingsCount}
       selectedTicketsUpNext={selectedTicketsUpNext}
       selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
       presentation={presentation}

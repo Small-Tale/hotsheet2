@@ -1228,7 +1228,21 @@ same explanation (HS2-CGXGWY).
   reconnect, overflow) re-reads it too, as does a Devices read refused with 401 or 403. A 401
   drops every grant. The grants are a signal in `client-origin.ts`, so host-only controls,
   the Open Project flow, and this category (which starts or refuses its long poll on every
-  grant change) update in place. Nothing polls on a timer. The pairing screen proposes a device name from the
+  grant change) update in place. Nothing polls on a timer.
+  An admin or host page learns about a new pairing request without opening the category
+  (HS2-BZHMEV). The server pushes `pairing_requests`, only to device managers, when a request
+  arrives or is approved or rejected; `features/pairing-requests.ts` then re-reads
+  `/remote-auth/owner` once (coalesced like the grants) and on every change-stream resync, and
+  the open category's own long poll feeds it too. Requests still waiting for approval are
+  counted on the Settings view-mode choice (the same count badge as Notifications, with "N
+  pairing requests waiting" in its name and in the overflow menu's Show Settings item) and on
+  the Devices category row (a Kerf `Badge` in its trailing slot), which leads to the requests.
+  A request that arrives after the first read also raises a transient notice naming the
+  device and the route ("Open Settings → Devices to approve or reject it"), except while
+  Devices is showing; the badges stay as its record. A local display timer drops a request
+  when it expires and issues no request. A page that may not manage devices reads nothing and
+  shows no count; losing the admin grant clears it, and gaining it reads again. A host without
+  remote authentication (503) stops resync reads until a pairing event arrives. The pairing screen proposes a device name from the
   user agent and low-entropy client hints (`device-name.ts`), such as "Safari on iPhone" or
   "Chrome on macOS"; the person may edit it.
 

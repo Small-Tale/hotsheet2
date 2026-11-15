@@ -832,9 +832,15 @@ export function ProjectSidebarDemo() {
 }
 export function SettingsNavigationDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
-      <SettingsNavigation selected="guidance" collapseControl />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
+        <SettingsNavigation selected="guidance" collapseControl />
+      </CatalogExample>
+      {/* Pairing requests waiting for approval count on Devices (HS2-BZHMEV). */}
+      <CatalogExample label="Pairing Requests Waiting" viewport={{ width: 'sidebar' }}>
+        <SettingsNavigation selected="general" pairingRequests={2} collapseControl />
+      </CatalogExample>
+    </>
   );
 }
 export function NotificationNavigationDemo() {

@@ -60,7 +60,13 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
 
 describe('sidebar surface projection (HS2-BSSWGV)', () => {
   it('projects the settings and notifications navigations', () => {
-    expect(sidebar('settings')).toEqual({ kind: 'settings', selected: 'ai' });
+    expect(sidebar('settings')).toEqual({ kind: 'settings', selected: 'ai', pairingRequests: 0 });
+    // Waiting pairing requests reach the Devices category (HS2-BZHMEV).
+    expect(sidebar('settings', { pairingRequestCount: () => 3 })).toEqual({
+      kind: 'settings',
+      selected: 'ai',
+      pairingRequests: 3,
+    });
     expect(sidebar('notifications')).toMatchObject({
       kind: 'notifications',
       selected: 'pending',
