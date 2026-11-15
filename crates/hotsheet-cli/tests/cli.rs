@@ -11863,6 +11863,9 @@ fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     let hs = |dir: &Path| {
         let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
         command.arg("-C").arg(dir);
+        // HS2-XTQHPK: this Linux-only test drives a fake `secret-tool` shim on PATH,
+        // never a real keyring, so it lifts the cargo-forced keychain deny.
+        command.env_remove("HOTSHEET_NATIVE_SECRETS");
         command
     };
     use std::os::unix::fs::PermissionsExt;
