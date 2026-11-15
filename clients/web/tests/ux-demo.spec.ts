@@ -3834,7 +3834,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await expect(category).toHaveJSProperty('value', 'terminals');
 
     await choose(category, 'permissions');
-    await expect(workspace.locator('[data-permission-note="true"]')).toContainText('floating permission popup');
+    await expect(workspace.locator('[data-permission-note="true"]')).toContainText("this project's permission popup");
     await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'off');
     await expect(delay.locator('.kui-select__trigger')).toBeDisabled();
     await shot('permissions-off', workspace.locator('[data-component="grid"]'));

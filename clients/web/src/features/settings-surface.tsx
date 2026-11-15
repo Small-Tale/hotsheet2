@@ -61,6 +61,8 @@ export interface SettingsSurfaceDependencies {
   lockedPermissionRules: Readable<ReadonlySet<string>>;
   unrefreshedPermissionRules: Readable<ReadonlySet<string>>;
   permissionLegacyDiscardFor: (projectId: string) => NonNullable<Props['permissions']['legacy']>['review'];
+  /** The pending request's in-flow popup while Settings → Permissions hosts it (HS2-84XE8Q). */
+  pendingPermissionRequest?: () => Props['permissions']['pendingRequest'];
   revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
@@ -125,6 +127,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     lockedPermissionRules,
     unrefreshedPermissionRules,
     permissionLegacyDiscardFor,
+    pendingPermissionRequest,
     revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
@@ -222,6 +225,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           rulesMessage: permissionRulesMessage.value,
           locked: lockedPermissionRules.value.has(current.id),
           rulesRefreshFailed: unrefreshedPermissionRules.value.has(current.id),
+          pendingRequest: settingsCategory() === 'permissions' ? pendingPermissionRequest?.() : undefined,
           legacy: {
             sources: projectSourcesSettings(current)
               .sources.filter(

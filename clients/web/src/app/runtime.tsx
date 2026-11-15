@@ -1324,6 +1324,7 @@ export async function startHotSheetWebClient() {
     permissionRulesChanged,
     updatePermissionTimer,
     permissionPopupSurface,
+    permissionSettingsModalOpen,
     notificationsPaused,
     setNotificationsPaused,
   } = permissionsController;
@@ -4980,9 +4981,26 @@ export async function startHotSheetWebClient() {
       },
     },
   });
+  /**
+   * Settings → Permissions lays the pending request's popup out above its automation controls instead of
+   * floating it over them, so a pointer reaches those controls while a request waits (HS2-84XE8Q). A chat
+   * keeps hosting its own sidecar, and an open Permissions modal returns the popup to the top layer.
+   */
+  const permissionPopupInSettings = () => {
+    const current = project();
+    return Boolean(
+      current &&
+      shellMode.value === 'project' &&
+      viewMode.value === 'settings' &&
+      settingsCategory() === 'permissions' &&
+      !conversationOpen.value &&
+      !permissionSettingsModalOpen(current.id),
+    );
+  };
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   const { settingsWorkspace } = createSettingsSurface({
     settingsCategory: () => settingsCategory(),
+    pendingPermissionRequest: () => (permissionPopupInSettings() ? permissionPopupSurface('flow') : undefined),
     developmentStrategy: (projectId) => {
       const current = projects.value.find((item) => item.id === projectId),
         gitSources =
@@ -5714,6 +5732,7 @@ export async function startHotSheetWebClient() {
     workersLive: (projectId: string) =>
       workersLive(projectLiveSummary(liveStates.forProject(projectId), liveClock.value)),
     permissionPopupSurface,
+    permissionPopupInSettings,
     project,
     projectRestoreFailures,
     projectRestoreRank,

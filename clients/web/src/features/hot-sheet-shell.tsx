@@ -140,6 +140,8 @@ export interface HotSheetShellDependencies {
   /** Live AI workers for the Workers view choice's name and title (HS2-6B9S7P). */
   workersLive?: (projectId: string) => WorkersLive | undefined;
   permissionPopupSurface: (layer?: 'flow' | 'top') => SafeHtml | undefined;
+  /** Settings → Permissions lays the pending popup out in its own flow, so the shell does not float it (HS2-84XE8Q). */
+  permissionPopupInSettings?: () => boolean;
   project: () => Project | undefined;
   projectRestoreFailures: Signal<ProjectRestoreFailure[]>;
   projectRestoreRank: (id: string) => number | undefined;
@@ -240,6 +242,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     permissionCount,
     workersLive,
     permissionPopupSurface,
+    permissionPopupInSettings = () => false,
     project,
     projectRestoreFailures,
     projectRestoreRank,
@@ -306,10 +309,13 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             .map((entry) => entry.item)
             .find((root) => root === selectedProjectRestoreRoot.value);
     if (!current && !restoreFailure && !openingRoot) return <AppEmptyState />;
-    // A chat hosts the permission sidecar within its own modal top layer. Otherwise the shell
-    // popup uses the global top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2).
-    const haltPopup = haltedSessionsController.popup(),
-      popup = (conversationOpen.value ? undefined : permissionPopupSurface('top')) ?? haltPopup,
+    // A chat hosts the permission sidecar within its own modal top layer, and Settings → Permissions
+    // lays it out above its automation controls (HS2-84XE8Q). Otherwise the shell popup uses the global
+    // top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2).
+    const settingsHostsPermission = !restoreFailure && !openingRoot && permissionPopupInSettings(),
+      haltPopup = haltedSessionsController.popup(),
+      popup =
+        (conversationOpen.value || settingsHostsPermission ? undefined : permissionPopupSurface('top')) ?? haltPopup,
       currentJob = current && migrationJobsByRoot.value[current.root],
       currentBackupUnverified = Boolean(
         currentJob?.kind === 'backup' &&

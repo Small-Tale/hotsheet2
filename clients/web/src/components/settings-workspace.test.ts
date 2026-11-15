@@ -1,3 +1,4 @@
+import { raw } from 'kerfjs';
 import { describe, expect, it } from 'vitest';
 
 import type { SettingsWorkspaceProps } from './settings-workspace';
@@ -113,5 +114,40 @@ describe('SettingsWorkspace', () => {
     expect(permissions).toContain('data-permission-note="true"');
     // The help copy keeps Kerf Text item geometry so it starts on the field-label edge (HS2-4JXTS8).
     expect(permissions.match(/<p[^>]*data-permission-note="true"[^>]*>/)?.[0]).not.toContain('data-flush');
+  });
+
+  it('lays a pending permission request out above the automation controls (HS2-84XE8Q)', () => {
+    const idle = String(SettingsWorkspace({ ...props, category: 'permissions' }));
+    expect(idle).not.toContain('data-key="permission-pending-request"');
+    expect(idle).toContain('data-key="permission-automation"');
+    const pending = String(
+      SettingsWorkspace({
+        ...props,
+        category: 'permissions',
+        permissions: {
+          ...props.permissions,
+          pendingRequest: raw('<aside data-component="permission-request-popup" data-layer="flow"></aside>'),
+        },
+      }),
+    );
+    const request = pending.indexOf('data-key="permission-pending-request"'),
+      form = pending.indexOf('data-key="permission-automation"'),
+      control = pending.indexOf('name="permission-automation-action"');
+    expect(request).toBeGreaterThan(-1);
+    expect(request).toBeLessThan(form);
+    expect(form).toBeLessThan(control);
+    // Another category never hosts it.
+    expect(
+      String(
+        SettingsWorkspace({
+          ...props,
+          category: 'general',
+          permissions: {
+            ...props.permissions,
+            pendingRequest: raw('<aside data-component="permission-request-popup"></aside>'),
+          },
+        }),
+      ),
+    ).not.toContain('permission-request-popup');
   });
 });
