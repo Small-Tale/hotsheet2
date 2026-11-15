@@ -20442,14 +20442,25 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.setViewportSize({ width, height: 800 });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Columns View' }).click();
+    // HS2-ESDMAV: each setup step waits on its own state, so a stall under full-gate load names the step that
+    // stalled instead of surfacing later as a board that never rendered.
+    await test.step('open the project and wait for its first ticket page', async () => {
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Local Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await expect(page.locator('[data-ticket-slug="HS2-SCROLL1000"]').first()).toBeVisible();
+      await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
+    });
     const popup = page.locator('[data-component="permission-request-popup"]'),
       columns = page.locator('.ticket-board-column__tickets');
-    await expect(columns).toHaveCount(4);
+    await test.step('switch to Columns View and wait for the four columns', async () => {
+      const columnsView = page.getByRole('button', { name: 'Columns View' });
+      await columnsView.click();
+      await expect(columnsView).toHaveAttribute('data-selected', 'true');
+      await expect(columns).toHaveCount(4);
+      await expect(columns.first().locator('[data-ticket-slug]').first()).toBeVisible();
+    });
     const before = await columns.evaluateAll((nodes) =>
       nodes.map((node, index) => {
         if (index > 1) return 0;
