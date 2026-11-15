@@ -1540,6 +1540,13 @@ or on `SIGINT`, `SIGTERM`, or `SIGHUP`, the launcher sends `SIGTERM` to its own 
 `sh -c`, it then sends one `SIGKILL` to that group, ending any same-group straggler and itself.
 Vite stays in the launcher's group, so Playwright's normal group `SIGKILL` still covers both.
 
+One group signal reaches the launcher and Vite together, and under CPU load the launcher can
+observe Vite's exit before its own signal listener runs (HS2-DXVH3Q). When the server closes
+without a recorded stop, the launcher therefore lets one full event-loop pass (two nested
+`setImmediate` calls) deliver any signal already queued for it before it decides between the group
+sweep and the server's own exit code. Without that pass it skipped the sweep, and a `SIGTERM`-ignoring
+same-group straggler outlived it.
+
 Ownership is only the launcher's `ChildProcess` handle and its own live group. Nothing searches
 for processes by name, command, or port. Node disables `kill` on a reaped handle, so a reused pid
 never receives the signal. A descendant that leaves the group (`setsid`/`setpgid`) is out of

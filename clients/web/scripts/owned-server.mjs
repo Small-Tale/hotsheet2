@@ -40,6 +40,17 @@ export function leadsOwnProcessGroup(pid = process.pid, run = spawnSync, platfor
   return result.status === 0 && Number(result.stdout.trim()) === pid;
 }
 
+/**
+ * Run `callback` after one full event-loop pass that includes a poll phase (HS2-DXVH3Q). One
+ * `kill(-pgid)` posts the signal to this launcher in the same system call that dooms the server, so
+ * by the time the server's exit is dispatched the signal already waits in libuv's signal pipe. Under
+ * CPU load that exit can be dispatched first; the nested immediate lets the waiting signal reach its
+ * listener before the launcher decides whether it was stopped.
+ */
+function afterPendingSignals(callback) {
+  setImmediate(() => setImmediate(callback));
+}
+
 function killOwnedWindowsTree(pid, run = spawnSync) {
   // Windows has no POSIX process group. Taskkill follows the child we still own, including its
   // descendants, before Node can reap that child and the pid can be reused.
@@ -62,6 +73,7 @@ export function runOwnedServer({
   leadsGroup = leadsOwnProcessGroup,
   platform = process.platform,
   killTree = killOwnedWindowsTree,
+  drainSignals = afterPendingSignals,
 }) {
   // Decided before the server starts, while this process is certainly alive in its own group.
   const sweepGroup = leadsGroup();
@@ -111,7 +123,7 @@ export function runOwnedServer({
       resolveExit(code);
     };
     child.once('error', () => finish(1));
-    child.once('close', (code, signal) => {
+    const settle = (code, signal) => {
       // A same-group descendant that outlived the server's own shutdown is still ours: this live
       // leader's group id cannot be reused. One SIGKILL ends it, and this launcher, which has no
       // further work. A descendant that left the group (setsid/setpgid) is out of reach here; it
@@ -119,6 +131,12 @@ export function runOwnedServer({
       if (stopReason !== undefined && sweepGroup) processHost.kill(0, 'SIGKILL');
       if (stopReason !== undefined && stopReason in SIGNAL_EXIT) finish(SIGNAL_EXIT[stopReason]);
       else finish(code ?? SIGNAL_EXIT[signal] ?? 1);
+    };
+    child.once('close', (code, signal) => {
+      // A recorded stop is final. Otherwise a group signal that ended the server may still be on its
+      // way to this launcher's listener; deciding now would skip the sweep and drop that signal.
+      if (stopReason !== undefined) settle(code, signal);
+      else drainSignals(() => settle(code, signal));
     });
   });
 }
