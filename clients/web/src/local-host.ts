@@ -21,7 +21,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,6 +36,7 @@ import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
+import { hotsheetHome } from './machine-home';
 import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
 import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
@@ -363,7 +364,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const snapshot = snapshotLocalHostArtifacts(
     fileURLToPath(new URL('../dist', import.meta.url)),
     selected,
-    process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2'),
+    hotsheetHome(),
   );
   Object.assign(
     process.env,

@@ -2095,7 +2095,9 @@ Every binary resolves that machine home through one resolver,
 back to `<temp>/.hotsheet2`, so a failed `HOTSHEET_HOME=$(mktemp -d)` substitution never
 writes the index, settings, or checkout registry into the working directory. A non-empty
 relative value is an explicit choice and is used as given, relative to the working
-directory. `HOTSHEET_CACHE_DIR` follows the same blank-means-unset rule.
+directory. `HOTSHEET_CACHE_DIR` follows the same blank-means-unset rule. The web
+client's Node bridges apply the same rule to `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`
+(default `~/.hotsheet`) through `clients/web/src/machine-home.ts` (HS2-N2HB7G).
 
 The rule itself lives in the dependency-free `hotsheet_sync::env_path` (HS2-15ZN8E) so
 crates that do not depend on `hotsheet-ticketing` apply it too: the terminal relay's

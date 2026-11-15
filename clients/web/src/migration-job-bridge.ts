@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
+import { hotsheetHome } from './machine-home';
 import { MigrationJobs } from './migration-jobs';
 import type { MigrationJob, MigrationStart } from './migration-progress';
 import { projectSessionRegistry, runHs1MigrationJob } from './project-bridge';
@@ -9,8 +9,7 @@ import { projectSessionRegistry, runHs1MigrationJob } from './project-bridge';
 type MigrationHost = typeof process & { __hotsheetMigrationJobs?: MigrationJobs };
 export function migrationJobRegistry(host: MigrationHost = process): MigrationJobs {
   return (host.__hotsheetMigrationJobs ??= new MigrationJobs(
-    process.env.HOTSHEET_MIGRATION_JOBS ??
-      resolve(process.env.HOTSHEET_HOME ?? resolve(homedir(), '.hotsheet2'), 'migration-jobs'),
+    process.env.HOTSHEET_MIGRATION_JOBS ?? resolve(hotsheetHome(), 'migration-jobs'),
     runHs1MigrationJob,
   ));
 }

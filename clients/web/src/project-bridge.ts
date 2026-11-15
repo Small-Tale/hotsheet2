@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from 'node:fs';
 import { access, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
 import type { Checkout } from './api';
@@ -20,6 +19,7 @@ import {
   requireHs1Backup,
 } from './hs1-backup';
 import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
+import { hotsheetHome, hotsheetLegacyHome } from './machine-home';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
 import type { RegisteredProject } from './registered-projects-model';
@@ -248,14 +248,6 @@ export function requireStoreSchemaCompatibility(
 }
 
 export { developmentRepositoryRoot };
-
-function hotsheetHome() {
-  return process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2');
-}
-
-function hs1LegacyHome() {
-  return process.env.HOTSHEET_LEGACY_HOME || resolve(homedir(), '.hotsheet');
-}
 
 async function exists(path: string) {
   try {
@@ -799,7 +791,7 @@ async function hs1Registrations(root: string, legacyHome: string) {
 }
 
 /** Detect exact HS1 registrations left by cleanup runs that predate registry reconciliation. */
-export async function hasHs1Registrations(root: string, legacyHome = hs1LegacyHome()): Promise<boolean> {
+export async function hasHs1Registrations(root: string, legacyHome = hotsheetLegacyHome()): Promise<boolean> {
   const registrations = await hs1Registrations(root, legacyHome);
   return registrations.saved || registrations.matchingKeys.length > 0;
 }
@@ -807,7 +799,7 @@ export async function hasHs1Registrations(root: string, legacyHome = hs1LegacyHo
 /** Remove only HS1 registrations for this checkout after verified backup and before live-data deletion. */
 export async function reconcileHs1Registrations(
   root: string,
-  legacyHome = hs1LegacyHome(),
+  legacyHome = hotsheetLegacyHome(),
   probe: ProcessProbe = processIsRunning,
 ): Promise<void> {
   const directory = resolve(root, '.hotsheet');

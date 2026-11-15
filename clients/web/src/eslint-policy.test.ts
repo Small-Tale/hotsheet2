@@ -278,6 +278,33 @@ describe('web ESLint policy', () => {
     expect(globalIgnores?.match(/'target\/\*\*'/g)).toHaveLength(1);
   });
 
+  it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
+    // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
+    // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.
+    const read = /\.\s*HOTSHEET_(?:LEGACY_)?HOME\b|\[\s*['"`]HOTSHEET_(?:LEGACY_)?HOME['"`]\s*\]/;
+    const offenders: string[] = [];
+    const check = (path: string) => {
+      const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+      if (read.test(source))
+        offenders.push(
+          relative(join(import.meta.dirname, '..'), path)
+            .split(sep)
+            .join('/'),
+        );
+    };
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[jt]sx?$/.test(entry.name)) check(path);
+      }
+    };
+    scan(import.meta.dirname);
+    for (const name of ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'])
+      check(join(import.meta.dirname, '..', name));
+    expect(offenders).toEqual(['src/machine-home.ts']);
+  });
+
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {
     const config = readFileSync(new URL('../eslint.config.mjs', import.meta.url), 'utf8');
     expect(config).not.toContain("files: ['src/main.tsx']");
