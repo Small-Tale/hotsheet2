@@ -17,6 +17,7 @@ import { isFeedbackNeeded } from '../src/feedback-needed';
 import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
+import { appRequests } from './app-requests';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -8066,7 +8067,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
     busy: boolean;
     cwd: string;
   }> = [];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.endsWith('/terminals')) return route.fallback();
@@ -13612,7 +13613,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   };
   let claimed = true;
   const current = () => ({ ...row, ...(claimed ? claim : { claim_count: 1 }) });
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
@@ -24794,7 +24795,7 @@ for (const width of [390, 1280] as const)
     await mockProject(page);
     const messages: Array<{ text: string }> = [],
       driveCreates: unknown[] = [];
-    await page.route('**/*', (route) => {
+    await page.route(appRequests, (route) => {
       const request = route.request(),
         path = new URL(request.url()).pathname;
       if (path.endsWith('/connections') && request.method() === 'GET')
@@ -24851,7 +24852,7 @@ test('omits the removed terminal message action across viewport transitions (HS2
   await page.setViewportSize({ width: 2048, height: 1128 });
   await mockProject(page);
   const messages: Array<{ text: string }> = [];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (path.endsWith('/connections') && request.method() === 'GET')
@@ -27024,7 +27025,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
   ];
   const posters = new Map<string, Buffer>(),
     videoBodies = new Map<string, Buffer>();
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       attachment = path.match(/\/tickets\/01\/attachments\/([^/]+)$/),
@@ -35572,7 +35573,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     stores: ['/work/demo.hs2'],
     apiPath: '/__hotsheet/project-api/demo-checkout',
   };
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: proj });
@@ -36037,7 +36038,7 @@ test('preserves list and every board-column scroll position across ticket mutati
       up_next: false,
     }));
   let rows = [...items];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });

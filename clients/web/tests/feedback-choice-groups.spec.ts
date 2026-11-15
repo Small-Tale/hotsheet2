@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-83YCDP: a FEEDBACK NEEDED prompt with several CHOICE groups renders every group as its own
 // selection list (including the blank-line header form) and answers each group under its question.
 const PROMPT = [
@@ -73,7 +75,7 @@ async function mock(page: Page, where: 'note' | 'details', prompt = PROMPT) {
         : [],
     attachments: [],
   };
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

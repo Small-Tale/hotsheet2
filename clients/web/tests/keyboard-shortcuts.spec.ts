@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { KEYBOARD_SHORTCUTS, shortcutDef } from '../src/keyboard-shortcuts';
+import { appRequests } from './app-requests';
 
 // End-to-end coverage for the view/panel and tab-cycling keyboard shortcuts (HS2-9SHYWD). `ControlOrMeta`
 // maps to Cmd on macOS and Ctrl elsewhere — exactly the app's `mod` modifier — so the same presses
@@ -62,7 +63,7 @@ const counts = {
 };
 
 async function installFixture(page: import('@playwright/test').Page) {
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,

@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // The app shell, terminal grid, terminal drawer, and project strip configure one another through
 // props rather than cross-component CSS (HS2-DR549A). These flows drive the real client against the
 // server's wire shapes and assert each composed presentation, both ways, through the shipped shell.
@@ -42,7 +44,7 @@ const ticket = (slug: string) => ({
 });
 
 async function openProject(page: Page) {
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 test.use({ deviceScaleFactor: 2, video: 'on' });
@@ -106,7 +107,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   const ticketsReleased = new Promise<void>((resolve) => {
     releaseTickets = resolve;
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,

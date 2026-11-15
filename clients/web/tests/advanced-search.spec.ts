@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 /**
  * Wait until the layout's finite animations (the rail-collapse transition after a resize) have
  * finished, so a capture shows the settled layout rather than a half-slid one (HS2-P2YPTS,
@@ -127,7 +129,7 @@ const rows = [
 test('evaluates is: filters and boolean expressions in the workspace search', async ({ page }) => {
   test.setTimeout(60_000);
   const ticketQueries: URL[] = [];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.startsWith('/__hotsheet/')) return route.continue();
@@ -514,7 +516,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
 });
 
 test('keeps the project identity readable beside expanded search at 680px', async ({ page }) => {
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.startsWith('/__hotsheet/')) return route.continue();

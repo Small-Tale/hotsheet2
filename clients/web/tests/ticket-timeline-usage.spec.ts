@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-ZA7W6E / HS2-J14225: the Timeline tab shows the AI tokens and models recorded in each
 // phase gap next to the elapsed time, and the ticket's per-model total below the rail.
 const capabilities = {
@@ -95,7 +97,7 @@ const usage = {
 };
 
 async function mockProject(page: Page, usageResponse: unknown = usage) {
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');

@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-H1K9YY: rendered Markdown fields (ticket Details and notes) enter their editor on a single
 // click. Links, ticket references, and other controls inside the rendered Markdown keep their own
 // action and never start editing. Keyboard entry and the blur-flush autosave contract are unchanged.
@@ -85,7 +87,7 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
     attachments: [],
     concurrency_token: `T${token}`,
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),

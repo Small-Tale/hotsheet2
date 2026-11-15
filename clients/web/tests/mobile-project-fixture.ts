@@ -1,3 +1,4 @@
+import { appRequests } from './app-requests';
 /**
  * A mocked single-project phone/desktop app fixture shared by the mobile layout and touch field
  * audits: provider capabilities, one checkout, `count` started tickets, and optional terminals.
@@ -99,7 +100,7 @@ export async function openDemoProject(
   } = {},
 ) {
   let repositoryInitialized = false;
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

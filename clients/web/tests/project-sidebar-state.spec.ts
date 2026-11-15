@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const capabilities = {
   create: true,
   update: true,
@@ -50,7 +52,7 @@ test('never renders one project sidebar with another Project Statistics', async 
     releaseOther = resolve;
   });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,
@@ -204,7 +206,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     completion_trend: trend,
   });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,
@@ -353,7 +355,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
     completed_today: 2,
     completion_trend: [0, 1, 0, 2, 0, 1, 2],
   };
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

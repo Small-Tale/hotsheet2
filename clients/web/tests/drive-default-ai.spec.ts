@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // Regression for HS2-BECC2T: the sidebar Drive control must reflect the *active*
 // project's default AI tool immediately — on boot restore and on tab switch —
 // without the user first opening the AI settings screen. The bug kept the Drive
@@ -95,7 +97,7 @@ async function mockTwoProjects(page: import('@playwright/test').Page) {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/alpha', '/work/bravo']));
     localStorage.setItem('hotsheet.workspace.active-project-root.v1', '/work/bravo');
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

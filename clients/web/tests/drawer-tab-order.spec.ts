@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 const project = {
@@ -79,7 +80,7 @@ async function installFixture(page: import('@playwright/test').Page) {
     { id: 'shell-one', alive: true, busy: false, cwd: project.root },
     { id: 'shell-two', alive: true, busy: false, cwd: project.root },
   ];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

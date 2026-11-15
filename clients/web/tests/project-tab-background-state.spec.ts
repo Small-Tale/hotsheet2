@@ -1,5 +1,7 @@
 import { expect, type Page, type Route, test, type WebSocketRoute } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const projects = {
   alpha: {
     id: 'alpha-project',
@@ -90,7 +92,7 @@ async function installProjects(page: Page) {
     });
   });
 
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);

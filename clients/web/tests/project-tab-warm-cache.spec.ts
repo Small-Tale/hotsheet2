@@ -1,6 +1,7 @@
 import { expect, type Page, type Route, test, type WebSocketRoute } from '@playwright/test';
 
 import { PROJECT_WARM_CACHE_CAPACITY } from '../src/project-warm-cache';
+import { appRequests } from './app-requests';
 
 // HS2-AZZ9TF: recently used project tabs stay warm (tickets, commands, AI tool inventory, terminal
 // snapshot) so switching is instant — no loading placeholder, busy bars, or "Loading AI tools" /
@@ -155,7 +156,7 @@ async function installWorkspace(page: Page) {
     });
   });
 
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);

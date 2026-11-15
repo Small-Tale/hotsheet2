@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // Search scope across the built-in views: searching from Trash searches only Trash (HS2-S6TXSW), and
 // any other search can switch into All Tickets from its floating toolbar (HS2-4J6764).
 
@@ -78,7 +80,7 @@ function inScope(ticket: (typeof rows)[number], url: URL) {
 /** Mock one project whose ticket endpoint scopes rows the way the server does, recording each search scope. */
 async function mockSearchProject(page: Page, views: Array<{ id: string; name: string; query: string }> = []) {
   const searches: string[] = [];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

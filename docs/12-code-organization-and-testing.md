@@ -1513,7 +1513,9 @@ under a second on an idle host). The identity answers 503 until that finishes, s
 readiness wait, not the first wave of tests, pays for the cold transforms (HS2-15EYK1). Every
 browser context still fetches the roughly 850 unbundled modules itself. A fixture whose handler
 only fakes app and API responses therefore routes `appRequests` (`tests/app-requests.ts`) rather
-than `'**/*'`, so those module requests never round-trip through the test worker.
+than `'**/*'`, so those module requests never round-trip through the test worker. Every browser
+fixture does so, and a policy test in `src/eslint-policy.test.ts` rejects a new `'**/*'` or `'**'`
+route unless an allowlist entry gives the reason its handler must see every request (HS2-7YN9VV).
 
 The Vite child also gets its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`, removed
 when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the developer's real remote

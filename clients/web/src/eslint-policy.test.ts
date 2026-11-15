@@ -110,6 +110,35 @@ describe('web ESLint policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('HS2-7YN9VV routes app requests with appRequests instead of a catch-all glob', () => {
+    // A `'**/*'` or `'**'` route sends each of the ~850 unbundled Vite module requests of a cold page
+    // load through the test worker (HS2-15EYK1). Route `appRequests` from `tests/app-requests.ts`
+    // instead. A handler that must see every request, for example to count or delay all of them,
+    // goes in this allowlist as `'<file>': '<reason>'`.
+    const allowed: Record<string, string> = {};
+    const tests = join(import.meta.dirname, '../tests');
+    const found: Record<string, number> = {};
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name)) {
+          const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          const count = source.match(/\.route\(\s*(['"`])\*\*(?:\/\*)?\1/g)?.length ?? 0;
+          if (count > 0) found[relative(tests, path).split(sep).join('/')] = count;
+        }
+      }
+    };
+    scan(tests);
+    expect(Object.keys(found).filter((file) => !(file in allowed))).toEqual([]);
+    for (const [file, reason] of Object.entries(allowed)) {
+      expect(found[file], `${file} no longer needs its catch-all allowlist entry`).toBeGreaterThan(0);
+      expect(reason.trim()).not.toBe('');
+    }
+    const helper = readFileSync(join(tests, 'app-requests.ts'), 'utf8');
+    expect(helper).toContain('export const appRequests = /^(?![a-z]+:');
+  });
+
   it('HS2-3TWWWD bounds the type-aware ESLint heap so it does not depend on machine memory', () => {
     // Typed linting of the client peaks near 3.3 GB and needs about 2.5 GB of heap. Node's default
     // heap limit is derived from RAM, so the 7 GB macOS runner aborted at about 2 GB. Pin an explicit,

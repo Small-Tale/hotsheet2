@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-0PF13V: the drawer grid sizes its tiles from the measured drawer bounds. A re-render that
 // replaced the drawer (Settings/Notifications unmount it) left the bounds observer on the detached
 // node, which recorded 0x0, so the grid stayed at its minimum tile until a manual drawer resize or a
@@ -76,7 +78,7 @@ async function installWorkspace(page: Page) {
     }
     Object.assign(window, { WebSocket: FakeSocket });
   }, project.root);
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = decodeURIComponent(new URL(request.url()).pathname);
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path) && request.method() === 'POST')

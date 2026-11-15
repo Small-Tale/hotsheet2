@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { capabilities, DEFAULT_TERMINALS, openDemoProject, project, ticket } from './mobile-project-fixture';
 
 type ToastEntranceWindow = Window & {
@@ -639,7 +640,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,
