@@ -39408,45 +39408,61 @@ test('opens row, gallery, and reference attachment menus through the shared open
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const menu = page.locator('[data-context-menu="attachment"]'),
-    items = () => menu.getByRole('menuitem').allTextContents(),
-    insideViewport = async () => {
-      const box = (await menu.getByRole('menu').first().boundingBox())!,
+    popup = menu.getByRole('menu').first(),
+    menuItem = (name: string) => menu.getByRole('menuitem', { name, exact: true }),
+    // HS2-FH0H93: the menu root and its data-kind render before Kerf shows the popover, and Kerf's
+    // positionPopup resolves asynchronously and writes data-placement last. An Escape sent before
+    // the popover is shown can reach the gallery dialog beneath instead, and geometry read before
+    // placement is not the final position, so every step waits for the placed menu.
+    expectMenu = async (kind: 'item' | 'host') => {
+      await expect(menu).toHaveAttribute('data-kind', kind);
+      await expect(popup).toBeVisible();
+      await expect(popup).toHaveAttribute('data-placement', /\S/);
+    },
+    dismissMenu = async () => {
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+    },
+    expectInsideViewport = async () => {
+      const box = (await popup.boundingBox())!,
         viewport = page.viewportSize()!;
-      return box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
     };
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const item = page.locator('[data-attachment-id="A1"]');
   // Row ellipsis and row right-click open the item menu (with Rename).
   await item.getByRole('button', { name: 'More Actions for proof.png' }).click();
-  await expect(menu).toHaveAttribute('data-kind', 'item');
-  expect(await items()).toContain('Rename');
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
+  await expectMenu('item');
+  await expect(menuItem('Rename')).toBeVisible();
+  await dismissMenu();
   await item.click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'item');
-  await page.keyboard.press('Escape');
+  await expectMenu('item');
+  await dismissMenu();
   // Gallery menu button and right-click on gallery media open the host menu (with Copy path).
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
   await gallery.getByRole('button', { name: 'More image actions' }).click();
-  await expect(menu).toHaveAttribute('data-kind', 'host');
-  expect(await items()).toContain('Copy path');
-  expect(await insideViewport()).toBe(true);
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  if (!(await gallery.isVisible())) await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  await expectMenu('host');
+  await expect(menuItem('Copy path')).toBeVisible();
+  await expectInsideViewport();
+  // Escape closes only the topmost surface: the menu, not the gallery beneath it.
+  await dismissMenu();
+  await expect(gallery).toBeVisible();
   await gallery.locator('[data-gallery-image="true"]').click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'host');
+  await expectMenu('host');
+  await dismissMenu();
+  await expect(gallery).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  if (await gallery.isVisible()) await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
   // A Markdown reference right-click opens the host menu at the pointer, clamped on a phone.
   await page.getByRole('tab', { name: 'Info' }).click();
   const reference = page.locator('.markdown-preview__attachment-image').first();
   await reference.click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'host');
-  expect(await insideViewport()).toBe(true);
+  await expectMenu('host');
+  await expectInsideViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-1rqa1e-reference-menu-wide.png' });
 });
 
