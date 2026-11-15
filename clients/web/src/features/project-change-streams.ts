@@ -95,6 +95,14 @@ export interface ProjectChangeStreamsDependencies {
     applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
     resync: () => Promise<void>;
   };
+  /**
+   * This page's browser-session grants on a remote-mode host (HS2-A3TDNH): `browser_grants` events
+   * trigger one coalesced re-read of `/remote-auth/me` and each stream resync re-reads it. No timer reads it.
+   */
+  browserGrants?: {
+    applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
+    resync: () => Promise<void>;
+  };
   /** Stats' Overnight timeline (HS2-9AN4DN): each stream resync re-reads the recorded history once. */
   liveHistory?: { resync: () => Promise<void> };
   /**
@@ -267,6 +275,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     liveStates,
     hostHealth,
     standbySettings,
+    browserGrants,
     liveHistory,
     onStreamHealth,
   } = dependencies;
@@ -402,6 +411,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
               ...(hostHealth ? [hostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
+              ...(browserGrants ? [browserGrants.resync()] : []),
               ...(liveHistory ? [liveHistory.resync()] : []),
               refreshTerminalDashboard(true, current),
               refreshProviderOutbox(current),
@@ -418,6 +428,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             liveStates?.applyEvents(response.events);
             void hostHealth?.applyEvents(response.events);
             void standbySettings?.applyEvents(response.events);
+            void browserGrants?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));
             for (const event of response.events) {
               if (event.kind === 'permission_resolved') {

@@ -22,7 +22,8 @@ HS2-WSGZZY cross-transport acceptance. Sessions carry separate admin and local
 (host-trusted) grants instead of trusting the URL or peer: admin sessions and the
 local host manage devices from App Settings → Devices, and a local session gets
 host-only actions such as the folder chooser; pairing requests last 15 minutes
-(HS2-85W6BE, HS2-DXM0YN, shipped). See [server trust](04-core-server-cli.md)
+(HS2-85W6BE, HS2-DXM0YN, shipped). A grant changed elsewhere applies to an open
+page without a reload (HS2-A3TDNH, shipped). See [server trust](04-core-server-cli.md)
 §4.6.1 and [distributed access](08-distributed-and-remote.md) §8.2.2.
 
 **Phone terminal keys (HS2-RS96EJ):** the expanded key group uses an ellipsis control labelled More terminal keys

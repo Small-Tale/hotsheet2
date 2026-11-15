@@ -9,6 +9,8 @@
  * because a TLS proxy such as Tailscale Serve also arrives over loopback; the paired session's `local`
  * grant decides instead (HS2-85W6BE). */
 
+import { signal } from 'kerfjs';
+
 /** Whether a hostname is a loopback (same-device) address. */
 export function isLoopbackHostname(hostname: string): boolean {
   const host = hostname.trim().replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
@@ -23,23 +25,30 @@ export interface BrowserSessionGrants {
   admin: boolean;
 }
 
-let sessionGrants: BrowserSessionGrants | undefined;
+/** A signal, so every render and effect that asked about host actions or device management follows a
+ * grant changed elsewhere without a reload (HS2-A3TDNH). */
+const sessionGrants = signal<BrowserSessionGrants | undefined>(undefined);
 
-/** Record the grants `/remote-auth/me` (or a redeem) reported for this page's session. */
+/** Record the grants `/remote-auth/me` (or a redeem) reported for this page's session. Unchanged grants
+ * leave the signal alone, so a re-read that finds nothing new re-renders nothing. */
 export function setBrowserSessionGrants(device: unknown): BrowserSessionGrants {
   const record = typeof device === 'object' && device !== null ? (device as Record<string, unknown>) : {};
-  sessionGrants = { local: record.local === true, admin: record.admin === true };
-  return sessionGrants;
+  const next = { local: record.local === true, admin: record.admin === true },
+    current = sessionGrants.peek();
+  if (current?.local === next.local && current.admin === next.admin) return current;
+  sessionGrants.value = next;
+  return next;
 }
 
-/** This page's session grants; undefined before the session is known or on a local-mode host. */
+/** This page's session grants; undefined before the session is known or on a local-mode host. A read
+ * inside a render or effect subscribes it to grant changes. */
 export function browserSessionGrants(): BrowserSessionGrants | undefined {
-  return sessionGrants;
+  return sessionGrants.value;
 }
 
 /** Forget the session grants (tests and a signed-out page). */
 export function resetBrowserSessionGrants(): void {
-  sessionGrants = undefined;
+  sessionGrants.value = undefined;
 }
 
 /** Whether the web client is running on a different device than the server. A `?device=remote` /
@@ -54,7 +63,7 @@ export function isRemoteClient(
   const override = new URLSearchParams(location.search ?? '').get('device');
   if (override === 'remote') return true;
   if (override === 'local') return false;
-  if (doc && stampedBrowserAuthMode(doc) === 'remote') return sessionGrants?.local !== true;
+  if (doc && stampedBrowserAuthMode(doc) === 'remote') return sessionGrants.value?.local !== true;
   return !isLoopbackHostname(location.hostname);
 }
 
@@ -64,7 +73,7 @@ export function canManageRemoteDevices(
   doc: Pick<Document, 'querySelector'> | undefined = typeof document === 'undefined' ? undefined : document,
 ): boolean {
   if (!doc || stampedBrowserAuthMode(doc) !== 'remote') return true;
-  return sessionGrants?.admin === true;
+  return sessionGrants.value?.admin === true;
 }
 
 /** The browser-auth mode the serving host stamped into the document (HS2-7DBJMS), if any. */

@@ -1118,7 +1118,10 @@ exposes `remote sessions status|approve|reject|update|revoke|revoke-all`. Sessio
 carry `admin` and `local` grants (HS2-85W6BE, HS2-DXM0YN); `routes/remote_auth.rs`
 `manager()` authorizes device management for the machine secret or an admin session,
 and the catalog's in-memory revision drives the `/remote-auth/owner/changes` long poll
-(a `LongWait` route in `request_timing.rs`). In the browser,
+(a `LongWait` route in `request_timing.rs`). Grant changes, revocations and sign-outs
+emit the anonymous `browser_grants` change event (HS2-A3TDNH), which
+`clients/web/src/features/browser-grants.ts` turns into one re-read of `/remote-auth/me`
+from `features/project-change-streams.ts`. In the browser,
 `clients/web/src/components/remote-auth-screen.tsx` gates startup, proposes a device
 name (`device-name.ts`) and records the session grants in `client-origin.ts`, which
 decides same-device from the local grant on a remote-mode host;

@@ -908,3 +908,159 @@ async fn hs2_dxm0yn_device_list_long_poll_wakes_on_change_and_rechecks_access() 
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 }
+
+/// The `browser_grants` events emitted after `since`, through the cursored long-poll channel
+/// every open page already follows.
+async fn grant_events_since(router: &axum::Router, since: u64) -> (u64, Vec<Value>) {
+    let page = json_body(
+        router
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={since}&timeout_ms=0"),
+                None,
+                None,
+                None,
+                true,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let events = page["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "browser_grants")
+        .cloned()
+        .collect();
+    (page["cursor"].as_u64().unwrap(), events)
+}
+
+#[tokio::test]
+async fn hs2_a3tdnh_grant_changes_push_a_cursored_event_without_identities() {
+    let (_dir, state) = fixture();
+    let router = app(state);
+    let (_tablet, _csrf, tablet) =
+        paired(&router, "Synthetic tablet", json!({"role": "read_write"})).await;
+    let (phone_cookie, phone_csrf, _phone) =
+        paired(&router, "Synthetic phone", json!({"role": "read_only"})).await;
+    let tablet_path = format!(
+        "/remote-auth/owner/devices/{}",
+        tablet["id"].as_str().unwrap()
+    );
+    let (mut cursor, _) = grant_events_since(&router, 0).await;
+
+    // A pairing request changes no open page's grants and pushes nothing.
+    pending(&router, "Synthetic stranger").await;
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+    cursor = next;
+
+    // Granting, then removing, each push one cursored event; repeats push again.
+    for grant in [
+        json!({"admin": true}),
+        json!({"local": true}),
+        json!({"admin": false, "local": false}),
+        json!({"admin": true}),
+    ] {
+        assert_eq!(
+            status(
+                &router,
+                request("PATCH", &tablet_path, Some(grant), None, None, true)
+            )
+            .await,
+            StatusCode::OK
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), 1, "{events:?}");
+        let event = &events[0];
+        assert!(event["cursor"].as_u64().unwrap() > cursor);
+        // Machine-wide and anonymous: no store, device id, or grant values reach other sessions.
+        assert_eq!(event["store"], "");
+        assert_eq!(event["id"], "");
+        assert_eq!(event["slug"], "");
+        assert!(event.get("message").is_none());
+        cursor = next;
+    }
+
+    // A change to an unknown device pushes nothing.
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "PATCH",
+                "/remote-auth/owner/devices/missing",
+                Some(json!({"admin": true})),
+                None,
+                None,
+                true
+            )
+        )
+        .await,
+        StatusCode::NOT_FOUND
+    );
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+    cursor = next;
+
+    // Revoking a device pushes; revoking it again (already gone) does not.
+    for expected in [1, 0] {
+        assert_eq!(
+            status(
+                &router,
+                request("DELETE", &tablet_path, None, None, None, true)
+            )
+            .await,
+            StatusCode::NO_CONTENT
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), expected, "{events:?}");
+        cursor = next;
+    }
+
+    // A browser signing itself out pushes, so its other tabs learn the session is gone.
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "POST",
+                "/remote-auth/logout",
+                None,
+                Some(&phone_cookie),
+                Some(&phone_csrf),
+                false
+            )
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    cursor = next;
+
+    // Revoke-all pushes only when it removed a session.
+    paired(&router, "Synthetic laptop", json!({"role": "read_only"})).await;
+    let (next, _) = grant_events_since(&router, cursor).await;
+    cursor = next;
+    for expected in [1, 0] {
+        assert_eq!(
+            status(
+                &router,
+                request(
+                    "POST",
+                    "/remote-auth/owner/revoke-all",
+                    None,
+                    None,
+                    None,
+                    true
+                )
+            )
+            .await,
+            StatusCode::NO_CONTENT
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), expected, "{events:?}");
+        cursor = next;
+    }
+}

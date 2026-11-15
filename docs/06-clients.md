@@ -1203,8 +1203,15 @@ same explanation (HS2-CGXGWY).
   (cursor replay, 1 s to 30 s failure backoff, no fixed interval) and stops when it hides. A
   host in local browser mode is the trusted owner. On a remote-mode host a session without
   the admin grant sees the category with "Administrator access required." and never loads the
-  list. Grants a page reads at load (`/remote-auth/me`) apply until it reloads; the bridge and
-  server re-check them on every request. The pairing screen proposes a device name from the
+  list. The bridge and server re-check the grants on every request, and an open page follows
+  them without a reload (HS2-A3TDNH): the server pushes an anonymous `browser_grants` change
+  event when a device's grants change, a device is revoked, every device is revoked, or a
+  session signs out, and `features/browser-grants.ts` then re-reads `/remote-auth/me` once
+  (coalescing events that land during the read). Every change-stream resync (first connect,
+  reconnect, overflow) re-reads it too, as does a Devices read refused with 401 or 403. A 401
+  drops every grant. The grants are a signal in `client-origin.ts`, so host-only controls,
+  the Open Project flow, and this category (which starts or refuses its long poll on every
+  grant change) update in place. Nothing polls on a timer. The pairing screen proposes a device name from the
   user agent and low-entropy client hints (`device-name.ts`), such as "Safari on iPhone" or
   "Chrome on macOS"; the person may edit it.
 

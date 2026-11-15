@@ -125,6 +125,7 @@ import { createAiConfigurationController } from '../features/ai-configuration';
 import { createAnnouncerController } from '../features/announcer-controller';
 import { createAutomaticTicketGrouping } from '../features/automatic-ticket-grouping';
 import { createBoardColumnPaging } from '../features/board-column-paging';
+import { createBrowserGrants } from '../features/browser-grants';
 import { createClaimClockController } from '../features/claim-clock';
 import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
@@ -1663,7 +1664,10 @@ export async function startHotSheetWebClient() {
   });
   // App Settings → Devices (HS2-DXM0YN): one long poll follows the host's device list while the category
   // shows, and stops when it hides.
-  const remoteDevices = createRemoteDevices();
+  // A grant changed elsewhere reaches this page over the change channel (HS2-A3TDNH); a refused list
+  // read also re-checks it. `start` reads the grant signal, so this effect follows it either way.
+  const browserGrants = createBrowserGrants();
+  const remoteDevices = createRemoteDevices({ onForbidden: () => void browserGrants.refresh() });
   effect(() => {
     if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
     else remoteDevices.stop();
@@ -4415,6 +4419,7 @@ export async function startHotSheetWebClient() {
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
+    browserGrants,
     onStreamHealth: standby.streamHealth,
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });

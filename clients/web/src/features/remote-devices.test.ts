@@ -151,6 +151,61 @@ describe('HS2-DXM0YN remote devices controller', () => {
     expect(devices.state.value).toBe('idle');
   });
 
+  it('HS2-A3TDNH asks the page to re-read its grants after a refusal, and restarts once the grant returns', async () => {
+    const host = scriptedHost();
+    let admin = true;
+    const onForbidden = vi.fn();
+    const devices = createRemoteDevices({ request: host.request, canManage: () => admin, onForbidden });
+    devices.start();
+    (await host.next()).answer(Response.json(list(1)));
+    // The grant went elsewhere; the server wakes the long poll and refuses it.
+    (await host.next()).answer(Response.json({ error: 'administrator access required' }, { status: 403 }));
+    await settle();
+    expect(devices.state.value).toBe('forbidden');
+    expect(onForbidden).toHaveBeenCalledTimes(1);
+    // The category still shows; the effect re-runs start while the grant is still missing.
+    admin = false;
+    devices.start();
+    expect(host.calls).toHaveLength(2);
+    // The grant comes back while the category shows: the same start follows again from scratch.
+    admin = true;
+    devices.start();
+    expect(devices.state.value).toBe('loading');
+    const reload = await host.next();
+    expect(reload.path).toBe(REMOTE_DEVICES_PATH);
+    reload.answer(Response.json(list(7)));
+    await host.next();
+    expect(devices.state.value).toBe('ready');
+    devices.stop();
+  });
+
+  it('HS2-A3TDNH drops the list and the running poll as soon as the page learns the grant is gone', async () => {
+    const host = scriptedHost();
+    let admin = true;
+    const devices = createRemoteDevices({ request: host.request, canManage: () => admin });
+    // Repeated grant changes while the category shows: removed, added, removed, added.
+    for (const [round, revision] of [10, 20].entries()) {
+      admin = true;
+      devices.start();
+      const first = await host.next();
+      expect(first.path).toBe(REMOTE_DEVICES_PATH);
+      first.answer(Response.json(list(revision)));
+      const poll = await host.next();
+      expect(devices.list.value?.revision).toBe(revision);
+      admin = false;
+      devices.start();
+      expect(devices.state.value).toBe('forbidden');
+      expect(devices.list.value).toBeUndefined();
+      // The poll was aborted, not left to answer into a refused view.
+      poll.answer(Response.json(list(revision + 1)));
+      await settle();
+      expect(devices.list.value, `round ${String(round)}`).toBeUndefined();
+      expect(devices.state.value).toBe('forbidden');
+    }
+    devices.stop();
+    expect(devices.state.value).toBe('idle');
+  });
+
   it('never requests the list for a session without the admin grant', () => {
     const host = scriptedHost();
     const devices = createRemoteDevices({ request: host.request, canManage: () => false });

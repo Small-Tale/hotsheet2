@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium, type Page } from '@playwright/test';
+import { chromium, type Page, type WebSocketRoute } from '@playwright/test';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
@@ -31,6 +31,17 @@ async function waitForExit(pid: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
+
+/** Rails slide when the width changes; capture once every animation has finished. */
+const settled = (target: Page) =>
+  target.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== 'running',
+      ),
+  );
 
 describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
   let home = '';
@@ -408,16 +419,6 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     const browser = await chromium.launch({ headless: true });
     const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
     const capture = (name: string) => join(captures, `hs2-dxm0yn-${name}.png`);
-    // Rails slide when the width changes; capture once every animation has finished.
-    const settled = (target: Page) =>
-      target.waitForFunction(() =>
-        document
-          .getAnimations()
-          .every(
-            (animation) =>
-              animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== 'running',
-          ),
-      );
     const signedIn = async (who: { session: string; csrf: string }) => {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       await context.addCookies([
@@ -479,6 +480,112 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
       await other.setViewportSize({ width: 375, height: 812 });
       await settled(other);
       await other.screenshot({ path: capture('admin-required-narrow'), fullPage: true });
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
+
+  it('HS2-A3TDNH applies grants changed elsewhere to the open page, repeatedly and across a reconnect, without a reload', async () => {
+    expect(granted.plain).toBeDefined();
+    const who = granted.plain;
+    const cliRun = (args: string[]) =>
+      execFileAsync(cli, ['-C', store, 'remote', 'sessions', ...args], {
+        env: { ...process.env, HOTSHEET_HOME: home },
+      });
+    const browser = await chromium.launch({ headless: true });
+    const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
+    const capture = (name: string) => join(captures, `hs2-a3tdnh-${name}.png`);
+    try {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await context.addCookies([
+        { name: 'hs2_remote_session', value: who.session, url: origin, httpOnly: true, sameSite: 'Strict' },
+        { name: 'hs2_remote_csrf', value: who.csrf, url: origin, sameSite: 'Strict' },
+      ]);
+      // Every page socket reaches the real host through a handle the test can drop, to force a reconnect.
+      const sockets: WebSocketRoute[] = [];
+      let refuseSockets = false;
+      await context.routeWebSocket(/.*/, (socket) => {
+        if (refuseSockets) {
+          void socket.close();
+          return;
+        }
+        socket.connectToServer();
+        sockets.push(socket);
+      });
+      const page = await context.newPage();
+      const loads: string[] = [];
+      page.on('load', () => loads.push(page.url()));
+      await page.goto(origin);
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.locator(`[data-checkout-root="${checkoutRoot}"]`).click();
+      await page.getByText('Open a Hot Sheet Project').waitFor({ state: 'detached', timeout: 20_000 });
+      await page.getByLabel('Settings View').click();
+      await page.locator('nav[aria-label="Settings categories"] [data-item-id="devices"]').first().click();
+      const devices = page.locator('[data-component="remote-devices-settings"]');
+      const refused = devices.getByText('Administrator access required.');
+      const listed = devices.getByText('Synthetic tablet', { exact: true });
+      await refused.waitFor();
+      expect(sockets.length).toBeGreaterThan(0);
+
+      // The host-only folder flow follows the local grant at the moment the user asks for it.
+      const sourceChoice = async (expected: 'local' | 'remote') => {
+        await page.getByRole('button', { name: 'Add Project' }).first().click();
+        // Remote opens the registered-project dialog instead of the Local or Remote Project choice.
+        if (expected === 'local') await page.getByRole('button', { name: 'Local Project' }).waitFor();
+        else await page.locator('[data-remote-project-dialog][data-controlled-open="true"]').waitFor();
+        await expect(page.getByRole('button', { name: 'Local Project' }).count()).resolves.toBe(
+          expected === 'local' ? 1 : 0,
+        );
+        await page.keyboard.press('Escape');
+      };
+      await sourceChoice('remote');
+
+      // Granted elsewhere (the headless CLI here), then removed, then granted again: each lands live.
+      for (const round of [1, 2]) {
+        await cliRun(['update', who.id, '--admin', 'true', '--local', 'true']);
+        await listed.waitFor({ timeout: 15_000 });
+        await expect(refused.count()).resolves.toBe(0);
+        if (round === 1) {
+          await settled(page);
+          await page.screenshot({ path: capture('granted-wide'), fullPage: true });
+        }
+        await sourceChoice('local');
+        await cliRun(['update', who.id, '--admin', 'false', '--local', 'false']);
+        await refused.waitFor({ timeout: 15_000 });
+        await expect(listed.count()).resolves.toBe(0);
+        if (round === 1) {
+          await settled(page);
+          await page.screenshot({ path: capture('removed-wide'), fullPage: true });
+        }
+        await sourceChoice('remote');
+      }
+
+      // A grant that changes while the page's change connection is down applies once it reconnects.
+      refuseSockets = true;
+      for (const socket of sockets.splice(0)) await socket.close();
+      await cliRun(['update', who.id, '--admin', 'true']);
+      refuseSockets = false;
+      await listed.waitFor({ timeout: 30_000 });
+      await expect(refused.count()).resolves.toBe(0);
+      // Revoking the session drops every grant from the open page, too.
+      await cliRun(['revoke', who.id]);
+      await refused.waitFor({ timeout: 15_000 });
+      await sourceChoice('remote');
+
+      // Wide, medium, narrow, and back: the refusal the page reached live lays out like a loaded one.
+      for (const [name, width, height] of [
+        ['wide', 1280, 800],
+        ['medium', 768, 900],
+        ['narrow', 375, 812],
+        ['wide-again', 1280, 800],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await refused.waitFor();
+        await settled(page);
+        await page.screenshot({ path: capture(`revoked-${name}`), fullPage: true });
+      }
+      // None of it reloaded the page.
+      expect(loads).toHaveLength(1);
     } finally {
       await browser.close();
     }

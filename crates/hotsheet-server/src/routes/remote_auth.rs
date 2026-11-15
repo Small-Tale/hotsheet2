@@ -6,6 +6,7 @@
 
 use crate::AppState;
 use crate::api_error::ApiError;
+use crate::events::ChangeEvent;
 use crate::remote_auth::{
     AuthFailure, Device, DeviceChange, Grants, IssuedSession, PendingDevice, Role,
 };
@@ -77,6 +78,27 @@ pub(crate) struct DeviceList {
 
 /// How long one device-list long poll waits before answering unchanged.
 const CHANGES_WAIT: std::time::Duration = std::time::Duration::from_secs(25);
+
+/// The change event kind open pages re-read their own session grants on (HS2-A3TDNH).
+pub(crate) const BROWSER_GRANTS_EVENT: &str = "browser_grants";
+
+/// Announce that some browser session's grants or validity may have changed. It names no
+/// device and carries no values, so it tells other sessions nothing: each remote-mode page
+/// re-reads its own `GET /remote-auth/me`, which stays the one source of truth (HS2-A3TDNH).
+fn emit_grants_changed(state: &AppState) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: BROWSER_GRANTS_EVENT.into(),
+        id: String::new(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+        live: None,
+    });
+}
 
 fn now() -> i64 {
     OffsetDateTime::now_utc().unix_timestamp()
@@ -308,6 +330,8 @@ pub(crate) async fn logout(
     catalog(&state)?
         .revoke(&device.id)
         .map_err(|_| internal())?;
+    // Other tabs of this browser share the session and lose it too.
+    emit_grants_changed(&state);
     let mut response = StatusCode::NO_CONTENT.into_response();
     let secure = if origin.starts_with("https://") {
         "; Secure"
@@ -402,11 +426,12 @@ pub(crate) async fn change(
     Json(request): Json<DeviceChange>,
 ) -> Result<Json<Device>, ApiError> {
     manager(&state, &headers, peer.as_ref(), true)?;
-    catalog(&state)?
+    let changed = catalog(&state)?
         .change(&id, request)
         .map_err(|_| internal())?
-        .map(Json)
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "device not found"))
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "device not found"))?;
+    emit_grants_changed(&state);
+    Ok(Json(changed))
 }
 
 pub(crate) async fn revoke(
@@ -416,7 +441,9 @@ pub(crate) async fn revoke(
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     manager(&state, &headers, peer.as_ref(), true)?;
-    catalog(&state)?.revoke(&id).map_err(|_| internal())?;
+    if catalog(&state)?.revoke(&id).map_err(|_| internal())? {
+        emit_grants_changed(&state);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -427,6 +454,8 @@ pub(crate) async fn revoke_all(
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     owner(&state, &headers, peer.as_ref())?;
-    catalog(&state)?.revoke_all().map_err(|_| internal())?;
+    if catalog(&state)?.revoke_all().map_err(|_| internal())? > 0 {
+        emit_grants_changed(&state);
+    }
     Ok(StatusCode::NO_CONTENT)
 }

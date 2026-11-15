@@ -74,6 +74,19 @@ read-only admin, and local admin session (403 without admin, Origin/CSRF on chan
 a non-local admin granting and removing local, itself included, per HS2-KTHQE5,
 `revoke-all` host-only, 404/422 answers) and
 the long poll waking on a pairing and refusing a session revoked while it waited.
+HS2-A3TDNH: `hotsheet-server/tests/remote_auth.rs`
+`hs2_a3tdnh_grant_changes_push_a_cursored_event_without_identities` pins one anonymous
+cursored `browser_grants` event per grant change, revoke, sign-out and revoke-all, and
+none for a pairing request, an unknown device or a repeated revoke;
+`features/browser-grants.test.ts` covers added and removed grants, deduplication across
+streams, coalescing repeated changes, resync after a reconnect or server restart, 401
+versus other failures, and local mode; `client-origin.test.ts` pins grant changes
+re-running effects in both directions and only on change; `features/remote-devices.test.ts`
+walks refused, regranted and repeatedly removed grants while the category shows;
+`features/runtime-split-controllers.test.ts` wires events and every resync kind; and
+`remote-auth-server-integration.test.ts` changes a signed-in page's grants twice through
+the real CLI, then across a dropped change connection, then revokes it, checking App
+Settings → Devices and the Open Project flow without a reload at four widths.
 HS2-S8R3PD: `hotsheet-server/tests/remote_host_access.rs` sends every host-acting
 server route (difftool, repository and attachment open/reveal, project open and
 checkout/store/Git-source registration and relink) as a plain session (403

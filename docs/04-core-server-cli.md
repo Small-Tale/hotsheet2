@@ -1941,7 +1941,10 @@ from the URL, peer address, `Host` or forwarded headers: Tailscale Serve reaches
 the browser host through the same loopback port the owner opens locally, so the
 request cannot tell them apart. A plain session keeps the remote route set. The
 grants persist in the catalog; a catalog written before them loads with both
-false.
+false. Changing a device's grants, revoking one device or all of them, and a
+session signing out push a `browser_grants` change event on the cursored change
+channel (`/ws/sync`, `/ws/poll`). It names no store, device, or grant value;
+each open remote-mode page re-reads its own `GET /remote-auth/me` (HS2-A3TDNH).
 
 **Host-only server routes (HS2-S8R3PD).** The bridge forwards any project API path,
 so the server enforces the local grant itself. After authentication
