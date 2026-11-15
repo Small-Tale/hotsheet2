@@ -3823,7 +3823,14 @@ repainted when the color scheme changes). While matches are highlighted, xterm's
 `minimumContrastRatio` is 4.5 so text stays legible on them (the DOM renderer misses
 inverse-video default-color text: `HS2-1930X3`). A borderless text control in its own Kerf `ToolbarControlGroup` after the open field shows the count (clicking it steps to the next match, Shift-click to the previous one, and keeps typing in the field; it is disabled with no matches):
 "3 of 12", "No matches", or "1000+ matches" past the addon's 1000-match highlight limit. The count
-follows query edits and re-counts when output arrives while the search is open. Emptying the field
+follows query edits and re-counts when output arrives while the search is open. The active match
+survives a drawer or window resize (HS2-SWY5DQ). When the terminal reflows, xterm drops or strands the
+selection that the search addon steps from, and the addon refreshes its match list only after a delay.
+The viewport therefore remembers the active match's index. After a resize it re-highlights and
+re-selects that match through the addon's public API, keeping the scroll position. It does this
+before the next Enter or Shift-Enter step, and again whenever the addon's own re-search reports a
+different match, until a re-search confirms it. If a redraw at the new width changes how many matches
+exist, the same index stays active while it still exists. Emptying the field
 (typing or Clear) or closing it removes the highlights and the count. Selecting another terminal
 moves the search there and clears the terminal it left, including a terminal whose runtime loads
 or is restored from the parked pool after the switch. Decorations are xterm's proposed API, so a

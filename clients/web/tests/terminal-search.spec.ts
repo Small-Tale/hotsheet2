@@ -296,3 +296,94 @@ test('HS2-HPDX81 the open search, its count, and Hide stay inside a phone-width 
   await expectInsideDrawer(group, count, clear, hide);
   await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-1280.png') });
 });
+
+interface SearchReport {
+  resultIndex: number;
+  resultCount: number;
+}
+
+test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes and Enter steps on from it', async ({
+  page,
+}) => {
+  const { drawer } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    // The full count control, or its screen-reader status when a narrow rail hides it (HS2-HPDX81).
+    count = drawer.locator('[data-terminal-search-count], [data-terminal-search-count-status]');
+  // Record every results report the viewport publishes, so a resize is judged by what it reported.
+  await page.evaluate(() => {
+    const reports: SearchReport[] = [];
+    (window as typeof window & { __searchReports: SearchReport[] }).__searchReports = reports;
+    document.addEventListener('hotsheet-terminal-search-results', (event) => {
+      reports.push((event as CustomEvent<SearchReport>).detail);
+    });
+  });
+  const reports = () =>
+    page.evaluate(() => (window as typeof window & { __searchReports: SearchReport[] }).__searchReports);
+  // The fake PTY redraws nano at each width, so the match total may differ by width; the active index may not.
+  const active = (index: number) => expect(count).toHaveText(new RegExp(`^${index} of \\d+$`));
+  const total = async () => Number((await count.textContent())!.split(' of ')[1]);
+  await group.getByRole('button', { name: 'Search Terminal' }).click();
+  await page.keyboard.type('File');
+  await active(1);
+  expect(await total()).toBeGreaterThanOrEqual(2);
+
+  // Resize, wait for the terminal to re-search its reflowed buffer and the shell to settle, and require
+  // that no report since the resize moved the active match.
+  const resizeKeeping = async (width: number, height: number, index: number) => {
+    const before = (await reports()).length;
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(async () => (await reports()).length, { message: `re-search at ${width}px` })
+      .toBeGreaterThan(before);
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    );
+    const since = (await reports()).slice(before);
+    expect(since.map((report) => report.resultIndex + 1)).toEqual(since.map(() => index));
+    await active(index);
+    await expect(editor).toBeFocused();
+    expect(await total()).toBeGreaterThanOrEqual(2);
+    await page.screenshot({ path: test.info().outputPath(`hs2-swy5dq-active-${index}-${width}.png`) });
+  };
+
+  // Narrow: the first match stays active; Enter steps to the second and Shift-Enter back.
+  await resizeKeeping(390, 844, 1);
+  await page.keyboard.press('Enter');
+  await active(2);
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  await page.keyboard.press('Enter');
+  await active(2);
+
+  // Medium: the second match stays active and the steps go on from it.
+  await resizeKeeping(768, 900, 2);
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  await page.keyboard.press('Enter');
+  await active(2);
+
+  // Wide again: still the second match; Enter moves past it (wrapping after the last) and Shift-Enter returns.
+  await resizeKeeping(1280, 800, 2);
+  const wideTotal = await total();
+  await page.keyboard.press('Enter');
+  await active(wideTotal > 2 ? 3 : 1);
+  await page.keyboard.press('Shift+Enter');
+  await active(2);
+
+  // A step pressed straight after a resize, before the terminal re-searches, also goes on from the active
+  // match instead of restarting from the first.
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  const before = (await reports()).length;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.keyboard.press('Enter');
+  await active(2);
+  await expect.poll(async () => (await reports()).length).toBeGreaterThan(before + 1);
+  await active(2);
+});

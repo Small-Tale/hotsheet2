@@ -1621,17 +1621,73 @@ function initializeTerminalViewport(
     // decorations and reports the active index and match count, including re-counts after new output.
     // Decorations are xterm's proposed API, so only a searched terminal turns it on; nothing else here
     // calls a proposed API (registerDecoration, markers, unicode, character joiners).
+    //
+    // The addon steps from the terminal's selection, which xterm clears on a resize that changes rows and
+    // leaves at stale cells after a reflow, and it counts against a match list it refreshes only 200 ms
+    // after the resize. Its own post-resize re-search then lands on the last match, and a step restarts
+    // from the first or reports no active match (HS2-SWY5DQ). So the viewport remembers the active match's
+    // index and, after a resize, re-anchors the addon there through its public API: before a step, and
+    // whenever the addon's own re-search reports a different match, until one confirms it.
     let searchAddon: SearchAddon | undefined,
       searchQuery = '',
-      contrastBeforeSearch: number | undefined;
+      contrastBeforeSearch: number | undefined,
+      activeIndex = -1,
+      resultCount = 0,
+      anchorAfterResize = false,
+      searching = false,
+      holdResults: ((results: TerminalSearchResults) => void) | undefined;
     const searchOptions = (incremental: boolean) => ({
       incremental,
       decorations: resolveTerminalSearchDecorations(element),
     });
+    const publishResults = (results: TerminalSearchResults) => {
+      activeIndex = results.resultIndex;
+      resultCount = results.resultCount;
+      element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_RESULTS_EVENT, { bubbles: true, detail: results }));
+    };
+    // Calls the viewport makes itself, so their reports are told apart from the addon's own re-searches.
+    const searchSelf = <T>(call: () => T): T => {
+      searching = true;
+      try {
+        return call();
+      } finally {
+        searching = false;
+      }
+    };
+    // Select the remembered match again: re-highlight the reflowed buffer so the addon counts against it,
+    // select the first match from an empty selection, and step once per index. Reports while stepping are
+    // held back so the count never shows the matches passed on the way, and the scroll position the reflow
+    // left is kept, as the addon's own re-search keeps it.
+    const reanchorSearch = () => {
+      const addon = searchAddon,
+        target = activeIndex;
+      if (!addon || !searchQuery || target < 0 || target >= resultCount) return;
+      const viewportY = terminal.buffer.active.viewportY,
+        options = searchOptions(false);
+      let held: TerminalSearchResults | undefined;
+      holdResults = (results) => {
+        held = results;
+      };
+      try {
+        addon.clearDecorations();
+        terminal.clearSelection();
+        let index = 0;
+        while (index <= target && addon.findNext(searchQuery, options)) index += 1;
+      } finally {
+        holdResults = undefined;
+        terminal.scrollToLine(viewportY);
+        if (held) publishResults(held);
+      }
+    };
     const search = (event: Event) => {
       const detail = (event as CustomEvent<TerminalSearchDetail>).detail;
+      // A step or an edit after a resize starts from the remembered match, not from the reflowed buffer's edge.
+      if (!detail.query) anchorAfterResize = false;
+      else if (anchorAfterResize) reanchorSearch();
       searchQuery = detail.query;
       if (!detail.query) {
+        activeIndex = -1;
+        resultCount = 0;
         if (searchAddon) {
           searchAddon.clearDecorations();
           terminal.clearSelection();
@@ -1654,12 +1710,34 @@ function initializeTerminalViewport(
         const addon = new SearchAddon({ highlightLimit: TERMINAL_SEARCH_HIGHLIGHT_LIMIT });
         searchAddon = addon;
         terminal.loadAddon(addon);
-        const resultsListener = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
-          const results: TerminalSearchResults = { resultIndex, resultCount };
-          element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_RESULTS_EVENT, { bubbles: true, detail: results }));
+        const resultsListener = addon.onDidChangeResults((change) => {
+          const results: TerminalSearchResults = { resultIndex: change.resultIndex, resultCount: change.resultCount };
+          if (holdResults) {
+            holdResults(results);
+            return;
+          }
+          // The addon's own re-search after a resize: one that moved the active match re-anchors once the
+          // addon has returned, and one that kept it ends the watch.
+          if (anchorAfterResize && !searching) {
+            if (activeIndex >= 0 && results.resultIndex !== activeIndex && activeIndex < results.resultCount) {
+              resultCount = results.resultCount;
+              queueMicrotask(() => {
+                if (!anchorAfterResize) return;
+                anchorAfterResize = false;
+                reanchorSearch();
+              });
+              return;
+            }
+            anchorAfterResize = false;
+          }
+          publishResults(results);
+        });
+        const resizeListener = terminal.onResize(() => {
+          if (searchQuery && activeIndex >= 0) anchorAfterResize = true;
         });
         own(() => {
           resultsListener.dispose();
+          resizeListener.dispose();
         });
       }
       const addon = searchAddon,
@@ -1670,7 +1748,7 @@ function initializeTerminalViewport(
             : addon.findNext(detail.query, options);
       // Stepping back from the only match reports no match and drops the selection once before the addon
       // wraps, so a manual step retries once; a query that is really absent fails both times.
-      detail.found = step() || (!detail.incremental && step());
+      detail.found = searchSelf(() => step() || (!detail.incremental && step()));
     };
     element.addEventListener(TERMINAL_SEARCH_EVENT, search);
     own(() => {
@@ -1680,8 +1758,10 @@ function initializeTerminalViewport(
     own(
       watchTerminalScheme(() => {
         if (!searchAddon || !searchQuery || !element.isConnected) return;
-        searchAddon.clearDecorations();
-        searchAddon.findNext(searchQuery, searchOptions(true));
+        const addon = searchAddon;
+        if (anchorAfterResize) reanchorSearch();
+        addon.clearDecorations();
+        searchSelf(() => addon.findNext(searchQuery, searchOptions(true)));
       }),
     );
     // An open search reaches a terminal whose runtime loaded after the query was typed (and, from

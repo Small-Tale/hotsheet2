@@ -116,9 +116,14 @@ vi.mock('@xterm/xterm', () => ({
       this.scrollHandler = handler;
       return { dispose: vi.fn() };
     }
+    // xterm notifies every resize listener; the search (HS2-SWY5DQ) listens beside the viewport re-sync.
+    resizeHandlers: Array<() => void> = [];
     resizeHandler?: () => void;
     onResize(handler: () => void) {
-      this.resizeHandler = handler;
+      this.resizeHandlers.push(handler);
+      this.resizeHandler = () => {
+        for (const listener of this.resizeHandlers) listener();
+      };
       return { dispose: vi.fn() };
     }
     dataHandler?: (value: string) => void;
@@ -514,6 +519,109 @@ describe('terminal search (HS2-TWZSZF)', () => {
     });
     expect(preview.listeners.mock.calls.some(([name]) => name === TERMINAL_SEARCH_EVENT)).toBe(false);
     disposePreview();
+  });
+
+  it('HS2-SWY5DQ re-anchors the active match after a resize, before a report or a step, without scrolling', async () => {
+    searchAddons.length = 0;
+    const { viewport, listeners } = element();
+    const dispatched = (viewport as unknown as { dispatchEvent: ReturnType<typeof vi.fn> }).dispatchEvent;
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
+    const ask = (query: string, direction: 'next' | 'previous' = 'next', incremental = true) => {
+      const detail: TerminalSearchDetail = { query, direction, incremental };
+      search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
+      return detail.found;
+    };
+    const terminal = allocated.terminals.at(-1) as unknown as {
+      clearSelection: ReturnType<typeof vi.fn>;
+      scrollToLine: ReturnType<typeof vi.fn>;
+      buffer: { active: { viewportY: number } };
+      resizeHandler?: () => void;
+    };
+    const published = () =>
+      dispatched.mock.calls
+        .map(([event]) => event as CustomEvent<{ resultIndex: number; resultCount: number }>)
+        .filter((event) => event.type === TERMINAL_SEARCH_RESULTS_EVENT)
+        .map((event) => event.detail.resultIndex);
+    // A fake addon over three matches: each search reports the match it selects, as xterm's does.
+    let selected = -1;
+    const report = (resultIndex: number) => {
+      for (const listener of searchAddons[0].resultsListeners) listener({ resultIndex, resultCount: 3 });
+    };
+    expect(ask('File')).toBe(true);
+    const addon = searchAddons[0];
+    addon.findNext.mockImplementation(() => {
+      selected = (selected + 1) % 3;
+      report(selected);
+      return true;
+    });
+    addon.findPrevious.mockImplementation(() => {
+      selected = (selected + 2) % 3;
+      report(selected);
+      return true;
+    });
+    terminal.clearSelection.mockImplementation(() => {
+      selected = -1;
+    });
+    ask('File', 'next', false);
+    ask('File', 'next', false);
+    expect(published()).toEqual([0, 1]);
+
+    // The addon's own re-search after a resize lands on the last match; the viewport holds that report
+    // back and re-anchors on the second match once the addon has returned, keeping the scroll line.
+    dispatched.mockClear();
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 7;
+    terminal.scrollToLine.mockClear();
+    selected = -1;
+    report(2);
+    expect(published()).toEqual([]);
+    await Promise.resolve();
+    expect(published()).toEqual([1]);
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(7);
+    expect(selected).toBe(1);
+    // A later report outside a resize is published as it is.
+    report(2);
+    expect(published()).toEqual([1, 2]);
+    selected = 1;
+    report(1);
+
+    // A step pressed after a resize but before the re-search goes on from the active match, not the first,
+    // counting against a freshly highlighted buffer.
+    dispatched.mockClear();
+    addon.clearDecorations.mockClear();
+    terminal.resizeHandler!();
+    selected = -1;
+    ask('File', 'next', false);
+    expect(addon.clearDecorations).toHaveBeenCalledTimes(1);
+    expect(published()).toEqual([1, 2]);
+    // The addon's late re-search (after the redraw that followed the resize) moved it: re-anchored again.
+    selected = -1;
+    report(0);
+    await Promise.resolve();
+    expect(published()).toEqual([1, 2, 2]);
+    // Once a re-search confirms the match, reports are published as they are.
+    report(2);
+    report(0);
+    expect(published()).toEqual([1, 2, 2, 2, 0]);
+    selected = 2;
+    report(2);
+
+    // Shift-Enter after a resize steps back from the active match.
+    dispatched.mockClear();
+    terminal.resizeHandler!();
+    selected = -1;
+    ask('File', 'previous', false);
+    expect(published()).toEqual([2, 1]);
+
+    // Emptying the field forgets the match; a resize then re-anchors nothing.
+    expect(ask('')).toBe(false);
+    dispatched.mockClear();
+    addon.findNext.mockClear();
+    terminal.resizeHandler!();
+    expect(ask('File')).toBe(true);
+    expect(addon.findNext).toHaveBeenCalledTimes(1);
+    dispose();
   });
 });
 
