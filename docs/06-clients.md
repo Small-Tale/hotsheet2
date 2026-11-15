@@ -1153,6 +1153,9 @@ preview/download, server directory browser) are separate design work.
   the gallery footer (also as the footer changes height when markup finishes), so the toast never
   covers the zoom or markup toolbars at wide or phone widths; each new toast also reopens the stack
   so it draws above a modal opened since the previous one (HS2-DSW9TY).
+  With no gallery open, the stack instead rises above the collapsed terminal drawer's round restore
+  button, which shares its bottom-end corner, and follows that button through window resizes, so
+  the button never covers the toast's first words (HS2-T90WCZ).
   Toasts stay dismissible over modal surfaces (HS2-M2G31B): a modal `<dialog>` makes everything
   outside it inert, so while a toast shows the stack lives inside the topmost open modal dialog
   (in an app-inserted `data-morph-preserve` host, `display: contents`, that Kerf re-renders keep)

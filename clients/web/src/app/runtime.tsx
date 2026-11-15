@@ -281,7 +281,7 @@ import {
   type TicketView,
   ticketViewQuery,
 } from '../ticket-views';
-import { createBrowserToastClearance } from '../toast-clearance';
+import { createBrowserToastClearance, findToastObstacle } from '../toast-clearance';
 import { createToastLifetime } from '../toast-lifetime';
 import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
@@ -911,10 +911,9 @@ export async function startHotSheetWebClient() {
       item.replaceChildren(text);
     },
   });
-  // While a toast shows it rises above the media gallery's footer controls (HS2-DSW9TY).
-  const toastClearance = createBrowserToastClearance(toastHost, () =>
-    document.querySelector('[data-component="attachment-gallery"] .attachment-gallery__footer'),
-  );
+  // While a toast shows it rises above the media gallery's footer controls (HS2-DSW9TY) or, with no
+  // gallery open, the collapsed terminal drawer's restore button (HS2-T90WCZ).
+  const toastClearance = createBrowserToastClearance(toastHost, () => findToastObstacle(document));
   // While a toast shows it lives inside the topmost open modal dialog, so it stays clickable over the
   // gallery, and it moves (and re-measures its clearance) when a modal opens or closes (HS2-M2G31B).
   const toastModalHost = createBrowserToastModalHost(toastHost, () => {

@@ -19,15 +19,29 @@ export interface ToastClearanceEnvironment<Obstacle extends ToastObstacle = Elem
   observeResize: (callback: () => void) => { observe(target: Obstacle): void; disconnect(): void };
 }
 
+// The obstacle's own size and the window's size both move its top edge: the restore button keeps its
+// size but follows the viewport's bottom edge when the window resizes (HS2-T90WCZ).
 const browserEnvironment = (findObstacle: () => Element | null): ToastClearanceEnvironment => ({
   findObstacle,
   viewportHeight: () => window.innerHeight,
-  observeResize: (callback) => new ResizeObserver(callback),
+  observeResize: (callback) => {
+    const observer = new ResizeObserver(callback);
+    window.addEventListener('resize', callback);
+    return {
+      observe: (target) => {
+        observer.observe(target);
+      },
+      disconnect: () => {
+        observer.disconnect();
+        window.removeEventListener('resize', callback);
+      },
+    };
+  },
 });
 
 /**
- * Keep the bottom-placed toast stack clear of a full-width bottom control strip, such as the media
- * gallery's footer with its zoom and markup toolbars (HS2-DSW9TY). While a toast shows, the stack's
+ * Keep the bottom-placed toast stack clear of a bottom control, such as the media gallery's footer
+ * with its zoom and markup toolbars (HS2-DSW9TY) or the terminal drawer's restore button (HS2-T90WCZ). While a toast shows, the stack's
  * bottom edge follows the measured top of that strip — including when the strip changes height, as it
  * does when markup finishes — and returns to the viewport edge once the strip is gone.
  */
@@ -67,6 +81,23 @@ export function createToastClearance<Obstacle extends ToastObstacle = Element>(
     /** No toast shows: stop observing and return the stack to the viewport edge. */
     stop,
   };
+}
+
+/** The media gallery's full-width footer strip with its zoom and markup toolbars (HS2-DSW9TY). */
+export const GALLERY_FOOTER_SELECTOR = '[data-component="attachment-gallery"] .attachment-gallery__footer';
+/**
+ * The collapsed terminal drawer's restore toolbar in the Workbench's bottom-end corner (HS2-T90WCZ).
+ * Its app-owned theme wrapper is `display: contents`, so the toolbar inside it is what takes space.
+ */
+export const TERMINAL_DRAWER_RESTORE_SELECTOR = '.app-shell__restore-control-theme > *';
+
+/**
+ * The bottom-anchored surface a showing toast must clear. The open media gallery's footer wins, since
+ * the modal gallery covers everything beneath it; otherwise the collapsed terminal drawer's round
+ * restore button, which shares the toast's bottom-end corner and would cover its first words.
+ */
+export function findToastObstacle<Obstacle>(root: { querySelector(selector: string): Obstacle | null }) {
+  return root.querySelector(GALLERY_FOOTER_SELECTOR) ?? root.querySelector(TERMINAL_DRAWER_RESTORE_SELECTOR);
 }
 
 /** The browser form: measure `findObstacle()` against the window and follow it with a ResizeObserver. */

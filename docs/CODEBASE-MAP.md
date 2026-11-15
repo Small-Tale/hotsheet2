@@ -446,6 +446,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
     tests/typing-latency-profile.spec.ts # Opt-in (HOTSHEET_TYPING_PROFILE=1) real-server per-keystroke Event Timing profile of the search, title, details, note, and linked-reader details editors (HS2-EQTXTJ, HS2-WV0VPE)
+    tests/toast-drawer-clearance.spec.ts # Real-server regression: the app toast rises above the collapsed terminal drawer's restore button at 1440, 760, 390, and wide again (HS2-T90WCZ)
     tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
     tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models, rail labels share one edge, and the per-model breakdown table sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
@@ -526,7 +527,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/attachment-owner.ts # Which ticket an attachment action acts on: a linked reader frame (its project and attachment capabilities) or the workspace selection; a closed frame resolves to none (HS2-W8VEMP, HS2-KKB9VF)
     src/attachment-label-editing.ts # Per-surface open attachment batch label editor state (begin/restore/end) and its autosave controller (controlled draft, recovery copy, one merged write on blur/page hide), shared by the app and the UX demo (HS2-SG0AZY, HS2-0QQHSZ)
     src/server-clock.ts # Per-project server-clock estimate from stamped turn envelopes and the connections snapshot's `Date` header for remote clients' turn timing (HS2-GA5ASE, HS2-FMZSNY)
-    src/toast-clearance.ts # Lifts the root toast stack above the media gallery footer while a toast shows (HS2-DSW9TY)
+    src/toast-clearance.ts # Lifts the root toast stack above the media gallery footer (HS2-DSW9TY) or the collapsed terminal drawer's restore button (HS2-T90WCZ) while a toast shows
     src/toast-modal-host.ts # Hosts the root toast stack inside the topmost open modal dialog while a toast shows so it stays dismissible, and back on the body after (HS2-M2G31B)
     src/toast-lifetime.ts # Root toast's 2.5-second replacement and dismissal state machine (HS2-KEHG7H)
     src/toast-presentation.ts # Generation-aware asynchronous public Toast.create handoff and disposal (HS2-QHH1ZP)
