@@ -1822,3 +1822,10 @@ test('HS2-5340N1 an unprovable failure or changed inputs rerun the whole suite s
   assert.equal(runGate(options), 0);
   assert.ok(whole(commands.at(-1)), 'changed inputs invalidate the targeted record');
 });
+
+test('HS2-XTQHPK every gate stage inherits the OS keychain kill switch', () => {
+  // Importing the gate sets it on process.env, which every stage and spawned binary inherits.
+  assert.equal(process.env.HOTSHEET_NATIVE_SECRETS, 'deny');
+  const source = readFileSync(new URL('./local-gate.mjs', import.meta.url), 'utf8');
+  assert.match(source, /^process\.env\.HOTSHEET_NATIVE_SECRETS = 'deny';$/m);
+});

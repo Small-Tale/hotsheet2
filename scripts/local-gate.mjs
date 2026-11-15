@@ -37,6 +37,11 @@ import {
 } from './gate-timings.mjs';
 import { verifyInstalledDependencies } from './installed-dependencies.mjs';
 
+// HS2-XTQHPK: every stage the gate runs (cargo, node tests, Vitest, Playwright, tooling) and
+// every binary those stages spawn inherits this, so no gate run can reach the developer's
+// OS keychain and raise a password prompt. It only refuses native credentials.
+process.env.HOTSHEET_NATIVE_SECRETS = 'deny';
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;

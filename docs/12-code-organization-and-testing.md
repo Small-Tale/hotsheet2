@@ -808,7 +808,7 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   rebuilt binary prompts again. `HOTSHEET_NATIVE_SECRETS=deny` makes the native credential
   port refuse every set, get and delete with an error naming HS2-XTQHPK, without calling
   the OS. `.cargo/config.toml` forces it for every process cargo or nextest launches, and
-  the Playwright and Vitest configs set it before workers and servers start. The switch
+  the Playwright and Vitest configs set it before workers and servers start, and `scripts/check.sh` sets it for every gate stage. The switch
   only refuses; it never activates fixture credentials, so tests that need credentials
   still opt into synthetic ones.
 - **Machine-home isolation (HS2-T9VXEP):** tests and repros must never write the real
