@@ -1,7 +1,7 @@
 //! HS2-HTS89S: a validation step left running by a hosting process that died is
 //! stopped by its recorded process group, and nothing else is. Synthetic commands only.
 use std::os::unix::process::CommandExt;
-use std::process::{Child, Command};
+use std::process::Child;
 use std::time::{Duration, Instant};
 
 use hotsheet_ticketing::orchestration::{
@@ -17,7 +17,7 @@ use crate::orchestration::validation::{
 
 /// A synthetic step: its own process group, as the host launches steps.
 fn group(line: &str, dir: &Path) -> Child {
-    Command::new("/bin/sh")
+    hotsheet_ticketing::git::launch("/bin/sh")
         .args(["-c", line])
         .current_dir(dir)
         .process_group(0)
@@ -27,7 +27,7 @@ fn group(line: &str, dir: &Path) -> Child {
 
 /// A hosting process that is gone: a pid that ran and was reaped.
 fn dead_host() -> (u32, u64) {
-    let mut gone = Command::new("/bin/sh")
+    let mut gone = hotsheet_ticketing::git::launch("/bin/sh")
         .args(["-c", "exit 0"])
         .spawn()
         .unwrap();
