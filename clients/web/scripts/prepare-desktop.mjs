@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
-import { assertStandaloneNode, desktopResourcePlan } from './desktop-node-runtime.mjs';
+import { assertStandaloneNode, desktopNodeRuntime, desktopResourcePlan } from './desktop-node-runtime.mjs';
 import { stageMigratorDependencies } from './stage-migrator-dependencies.mjs';
 
 const web = fileURLToPath(new URL('..', import.meta.url));
@@ -23,7 +23,7 @@ function copyExecutable(source, destination) {
 
 if (!existsSync(resolve(migrator, 'node_modules/@electric-sql/pglite')))
   throw new Error('Build the migrator first with `npm ci` from migrator/.');
-const nodeRuntime = process.env.HOTSHEET_DESKTOP_NODE || process.execPath;
+const nodeRuntime = desktopNodeRuntime();
 const copyPlan = desktopResourcePlan(root, binaries, nodeRuntime);
 assertStandaloneNode(nodeRuntime);
 

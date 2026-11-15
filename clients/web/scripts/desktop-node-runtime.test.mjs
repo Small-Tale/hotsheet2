@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { assertStandaloneNode } from './desktop-node-runtime.mjs';
+import { assertStandaloneNode, desktopNodeRuntime } from './desktop-node-runtime.mjs';
 
 it('HS2-T7HVHA accepts a Node runtime linked only to macOS system libraries', () => {
   expect(() =>
@@ -49,4 +49,14 @@ it('HS2-D80Q2V executes an extensionless Linux Node without invoking macOS otool
       throw new Error('missing runtime');
     }),
   ).toThrow(/standalone Linux executable/);
+});
+
+it('HS2-MVF6X3 bundles the running Node when HOTSHEET_DESKTOP_NODE is unset or blank', () => {
+  for (const blank of [undefined, '', ' ', '\t\n '])
+    expect(desktopNodeRuntime({ HOTSHEET_DESKTOP_NODE: blank }, '/running/node')).toBe('/running/node');
+  expect(desktopNodeRuntime({}, '/running/node')).toBe('/running/node');
+  expect(desktopNodeRuntime({ HOTSHEET_DESKTOP_NODE: 'tools/node' }, '/running/node')).toBe('tools/node');
+  expect(desktopNodeRuntime({ HOTSHEET_DESKTOP_NODE: '/opt/node/bin/node' }, '/running/node')).toBe(
+    '/opt/node/bin/node',
+  );
 });

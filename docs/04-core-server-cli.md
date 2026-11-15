@@ -2117,6 +2117,13 @@ binary override selects the checkout's (or the production host's selected) binar
 `HOTSHEET_REPO_ROOT` resolves to the checkout two levels above the working directory, as an unset
 one does, rather than to the working directory itself.
 
+The plain-Node launchers in `clients/web/scripts/` apply the same rule through
+`scripts/non-blank.mjs`, a twin of `nonBlank` that `machine-home.test.ts` pins to it (HS2-MVF6X3):
+`stable-dev.mjs` reads `HOTSHEET_REPO_ROOT`, `HOTSHEET_WEB_STABLE_TEMP_ROOT`, and
+`HOTSHEET_WEB_STABLE_SOURCE_ROOT`, and `prepare-desktop.mjs` reads `HOTSHEET_DESKTOP_NODE`. A blank
+value takes the unset default: the checkout two levels above the web package, the per-user cache
+directory, the web package itself, and the running Node executable.
+
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:

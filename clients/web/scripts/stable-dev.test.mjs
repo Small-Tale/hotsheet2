@@ -12,6 +12,7 @@ import {
   runStableDev,
   stableDevEnvironment,
   stableSnapshotParent,
+  stableSourceRoot,
 } from './stable-dev.mjs';
 
 const cleanup = [];
@@ -85,6 +86,34 @@ describe('stable dev snapshot', () => {
     );
     expect(stableSnapshotParent({ HOTSHEET_WEB_STABLE_TEMP_ROOT: '/override' }, 'darwin', '/Users/dev')).toBe(
       resolve('/override'),
+    );
+  });
+
+  it('HS2-MVF6X3 treats blank path overrides as unset and uses any other value as given', () => {
+    const webRoot = resolve(import.meta.dirname, '..');
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      expect(stableSnapshotParent({ HOTSHEET_WEB_STABLE_TEMP_ROOT: blank }, 'linux', '/home/dev')).toBe(
+        join('/home/dev', '.cache', 'hotsheet-web-stable'),
+      );
+      expect(stableSourceRoot({ HOTSHEET_WEB_STABLE_SOURCE_ROOT: blank })).toBe(webRoot);
+      expect(
+        stableDevEnvironment('/work/hotsheet2/clients/web', '/s', { HOTSHEET_REPO_ROOT: blank }).HOTSHEET_REPO_ROOT,
+      ).toBe(resolve('/work/hotsheet2'));
+    }
+    expect(stableSnapshotParent({ HOTSHEET_WEB_STABLE_TEMP_ROOT: 'rel/temp' }, 'linux', '/home/dev')).toBe(
+      resolve('rel/temp'),
+    );
+    expect(stableSnapshotParent({ HOTSHEET_WEB_STABLE_TEMP_ROOT: '/abs/temp' }, 'linux', '/home/dev')).toBe(
+      resolve('/abs/temp'),
+    );
+    expect(stableSourceRoot({ HOTSHEET_WEB_STABLE_SOURCE_ROOT: 'rel/web' })).toBe(resolve('rel/web'));
+    expect(stableSourceRoot({ HOTSHEET_WEB_STABLE_SOURCE_ROOT: '/abs/web' })).toBe(resolve('/abs/web'));
+    // The repository root is passed through unchanged, as before; the bridges resolve it.
+    expect(stableDevEnvironment('/w/clients/web', '/s', { HOTSHEET_REPO_ROOT: 'rel/repo' }).HOTSHEET_REPO_ROOT).toBe(
+      'rel/repo',
+    );
+    expect(stableDevEnvironment('/w/clients/web', '/s', { HOTSHEET_REPO_ROOT: '/abs/repo' }).HOTSHEET_REPO_ROOT).toBe(
+      '/abs/repo',
     );
   });
 

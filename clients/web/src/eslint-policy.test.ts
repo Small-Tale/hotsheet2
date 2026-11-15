@@ -351,6 +351,10 @@ describe('web ESLint policy', () => {
       'HOTSHEET_DEV_LATENCY_LOG',
       'HOTSHEET_VITE_CACHE_DIR',
       'HOTSHEET_DESKTOP_STORAGE_DIRECTORY',
+      // HS2-MVF6X3: the plain-Node launchers in scripts/ use the non-blank.mjs twin.
+      'HOTSHEET_WEB_STABLE_TEMP_ROOT',
+      'HOTSHEET_WEB_STABLE_SOURCE_ROOT',
+      'HOTSHEET_DESKTOP_NODE',
     ].join('|');
     const read = new RegExp(
       String.raw`\b(?:process\.env|environment|env)(?:\.\s*(?:${names})\b|\[\s*['"\x60](?:${names})['"\x60]\s*\]|\[\s*variable\s*\])`,
@@ -379,6 +383,10 @@ describe('web ESLint policy', () => {
     scan(import.meta.dirname);
     for (const name of ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'])
       check(join(import.meta.dirname, '..', name));
+    // HS2-MVF6X3: the scripts/ launchers too; their test files set these variables rather than read them.
+    const scripts = join(import.meta.dirname, '..', 'scripts');
+    for (const entry of readdirSync(scripts))
+      if (/\.mjs$/.test(entry) && !/\.test\.mjs$/.test(entry)) check(join(scripts, entry));
     expect(offenders).toEqual([]);
   });
 

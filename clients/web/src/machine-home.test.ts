@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { nonBlank as scriptNonBlank } from '../scripts/non-blank.mjs';
 import { clientDiscoveryPath } from './client-discovery';
 import { devLatencyLogPath } from './dev-latency-log';
 import { hotsheetHome, hotsheetLegacyHome, nonBlank } from './machine-home';
@@ -21,6 +22,11 @@ describe('HS2-N2HB7G machine home resolution', () => {
     }
     expect(hotsheetHome({}, user)).toBe(resolve('/users/a', '.hotsheet2'));
     expect(hotsheetLegacyHome({}, user)).toBe(resolve('/users/a', '.hotsheet'));
+  });
+
+  it('HS2-MVF6X3 keeps the scripts/ twin of nonBlank identical to this one', () => {
+    for (const value of [undefined, '', ' ', '\t', ' \n ', '\u00a0', 'relative/path', '/abs/path', ' padded ', '0'])
+      expect(scriptNonBlank(value)).toBe(nonBlank(value));
   });
 
   it('uses a non-empty value as given, relative or absolute', () => {
