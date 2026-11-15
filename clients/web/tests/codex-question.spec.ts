@@ -108,15 +108,24 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
 
 // HS2-5EV4N9: the question notice's footer actions wrap instead of overlapping, and stay on screen.
 async function expectFooterActionsApart(popup: Locator, width: number) {
-  const boxes = await Promise.all(
-    ['Dismiss', 'Pause Notifications', 'Answer in terminal'].map(async (name) => {
-      const button = popup.getByRole('button', { name, exact: true });
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      expect(box, name).not.toBeNull();
-      return { name, ...box! };
-    }),
-  );
+  const names = ['Dismiss', 'Pause Notifications', 'Answer in terminal'] as const;
+  for (const name of names) await expect(popup.getByRole('button', { name, exact: true })).toBeVisible();
+  // HS2-4EK9BB: a viewport change renders the shell again, which mounts the popup anew; the
+  // new popover is closed until the top-layer watcher presents it a few milliseconds later.
+  // Measure once all three actions are on screen together, in the presented popup.
+  let boxes: { name: string; x: number; y: number; width: number; height: number }[] = [];
+  await expect
+    .poll(async () => {
+      const measured = await Promise.all(
+        names.map(async (name) => ({
+          name,
+          box: await popup.getByRole('button', { name, exact: true }).boundingBox(),
+        })),
+      );
+      boxes = measured.flatMap(({ name, box }) => (box ? [{ name, ...box }] : []));
+      return boxes.length;
+    }, 'every footer action is on screen')
+    .toBe(names.length);
   for (const box of boxes) {
     expect(box.x, box.name).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, box.name).toBeLessThanOrEqual(width);
