@@ -1,9 +1,11 @@
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { describe, expect, it } from 'vitest';
 
 import {
   createTerminalSearchSync,
   searchTerminalViewport,
   TERMINAL_SEARCH_EVENT,
+  terminalDrawerSearch,
   terminalSearchCountText,
   type TerminalSearchDetail,
   type TerminalSearchResults,
@@ -241,5 +243,26 @@ describe('terminal search sync (HS2-M5QPED)', () => {
     const before = viewport.requests.length;
     sync.ready(viewport);
     expect(viewport.requests).toHaveLength(before);
+  });
+});
+
+describe('terminal drawer search prop (HS2-174S6X)', () => {
+  it('maps the model, open state, and results to the drawer count and step availability', () => {
+    const model = createSearchFieldModel();
+    expect(terminalDrawerSearch(model, false, undefined)).toEqual({
+      model,
+      open: false,
+      count: undefined,
+      hasMatches: false,
+    });
+    expect(terminalDrawerSearch(model, true, { resultIndex: 2, resultCount: 12 })).toMatchObject({
+      open: true,
+      count: '3 of 12',
+      hasMatches: true,
+    });
+    expect(terminalDrawerSearch(model, true, { resultIndex: -1, resultCount: 0 })).toMatchObject({
+      count: 'No matches',
+      hasMatches: false,
+    });
   });
 });

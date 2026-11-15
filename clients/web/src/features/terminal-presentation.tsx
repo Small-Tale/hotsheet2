@@ -26,7 +26,7 @@ import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
 import { type ServerClocks, serverClocks } from '../server-clock';
-import { terminalSearchCountText, type TerminalSearchResults } from '../terminal-search';
+import { terminalDrawerSearch, type TerminalSearchResults } from '../terminal-search';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityType } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
@@ -359,12 +359,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
       mobile: viewportMobile.value,
       touchClipboard: touchClipboard(),
-      search: {
-        model: terminalSearch.model,
-        open: terminalSearch.open.value,
-        count: terminalSearchCountText(terminalSearch.results.value),
-        hasMatches: (terminalSearch.results.value?.resultCount ?? 0) > 0,
-      },
+      search: terminalDrawerSearch(terminalSearch.model, terminalSearch.open.value, terminalSearch.results.value),
     };
   }
 

@@ -9,6 +9,10 @@
  * results (including re-counts after new output) with a bubbling results event, which the drawer
  * shows as a match count beside the field.
  */
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
+
+import type { TerminalDrawerSearch } from './components/terminal-drawer';
+
 /** Event dispatched on an interactive viewport to search its buffer. */
 export const TERMINAL_SEARCH_EVENT = 'hotsheet-terminal-search';
 /** Bubbling event a viewport dispatches whenever its search results change (HS2-M5QPED). */
@@ -63,6 +67,18 @@ export function terminalSearchCountText(
   const total = resultCount >= limit ? `${limit}+` : String(resultCount);
   if (resultIndex >= 0) return `${resultIndex + 1} of ${total}`;
   return resultCount === 1 ? '1 match' : `${total} matches`;
+}
+
+/**
+ * The drawer's search prop from the field model, its open state, and the searched terminal's results
+ * (HS2-M5QPED). Production and the catalog demo (HS2-174S6X) present the search through this one mapping.
+ */
+export function terminalDrawerSearch(
+  model: SearchFieldModel,
+  open: boolean,
+  results: TerminalSearchResults | undefined,
+): TerminalDrawerSearch {
+  return { model, open, count: terminalSearchCountText(results), hasMatches: (results?.resultCount ?? 0) > 0 };
 }
 
 export interface TerminalSearchSyncOptions {

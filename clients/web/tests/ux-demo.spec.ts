@@ -7601,6 +7601,102 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
     .screenshot({ path: 'target/visual-captures/hs2-e3j0vv-fixed-layout-grid-tab.png' });
 });
 
+test('catalogs the terminal drawer search states with settings and reset (HS2-174S6X)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const example = page.getByRole('region', { name: 'Terminal Search', exact: true }),
+    drawer = example.locator('[data-component="terminal-drawer"]'),
+    field = drawer.locator('[data-component="search-field"][data-search-field-id="terminal-search"]'),
+    editor = drawer.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    inspector = page.getByRole('complementary', { name: 'TerminalDrawer Settings' }),
+    state = inspector.locator('kui-select[name="search-state"]');
+  const setState = async (next: string) => {
+    await setDemoSettingsOpen(page, true);
+    await state.evaluate((node: HTMLElement & { value: string }, to) => {
+      node.value = to;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, next);
+    await expect(state).toHaveJSProperty('value', next);
+    // The narrow catalog's settings overlay covers the stage; close it before reading the drawer.
+    await setDemoSettingsOpen(page, false);
+  };
+  const noPageOverflow = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  for (const [width, name] of [
+    [1280, 'wide'],
+    [390, 'phone'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-drawer');
+    await expect(drawer).toBeVisible();
+    // The other drawer specimens take no search prop, so the field id stays unique on the page.
+    await expect(page.locator('[data-search-field-id="terminal-search"]')).toHaveCount(1);
+
+    // Collapsed: only the iconic trigger, and no count.
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(count).toHaveCount(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-collapsed-${name}.png` });
+
+    // Open, empty: the field is open and nothing is searched, so no count.
+    await setState('open');
+    await expect(field).toHaveAttribute('data-expanded', 'true');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveText('');
+    await expect(count).toHaveCount(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-open-${name}.png` });
+
+    // Open with a count: the count control steps forward, and Shift steps back.
+    await setState('count');
+    await expect(editor).toHaveText('root');
+    await expect(count).toHaveText('3 of 12');
+    await expect(count).toBeEnabled();
+    await expect(count).toHaveAccessibleName('Next Match, 3 of 12');
+    await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-count-${name}.png` });
+    await count.click();
+    await expect(count).toHaveText('4 of 12');
+    await count.click({ modifiers: ['Shift'] });
+    await expect(count).toHaveText('3 of 12');
+    // Enter in the field steps through matches instead of submitting, as in production.
+    await editor.focus();
+    await page.keyboard.press('Enter');
+    await expect(count).toHaveText('4 of 12');
+    await expect(editor).toBeFocused();
+
+    // No matches: the count reads so and cannot step.
+    await setState('none');
+    await expect(editor).toHaveText('webpack');
+    await expect(count).toHaveText('No matches');
+    await expect(count).toBeDisabled();
+    await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-none-${name}.png` });
+
+    // The highlight limit caps the count.
+    await setState('limit');
+    await expect(count).toHaveText('1000+ matches');
+    await expect(count).toBeEnabled();
+
+    // Kerf's clear empties the real model, which clears the count as production's search does.
+    await drawer.getByRole('button', { name: 'Clear Terminal Search' }).click();
+    await expect(count).toHaveCount(0);
+    await expect(drawer.locator('[data-search-field-editor="terminal-search"]:not(:empty)')).toHaveCount(0);
+
+    // Reset restores the collapsed state and the live Settings control.
+    await setState('count');
+    await setDemoSettingsOpen(page, true);
+    await inspector.getByRole('button', { name: 'Reset' }).click();
+    await expect(state).toHaveJSProperty('value', 'collapsed');
+    await setDemoSettingsOpen(page, false);
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(count).toHaveCount(0);
+    // A further edit after Reset applies.
+    await setState('none');
+    await expect(count).toHaveText('No matches');
+    await setState('collapsed');
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+  }
+});
+
 test('operates the project tab bar across pointer, keyboard, and responsive states', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tabs');
