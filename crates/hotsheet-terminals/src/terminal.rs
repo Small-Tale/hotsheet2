@@ -396,7 +396,8 @@ impl OutputReplay {
 enum Decided {
     /// Resize the PTY and broadcast the decision.
     Resize(Decision),
-    /// Broadcast the unchanged applied size because the query answerer changed (HS2-0GZZHV).
+    /// Broadcast the unchanged applied size because the driver or the query answerer changed
+    /// (HS2-0GZZHV, HS2-G1ADYV).
     Notice(Decision),
     Nothing,
 }
@@ -469,7 +470,8 @@ fn apply_decided(
             let _ = resize_pty(master, d.rows, d.cols);
             Some(d)
         }
-        // Same size, new answerer: every viewer learns who answers queries now.
+        // Same size, new driver or answerer: every viewer learns who drives and who answers
+        // queries now (HS2-0GZZHV, HS2-G1ADYV).
         Decided::Notice(d) => {
             let _ = size_tx.send(d);
             None
@@ -859,14 +861,12 @@ impl Terminal {
         decision
     }
 
-    /// Decide the PTY size; when nothing resizes but the query answerer changed, the applied
-    /// size naming the new answerer to broadcast instead (HS2-0GZZHV).
+    /// Decide the PTY size; when nothing resizes but the driver or the query answerer changed,
+    /// the applied size naming them to broadcast instead (HS2-0GZZHV, HS2-G1ADYV).
     fn decide_or_notice(s: &mut SizeArbiter, now_ms: u64) -> Decided {
         match s.decide(now_ms) {
             Some(decision) => Decided::Resize(decision),
-            None => s
-                .answerer_notice()
-                .map_or(Decided::Nothing, Decided::Notice),
+            None => s.notice().map_or(Decided::Nothing, Decided::Notice),
         }
     }
 
@@ -915,11 +915,11 @@ impl Terminal {
                     std::thread::sleep(std::time::Duration::from_millis(
                         at.saturating_sub(wall_ms()),
                     ));
-                    // Applied under the arbiter lock, in decision order (HS2-AYVQ9Q).
+                    // Applied under the arbiter lock, in decision order (HS2-AYVQ9Q). A focus-hold
+                    // takeover by a viewport with the same grid lands here without a resize, so
+                    // the notice announces its new driver (HS2-G1ADYV).
                     due = sizer.with_lock(|s| {
-                        let decided = s
-                            .decide(wall_ms())
-                            .map_or(Decided::Nothing, Decided::Resize);
+                        let decided = Self::decide_or_notice(s, wall_ms());
                         apply_decided(&size_tx, &master, decided);
                         s.deferred_until()
                     });
@@ -1374,6 +1374,76 @@ mod tests {
         let _ = term.kill();
     }
 
+    /// HS2-G1ADYV: a focus-hold takeover by a viewport with the same grid lands on the trailing
+    /// re-decide without a resize. Before, that pass broadcast only resizes, so every viewer kept
+    /// the old driver and the new driver's viewer never started answering terminal queries.
+    #[test]
+    fn a_same_size_takeover_is_announced_once_without_a_resize() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        let mut sizes = term.subscribe_size();
+        let claim = |viewer: &str, interacting| ViewportClaim {
+            viewer_id: viewer.into(),
+            cols: 100,
+            rows: 30,
+            focus: true,
+            visible: true,
+            interacting,
+            answers_queries: true,
+            activity_at_ms: 0,
+        };
+        assert!(term.claim_size(claim("desk", true), wall_ms()).is_some());
+        let first = sizes.blocking_recv().expect("the desk size");
+        assert_eq!(first.driven_by.as_deref(), Some("desk"));
+        // A later interaction than the desk's, so the phone is the takeover candidate.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(
+            term.claim_size(claim("phone", true), wall_ms()).is_none(),
+            "held inside the focus-hold"
+        );
+        let handoff = recv_within(&mut sizes, std::time::Duration::from_secs(5))
+            .expect("the held handoff is announced on its own");
+        assert_eq!(
+            (
+                handoff.cols,
+                handoff.rows,
+                handoff.driven_by.as_deref(),
+                handoff.answered_by.as_deref()
+            ),
+            (100, 30, Some("phone"), Some("phone"))
+        );
+        assert_eq!(pty_grid(&term), (100, 30), "nothing resized");
+        // The old driver's connection ends and the phone heartbeats: nothing more to announce.
+        assert!(term.drop_viewer("desk", wall_ms()).is_none());
+        assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
+        settle_trailing_resize(&term);
+        assert!(sizes.try_recv().is_err(), "one notice, no repeats");
+        assert_eq!(
+            term.current_size().and_then(|d| d.driven_by).as_deref(),
+            Some("phone")
+        );
+        let _ = term.kill();
+    }
+
+    /// The next broadcast size within `limit`, so a missing frame fails instead of hanging.
+    fn recv_within(
+        sizes: &mut broadcast::Receiver<Decision>,
+        limit: std::time::Duration,
+    ) -> Option<Decision> {
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            match sizes.try_recv() {
+                Ok(decision) => return Some(decision),
+                Err(broadcast::error::TryRecvError::Empty) => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
     /// The PTY's real grid, as the program sees it through `TIOCGWINSZ`.
     fn pty_grid(term: &Terminal) -> (u16, u16) {
         let size = term.master.lock_or_recover().get_size().expect("pty size");
@@ -1550,10 +1620,11 @@ mod tests {
             (
                 notice.cols,
                 notice.rows,
-                notice.driven_by,
+                notice.driven_by.as_deref(),
                 notice.answered_by.as_deref()
             ),
-            (120, 40, None, Some("phone"))
+            // The focused survivor also drives the held size (HS2-G1ADYV).
+            (120, 40, Some("phone"), Some("phone"))
         );
         assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
         std::thread::sleep(std::time::Duration::from_millis(150));

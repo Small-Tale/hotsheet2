@@ -4353,6 +4353,16 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId, answeredBy: vie
   The older size then landed last while the arbiter recorded the newer one as applied, so no
   later claim corrected it, and a zoomed Workspace Grid terminal stayed at another device's size
   (**HS2-AYVQ9Q**).
+- A driver change that resizes nothing is still announced. When the new driver's grid is within
+  the min-delta of the applied size (two Workspace Grid zooms at 80×24, or a survivor at the
+  departed driver's grid), the arbiter records it as the applied size's driver without resizing
+  the PTY and sends every viewer the unchanged size naming the new `driven_by` and `answered_by`,
+  once. That includes a focus-hold takeover that lands on the trailing re-decide. Before, the
+  old driver stayed `driven_by` (or the size became undriven once it left), the new driver's
+  viewport never set `data-driving="true"`, and the earliest-attached viewer answered terminal
+  queries instead of the driver. A lone focused viewer whose grid matches the spawn size drives
+  it from its first claim. A hold with nothing focused keeps the driver it holds for
+  (**HS2-G1ADYV**).
 - **Exactly one viewer answers the program's terminal queries (HS2-0GZZHV).** Every attached
   xterm answers a query such as a cursor-position request (`ESC[6n`), device attributes, a mode
   or colour report, and reports focus changes. With several viewers the program read one reply
