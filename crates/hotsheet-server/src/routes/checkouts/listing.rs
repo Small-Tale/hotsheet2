@@ -195,16 +195,10 @@ fn merge_checkout_page(
         }
     }
     // A disabled source is left out of the merged view rather than failing it (HS2-SF6W34).
-    let mut external_sources = Vec::new();
-    for source in checkout
-        .sources
-        .iter()
-        .filter(|source| source.provider != "git" && params.source.is_none())
-    {
-        if !connection_disabled(state, &source.connection_id)? {
-            external_sources.push(source);
-        }
-    }
+    let external_sources =
+        checkout_page::merged_external_sources(&checkout, params.source.is_some(), |id| {
+            connection_disabled(state, id)
+        })?;
     let source_keys = entries
         .iter()
         .map(|(store_id, _)| checkout_page::git_source_key(store_id))
@@ -251,8 +245,10 @@ fn merge_checkout_page(
         match result {
             Ok(summary) => provider_summaries[index] = Some(summary),
             Err(error) => {
-                failed_sources[index] =
-                    Some(format!("{}: {}", source.connection_id, error.message));
+                failed_sources[index] = Some(checkout_page::source_error(
+                    &source.connection_id,
+                    &error.message,
+                ));
             }
         }
     }
@@ -356,8 +352,10 @@ fn merge_checkout_page(
             ) {
                 Ok(page) => page,
                 Err(error) => {
-                    failed_sources[source_index] =
-                        Some(format!("{}: {}", source.connection_id, error.message));
+                    failed_sources[source_index] = Some(checkout_page::source_error(
+                        &source.connection_id,
+                        &error.message,
+                    ));
                     return Ok(checkout_page::SourceBatch {
                         exhausted: true,
                         ..Default::default()

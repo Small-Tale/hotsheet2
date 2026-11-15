@@ -442,8 +442,9 @@ query(filter, sort, text?, paging) -> TicketRow[]
   truncated result in `{items, partial, truncated, warnings}`. The warning strings
   identify omitted sources and a limit that cut rows. The HTTP backend reads both
   response headers; without a server, the MCP backend marks a checkout partial
-  when it has external sources that only the server can read. The serverless backend
-  detects truncation by reading one additional merged row. A fresh page after recovery
+  when it has enabled external sources that only the server can read (a disabled
+  connection, or a `source=git` read, omits nothing, as on the server). The serverless
+  backend detects truncation by reading one additional merged row. A fresh page after recovery
   includes the source again; callers restart pagination rather than continuing a
   partial cursor when they need the recovered source's older rows (HS2-190BAS).
   The web client carries partial status through checkout search, sidebar search counts,
@@ -487,11 +488,18 @@ query(filter, sort, text?, paging) -> TicketRow[]
   therefore apply the same 1–500 `page_size` bound, the same staleness rules, and the same
   zero-filled seven-day `completion_trend`. Source keys are `git:{connection id}` and
   `provider:{connection id}`, so a cursor started on one side continues on the other
-  whenever the checkout's source set matches. The serverless backend reads only a
-  checkout's git stores, so for a checkout with hosted-provider sources its cursors differ
-  in source set and are rejected as stale by the server (and vice versa) rather than
-  reinterpreted. Rows keep their `store` field: the hosted store id on the server, the
-  store path serverlessly.
+  whenever the checkout's source set matches. Both sides choose that set with the shared
+  `checkout_page::merged_external_sources` rule (enabled non-git links, none for
+  `source=git`). The serverless backend cannot read hosted providers (they need the
+  trusted credential broker of `docs/16-external-sync-interface.md` §16.8.1, HS2-C1E8Q4),
+  so it keeps each hosted source's `provider:{connection id}` key, reads it as exhausted,
+  names it in `source_errors` as `{connection id}: <reason>` with a fixed reason that a
+  running Hot Sheet server is needed, and counts only its git stores, exactly as
+  the server reports a source whose read failed. Its cursors therefore continue on the
+  server and the reverse, with the same partial-cursor caveat as any failed source; an
+  external-only checkout returns no rows and names every omitted source rather than
+  failing (HS2-DX78E7). Rows keep their `store` field: the hosted store id on the server,
+  the store path serverlessly.
 
 - **Continuation under concurrent mutation (decided HS2-ZYW6K8; built HS2-74H84S):**
   checkout cursors are _value-keyset continuations_, not snapshots. The server keeps no
