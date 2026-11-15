@@ -84,7 +84,9 @@ the staged Node executable on each host. `npm run desktop:build` packages the ma
 ephemeral desktop origins (HS2-RKZKX7). `src/desktop-close.ts` captures parent recovery
 through `desktop-recovery-flush.ts` and drains ordinary writes before the native shell's
 exact-request IPC acknowledgement; `src-tauri/src/close_lifecycle.rs` fences close/quit,
-retry, timeout and stale acknowledgements (HS2-E0H7S0). On macOS
+retry, timeout and stale acknowledgements (HS2-E0H7S0). `src-tauri/src/env_path.rs` resolves
+`HOTSHEET_DESKTOP_STORAGE_DIRECTORY` with a blank-as-unset local copy of `hotsheet_sync::env_path`
+(HS2-15ZN8E). On macOS
 `src-tauri/src/terminal_relay.rs` runs the bundled `hotsheet-cli terminal-relay install` (bounded,
 non-blocking on failure) before the bridge starts (HS2-HYF56Y). The same bridge keeps staged draft attachment
 bytes as single atomic records under `draft-files-v1`, `src/desktop-draft-files.ts` routes
@@ -835,7 +837,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
     hotsheet-notify/         # Notifier plugins (HS2-R5HTZN, docs/32): Message/EventKind, Capabilities + typed settings schema, render (format choice, Markdown→HTML/plain, truncation, attachment limits), built-in speak/ntfy/email/webhook/slack/teams/twilio over injectable runner/HTTP/SMTP (HS2-97ZHMM), external manifest+stdin/stdout plugins in ${HOTSHEET_HOME}/notifiers, notifications.json config + rules, Dispatcher (dedupe cooldown via memory + log, retry/backoff, shapes-only delivery log), transitions (ticket state changes into messages, shared by the server router and the CLI), views (saved-view rule memberships, HS2-G8NXNC), admin workflow shared by CLI and server, testing fakes
       src/delivery_log.rs   # Process-shared flush/journal locks, private exact-held-ID write-ahead reservations, interrupted-send recovery and reservation-aware bounded JSONL compaction (HS2-MFD44D); delivery_log_tests.rs launches independent dispatch processes with synthetic transports
-    hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
+    hotsheet-sync/           # Shared leaf helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP); env_path::{non_blank, env_path} — the one blank-as-unset rule for path overrides, re-exported by hotsheet_ticketing::machine_home (HS2-15ZN8E)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
     hotsheet-process-journal/ # Private, bounded machine-local child launch/exit records, atomic updates, crash-unresolved inventory and retention; tracked Command adapter for utility and detached children; CLI `processes` reads it (HS2-GDCMXE, HS2-G9TF60)
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10

@@ -2097,6 +2097,15 @@ writes the index, settings, or checkout registry into the working directory. A n
 relative value is an explicit choice and is used as given, relative to the working
 directory. `HOTSHEET_CACHE_DIR` follows the same blank-means-unset rule.
 
+The rule itself lives in the dependency-free `hotsheet_sync::env_path` (HS2-15ZN8E) so
+crates that do not depend on `hotsheet-ticketing` apply it too: the terminal relay's
+`HOTSHEET_LAUNCH_AGENTS_DIR`, `HOTSHEET_LAUNCHCTL` and `HOME` fallback, and the terminal
+broker's `HOTSHEET_PROCESS_JOURNAL_HOME`. The desktop shell, a separate Cargo workspace,
+keeps a local copy for `HOTSHEET_DESKTOP_STORAGE_DIRECTORY`. A blank LaunchAgents override
+falls back to `~/Library/LaunchAgents`, a blank `HOME` is an error rather than a relative
+`Library/LaunchAgents`, a blank `launchctl` override runs `/bin/launchctl`, and a blank
+journal home disables broker provenance.
+
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:

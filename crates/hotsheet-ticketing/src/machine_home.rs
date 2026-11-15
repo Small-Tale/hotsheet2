@@ -15,17 +15,9 @@ use std::path::PathBuf;
 /// `.hotsheet` (HS1's data directory).
 pub const DEFAULT_HOME_DIR: &str = ".hotsheet2";
 
-/// A path-valued variable, or `None` when it is unset, empty, or whitespace-only.
-pub fn env_path(name: &str) -> Option<PathBuf> {
-    non_blank(std::env::var_os(name))
-}
-
-/// `value` as a path, or `None` when it is absent, empty, or whitespace-only.
-pub fn non_blank(value: Option<OsString>) -> Option<PathBuf> {
-    value
-        .filter(|value| !value.to_string_lossy().trim().is_empty())
-        .map(PathBuf::from)
-}
+/// The blank-as-unset rule lives in the leaf `hotsheet-sync` crate so crates that do not
+/// depend on this one share it (HS2-15ZN8E).
+pub use hotsheet_sync::env_path::{env_path, non_blank};
 
 /// Pure resolution: `hotsheet_home` when set, else `<home>/.hotsheet2`, else
 /// `<temp>/.hotsheet2`. Blank values count as unset at both levels.

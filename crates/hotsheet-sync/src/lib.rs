@@ -6,6 +6,11 @@
 //! lock and keep serving**. Call [`LockExt::lock_or_recover`] (or the `RwLock` variants)
 //! instead of `lock().unwrap()`, silently skipping via `if let Ok(..)`, or mapping poison
 //! to an HTTP 500.
+//!
+//! [`env_path`] holds the other cross-crate leaf rule: a blank path-valued environment
+//! override counts as unset (HS2-15ZN8E).
+
+pub mod env_path;
 
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 

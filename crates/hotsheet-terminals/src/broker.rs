@@ -43,6 +43,17 @@ use crate::wire_bytes::{BytesEncoding, WireBytes};
 /// Detached brokers exit after this long with no terminals and no connected clients.
 pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
 
+/// The machine home under which the broker journals the child processes it starts.
+pub const PROCESS_JOURNAL_HOME_ENV: &str = "HOTSHEET_PROCESS_JOURNAL_HOME";
+
+/// Pure resolution of [`PROCESS_JOURNAL_HOME_ENV`]: a blank value counts as unset, so the
+/// broker never journals into a relative `""` home in its working directory (HS2-15ZN8E).
+pub fn resolve_process_journal_home(
+    value: Option<std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    hotsheet_sync::env_path::non_blank(value)
+}
+
 /// A real millis clock for the broker process (the size arbiter is deterministic given it).
 /// Distinct from the terminal's injected test clock — the broker runs as its own process.
 #[cfg(unix)]
@@ -732,14 +743,15 @@ async fn handle_request(
                 replay_bytes: replay_bytes.map_or(crate::SCROLLBACK_BYTES, |bytes| {
                     usize::try_from(bytes).unwrap_or(usize::MAX)
                 }),
-                provenance: std::env::var_os("HOTSHEET_PROCESS_JOURNAL_HOME").map(|home| {
-                    crate::ProcessProvenance {
-                        machine_home: std::path::PathBuf::from(home),
-                        supervisor: "terminal-broker".into(),
-                        project_id: project.to_string(),
-                        session_id: id.clone(),
-                        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
-                    }
+                provenance: resolve_process_journal_home(std::env::var_os(
+                    PROCESS_JOURNAL_HOME_ENV,
+                ))
+                .map(|machine_home| crate::ProcessProvenance {
+                    machine_home,
+                    supervisor: "terminal-broker".into(),
+                    project_id: project.to_string(),
+                    session_id: id.clone(),
+                    binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
                 }),
             };
             // A new PTY would inherit this broker's dead bootstrap namespace and fail in
@@ -1156,6 +1168,33 @@ impl BrokerStreamWriter {
 
     pub async fn send(&mut self, _frame: &StreamIn) -> std::io::Result<()> {
         Err(unsupported())
+    }
+}
+
+#[cfg(test)]
+mod journal_home_tests {
+    use super::resolve_process_journal_home;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    #[test]
+    fn hs2_15zn8e_process_journal_home_treats_blank_as_unset() {
+        assert_eq!(resolve_process_journal_home(None), None);
+        for blank in ["", " ", "\t", " \n "] {
+            assert_eq!(
+                resolve_process_journal_home(Some(OsString::from(blank))),
+                None,
+                "{blank:?}"
+            );
+        }
+        assert_eq!(
+            resolve_process_journal_home(Some(OsString::from("rel/home"))),
+            Some(PathBuf::from("rel/home"))
+        );
+        assert_eq!(
+            resolve_process_journal_home(Some(OsString::from("/abs/home"))),
+            Some(PathBuf::from("/abs/home"))
+        );
     }
 }
 

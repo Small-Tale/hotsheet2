@@ -9,12 +9,14 @@
 //! user's real GUI domain. The test environment additionally forces [`LAUNCHCTL_ENV`] and
 //! [`LAUNCH_AGENTS_DIR_ENV`] to inert paths (`.cargo/config.toml`).
 
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use hotsheet_sync::env_path::non_blank;
 use serde::Serialize;
 
 use crate::launch_relay::{RelayHello, RelayUnavailable, relay_hello};
@@ -50,7 +52,13 @@ pub trait Launchctl {
 
 /// The real `launchctl`, or the executable named by [`LAUNCHCTL_ENV`].
 pub fn launchctl_program() -> PathBuf {
-    std::env::var_os(LAUNCHCTL_ENV).map_or_else(|| PathBuf::from("/bin/launchctl"), PathBuf::from)
+    resolve_launchctl_program(std::env::var_os(LAUNCHCTL_ENV))
+}
+
+/// Pure resolution of [`launchctl_program`]: a blank override counts as unset, so it never
+/// runs a relative `""` program (HS2-15ZN8E).
+pub fn resolve_launchctl_program(launchctl: Option<OsString>) -> PathBuf {
+    non_blank(launchctl).unwrap_or_else(|| PathBuf::from("/bin/launchctl"))
 }
 
 /// Runs [`launchctl_program`]. This leaf crate builds no commands itself: the caller supplies
@@ -86,16 +94,29 @@ impl Launchctl for SystemLaunchctl {
 
 /// The LaunchAgents directory: [`LAUNCH_AGENTS_DIR_ENV`], else `~/Library/LaunchAgents`.
 pub fn default_agents_dir() -> io::Result<PathBuf> {
-    if let Some(directory) = std::env::var_os(LAUNCH_AGENTS_DIR_ENV) {
-        return Ok(PathBuf::from(directory));
+    resolve_agents_dir(
+        std::env::var_os(LAUNCH_AGENTS_DIR_ENV),
+        std::env::var_os("HOME"),
+    )
+}
+
+/// Pure resolution of [`default_agents_dir`]. A blank override or `HOME` counts as unset, so
+/// a plist is never written to a relative `Library/LaunchAgents` in the working directory
+/// (HS2-15ZN8E).
+pub fn resolve_agents_dir(
+    agents_dir: Option<OsString>,
+    home: Option<OsString>,
+) -> io::Result<PathBuf> {
+    if let Some(directory) = non_blank(agents_dir) {
+        return Ok(directory);
     }
-    let home = std::env::var_os("HOME").ok_or_else(|| {
+    let home = non_blank(home).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
             "HOME is not set, so ~/Library/LaunchAgents is unknown",
         )
     })?;
-    Ok(PathBuf::from(home).join("Library").join("LaunchAgents"))
+    Ok(home.join("Library").join("LaunchAgents"))
 }
 
 /// Everything that identifies one relay agent.
