@@ -55,7 +55,10 @@ test('keeps App Settings content inside its column at 600 px and back (HS2-21E07
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByLabel('Settings View').click();
-    await page.getByRole('button', { name: 'General', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'App Settings' })
+      .getByRole('button', { name: 'General', exact: true })
+      .click();
     const workspace = page.locator('[data-component="settings-workspace"]');
     await expect(workspace).toHaveAttribute('data-settings-category', 'general');
     for (const [label, width] of [
