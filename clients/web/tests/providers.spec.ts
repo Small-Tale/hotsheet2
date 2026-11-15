@@ -10920,6 +10920,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
+    // HS2-S4FJ85: New Drawer Item slides with the ~220 ms drawer-open transition; click it once open.
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
