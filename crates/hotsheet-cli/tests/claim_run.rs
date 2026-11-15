@@ -19,6 +19,9 @@ fn cli_binary() -> &'static str {
     first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-cli"), &["--version"])
 }
 
+/// The upper bound of a wait on state that should arrive, never a timing window under test.
+const SAFETY_BOUND: Duration = Duration::from_secs(60);
+
 struct Fixture {
     root: tempfile::TempDir,
     store: FsStore,
@@ -111,6 +114,10 @@ impl Fixture {
                 self.root.path().join("grandchild-started"),
             )
             .env(
+                "HS2_MFYYJ9_GRANDCHILD_GATE",
+                self.root.path().join("grandchild-gate"),
+            )
+            .env(
                 "HS2_MFYYJ9_GRANDCHILD_DELAY_MS",
                 if mode == "grandchild-exit" {
                     "1200"
@@ -127,28 +134,14 @@ impl Fixture {
         self.wait_file("started");
     }
 
+    /// Wait for a marker file. The bound only stops a hung test: a host stall on a loaded CI
+    /// runner suspended every process for about 13 s, so it is not a timing window (HS2-EGMJ8G).
     fn wait_file(&self, name: &str) {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + SAFETY_BOUND;
         while !self.root.path().join(name).exists() {
             assert!(Instant::now() < deadline, "{name} did not appear");
             thread::sleep(Duration::from_millis(20));
         }
-    }
-
-    fn hold_ticket_lock(&self, duration: Duration) -> thread::JoinHandle<()> {
-        let store = self.store.clone();
-        let marker = self.root.path().join("locked");
-        let holder = thread::spawn(move || {
-            store
-                .with_ticket_transaction(|| {
-                    fs::write(marker, "held").unwrap();
-                    thread::sleep(duration);
-                    Ok::<(), StoreError>(())
-                })
-                .unwrap();
-        });
-        self.wait_file("locked");
-        holder
     }
 
     /// Hold the ticket lock until the returned sender sends or is dropped (HS2-K1M08D).
@@ -187,6 +180,14 @@ impl Fixture {
     }
 }
 
+fn renew_count(ticket: &Ticket) -> usize {
+    ticket
+        .claim_history
+        .iter()
+        .filter(|event| event.kind == ClaimEventKind::Renew)
+        .count()
+}
+
 fn git(project: &Path, args: &[&str]) -> String {
     let output = hotsheet_git::command_in(project)
         .args(args)
@@ -211,24 +212,31 @@ fn claim_run_child() {
         .parse()
         .unwrap();
     thread::sleep(Duration::from_millis(delay));
-    match std::env::var("HS2_MFYYJ9_MODE").unwrap().as_str() {
-        "grandchild-exit" | "grandchild-wait" => {
+    let mode = std::env::var("HS2_MFYYJ9_MODE").unwrap();
+    match mode.as_str() {
+        "grandchild-exit" | "grandchild-wait" | "grandchild-hold" => {
             let mut grandchild = Command::new(std::env::current_exe().unwrap());
             grandchild
                 .args(["--exact", "claim_run_grandchild", "--nocapture"])
                 .env("HS2_MFYYJ9_GRANDCHILD", "commit")
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit());
+            if mode == "grandchild-hold" {
+                grandchild.env("HS2_MFYYJ9_GRANDCHILD_GATED", "1");
+            }
             #[expect(clippy::zombie_processes, reason = "HS2-MFYYJ9: parent exits first")]
             grandchild.spawn().unwrap();
             let started = PathBuf::from(std::env::var("HS2_MFYYJ9_GRANDCHILD_STARTED").unwrap());
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + SAFETY_BOUND;
             while !started.exists() {
                 assert!(Instant::now() < deadline, "grandchild did not start");
                 thread::sleep(Duration::from_millis(10));
             }
-            if std::env::var("HS2_MFYYJ9_MODE").unwrap() == "grandchild-wait" {
-                thread::sleep(Duration::from_millis(delay));
+            match mode.as_str() {
+                "grandchild-wait" => thread::sleep(Duration::from_millis(delay)),
+                // HS2-EGMJ8G: keep the tree running until the guard stops it.
+                "grandchild-hold" => wait_for_path(&release_path(), "the guard never stopped"),
+                _ => {}
             }
         }
         "commit" => {
@@ -240,18 +248,23 @@ fn claim_run_child() {
         "fail" => panic!("synthetic child failure"),
         // HS2-K1M08D: exit only once the test releases it, then mark completion.
         "release-wait" => {
-            let release = PathBuf::from(std::env::var("HS2_MFYYJ9_RELEASE").unwrap());
-            let deadline = Instant::now() + Duration::from_secs(30);
-            while !release.exists() {
-                assert!(
-                    Instant::now() < deadline,
-                    "the test never released the child"
-                );
-                thread::sleep(Duration::from_millis(20));
-            }
+            wait_for_path(&release_path(), "the test never released the child");
             fs::write(std::env::var("HS2_MFYYJ9_MARKER").unwrap(), "completed").unwrap();
         }
         _ => fs::write(std::env::var("HS2_MFYYJ9_MARKER").unwrap(), "completed").unwrap(),
+    }
+}
+
+fn release_path() -> PathBuf {
+    PathBuf::from(std::env::var("HS2_MFYYJ9_RELEASE").unwrap())
+}
+
+/// Wait in a guarded child for a file the test writes; the bound only ends an orphan.
+fn wait_for_path(path: &Path, message: &str) {
+    let deadline = Instant::now() + SAFETY_BOUND;
+    while !path.exists() {
+        assert!(Instant::now() < deadline, "{message}");
+        thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -265,11 +278,24 @@ fn claim_run_grandchild() {
         "started",
     )
     .unwrap();
-    let delay = std::env::var("HS2_MFYYJ9_GRANDCHILD_DELAY_MS")
-        .unwrap()
-        .parse()
-        .unwrap();
-    thread::sleep(Duration::from_millis(delay));
+    if std::env::var_os("HS2_MFYYJ9_GRANDCHILD_GATED").is_some() {
+        // HS2-EGMJ8G: commit only once the test opens the gate after the guard exited, so
+        // the commit lands exactly when the guard failed to stop this grandchild.
+        let gate = PathBuf::from(std::env::var("HS2_MFYYJ9_GRANDCHILD_GATE").unwrap());
+        let deadline = Instant::now() + SAFETY_BOUND;
+        while !gate.exists() {
+            if Instant::now() >= deadline {
+                return;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    } else {
+        let delay = std::env::var("HS2_MFYYJ9_GRANDCHILD_DELAY_MS")
+            .unwrap()
+            .parse()
+            .unwrap();
+        thread::sleep(Duration::from_millis(delay));
+    }
     let project = PathBuf::from(std::env::var("HS2_MFYYJ9_PROJECT").unwrap());
     fs::write(project.join("synthetic.txt"), "late grandchild commit\n").unwrap();
     git(&project, &["add", "synthetic.txt"]);
@@ -279,15 +305,30 @@ fn claim_run_grandchild() {
     );
 }
 
+/// HS2-EGMJ8G: the child runs until the store shows two scheduled renewals after the
+/// preflight one, instead of for a fixed 4.5 s against a 3 s lease. The 6-second lease
+/// renews 2 s before each deadline; the old 1 s margin failed (correctly, closed) when a CI
+/// host stall held the renewal past it.
 #[test]
 fn hs2_mfyyj9_delayed_child_renews_the_same_claim_attempt_and_reconnects() {
     let f = Fixture::new();
     f.claim("worker");
     let attempt = f.ticket().claim_history.last().unwrap().id;
-    let output = f
-        .guard("worker", "3", "marker", "4500")
-        .wait_with_output()
-        .unwrap();
+    let mut child = f.guard("worker", "6", "release-wait", "0");
+    let deadline = Instant::now() + SAFETY_BOUND;
+    while renew_count(&f.ticket()) < 3 {
+        if let Some(status) = child.try_wait().unwrap() {
+            let output = child.wait_with_output().unwrap();
+            panic!(
+                "the guard ended with {status} before two scheduled renewals: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        assert!(Instant::now() < deadline, "scheduled renewals never landed");
+        thread::sleep(Duration::from_millis(50));
+    }
+    fs::write(f.root.path().join("release"), "release").unwrap();
+    let output = child.wait_with_output().unwrap();
     assert!(
         output.status.success(),
         "{}",
@@ -304,20 +345,13 @@ fn hs2_mfyyj9_delayed_child_renews_the_same_claim_attempt_and_reconnects() {
             .count(),
         1
     );
-    assert!(
-        ticket
-            .claim_history
-            .iter()
-            .filter(|event| event.kind == ClaimEventKind::Renew)
-            .count()
-            >= 3
-    );
+    assert!(renew_count(&ticket) >= 3);
     assert_eq!(ticket.claim_history[0].id, attempt);
 
     fs::remove_file(f.root.path().join("started")).unwrap();
     fs::remove_file(f.root.path().join("completed")).unwrap();
     let reconnect = f
-        .guard("worker", "3", "marker", "50")
+        .guard("worker", "6", "marker", "50")
         .wait_with_output()
         .unwrap();
     assert!(
@@ -506,21 +540,30 @@ fn hs2_mfyyj9_takeover_stops_a_grandchild_commit_with_inherited_stdio() {
     assert_eq!(f.ticket().claimed_by.as_deref(), Some("replacement"));
 }
 
+/// HS2-EGMJ8G: the lock is held until the guard has exited, so the guard can only fail at
+/// its own lease deadline; a fixed 2.8 s hold let a stalled guard instead renew after the
+/// hold and fail differently. The grandchild commits only once the gate opens after the
+/// guard exited, so no fixed grandchild timer races the stop. A 6-second lease leaves the
+/// whole start-up before its first scheduled renewal.
 #[test]
 fn hs2_mfyyj9_held_lock_cannot_revive_expired_attempt_or_allow_grandchild_commit() {
     let f = Fixture::new();
     let head = f.init_project();
     f.claim("worker");
-    let child = f.guard("worker", "2", "grandchild-wait", "4000");
+    let child = f.guard("worker", "6", "grandchild-hold", "0");
     f.wait_file("grandchild-started");
-    let holder = f.hold_ticket_lock(Duration::from_millis(2800));
-    // HS2-FDZGFD: snapshot only once the lock is held. The guard renews every second, so
-    // a snapshot taken earlier can miss a renewal that commits before the hold begins.
+    let (release_lock, holder) = f.hold_ticket_lock_until_released();
+    // HS2-FDZGFD: snapshot only once the lock is held, so a renewal that commits before the
+    // hold begins is part of the baseline.
     let before = f.ticket().claim_history;
     let output = child.wait_with_output().unwrap();
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("lease deadline passed"));
+    drop(release_lock);
     holder.join().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("lease deadline passed"), "{stderr}");
+    // A grandchild that outlived the guard commits as soon as the gate opens.
+    fs::write(f.root.path().join("grandchild-gate"), "open").unwrap();
     thread::sleep(Duration::from_millis(800));
     assert_eq!(
         git(&f.root.path().join("project"), &["rev-parse", "HEAD"]),
