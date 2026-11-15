@@ -1197,6 +1197,143 @@ mod tests {
         assert_eq!(a.release_owner(new), 0, "a second release is a no-op");
     }
 
+    // HS2-AYVQ9Q: the claim states of a Workspace Grid zoom, unzoom, zoom against another device.
+
+    /// One step of a zoom cycle, as the server sees it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ZoomEvent {
+        /// The previous magnified viewport's connection ends (unzoom), however late it arrives.
+        ReleasePrevious,
+        /// The other device taps its terminal (an interacting claim at its own size).
+        OtherInteracts,
+        /// The other device's steady heartbeat.
+        OtherHeartbeat,
+        /// The remounted grid tile's passive 80×24 claim.
+        TileClaims,
+        /// The new magnified viewport mounts: a hidden first claim, then its gesture claim.
+        ZoomOpens,
+    }
+
+    /// Apply each event and decide after it, as `Terminal` does, then run the trailing
+    /// re-decides the arbiter asks for until none is pending. Returns the applied size.
+    fn run_zoom_cycle(
+        a: &mut SizeArbiter,
+        now: &mut u64,
+        owners: &mut Vec<SizeClaimOwner>,
+        cycle: usize,
+        order: &[ZoomEvent],
+    ) -> Decision {
+        let zoomed = format!("magnified-{cycle}");
+        for event in order {
+            *now += 40;
+            match event {
+                ZoomEvent::ReleasePrevious => {
+                    if let Some(previous) = owners.first().copied() {
+                        a.release_owner(previous);
+                    }
+                }
+                ZoomEvent::OtherInteracts => {
+                    a.upsert(interacting_claim("other", 60, 16, true, 0), *now);
+                }
+                ZoomEvent::OtherHeartbeat => a.upsert(claim("other", 60, 16, true, 0), *now),
+                ZoomEvent::TileClaims => {
+                    a.upsert(claim(&format!("tile-{cycle}"), 80, 24, true, 0), *now);
+                }
+                ZoomEvent::ZoomOpens => {
+                    let owner = SizeClaimOwner::next();
+                    a.upsert_owned(
+                        ViewportClaim {
+                            visible: false,
+                            ..claim(&zoomed, 80, 24, true, 0)
+                        },
+                        owner,
+                        *now,
+                    );
+                    a.upsert_owned(interacting_claim(&zoomed, 80, 24, true, 0), owner, *now);
+                    owners.push(owner);
+                }
+            }
+            let _ = a.decide(*now);
+        }
+        while let Some(at) = a.deferred_until() {
+            *now = (*now).max(at);
+            let _ = a.decide(*now);
+        }
+        // The previous cycle's connection is gone once its (possibly late) release ran.
+        if owners.len() > 1 {
+            owners.remove(0);
+        }
+        a.applied().expect("an applied size")
+    }
+
+    /// Every order the server can see a zoom cycle in, with the unzoomed viewport's release
+    /// arriving before or after the other device's tap, the tile's remount, and even the new
+    /// zoom, ends with the newly zoomed viewport driving 80×24 after the focus-hold. Repeated
+    /// over several cycles so each starts from the previous cycle's end state.
+    #[test]
+    fn every_zoom_unzoom_zoom_order_hands_the_size_to_the_newest_zoom() {
+        use ZoomEvent::*;
+        // The test sends the other device's tap before clicking zoom, so that order is fixed;
+        // the release, the tile, and the heartbeat may land anywhere.
+        let orders: [&[ZoomEvent]; 8] = [
+            &[ReleasePrevious, OtherInteracts, TileClaims, ZoomOpens],
+            &[OtherInteracts, ReleasePrevious, TileClaims, ZoomOpens],
+            &[OtherInteracts, TileClaims, ReleasePrevious, ZoomOpens],
+            &[OtherInteracts, TileClaims, ZoomOpens, ReleasePrevious],
+            &[
+                TileClaims,
+                OtherInteracts,
+                ZoomOpens,
+                OtherHeartbeat,
+                ReleasePrevious,
+            ],
+            &[
+                OtherInteracts,
+                ZoomOpens,
+                ReleasePrevious,
+                TileClaims,
+                OtherHeartbeat,
+            ],
+            &[
+                OtherHeartbeat,
+                ReleasePrevious,
+                OtherInteracts,
+                OtherHeartbeat,
+                ZoomOpens,
+            ],
+            &[
+                ReleasePrevious,
+                ReleasePrevious,
+                OtherInteracts,
+                ZoomOpens,
+                OtherHeartbeat,
+            ],
+        ];
+        for first in orders {
+            for second in orders {
+                let mut a = SizeArbiter::default();
+                a.set_applied(80, 24);
+                let mut now = 1_000;
+                // The other device last interacted at its small size; this browser zooms once.
+                a.upsert(interacting_claim("other", 60, 16, true, 0), now);
+                let mut owners = Vec::new();
+                let zoomed = run_zoom_cycle(&mut a, &mut now, &mut owners, 0, &[ZoomOpens]);
+                assert_eq!((zoomed.cols, zoomed.rows), (80, 24), "first zoom");
+                for (cycle, order) in [first, second].into_iter().enumerate() {
+                    let cycle = cycle + 1;
+                    let applied = run_zoom_cycle(&mut a, &mut now, &mut owners, cycle, order);
+                    // The driver, not the announced `driven_by`: a same-size handoff from the
+                    // previous zoom is not re-announced yet (HS2-G1ADYV).
+                    assert_eq!(
+                        (applied.cols, applied.rows, a.driver.as_deref()),
+                        (80, 24, Some(format!("magnified-{cycle}").as_str())),
+                        "cycle {cycle} in order {order:?} after {first:?}"
+                    );
+                }
+            }
+        }
+    }
+
     /// One connection that claimed several viewer ids releases all of them, and only them.
     #[test]
     fn an_owner_release_drops_every_viewport_it_still_holds() {

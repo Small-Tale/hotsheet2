@@ -4337,6 +4337,13 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId, answeredBy: vie
   release only the claims that connection still owns, every viewer id it claimed included. A
   viewer that reconnected under the same id before its old socket ended keeps driving
   (**HS2-CCNRVW**).
+- The server applies each size decision (the size frame to every viewer, then the PTY resize)
+  while it still holds the arbiter, so decisions reach the PTY and the viewers in the order they
+  were made. Before, two concurrent passes (a viewer's claim or release and the trailing
+  re-decide that ends a focus-hold or rate limit) could apply in reverse order on a loaded host.
+  The older size then landed last while the arbiter recorded the newer one as applied, so no
+  later claim corrected it, and a zoomed Workspace Grid terminal stayed at another device's size
+  (**HS2-AYVQ9Q**).
 - **Exactly one viewer answers the program's terminal queries (HS2-0GZZHV).** Every attached
   xterm answers a query such as a cursor-position request (`ESC[6n`), device attributes, a mode
   or colour report, and reports focus changes. With several viewers the program read one reply

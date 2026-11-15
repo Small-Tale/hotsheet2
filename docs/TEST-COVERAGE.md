@@ -59,7 +59,14 @@ later attach sees an undriven size. HS2-CCNRVW adds a reconnect under the same v
 a late normal close and a late revocation of the old connection leave the new connection
 driving, and the owner's own close still releases it; `SizeArbiter` unit tests in
 `hotsheet-terminals/src/sizing.rs` cover owner release, plain claims, removal and expiry
-ending ownership. `clients/web/src/remote-projects/terminals.test.ts` covers the
+ending ownership. HS2-AYVQ9Q adds ordered application of size decisions: `terminal.rs` tests
+stall an older decision between deciding and applying it (a test-only per-thread hook) and
+assert that it never lands after a newer one. Six threads then send repeated claims with
+interleaved, out-of-order clocks and stalls, followed by an empty-then-refill pass, and must
+settle with the last size frame, the PTY's real grid, and the arbiter's applied size equal. A
+`sizing.rs` transition test runs every order of a Workspace Grid zoom, unzoom, zoom against
+another device (a late release, the other device's tap, the remounted tile, heartbeats) over
+repeated cycles. In each, the newest zoom drives 80×24 after the focus-hold. `clients/web/src/remote-projects/terminals.test.ts` covers the
 launch-directory translation and per-server ownership (most specific checkout, legacy
 composite launches, no lone-tab claim of a stray terminal);
 `remote-projects/transport.test.ts` drives the bridge against two synthetic servers:

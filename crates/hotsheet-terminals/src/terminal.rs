@@ -451,6 +451,52 @@ fn resize_pty(
         .map_err(pty_err)
 }
 
+/// Apply one arbiter decision: broadcast it, then resize the PTY. Callers hold the arbiter lock,
+/// so decisions reach the PTY and the viewers in the order the arbiter made them (HS2-AYVQ9Q).
+fn apply_decided(
+    size_tx: &broadcast::Sender<Decision>,
+    master: &Mutex<Box<dyn MasterPty + Send>>,
+    decided: Decided,
+) -> Option<Decision> {
+    #[cfg(test)]
+    pause_before_apply();
+    match decided {
+        Decided::Resize(d) => {
+            // Announce before resizing: the program's reaction to SIGWINCH (often a cursor
+            // position query) must reach each viewer after the frame naming the new answerer,
+            // or the old driver answers it too (HS2-0GZZHV).
+            let _ = size_tx.send(d.clone());
+            let _ = resize_pty(master, d.rows, d.cols);
+            Some(d)
+        }
+        // Same size, new answerer: every viewer learns who answers queries now.
+        Decided::Notice(d) => {
+            let _ = size_tx.send(d);
+            None
+        }
+        Decided::Nothing => None,
+    }
+}
+
+#[cfg(test)]
+type ApplyPause = (std::sync::Arc<std::sync::Barrier>, std::time::Duration);
+
+#[cfg(test)]
+thread_local! {
+    /// Test hook (one-shot, this thread only): stall the next decision this thread makes between
+    /// deciding and applying it, as a descheduled thread on a loaded machine does. The barrier
+    /// tells the test the stall has begun (HS2-AYVQ9Q).
+    static APPLY_PAUSE: std::cell::Cell<Option<ApplyPause>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn pause_before_apply() {
+    if let Some((reached, stall)) = APPLY_PAUSE.with(std::cell::Cell::take) {
+        reached.wait();
+        std::thread::sleep(stall);
+    }
+}
+
 /// The launcher-assigned session worker id variable (mirrors `hotsheet_aitools::WORKER_ID_ENV`).
 /// A terminal remembers it so a host that reattaches after a restart can still release the
 /// session's claims when the terminal ends (HS2-RXWXQ8).
@@ -746,12 +792,13 @@ impl Terminal {
     /// changed, resize the PTY and broadcast the decision to all viewers. Returns the decision
     /// when a resize happened. `now_ms` is the injected clock (real millis from the caller).
     pub fn claim_size(&self, claim: ViewportClaim, now_ms: u64) -> Option<Decision> {
-        let decided = {
-            let mut s = self.sizer.lock_or_recover();
-            s.upsert(claim, now_ms);
-            Self::decide_or_notice(&mut s, now_ms)
-        };
-        self.apply_size(decided)
+        self.arbitrate(
+            |s| {
+                s.upsert(claim, now_ms);
+                true
+            },
+            now_ms,
+        )
     }
 
     /// [`Self::claim_size`] for one attach connection, which owns the claim until another
@@ -762,35 +809,54 @@ impl Terminal {
         owner: SizeClaimOwner,
         now_ms: u64,
     ) -> Option<Decision> {
-        let decided = {
-            let mut s = self.sizer.lock_or_recover();
-            s.upsert_owned(claim, owner, now_ms);
-            Self::decide_or_notice(&mut s, now_ms)
-        };
-        self.apply_size(decided)
+        self.arbitrate(
+            |s| {
+                s.upsert_owned(claim, owner, now_ms);
+                true
+            },
+            now_ms,
+        )
     }
 
     /// An attach connection ended: drop the claims it still owns and recompute (self-heal). A
     /// viewport a newer connection reclaimed under the same id keeps its claim (HS2-CCNRVW).
     pub fn release_owner(&self, owner: SizeClaimOwner, now_ms: u64) -> Option<Decision> {
-        let decided = {
-            let mut s = self.sizer.lock_or_recover();
-            if s.release_owner(owner) == 0 {
-                return None;
-            }
-            Self::decide_or_notice(&mut s, now_ms)
-        };
-        self.apply_size(decided)
+        self.arbitrate(|s| s.release_owner(owner) > 0, now_ms)
     }
 
     /// A viewport disconnected: drop its claim and recompute (self-heal).
     pub fn drop_viewer(&self, viewer_id: &str, now_ms: u64) -> Option<Decision> {
-        let decided = {
+        self.arbitrate(
+            |s| {
+                s.remove(viewer_id);
+                true
+            },
+            now_ms,
+        )
+    }
+
+    /// Apply `change` to the arbiter and, when it returns true, decide and apply the decision
+    /// while still holding the arbiter lock (HS2-AYVQ9Q). Deciding under the lock but
+    /// broadcasting and resizing after releasing it let two concurrent passes (a viewer's claim
+    /// and the trailing re-decide, or two viewers' claims) apply in the opposite order to the
+    /// one they decided in. The older size then reached the PTY and every viewer last, while
+    /// the arbiter recorded the newer size as applied and never resized again. Applying in
+    /// decision order keeps the PTY, the viewers, and the arbiter's applied size equal.
+    fn arbitrate(
+        &self,
+        change: impl FnOnce(&mut SizeArbiter) -> bool,
+        now_ms: u64,
+    ) -> Option<Decision> {
+        let decision = {
             let mut s = self.sizer.lock_or_recover();
-            s.remove(viewer_id);
-            Self::decide_or_notice(&mut s, now_ms)
+            if !change(&mut s) {
+                return None;
+            }
+            let decided = Self::decide_or_notice(&mut s, now_ms);
+            apply_decided(&self.size_tx, &self.master, decided)
         };
-        self.apply_size(decided)
+        self.schedule_trailing_resize();
+        decision
     }
 
     /// Decide the PTY size; when nothing resizes but the query answerer changed, the applied
@@ -824,27 +890,6 @@ impl Terminal {
         self.size_tx.subscribe()
     }
 
-    fn apply_size(&self, decided: Decided) -> Option<Decision> {
-        let decision = match decided {
-            Decided::Resize(d) => {
-                // Announce before resizing: the program's reaction to SIGWINCH (often a cursor
-                // position query) must reach each viewer after the frame naming the new answerer,
-                // or the old driver answers it too (HS2-0GZZHV).
-                let _ = self.size_tx.send(d.clone());
-                let _ = self.resize(d.rows, d.cols);
-                Some(d)
-            }
-            // Same size, new answerer: every viewer learns who answers queries now.
-            Decided::Notice(d) => {
-                let _ = self.size_tx.send(d);
-                None
-            }
-            Decided::Nothing => None,
-        };
-        self.schedule_trailing_resize();
-        decision
-    }
-
     /// The trailing edge of the resize rate limit (HS2-GSRZX6): when the arbiter deferred a
     /// change, decide again once the min-interval has passed so the last size of a burst lands
     /// without waiting for a viewer's next claim. At most one trailing decide is pending.
@@ -870,15 +915,14 @@ impl Terminal {
                     std::thread::sleep(std::time::Duration::from_millis(
                         at.saturating_sub(wall_ms()),
                     ));
-                    let (decision, next) =
-                        sizer.with_lock(|s| (s.decide(wall_ms()), s.deferred_until()));
-                    if let Some(d) = decision {
-                        // Announce first, as in `apply_size` (HS2-0GZZHV).
-                        let (rows, cols) = (d.rows, d.cols);
-                        let _ = size_tx.send(d);
-                        let _ = resize_pty(&master, rows, cols);
-                    }
-                    due = next;
+                    // Applied under the arbiter lock, in decision order (HS2-AYVQ9Q).
+                    due = sizer.with_lock(|s| {
+                        let decided = s
+                            .decide(wall_ms())
+                            .map_or(Decided::Nothing, Decided::Resize);
+                        apply_decided(&size_tx, &master, decided);
+                        s.deferred_until()
+                    });
                 }
                 pending.store(false, std::sync::atomic::Ordering::SeqCst);
                 // A claim deferred between the last decide and clearing the flag saw a pending
@@ -1327,6 +1371,150 @@ mod tests {
         );
         std::thread::sleep(std::time::Duration::from_millis(250));
         assert!(sizes.try_recv().is_err(), "one takeover, no repeats");
+        let _ = term.kill();
+    }
+
+    /// The PTY's real grid, as the program sees it through `TIOCGWINSZ`.
+    fn pty_grid(term: &Terminal) -> (u16, u16) {
+        let size = term.master.lock_or_recover().get_size().expect("pty size");
+        (size.cols, size.rows)
+    }
+
+    /// Wait (bounded) until no trailing re-decide is pending or running.
+    fn settle_trailing_resize(term: &Terminal) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while term
+            .trailing_resize
+            .load(std::sync::atomic::Ordering::SeqCst)
+            || term.sizer.with_lock(|s| s.deferred_until()).is_some()
+        {
+            assert!(Instant::now() < deadline, "the trailing re-decide settles");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// The last broadcast size, the PTY's real size, and the arbiter's applied size agree.
+    fn assert_applied_everywhere(term: &Terminal, sizes: &mut broadcast::Receiver<Decision>) {
+        let applied = term.current_size().expect("an applied size");
+        let mut last = None;
+        loop {
+            match sizes.try_recv() {
+                Ok(decision) => last = Some((decision.cols, decision.rows)),
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+                Err(_) => break,
+            }
+        }
+        assert_eq!(
+            last,
+            Some((applied.cols, applied.rows)),
+            "viewers were told the applied size last"
+        );
+        assert_eq!(
+            pty_grid(term),
+            (applied.cols, applied.rows),
+            "the PTY has the applied size"
+        );
+    }
+
+    fn lone_claim(cols: u16, rows: u16) -> ViewportClaim {
+        ViewportClaim {
+            viewer_id: "zoomed".into(),
+            cols,
+            rows,
+            focus: true,
+            visible: true,
+            interacting: false,
+            answers_queries: true,
+            activity_at_ms: 0,
+        }
+    }
+
+    /// HS2-AYVQ9Q: a pass that decided first but was descheduled before applying its decision
+    /// must not apply it after a newer pass. Before, the decision was broadcast and applied to the
+    /// PTY after the arbiter lock was released, so the older size landed last: the zoomed Workspace
+    /// Grid viewer saw the PTY stay at the other device's size while the arbiter believed its own
+    /// size was applied, and no later claim changed anything.
+    #[test]
+    fn a_stalled_older_decision_never_lands_after_a_newer_one() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Arc::new(Terminal::spawn(spec).expect("spawn"));
+        let mut sizes = term.subscribe_size();
+        let started = wall_ms();
+        let reached = Arc::new(Barrier::new(2));
+        let older = {
+            let (term, reached) = (term.clone(), reached.clone());
+            std::thread::spawn(move || {
+                APPLY_PAUSE.with(|pause| {
+                    pause.set(Some((reached, Duration::from_millis(300))));
+                });
+                term.claim_size(lone_claim(60, 16), started)
+            })
+        };
+        // The older pass has decided 60x16 and is stalled before applying it.
+        reached.wait();
+        // A newer claim, past the resize min-interval on the injected clock.
+        let newer = term.claim_size(lone_claim(80, 24), started + 1_000);
+        let older = older.join().expect("older pass");
+        assert_eq!(older.map(|d| (d.cols, d.rows)), Some((60, 16)));
+        assert_eq!(newer.map(|d| (d.cols, d.rows)), Some((80, 24)));
+        settle_trailing_resize(&term);
+        assert_applied_everywhere(&term, &mut sizes);
+        assert_eq!(pty_grid(&term), (80, 24), "the newest claim wins");
+        let _ = term.kill();
+    }
+
+    /// HS2-AYVQ9Q: many concurrent claims with interleaved, out-of-order clocks and stalls between
+    /// deciding and applying, repeated, always settle with the viewers, the PTY, and the arbiter
+    /// on one size, including after an empty-then-refill pass (the viewer leaves and returns).
+    #[test]
+    fn concurrent_out_of_order_claims_settle_on_one_applied_size() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["30".into()];
+        let term = Arc::new(Terminal::spawn(spec).expect("spawn"));
+        let mut sizes = term.subscribe_size();
+        // A clock in the past, so a deferred trailing decide is due at once on the wall clock.
+        let clock = Arc::new(std::sync::atomic::AtomicU64::new(wall_ms() - 3_600_000));
+        for round in 0..3u16 {
+            let start = Arc::new(Barrier::new(6));
+            let workers: Vec<_> = (0..6u16)
+                .map(|worker| {
+                    let (term, clock, start) = (term.clone(), clock.clone(), start.clone());
+                    std::thread::spawn(move || {
+                        start.wait();
+                        for step in 0..30u16 {
+                            // Take the clock before contending for the lock, as an attach does;
+                            // a thread that loses the race carries an older time.
+                            let now = clock.fetch_add(150, std::sync::atomic::Ordering::SeqCst);
+                            if (step + worker) % 3 == 0 {
+                                APPLY_PAUSE.with(|pause| {
+                                    pause.set(Some((
+                                        Arc::new(Barrier::new(1)),
+                                        Duration::from_millis(u64::from(worker % 3)),
+                                    )));
+                                });
+                            }
+                            let cols = 40 + 2 * ((worker * 31 + step * 7 + round) % 60);
+                            let rows = 10 + 2 * ((worker + step) % 20);
+                            term.claim_size(lone_claim(cols, rows), now);
+                        }
+                    })
+                })
+                .collect();
+            for worker in workers {
+                worker.join().expect("worker");
+            }
+            settle_trailing_resize(&term);
+            assert_applied_everywhere(&term, &mut sizes);
+            // Empty, then refill: the viewer leaves (the size holds) and claims again.
+            term.drop_viewer("zoomed", clock.load(std::sync::atomic::Ordering::SeqCst));
+            settle_trailing_resize(&term);
+            let refill = clock.fetch_add(1_000, std::sync::atomic::Ordering::SeqCst) + 1_000;
+            term.claim_size(lone_claim(100 + round * 4, 30), refill);
+            settle_trailing_resize(&term);
+            assert_applied_everywhere(&term, &mut sizes);
+            assert_eq!(pty_grid(&term), (100 + round * 4, 30));
+        }
         let _ = term.kill();
     }
 
