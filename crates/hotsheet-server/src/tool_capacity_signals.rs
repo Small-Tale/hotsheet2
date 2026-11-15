@@ -98,9 +98,42 @@ pub fn usage_signal(event: &UsageEvent) -> Option<LimitSignal> {
         .map(|cents| cents as u64);
     Some(LimitSignal {
         cost_cents,
-        session: event.session.as_deref().and_then(identifier),
+        session: Some(usage_discriminator(event)),
         ..signal(&event.tool, SignalKind::Usage, at)?
     })
+}
+
+/// HS2-XFMKHQ: the opaque discriminator of one recorded usage event: its session id
+/// (when usable) and a short digest of the event itself. A retried append of the same
+/// event yields the same value, so the registry still counts it once; two different
+/// responses recorded in the same millisecond with the same rounded cost stay apart,
+/// which a millisecond time and a cost alone could not tell. Identifiers only: the
+/// digest covers numbers and ids, and nothing in it can be read back.
+fn usage_discriminator(event: &UsageEvent) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    for part in [
+        event.ts.as_str(),
+        event.tool.as_str(),
+        event.model.as_deref().unwrap_or(""),
+        event.ticket.as_deref().unwrap_or(""),
+        event.session.as_deref().unwrap_or(""),
+    ] {
+        hash.update(part.as_bytes());
+        hash.update([0]);
+    }
+    hash.update(event.tokens_in.to_le_bytes());
+    hash.update(event.tokens_out.to_le_bytes());
+    hash.update(event.cost_usd.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+    let digest: String = hash.finalize()[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    match event.session.as_deref().and_then(identifier) {
+        // Kept within the 160-character identifier bound with the digest appended.
+        Some(session) => format!("{}.{digest}", &session[..session.len().min(140)]),
+        None => format!("u.{digest}"),
+    }
 }
 
 /// HS2-PFHRS9: the tool account the terminal `terminal_id` was started for, when an
@@ -352,8 +385,15 @@ mod tests {
             session: session.map(Into::into),
         };
         let priced = usage_signal(&event(Some(0.1234), Some("session-1"))).unwrap();
+        let mut value = serde_json::to_value(&priced).unwrap();
+        let session = value["session"].as_str().unwrap().to_owned();
+        assert!(
+            session.starts_with("session-1.") && session.len() == "session-1.".len() + 16,
+            "{session}"
+        );
+        value["session"] = "session-1".into();
         assert_eq!(
-            serde_json::to_value(&priced).unwrap(),
+            value,
             serde_json::json!({"tool":"claude","kind":"usage","at_ms":AT_MS,"cost_cents":13,
                 "session":"session-1"}),
             "identifiers and metrics only: no model, ticket or token text"
@@ -367,11 +407,29 @@ mod tests {
         for cost in [None, Some(f64::NAN), Some(-1.0), Some(f64::INFINITY)] {
             assert_eq!(usage_signal(&event(cost, None)).unwrap().cost_cents, None);
         }
-        // A session id of another shape is dropped, not rewritten.
-        assert_eq!(
-            usage_signal(&event(None, Some("a b"))).unwrap().session,
-            None
+        // A session id of another shape is dropped, not rewritten: only the digest stays.
+        let unusable = usage_signal(&event(None, Some("a b")))
+            .unwrap()
+            .session
+            .unwrap();
+        assert!(
+            unusable.starts_with("u.") && !unusable.contains("a b"),
+            "{unusable}"
         );
+        // HS2-XFMKHQ: the same event again is the same signal (counted once), while two
+        // responses in the same millisecond with the same rounded cost stay apart.
+        let first = event(Some(0.01575), Some("cap-session"));
+        let mut second = first.clone();
+        second.tokens_out += 10;
+        second.cost_usd = Some(0.0165);
+        let (a, b) = (
+            usage_signal(&first).unwrap(),
+            usage_signal(&second).unwrap(),
+        );
+        assert_eq!((a.at_ms, a.cost_cents), (b.at_ms, b.cost_cents));
+        assert_ne!(a, b);
+        assert_eq!(usage_signal(&first.clone()).unwrap(), a);
+        a.validate(AT_MS).unwrap();
         let mut undated = event(None, None);
         undated.ts = "yesterday".into();
         assert_eq!(usage_signal(&undated), None);

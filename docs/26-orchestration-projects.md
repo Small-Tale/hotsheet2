@@ -1220,10 +1220,12 @@ called right after the append with exactly the events written and priced: driven
 (through the dist work loop's usage sink), client-drive turns, Claude transcript usage and
 the Codex rollout watch. Events from a terminal carry the account its session was started
 for; driven and client-drive turns are unattributed. A retried append of the same event
-yields the identical signal (tool, time, session and cost), which the registry answers
-`duplicate`, so it counts once; two different responses of one session in the same
-millisecond with the same cost also collapse into one, which can undercount a budget by
-that response. A usage signal wakes the scheduler only when it changes the account's
+yields the identical signal (tool, time, cost, and a `session` discriminator made of the
+session id and a short digest of the event's own numbers and ids), which the registry
+answers `duplicate`, so it counts once. Two different responses of one session in the
+same millisecond with the same rounded cost differ in that digest and both count; an
+earlier signal that kept only the session id could collapse them and undercount a
+budget. A usage signal wakes the scheduler only when it changes the account's
 standing (a first completed turn, a confirmed recovery); one that only adds cost does
 not, and the budget is read at the next pass.
 

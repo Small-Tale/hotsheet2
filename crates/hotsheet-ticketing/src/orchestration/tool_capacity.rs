@@ -81,7 +81,8 @@ pub struct LimitSignal {
     /// Usage signals only: the turn's cost. Absent means the cost is unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_cents: Option<u64>,
-    /// An opaque session id that keeps two sessions' otherwise equal signals apart.
+    /// An opaque discriminator that keeps otherwise equal signals apart: a session id,
+    /// and for a usage signal also a digest of the recorded event (HS2-XFMKHQ).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
 }

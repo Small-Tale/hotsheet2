@@ -20397,7 +20397,9 @@ components:
           minimum: 0
           maximum: 100000000
         session:
-          description: An opaque session id that keeps two sessions' otherwise equal signals apart.
+          description:
+            An opaque discriminator that keeps otherwise equal signals apart - a session id, and for a usage signal
+            also a digest of the recorded event.
           type:
             - string
             - 'null'
