@@ -30,4 +30,27 @@ describe('NoteMetadataDialog', () => {
     expect(confidence).toContain('name="note-metadata-confidence"');
     expect(confidence).toContain('Enter 0–100, or leave blank to clear the score.');
   });
+
+  it('HS2-J4G9GB picks an earlier request or none for an existing note', () => {
+    const response = String(
+      NoteMetadataDialog({
+        state: {
+          ...state,
+          mode: 'response',
+          kind: 'regular',
+          responseTo: 'request-b',
+          responseTargets: [
+            { value: 'request-a', label: 'First question' },
+            { value: 'request-b', label: 'Second question' },
+          ],
+        },
+      }),
+    );
+    expect(response).toContain('Link as feedback response');
+    expect(response).toContain('name="note-metadata-response"');
+    expect(response).toContain('Not a Response');
+    expect(response).toContain('First question');
+    expect(response).toContain('No new note is added.');
+    expect(response).not.toContain('Confirm type change');
+  });
 });

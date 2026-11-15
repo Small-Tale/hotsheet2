@@ -32699,6 +32699,196 @@ async fn hs2_vbfszj_response_to_accepts_a_legacy_request_and_refuses_explicit_re
     assert_eq!(link, 1);
 }
 
+/// HS2-J4G9GB: an existing note becomes a feedback response through the real checkout
+/// route, idempotently, guarded by the optimistic token, and atomically refused.
+#[tokio::test]
+async fn hs2_j4g9gb_links_an_existing_note_as_a_response_through_the_checkout_route() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Synthetic response link"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let patch = |body: serde_json::Value| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/tickets/{id}");
+        async move {
+            let response = router
+                .oneshot(authed("PATCH", &uri, Some(&body.to_string())))
+                .await
+                .unwrap();
+            let status = response.status();
+            (status, body_json(response).await)
+        }
+    };
+    let note_id = |ticket: &serde_json::Value, text: &str| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["text"] == text)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let note = |ticket: &serde_json::Value, id: &str| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    let (_, first) = patch(serde_json::json!({
+        "note":"FEEDBACK NEEDED: first synthetic question","note_kind":"feedback_needed",
+        "actor":{"role":"ai","id":"synthetic-agent"}
+    }))
+    .await;
+    let first_id = note_id(&first, "FEEDBACK NEEDED: first synthetic question");
+    let (_, second) = patch(serde_json::json!({
+        "note":"FEEDBACK NEEDED: second synthetic question","note_kind":"feedback_needed"
+    }))
+    .await;
+    let second_id = note_id(&second, "FEEDBACK NEEDED: second synthetic question");
+    let (_, decided) = patch(serde_json::json!({
+        "note":"Synthetic decision: option A","note_kind":"regular",
+        "actor":{"role":"ai","id":"synthetic-agent"}
+    }))
+    .await;
+    let decision = note_id(&decided, "Synthetic decision: option A");
+    let notes_before = decided["notes"].as_array().unwrap().len();
+    let stale_token = decided["concurrency_token"].as_str().unwrap().to_owned();
+
+    // Link with a fresh token: no reply is appended, the human edit keeps the AI author.
+    let (status, linked) = patch(serde_json::json!({
+        "note_id":decision,"response_to":first_id,"expected_token":stale_token,
+        "actor":{"role":"human"}
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{linked}");
+    assert_eq!(linked["notes"].as_array().unwrap().len(), notes_before);
+    let linked_note = note(&linked, &decision);
+    assert_eq!(linked_note["response_to"], first_id);
+    assert_eq!(linked_note["human_edited"], true);
+    assert_eq!(linked_note["actor"]["role"], "ai");
+    assert_eq!(
+        linked["feedback_needed"], true,
+        "the second request is open"
+    );
+    let token = linked["concurrency_token"].as_str().unwrap().to_owned();
+
+    // Already linked: idempotent, so the token does not move.
+    let (status, repeat) = patch(serde_json::json!({
+        "note_id":decision,"response_to":first_id,"expected_token":token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{repeat}");
+    assert_eq!(repeat["concurrency_token"], token);
+
+    // A concurrent writer holding the pre-link token is refused as a retryable change.
+    let (status, conflict) = patch(serde_json::json!({
+        "note_id":decision,"response_to":second_id,"expected_token":stale_token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
+    assert_eq!(conflict["code"], "ticket_changed");
+
+    // Relink to the second request with the current token.
+    let (status, relinked) = patch(serde_json::json!({
+        "note_id":decision,"response_to":second_id,"expected_token":token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{relinked}");
+    assert_eq!(note(&relinked, &decision)["response_to"], second_id);
+    assert_eq!(
+        relinked["feedback_needed"], true,
+        "the first request reopens"
+    );
+
+    // An invalid link refuses the whole request, including a title in the same patch.
+    let (status, refused) = patch(serde_json::json!({
+        "title":"must not write","note_id":first_id,"response_to":second_id
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    assert!(refused.get("code").is_none(), "not a retry: {refused}");
+    let (_, current) = patch(serde_json::json!({})).await;
+    assert_eq!(current["title"], "Synthetic response link");
+
+    // JSON null unlinks; the request link is gone and a later read agrees.
+    let (status, unlinked) =
+        patch(serde_json::json!({"note_id":decision,"response_to":null})).await;
+    assert_eq!(status, StatusCode::OK, "{unlinked}");
+    assert!(note(&unlinked, &decision).get("response_to").is_none());
+    let store = FsStore::open(&ticket_store).unwrap();
+    let stored = store
+        .read_ticket(&hotsheet_model::Ulid::from_string(&id).unwrap())
+        .unwrap();
+    assert!(stored.notes.iter().all(|note| note.response_to.is_none()));
+}
+
+#[tokio::test]
+async fn hs2_j4g9gb_remote_response_link_refuses_before_any_write_or_lookup() {
+    let (_dir, st) = state();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(Vec::new().into()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+    let response = app
+        .oneshot(authed(
+            "PATCH",
+            "/providers/github-main/tickets/42",
+            Some(r#"{"title":"must not write","note_id":"91","response_to":"90"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response).await;
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("note_response_link"),
+        "{body}"
+    );
+    assert!(transport.requests.lock().unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn hs2_xcmavt_authenticated_plan_replays_and_promotes_without_claim() {
     let (_primary, state) = state();

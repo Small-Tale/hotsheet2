@@ -121,6 +121,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly beginNoteMetadataEdit: (noteId: string, mode: NoteMetadataMode, frame?: TicketReaderFrame) => void;
   readonly saveNoteMetadata: (form: HTMLFormElement) => Promise<void>;
   readonly dismissNoteMetadata: () => void;
+  readonly chooseNoteResponseLink: (value: string) => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
@@ -208,6 +209,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     beginNoteMetadataEdit,
     saveNoteMetadata,
     dismissNoteMetadata,
+    chooseNoteResponseLink,
     dismissFeedbackRequest,
     feedbackResponseDrafts,
     readerNoteAutosave,
@@ -1316,7 +1318,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.selector, (_event, target) => {
       const noteId = data(target).noteId,
         mode = data(target).mode;
-      if (noteId && (mode === 'kind' || mode === 'summary' || mode === 'confidence'))
+      if (noteId && (mode === 'kind' || mode === 'summary' || mode === 'confidence' || mode === 'response'))
         beginNoteMetadataEdit(noteId, mode, linkedReaderFrame(target));
     }),
   );
@@ -1324,6 +1326,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteMetadata.selector, (event, target) => {
       event.preventDefault();
       void saveNoteMetadata(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    // HS2-J4G9GB: the response picker is controlled, so a re-render keeps the person's choice.
+    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.noteResponseLinkField.selector, (_event, target) => {
+      chooseNoteResponseLink((target as HTMLSelectElement).value);
     }),
   );
   lifetime.add(

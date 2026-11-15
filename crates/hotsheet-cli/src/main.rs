@@ -259,9 +259,13 @@ enum Cmd {
         /// Clear the timeline headline of the note named by --edit-note.
         #[arg(long, requires = "edit_note", conflicts_with = "note_summary")]
         clear_note_summary: bool,
-        /// Provider-native feedback request note id answered by this note.
-        #[arg(long, conflicts_with = "edit_note")]
+        /// Provider-native feedback request note id answered by the appended note, or by the
+        /// note named by --edit-note when the connection supports note_response_link.
+        #[arg(long, conflicts_with = "clear_response_to")]
         response_to: Option<String>,
+        /// Remove the response link from the note named by --edit-note (HS2-J4G9GB).
+        #[arg(long, requires = "edit_note")]
+        clear_response_to: bool,
         /// AI completion confidence (integer 0-100) recorded on the appended note, or the
         /// corrected score of the note named by --edit-note (note text then optional).
         #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
@@ -1424,6 +1428,7 @@ fn validate_note_modifiers(
     note_summary: Option<Option<&String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<&String>,
+    response_link: bool,
 ) -> Result<()> {
     if edit_note.is_some() {
         hotsheet_ticketing::ops::validate_note_kind_edit(
@@ -1440,11 +1445,11 @@ fn validate_note_modifiers(
     }
     match (
         edit_note.is_some(),
-        note_confidence.is_some() || note_kind.is_some() || note_summary.is_some(),
+        note_confidence.is_some() || note_kind.is_some() || note_summary.is_some() || response_link,
     ) {
         (true, false) => bail!(
-            "--edit-note requires --note, --note-file, --note-confidence, or \
-             --clear-note-confidence, or --note-kind"
+            "--edit-note requires --note, --note-file, --note-confidence, \
+             --clear-note-confidence, --note-kind, --response-to, or --clear-response-to"
         ),
         (false, true) => {
             bail!("--note-confidence requires --note or --note-file when appending a note")

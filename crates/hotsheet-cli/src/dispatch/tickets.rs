@@ -976,6 +976,10 @@ pub(crate) fn cmd_edit(
     {
         bail!("note '{note_id}' was not found on ticket '{}'", ticket.slug);
     }
+    // HS2-J4G9GB: an invalid existing-note link refuses the edit before any field writes.
+    if let (Some(note_id), Some(Some(request_id))) = (edit_note, response_to.as_ref()) {
+        ops::validate_note_response_link(&ticket, &note_id, note_kind, request_id)?;
+    }
     let up_next = if up_next {
         Some(true)
     } else if no_up_next {
@@ -1054,6 +1058,7 @@ pub(crate) fn cmd_edit(
             confidence: note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
             allow_feedback_prompt_edit: false,
+            response_to,
         };
         if !edit.is_empty() {
             updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;
@@ -1075,7 +1080,7 @@ pub(crate) fn cmd_edit(
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
-                response_to,
+                response_to: response_to.flatten(),
             },
             text,
         )?;
@@ -1450,9 +1455,13 @@ pub(crate) struct TicketEditArgs {
     /// Clear an existing note's timeline headline.
     #[arg(long, requires = "edit_note", conflicts_with = "note_summary")]
     clear_note_summary: bool,
-    /// Feedback request note ULID answered by this note.
-    #[arg(long, conflicts_with = "edit_note")]
+    /// Feedback request note ULID answered by the appended note, or by the note named by
+    /// --edit-note (HS2-J4G9GB).
+    #[arg(long, conflicts_with = "clear_response_to")]
     response_to: Option<String>,
+    /// Remove the response link from the note named by --edit-note.
+    #[arg(long, requires = "edit_note")]
+    clear_response_to: bool,
     /// AI completion confidence (integer 0-100) recorded on the appended note, or the
     /// corrected score of the note named by --edit-note (note text then optional).
     #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
@@ -1594,7 +1603,8 @@ pub(crate) struct TicketEdit {
     note: Option<String>,
     note_kind: Option<NoteKind>,
     note_summary: Option<Option<String>>,
-    response_to: Option<String>,
+    /// `Some(None)` removes an existing note's link (HS2-J4G9GB).
+    response_to: Option<Option<String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 }
@@ -1603,7 +1613,15 @@ impl TicketEdit {
     /// Read `--note`/`--note-file` and validate the note modifiers before any write.
     fn prepare(args: TicketEditArgs) -> Result<Self> {
         let note = read_note_input(args.note, args.note_file, args.allow_literal_backslash_n)?;
-        if args.response_to.is_some() && note.as_deref().is_none_or(str::is_empty) {
+        let response_to = if args.clear_response_to {
+            Some(None)
+        } else {
+            args.response_to.map(Some)
+        };
+        if args.edit_note.is_none()
+            && response_to.is_some()
+            && note.as_deref().is_none_or(str::is_empty)
+        {
             anyhow::bail!("--response-to requires --note or --note-file");
         }
         let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
@@ -1618,6 +1636,7 @@ impl TicketEdit {
             note_summary.as_ref().map(Option::as_ref),
             note_confidence,
             args.edit_note.as_ref(),
+            response_to.is_some(),
         )?;
         Ok(Self {
             title: args.title,
@@ -1643,7 +1662,7 @@ impl TicketEdit {
             note,
             note_kind: args.note_kind.as_deref().map(parse_note_kind).transpose()?,
             note_summary,
-            response_to: args.response_to,
+            response_to,
             note_confidence,
             edit_note: args.edit_note,
         })

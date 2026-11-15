@@ -1726,6 +1726,7 @@ pub fn edit_note(
             confidence: None,
             actor: None,
             allow_feedback_prompt_edit: false,
+            response_to: None,
         },
     )
 }
@@ -1748,6 +1749,9 @@ pub struct NoteEditInput {
     /// it such an edit is refused, so a reply typed into the wrong field can never overwrite the
     /// prompt (HS2-MB2Q10).
     pub allow_feedback_prompt_edit: bool,
+    /// Link an existing note as the answer to a feedback request (HS2-J4G9GB):
+    /// `Some(Some(request_id))` links or relinks, `Some(None)` unlinks, absent leaves it.
+    pub response_to: Option<Option<String>>,
 }
 
 impl NoteEditInput {
@@ -1757,7 +1761,64 @@ impl NoteEditInput {
             && self.summary.is_none()
             && self.confidence.is_none()
             && self.kind.is_none()
+            && self.response_to.is_none()
     }
+}
+
+/// Parse and validate an existing-note response link before the edit applies (HS2-J4G9GB).
+///
+/// The target obeys the append rule (a request reads present, never an explicit Regular
+/// note), and additionally must be a different note created before the response, so a
+/// link can only close a request the note could have answered. The responding note must
+/// read as Regular after `kind_override`, a kind correction in the same edit: a legacy
+/// implicit request or an AI thumbs rating never answers a request.
+pub fn validate_note_response_link(
+    ticket: &Ticket,
+    note_id: &Ulid,
+    kind_override: Option<NoteKind>,
+    request_id: &str,
+) -> Result<Ulid, StoreError> {
+    let request_id = Ulid::from_string(request_id).map_err(|_| {
+        StoreError::InvalidFeedbackResponse("response_to must be a feedback request ULID")
+    })?;
+    let Some(response) = ticket.notes.iter().find(|note| &note.id == note_id) else {
+        return Err(StoreError::InvalidFeedbackResponse(
+            "response_to requires a note on this ticket",
+        ));
+    };
+    let resulting_kind = kind_override
+        .unwrap_or_else(|| Note::infer_kind(response.kind, response.kind_explicit, &response.text));
+    if resulting_kind != NoteKind::Regular || response.is_ai_thumbs_feedback() {
+        return Err(StoreError::InvalidFeedbackResponse(
+            "response_to requires a regular note",
+        ));
+    }
+    let Some(request) = ticket
+        .notes
+        .iter()
+        .find(|note| note.id == request_id && note.is_feedback_needed_request())
+    else {
+        return Err(StoreError::InvalidFeedbackResponse(
+            "response_to must name a feedback request on this ticket",
+        ));
+    };
+    let earlier = request
+        .created_at
+        .chronological_cmp(&response.created_at)
+        .unwrap_or_else(|| {
+            request
+                .created_at
+                .as_str()
+                .cmp(response.created_at.as_str())
+        })
+        .then(request.id.cmp(&response.id))
+        .is_lt();
+    if request.id == response.id || !earlier {
+        return Err(StoreError::InvalidFeedbackResponse(
+            "response_to must name an earlier feedback request",
+        ));
+    }
+    Ok(request_id)
 }
 
 /// Refuse a correction that would discard a persisted note during serialization.
@@ -1784,6 +1845,16 @@ pub fn edit_note_with_metadata(
         let text = edit
             .text
             .map(|text| canonicalize_attachment_id_references(store, &ticket, &text));
+        // HS2-J4G9GB: validate a response link against the ticket before borrowing the note.
+        // A missing note falls through to the NotFound below.
+        let exists = ticket.notes.iter().any(|note| &note.id == note_id);
+        let response_change = match edit.response_to.as_ref() {
+            Some(Some(request_id)) if exists => Some(Some(validate_note_response_link(
+                &ticket, note_id, edit.kind, request_id,
+            )?)),
+            Some(None) => Some(None),
+            _ => None,
+        };
         let note = ticket
             .notes
             .iter_mut()
@@ -1825,16 +1896,20 @@ pub fn edit_note_with_metadata(
                 note.feedback_request = kind == NoteKind::FeedbackNeeded;
                 (previous, kind)
             });
+        // Re-linking the same request (or unlinking an unlinked note) changes nothing.
+        let response_change = response_change.filter(|link| *link != note.response_to);
         if kind_change.is_none()
             && text.is_none()
             && edit.summary.is_none()
             && edit.confidence.is_none()
+            && response_change.is_none()
         {
             return Ok(ticket);
         }
         // HS2-5E8Y9R: a reviewed repair of AI-authored metadata has the same durable
         // human provenance as a text repair, while the original actor remains intact.
         if (kind_change.is_some()
+            || response_change.is_some()
             || edit
                 .summary
                 .as_ref()
@@ -1882,6 +1957,9 @@ pub fn edit_note_with_metadata(
         }
         if let Some(summary) = edit.summary {
             note.summary = summary;
+        }
+        if let Some(link) = response_change {
+            note.response_to = link;
         }
         note.edited_at = now.clone();
         if let Some((previous, kind)) = kind_change {
@@ -5241,6 +5319,7 @@ mod tests {
                     confidence: None,
                     actor,
                     allow_feedback_prompt_edit: false,
+                    response_to: None,
                 },
             )
             .unwrap()
@@ -5297,6 +5376,7 @@ mod tests {
                     id: None,
                 }),
                 allow_feedback_prompt_edit: false,
+                response_to: None,
             },
         )
         .unwrap();
@@ -5323,6 +5403,7 @@ mod tests {
                     id: None,
                 }),
                 allow_feedback_prompt_edit: false,
+                response_to: None,
             },
         )
         .unwrap();
@@ -5430,6 +5511,7 @@ mod tests {
                         id: None,
                     }),
                     allow_feedback_prompt_edit: false,
+                    response_to: None,
                 },
             )
             .unwrap()
@@ -5475,6 +5557,7 @@ mod tests {
                     id: None,
                 }),
                 allow_feedback_prompt_edit: false,
+                response_to: None,
             },
         )
         .unwrap();
@@ -6299,6 +6382,278 @@ mod tests {
         assert_eq!(answered.notes.last().unwrap().response_to, Some(legacy));
         // A second dismissal of the same, now answered, legacy request stays a valid link.
         assert!(respond(legacy.to_string()).is_ok());
+    }
+
+    /// HS2-J4G9GB: one synthetic ticket with two requests, a later decision note, and an
+    /// AI author, so every link transition runs against a real store.
+    fn response_link_fixture(store: &FsStore) -> (Ulid, Ulid, Ulid, Ulid) {
+        let id = titled(store, "Synthetic response link").id;
+        let first = Ulid::new();
+        let second = Ulid::new();
+        let decision = Ulid::new();
+        for (note_id, kind, at, text) in [
+            (
+                first,
+                NoteKind::FeedbackNeeded,
+                "2026-11-01T00:00:00Z",
+                "FEEDBACK NEEDED: first synthetic question",
+            ),
+            (
+                second,
+                NoteKind::FeedbackNeeded,
+                "2026-11-01T01:00:00Z",
+                "FEEDBACK NEEDED: second synthetic question",
+            ),
+            (
+                decision,
+                NoteKind::Regular,
+                "2026-11-01T02:00:00Z",
+                "Synthetic decision: option A",
+            ),
+        ] {
+            add_note_with_metadata(
+                store,
+                &id,
+                note_id,
+                ts(at),
+                kind,
+                NoteMetadataInput {
+                    kind_explicit: true,
+                    actor: Some(hotsheet_model::NoteActor {
+                        role: hotsheet_model::AttachmentActorRole::Ai,
+                        id: Some("synthetic-agent".into()),
+                    }),
+                    ..Default::default()
+                },
+                text.into(),
+            )
+            .unwrap();
+        }
+        (id, first, second, decision)
+    }
+
+    fn link_edit(
+        request: Option<&Ulid>,
+        role: hotsheet_model::AttachmentActorRole,
+    ) -> NoteEditInput {
+        NoteEditInput {
+            response_to: Some(request.map(Ulid::to_string)),
+            actor: Some(hotsheet_model::NoteActor { role, id: None }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn hs2_j4g9gb_link_relink_repeat_and_unlink_an_existing_note() {
+        use hotsheet_model::AttachmentActorRole::{Ai, Human};
+        let (_dir, store) = store();
+        let (id, first, second, decision) = response_link_fixture(&store);
+        let open = store.read_ticket(&id).unwrap();
+        assert!(open.feedback_needed());
+
+        // Link: the existing decision answers the first request without a new note.
+        let linked = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-02T00:00:00Z"),
+            link_edit(Some(&first), Human),
+        )
+        .unwrap();
+        let note = linked
+            .notes
+            .iter()
+            .find(|note| note.id == decision)
+            .unwrap();
+        assert_eq!(note.response_to, Some(first));
+        assert_eq!(note.text, "Synthetic decision: option A");
+        assert_eq!(note.edited_at.as_str(), "2026-11-02T00:00:00Z");
+        assert!(
+            note.human_edited,
+            "a human link of AI text is human provenance"
+        );
+        assert_eq!(note.actor.as_ref().unwrap().role, Ai);
+        assert_eq!(linked.notes.len(), open.notes.len(), "no reply is appended");
+        assert!(linked.feedback_needed(), "the second request is still open");
+
+        // Already linked: the same link is idempotent and writes nothing.
+        let repeat = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-03T00:00:00Z"),
+            link_edit(Some(&first), Human),
+        )
+        .unwrap();
+        assert_eq!(repeat, linked);
+        assert_eq!(store.read_ticket(&id).unwrap(), linked);
+
+        // Relink: the note moves to the second request, reopening the first.
+        let relinked = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-04T00:00:00Z"),
+            link_edit(Some(&second), Ai),
+        )
+        .unwrap();
+        let note = relinked
+            .notes
+            .iter()
+            .find(|note| note.id == decision)
+            .unwrap();
+        assert_eq!(note.response_to, Some(second));
+        assert!(relinked.feedback_needed(), "the first request reopens");
+        let report = hotsheet_model::note_doctor::diagnose_notes(&relinked, None);
+        assert!(
+            !report
+                .findings
+                .iter()
+                .any(|finding| finding.id == "orphaned_response")
+        );
+
+        // Unlink, then unlink again (a no-op), then empty-then-refill.
+        let unlinked = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-05T00:00:00Z"),
+            link_edit(None, Human),
+        )
+        .unwrap();
+        assert_eq!(
+            unlinked
+                .notes
+                .iter()
+                .find(|note| note.id == decision)
+                .unwrap()
+                .response_to,
+            None
+        );
+        let again = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-06T00:00:00Z"),
+            link_edit(None, Human),
+        )
+        .unwrap();
+        assert_eq!(again, unlinked);
+        let refilled = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-07T00:00:00Z"),
+            link_edit(Some(&first), Human),
+        )
+        .unwrap();
+        assert_eq!(
+            refilled
+                .notes
+                .iter()
+                .find(|note| note.id == decision)
+                .unwrap()
+                .response_to,
+            Some(first)
+        );
+        // Round-trip through the file format keeps the link.
+        assert_eq!(store.read_ticket(&id).unwrap(), refilled);
+    }
+
+    #[test]
+    fn hs2_j4g9gb_refuses_links_that_could_not_answer_the_request() {
+        use hotsheet_model::AttachmentActorRole::Human;
+        let (_dir, store) = store();
+        let (id, first, second, decision) = response_link_fixture(&store);
+        let other = titled(&store, "Synthetic other ticket").id;
+        let foreign = Ulid::new();
+        add_note(
+            &store,
+            &other,
+            foreign,
+            ts("2026-11-01T00:00:00Z"),
+            NoteKind::FeedbackNeeded,
+            "FEEDBACK NEEDED: elsewhere".into(),
+        )
+        .unwrap();
+        let before = store.read_ticket(&id).unwrap();
+        let attempt = |note: &Ulid, edit: NoteEditInput| {
+            matches!(
+                edit_note_with_metadata(&store, &id, note, ts("2026-11-02T00:00:00Z"), edit),
+                Err(StoreError::InvalidFeedbackResponse(_))
+            )
+        };
+        // A non-request, a foreign request, an unknown id, and a malformed id.
+        assert!(attempt(&decision, link_edit(Some(&decision), Human)));
+        assert!(attempt(&decision, link_edit(Some(&foreign), Human)));
+        assert!(attempt(&decision, link_edit(Some(&Ulid::new()), Human)));
+        assert!(attempt(
+            &decision,
+            NoteEditInput {
+                response_to: Some(Some("not-a-ulid".into())),
+                ..Default::default()
+            }
+        ));
+        // A request cannot answer itself or a later request, and only a regular note answers.
+        assert!(attempt(&second, link_edit(Some(&second), Human)));
+        assert!(attempt(&first, link_edit(Some(&second), Human)));
+        assert!(attempt(
+            &decision,
+            NoteEditInput {
+                kind: Some(NoteKind::Activity),
+                response_to: Some(Some(first.to_string())),
+                ..Default::default()
+            }
+        ));
+        // Nothing changed, including the kind that rode with the refused link.
+        assert_eq!(store.read_ticket(&id).unwrap(), before);
+    }
+
+    #[test]
+    fn hs2_j4g9gb_interleaved_edits_keep_both_the_link_and_the_text() {
+        use hotsheet_model::AttachmentActorRole::Human;
+        let (_dir, store) = store();
+        let (id, first, _second, decision) = response_link_fixture(&store);
+        // Writer A corrects the text; writer B, reading before A, links the note. Each
+        // transaction rereads the ticket, so neither change is lost.
+        edit_note(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-02T00:00:00Z"),
+            "Synthetic decision: option B".into(),
+        )
+        .unwrap();
+        let linked = edit_note_with_metadata(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-02T00:01:00Z"),
+            link_edit(Some(&first), Human),
+        )
+        .unwrap();
+        let note = linked
+            .notes
+            .iter()
+            .find(|note| note.id == decision)
+            .unwrap();
+        assert_eq!(note.text, "Synthetic decision: option B");
+        assert_eq!(note.response_to, Some(first));
+        // A text edit after the link keeps the link.
+        let edited = edit_note(
+            &store,
+            &id,
+            &decision,
+            ts("2026-11-02T00:02:00Z"),
+            "Synthetic decision: option C".into(),
+        )
+        .unwrap();
+        let note = edited
+            .notes
+            .iter()
+            .find(|note| note.id == decision)
+            .unwrap();
+        assert_eq!(note.response_to, Some(first));
     }
 
     #[test]

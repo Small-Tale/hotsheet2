@@ -331,6 +331,8 @@ export type Capabilities = Record<
   query_fields: string[];
   /** Atomic note-kind correction; omitted older/provider capability is false. */
   note_kind_edit?: boolean;
+  /** Link an existing note as a feedback response (HS2-J4G9GB); omitted older/provider capability is false. */
+  note_response_link?: boolean;
   /** Append or correct a note's completion confidence; omitted older capability is false. */
   note_confidence?: boolean;
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */

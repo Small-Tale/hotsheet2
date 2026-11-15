@@ -8526,7 +8526,7 @@ fn edit_records_note_confidence_on_completion() {
         (vec!["--clear-note-confidence"], "--edit-note"),
         (
             vec!["--edit-note", "01ARZ3NDEKTSV4RRFFQ69G5FAV"],
-            "--edit-note requires --note, --note-file, --note-confidence, or",
+            "--edit-note requires --note, --note-file, --note-confidence,",
         ),
         (
             vec![
@@ -14524,6 +14524,175 @@ fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
         .assert()
         .failure();
     assert_eq!(read()["title"], "Synthetic explicit kind");
+}
+
+/// HS2-J4G9GB: `edit --edit-note --response-to` links an existing note idempotently, the
+/// provider command matches it, an invalid link writes nothing, and the link can be cleared.
+#[test]
+fn hs2_j4g9gb_cli_links_relinks_and_clears_an_existing_note_response() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let slug = new_ticket(dir.path(), "Synthetic response link");
+    for (text, kind) in [
+        (
+            "FEEDBACK NEEDED: first synthetic question",
+            "feedback_needed",
+        ),
+        (
+            "FEEDBACK NEEDED: second synthetic question",
+            "feedback_needed",
+        ),
+        ("Synthetic decision: option A", "regular"),
+    ] {
+        hs(dir.path())
+            .args(["edit", &slug, "--note", text, "--note-kind", kind])
+            .assert()
+            .success();
+    }
+    let providers = hs(dir.path())
+        .args(["providers", "--json"])
+        .assert()
+        .success();
+    let providers: serde_json::Value =
+        serde_json::from_slice(&providers.get_output().stdout).unwrap();
+    let connection = providers[0]["connection_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        providers[0]["capabilities"]["note_response_link"], true,
+        "{providers}"
+    );
+    let read = || {
+        let out = hs(dir.path())
+            .args(["provider-get", &connection, &slug])
+            .assert()
+            .success();
+        serde_json::from_slice::<serde_json::Value>(&out.get_output().stdout).unwrap()
+    };
+    let initial = read();
+    let id_of = |text: &str| {
+        initial["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["text"] == text)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let first = id_of("FEEDBACK NEEDED: first synthetic question");
+    let second = id_of("FEEDBACK NEEDED: second synthetic question");
+    let decision = id_of("Synthetic decision: option A");
+    let link_of = |ticket: &serde_json::Value| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == decision.as_str())
+            .unwrap()
+            .get("response_to")
+            .cloned()
+    };
+
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+        ])
+        .assert()
+        .success();
+    let linked = read();
+    assert_eq!(link_of(&linked), Some(serde_json::json!(first)));
+    assert_eq!(linked["notes"].as_array().unwrap().len(), 3);
+    // Already linked: idempotent.
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+        ])
+        .assert()
+        .success();
+    assert_eq!(read(), linked);
+    // Relink through the provider command, with its optimistic token.
+    let token = linked["concurrency_token"].as_str().unwrap().to_owned();
+    hs(dir.path())
+        .args([
+            "provider-edit",
+            &connection,
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &second,
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .success();
+    assert_eq!(link_of(&read()), Some(serde_json::json!(second)));
+    // A stale token is refused and leaves the link alone.
+    hs(dir.path())
+        .args([
+            "provider-edit",
+            &connection,
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .failure();
+    assert_eq!(link_of(&read()), Some(serde_json::json!(second)));
+    // An invalid link (a request cannot answer another request) refuses the whole edit.
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "must not write",
+            "--edit-note",
+            &first,
+            "--response-to",
+            &second,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("requires a regular note"));
+    assert_eq!(read()["title"], "Synthetic response link");
+    // --clear-response-to needs --edit-note and conflicts with --response-to.
+    hs(dir.path())
+        .args(["edit", &slug, "--clear-response-to"])
+        .assert()
+        .failure();
+    hs(dir.path())
+        .args(["edit", &slug, "--response-to", &first])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--response-to requires --note"));
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--clear-response-to",
+        ])
+        .assert()
+        .success();
+    assert_eq!(link_of(&read()), None);
 }
 
 fn hs2_4j6v46_command(home: &Path, source: &Path, capability: bool) -> Command {

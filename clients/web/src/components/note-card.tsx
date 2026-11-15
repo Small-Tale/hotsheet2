@@ -51,6 +51,10 @@ export interface NoteCardProps {
   metadataEditable?: boolean;
   /** Provider supports confidence correction independently of kind correction. */
   confidenceEditable?: boolean;
+  /** The note can be linked (or relinked) as a feedback response (HS2-J4G9GB). */
+  responseLinkable?: boolean;
+  /** Why a disabled response link is unavailable; defaults to the provider reason. */
+  responseLinkReason?: string;
   /** Persisted kind, which can differ from the presented kind after an answer. */
   storedKind?: NoteKind;
   hasLinkedResponses?: boolean;
@@ -388,6 +392,8 @@ export function NoteCard({
   repairable = false,
   metadataEditable = false,
   confidenceEditable = false,
+  responseLinkable = false,
+  responseLinkReason = 'This source cannot link an existing note as a feedback response.',
   storedKind = kind,
   hasLinkedResponses = false,
   editing = false,
@@ -498,6 +504,13 @@ export function NoteCard({
                     : hasLinkedResponses
                       ? 'A linked response exists; review the response before changing this type.'
                       : undefined,
+                },
+                {
+                  label: 'Link as Feedback Response',
+                  action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
+                  attributes: { 'data-note-id': id, 'data-mode': 'response' },
+                  disabled: !responseLinkable,
+                  disabledReason: responseLinkable ? undefined : responseLinkReason,
                 },
                 {
                   label: 'Edit Timeline Summary',

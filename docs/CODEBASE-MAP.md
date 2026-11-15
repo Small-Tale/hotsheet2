@@ -1381,7 +1381,10 @@ on the first project open after upgrade, before the setup refresh writes the dur
 HS2-CV5NMC: `hotsheet-model::Note::infer_kind` owns legacy note inference and
 `kind_explicit` file/wire metadata preserves author intent. Ticketing `ops` owns
 atomic note-kind correction and its id/kind audit; provider `note_kind_edit` gates
-correction. External `note_trailer` carries append intent in native comments.
+correction. HS2-J4G9GB: `ops::validate_note_response_link` and
+`NoteEditInput.response_to` link an existing note as a feedback response; provider
+`note_response_link` gates it, and `clients/web/src/note-response-link.ts` mirrors the
+eligibility rule for the note menu and AI repair preview. External `note_trailer` carries append intent in native comments.
 
 Ticket groups (HS2-3XNTSD, HS2-9KZSD4, [35-ticket-groups.md](35-ticket-groups.md)):
 `crates/hotsheet-model/src/group.rs` owns group ids (`is_group_id`, `new_group_id`), the

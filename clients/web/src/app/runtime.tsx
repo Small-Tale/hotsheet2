@@ -78,7 +78,11 @@ import {
   selectDevelopmentStrategy,
 } from '../components/development-strategy-settings-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
-import type { NoteMetadataDialogState, NoteMetadataMode } from '../components/note-metadata-dialog';
+import {
+  NO_RESPONSE_LINK,
+  type NoteMetadataDialogState,
+  type NoteMetadataMode,
+} from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
@@ -203,6 +207,7 @@ import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import { sendSystemNotification, shouldUseSystemNotification } from '../native-notifications';
 import { type ProjectTicketSources, resolveNewTicketSource } from '../new-ticket-source';
 import { parseNoteRepairProposal, previewNoteRepair } from '../note-repair-proposal';
+import { responseLinkLabel, responseLinkTargets, responseLinkUnavailable } from '../note-response-link';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
@@ -5191,6 +5196,29 @@ export async function startHotSheetWebClient() {
       owner = frame ? projects.peek().find((item) => item.id === frame.projectId) : project();
     if (!ticket || !note || !owner || !ticket.concurrency_token) return;
     const capabilities = frame ? frame.capabilities : capabilitiesFor(ticket.connection_id);
+    if (mode === 'response') {
+      // HS2-J4G9GB: link this existing note itself; the picker offers only earlier requests.
+      if (responseLinkUnavailable(ticket.notes, noteId, capabilities)) return;
+      const targets = responseLinkTargets(ticket.notes, noteId).map((request) => ({
+        value: request.id,
+        label: responseLinkLabel(request),
+      }));
+      if (note.response_to && !targets.some((target) => target.value === note.response_to))
+        targets.push({ value: note.response_to, label: 'Unavailable request' });
+      noteMetadataDialog.value = {
+        noteId,
+        ticketId: ticket.qualified_id,
+        projectId: owner.id,
+        frameId: frame?.id,
+        token: ticket.concurrency_token,
+        mode,
+        kind: note.kind,
+        hasResponses: false,
+        responseTo: note.response_to,
+        responseTargets: targets,
+      };
+      return;
+    }
     if (
       !capabilities.note_edit ||
       (mode === 'confidence' ? !capabilities.note_confidence : !capabilities.note_kind_edit)
@@ -5242,6 +5270,15 @@ export async function startHotSheetWebClient() {
         return;
       }
       patch.note_summary = summary || null;
+    } else if (state.mode === 'response') {
+      const choice = form.querySelector<HTMLSelectElement>('[name="note-metadata-response"]')?.value;
+      if (!choice) return;
+      const responseTo = choice === NO_RESPONSE_LINK ? undefined : choice;
+      if (responseTo === state.responseTo) {
+        noteMetadataDialog.value = undefined;
+        return;
+      }
+      patch.response_to = responseTo ?? null;
     } else {
       const raw = form.querySelector<HTMLInputElement>('[name="note-metadata-confidence"]')?.value.trim() ?? '';
       if (raw && (!/^\d{1,3}$/u.test(raw) || Number(raw) > 100)) {
@@ -6455,6 +6492,10 @@ export async function startHotSheetWebClient() {
     saveNoteMetadata,
     dismissNoteMetadata: () => {
       noteMetadataDialog.value = undefined;
+    },
+    chooseNoteResponseLink: (value: string) => {
+      const state = noteMetadataDialog.peek();
+      if (state?.mode === 'response') noteMetadataDialog.value = { ...state, responseChoice: value };
     },
     dismissFeedbackRequest,
     runCommand,

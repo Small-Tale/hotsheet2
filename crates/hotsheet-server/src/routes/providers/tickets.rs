@@ -321,6 +321,16 @@ pub(crate) fn do_provider_update(
             format!("provider connection '{connection_id}' does not support note_kind_edit"),
         ));
     }
+    // HS2-J4G9GB: linking an existing note is a separate, explicitly reported capability.
+    if req.note_id.is_some()
+        && req.response_to.is_some()
+        && !provider.descriptor().capabilities.note_response_link
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note_response_link"),
+        ));
+    }
     if req.note_id.is_some() && !provider.supports_note_edit() {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -352,12 +362,23 @@ pub(crate) fn do_provider_update(
         ));
     }
     if req.response_to.is_some()
-        && (req.note_id.is_some() || req.note.as_deref().is_none_or(str::is_empty))
+        && req.note_id.is_none()
+        && req.note.as_deref().is_none_or(str::is_empty)
     {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "response_to requires an appended note",
+            "response_to requires an appended note or note_id",
         ));
+    }
+    // A hosted Markdown store refuses an invalid existing-note link before any field writes.
+    if let (Some(note_id), Some(Some(request_id))) = (req.note_id.as_deref(), &req.response_to)
+        && let Some(entry) = state.host.get(connection_id)
+        && let Ok(native) = Ulid::from_string(id)
+        && let Ok(note_id) = Ulid::from_string(note_id)
+        && let Ok(current) = entry.store.read_ticket(&native)
+        && current.notes.iter().any(|note| note.id == note_id)
+    {
+        ops::validate_note_response_link(&current, &note_id, req.note_kind, request_id)?;
     }
     if req.note_id.is_some() {
         ops::validate_note_kind_edit(req.note_kind)?;
@@ -444,12 +465,22 @@ pub(crate) fn do_provider_update(
         confidence: confidence_change,
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
         allow_feedback_prompt_edit,
+        response_to: if note_id.is_some() {
+            req.response_to.clone()
+        } else {
+            None
+        },
     };
     match (note_id, edit) {
         (Some(note_id), edit) if !edit.is_empty() => {
             ticket = provider
                 .edit_note_with_metadata(id, &note_id, timestamp, edit)
-                .map_err(provider_transfer_error)?;
+                .map_err(|error| match &error {
+                    hotsheet_ticketing::ProviderError::Store(
+                        hotsheet_ticketing::StoreError::InvalidFeedbackResponse(_),
+                    ) => ApiError::new(StatusCode::BAD_REQUEST, error.to_string()),
+                    _ => provider_transfer_error(error),
+                })?;
             // HS2-C1CFSH: an explicit regular note never opens a request; say so.
             ticket
                 .warnings
@@ -466,7 +497,7 @@ pub(crate) fn do_provider_update(
             let marker_warning = ops::suppressed_feedback_marker_warning(
                 note_kind,
                 req.note_kind.is_some(),
-                req.response_to.is_some(),
+                matches!(req.response_to, Some(Some(_))),
                 &note,
             );
             ticket = provider
@@ -484,7 +515,7 @@ pub(crate) fn do_provider_update(
                         confidence: note_confidence,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                         ai_feedback: None,
-                        response_to: req.response_to.clone(),
+                        response_to: req.response_to.clone().flatten(),
                     },
                     note,
                 )

@@ -16025,7 +16025,12 @@ components:
             - type: 'null'
           description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description:
+            Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+            null with note_id removes the link. Requires the note_response_link capability.
         note_confidence:
           anyOf:
             - type: integer
@@ -16731,7 +16736,12 @@ components:
             - type: 'null'
           description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description:
+            Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+            null with note_id removes the link. Requires the note_response_link capability.
         note_confidence:
           anyOf:
             - type: integer
@@ -17033,7 +17043,12 @@ components:
                   - type: string
                   - type: 'null'
               response_to:
-                type: string
+                anyOf:
+                  - type: string
+                  - type: 'null'
+                description:
+                  Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+                  null with note_id removes the link. Requires the note_response_link capability.
               note_confidence:
                 anyOf:
                   - type: integer
@@ -18957,6 +18972,10 @@ components:
           type: boolean
           default: false
           description: Atomic persisted note kind correction. Git supports it; remote providers refuse before mutation.
+        note_response_link:
+          type: boolean
+          default: false
+          description: Link an existing note as a feedback response (HS2-J4G9GB). Git supports it; remote providers refuse before mutation.
         groups:
           type: boolean
           description: Tickets carry a `group` id and the connection lists, ungroups, and merges groups (HS2-PDSHNN, HS2-9KZSD4).

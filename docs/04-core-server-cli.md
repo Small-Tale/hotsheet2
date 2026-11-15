@@ -1289,9 +1289,23 @@ regular reply or `No response needed` acknowledgement. The request must be a not
 that ticket that reads present as a feedback request: a typed `feedback_needed` note or
 a legacy implicit regular note carrying the marker, never an explicit Regular note
 (HS2-VBFSZJ). An invalid target is a 400, not a stale-token conflict. The server PATCH routes and MCP
-`hotsheet_update` accept the same `response_to` JSON field; it is invalid on an
-edit or without note text. New feedback requests are independently tracked, while
+`hotsheet_update` accept the same `response_to` JSON field. Without `note_id` it needs
+note text. New feedback requests are independently tracked, while
 older notes without the linkage retain sequential review state (HS2-W1ENZD).
+
+An existing note can become the response itself (HS2-J4G9GB). Use `--edit-note <id>
+--response-to <request-id>`, or `note_id` plus `response_to` in the API and MCP, so a
+decision recorded without the link closes its request without a duplicate note.
+`--clear-response-to`, or JSON `null`, removes the link. The target follows the append
+rule and must also be a different request created before the note. The note must read
+as Regular after any kind change in the same edit. An invalid link is a 400 that
+refuses the whole request before any field changes. Repeating the same link writes
+nothing. The edit bumps `edited_at` and, for a human linking AI text, sets
+`human_edited` while keeping the author. The ticket's `expected_token` guards
+concurrent edits (HTTP, provider routes, MCP `hotsheet_update`, and
+`provider-edit --expected-token`). Git advertises `note_response_link: true`. GitHub,
+Jira and GitLab advertise false and refuse with `Unsupported { capability:
+"note_response_link" }` (HTTP 409, CLI error) before any accompanying field changes.
 `--note-kind regular` explicitly preserves a Regular note even if its text contains
 the legacy feedback marker (HS2-CV5NMC). Omitting the flag retains legacy inference.
 With `--edit-note <id>`, `--note-kind <kind>` intentionally corrects only that note's

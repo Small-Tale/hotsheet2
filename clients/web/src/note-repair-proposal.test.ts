@@ -13,6 +13,7 @@ const note: Note = {
   actor: { role: 'ai' },
 };
 const capabilities = { note_edit: true, note_kind_edit: true } as Capabilities;
+type NoteRepairProposalInput = [target: string, kind?: string];
 
 describe('HS2-5E8Y9R note repair proposals', () => {
   it('accepts a focused fenced proposal and prepares a human-reviewed kind correction', () => {
@@ -54,10 +55,73 @@ describe('HS2-5E8Y9R note repair proposals', () => {
     expect(preview.unavailable).toEqual([
       'This source cannot change note type.',
       'Editing an existing note summary is not supported yet.',
-      'Linking an existing note as a response is not supported yet.',
+      'This source cannot link an existing note as a feedback response.',
     ]);
     expect(preview.patch).not.toHaveProperty('response_to');
     expect(preview.patch).not.toHaveProperty('note_summary');
+  });
+
+  describe('HS2-J4G9GB existing-note response links', () => {
+    const request: Note = {
+      id: '01SYNTHETICREQUEST0000000000',
+      kind: 'feedback_needed',
+      feedback_request: true,
+      text: 'FEEDBACK NEEDED: pick one',
+      created_at: '2025-12-31T00:00:00Z',
+      edited_at: '2025-12-31T00:00:00Z',
+    };
+    const other: Note = { ...request, id: '01SYNTHETICREQUEST0000000001', created_at: '2025-12-31T01:00:00Z' };
+    const later: Note = { ...request, id: '01SYNTHETICREQUEST0000000002', created_at: '2026-02-01T00:00:00Z' };
+    const decision: Note = { ...note, text: 'Synthetic decision: option A' };
+    const linkable = { ...capabilities, note_response_link: true } as Capabilities;
+    const propose = (response_to: string | null, kind?: string) =>
+      parseNoteRepairProposal(JSON.stringify({ note_id: note.id, response_to, ...(kind ? { kind } : {}) }), note.id);
+
+    it('links, relinks, and unlinks the existing note through one patch', () => {
+      const notes = [request, other, decision];
+      const linked = previewNoteRepair(propose(request.id), decision, linkable, 'synthetic-token', notes);
+      expect(linked).toMatchObject({
+        unavailable: [],
+        changed: true,
+        patch: { note_id: note.id, response_to: request.id, expected_token: 'synthetic-token' },
+      });
+      expect(linked.patch).not.toHaveProperty('note');
+      const relinked = previewNoteRepair(propose(other.id), { ...decision, response_to: request.id }, linkable, '', [
+        request,
+        other,
+        { ...decision, response_to: request.id },
+      ]);
+      expect(relinked.patch).toMatchObject({ response_to: other.id });
+      const unlinked = previewNoteRepair(propose(null), { ...decision, response_to: request.id }, linkable, '', [
+        request,
+        { ...decision, response_to: request.id },
+      ]);
+      expect(unlinked.patch).toMatchObject({ response_to: null });
+      expect(unlinked.changed).toBe(true);
+    });
+
+    it('treats an already linked note as a no-op', () => {
+      const same = previewNoteRepair(propose(request.id), { ...decision, response_to: request.id }, linkable, '', [
+        request,
+        { ...decision, response_to: request.id },
+      ]);
+      expect(same).toMatchObject({ unavailable: [], changed: false });
+      expect(same.patch).not.toHaveProperty('response_to');
+    });
+
+    it('names each reason a link cannot apply and never patches it', () => {
+      const cases: Array<[NoteRepairProposalInput, Note[], string]> = [
+        [[later.id], [request, decision, later], 'does not name an earlier feedback request'],
+        [['01UNKNOWN000000000000000000'], [request, decision], 'does not name an earlier feedback request'],
+        [[request.id, 'activity'], [request, decision], 'Only a regular note can answer a feedback request.'],
+        [[request.id], [decision], 'No earlier feedback request on this ticket.'],
+      ];
+      for (const [[target, kind], notes, reason] of cases) {
+        const preview = previewNoteRepair(propose(target, kind), decision, linkable, '', notes);
+        expect(preview.unavailable.join(' ')).toContain(reason);
+        expect(preview.patch).not.toHaveProperty('response_to');
+      }
+    });
   });
 
   it('marks an AI prompt text edit explicit and keeps a no-op proposal from applying', () => {

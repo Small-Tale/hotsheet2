@@ -139,7 +139,7 @@ pub fn diagnose_notes(ticket: &Ticket, note_id: Option<Ulid>) -> NoteDoctorRepor
                 && note.kind == NoteKind::Regular
                 && reads_as_decision(&note.text)
             {
-                current.push(finding(note, "possible_unlinked_decision", "This note reads as a decision after an unanswered feedback request but has no response_to link.", "Review the note and link it to the request if it answers it."));
+                current.push(finding(note, "possible_unlinked_decision", "This note reads as a decision after an unanswered feedback request but has no response_to link.", "If it answers the request, link this existing note with note_id and response_to (HS2-J4G9GB)."));
             }
             if note.response_to == Some(request.id) {
                 unanswered = None;

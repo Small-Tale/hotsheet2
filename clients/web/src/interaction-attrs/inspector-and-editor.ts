@@ -58,6 +58,7 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   ticketTagInputField: attr('name', 'ticket-tag-input'),
   markdownSourceField: attr('name', 'markdown-source'),
   newNoteBodyField: attr('name', 'new-note-body'),
+  noteResponseLinkField: attr('name', 'note-metadata-response'),
   editOnClick: attr('data-edit-on-click', 'true'),
   feedbackPromptBody: attr('data-feedback-prompt-body', 'true'),
   noteBodyField: attr('name', 'note-body'),

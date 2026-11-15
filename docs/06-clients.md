@@ -4780,7 +4780,11 @@ shows the returned note-level proposal beside the transcript. A human reviews th
 before and after text, kind, confidence, and any unavailable operation before
 accepting. The update uses the ticket's optimistic token; a changed ticket needs
 a fresh proposal. The proposal cannot create a response or alter ticket-wide
-fields. Providers that cannot apply a proposed operation explain it in the preview.
+fields. It may propose `response_to` to link this existing note to an earlier request
+on the ticket, or `null` to remove a wrong link. The preview applies that link to the
+note itself. It names the reason when the source lacks `note_response_link`, the note
+is not regular, or the target is not an earlier request (HS2-J4G9GB). Providers that
+cannot apply a proposed operation explain it in the preview.
 
 The same stored-note menu offers explicit **Change type**, **Edit timeline summary**
 for activity and status notes, and **Correct confidence** (HS2-Q0GWXT). Each opens
@@ -4789,6 +4793,14 @@ change that closes an unanswered feedback request is called out before saving,
 and a request with linked responses cannot change type. Unsupported provider
 actions stay visible with a reason. Saves use the optimistic token and retain the
 original author and response links.
+
+**Link as feedback response** (HS2-J4G9GB) opens the same dialog with a picker of the
+ticket's feedback requests created before the note, plus **Not a response** to remove
+an existing link. Saving links the note itself, so its request closes without a new
+note. The item stays visible but disabled with a reason in three cases: the source
+does not support `note_response_link`, the note is not regular, or no earlier
+request exists. The picker is controlled, so a re-render or resize keeps the unsaved
+choice.
 
 Note cards use the canonical spacing ladder: a 16px card inset, 8px between ordinary
 card regions, and 4px inside connected icon/metadata and inline-feedback clusters. The

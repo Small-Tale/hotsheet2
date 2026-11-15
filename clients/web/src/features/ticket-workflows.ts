@@ -64,6 +64,7 @@ import {
 } from '../new-ticket-source';
 import { submitNotWorkingReport } from '../not-working-workflow';
 import { noteAuthorship } from '../note-authorship';
+import { responseLinkUnavailable } from '../note-response-link';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import {
   bulkTagChoices,
@@ -1845,6 +1846,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function timelineUsage(ticket: FullTicket) {
     return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).breakdown;
   }
+  /** HS2-J4G9GB: the note menu's response link stays visible with its reason when unavailable. */
+  function linkState(ticket: FullTicket, noteId: string) {
+    const reason = responseLinkUnavailable(ticket.notes, noteId, capabilitiesFor(ticket.connection_id));
+    return reason ? { responseLinkable: false, responseLinkReason: reason } : { responseLinkable: true };
+  }
   function notes(ticket: FullTicket) {
     return ticket.notes.map((note) => {
       // Authorship comes from the note's recorded actor (HS2-32QDZ3).
@@ -1865,6 +1871,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           capabilitiesFor(ticket.connection_id)?.note_edit && capabilitiesFor(ticket.connection_id)?.note_confidence,
         ),
         hasLinkedResponses: ticket.notes.some((item) => item.response_to === note.id),
+        ...linkState(ticket, note.id),
         aiAuthored,
         humanEdited: note.human_edited,
         aiTool,

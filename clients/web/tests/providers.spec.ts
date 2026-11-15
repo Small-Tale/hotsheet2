@@ -39991,6 +39991,135 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
   }
 });
 
+test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback response through the real server', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic response link' });
+    const append = (note: string, note_kind: string) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+        note,
+        note_kind,
+        actor: { role: 'ai', id: 'synthetic-session' },
+      });
+    await append('FEEDBACK NEEDED: Which synthetic layout?', 'feedback_needed');
+    await append('FEEDBACK NEEDED: Which synthetic color?', 'feedback_needed');
+    const seeded = await append('Decision: synthetic layout A', 'regular');
+    const [first, second, decision] = seeded.notes;
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const rail = page.locator('#app-right-rail');
+    const card = rail.locator(`article[data-note-id="${decision.id}"]`);
+    const linkItem = (noteId: string) =>
+      page.getByRole('menuitem', { name: 'Link as Feedback Response' }).and(page.locator(`[data-note-id="${noteId}"]`));
+
+    // A request cannot answer another request: visible, disabled, with its reason.
+    await rail.locator(`article[data-note-id="${first.id}"]`).getByRole('button', { name: 'Note Actions' }).click();
+    await expect(linkItem(first.id)).toHaveAttribute('aria-disabled', 'true');
+    await expect(linkItem(first.id)).toHaveAttribute('title', 'Only a regular note can answer a feedback request.');
+    await page.keyboard.press('Escape');
+
+    // Link: pick the first request for the existing decision note.
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    const dialog = page.getByRole('dialog', { name: 'Link as feedback response' });
+    const select = dialog.locator('[name="note-metadata-response"]');
+    await select.locator('.kui-select__trigger').click();
+    await expect(select.locator(`.kui-select__option[data-value="${second.id}"]`)).toContainText(
+      'Which synthetic color?',
+    );
+    await select.locator(`.kui-select__option[data-value="${first.id}"]`).click();
+    await expect(select.locator('.kui-select__trigger')).toHaveAttribute('aria-expanded', 'false');
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1100],
+      ['narrow', 390],
+      ['returned-wide', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveCSS('opacity', '1');
+      await page.waitForTimeout(180);
+      await page.screenshot({ path: test.info().outputPath(`hs2-j4g9gb-${label}.png`) });
+    }
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    let updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes).toHaveLength(3);
+    expect(updated.notes.find((note) => note.id === decision.id)).toMatchObject({
+      response_to: first.id,
+      human_edited: true,
+      actor: { role: 'ai', id: 'synthetic-session' },
+      text: 'Decision: synthetic layout A',
+    });
+    // The answered request now presents as an ordinary note; the second stays open.
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'regular');
+    await expect(rail.locator(`article[data-note-id="${second.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+    await page.screenshot({ path: test.info().outputPath('hs2-j4g9gb-linked-wide.png') });
+
+    // Relink through the keyboard path to the second request.
+    await card.focus();
+    await page.keyboard.press('ContextMenu');
+    await linkItem(decision.id).click();
+    await select.locator('.kui-select__trigger').click();
+    await select.locator(`.kui-select__option[data-value="${second.id}"]`).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === decision.id)?.response_to).toBe(second.id);
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+
+    // Already linked: saving the same request closes without another write.
+    const before = updated.updated_at;
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect((await server.request<FullTicket>(`/tickets/${created.id}`)).updated_at).toBe(before);
+
+    // Unlink, then reload: the stored link is gone.
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    await select.locator('.kui-select__trigger').click();
+    await select.locator('.kui-select__option[data-value="none"]').click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === decision.id)?.response_to).toBeUndefined();
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+  } finally {
+    await server.stop();
+  }
+});
+
 test('preserves explicit note kinds and infers omitted UI requests through the real server (HS2-CV5NMC)', async ({
   page,
 }) => {
