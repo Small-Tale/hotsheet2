@@ -781,6 +781,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderStack: signal([]),
       readerOpen: signal(true),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: editing,
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),
@@ -851,6 +853,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderFrame: () => undefined,
       linkedReaderStack: signal([]),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: editing,
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),
@@ -911,6 +915,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderFrame: () => undefined,
       linkedReaderStack: signal([]),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: signal<string | undefined>(undefined),
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),
