@@ -2103,7 +2103,8 @@ The rule itself lives in the dependency-free `hotsheet_sync::env_path` (HS2-15ZN
 crates that do not depend on `hotsheet-ticketing` apply it too: the terminal relay's
 `HOTSHEET_LAUNCH_AGENTS_DIR`, `HOTSHEET_LAUNCHCTL` and `HOME` fallback, and the terminal
 broker's `HOTSHEET_PROCESS_JOURNAL_HOME`. The desktop shell, a separate Cargo workspace,
-keeps a local copy for `HOTSHEET_DESKTOP_STORAGE_DIRECTORY`. A blank LaunchAgents override
+keeps a local copy for `HOTSHEET_DESKTOP_STORAGE_DIRECTORY`, and the Node local host reads
+the same variable through `machine-home.ts`'s `nonBlank` (HS2-1VF50T). A blank LaunchAgents override
 falls back to `~/Library/LaunchAgents`, a blank `HOME` is an error rather than a relative
 `Library/LaunchAgents`, a blank `launchctl` override runs `/bin/launchctl`, and a blank
 journal home disables broker provenance.

@@ -10,8 +10,10 @@ import WebSocket from 'ws';
 
 import { CHANGE_WS_MUX_PATH } from './change-ws-mux';
 import { CLIENT_BUILD_META_NAME } from './client-build';
+import { DESKTOP_STORAGE_PATH } from './desktop-storage-contract';
 import {
   createLocalHostApp,
+  desktopStorageDirectoryFrom,
   mcpBinaryEnvironment,
   releaseBinaryEnvironment,
   snapshotLocalHostArtifacts,
@@ -66,6 +68,42 @@ describe('local production host (HS2-587N4D)', () => {
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+});
+
+describe('desktop storage directory override (HS2-1VF50T)', () => {
+  it('treats an unset, empty, or whitespace-only value as unset and keeps any other value as given', () => {
+    expect(desktopStorageDirectoryFrom({})).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: '' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: ' ' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: ' \t\n ' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: 'relative/prefs' })).toBe(
+      'relative/prefs',
+    );
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: '/abs/prefs' })).toBe('/abs/prefs');
+  });
+
+  it('mounts the desktop storage bridge only for a non-blank directory', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-storage-')),
+      dist = resolve(root, 'dist'),
+      storage = resolve(root, 'prefs'),
+      url = `http://127.0.0.1:4175${DESKTOP_STORAGE_PATH}`;
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), '<!doctype html><title>Hot Sheet</title>');
+      for (const blank of [undefined, '', ' ', '\t']) {
+        const response = await createLocalHostApp(dist, new Hono(), blank).request(url);
+        // Without the bridge the path falls through to the client document, and no directory is made.
+        expect(response.headers.get('content-type')).toContain('text/html');
+      }
+      expect(existsSync(resolve(process.cwd(), ' '))).toBe(false);
+      const mounted = await createLocalHostApp(dist, new Hono(), storage).request(url);
+      expect(mounted.status).toBe(200);
+      expect(await mounted.json()).toEqual([]);
+      expect(statSync(storage).isDirectory()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

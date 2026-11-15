@@ -36,7 +36,7 @@ import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
-import { hotsheetHome } from './machine-home';
+import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
 import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
@@ -263,11 +263,21 @@ export function stampBrowserAuthMode(html: string, remote = remoteBrowserAuthReq
   return html.replace(/<\/head>/i, `${tag}</head>`);
 }
 
+/**
+ * The desktop shell's preference directory (HS2-1VF50T). Like the Rust path overrides (HS2-15ZN8E),
+ * an unset, empty, or whitespace-only value counts as unset, so a blank value never mounts the
+ * storage bridge on a directory named by spaces in the working directory. A non-blank value,
+ * relative or absolute, is used as given.
+ */
+export function desktopStorageDirectoryFrom(environment: MachineHomeEnvironment = process.env): string | undefined {
+  return nonBlank(environment.HOTSHEET_DESKTOP_STORAGE_DIRECTORY);
+}
+
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
 export function createLocalHostApp(
   distRoot: string,
   bridge: Hono = createDevApp(true),
-  desktopStorageDirectory = process.env.HOTSHEET_DESKTOP_STORAGE_DIRECTORY,
+  desktopStorageDirectory = desktopStorageDirectoryFrom(),
   gateway: MiddlewareHandler = peerGateway(),
 ): Hono {
   const app = new Hono();
@@ -275,8 +285,9 @@ export function createLocalHostApp(
     if (DEVELOPMENT_ONLY.test(context.req.path)) return context.notFound();
     await next();
   });
-  if (desktopStorageDirectory && !remoteBrowserAuthRequired())
-    app.route('/', desktopStorageBridge(desktopStorageDirectory));
+  const storageDirectory = nonBlank(desktopStorageDirectory);
+  if (storageDirectory !== undefined && !remoteBrowserAuthRequired())
+    app.route('/', desktopStorageBridge(storageDirectory));
   app.route('/', bridge);
   // A paired peer reaches this host's machine server through the same proxy (HS2-H4REBS).
   app.use('*', gateway);
