@@ -120,7 +120,10 @@ export function TicketSourceSetupDialog({
     disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" size={16} />,
     created = createdGitTicketStore,
     defaultStore = `${target?.root}.hs2`,
-    defaultExists = Boolean(target?.stores.includes(defaultStore));
+    defaultExists = Boolean(target?.stores.includes(defaultStore)),
+    // HS2-CGXGWY: relinking names a host path, so a session without host access cannot save it.
+    relinkReason = hostOnlyDisabledReason('git-source-relink', hostActionsAvailable),
+    relinkDisabled = providerBusy || !hostActionsAvailable;
   const rootLabel = 'Set up ticket support',
     detailLabel = created
       ? 'Ticket repository ready'
@@ -189,8 +192,10 @@ export function TicketSourceSetupDialog({
           ),
           <LucideIcon icon={GitBranch} name="git-branch" />,
           undefined,
-          defaultExists,
-          defaultExists ? 'The recommended ticket repository is already connected.' : undefined,
+          defaultExists || !hostActionsAvailable,
+          defaultExists
+            ? 'The recommended ticket repository is already connected.'
+            : hostOnlyDisabledReason('git-source-link', hostActionsAvailable),
           'none',
         )}
         {option(
@@ -311,8 +316,8 @@ export function TicketSourceSetupDialog({
               label="Location"
               value={editingGit.locator}
               required
-              disabled={providerBusy}
-              hint="If the ticket repository moved, enter its new folder path."
+              disabled={relinkDisabled}
+              hint={relinkReason ?? 'If the ticket repository moved, enter its new folder path.'}
             />
             {editingGit.identityMismatch ? (
               <Text tone="danger" role="alert" wrap="anywhere" flush>
@@ -327,6 +332,7 @@ export function TicketSourceSetupDialog({
               <Checkbox
                 name="review-unverified-recovery"
                 value="on"
+                disabled={!hostActionsAvailable}
                 label="If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot verify it is the same repository."
               />
             )}
@@ -466,7 +472,8 @@ export function TicketSourceSetupDialog({
         <Button
           emphasis="primary"
           type="button"
-          disabled={providerBusy}
+          disabled={relinkDisabled}
+          title={relinkReason}
           action={PROJECT_LIFECYCLE_ACTIONS.submitGitSourceRelink.value}
         >
           {providerBusy ? 'Saving…' : 'Save location'}

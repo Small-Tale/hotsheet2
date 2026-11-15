@@ -136,6 +136,53 @@ describe('host-only controls on remote clients', () => {
     expect(setup).toContain(reason('choose-folder'));
   });
 
+  it('disables linking and relinking a Git ticket repository by path (HS2-CGXGWY)', () => {
+    const option = (markup: string, action: string) =>
+      markup.match(new RegExp(`<button(?=[^>]*data-action="${action}")[^>]*>`))?.[0] ?? '';
+    const project = { id: 'demo', root: '/work/demo', name: 'Demo', stores: [], needsTicketSetup: true };
+    const remoteRoot = String(
+      TicketSourceSetupDialog({ project, providerConnections: [], navigation: 'none', hostActionsAvailable: false }),
+    );
+    expect(option(remoteRoot, 'create-project-git-source')).toContain('disabled');
+    expect(option(remoteRoot, 'create-project-git-source')).toContain(`title="${reason('git-source-link')}"`);
+    const localRoot = String(
+      TicketSourceSetupDialog({ project, providerConnections: [], navigation: 'none', hostActionsAvailable: true }),
+    );
+    expect(option(localRoot, 'create-project-git-source')).not.toContain('disabled');
+    expect(localRoot).not.toContain(reason('git-source-link'));
+
+    const source = {
+      provider: 'git',
+      connectionId: 'git-local',
+      name: 'Hot Sheet Git',
+      locator: '/work/demo.hs2',
+      default: true,
+    } as Parameters<typeof TicketSourceSetupDialog>[0]['editingGitSource'];
+    const editor = (hostActionsAvailable: boolean) =>
+      String(
+        TicketSourceSetupDialog({
+          project,
+          providerConnections: [],
+          navigation: 'none',
+          editingProviderId: 'git-local',
+          editingGitSource: source,
+          hostActionsAvailable,
+        }),
+      );
+    const remote = editor(false),
+      save = (markup: string) => option(markup, 'submit-git-source-relink'),
+      field = (markup: string) => markup.match(/<input(?=[^>]*name="git-store-path")[^>]*>/)?.[0] ?? '';
+    expect(save(remote)).toContain('disabled');
+    expect(save(remote)).toContain(`title="${reason('git-source-relink')}"`);
+    expect(field(remote)).toContain('disabled');
+    expect(field(remote)).toContain(`aria-description="${reason('git-source-relink')}"`);
+    expect(remote).toMatch(/<input(?=[^>]*name="review-unverified-recovery")[^>]*disabled/);
+    const local = editor(true);
+    expect(save(local)).not.toContain('disabled');
+    expect(field(local)).not.toContain('disabled');
+    expect(local).not.toContain(reason('git-source-relink'));
+  });
+
   it('disables conversation save and the saved-conversation opener', () => {
     const conversation = String(
       AIConversation({

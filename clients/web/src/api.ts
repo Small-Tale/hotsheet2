@@ -2,7 +2,12 @@ import { browserRandomId } from './browser-id';
 import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
 import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
-import { assertHostAction, type HostOnlyAction } from './host-only-actions';
+import {
+  assertHostAction,
+  HOST_ACCESS_REQUIRED_CODE,
+  type HostOnlyAction,
+  HostOnlyActionError,
+} from './host-only-actions';
 import { errorCodeOf, errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import type { PermissionAutomation, PermissionPattern, PermissionSecretSuggestion } from './permission-notifications';
 import { prioritiesToWire } from './priority-wire';
@@ -1726,14 +1731,22 @@ export class Api {
   /**
    * Requests that launch something on the server's machine reject with an explanation on a remote
    * client instead of acting on a screen nobody is looking at (HS2-F78B1S). A host file path stays
-   * available: it can still be pasted into a terminal that runs on that machine.
+   * available: it can still be pasted into a terminal that runs on that machine. A server refusal for a
+   * session without host access (HS2-S8R3PD) reads as the same explanation (HS2-CGXGWY).
    */
   private hostAction(action: 'open' | 'reveal' | 'path' | HostOnlyAction): { parsed: HostParsedRequest } {
     const kind = action === 'open' ? 'open-file' : action === 'reveal' ? 'reveal-file' : action;
     return {
       parsed: async (parse, path, requested) => {
-        if (kind !== 'path') assertHostAction(kind);
-        return this.parsed(parse, path, requested);
+        if (kind === 'path') return this.parsed(parse, path, requested);
+        assertHostAction(kind);
+        try {
+          return await this.parsed(parse, path, requested);
+        } catch (reason) {
+          if (reason instanceof ApiHttpError && reason.code === HOST_ACCESS_REQUIRED_CODE)
+            throw new HostOnlyActionError(kind);
+          throw reason;
+        }
       },
     };
   }
@@ -1845,8 +1858,9 @@ export class Api {
     this.parsed(parseGitHubRepositoryAccess, `/github-auth/device/${encodeURIComponent(session)}/repositories`);
   cancelGitHubAuth = (session: string) =>
     this.parsed(ignoreBody, `/github-auth/device/${encodeURIComponent(session)}`, { method: 'DELETE' });
+  /** Linking a Git source names a host path, so it is a host-only action (HS2-S8R3PD, HS2-CGXGWY). */
   addCheckoutSource = (checkout: string, connection: ProviderConnection, makeDefault = false) =>
-    this.parsed(
+    (connection.provider === 'git' ? this.hostAction('git-source-link').parsed : this.parsed.bind(this))(
       parseCheckout,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connection.id)}`,
       {
@@ -1883,7 +1897,7 @@ export class Api {
       { method: 'PUT', body: JSON.stringify({ ticket_prefix: ticketPrefix }) },
     );
   relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string, reviewUnverifiedRecovery = false) =>
-    this.parsed(
+    this.hostAction('git-source-relink').parsed(
       parseCheckoutRelink,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/relink`,
       { method: 'PATCH', body: JSON.stringify({ path, review_unverified_recovery: reviewUnverifiedRecovery }) },

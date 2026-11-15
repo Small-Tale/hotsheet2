@@ -283,6 +283,15 @@ the components take a `hostActionsAvailable` prop that defaults to
 refusal stays as a backstop. Browser-native replacements (in-page diff, attachment
 preview/download, server directory browser) are separate design work.
 
+Linking a Git ticket repository by path and changing a Git source's location are
+host-only too, because the server refuses them to a session without host access
+(HS2-S8R3PD). Ticket source setup disables **Create a Hot Sheet 2 git ticket
+repository**, and the Git source editor disables **Location**, its unverified-recovery
+checkbox and **Save location**, with the explanation as the field hint and the button
+tooltip. The source's color, ticket prefix, Remove and provider sources stay available.
+A `host_access_required` refusal that still arrives for any host-only action shows the
+same explanation (HS2-CGXGWY).
+
 ## 6.3 Web client and Tauri desktop host
 
 - **Durable controlled desktop close.** Before closing a native window or quitting,
