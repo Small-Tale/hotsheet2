@@ -184,7 +184,14 @@ pub(super) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
         JobCmd::Watch { cmd } => match cmd {
             JobWatchCmd::Start(args) => watch_start(&home, args),
             JobWatchCmd::Stop => watch_stop(&home),
-            JobWatchCmd::Status => print_json(&monitor_status(&MonitorSlot::at(&home))?),
+            JobWatchCmd::Status => {
+                let mut status = monitor_status(&MonitorSlot::at(&home))?;
+                // HS2-RTEQ7R: where a GitLab watch would take its token from, if any.
+                status["gitlab_token"] = super::job_gitlab::token_source(&home)
+                    .map(|source| source.code())
+                    .into();
+                print_json(&status)
+            }
             JobWatchCmd::Ci {
                 target,
                 ticket,
@@ -519,7 +526,7 @@ fn register_sources(monitor: &mut Monitor, home: &Path) {
     monitor.register(Box::new(GithubActionsSource::new(UreqGithubApi::new(home))));
     // HS2-TPAHYA: GitLab CI pipelines, through the same REST port.
     monitor.register(Box::new(hotsheet_jobs::GitlabCiSource::new(
-        super::job_gitlab::UreqGitlabApi::new(),
+        super::job_gitlab::UreqGitlabApi::new(home),
     )));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.

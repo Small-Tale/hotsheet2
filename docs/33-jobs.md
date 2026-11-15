@@ -353,9 +353,13 @@ Job kind and external system are `gitlab-ci`.
   `manual` are no verdict; the rest wait or run. A retried pipeline keeps its id, so
   a rewatch ignores a judged pipeline by id. Outcome refs have the same keys as
   GitHub's, with `run_attempt` 1; no artifact digest exists to record.
-- **Credentials.** `GITLAB_TOKEN`, sent as `PRIVATE-TOKEN`, kept in memory only. The
-  API root is `HOTSHEET_GITLAB_API_URL` (default `https://gitlab.com/api/v4`), HTTPS
-  except loopback HTTP for tests. Reading a `glab` sign-in is HS2-RTEQ7R.
+- **Credentials.** `GITLAB_TOKEN`, sent as `PRIVATE-TOKEN`, kept in memory only;
+  without it, the signed-in `glab` CLI's token for the API root's host
+  (`glab config get token --host <host>`, one journaled launch, a failure remembered
+  for 15 minutes, read again after a 401; HS2-RTEQ7R). `job watch status` reports
+  `gitlab_token` as `GITLAB_TOKEN`, `glab` or `null`, never the token. The API root is
+  `HOTSHEET_GITLAB_API_URL` (default `https://gitlab.com/api/v4`), HTTPS except
+  loopback HTTP for tests.
 
 ## 33.10 File watchers and change waiters (HS2-N1QDZW)
 

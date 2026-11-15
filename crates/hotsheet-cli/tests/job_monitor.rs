@@ -48,6 +48,10 @@ impl Fixture {
             .args(args)
             .env("HOTSHEET_HOME", self.home.path())
             .env("HOTSHEET_JOB_WATCH_FIXTURES", self.operations.path())
+            // HS2-RTEQ7R: no GitLab credential is looked up: the developer's own
+            // `GITLAB_TOKEN` or `glab` sign-in is never read by a test.
+            .env_remove("GITLAB_TOKEN")
+            .env("HOTSHEET_GITLAB_API_URL", "http://gitlab.invalid")
             .env_remove("HOTSHEET_ACTOR_ROLE")
             .env_remove("HOTSHEET_ACTOR_ID")
             .output()
@@ -153,7 +157,7 @@ fn start_and_stop_are_idempotent() {
     let fx = Fixture::new();
     assert_eq!(
         fx.json(&["job", "watch", "status"]),
-        json!({"running": false, "monitor": null})
+        json!({"running": false, "monitor": null, "gitlab_token": null})
     );
     // Stopping when nothing runs is a successful no-op and creates no monitor.
     assert_eq!(
