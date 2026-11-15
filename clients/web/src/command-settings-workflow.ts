@@ -192,12 +192,37 @@ export class CommandSettingsSaves {
   private readonly commandRevisions = new Map<string, string>();
   private readonly groupRevisions = new Map<string, string>();
   private readonly conflicts = new Set<string>();
+  /** Bumped when a write starts and when it settles, so a refresh can tell it overlapped one (HS2-A6K8D5). */
+  private readonly commandWrites = new Map<string, number>();
+  private readonly groupWrites = new Map<string, number>();
   constructor(private readonly port: CommandSettingsSavePort) {}
 
-  loadRevisions(projectId: string, commands: string, groups: string): void {
+  /**
+   * A token a refresh captures before it reads the server. A response read before a save and
+   * delivered after it would otherwise restore the old groups and revision, and the next save
+   * would then fail as a conflict with this tab's own write (HS2-A6K8D5).
+   */
+  writeVersion(projectId: string): string {
+    return `${String(this.commandWrites.get(projectId) ?? 0)}:${String(this.groupWrites.get(projectId) ?? 0)}`;
+  }
+
+  private bump(writes: Map<string, number>, projectId: string): void {
+    writes.set(projectId, (writes.get(projectId) ?? 0) + 1);
+  }
+
+  /** `since` is the refresh's `writeVersion`; a revision read before a later write is stale. */
+  loadRevisions(projectId: string, commands: string, groups: string, since?: string): void {
     if (this.conflicts.has(projectId)) return;
-    this.commandRevisions.set(projectId, commands);
-    this.groupRevisions.set(projectId, groups);
+    const [commandsSince, groupsSince] = since?.split(':') ?? [];
+    if (since === undefined || commandsSince === String(this.commandWrites.get(projectId) ?? 0))
+      this.commandRevisions.set(projectId, commands);
+    if (since === undefined || groupsSince === String(this.groupWrites.get(projectId) ?? 0))
+      this.groupRevisions.set(projectId, groups);
+  }
+
+  /** Whether a load has supplied both revisions a write must name (HS2-A6K8D5). */
+  hasRevisions(projectId: string): boolean {
+    return this.commandRevisions.has(projectId) && this.groupRevisions.has(projectId);
   }
 
   hasConflict(projectId: string): boolean {
@@ -245,6 +270,7 @@ export class CommandSettingsSaves {
       return;
     }
     this.port.setMessage(projectId, '');
+    this.bump(this.commandWrites, projectId);
     try {
       const saved = await this.port.saveCommands(path, definitions, {
         ...options,
@@ -260,6 +286,8 @@ export class CommandSettingsSaves {
       }
     } catch (reason) {
       if (this.current(projectId, path, generation)) this.saveError(projectId, reason);
+    } finally {
+      this.bump(this.commandWrites, projectId);
     }
   }
 
@@ -274,6 +302,7 @@ export class CommandSettingsSaves {
       generation = (this.groupGenerations.get(projectId) ?? 0) + 1;
     this.groupGenerations.set(projectId, generation);
     this.groupPending.set(projectId, (this.groupPending.get(projectId) ?? 0) + 1);
+    this.bump(this.groupWrites, projectId);
     const previous = this.groupTail.get(projectId) ?? Promise.resolve(),
       task = previous
         .catch(() => undefined)
@@ -295,6 +324,7 @@ export class CommandSettingsSaves {
         this.port.groupsFailed?.(projectId);
       }
     } finally {
+      this.bump(this.groupWrites, projectId);
       const remaining = (this.groupPending.get(projectId) ?? 1) - 1;
       if (remaining > 0) this.groupPending.set(projectId, remaining);
       else this.groupPending.delete(projectId);
@@ -314,7 +344,10 @@ export class CommandSettingsSaves {
     this.port.setMessage(projectId, reason instanceof Error ? reason.message : String(reason));
   }
 
-  loadGroups(projectId: string, groups: readonly string[]): void {
-    if (!this.groupPending.has(projectId) && !this.conflicts.has(projectId)) this.port.groupsLoaded(projectId, groups);
+  /** `since` is the refresh's `writeVersion`; groups read before a later group write are stale. */
+  loadGroups(projectId: string, groups: readonly string[], since?: string): void {
+    if (this.groupPending.has(projectId) || this.conflicts.has(projectId)) return;
+    if (since !== undefined && since.split(':')[1] !== String(this.groupWrites.get(projectId) ?? 0)) return;
+    this.port.groupsLoaded(projectId, groups);
   }
 }

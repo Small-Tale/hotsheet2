@@ -165,8 +165,9 @@ export type TicketViewActionSpec =
   /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
   | { kind: 'add-data-source' }
   /** Settings → Commands: add a command group, then add a command (HS2-YKB7HS). `compact` (the
-   * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. */
-  | { kind: 'command-settings'; size?: 'default' | 'compact' };
+   * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. `ready: false`
+   * disables both until the project's command settings have loaded (HS2-A6K8D5). */
+  | { kind: 'command-settings'; size?: 'default' | 'compact'; ready?: boolean };
 
 /** The Trash view's standalone outlined danger action. */
 export function EmptyTrashAction() {
@@ -212,6 +213,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
             shape="pill"
             size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a command group"
+            disabled={action.ready === false}
             action={COMMANDS_AND_AI_ACTIONS.addCommandGroup.value}
             icon={<LucideIcon size="s" icon={FolderPlus} name="folder-plus" />}
           >
@@ -222,6 +224,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
             shape="pill"
             size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a custom command"
+            disabled={action.ready === false}
             action={COMMANDS_AND_AI_ACTIONS.addCommandSetting.value}
             icon={<LucideIcon size="s" icon={Plus} name="plus" />}
           >

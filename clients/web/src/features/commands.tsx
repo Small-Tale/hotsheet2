@@ -86,6 +86,8 @@ export function createCommandsController({
     commandSettingsMessagesByProject = signal<Record<string, string>>({}),
     commandSettingsSelectedByProject = signal<Record<string, string[]>>({}),
     commandSettingsExtraGroupsByProject = signal<Record<string, string[]>>({}),
+    /** Projects whose command settings have loaded the revisions a write must name (HS2-A6K8D5). */
+    commandSettingsReadyByProject = signal<Partial<Record<string, true>>>({}),
     commandIconSearch = signal('');
   let commandSelectionAnchor: string | undefined;
   const messageRevisions = new Map<string, number>();
@@ -248,11 +250,24 @@ export function createCommandsController({
     changeCommandGroups(projectId, commandGroupsAfterEdit(before, after, commandSettingsExtraGroups(projectId)));
   }
   /** Adopt the server's kept command groups unless a local group save is still in flight. */
-  function loadCommandGroups(projectId: string, groups: readonly string[]) {
-    commandSettingsSaves.loadGroups(projectId, groups);
+  function loadCommandGroups(projectId: string, groups: readonly string[], since?: string) {
+    commandSettingsSaves.loadGroups(projectId, groups, since);
   }
-  function loadCommandRevisions(projectId: string, commands: string, groups: string) {
-    commandSettingsSaves.loadRevisions(projectId, commands, groups);
+  function loadCommandRevisions(projectId: string, commands: string, groups: string, since?: string) {
+    commandSettingsSaves.loadRevisions(projectId, commands, groups, since);
+    if (commandSettingsSaves.hasRevisions(projectId) && !commandSettingsReadyByProject.value[projectId])
+      commandSettingsReadyByProject.value = { ...commandSettingsReadyByProject.value, [projectId]: true };
+  }
+  /**
+   * Before its first load a project's editor shows no commands or groups, and a write would name no
+   * revision, so the server rejects it as a conflict that only a reload clears (HS2-A6K8D5).
+   */
+  function commandSettingsReady(projectId: string) {
+    return commandSettingsReadyByProject.value[projectId] === true;
+  }
+  /** Capture before a refresh reads the server, then pass to the loads (HS2-A6K8D5). */
+  function commandSettingsWriteVersion(projectId: string) {
+    return commandSettingsSaves.writeVersion(projectId);
   }
   function hasCommandSettingsConflict(projectId: string) {
     return commandSettingsSaves.hasConflict(projectId);
@@ -368,6 +383,8 @@ export function createCommandsController({
     commandSettingsExtraGroups,
     loadCommandGroups,
     loadCommandRevisions,
+    commandSettingsWriteVersion,
+    commandSettingsReady,
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,

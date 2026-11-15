@@ -992,6 +992,10 @@ same explanation (HS2-CGXGWY).
   cannot replace a newer local
   edit or a reopened project's settings; group writes run in edit
   order and an in-flight group save keeps an older refresh from discarding an empty group.
+  `Add group…` and `Add command…` stay disabled until the project's first command settings read
+  has supplied both revisions, so no write is sent without one. A refresh that read the server
+  before a save started or settled is ignored for that save's revision and groups, so it cannot
+  rewind the next write into a conflict with this tab's own save (HS2-A6K8D5).
   Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.

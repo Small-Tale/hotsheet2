@@ -253,6 +253,52 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
     }
   });
 
+  test('holds command setting writes until the project has loaded its command revisions (HS2-A6K8D5)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await launchedApp(context, baseURL!);
+    // A slow runner delivered the open's command-groups read after the test had already created a
+    // group. That write named no revision, the server rejected it as a conflict, and only a reload
+    // cleared it. Hold the read (after the real server answered it) to reproduce that order.
+    const held = app.pauseApi((method, path) => method === 'GET' && path.endsWith('/command-groups'));
+    try {
+      await clickOpenProject(page);
+      await app.projectRemembered();
+      await held.started;
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const addCommand = page.getByRole('button', { name: 'Add command…', exact: true });
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await page.screenshot({ path: 'target/visual-captures/hs2-a6k8d5-commands-loading-wide.png' });
+      held.release();
+      await expect(addGroup).toBeEnabled();
+      await expect(addCommand).toBeEnabled();
+      await page.screenshot({ path: 'target/visual-captures/hs2-a6k8d5-commands-ready-wide.png' });
+      const dialog = page.getByRole('dialog', { name: 'New Command Group' });
+      const name = dialog.getByRole('textbox', { name: 'Group Name' });
+      const groups = () => app.server.request<string[]>(`/checkouts/${app.server.checkoutId}/command-groups`);
+      for (const [group, expected] of [
+        ['Ideas', ['Ideas']],
+        ['Second', ['Ideas', 'Second']],
+      ] as const) {
+        await addGroup.click();
+        await settledDialog(dialog);
+        await name.fill(group);
+        await name.press('Enter');
+        await expect(dialog).toHaveCount(0);
+        await expect.poll(groups).toEqual(expected);
+      }
+      await expect(page.locator('[data-component="command-settings-editor"]')).not.toContainText('changed elsewhere');
+    } finally {
+      held.release();
+      await page.close();
+      await app.stop();
+    }
+  });
+
   test('customizes a real drawer launch with whole-dialog cancel, defaults, validation and a subsequent launch @ci-smoke @ci-webkit', async ({
     context,
     baseURL,

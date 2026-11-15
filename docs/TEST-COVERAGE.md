@@ -1047,6 +1047,11 @@ HS2-X2A3C1 covers persisted-content command and kept-group revisions in server
 HTTP tests (stale editor, same-session overlap, missing precondition, restart),
 command workflow unit tests (tab conflict and draft retention), and the real-server
 browser command editor flow (remote edit, stale save conflict, reload recovery).
+HS2-A6K8D5 adds the workflow unit test for a refresh that read the server before a
+group or command save and arrives after it, the header-action test for disabled
+`Add group…`/`Add command…` before the first load, and the real-server browser test
+in `tests/native-prompt-replacements.spec.ts` that holds the open's command-groups
+read, asserts both actions are disabled, then saves two groups without a conflict.
 
 HS2-TVASVW covers bounded direct change-poll fallback in
 `change-poll-mux.test.ts` (cap, timeout, queue rotation, abort, supersede, refill), worker

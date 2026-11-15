@@ -624,4 +624,20 @@ describe('TicketViewAction settings actions', () => {
     expect(markup).toMatch(/data-size="compact"[^>]*title="Add a custom command"[^]*Command…/);
     expect(markup).not.toContain('Add group…');
   });
+  it('disables both actions until the project has loaded its command settings (HS2-A6K8D5)', () => {
+    const disabled = (markup: string) =>
+      ['add-command-group', 'add-command-setting'].map((action) =>
+        new RegExp(
+          `<button[^>]*\\bdisabled\\b[^>]*data-action="${action}"|<button[^>]*data-action="${action}"[^>]*\\bdisabled\\b`,
+        ).test(markup),
+      );
+    expect(disabled(String(TicketViewAction({ action: { kind: 'command-settings', ready: false } })))).toEqual([
+      true,
+      true,
+    ]);
+    expect(disabled(String(TicketViewAction({ action: { kind: 'command-settings', ready: true } })))).toEqual([
+      false,
+      false,
+    ]);
+  });
 });

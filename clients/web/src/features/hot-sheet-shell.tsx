@@ -171,6 +171,8 @@ export interface HotSheetShellDependencies {
   selectedTicketSlugs: Signal<string[]>;
   selectedView: Signal<TicketView>;
   settingsCategory: () => SettingsCategory;
+  /** Whether a project's command settings have loaded (HS2-A6K8D5). */
+  commandSettingsReady: (projectId: string) => boolean;
   shellMode: Signal<ProjectStripMode>;
   statsProjectId: Signal<string | undefined>;
   sidebarCollapsed: Signal<boolean>;
@@ -271,6 +273,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     selectedTicketSlugs,
     selectedView,
     settingsCategory,
+    commandSettingsReady,
     shellMode,
     statsProjectId,
     sidebarCollapsed,
@@ -533,7 +536,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         : settingsCategory() === 'sources'
           ? { kind: 'add-data-source' }
           : settingsCategory() === 'commands'
-            ? { kind: 'command-settings', size: viewportMobile.value ? 'compact' : 'default' }
+            ? {
+                kind: 'command-settings',
+                size: viewportMobile.value ? 'compact' : 'default',
+                ready: commandSettingsReady(current.id),
+              }
             : undefined;
     const headingAction = !['settings', 'notifications', 'workers'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)

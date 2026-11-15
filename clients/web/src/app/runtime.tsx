@@ -1136,6 +1136,8 @@ export async function startHotSheetWebClient() {
     commandSettingsExtraGroups,
     loadCommandGroups,
     loadCommandRevisions,
+    commandSettingsWriteVersion,
+    commandSettingsReady,
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
@@ -4228,6 +4230,8 @@ export async function startHotSheetWebClient() {
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         previous = JSON.stringify(commandDefinitions.value, null, 2),
+        // A save that starts or settles while these reads are in flight makes them stale (HS2-A6K8D5).
+        writes = commandSettingsWriteVersion(current.id),
         [commandResult, runs, groupResult] = await Promise.all([
           client.commandsWithRevision(),
           client.commandRuns(),
@@ -4246,9 +4250,9 @@ export async function startHotSheetWebClient() {
         draft = commandSettingsDraftsByProject.value[current.id];
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A project may not have opened the command settings editor yet.
       if (draft === undefined || draft === previous)
-        loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*');
+        loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*', writes);
       commandDefinitions.value = definitions;
-      if (groups) loadCommandGroups(current.id, groups);
+      if (groups) loadCommandGroups(current.id, groups, writes);
       const projection = projectProjectionById.value[current.id];
       projectProjectionById.value = {
         ...projectProjectionById.value,
@@ -5852,6 +5856,7 @@ export async function startHotSheetWebClient() {
     selectedTicketSlugs,
     selectedView,
     settingsCategory,
+    commandSettingsReady,
     shellMode,
     statsProjectId,
     sidebarCollapsed,
