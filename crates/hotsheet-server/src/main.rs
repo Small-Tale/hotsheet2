@@ -406,6 +406,9 @@ async fn main() -> Result<()> {
 
     // Commit group registry writes in the background, one commit per burst (HS2-9EGWC4).
     hotsheet_ticketing::groups::git_sync::enable_background();
+    // Tell open clients when a registry's publication state changes (HS2-1CWD0H). Held for
+    // the run.
+    let _group_registry_sync = state.watch_group_registry_sync();
     // Aggressively sync each hosted store with its git remote in the background (HS2-19
     // follow-up): interval + kick-on-write + backoff. Held for the run.
     let _sync = hotsheet_server::sync_loop::spawn_sync_loop(

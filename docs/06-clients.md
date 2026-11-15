@@ -5099,12 +5099,15 @@ transition history (HS2-XKXE7V).
   [02](02-ticket-storage.md) §2.12.2.
 
 - **Group registry publication failures (HS2-VFYSQK):** the group-list read the client
-  already makes (on project load and after each group operation) carries `registry_sync`.
-  While it is `blocked` or `failed`, the shell shows `GroupRegistrySyncBanner`, a
-  warning-toned `ShellBanner` directly after `TicketStoreSyncBanner`, with the server's
-  one-line detail and a sentence saying other clones do not see new or renamed groups yet.
-  It adds no request or timer, has no dismiss, and clears on the next read that reports
-  another state ([35](35-ticket-groups.md) §35.7; change events are `HS2-1CWD0H`).
+  already makes (on project load, after each group operation, and on a
+  `group_registry_sync` change event for the shown project, HS2-1CWD0H) carries
+  `registry_sync`. While it is `blocked` or `failed`, the shell shows
+  `GroupRegistrySyncBanner`, a warning-toned `ShellBanner` directly after
+  `TicketStoreSyncBanner`, with the server's one-line detail and a sentence saying other
+  clones do not see new or renamed groups yet. It adds no timer, has no dismiss, and
+  clears on the next read that reports another state, so it follows the server's
+  background commit and sync-loop recoveries without a group operation. Only the newest
+  read for a project is kept ([35](35-ticket-groups.md) §35.7).
 
 - **Narrow widths:** value tables stack under their labels.
 - **Load start:** opening the view starts both reports outside the opening effect's

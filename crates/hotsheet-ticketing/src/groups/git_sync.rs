@@ -25,12 +25,15 @@
 //! The server commits in the background, coalescing a burst of writes into one commit
 //! ([`enable_background`]); the CLI and MCP commit as each write returns. The server's
 //! sync loop retries the commit and push and refreshes the overlay ([`sync_checkout`]).
+//! [`on_status_change`] tells a process when a recorded state changes, so the server can
+//! announce it to open clients (HS2-1CWD0H).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
-use std::sync::{Condvar, Mutex, OnceLock, PoisonError};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use hotsheet_model::is_group_id;
@@ -73,6 +76,18 @@ pub enum RegistrySyncState {
 }
 
 impl RegistrySyncState {
+    /// The serialized name (`local_only`, ...).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Synced => "synced",
+            Self::LocalOnly => "local_only",
+            Self::Waiting => "waiting",
+            Self::Blocked => "blocked",
+            Self::Failed => "failed",
+            Self::Untracked => "untracked",
+        }
+    }
+
     /// Whether a person should look at it.
     pub fn needs_attention(self) -> bool {
         matches!(self, Self::Blocked | Self::Failed)
@@ -114,19 +129,82 @@ fn record_status(checkout_root: &Path, status: &mut RegistrySyncStatus) {
     status.at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
+    // The background committer and a sync-loop pass can record at once; compare and write
+    // under one lock so each state change is announced exactly once (HS2-1CWD0H).
+    let _recording = RECORDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let before = read_status(checkout_root).map(|status| status.state);
     let path = checkout_root.join(GROUP_SYNC_STATUS_FILE);
-    // A registry Hot Sheet does not publish has no publication status to show.
-    if status.state == RegistrySyncState::Untracked {
+    let after = if status.state == RegistrySyncState::Untracked {
+        // A registry Hot Sheet does not publish has no publication status to show.
         let _ = fs::remove_file(&path);
+        None
+    } else if !path.parent().is_some_and(Path::is_dir) {
+        // Never create `.hotsheet2/` just to record a status.
         return;
-    }
-    // Never create `.hotsheet2/` just to record a status.
-    if !path.parent().is_some_and(Path::is_dir) {
-        return;
-    }
-    if let Ok(mut text) = serde_json::to_string_pretty(status) {
+    } else {
+        let Ok(mut text) = serde_json::to_string_pretty(status) else {
+            return;
+        };
         text.push('\n');
-        let _ = crate::store::write_file_atomically(&path, text.as_bytes());
+        if crate::store::write_file_atomically(&path, text.as_bytes()).is_err() {
+            return;
+        }
+        Some(status.state)
+    };
+    if before != after {
+        notify_status_change(checkout_root, after);
+    }
+}
+
+// ---- status-change listeners (HS2-1CWD0H) ---------------------------------------------
+
+/// Serializes [`record_status`]'s read, compare, and write.
+static RECORDING: Mutex<()> = Mutex::new(());
+
+/// Called with the checkout root and the registry's new visible state (`None` once there
+/// is no status to show) whenever a recorded publication state changes.
+type StatusListenerFn = dyn Fn(&Path, Option<RegistrySyncState>) + Send + Sync;
+
+static LISTENERS: Mutex<Vec<(u64, Arc<StatusListenerFn>)>> = Mutex::new(Vec::new());
+static NEXT_LISTENER: AtomicU64 = AtomicU64::new(0);
+
+/// A registered status-change listener; dropping it unregisters the listener.
+#[must_use = "dropping the guard unregisters the listener"]
+pub struct StatusListener(u64);
+
+impl Drop for StatusListener {
+    fn drop(&mut self) {
+        LISTENERS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|(id, _)| *id != self.0);
+    }
+}
+
+/// Call `listener` whenever a registry's recorded publication state changes in this
+/// process: after a write's commit (in the background committer or inline) or a sync pass.
+/// A repeat of the same state never calls it. It runs on the thread that recorded the
+/// status, so it must be quick and must not wait on registry work.
+pub fn on_status_change(
+    listener: impl Fn(&Path, Option<RegistrySyncState>) + Send + Sync + 'static,
+) -> StatusListener {
+    let id = NEXT_LISTENER.fetch_add(1, Ordering::Relaxed);
+    LISTENERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push((id, Arc::new(listener)));
+    StatusListener(id)
+}
+
+fn notify_status_change(checkout_root: &Path, state: Option<RegistrySyncState>) {
+    let listeners: Vec<Arc<StatusListenerFn>> = LISTENERS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .map(|(_, listener)| Arc::clone(listener))
+        .collect();
+    for listener in listeners {
+        listener(checkout_root, state);
     }
 }
 

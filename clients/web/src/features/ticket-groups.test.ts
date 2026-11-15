@@ -145,6 +145,47 @@ describe('ticket groups controller (HS2-3XNTSD)', () => {
     expect(projectGroupRegistrySync.value).toBe(before);
   });
 
+  it('rereads the shown project on a registry change event and keeps only the newest read (HS2-1CWD0H)', async () => {
+    const { controller, api, setProject } = setup();
+    const failed = { state: 'failed', detail: 'hook refused', committed: false, at: '2026-11-15T00:00:00Z' } as const;
+    // An event for a project that is not shown reads nothing; it rereads when shown.
+    await controller.reloadGroups({ id: 'other' });
+    expect(api.checkoutGroups).not.toHaveBeenCalled();
+    api.checkoutGroups.mockResolvedValueOnce({ registry: true, groups: [], registrySync: failed });
+    await controller.reloadGroups({ id: 'p' });
+    expect(api.checkoutGroups).toHaveBeenCalledWith('p');
+    expect(projectGroupRegistrySync.value).toEqual({ p: failed });
+    // Two events in quick succession: the earlier read answers last and must not restore
+    // the failure the later read cleared.
+    let answerFirst!: (list: CheckoutGroupList) => void;
+    api.checkoutGroups
+      .mockReturnValueOnce(
+        new Promise<CheckoutGroupList>((resolve) => {
+          answerFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ registry: true, groups: [] });
+    const first = controller.reloadGroups({ id: 'p' }),
+      second = controller.reloadGroups({ id: 'p' });
+    await second;
+    expect(projectGroupRegistrySync.value).toEqual({});
+    answerFirst({ registry: true, groups: [], registrySync: failed });
+    await first;
+    expect(projectGroupRegistrySync.value).toEqual({});
+    // A later event reads again and shows a new failure.
+    api.checkoutGroups.mockResolvedValueOnce({
+      registry: true,
+      groups: [],
+      registrySync: { ...failed, state: 'blocked', detail: 'pull first' },
+    });
+    await controller.reloadGroups({ id: 'p' });
+    expect(projectGroupRegistrySync.value.p?.state).toBe('blocked');
+    // Switching projects is unaffected: the newest read per project wins independently.
+    setProject({ id: 'q', apiPath: '/api' } as Project);
+    await controller.reloadGroups({ id: 'p' });
+    expect(api.checkoutGroups).toHaveBeenCalledTimes(4);
+  });
+
   it('sets a group through the bulk path, reusing an existing group’s stored value', async () => {
     const { controller, executeBulkTicketAction } = setup();
     await controller.setGroup(['HS2-C'], '  BOARD ');

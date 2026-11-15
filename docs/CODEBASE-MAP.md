@@ -401,7 +401,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/repository-size.tsx # Project statistics "Repository size" section (HS2-QF44T7, HS2-RFJ1GN): code repo + each ticket store, git object and attachment sizes, full compaction preview and confirmed execution with recovery guidance; loaded from GET /checkouts/{id}/repository/size and GET/POST /checkouts/{id}/repository/compaction; colocated CSS; demo src/ux-demo/repository-size-demo.tsx
     src/components/repository-size-banner.tsx # Project shell warning strip (HS2-P1GYWH) while any repository is over a GitHub size limit: ShellBanner naming the repositories, View Repository Size + per-level Dismiss; report loaded once per project by runtime.tsx
     src/components/ticket-store-sync-banner.tsx # Project shell strip (HS2-ADHFKZ) while a linked Git ticket store is not publishing (rejected/conflict/stalled rebase/history recovery/persistent offline): ShellBanner naming the store, cause, unpublished changes, and the server next step; no dismiss
-    src/components/group-registry-sync-banner.tsx # Project shell strip (HS2-VFYSQK) while the group registry's `registry_sync` is blocked or failed: ShellBanner with the server's detail; state kept in ticket-group-state `projectGroupRegistrySync` from each group-list read
+    src/components/group-registry-sync-banner.tsx # Project shell strip (HS2-VFYSQK) while the group registry's `registry_sync` is blocked or failed: ShellBanner with the server's detail; state kept in ticket-group-state `projectGroupRegistrySync` from each group-list read, reread on `group_registry_sync` change events (HS2-1CWD0H)
     src/note-authorship.ts # Note author/AI-label facets from the recorded note actor (tool name from the worker-id prefix; HS2-32QDZ3)
     src/ticket-creator.ts # aiCreatorLabel: the quiet AI-created ticket summary label from the recorded created_by (HS2-9FPHWY)
     src/components/search-scope-toolbar.tsx # Floating search scope switch (Kerf FloatingToolbar + SegmentedControl: searched view or All Tickets, every collection except Trash) + colocated CSS + wireSearchScopeToolbar; composed by AppShell's workspaceFloating slot while a search is active outside Trash; demo src/ux-demo/search-scope-toolbar-demo.tsx (HS2-4J6764)
@@ -1396,7 +1396,7 @@ file per group under `<checkout>/.hotsheet2/groups/<id>.json`; `groups/git_sync.
 commits each registry write in the code checkout (`git commit --only`), pushes
 registry-only fast-forwards to the branch's upstream, keeps the upstream overlay
 (`.hotsheet2/groups-remote.json`) and status (`.hotsheet2/groups-sync.json`), and runs a
-background burst committer in the server (HS2-9EGWC4); the server sync loop's
+background burst committer in the server (HS2-9EGWC4); `on_status_change` listeners hear each recorded state change, which the server announces as `group_registry_sync` change events through `AppState::watch_group_registry_sync` (HS2-1CWD0H); the server sync loop's
 `sync_group_registries` retries and pulls each linked checkout. `saved_views.rs` parses
 `group:` and `has:group`. The index (schema 24) stores `group_name` (the raw value) and
 `group_key` (the id or a legacy key) and filters on `group`, `group_ids`, and `has_group`.

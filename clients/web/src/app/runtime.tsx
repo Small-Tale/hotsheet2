@@ -4430,6 +4430,7 @@ export async function startHotSheetWebClient() {
     claimTurnEvent: (envelope) => automaticTicketGrouping.claimTurnEvent(envelope),
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
+    reloadTicketGroups: (target) => ticketGroups.reloadGroups(target),
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },

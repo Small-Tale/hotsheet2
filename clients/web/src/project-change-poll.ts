@@ -60,6 +60,10 @@ export const containsRepositorySizeChange = (response: PollResponse, checkoutId:
 export const containsTicketStoreSyncChange = (response: PollResponse, checkoutId: string): boolean =>
   response.events.some((event) => event.kind === 'ticket_store_sync' && event.id === checkoutId);
 
+/** The publication state of this checkout's group registry changed (HS2-1CWD0H). */
+export const containsGroupRegistrySyncChange = (response: PollResponse, checkoutId: string): boolean =>
+  response.events.some((event) => event.kind === 'group_registry_sync' && event.id === checkoutId);
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     const timeout = globalThis.setTimeout(resolve, milliseconds);

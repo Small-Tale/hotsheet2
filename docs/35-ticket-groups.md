@@ -251,15 +251,23 @@ ticket store publishes tickets, without disturbing anything else in that checkou
   registry Hot Sheet does not publish (no Git, ignored, disabled) has none. `GET /checkouts/{reference}/groups` returns it as `registry_sync`, and so does
   `hotsheet-cli groups --json`. `hotsheet-cli groups` prints a warning for `blocked` and
   `failed`, and the server logs them.
+- **Change events (HS2-1CWD0H).** Whenever the recorded state changes (not on a repeat of
+  the same state), the server emits one replayable `group_registry_sync` change event per
+  checkout registered at that code checkout, with `id` the checkout id and `slug` the new
+  state (`none` once there is no status). It comes from whichever step recorded it: the
+  background committer about 400 ms after a write, or a sync-loop pass that fails or
+  recovers. It carries no detail text or paths.
 - **Web client (HS2-VFYSQK).** The web client keeps `registry_sync` from each group-list
-  read (on project load and after each group operation; no timer) and shows
+  read (on project load, after each group operation, and on a `group_registry_sync` event
+  for the shown project; no timer) and shows
   `GroupRegistrySyncBanner`, a warning-toned project shell banner beside the ticket-store
   sync banner, while the state is `blocked` or `failed`. Its title is "Ticket groups are
   not publishing changes"; its detail repeats the server's line (which names the next
   step), says that groups are saved on this computer but other clones do not see new or
   renamed groups until they are published, and for `failed` that Hot Sheet tries again on
-  its next sync. It has no dismiss and clears when a later read reports another state.
-  The client sees a change only on its next read; a server change event is `HS2-1CWD0H`.
+  its next sync. It has no dismiss and clears when a later read reports another state; the
+  change event triggers that read, so the banner appears and clears without a group
+  operation.
 
 **This repository's hooks.** Measured on a loaded maintainer machine, the pre-commit
 format check took 64-78 s, a pre-push of `main` needs a main-integration window and is

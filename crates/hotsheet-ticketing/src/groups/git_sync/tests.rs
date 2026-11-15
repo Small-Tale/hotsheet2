@@ -410,6 +410,74 @@ fn hs2_9egwc4_non_git_and_ignored_checkouts_are_untracked() {
     assert_eq!(subjects(&root)[0], "Ignore everything Hot Sheet");
 }
 
+/// HS2-1CWD0H: a listener hears each change of recorded state once, from a write and from
+/// sync passes, and never a repeat of the same state; dropping its guard stops it.
+#[test]
+fn hs2_1cwd0h_listeners_hear_each_state_change_once_and_not_repeats() {
+    let (_world, root) = World::new();
+    let heard: Arc<Mutex<Vec<Option<RegistrySyncState>>>> = Arc::default();
+    let listener = {
+        let heard = Arc::clone(&heard);
+        let root = root.clone();
+        // Other tests record statuses concurrently in this process; keep this checkout's.
+        on_status_change(move |changed, state| {
+            if changed == root {
+                heard.lock().unwrap().push(state);
+            }
+        })
+    };
+    let take = || std::mem::take(&mut *heard.lock().unwrap());
+
+    let hooks = root.join(".git/hooks");
+    write(
+        &hooks,
+        "pre-push",
+        "#!/bin/sh\necho 'gate refused this push' >&2\nexit 1\n",
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(hooks.join("pre-push"), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let registry = GroupRegistry::for_checkout(&root);
+    registry.find_or_create("Sprint").unwrap();
+    assert_eq!(take(), [Some(RegistrySyncState::Failed)]);
+    // Failing again, on a pass and on another write, is no change.
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Failed);
+    registry.find_or_create("Later").unwrap();
+    assert_eq!(take(), []);
+    // A recovery by a sync pass is a change; a further synced pass is not.
+    fs::remove_file(hooks.join("pre-push")).unwrap();
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Synced);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Synced);
+    assert_eq!(take(), [Some(RegistrySyncState::Synced)]);
+    // Once the registry is ignored its status disappears, which is a change too.
+    write(&root, ".gitignore", "/.hotsheet2/\n");
+    git_in(&root, &["commit", "-q", "-am", "Ignore Hot Sheet"]);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert_eq!(take(), [None]);
+
+    // After the guard drops, a change is not heard.
+    drop(listener);
+    write(&root, ".gitignore", "/.hotsheet2/*\n!/.hotsheet2/groups/\n");
+    git_in(&root, &["commit", "-q", "-am", "Publish groups again"]);
+    assert_ne!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert!(read_status(&root).is_some());
+    assert_eq!(take(), []);
+}
+
+#[test]
+fn hs2_1cwd0h_state_names_match_their_serialized_form() {
+    use RegistrySyncState::{Blocked, Failed, LocalOnly, Synced, Untracked, Waiting};
+    for state in [Synced, LocalOnly, Waiting, Blocked, Failed, Untracked] {
+        assert_eq!(
+            serde_json::to_value(state).unwrap(),
+            serde_json::Value::String(state.as_str().into())
+        );
+    }
+}
+
 #[test]
 fn hs2_9egwc4_a_burst_of_background_writes_is_one_commit() {
     assert_eq!(coalesced_message(&[]), PENDING_COMMIT_MESSAGE);

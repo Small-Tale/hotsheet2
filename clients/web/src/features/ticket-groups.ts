@@ -62,6 +62,8 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
   let session = 0;
   /** The project whose summaries were last requested, and the missing ids last asked about. */
   let syncedProject: string | undefined, syncedMissing: string | undefined;
+  /** The newest group-list read per project. */
+  const latestRead = new Map<string, number>();
   /** The open dialog's session, read fresh after an await. */
   const openSession = () => ticketGroupDialog.value?.session;
   const view = () => selectedView.value,
@@ -122,13 +124,25 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     const current = project();
     if (!current) return Promise.resolve();
     syncedProject = current.id;
+    // Only the latest read for a project is kept, so a slower earlier response cannot bring back
+    // a status a later event already replaced (HS2-1CWD0H).
+    const read = (latestRead.get(current.id) ?? 0) + 1;
+    latestRead.set(current.id, read);
     return api()
       .checkoutGroups(current.id)
       .then((result) => {
+        if (latestRead.get(current.id) !== read) return;
         storeSummaries(current.id, result.groups);
         storeGroupRegistrySync(current.id, result.registrySync);
       })
       .catch(() => undefined);
+  }
+  /**
+   * Reread a project's groups after the server announced a `group_registry_sync` change
+   * (HS2-1CWD0H). Only the shown project is read; another project rereads when it is shown.
+   */
+  function reloadGroups(target: Pick<Project, 'id'>): Promise<void> {
+    return project()?.id === target.id ? refreshGroups() : Promise.resolve();
   }
   /**
    * Load the summaries when the project changes, and again when loaded tickets store ids the last
@@ -400,6 +414,7 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     groupNames,
     displayName,
     refreshGroups,
+    reloadGroups,
     syncGroups,
     collectionProps,
     toggleGroup,

@@ -738,7 +738,7 @@ const registrySyncState = (server: Server) =>
     .request<{ registry_sync?: { state: string } }>(`/checkouts/${server.checkoutId}/groups`)
     .then((body) => body.registry_sync?.state ?? 'none');
 
-test('HS2-VFYSQK warns in the project shell while the group registry cannot publish, and clears after', async ({
+test('HS2-VFYSQK HS2-1CWD0H warns in the project shell while the group registry cannot publish, and follows server changes live', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -779,21 +779,30 @@ test('HS2-VFYSQK warns in the project shell while the group registry cannot publ
       await page.screenshot({ path: join(shots, `group-registry-sync-banner-${label}-${width}.png`) });
     }
 
-    // Once the hook stops refusing, the next registry write commits (no upstream: local_only)...
-    rmSync(join(server.root, '.git', 'hooks', 'pre-commit'));
+    // Once the hook stops refusing, another client's registry write commits in the server's
+    // background burst (no upstream: local_only). This page makes no group operation and has no
+    // timer: the server's `group_registry_sync` change event makes it reread, so the banner
+    // clears (HS2-1CWD0H).
+    const hook = join(server.root, '.git', 'hooks', 'pre-commit');
+    const groupReads: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/groups'))
+        groupReads.push(request.url());
+    });
+    rmSync(hook);
     await server.request(`/checkouts/${server.checkoutId}/groups`, 'POST', { name: 'Recovered' });
-    await expect.poll(() => registrySyncState(server), { timeout: 30_000 }).toBe('local_only');
-    // ...but the client has no timer: the banner stays until a group operation rereads the list.
-    await expect(banner).toBeVisible();
-    const view = list(page),
-      menu = page.locator('[data-ticket-group-menu="true"]'),
-      dialog = page.locator('[data-dialog-component="ticket-group-dialog"]');
-    await group(view, BOARD).locator('[data-component="list-header"]').click({ button: 'right' });
-    await menu.getByRole('menuitem', { name: 'Rename Group…' }).click();
-    await dialog.getByLabel('Group Name').fill('Board polish');
-    await dialog.getByRole('button', { name: 'Rename' }).click();
-    await expect(dialog).toBeHidden();
-    await expect(banner).toHaveCount(0);
+    await expect(banner).toHaveCount(0, { timeout: 30_000 });
+    expect(await registrySyncState(server)).toBe('local_only');
+    // The banner returns the same way when a later background commit is refused again.
+    writeFileSync(hook, '#!/bin/sh\necho "synthetic hook refused the commit" >&2\nexit 1\n', { mode: 0o755 });
+    await server.request(`/checkouts/${server.checkoutId}/groups`, 'POST', { name: 'Refused again' });
+    await expect(banner).toBeVisible({ timeout: 30_000 });
+    await expect(banner).toContainText('synthetic hook refused the commit');
+    // One reread per announced state change, not a polling loop.
+    const reads = groupReads.length;
+    expect(reads, 'a reread per state change').toBeGreaterThanOrEqual(2);
+    await settle(page);
+    expect(groupReads.length, 'no further reads while the state holds').toBe(reads);
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();

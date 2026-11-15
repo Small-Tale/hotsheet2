@@ -21,6 +21,7 @@ import type { LiveStateStore } from '../live-state';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { parsePermissionResolution } from '../permission-notifications';
 import {
+  containsGroupRegistrySyncChange,
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
@@ -77,6 +78,8 @@ export interface ProjectChangeStreamsDependencies {
   loadRepositorySize: (target: Project) => Promise<unknown>;
   /** Reload a project's ticket-store sync health after a `ticket_store_sync` event (HS2-ADHFKZ). */
   loadTicketStoreSync?: (target: Project) => Promise<unknown>;
+  /** Reread a project's group list and registry status after a `group_registry_sync` event (HS2-1CWD0H). */
+  reloadTicketGroups?: (target: Project) => Promise<unknown>;
   /**
    * Per-store live state for glance surfaces (HS2-JTTQMY): `live_state` events apply to it,
    * and each stream resync re-reads `GET /live-state` once. No timer reads it.
@@ -272,6 +275,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     claimTurnEvent,
     loadRepositorySize,
     loadTicketStoreSync,
+    reloadTicketGroups,
     liveStates,
     hostHealth,
     standbySettings,
@@ -520,6 +524,11 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             // A sync changed a ticket store's publication state: reload its health (HS2-ADHFKZ).
             if (loadTicketStoreSync && containsTicketStoreSyncChange(response, current.id))
               void loadTicketStoreSync(current);
+            // The group registry's publication state changed, for example the server's
+            // background commit or a sync pass failed or recovered: reread the group list and
+            // its registry status so the banner follows without polling (HS2-1CWD0H).
+            if (reloadTicketGroups && containsGroupRegistrySyncChange(response, current.id))
+              void reloadTicketGroups(current);
           }),
         });
         projectChangeStreams.set(current.id, () => {
