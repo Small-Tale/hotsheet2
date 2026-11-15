@@ -1507,6 +1507,14 @@ server, including one with no id, answers 404. Before this check, a run that los
 to another run's starting server tested that server's worktree and lost its connection when the
 other run ended (`ERR_CONNECTION_REFUSED`).
 
+In the frozen stable-dev snapshot Playwright uses, the first request for the run's own identity
+also transforms the client module graph once (`src/vite-module-warmup.ts`, about 900 modules in
+under a second on an idle host). The identity answers 503 until that finishes, so Playwright's
+readiness wait, not the first wave of tests, pays for the cold transforms (HS2-15EYK1). Every
+browser context still fetches the roughly 850 unbundled modules itself. A fixture whose handler
+only fakes app and API responses therefore routes `appRequests` (`tests/app-requests.ts`) rather
+than `'**/*'`, so those module requests never round-trip through the test worker.
+
 The Vite child also gets its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`, removed
 when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the developer's real remote
 registry, machine secrets, bootstrap server or HS1 data. A fixture server that needs a home names
