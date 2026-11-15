@@ -1785,8 +1785,16 @@ same explanation (HS2-CGXGWY).
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.126 (HS2-2055AY). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.130 (HS2-2TXT6F). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
+  `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
+  `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`
+  (the design-mock skill is mirrored under `clients/web/.agents/skills`). It records its
+  conflict resolutions in `clients/web/.kerf-ai-setup.json`: authored scripts, ESLint
+  config, dependency ranges, and catalog paths are `keep`; Kerf's proposed `check` and
+  `kerf:*` scripts, `@typescript-eslint/parser`, and `noUncheckedIndexedAccess` are `skip`.
+  The root `.prettierrc.json` owns formatting, so the `prettier.config.mjs` that setup
+  proposes is not committed (KF-G54HNG).
   Since beta.124 (KF-JPE38T, `KUI-L303`) the client renders no raw `<form>`: forms are Kerf `Form`, and
   both entry points install `wireForms` so a submission never navigates the page (HS2-GAJSX9).
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated

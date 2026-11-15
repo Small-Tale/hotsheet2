@@ -398,7 +398,11 @@ promise, types a path, and releases the list. It then checks that the input node
 focus, and caret survive a wide-to-narrow-to-wide pass, and that Connect provider posts the
 typed locator.
 
-HS2-2055AY upgrades the pinned Kerf client packages to beta.126 (KF-YA45PW).
+HS2-2TXT6F upgrades the pinned Kerf client packages to beta.130. Existing unit,
+lint/doctor, catalog, and browser coverage carries the upgrade; no Hot Sheet behavior
+changes.
+
+HS2-2055AY upgraded the pinned Kerf client packages to beta.126 (KF-YA45PW).
 The same real-app provider case checks at 1280 and 390 px that the open Repository
 list stays visible after the asynchronous list arrives, retains its typed-path
 create option, and filters newly loaded matching repositories. It also exercises
