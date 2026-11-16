@@ -1047,7 +1047,10 @@ async fn slow_viewer_input_reaches_the_pty(addr: std::net::SocketAddr, id: &str)
     ws.send(WsMessage::Text("typed-under-backpressure\n".into()))
         .await
         .unwrap();
-    let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+    // HS2-K3QG1J: the regression holds input behind output for as long as the viewer stops reading,
+    // which here is indefinitely, so this bound only has to exceed scheduling delay. The former 3 s
+    // failed under full-workspace load while the PTY's `yes` flood competed for the same CPUs.
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {
             if std::fs::read_to_string(&marker).unwrap_or_default() == "typed-under-backpressure" {
                 return;

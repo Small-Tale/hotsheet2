@@ -196,6 +196,9 @@ test('HS2-M5QPED terminal search highlights every match and counts them through 
   await replaceQuery('Justify');
   await expect(count).toHaveText('1 of 1');
   await writeTerminalOutput(page, 'terminal-new', '\u001b[6;1HJustify once more, Justify twice');
+  // HS2-QHFP4A: the count is re-searched from the rendered buffer, so wait for the output to land
+  // there first; a run that never delivers it now fails here instead of on a stale "1 of 1".
+  await expect(viewport.locator('.xterm-rows')).toContainText('Justify once more, Justify twice');
   await expect(count).toHaveText(/^\d of 3$/);
   await expect(highlights()).toHaveCount(4);
   await page.screenshot({ path: test.info().outputPath('hs2-m5qped-matches-1280.png') });
