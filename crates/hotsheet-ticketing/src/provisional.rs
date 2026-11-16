@@ -565,6 +565,79 @@ pub fn ticket_readiness(
     }
 }
 
+/// HS2-XYF4YT: how one prerequisite of a claimed ticket stands for an uncoordinated
+/// agent. Inform only: it never changes which ticket is claimed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum ClaimPrerequisite {
+    /// The prerequisite waits on CI and satisfies the claim provisionally: build on a base
+    /// that contains `gate_commit`.
+    AwaitingCi(ProvisionalBase),
+    /// The prerequisite's recorded gate reads red: rebase onto its repair, or reopen.
+    GateRed {
+        blocker: Ulid,
+        slug: String,
+        gate_commit: String,
+        gate: GateObservation,
+    },
+}
+
+impl ClaimPrerequisite {
+    /// What one warn-once record is keyed on: the prerequisite, its commit and run.
+    pub fn red_key(&self) -> Option<String> {
+        match self {
+            Self::GateRed {
+                blocker,
+                gate_commit,
+                gate,
+                ..
+            } => Some(format!(
+                "{blocker}/{gate_commit}/{}",
+                gate.run.as_deref().unwrap_or("-")
+            )),
+            Self::AwaitingCi(_) => None,
+        }
+    }
+}
+
+/// HS2-XYF4YT: the prerequisites of `claimed` an agent should know about at claim and
+/// renew time, in `blocked_by` order. Empty when the policy is off (nothing is probed),
+/// and for every prerequisite that is closed, confirmed by a green gate, or blocked for
+/// any reason other than a red gate.
+pub fn claim_prerequisites(
+    policy: &SpeculationPolicy,
+    claimed: &Ticket,
+    tickets: &[Ticket],
+    probe: &dyn GateProbe,
+) -> Vec<ClaimPrerequisite> {
+    if !policy.enabled {
+        return Vec::new();
+    }
+    claimed
+        .blocked_by
+        .iter()
+        .filter_map(
+            |blocker| match blocker_readiness(policy, claimed, blocker, tickets, probe) {
+                BlockerReadiness::Provisional(base) => Some(ClaimPrerequisite::AwaitingCi(base)),
+                BlockerReadiness::Blocked {
+                    reason: BlockReason::GateRed,
+                } => {
+                    let found = tickets.iter().find(|ticket| ticket.id == *blocker)?;
+                    let gate_commit = ci_gate_commit(found)?;
+                    let gate = probe.gate(&gate_commit);
+                    Some(ClaimPrerequisite::GateRed {
+                        blocker: *blocker,
+                        slug: found.slug.clone(),
+                        gate_commit,
+                        gate,
+                    })
+                }
+                _ => None,
+            },
+        )
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "provisional_tests.rs"]
 mod provisional_tests;

@@ -3324,6 +3324,28 @@ reason. `speculation-status`, `coordination status`, `coordination workers`, `GE
 `repair_first` and `reevaluate`. Opting a ticket out is the ordinary tag edit in the
 CLI (`edit --tag`) and MCP (`hotsheet_update`).
 
+**Uncoordinated claims (HS2-XYF4YT).** A single agent without a coordination pool
+claims exactly as before: `claim-next` stays edge-blind (HS2-E3C530) and the policy
+never changes which ticket is claimed. Under an enabled policy the answers of `claim`,
+`claim-next` and `renew` inform. The CLI prints one line per `blocked_by` prerequisite
+that is provisional (`Prerequisite <slug> awaits CI (<gate>): build on a base that
+contains its CI gate commit <sha>; integrate <rule>`), and the server routes
+(`/claim-next`, `/tickets/{id}/claim`, `/tickets/{id}/renew` and their
+`/checkouts/{reference}/…` forms), MCP `hotsheet_claim`, `hotsheet_claim_next` and
+`hotsheet_renew`, and the serverless MCP backend add a `provisional` member:
+`integration`, `prerequisites` (each `ProvisionalBase`) and `red_gates` (slug, gate
+commit, gate reading). A prerequisite whose recorded gate reads red is reported once
+per claim attempt: the machine-local `HOTSHEET_HOME/provisional-claim-warnings.json`
+(file-locked, the newest 1024 keys) records `(ticket, claim attempt, prerequisite, gate
+commit, run)`, so a repeat `renew` stays quiet, while a new red run or a new claim
+reports again. A record that cannot be read or written repeats a warning rather than
+losing one. Closed and green prerequisites, and every other blocking reason, are not
+named. The code checkout is the checkout route's, else the one registered checkout that
+links the store, else (CLI) the working directory's. With the policy off, unreadable or
+absent, or nothing to report, every answer is byte-identical to the bare ticket. The
+rule is `provisional::claim_prerequisites`; `hotsheet_cli::provisional_claims` is the
+one runtime the CLI, the routes and the MCP backend call.
+
 **REST and MCP (HS2-7J2ZSE).** The same requests are authenticated routes beside
 `integration-strategies`, and the MCP tool `hotsheet_speculation`, over one library
 (`hotsheet_cli::coordination::speculation_api`) that the commands use too:

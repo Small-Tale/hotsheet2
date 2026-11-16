@@ -21,7 +21,8 @@
 > reconciliation reads the CI runs gating a run, HS2-7QNK7Y, its deployments,
 > HS2-BYEB60, its validation attempts, HS2-G5H9FQ, and its sessions, HS2-75Q254),
 > the plan of prerequisites with computed readiness and the dispatch guard (§26.15,
-> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18;
+> HS2-42TARA; the single-project provisional rule shipped as HS2-2SJPCH, §26.18, and
+> informs an uncoordinated claim, HS2-XYF4YT;
 > a level a validation deadline changes is published at that deadline, HS2-J7N3PQ;
 > step events name their step in `step_id`, HS2-J7RG42; prerequisite tickets without a
 > run are followed on their target's change feed, HS2-TMA4YA; a session's host reports
@@ -3193,6 +3194,14 @@ rebased onto the fix, reopened and never discarded) live in
 `hotsheet_cli::coordination::speculation` as a ledger that is independent of the pool
 schema, so the cross-target form reuses `SpeculationLedger::record`, `apply`,
 `rebase`, `reopen` and the owed-note bookkeeping with its own storage (§26.22).
+
+An agent outside any pool uses the same rule to inform, not to choose (HS2-XYF4YT):
+`claim_prerequisites(policy, claimed, tickets, probe)` returns, for each `blocked_by`
+prerequisite, `AwaitingCi(ProvisionalBase)` or `GateRed { blocker, slug, gate_commit,
+gate }`, and nothing for any other state. `claim`, `claim-next` and `renew` add these to
+their answers under an enabled policy, with a red gate reported once per claim; see
+[05](05-ai-tool-plugins.md) §5.9.1, "Uncoordinated claims". `LiveGateProbe::open`
+builds the single-project probe without a pool.
 
 ## 26.19 Placing sessions (HS2-95SWQ4)
 

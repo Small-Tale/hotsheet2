@@ -5514,7 +5514,7 @@ paths:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '#/components/schemas/Ticket'
+                  - $ref: '#/components/schemas/ClaimedTicket'
                   - type: 'null'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
@@ -5549,7 +5549,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Ticket'
+                $ref: '#/components/schemas/ClaimedTicket'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -5653,7 +5653,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Ticket'
+                $ref: '#/components/schemas/ClaimedTicket'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -16721,7 +16721,7 @@ paths:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '#/components/schemas/ResolvedTicket'
+                  - $ref: '#/components/schemas/ClaimedResolvedTicket'
                   - type: 'null'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
@@ -16774,7 +16774,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResolvedTicket'
+                $ref: '#/components/schemas/ClaimedResolvedTicket'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -16888,7 +16888,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResolvedTicket'
+                $ref: '#/components/schemas/ClaimedResolvedTicket'
         '400':
           description: The request failed; code is present for errors with a stable machine-readable identifier.
           content:
@@ -25574,6 +25574,89 @@ components:
         next_due_ms:
           type: integer
           minimum: 0
+    ClaimProvisional:
+      type: object
+      description: >-
+        HS2-XYF4YT. Present on a claim, claim-next or renew answer only under an enabled
+        speculation policy, when a blocked_by prerequisite awaits CI or its gate first reads
+        red for this claim. Inform only; it never changes which ticket is claimed.
+      required:
+        - integration
+      properties:
+        integration:
+          type: string
+          enum:
+            - push-per-ticket
+            - parked
+        prerequisites:
+          type: array
+          description: Prerequisites awaiting CI; build on a base that contains each base_commit.
+          items:
+            type: object
+            required:
+              - blocker
+              - slug
+              - base_commit
+              - gate
+              - depth
+            properties:
+              blocker:
+                type: string
+              slug:
+                type: string
+              base_commit:
+                type: string
+              gate:
+                $ref: '#/components/schemas/ClaimGateObservation'
+              depth:
+                type: integer
+                minimum: 1
+        red_gates:
+          type: array
+          description: Red gates not yet reported to this claim; rebase onto the repair or reopen.
+          items:
+            type: object
+            required:
+              - slug
+              - gate_commit
+              - gate
+            properties:
+              slug:
+                type: string
+              gate_commit:
+                type: string
+              gate:
+                $ref: '#/components/schemas/ClaimGateObservation'
+    ClaimGateObservation:
+      type: object
+      required:
+        - result
+      properties:
+        result:
+          type: string
+          enum:
+            - pending
+            - green
+            - red
+            - superseded
+            - cancelled
+            - unknown
+        run:
+          type: string
+    ClaimedTicket:
+      allOf:
+        - $ref: '#/components/schemas/Ticket'
+        - type: object
+          properties:
+            provisional:
+              $ref: '#/components/schemas/ClaimProvisional'
+    ClaimedResolvedTicket:
+      allOf:
+        - $ref: '#/components/schemas/ResolvedTicket'
+        - type: object
+          properties:
+            provisional:
+              $ref: '#/components/schemas/ClaimProvisional'
     RemoteIdentity:
       type: object
       required:

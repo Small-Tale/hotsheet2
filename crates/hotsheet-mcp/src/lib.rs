@@ -481,7 +481,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim",
-            "description": "Claim one exact open ticket by slug or ULID. A blocked ticket is claimable: its blocked_reason is a note to re-evaluate, and the result carries blocked_notice while it is set. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied.",
+            "description": "Claim one exact open ticket by slug or ULID. A blocked ticket is claimable: its blocked_reason is a note to re-evaluate, and the result carries blocked_notice while it is set. A live same-worker retry is idempotent. Uses the launched project checkout unless checkout is supplied. Under an enabled speculation policy the result carries provisional {integration, prerequisites, red_gates} when a blocked_by prerequisite awaits CI (build on a base containing its base_commit) or its gate first reads red for this claim (rebase onto the repair or reopen); absent otherwise.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
@@ -518,7 +518,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_claim_next",
-            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; automatic selection skips blocked tickets, which hotsheet_claim can still take explicitly; prefers Up Next, then priority, then creation order). Uses the launched project checkout unless checkout is supplied: its local ticket sources form one queue, the default source winning a tie. GitHub, GitLab, and Jira sources have no claim leases and are skipped; a project with only those sources returns an unsupported error. Returns the claimed ticket with its store, or null if nothing is claimable.",
+            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; automatic selection skips blocked tickets, which hotsheet_claim can still take explicitly; prefers Up Next, then priority, then creation order). Uses the launched project checkout unless checkout is supplied: its local ticket sources form one queue, the default source winning a tie. GitHub, GitLab, and Jira sources have no claim leases and are skipped; a project with only those sources returns an unsupported error. Returns the claimed ticket with its store, or null if nothing is claimable. Under an enabled speculation policy the result carries provisional {integration, prerequisites, red_gates} when a blocked_by prerequisite awaits CI (build on a base containing its base_commit) or its gate first reads red for this claim (rebase onto the repair or reopen); absent otherwise.",
             "inputSchema": { "type": "object", "properties": {
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
                 "worker": str_prop("worker id recorded on the claim (default: worker)"),
@@ -539,7 +539,7 @@ fn base_tools_list() -> Value {
         },
         {
             "name": "hotsheet_renew",
-            "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated, and blocked_notice while the ticket has a blocked_reason to re-evaluate.",
+            "description": "Renew a claim's lease (must be the holding worker). Pass eta to replace the estimated completion time; the result carries eta_expired: true when the current estimate has passed and should be re-estimated, and blocked_notice while the ticket has a blocked_reason to re-evaluate. Under an enabled speculation policy the result carries provisional {integration, prerequisites, red_gates} when a blocked_by prerequisite awaits CI (build on a base containing its base_commit) or its gate first reads red for this claim (rebase onto the repair or reopen); absent otherwise.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "checkout": str_prop("optional checkout id, alias, or path; defaults to the launched project"),
@@ -1714,6 +1714,30 @@ mod core_backend {
             }
         }
 
+        /// HS2-XYF4YT: add the provisional prerequisites of `claimed` to a claim answer,
+        /// judged in the launched checkout, else in the one checkout linking this store.
+        fn with_provisional(&self, mut answer: Value, claimed: &Ticket) -> Value {
+            use hotsheet_cli::provisional_claims::{ProvisionalContext, attach, claim_provisional};
+            if claimed.blocked_by.is_empty() {
+                return answer;
+            }
+            let home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(hotsheet_ticketing::machine_home::hotsheet_home);
+            let context = match &self.checkout {
+                Some(checkout) => Some(ProvisionalContext::for_checkout(checkout, &home)),
+                None => ProvisionalContext::for_store(self.store.root(), &home),
+            };
+            attach(
+                &mut answer,
+                claim_provisional(context.as_ref(), &self.store, claimed).as_ref(),
+            );
+            answer
+        }
+
         /// After each tool call, ask the running host under `home` to sync every store this
         /// process committed to with a headless push, and report each store no host
         /// accepted as a local-only notice naming `hotsheet-cli sync` (HS2-4BG2QN,
@@ -1903,8 +1927,9 @@ mod core_backend {
             if let Some(watch) = watches.into_iter().nth(index).flatten() {
                 watch.after();
             }
-            self.for_checkout(stores[index].clone(), checkout)
-                .api(&ticket)
+            let backend = self.for_checkout(stores[index].clone(), checkout);
+            let answer = backend.api(&ticket)?;
+            Ok(backend.with_provisional(answer, &ticket))
         }
 
         /// The stores a group route addresses, the project registry (a checkout only),
@@ -3755,7 +3780,7 @@ mod core_backend {
                         ops::claim_next_with_eta(&self.store, &now, lease, &worker, label, eta)
                             .map_err(store_err)?;
                     Ok(match claimed {
-                        Some(t) => self.api(&t)?,
+                        Some(t) => self.with_provisional(self.api(&t)?, &t),
                         None => Value::Null,
                     })
                 }
@@ -3769,7 +3794,7 @@ mod core_backend {
                     let claimed =
                         ops::claim_with_eta(&self.store, &t.id, &now, lease, &worker, label, eta)
                             .map_err(op_err)?;
-                    self.api(&claimed)
+                    Ok(self.with_provisional(self.api(&claimed)?, &claimed))
                 }
                 "POST"
                     if matches!(
@@ -3876,7 +3901,7 @@ mod core_backend {
                             Value::Bool(ops::claim_eta_expired(&renewed, &now)),
                         );
                     }
-                    Ok(result)
+                    Ok(self.with_provisional(result, &renewed))
                 }
                 // Cross-store copy (HS2-60 / HS2-S4H2AM): serverless, `to` is the
                 // destination store's path. New ULID + `copied_from`; source untouched.

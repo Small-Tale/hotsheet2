@@ -518,3 +518,61 @@ fn hs2_2sjpch_policy_defaults_validates_and_round_trips_shared_settings_only() {
     assert_eq!(named.validate(), Ok(()));
     assert_eq!(named.workflow(), "Build and test");
 }
+
+#[test]
+fn hs2_xyf4yt_claim_prerequisites_inform_only_on_awaiting_and_red() {
+    use GateResult as G;
+    let started = ticket("HS2-WORK", Status::Started, Some(StartedPhase::Working));
+    let closed = ticket("HS2-DONE", Status::Completed, None);
+    for (result, expect) in [
+        (G::Pending, Some("awaiting")),
+        (G::Unknown, Some("awaiting")),
+        (G::Red, Some("red")),
+        (G::Green, None),
+        (G::Superseded, None),
+        (G::Cancelled, None),
+    ] {
+        let blocker = awaiting_ci("HS2-BLOCK", SHA_A);
+        let dependent = dependent_on(&[&blocker, &started, &closed]);
+        let tickets = vec![
+            blocker.clone(),
+            started.clone(),
+            closed.clone(),
+            dependent.clone(),
+        ];
+        let probe = Probe::default().pushed(SHA_A, result);
+        let found = claim_prerequisites(&enabled(), &dependent, &tickets, &probe);
+        let kinds: Vec<&str> = found
+            .iter()
+            .map(|entry| match entry {
+                ClaimPrerequisite::AwaitingCi(base) => {
+                    assert_eq!(base.base_commit, SHA_A);
+                    assert_eq!(base.slug, "HS2-BLOCK");
+                    "awaiting"
+                }
+                ClaimPrerequisite::GateRed {
+                    gate_commit, gate, ..
+                } => {
+                    assert_eq!(gate_commit, SHA_A);
+                    assert_eq!(gate.run.as_deref(), Some("run-a"));
+                    "red"
+                }
+            })
+            .collect();
+        assert_eq!(kinds, expect.into_iter().collect::<Vec<_>>(), "{result:?}");
+        // The red key names the prerequisite, commit and run; awaiting CI has none.
+        if let Some(entry) = found.first() {
+            assert_eq!(
+                entry.red_key(),
+                (result == G::Red).then(|| format!("{}/{SHA_A}/run-a", blocker.id))
+            );
+        }
+        // Off: nothing, and the probe is never read.
+        let probe = Probe::default().pushed(SHA_A, result);
+        assert!(
+            claim_prerequisites(&SpeculationPolicy::default(), &dependent, &tickets, &probe)
+                .is_empty()
+        );
+        assert_eq!(probe.gate_reads.get(), 0);
+    }
+}

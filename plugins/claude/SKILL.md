@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 73 -->
+<!-- hotsheet-skill-version: 74 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -276,6 +276,22 @@ keep the file the authority for what may run here. After changing it, check it w
 `hotsheet-cli orchestration validation profiles --project <checkout>` (MCP
 `validation_profiles` without a `target_id`): it lists every profile and every problem
 by code and exits non-zero on a problem. An absent file is valid and offers nothing.
+
+## Prerequisites awaiting CI (HS2-XYF4YT)
+
+When the project's committed `speculation` policy is on, `claim`, `claim-next` and `renew`
+(CLI, server routes and MCP `hotsheet_claim`, `hotsheet_claim_next`, `hotsheet_renew`)
+name each `blocked_by` prerequisite that waits on CI: its slug, its `CI gate commit` and
+the policy's integration rule (MCP `provisional.prerequisites`, CLI `Prerequisite <slug>
+awaits CI`). This only informs; it never changes which ticket you claimed. Build on a
+base that contains that commit. Integrate under the named rule: `push-per-ticket` may
+land once your own gates pass, and the covering CI run then gates your work with its
+base; `parked` keeps the work on its branch until the base gate is green. When the
+answer warns that the gate reads red (MCP `provisional.red_gates`, CLI `Warning: the CI
+gate of prerequisite`), it does so once per claim: rebase onto the prerequisite's repair
+commit when it records one, otherwise reopen or set your work aside, and note which.
+Once the prerequisite closes or its gate is green it is no longer named. With the policy
+off, the answers are unchanged.
 
 ## Local verification (HS2-RS0FFT)
 

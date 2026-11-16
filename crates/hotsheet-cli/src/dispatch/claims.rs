@@ -1,12 +1,13 @@
 //! Live ticket claim leases: claim, claim-next, renew, and release.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result, bail, ensure};
+use hotsheet_cli::provisional_claims::{ProvisionalContext, claim_provisional};
 use hotsheet_model::{ClaimEventKind, Ticket, Timestamp, Ulid};
 use hotsheet_ticketing::{FsStore, metrics, ops};
 use time::{Duration, OffsetDateTime};
@@ -24,21 +25,29 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             label,
             lease_minutes,
             eta,
-        } => cmd_claim_next(path, &worker, label, lease_minutes, eta.as_deref()),
+        } => cmd_claim_next(
+            path,
+            &ctx.cwd,
+            &worker,
+            label,
+            lease_minutes,
+            eta.as_deref(),
+        ),
         Cmd::Claim {
             id,
             worker,
             label,
             lease_minutes,
-            start,
+            // `--start` is accepted for compatibility; a claim always starts the ticket.
+            start: _,
             eta,
         } => cmd_claim(
             path,
+            &ctx.cwd,
             &id,
             &worker,
             label,
             lease_minutes,
-            start,
             eta.as_deref(),
         ),
         Cmd::Release {
@@ -55,7 +64,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             worker,
             lease_minutes,
             eta,
-        } => cmd_renew(path, &id, &worker, lease_minutes, eta.as_deref()),
+        } => cmd_renew(path, &ctx.cwd, &id, &worker, lease_minutes, eta.as_deref()),
         Cmd::ClaimRun {
             id,
             worker,
@@ -313,6 +322,7 @@ fn await_renewal_with_clock(
 
 pub(crate) fn cmd_claim_next(
     path: &PathBuf,
+    cwd: &Path,
     worker: &str,
     label: Option<String>,
     lease_minutes: i64,
@@ -331,6 +341,7 @@ pub(crate) fn cmd_claim_next(
                 eta_suffix(&ticket)
             );
             println!("{}", phase_hint(&ticket));
+            print_provisional(&store, cwd, &ticket);
         }
         None => println!("No claimable tickets."),
     }
@@ -339,11 +350,11 @@ pub(crate) fn cmd_claim_next(
 
 pub(crate) fn cmd_claim(
     path: &PathBuf,
+    cwd: &Path,
     id: &str,
     worker: &str,
     label: Option<String>,
     lease_minutes: i64,
-    start: bool,
     eta: Option<&str>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
@@ -351,7 +362,6 @@ pub(crate) fn cmd_claim(
     let now_dt = OffsetDateTime::now_utc();
     let now = Timestamp::from_datetime(now_dt);
     let lease = lease_until(now_dt, lease_minutes);
-    let _ = start;
     let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
     let claimed = ops::claim_with_eta(&store, &ticket.id, &now, lease, worker, label, eta)?;
     println!(
@@ -364,7 +374,24 @@ pub(crate) fn cmd_claim(
     if let Some(notice) = ops::blocked_claim_notice(&claimed) {
         println!("{notice}");
     }
+    print_provisional(&store, cwd, &claimed);
     Ok(())
+}
+
+/// HS2-XYF4YT: under an enabled speculation policy, name each prerequisite awaiting CI
+/// and warn once per claim about a red gate. Prints nothing otherwise.
+fn print_provisional(store: &FsStore, cwd: &Path, claimed: &Ticket) {
+    if claimed.blocked_by.is_empty() {
+        return;
+    }
+    let home = hotsheet_plugins::hotsheet_home();
+    let context = ProvisionalContext::for_store(store.root(), &home)
+        .or_else(|| ProvisionalContext::for_dir(cwd, &home));
+    if let Some(provisional) = claim_provisional(context.as_ref(), store, claimed) {
+        for line in provisional.lines() {
+            println!("{line}");
+        }
+    }
 }
 
 pub(crate) fn cmd_release(path: &PathBuf, id: &str, worker: &str, force: bool) -> Result<()> {
@@ -399,6 +426,7 @@ pub(crate) fn cmd_release_worker(path: &PathBuf, worker: &str) -> Result<()> {
 
 pub(crate) fn cmd_renew(
     path: &PathBuf,
+    cwd: &Path,
     id: &str,
     worker: &str,
     lease_minutes: i64,
@@ -427,6 +455,7 @@ pub(crate) fn cmd_renew(
     if let Some(notice) = ops::blocked_claim_notice(&renewed) {
         println!("{notice}");
     }
+    print_provisional(&store, cwd, &renewed);
     Ok(())
 }
 

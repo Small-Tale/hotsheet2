@@ -92,6 +92,40 @@ impl LiveGateProbe {
     }
 }
 
+impl LiveGateProbe {
+    /// HS2-XYF4YT: the probe for the shipping checkout `project` (registered as
+    /// `checkout_id` in the machine home `registry_home`) under `policy`, without a
+    /// coordination pool. A gate commit must be reachable from the policy's base branch,
+    /// else from the checkout's upstream.
+    pub fn open(
+        project: &Path,
+        registry_home: &Path,
+        checkout_id: &str,
+        policy: &SpeculationPolicy,
+    ) -> Self {
+        let resolves = |name: &str| {
+            git(project, &["rev-parse", "--verify", "--quiet", name])
+                .is_some_and(|output| output.status.success())
+        };
+        let reference = match &policy.base_branch {
+            Some(branch) => [
+                format!("refs/remotes/origin/{branch}"),
+                format!("refs/heads/{branch}"),
+            ]
+            .into_iter()
+            .find(|name| resolves(name)),
+            None => resolves("@{upstream}").then(|| "@{upstream}".to_owned()),
+        };
+        Self {
+            project: project.to_path_buf(),
+            reference,
+            jobs: JobStore::at(registry_home),
+            checkout_id: checkout_id.to_owned(),
+            waiter: hotsheet_jobs::KeptWaiter::default(),
+        }
+    }
+}
+
 impl GateProbe for LiveGateProbe {
     fn reachable(&self, commit: &str) -> Option<bool> {
         is_ancestor(&self.project, commit, self.reference.as_deref()?)
@@ -275,26 +309,7 @@ fn add_note(store: &FsStore, id: &Ulid, summary: &str, text: String) -> Result<(
 impl Coordinator {
     /// The live probe for this pool's shipping checkout under `policy`.
     pub fn speculation_probe(&self, policy: &SpeculationPolicy) -> LiveGateProbe {
-        let resolves = |name: &str| {
-            git(&self.project, &["rev-parse", "--verify", "--quiet", name])
-                .is_some_and(|output| output.status.success())
-        };
-        let reference = match &policy.base_branch {
-            Some(branch) => [
-                format!("refs/remotes/origin/{branch}"),
-                format!("refs/heads/{branch}"),
-            ]
-            .into_iter()
-            .find(|name| resolves(name)),
-            None => resolves("@{upstream}").then(|| "@{upstream}".to_owned()),
-        };
-        LiveGateProbe {
-            project: self.project.clone(),
-            reference,
-            jobs: JobStore::at(&self.registry_home),
-            checkout_id: self.project_id.clone(),
-            waiter: hotsheet_jobs::KeptWaiter::default(),
-        }
+        LiveGateProbe::open(&self.project, &self.registry_home, &self.project_id, policy)
     }
 
     /// HS2-26JAEN: write the record of `reservation` for `assigned` while the caller

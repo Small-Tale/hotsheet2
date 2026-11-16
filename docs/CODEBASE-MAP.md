@@ -1378,6 +1378,13 @@ record. The rule itself is `crates/hotsheet-ticketing/src/provisional.rs`
 `speculation_api.rs` (HS2-7J2ZSE) is the one request layer that the CLI, the
 `/checkouts/{reference}/speculation/...` routes in `checkout_workers.rs` and the MCP
 `hotsheet_speculation` tool share;
+`crates/hotsheet-cli/src/provisional_claims.rs` (HS2-XYF4YT) informs uncoordinated
+`claim`, `claim-next` and `renew` answers under an enabled policy: `ProvisionalContext`
+(the checkout route's, the one checkout linking the store, or the working directory's),
+`claim_provisional` over `provisional::claim_prerequisites` and `LiveGateProbe::open`,
+the warn-once record `HOTSHEET_HOME/provisional-claim-warnings.json` (`warn_once`), and
+`attach` for JSON answers; the CLI (`dispatch/claims.rs`), the server routes
+(`routes/claims.rs` `ClaimAnswer`) and the serverless MCP backend call it;
 `provisional_tests.rs`, `speculation_tests.rs` and `tests/coordination_speculation.rs`
 pin the transitions.
 `source_support.rs` produces additive, registry-only per-source

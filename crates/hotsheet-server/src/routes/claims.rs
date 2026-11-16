@@ -10,18 +10,63 @@ use crate::{AppState, now};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use hotsheet_cli::provisional_claims::{ClaimProvisional, ProvisionalContext, claim_provisional};
 use hotsheet_ticketing::{ApiTicket, ops};
+use serde::Serialize;
 
 // ---- coordination: claim / release / renew (HS2-86) ------------------------------
 
 const DEFAULT_LEASE_MINUTES: i64 = 30;
+
+/// HS2-XYF4YT: a claim, claim-next or renew answer. `provisional` appears only under an
+/// enabled speculation policy with a prerequisite awaiting CI or a red gate not yet
+/// reported to this claim; otherwise the answer is the bare ticket, byte for byte.
+#[derive(Serialize)]
+pub(crate) struct ClaimAnswer<T> {
+    #[serde(flatten)]
+    answer: T,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provisional: Option<ClaimProvisional>,
+}
+
+/// The code checkout of a default-store claim: the one registered checkout linking it.
+fn store_context(state: &AppState, entry: &multistore::StoreEntry) -> Option<ProvisionalContext> {
+    ProvisionalContext::for_store(entry.store.root(), state.machine_home())
+}
+
+fn checkout_context(state: &AppState, reference: &str) -> Option<ProvisionalContext> {
+    state
+        .checkout_registry
+        .resolve(reference)
+        .ok()
+        .map(|checkout| ProvisionalContext::for_checkout(&checkout, state.machine_home()))
+}
+
+/// The context is resolved only for a ticket with prerequisites, so a plain claim does
+/// no extra registry or Git work.
+fn answer<T>(
+    answer: T,
+    context: impl FnOnce() -> Option<ProvisionalContext>,
+    entry: &multistore::StoreEntry,
+    ticket: &hotsheet_model::Ticket,
+) -> ClaimAnswer<T> {
+    let provisional = if ticket.blocked_by.is_empty() {
+        None
+    } else {
+        claim_provisional(context().as_ref(), &entry.store, ticket)
+    };
+    ClaimAnswer {
+        answer,
+        provisional,
+    }
+}
 
 /// `POST /claim-next` — atomically claim the top available ticket for a worker. Returns the
 /// claimed ticket, or `null` (200) when nothing is claimable.
 pub(crate) async fn claim_next_ticket(
     State(state): State<AppState>,
     Json(req): Json<ClaimReq>,
-) -> Result<Json<Option<ApiTicket>>, ApiError> {
+) -> Result<Json<Option<ClaimAnswer<ApiTicket>>>, ApiError> {
     let entry = state.default_entry();
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
@@ -35,12 +80,15 @@ pub(crate) async fn claim_next_ticket(
     if let Some(t) = &claimed {
         state.changed_in(&entry, "claimed", t);
     }
-    Ok(Json(
-        claimed
-            .as_ref()
-            .map(|ticket| api_ticket(&entry, ticket))
-            .transpose()?,
-    ))
+    let Some(ticket) = claimed else {
+        return Ok(Json(None));
+    };
+    Ok(Json(Some(answer(
+        api_ticket(&entry, &ticket)?,
+        || store_context(&state, &entry),
+        &entry,
+        &ticket,
+    ))))
 }
 
 /// `POST /checkouts/{reference}/claim-next` — HS2-AV80C4: claim the next ticket across
@@ -54,7 +102,7 @@ pub(crate) async fn claim_checkout_next_ticket(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Json(req): Json<ClaimReq>,
-) -> Result<Json<Option<ResolvedTicket>>, ApiError> {
+) -> Result<Json<Option<ClaimAnswer<ResolvedTicket>>>, ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(&reference)
@@ -92,7 +140,14 @@ pub(crate) async fn claim_checkout_next_ticket(
     };
     let entry = &entries[index];
     state.changed_in(entry, "claimed", &claimed);
-    resolved_claim_ticket(entry, &claimed).map(|Json(ticket)| Json(Some(ticket)))
+    let Json(resolved) = resolved_claim_ticket(entry, &claimed)?;
+    let context = || {
+        Some(ProvisionalContext::for_checkout(
+            &checkout,
+            state.machine_home(),
+        ))
+    };
+    Ok(Json(Some(answer(resolved, context, entry, &claimed))))
 }
 
 /// `POST /tickets/{id}/claim` — claim one exact open ticket by slug or ULID; a blocked
@@ -101,7 +156,7 @@ pub(crate) async fn claim_ticket(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<ClaimReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
+) -> Result<Json<ClaimAnswer<ApiTicket>>, ApiError> {
     let entry = state.default_entry();
     let ticket = entry
         .resolve(&id)?
@@ -124,7 +179,12 @@ pub(crate) async fn claim_ticket(
         eta,
     )?;
     state.changed_in(&entry, "claimed", &claimed);
-    Ok(Json(api_ticket(&entry, &claimed)?))
+    Ok(Json(answer(
+        api_ticket(&entry, &claimed)?,
+        || store_context(&state, &entry),
+        &entry,
+        &claimed,
+    )))
 }
 
 /// `POST /tickets/{id}/release` — release a claim (holder-only unless `force`).
@@ -154,7 +214,7 @@ pub(crate) async fn renew_ticket(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<RenewReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
+) -> Result<Json<ClaimAnswer<ApiTicket>>, ApiError> {
     let entry = state.default_entry();
     let ticket = entry
         .resolve(&id)?
@@ -169,7 +229,12 @@ pub(crate) async fn renew_ticket(
         .transpose()?;
     let renewed = ops::renew_with_eta(&entry.store, &ticket.id, now, lease, &worker, eta)?;
     state.changed_in(&entry, "renewed", &renewed);
-    Ok(Json(api_ticket(&entry, &renewed)?))
+    Ok(Json(answer(
+        api_ticket(&entry, &renewed)?,
+        || store_context(&state, &entry),
+        &entry,
+        &renewed,
+    )))
 }
 
 /// Resolve the owner before a claim mutation. An unqualified id must identify one
@@ -214,7 +279,7 @@ pub(crate) async fn claim_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<ClaimReq>,
-) -> Result<Json<ResolvedTicket>, ApiError> {
+) -> Result<Json<ClaimAnswer<ResolvedTicket>>, ApiError> {
     let (entry, native_id) = checkout_claim_entry(&state, &reference, &id)?;
     let ticket = entry
         .resolve(&native_id)?
@@ -237,7 +302,13 @@ pub(crate) async fn claim_checkout_ticket(
         eta,
     )?;
     state.changed_in(&entry, "claimed", &claimed);
-    resolved_claim_ticket(&entry, &claimed)
+    let Json(resolved) = resolved_claim_ticket(&entry, &claimed)?;
+    Ok(Json(answer(
+        resolved,
+        || checkout_context(&state, &reference),
+        &entry,
+        &claimed,
+    )))
 }
 
 pub(crate) async fn release_checkout_ticket(
@@ -265,7 +336,7 @@ pub(crate) async fn renew_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<RenewReq>,
-) -> Result<Json<ResolvedTicket>, ApiError> {
+) -> Result<Json<ClaimAnswer<ResolvedTicket>>, ApiError> {
     let (entry, native_id) = checkout_claim_entry(&state, &reference, &id)?;
     let ticket = entry
         .resolve(&native_id)?
@@ -280,5 +351,71 @@ pub(crate) async fn renew_checkout_ticket(
         .transpose()?;
     let renewed = ops::renew_with_eta(&entry.store, &ticket.id, now, lease, &worker, eta)?;
     state.changed_in(&entry, "renewed", &renewed);
-    resolved_claim_ticket(&entry, &renewed)
+    let Json(resolved) = resolved_claim_ticket(&entry, &renewed)?;
+    Ok(Json(answer(
+        resolved,
+        || checkout_context(&state, &reference),
+        &entry,
+        &renewed,
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    //! HS2-XYF4YT: with nothing to report, a claim answer serializes to exactly the bytes
+    //! of the bare ticket (and of the resolved `{ store, ticket }`).
+    use super::*;
+    use hotsheet_model::{Status, Ticket, Ulid};
+
+    fn ticket() -> ApiTicket {
+        let mut ticket = Ticket {
+            id: Ulid::new(),
+            slug: "HS-1".into(),
+            title: "Synthetic".into(),
+            status: Status::Started,
+            blocked_by: vec![Ulid::new()],
+            ..Ticket::default()
+        };
+        ticket.claimed_by = Some("agent".into());
+        ApiTicket::from(&ticket)
+    }
+
+    #[test]
+    fn hs2_xyf4yt_answer_without_news_is_byte_identical() {
+        let bare = ticket();
+        let wrapped = ClaimAnswer {
+            answer: bare.clone(),
+            provisional: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&wrapped).unwrap(),
+            serde_json::to_string(&bare).unwrap()
+        );
+        let resolved = ResolvedTicket {
+            store: "abc".into(),
+            ticket: bare,
+        };
+        let expected = serde_json::to_string(&resolved).unwrap();
+        let wrapped = ClaimAnswer {
+            answer: resolved,
+            provisional: None,
+        };
+        assert_eq!(serde_json::to_string(&wrapped).unwrap(), expected);
+    }
+
+    #[test]
+    fn hs2_xyf4yt_answer_with_news_adds_one_member() {
+        let bare = ticket();
+        let wrapped = ClaimAnswer {
+            answer: bare.clone(),
+            provisional: Some(ClaimProvisional {
+                integration: hotsheet_ticketing::provisional::IntegrationRule::Parked,
+                prerequisites: Vec::new(),
+                red_gates: Vec::new(),
+            }),
+        };
+        let mut expected = serde_json::to_value(&bare).unwrap();
+        expected["provisional"] = serde_json::json!({ "integration": "parked" });
+        assert_eq!(serde_json::to_value(&wrapped).unwrap(), expected);
+    }
 }
