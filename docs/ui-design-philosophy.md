@@ -92,8 +92,9 @@ does not fork Kerf's guidance.
   following the system only. A pinned choice uses Kerf's root appearance scope
   (`.kui-light` / `.kui-dark` on `<html>`), never app color overrides. Each choice
   shows a stylized Hot Sheet window in that scheme, after news-cloud2's Appearance
-  picker. Kerf has no preview-tile choice, so the tiles are native radios with an
-  app-owned frame (`components/theme-picker.css`) until `KF-C29WJ9` ships.
+  picker. The tiles are Kerf's `RadioGroup presentation="tiles"` (`KF-C29WJ9`,
+  HS2-VW7JVV): Kerf owns the native radios, frame, selected ring and check, and
+  focus ring; the app supplies only the artwork (`theme-tile-art.tsx`).
   The pin also reaches the chrome outside the document (HS2-15W35F). Both
   `theme-color` metas keep their `prefers-color-scheme` media queries; a pinned
   choice gives both the pinned scheme's color (`#ffffff` or `#1c1c1e`), so the

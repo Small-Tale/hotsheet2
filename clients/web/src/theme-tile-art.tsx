@@ -64,37 +64,30 @@ function mockup(p: TilePalette): SafeHtml {
 }
 
 /**
- * One tile's SVG, decorative (`aria-hidden`): the radio's visible label names the choice. Clip ids carry
- * the kind so the three tiles can share a document.
+ * One tile's SVG, decorative (`aria-hidden`): the radio's visible label names the choice. Kerf's
+ * `RadioGroup` tile frame (HS2-VW7JVV) is 4:3 and rounds and clips its own corners, so the 132×92 art
+ * covers it with `slice`, trimming a few units from each side. The Auto clip ids carry the kind so the
+ * three tiles can share a document.
  */
 export function themeTileArt(kind: ThemePreference): SafeHtml {
   const clip = `theme-tile-clip-${kind}`;
   return (
-    <svg viewBox="0 0 132 92" aria-hidden="true">
-      <defs>
-        <clipPath id={clip}>
-          <rect x="0" y="0" width="132" height="92" rx="8" />
-        </clipPath>
-        {kind === 'auto' ? (
-          <g>
+    <svg viewBox="0 0 132 92" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      {kind === 'auto' ? (
+        <g>
+          <defs>
             <clipPath id={`${clip}-light`}>
               <polygon points="0,0 76,0 52,92 0,92" />
             </clipPath>
             <clipPath id={`${clip}-dark`}>
               <polygon points="76,0 132,0 132,92 52,92" />
             </clipPath>
-          </g>
-        ) : (
-          ''
-        )}
-      </defs>
-      {kind === 'auto' ? (
-        <g clipPath={`url(#${clip})`}>
+          </defs>
           <g clipPath={`url(#${clip}-light)`}>{mockup(LIGHT_TILE)}</g>
           <g clipPath={`url(#${clip}-dark)`}>{mockup(DARK_TILE)}</g>
         </g>
       ) : (
-        <g clipPath={`url(#${clip})`}>{mockup(kind === 'dark' ? DARK_TILE : LIGHT_TILE)}</g>
+        mockup(kind === 'dark' ? DARK_TILE : LIGHT_TILE)
       )}
     </svg>
   );

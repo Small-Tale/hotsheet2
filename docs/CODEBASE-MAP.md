@@ -500,7 +500,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/away-digest-dialog.tsx # While you were away dialog on leaving standby: range, Completed/Need you/Tokens tiles, event rows with Open/Answer, Dismiss and Show What Needs Me (HS2-JJ9RYN)
     src/components/host-disk-settings.tsx # App Settings → General → Host health disks: Monitor switches, Forget, Add Disk… (HS2-KBVZV1); add-host-disk-dialog.tsx is its path dialog; host-disk-choices.ts saves choices through /host-health/disks
     src/components/standby-settings.tsx # App Settings → General → Standby: idle entry switch and threshold (HS2-EQVZTZ)
-    src/components/theme-picker.tsx # App Settings → General → Theme: Auto/Light/Dark preview tiles as native radios (HS2-EFTHS6; tile frame CSS until KF-C29WJ9)
+    src/components/theme-picker.tsx # App Settings → General → Theme: Auto/Light/Dark as Kerf RadioGroup preview tiles (HS2-EFTHS6, HS2-VW7JVV)
     src/components/notification-settings.tsx # App Settings → Notifications: delivery options, channel and rule ListActionRows with menus, recent deliveries ValueTable (HS2-DPBJJA)
     src/components/notification-channel-dialog.tsx # Add/edit channel DialogSurface with fields generated from the notifier settings schema; write-only credentials (HS2-DPBJJA)
     src/components/notification-rule-dialog.tsx # Add/edit rule DialogSurface: events, channels, filters, severity, cooldown (HS2-DPBJJA)
