@@ -1063,6 +1063,9 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
     let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(&executable, permissions).unwrap();
+    // HS2-9K9CP7: the CLI gives `rulesync --version` 5 s. Under full-suite load the fixture's
+    // first exec can take longer, so launch it once without a deadline first.
+    first_launch::launched(&executable, &["--version"]);
     let path = std::env::join_paths(
         std::iter::once(bin.clone())
             .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
@@ -1079,8 +1082,8 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
         .stdout
         .clone();
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
-    assert_eq!(report["state"], "outdated");
-    assert_eq!(report["executable_version"], "38.0.0");
+    assert_eq!(report["state"], "outdated", "report: {report}");
+    assert_eq!(report["executable_version"], "38.0.0", "report: {report}");
     assert_eq!(report["sources"][0]["locked_ref"], "first");
     assert_eq!(report["sources"][0]["latest_ref"], "second");
     assert_eq!(
