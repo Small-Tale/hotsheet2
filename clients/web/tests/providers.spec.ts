@@ -818,6 +818,122 @@ test('adds a tag through the Add tag surface inside the modal reader (HS2-Q4JE3V
   }
 });
 
+test('suggests every development strategy override tag for the open project only (HS2-PN74AH)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await mockProject(page);
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  // Only the demo project defines the custom `strict` strategy.
+  const strategyReads: string[] = [];
+  await page.route('**/checkouts/*/development-strategy*', (route) => {
+    const checkout = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? '');
+    strategyReads.push(checkout);
+    const strict = {
+      integration: 'serial',
+      local_gate: 'full-local',
+      minimum_tier: 'T1',
+      browser: true,
+      platform: false,
+      perf: false,
+      test_plan_timing: 'before-work',
+      ci_gate: 'CI',
+      red_ci_recovery: 'fallback-to-serial',
+    };
+    return route.fulfill({
+      json: {
+        policy: {
+          version: 2,
+          default: 'steady-main',
+          green_main_goal_minutes: 360,
+          custom: checkout === 'other-checkout' ? {} : { strict },
+        },
+        effective: {
+          preset: 'steady-main',
+          source: 'project',
+          integration: 'ci-staged',
+          local_gate: 'targeted',
+          require_green_main_sha: true,
+          attribute_red_ci_before_completion: true,
+          green_main_goal_minutes: 360,
+        },
+        presets: ['ticket-assured', 'steady-main', 'risk-guided'],
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('tab', { name: 'demo' }).click();
+  const inspector = page.locator('#app-right-rail'),
+    addTag = inspector.getByRole('button', { name: 'Add tag' }),
+    surface = page.getByRole('dialog', { name: 'Add tag' }),
+    input = surface.getByRole('combobox', { name: 'Tag Name' }),
+    offered = () =>
+      inspector
+        .locator('[data-component="ticket-tag-editor"] datalist option')
+        .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await expect
+    .poll(offered)
+    .toEqual(
+      expect.arrayContaining([
+        'development-strategy:ticket-assured',
+        'development-strategy:steady-main',
+        'development-strategy:risk-guided',
+        'development-strategy:strict',
+      ]),
+    );
+  // The Add tag field offers them too, and adding one writes the exact spelling the gate reads.
+  await addTag.click();
+  await input.fill('development-strategy:st');
+  await expect(surface.getByRole('option', { name: 'development-strategy:strict' })).toBeVisible();
+  await expect(surface.getByRole('option', { name: 'development-strategy:steady-main' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-pn74ah-strategy-tag-suggestions-1280.png' });
+  await input.fill('development-strategy:steady-main');
+  await input.press('Enter');
+  await expect(inspector.locator('.tag-chip[data-item-id="development-strategy:steady-main"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  // A tag the ticket already has is no longer offered; the others remain.
+  await expect.poll(offered).not.toContain('development-strategy:steady-main');
+  expect(await offered()).toContain('development-strategy:strict');
+
+  // Another project offers the built-ins but never the first project's custom strategy.
+  await page.getByRole('tab', { name: 'other' }).click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await expect.poll(() => strategyReads).toContain('other-checkout');
+  await expect.poll(offered).toEqual(expect.arrayContaining(['development-strategy:risk-guided']));
+  expect(await offered()).not.toContain('development-strategy:strict');
+  // The modal reader's tag editor offers the same project-scoped suggestions.
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+  await expect(reader).toBeVisible();
+  const readerOffered = () =>
+    reader
+      .locator('[data-component="ticket-tag-editor"] datalist option')
+      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+  await expect.poll(readerOffered).toEqual(expect.arrayContaining(['development-strategy:ticket-assured']));
+  expect(await readerOffered()).not.toContain('development-strategy:strict');
+  await page.keyboard.press('Escape');
+  await expect(reader).toHaveCount(0);
+  // One policy read per project, not one per selection.
+  await page.getByRole('tab', { name: 'demo' }).click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  expect(strategyReads.filter((checkout) => checkout === 'other-checkout')).toHaveLength(1);
+  expect(strategyReads.filter((checkout) => checkout !== 'other-checkout')).toHaveLength(1);
+});
+
 test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0ECV)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>

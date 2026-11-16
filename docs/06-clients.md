@@ -107,6 +107,11 @@ Dismissal ends the status popup's anchor tracking so later renders do not reopen
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a Kerf Combobox. It snapshots unused tag suggestions when
 opened; the suggestion listbox rises above the popover instead of clipping inside it.
+Suggestions are the project's existing tags plus a `development-strategy:<name>` override tag
+for every built-in strategy and every custom strategy in the open project's own policy, even
+when no ticket carries it yet. The policy is read once per project server when a ticket is
+first selected there; another project's custom names never appear, and tags the ticket
+already has are not offered (HS2-PN74AH).
 Enter, comma, or choosing a suggestion can add repeated tags. Escape restores focus to the
 trigger, and read-only providers omit the action entirely. Kerf owns the field, label, and
 hint geometry; a List sets the title-to-field rhythm (HS2-4Y6SM9, HS2-C32ERK).

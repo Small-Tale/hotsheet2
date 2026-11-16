@@ -123,6 +123,7 @@ import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
+import { developmentStrategyTagSuggestions } from '../development-strategy-tags';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
@@ -1992,7 +1993,32 @@ export async function startHotSheetWebClient() {
     const capabilities = newTicketSource()?.capabilities;
     return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
   };
-  const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
+  // Existing tags plus a development-strategy override tag for each strategy this project can use,
+  // including its own custom ones once its policy has been read (HS2-PN74AH).
+  const tagSuggestions = () => [
+    ...new Set([
+      ...tickets.value.flatMap((ticket) => ticket.tags),
+      ...developmentStrategyTagSuggestions(developmentReports.value[project()?.id ?? '']),
+    ]),
+  ];
+  // Read the project's strategy policy once, when a ticket is first selected there, so the tag
+  // editor can offer its custom strategies. One attempt per project server, never retried in a loop.
+  const strategyTagReads = new Set<string>();
+  effect(() => {
+    const current = project();
+    if (!current || selectedTicketSlugs.value.length === 0) return;
+    const key = `${current.id}:${current.apiPath}`;
+    if (strategyTagReads.has(key)) return;
+    strategyTagReads.add(key);
+    if (developmentReports.peek()[current.id]) return;
+    void new Api(current.apiPath, '').developmentStrategy(current.id).then(
+      (report) => {
+        if (!developmentReports.peek()[current.id])
+          developmentReports.value = { ...developmentReports.peek(), [current.id]: report };
+      },
+      () => undefined,
+    );
+  });
   const api = () => new Api(project()?.apiPath ?? '');
   const advisoryClaimResource = createAdvisoryClaimResource(api);
   // Created on first advisory use, never at startup: a page whose random source fails must
