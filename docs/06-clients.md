@@ -69,7 +69,10 @@ Trash sidebar destinations apply the corresponding status — Trash soft-deletes
 visibly highlight during dragover. A sidebar view, board column, or new-ticket target
 renders that highlight from the drag's current target, so a render mid-drag, such as the
 sidebar after a view switch, keeps it; it clears when the drag leaves the target, drops, or
-ends (HS2-G8EK08). A newly created ticket is inserted into both the active
+ends (HS2-G8EK08). Every ticket drop highlight, project tabs included, also clears when the
+drag ends without `dragend` reaching the document: the dragged row hears its own `dragend`
+after a render removes it, and a window blur, pointer press, or Escape after a lost drag
+ends it (HS2-43A1Y8). A newly created ticket is inserted into both the active
 collection and its project cache before it is selected, so that first selected presentation
 can be dragged immediately without a deselect/reselect workaround (HS2-6E9RRS).
 Right-clicking either a list or board TicketRow preserves an existing multi-selection

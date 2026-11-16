@@ -33676,8 +33676,9 @@ test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)
   await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
   await expect(backlog).toHaveAttribute('data-state', 'drag-target');
   // Switching the view re-renders every sidebar row; the highlight comes from state, so it survives
-  // without another dragover (the old node attribute was morphed away until the next one).
-  await sidebar.locator('[data-action="select-view"][data-item-id="archive"]').click();
+  // without another dragover (the old node attribute was morphed away until the next one). A real
+  // drag delivers no pointer events, which now end a stale drag (HS2-43A1Y8), so click without them.
+  await sidebar.locator('[data-action="select-view"][data-item-id="archive"]').dispatchEvent('click');
   await expect(sidebar.locator('[data-action="select-view"][data-item-id="archive"]')).toHaveAttribute(
     'aria-current',
     'page',
@@ -33697,7 +33698,7 @@ test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)
   await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
   await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
   // Back in All, where the dragged ticket is listed, hovering again and dropping clears it as well.
-  await sidebar.locator('[data-action="select-view"][data-item-id="all"]').click();
+  await sidebar.locator('[data-action="select-view"][data-item-id="all"]').dispatchEvent('click');
   await expect(ticket).toBeVisible();
   await hover(backlog);
   await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
@@ -33705,6 +33706,88 @@ test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)
   await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
   await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
   await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
+});
+
+test('clears every ticket drop highlight when a drag ends without dragend reaching the document (HS2-43A1Y8)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('tab', { name: 'demo' }).click();
+  const sidebar = page.locator('[data-component="view-navigation"]'),
+    row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    highlighted = page.locator('[data-dragging-ticket="true"]'),
+    projectTab = page.locator('[data-ticket-drop-project="other-checkout"]'),
+    // Start a ticket drag from `source` and hover `target`, as a native drag would.
+    dragOver = (source: Locator, target: string) =>
+      source.evaluate((node, selector) => {
+        const transfer = new DataTransfer();
+        node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+        document
+          .querySelector<HTMLElement>(selector)!
+          .dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      }, target);
+  await expect(row).toBeVisible();
+  await row.click();
+
+  // The dragged row leaves the page mid-drag: its dragend fires on a detached node.
+  const detached = await row.elementHandle();
+  await dragOver(row, '[data-ticket-drop-status="backlog"]');
+  await expect(highlighted).toHaveCount(1);
+  await sidebar.locator('[data-action="select-view"][data-item-id="archive"]').dispatchEvent('click');
+  await expect(row).toHaveCount(0);
+  await expect(sidebar.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket', 'true');
+  expect(await detached.evaluate((node) => node.isConnected)).toBe(false);
+  await detached.evaluate((node) => node.dispatchEvent(new DragEvent('dragend', { bubbles: true })));
+  await expect(highlighted).toHaveCount(0);
+  await sidebar.locator('[data-action="select-view"][data-item-id="all"]').click();
+  await expect(row).toBeVisible();
+
+  // The drag is cancelled outside the window: the window loses focus and no dragend arrives.
+  await dragOver(row, '[data-ticket-drop-project="other-checkout"]');
+  await expect(projectTab).toHaveAttribute('data-drop-target', 'true');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(projectTab).not.toHaveAttribute('data-drop-target', 'true');
+  await expect(highlighted).toHaveCount(0);
+
+  // The next pointer press after a lost drag clears a New ticket highlight.
+  await dragOver(row, '[data-ticket-drop-key="new-ticket:launcher"]');
+  await expect(page.locator('[data-ticket-drop-key="new-ticket:launcher"]')).toHaveAttribute(
+    'data-dragging-ticket',
+    'true',
+  );
+  await page.mouse.move(640, 790);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(highlighted).toHaveCount(0);
+
+  // Escape clears a board column highlight; other keys leave a live drag alone.
+  await page.getByLabel('Columns View').click();
+  const card = page.locator('[data-column-id] [data-ticket-slug="HS2-DEMO01"]');
+  await expect(card).toBeVisible();
+  await dragOver(card, '[data-column-id="completed"]');
+  await expect(page.locator('[data-column-id="completed"]')).toHaveAttribute('data-dragging-ticket', 'true');
+  await page.keyboard.press('Shift');
+  await expect(page.locator('[data-column-id="completed"]')).toHaveAttribute('data-dragging-ticket', 'true');
+  await page.keyboard.press('Escape');
+  await expect(highlighted).toHaveCount(0);
 });
 
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {

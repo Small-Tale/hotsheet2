@@ -442,6 +442,18 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     clearProjectTabDropTarget(undefined, 'ticket');
     clearTicketDropTarget();
   }
+  // A drag can end without `dragend` reaching the document: the dragged row is removed mid-drag,
+  // so `dragend` fires on a detached node, or the drag is cancelled outside the window. Pointer and
+  // key events do not reach the page during a native drag, so one arriving while a ticket drag is
+  // recorded means that drag is over; so does the window losing focus (HS2-43A1Y8).
+  function endStaleTicketDrag(event: Event) {
+    if (!dependencies.draggedTickets) return;
+    if (event instanceof KeyboardEvent && event.key !== 'Escape') return;
+    clearTicketDrag();
+  }
+  window.addEventListener('blur', endStaleTicketDrag, { signal: lifetime.signal });
+  window.addEventListener('pointerdown', endStaleTicketDrag, { capture: true, signal: lifetime.signal });
+  window.addEventListener('keydown', endStaleTicketDrag, { capture: true, signal: lifetime.signal });
   lifetime.add(
     delegate(document.body, 'dragstart', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       const source = project(),
@@ -449,6 +461,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (!source || !slug) return;
       const slugs = selectedTicketSlugs.value.includes(slug) ? [...selectedTicketSlugs.value] : [slug];
       dependencies.draggedTickets = { slugs, source };
+      // The source row hears its own `dragend` even after a render removes it (HS2-43A1Y8).
+      target.addEventListener('dragend', clearTicketDrag, { once: true });
       const transfer = (event as DragEvent).dataTransfer;
       if (transfer) {
         transfer.effectAllowed = 'copyMove';
