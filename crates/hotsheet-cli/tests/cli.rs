@@ -2770,9 +2770,14 @@ fn retained_permission_hook_uses_restarted_server_route() {
     )
     .unwrap();
 
+    // Build (and first-launch) the hook CLI before the server's accept window starts.
+    let mut hook = hook_cli();
     let store_for_server = store.clone();
     let server = std::thread::spawn(move || {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        // HS2-4T1VRE: the hook child starts, fails its stale route, and only then reaches this
+        // server. Under full-workspace load that took longer than the former 3 s (HS2-T4TQK0 widened
+        // the shared capture helper the same way); this bound only stops a hook that never comes.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         let stream = loop {
             match listener.accept() {
                 Ok((stream, _)) => break stream,
@@ -2790,7 +2795,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         // nonblocking, so a parallel test run can accept before the request arrives.
         stream.set_nonblocking(false).unwrap();
         stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
             .unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
@@ -2828,7 +2833,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         )
         .unwrap();
     });
-    let output = hook_cli()
+    let output = hook
         .env("HOTSHEET_HOME", &home)
         .env("HOTSHEET_PROJECT", &store)
         .env("HOTSHEET_SERVER", "http://127.0.0.1:1")
