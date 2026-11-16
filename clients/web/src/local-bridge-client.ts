@@ -131,6 +131,7 @@ export function parseOpenedProject(value: unknown): Project {
     typeof value.name !== 'string' ||
     typeof value.apiPath !== 'string' ||
     (value.changeMuxPath !== undefined && typeof value.changeMuxPath !== 'string') ||
+    (value.remoteHost !== undefined && typeof value.remoteHost !== 'string') ||
     !Array.isArray(value.stores)
   )
     invalid('project');

@@ -80,7 +80,14 @@ async function openBothTabs(page: Page, server: Server) {
       json:
         opened === 1
           ? { id: server.checkoutId, root: server.root, name: 'Launch', stores: [server.store], apiPath }
-          : { id: remoteId, root: remoteId, name: 'Build host · API', stores: [], apiPath: remotePath },
+          : {
+              id: remoteId,
+              root: remoteId,
+              name: 'Build host · API',
+              remoteHost: 'Build host',
+              stores: [],
+              apiPath: remotePath,
+            },
     });
   });
   // Both tabs reach the fixture server; the remote tab's checkout-scoped paths name the native checkout,
@@ -169,7 +176,9 @@ test('HS2-SHBSQF a remote tab shows this machine’s lines and another owner’s
     await expect(part(mine.slug, 'placement')).toHaveText('Build host');
     await expect(part(theirs.slug, 'goal')).toHaveText('ATL-7');
     await expect(part(theirs.slug, 'goal')).toHaveAttribute('title', 'Goal ATL-7: In atlas');
-    await expect(part(theirs.slug, 'placement')).toHaveText('This machine');
+    // HS2-CW8EY3: the other owner's work runs on the remote host, which the remote server calls its own
+    // machine; through this tab it reads as that host, never as this machine.
+    await expect(part(theirs.slug, 'placement')).toHaveText('Build host');
     await expect(row(unplanned.slug).locator('[data-row-orchestration="true"]')).toHaveCount(0);
     // One combined long poll: each half waits on its own cursor.
     await expect

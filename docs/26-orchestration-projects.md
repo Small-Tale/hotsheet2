@@ -5069,6 +5069,14 @@ asked again with no cursor on the next wait, while the other half still waits; o
 both fail does the read fail, so the client's bounded backoff applies. No timer issues a
 request. With no local project open the tab reads the remote server alone.
 
+The remote server answers from its own point of view, so a line it places on its own
+machine (`location: local`, every pushed line among them) runs on the remote host as
+this browser sees it. A remote tab reads such a line as a remote placement named by the
+tab's host (`Project.remoteHost`: the peer's live host name, else the reviewed origin's
+host, as in the tab's name), and "Remote server" when the host is unknown; it never
+reads "This machine" (HS2-CW8EY3). A line the remote server places elsewhere keeps its
+label.
+
 ### Headless surface
 
 ```sh

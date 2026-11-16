@@ -17,6 +17,8 @@ export interface Project {
   apiPath: string;
   /** The bridge's multiplexed change long-poll path, when it serves one (HS2-6W1NNF). */
   changeMuxPath?: string;
+  /** HS2-CW8EY3: a remote project's machine, as its tab names it; absent for a local project. */
+  remoteHost?: string;
   compatibility: CompatibilityAssessment;
   needsTicketSetup?: boolean;
   needsHs1Migration?: boolean;

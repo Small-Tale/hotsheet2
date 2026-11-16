@@ -59,6 +59,23 @@ export function mergeTargetLines(
   };
 }
 
+/**
+ * HS2-CW8EY3: the remote server answers from its own point of view, so a line it reads as running on its own
+ * machine (a pushed line, HS2-KB2Y51) runs on the remote host as this browser sees it. It reads as that host, the
+ * way a paired server's placement always reads (§26.26); a line the remote server already places elsewhere keeps
+ * its label. The version is untouched.
+ */
+export function fromRemoteServer(value: OrchestrationTargetLines, host: string | undefined): OrchestrationTargetLines {
+  return {
+    ...value,
+    lines: value.lines.map((line) =>
+      line.item.location === 'local'
+        ? { ...line, item: { ...line.item, location: 'remote', machine_label: host } }
+        : line,
+    ),
+  };
+}
+
 type Half = 'here' | 'there';
 type Settled = { half: Half; value: OrchestrationTargetLines } | { half: Half; error: unknown };
 
@@ -79,9 +96,16 @@ export function targetLinesClientFor(
 ): OrchestrationTargetLinesClient {
   const remote = parseRemoteProjectId(project.id);
   const local = remote ? open.find((candidate) => !parseRemoteProjectId(candidate.id)) : undefined;
-  if (!remote || !local) return api(project.apiPath);
-  const here = api(local.apiPath),
-    there = api(project.apiPath);
+  if (!remote) return api(project.apiPath);
+  const remoteServer = api(project.apiPath);
+  const there: OrchestrationTargetLinesClient = {
+    orchestrationTargetLines: (checkout, after, signal) =>
+      remoteServer
+        .orchestrationTargetLines(checkout, after, signal)
+        .then((value) => fromRemoteServer(value, project.remoteHost)),
+  };
+  if (!local) return there;
+  const here = api(local.apiPath);
   const last: Partial<Record<Half, OrchestrationTargetLines>> = {};
   const read = (half: Half, checkout: string, after: string | undefined, signal: AbortSignal): Promise<Settled> =>
     (half === 'here'

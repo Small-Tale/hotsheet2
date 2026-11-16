@@ -77,6 +77,9 @@ describe('local bridge adapter (HS2-313JET)', () => {
     const project = { id: 'p', root: '/r', name: 'r', apiPath: '/api', stores: [] };
     expect(parseOpenedProject(project)).toBe(project);
     expect(() => parseOpenedProject({ ...project, apiPath: 1 })).toThrow(LocalBridgeResponseError);
+    // HS2-CW8EY3: a remote project names its machine; anything but text is drift.
+    expect(parseOpenedProject({ ...project, remoteHost: 'build-box' }).remoteHost).toBe('build-box');
+    expect(() => parseOpenedProject({ ...project, remoteHost: 7 })).toThrow(LocalBridgeResponseError);
     expect(parseRemovedHs1Data({})).toEqual({ removed: [] });
     expect(() => parseRemovedHs1Data({ removed: 'x' })).toThrow(LocalBridgeResponseError);
     expect(parseConversationExportDestination({})).toEqual({});

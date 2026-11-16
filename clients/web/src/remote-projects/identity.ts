@@ -27,18 +27,19 @@ export function isRemoteProjectId(project: string): boolean {
   }
 }
 
-/** A remote project tab names the remote machine, then the project (HS2-HGG426). The peer's live
- * `host_name` comes first; an older peer that omits it falls back to the reviewed origin's host,
- * never to the label this device gave itself while pairing. */
-export function remoteProjectTabName(hostName: string | null | undefined, origin: string, projectName: string): string {
+/** HS2-CW8EY3: the remote machine's name: the peer's live `host_name`, or the reviewed origin's host for an
+ * older peer that omits it, never the label this device gave itself while pairing (HS2-HGG426). */
+export function remoteHostLabel(hostName: string | null | undefined, origin: string): string {
   const reported = hostName?.trim();
-  let host = reported;
-  if (!host) {
-    try {
-      host = new URL(origin).hostname || origin;
-    } catch {
-      host = origin;
-    }
+  if (reported) return reported;
+  try {
+    return new URL(origin).hostname || origin;
+  } catch {
+    return origin;
   }
-  return `${host} · ${projectName}`;
+}
+
+/** A remote project tab names the remote machine, then the project (HS2-HGG426). */
+export function remoteProjectTabName(hostName: string | null | undefined, origin: string, projectName: string): string {
+  return `${remoteHostLabel(hostName, origin)} · ${projectName}`;
 }

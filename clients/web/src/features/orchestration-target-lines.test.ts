@@ -3,9 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { Project } from '../interactions/types';
 import type { OrchestrationTargetLines } from '../orchestration-timeline';
-import { findTimelineItem } from '../orchestration-timeline-board';
+import { findTimelineItem, machineLabel } from '../orchestration-timeline-board';
+import { remoteHostLabel, remoteProjectTabName } from '../remote-projects/identity';
 import { demoTimeline } from '../ux-demo/orchestration-fixtures';
-import { createOrchestrationTargetLines, mergeTargetLines, targetLinesClientFor } from './orchestration-target-lines';
+import {
+  createOrchestrationTargetLines,
+  fromRemoteServer,
+  mergeTargetLines,
+  targetLinesClientFor,
+} from './orchestration-target-lines';
 
 const project = (id: string) => ({ id, name: id, apiPath: `/api/${id}` }) as Project;
 const waiting = findTimelineItem(demoTimeline('running'), 'step-6')!.item;
@@ -279,5 +285,68 @@ describe('the lines of a remote project’s tab (HS2-3D8D6V, HS2-SHBSQF)', () =>
     await settle();
     expect(fake.aborted.slice(1).sort()).toEqual(['here h1', 'there t2']);
     controller.dispose();
+  });
+});
+
+describe('the machine a remote server’s line runs on (HS2-CW8EY3)', () => {
+  const binding = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  const remote = {
+    id: `remote:${binding}:api-0123456789ab`,
+    name: 'build-box · API',
+    apiPath: '/api/remote',
+    remoteHost: 'build-box',
+  } as Project;
+  const at = (location: 'local' | 'remote' | 'unbound', machine?: string) => ({
+    ...waiting,
+    location,
+    ...(machine ? { machine_label: machine } : { machine_label: undefined }),
+  });
+  const answer = (version: string, items: (typeof waiting)[]): OrchestrationTargetLines => ({
+    version,
+    orchestrated: true,
+    lines: items.map((item) => ({ owner_checkout_id: 'atlas', owner_label: 'Atlas', proposed: false, item })),
+  });
+
+  it('reads the remote server’s own machine as the remote host and keeps every other placement', () => {
+    const relabelled = fromRemoteServer(
+      answer('t1', [at('local'), at('remote', 'third-box'), at('unbound')]),
+      'build-box',
+    );
+    expect(relabelled.version).toBe('t1');
+    expect(relabelled.lines.map((line) => [line.item.location, line.item.machine_label])).toEqual([
+      ['remote', 'build-box'],
+      ['remote', 'third-box'],
+      ['unbound', undefined],
+    ]);
+    expect(machineLabel(relabelled.lines[0].item)).toBe('build-box');
+    // A host the tab cannot name reads as a remote server, never as this machine.
+    expect(machineLabel(fromRemoteServer(answer('t1', [at('local')]), undefined).lines[0].item)).toBe('Remote server');
+  });
+
+  it('names the host on the remote half only, with and without a local project open', async () => {
+    const api = (apiPath: string) => ({
+      orchestrationTargetLines: () => Promise.resolve(answer(`${apiPath}-t`, [at('local')])),
+      orchestrationRemoteTargetLines: () =>
+        Promise.resolve(answer('h', [{ ...at('remote', 'build-box'), target: { ...waiting.target, native_id: 'x' } }])),
+    });
+    const merged = await targetLinesClientFor(remote, [remote, project('owner')], api).orchestrationTargetLines(
+      remote.id,
+    );
+    expect(merged.lines.map((line) => [line.item.target.native_id, machineLabel(line.item)])).toEqual([
+      ['x', 'build-box'],
+      [waiting.target.native_id, 'build-box'],
+    ]);
+    const alone = await targetLinesClientFor(remote, [remote], api).orchestrationTargetLines(remote.id);
+    expect(machineLabel(alone.lines[0].item)).toBe('build-box');
+    // A local project's own lines stay this machine's.
+    const own = await targetLinesClientFor(project('api'), [project('api')], api).orchestrationTargetLines('api');
+    expect(machineLabel(own.lines[0].item)).toBe('This machine');
+  });
+
+  it('names the host as the tab does: the live host name, else the reviewed origin’s host', () => {
+    expect(remoteHostLabel(' build-box ', 'https://10.0.0.5:4175')).toBe('build-box');
+    expect(remoteHostLabel(null, 'https://10.0.0.5:4175')).toBe('10.0.0.5');
+    expect(remoteHostLabel('', 'not a url')).toBe('not a url');
+    expect(remoteProjectTabName('build-box', 'https://10.0.0.5:4175', 'API')).toBe('build-box · API');
   });
 });

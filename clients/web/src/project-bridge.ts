@@ -29,7 +29,7 @@ import {
   privateRemoteConnection,
   requireCurrentRemoteBinding,
 } from './remote-projects/host';
-import { remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
+import { remoteHostLabel, remoteProjectId, remoteProjectTabName } from './remote-projects/identity';
 import {
   remoteTerminalItem,
   remoteTerminalLaunchCwd,
@@ -56,6 +56,8 @@ export interface ProjectSession {
   apiPath: string;
   /** Advertises the multiplexed change long-poll (HS2-6W1NNF); older bridges omit it. */
   changeMuxPath?: string;
+  /** HS2-CW8EY3: a remote project's machine, as its tab names it; absent for a local project. */
+  remoteHost?: string;
   compatibility: CompatibilityAssessment;
   needsTicketSetup: boolean;
   needsHs1Migration: boolean;
@@ -1703,6 +1705,7 @@ export async function openReviewedRemoteProject(bindingId: string, checkoutId: s
       root: id,
       // HS2-HGG426: the remote machine's name, not the label this device gave itself.
       name: remoteProjectTabName(discovery.host_name, connection.binding.origin, checkout.name),
+      remoteHost: remoteHostLabel(discovery.host_name, connection.binding.origin),
       stores: [],
       apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
       changeMuxPath: CHANGE_MUX_PATH,
