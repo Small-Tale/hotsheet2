@@ -830,6 +830,10 @@ impl OrchestrationRuntime {
                     "remove" => {
                         value(self.readiness_remove(owner, &decode(body)?, actor.as_ref(), tx)?)
                     }
+                    // HS2-YDY5HJ: move a machine-local plan into the checked-in one.
+                    "migrate" => {
+                        value(self.readiness_migrate(owner, &decode(body)?, actor.as_ref(), tx)?)
+                    }
                     // HS2-JSF985: which work is provisional on which gate, and the
                     // reopening of work a failed prerequisite's fix invalidated.
                     "speculation" => value(self.provisional_status(owner)?),

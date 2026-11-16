@@ -82,8 +82,8 @@ pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
 };
 pub use readiness::{
-    DefinePlanStep, PlanStepRef, PlanView, PrerequisiteRequest, ReadyItem, RefreshReadiness,
-    RefreshView, StepView,
+    DefinePlanStep, MigratePlan, PlanStepRef, PlanView, PrerequisiteRequest, ReadyItem,
+    RefreshReadiness, RefreshView, StepView,
 };
 pub use recovery::{CorrectRun, HandoffRun, PauseRun, ReconcileFailure, ReconcileSummary};
 pub use request::{is_cleanup_request, is_machine_path, is_path, request_cleanup_now};

@@ -37,6 +37,7 @@ mod runs;
 mod scheduler;
 mod session_executor;
 mod sessions;
+mod shared_plan;
 #[cfg(unix)]
 mod step_process;
 mod summary;

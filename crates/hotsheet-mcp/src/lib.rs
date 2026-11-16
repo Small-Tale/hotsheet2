@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"] // HS2-YDY5HJ: the hotsheet_targets schema literal outgrew 256 json! levels
 //! MCP shim: a stdio JSON-RPC 2.0 server exposing the `hotsheet_*` tools
 //! (`docs/05-ai-tool-plugins.md` §5.8). Per-project — an AI tool spawns it from its
 //! own config so the tool config owns which project it reaches.

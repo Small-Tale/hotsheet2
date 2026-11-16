@@ -32,6 +32,8 @@ mod summary;
 mod summary_use;
 mod summary_wait;
 mod target_lines;
+// HS2-YDY5HJ: the checked-in step definitions of a plan.
+mod shared_plan;
 // HS2-KB2Y51: lines another machine pushed for a checkout hosted here.
 mod line_observations;
 mod timeline;
@@ -108,9 +110,9 @@ pub use provisional::{
 };
 pub use readiness::{
     GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,
-    NewPlanStep, PlanFacts, PlanRecord, PlanRegistry, PlanStep, Prerequisite, PublishedLevel,
-    ReadinessError, ReadinessLevel, ReadinessReason, StepReadiness, TicketFacts, TicketKey,
-    TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
+    NewPlanStep, PlanFacts, PlanMigration, PlanRecord, PlanRegistry, PlanStep, Prerequisite,
+    PublishedLevel, ReadinessError, ReadinessLevel, ReadinessReason, StepReadiness, TicketFacts,
+    TicketKey, TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
 };
 pub use reconcile::{
     Alignment, Assessment, Disposition, DispositionAction, ExternalSource, ExternalWork,
@@ -162,6 +164,7 @@ pub use sessions::{
     SessionTransition, SessionUpdate, StopRequest, decide_safe_point, decide_stop, run_holder,
     session_label,
 };
+pub use shared_plan::{SHARED_PLAN_PATH, SharedPlan, SharedPlanStore, SharedStep, merge_steps};
 pub use summary::{
     BlockedTime, CostAggregate, CostReading, DurationAggregate, Metric, OutcomeTally,
     PROGRESS_ATTRIBUTION, ProgressInput, ProgressRollup, ProgressSummary, RetryTotals, RunProgress,
@@ -422,6 +425,8 @@ mod session_fence_tests;
 mod session_idle_tests;
 #[cfg(test)]
 mod session_tests;
+#[cfg(test)]
+mod shared_plan_tests;
 #[cfg(test)]
 mod summary_tests;
 #[cfg(test)]

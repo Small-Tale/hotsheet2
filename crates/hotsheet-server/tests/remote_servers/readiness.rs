@@ -176,6 +176,52 @@ async fn hs2_42tara_cli_plans_gates_overrides_and_follows_the_target() {
         step_a["step"]["step_id"].as_str().unwrap().to_owned(),
         step_b["step"]["step_id"].as_str().unwrap().to_owned(),
     );
+    // HS2-YDY5HJ: the definitions are checked in beside the manifest; a change from a
+    // stale step revision is refused, and migrating a plan already shared is a no-op.
+    let checked_in =
+        std::fs::read_to_string(project.join(".hotsheet2/orchestration-plan.json")).unwrap();
+    assert!(checked_in.contains(&a) && checked_in.contains(&b));
+    assert!(
+        cli_failure(
+            &home,
+            &worker,
+            &[
+                "readiness",
+                "define",
+                "--ticket",
+                &orchestration.slug,
+                "--target",
+                TARGET,
+                "--connection",
+                &connection,
+                "--id",
+                &first.slug,
+                "--expected-revision",
+                "0",
+                "--project",
+                &owner.id,
+            ],
+        )
+        .contains("plan_conflict")
+    );
+    let migrated = readiness(&["migrate"]);
+    assert_eq!(migrated["migrated"], json!([]));
+    assert!(migrated["revision"].is_string());
+    assert_eq!(readiness(&["plan"])["revision"], migrated["revision"]);
+    assert!(
+        cli_failure(
+            &home,
+            &worker,
+            &[
+                "readiness",
+                "migrate",
+                "--discard-local",
+                "--project",
+                &owner.id
+            ],
+        )
+        .contains("forbidden")
+    );
     // The same command again is the same step.
     let again = define(
         &second.slug,

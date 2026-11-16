@@ -939,10 +939,26 @@ struct Fixture {
     resources: Vec<ResourceNeed>,
 }
 impl Fixture {
+    fn remove(&mut self, owner: &str, step_id: &str) -> Result<PlanStep, OrchestrationError> {
+        self.registry.remove(
+            owner,
+            step_id,
+            &mut Transaction {
+                clock: &self.clock,
+                rng: &mut self.rng,
+            },
+        )
+    }
     fn new() -> Self {
         let home = tempfile::tempdir().unwrap();
+        // HS2-YDY5HJ: each owner's checkout is a directory under the home here.
+        let checkouts = home.path().join("checkouts");
         Self {
-            registry: PlanRegistry::new(home.path()),
+            registry: PlanRegistry::new(home.path(), move |owner| {
+                let root = checkouts.join(owner);
+                std::fs::create_dir_all(&root).map_err(OrchestrationError::Storage)?;
+                Ok(root)
+            }),
             home,
             clock: Clock(std::cell::Cell::new(1_000)),
             rng: Rng(1_000),
@@ -1214,16 +1230,12 @@ fn hs2_42tara_observations_keep_the_newest_read_and_only_named_tickets() {
     assert_eq!(facts(&fixture, &a), None);
     assert!(facts(&fixture, &b).is_some());
     assert_eq!(
-        fixture
-            .registry
-            .remove(OWNER, &step.step_id)
-            .unwrap()
-            .step_id,
+        fixture.remove(OWNER, &step.step_id).unwrap().step_id,
         step.step_id
     );
     assert!(fixture.registry.tickets(OWNER).unwrap().is_empty());
     assert!(matches!(
-        fixture.registry.remove(OWNER, &step.step_id),
+        fixture.remove(OWNER, &step.step_id),
         Err(OrchestrationError::Readiness(ReadinessError::StepNotFound))
     ));
 }
@@ -1316,8 +1328,8 @@ fn hs2_42tara_published_levels_report_each_change_once_through_every_sequence() 
     assert_eq!(published(&fixture, &second).seq, 3);
 
     // Empty, then refill: a step planned again starts from nothing.
-    fixture.registry.remove(OWNER, &first.step_id).unwrap();
-    fixture.registry.remove(OWNER, &second.step_id).unwrap();
+    fixture.remove(OWNER, &first.step_id).unwrap();
+    fixture.remove(OWNER, &second.step_id).unwrap();
     assert!(fixture.registry.is_empty(OWNER).unwrap());
     assert!(publish(&fixture, &[(&first, L::Confirmed)], 60).is_empty());
     let refilled = fixture.define(&a, Vec::new());
@@ -1469,6 +1481,7 @@ fn hs2_e7hr4r_a_definition_and_its_reads_are_one_write() {
         fixture.registry.define_observed(
             OWNER,
             new(&b, prerequisites),
+            None,
             observed,
             Some("worker-1".into()),
             &mut Transaction { clock, rng },

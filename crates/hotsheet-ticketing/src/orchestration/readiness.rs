@@ -15,13 +15,13 @@ use serde::{Deserialize, Serialize};
 
 use super::contract::{valid_identifier, valid_token};
 use super::reconcile::ticket_finished;
+use super::shared_plan::{SharedPlan, SharedPlanStore, SharedStep, merge_steps};
 use super::storage::{Storage, decode};
 use super::*;
 
 /// Steps one owning checkout may plan.
 pub const MAX_PLAN_STEPS: usize = 256;
 pub const MAX_STEP_PLAN_PREREQUISITES: usize = 16;
-const MAX_PLAN_STEPS_TOTAL: usize = 2048;
 const MAX_PLAN_BYTES: usize = 8 * 1024 * 1024;
 const MAX_NATIVE_ID_BYTES: usize = 256;
 
@@ -379,6 +379,10 @@ pub enum ReadinessError {
     NoGoals,
     /// HS2-HCW7MD: the goal ticket named for Propose Plan is not open.
     GoalNotOpen,
+    /// HS2-YDY5HJ: the checked-in plan and this change disagree on a step (it changed
+    /// since the caller read it, or a machine-local definition differs from the
+    /// checked-in one). Refused, never guessed.
+    PlanConflict,
 }
 
 impl ReadinessError {
@@ -395,6 +399,7 @@ impl ReadinessError {
             Self::NoTargets => "plan_no_targets",
             Self::NoGoals => "plan_no_goals",
             Self::GoalNotOpen => "plan_goal_not_open",
+            Self::PlanConflict => "plan_conflict",
         }
     }
 }
@@ -711,22 +716,66 @@ pub struct TicketUpdate {
 #[serde(deny_unknown_fields)]
 struct PlanFile {
     schema_version: u32,
+    /// HS2-YDY5HJ: step definitions of a plan kept before it was checked in, read
+    /// together with the checked-in steps until the next write moves them there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     steps: Vec<PlanRecord>,
+    /// HS2-YDY5HJ: the level this machine last published per step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    levels: Vec<LevelRecord>,
     #[serde(default)]
     tickets: Vec<TicketRecord>,
 }
 
-/// The machine-local plan: steps, the tickets read for them, and published levels.
+/// The level this machine last published for one step of one owner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LevelRecord {
+    owner_checkout_id: String,
+    step_id: String,
+    published: PublishedLevel,
+}
+
+/// What moving a machine-local plan into the checked-in one did (HS2-YDY5HJ).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanMigration {
+    /// Steps written to the checked-in plan.
+    pub migrated: Vec<String>,
+    /// Steps the checked-in plan already held unchanged.
+    pub already_shared: Vec<String>,
+    /// Local definitions a person chose to drop for the checked-in ones.
+    pub discarded: Vec<String>,
+    /// The checked-in plan's revision afterwards, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+}
+
+/// Where an owner's checkout is on this machine.
+type RootOf =
+    std::sync::Arc<dyn Fn(&str) -> Result<std::path::PathBuf, OrchestrationError> + Send + Sync>;
+
+/// The plan: step definitions checked in beside the manifest (HS2-YDY5HJ), and the
+/// tickets this machine read for them and the levels it published, machine-local.
 #[derive(Clone)]
 pub struct PlanRegistry {
     storage: Storage,
+    root_of: RootOf,
 }
 
 impl PlanRegistry {
-    pub fn new(home: &Path) -> Self {
+    /// `root_of` names the checkout directory of an owner checkout id on this machine.
+    pub fn new(
+        home: &Path,
+        root_of: impl Fn(&str) -> Result<std::path::PathBuf, OrchestrationError> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             storage: Storage::machine_named(home, "orchestration-plan.json"),
+            root_of: std::sync::Arc::new(root_of),
         }
+    }
+
+    fn shared(&self, owner_checkout_id: &str) -> Result<SharedPlanStore, OrchestrationError> {
+        Ok(SharedPlanStore::new(&(self.root_of)(owner_checkout_id)?))
     }
 
     fn read_file(&self) -> Result<PlanFile, OrchestrationError> {
@@ -734,10 +783,11 @@ impl PlanRegistry {
             return Ok(PlanFile {
                 schema_version: ORCHESTRATION_VERSION,
                 steps: Vec::new(),
+                levels: Vec::new(),
                 tickets: Vec::new(),
             });
         };
-        let file: PlanFile = decode(&bytes)?;
+        let mut file: PlanFile = decode(&bytes)?;
         for record in &file.steps {
             validate_step(&record.step).map_err(|_| OrchestrationError::Corrupt)?;
         }
@@ -745,6 +795,26 @@ impl PlanRegistry {
             valid_identifier(&record.owner_checkout_id)
                 .and_then(|()| validate_target(&record.target))
                 .map_err(|_| OrchestrationError::Corrupt)?;
+        }
+        for record in &file.levels {
+            valid_identifier(&record.owner_checkout_id)
+                .and_then(|()| valid_token(&record.step_id))
+                .map_err(|_| OrchestrationError::Corrupt)?;
+        }
+        // A level kept on a step record before HS2-YDY5HJ is this machine's level.
+        for record in &mut file.steps {
+            if let Some(published) = record.published.take()
+                && !file.levels.iter().any(|level| {
+                    level.owner_checkout_id == record.step.owner_checkout_id
+                        && level.step_id == record.step.step_id
+                })
+            {
+                file.levels.push(LevelRecord {
+                    owner_checkout_id: record.step.owner_checkout_id.clone(),
+                    step_id: record.step.step_id.clone(),
+                    published,
+                });
+            }
         }
         Ok(file)
     }
@@ -754,22 +824,70 @@ impl PlanRegistry {
         self.storage.write(&bytes, MAX_PLAN_BYTES)
     }
 
-    /// True when the owner plans nothing. Cheap enough to ask on every event.
-    pub fn is_empty(&self, owner_checkout_id: &str) -> Result<bool, OrchestrationError> {
-        Ok(self.records(owner_checkout_id)?.is_empty())
+    /// The owner's step definitions: the checked-in ones merged by step id with any
+    /// this machine kept before they were checked in. A conflict is refused.
+    fn steps_of(
+        &self,
+        owner_checkout_id: &str,
+        shared: Option<&SharedPlan>,
+        file: &PlanFile,
+    ) -> Result<Vec<PlanStep>, OrchestrationError> {
+        let checked_in: &[SharedStep] = shared.map_or(&[], |document| &document.steps);
+        let local: Vec<SharedStep> = legacy(file, owner_checkout_id);
+        let merged = merge_steps(checked_in, &local)
+            .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
+        let steps: Vec<PlanStep> = merged
+            .iter()
+            .map(|step| step.step(owner_checkout_id))
+            .collect();
+        for step in &steps {
+            validate_step(step).map_err(|_| OrchestrationError::Corrupt)?;
+        }
+        Ok(steps)
     }
 
-    /// The owner's steps with their published levels, ordered by step id.
+    /// The owner's step definitions now, ordered by step id.
+    fn definitions(&self, owner_checkout_id: &str) -> Result<Vec<PlanStep>, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let shared = self.shared(owner_checkout_id)?.read()?;
+        let file = self.read_file()?;
+        self.steps_of(owner_checkout_id, shared.as_ref(), &file)
+    }
+
+    /// True when the owner plans nothing. Cheap enough to ask on every event.
+    pub fn is_empty(&self, owner_checkout_id: &str) -> Result<bool, OrchestrationError> {
+        Ok(self.definitions(owner_checkout_id)?.is_empty())
+    }
+
+    /// The checked-in plan's revision, when one is checked in.
+    pub fn revision(&self, owner_checkout_id: &str) -> Result<Option<String>, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        Ok(self
+            .shared(owner_checkout_id)?
+            .read()?
+            .map(|document| document.revision))
+    }
+
+    /// The owner's steps with the levels this machine published, ordered by step id.
     pub fn records(&self, owner_checkout_id: &str) -> Result<Vec<PlanRecord>, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
-        let mut records: Vec<PlanRecord> = self
-            .read_file()?
-            .steps
+        let shared = self.shared(owner_checkout_id)?.read()?;
+        let file = self.read_file()?;
+        let steps = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        Ok(steps
             .into_iter()
-            .filter(|record| record.step.owner_checkout_id == owner_checkout_id)
-            .collect();
-        records.sort_by(|a, b| a.step.step_id.cmp(&b.step.step_id));
-        Ok(records)
+            .map(|step| {
+                let published = file
+                    .levels
+                    .iter()
+                    .find(|level| {
+                        level.owner_checkout_id == owner_checkout_id
+                            && level.step_id == step.step_id
+                    })
+                    .map(|level| level.published.clone());
+                PlanRecord { step, published }
+            })
+            .collect())
     }
 
     pub fn get(
@@ -778,10 +896,9 @@ impl PlanRegistry {
         step_id: &str,
     ) -> Result<PlanStep, OrchestrationError> {
         valid_token(step_id)?;
-        self.records(owner_checkout_id)?
+        self.definitions(owner_checkout_id)?
             .into_iter()
-            .find(|record| record.step.step_id == step_id)
-            .map(|record| record.step)
+            .find(|step| step.step_id == step_id)
             .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))
     }
 
@@ -792,10 +909,85 @@ impl PlanRegistry {
         target: &RunTarget,
     ) -> Result<Option<PlanStep>, OrchestrationError> {
         Ok(self
-            .records(owner_checkout_id)?
+            .definitions(owner_checkout_id)?
             .into_iter()
-            .find(|record| record.step.target == *target)
-            .map(|record| record.step))
+            .find(|step| step.target == *target))
+    }
+
+    /// HS2-YDY5HJ: move the definitions this machine kept before the plan was checked
+    /// in into the checked-in plan, merged by step id. Repeating it changes nothing. A
+    /// conflict is refused with `plan_conflict` and nothing is written, unless a
+    /// person asked to `discard_local`: then the conflicting local definitions are
+    /// dropped for the checked-in ones. Levels and ticket reads stay on this machine.
+    pub fn migrate(
+        &self,
+        owner_checkout_id: &str,
+        discard_local: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<PlanMigration, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let shared = self.shared(owner_checkout_id)?;
+        let _shared_lock = shared.lock()?;
+        let _lock = self.storage.lock()?;
+        let mut file = self.read_file()?;
+        let (migration, _) =
+            self.migrate_locked(owner_checkout_id, &shared, &mut file, discard_local, tx)?;
+        Ok(migration)
+    }
+
+    /// Under both locks: merge this owner's local definitions into the checked-in
+    /// plan, drop them from `file`, and write both when anything moved.
+    fn migrate_locked(
+        &self,
+        owner_checkout_id: &str,
+        shared: &SharedPlanStore,
+        file: &mut PlanFile,
+        discard_local: bool,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(PlanMigration, Option<SharedPlan>), OrchestrationError> {
+        let current = shared.read()?;
+        let local = legacy(file, owner_checkout_id);
+        let checked_in: Vec<SharedStep> = current
+            .as_ref()
+            .map(|document| document.steps.clone())
+            .unwrap_or_default();
+        let mut migration = PlanMigration::default();
+        let mut kept = local.clone();
+        if let Err(conflicts) = merge_steps(&checked_in, &kept) {
+            if !discard_local {
+                return Err(OrchestrationError::Readiness(ReadinessError::PlanConflict));
+            }
+            kept.retain(|step| !conflicts.contains(&step.step_id));
+            migration.discarded = conflicts
+                .into_iter()
+                .filter(|id| local.iter().any(|step| step.step_id == *id))
+                .collect();
+            // A local step whose target a checked-in step already works conflicts too.
+            if merge_steps(&checked_in, &kept).is_err() {
+                return Err(OrchestrationError::Readiness(ReadinessError::PlanConflict));
+            }
+        }
+        for step in &kept {
+            if checked_in.iter().any(|shared| shared == step) {
+                migration.already_shared.push(step.step_id.clone());
+            } else {
+                migration.migrated.push(step.step_id.clone());
+            }
+        }
+        let merged = merge_steps(&checked_in, &kept)
+            .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
+        let document = if migration.migrated.is_empty() {
+            current
+        } else {
+            shared.write_locked(current.as_ref(), merged, tx)?
+        };
+        if !local.is_empty() {
+            file.steps
+                .retain(|record| record.step.owner_checkout_id != owner_checkout_id);
+            self.write_file(file)?;
+        }
+        migration.revision = document.as_ref().map(|document| document.revision.clone());
+        Ok((migration, document))
     }
 
     /// Plan a step, or change the one that already works the same target ticket. The
@@ -808,17 +1000,23 @@ impl PlanRegistry {
         actor_id: Option<String>,
         tx: &mut Transaction<'_>,
     ) -> Result<(PlanStep, bool), OrchestrationError> {
-        self.define_observed(owner_checkout_id, new, Vec::new(), actor_id, tx)
+        self.define_observed(owner_checkout_id, new, None, Vec::new(), actor_id, tx)
     }
 
     /// HS2-E7HR4R: [`Self::define`] together with the reads of the tickets the step
-    /// names, in one write. A step written without them, and observed a moment later,
-    /// could be evaluated in between with a prerequisite not yet observed and published
-    /// as `stale`. Returns whether the step itself changed.
+    /// names, in one write of each file. A step written without them, and observed a
+    /// moment later, could be evaluated in between with a prerequisite not yet
+    /// observed and published as `stale`. Returns whether the step itself changed.
+    ///
+    /// HS2-YDY5HJ: the definition is written to the checked-in plan, merged by step
+    /// id under its lock; the reads stay on this machine. With `expected_revision`
+    /// (0 when no step works the ticket yet) a step that changed since the caller
+    /// read it is refused with `plan_conflict`.
     pub fn define_observed(
         &self,
         owner_checkout_id: &str,
         mut new: NewPlanStep,
+        expected_revision: Option<u32>,
         observed: Vec<(RunTarget, TicketUpdate)>,
         actor_id: Option<String>,
         tx: &mut Transaction<'_>,
@@ -829,14 +1027,23 @@ impl PlanRegistry {
         }
         new.resources.sort();
         let now_ms = tx.clock.now_ms();
+        let shared = self.shared(owner_checkout_id)?;
+        let _shared_lock = shared.lock()?;
         let _lock = self.storage.lock()?;
         let mut file = self.read_file()?;
-        let existing = file.steps.iter().position(|record| {
-            record.step.owner_checkout_id == owner_checkout_id && record.step.target == new.target
-        });
-        let step = match existing {
+        let (_, current) = self.migrate_locked(owner_checkout_id, &shared, &mut file, false, tx)?;
+        let mut steps: Vec<SharedStep> = current
+            .as_ref()
+            .map(|document| document.steps.clone())
+            .unwrap_or_default();
+        let existing = steps.iter().position(|step| step.target == new.target);
+        let found = existing.map_or(0, |index| steps[index].revision);
+        if expected_revision.is_some_and(|expected| expected != found) {
+            return Err(OrchestrationError::Readiness(ReadinessError::PlanConflict));
+        }
+        let (step, changed) = match existing {
             Some(index) => {
-                let step = &mut file.steps[index].step;
+                let step = &mut steps[index];
                 if step.ticket != new.ticket {
                     return Err(OrchestrationError::Conflict);
                 }
@@ -845,33 +1052,22 @@ impl PlanRegistry {
                     && step.tool == new.tool
                     && step.model == new.model
                 {
-                    let step = step.clone();
-                    let mut seen = false;
-                    for (target, update) in observed {
-                        seen |= apply_observation(&mut file, owner_checkout_id, &target, update);
-                    }
-                    if seen {
-                        self.write_file(&file)?;
-                    }
-                    return Ok((step, false));
+                    (step.step(owner_checkout_id), false)
+                } else {
+                    step.prerequisites = new.prerequisites;
+                    step.resources = new.resources;
+                    step.tool = new.tool;
+                    step.model = new.model;
+                    step.revision = step.revision.saturating_add(1);
+                    step.updated_at_ms = now_ms;
+                    step.updated_by = actor_id;
+                    let step = step.step(owner_checkout_id);
+                    validate_step(&step)?;
+                    (step, true)
                 }
-                step.prerequisites = new.prerequisites;
-                step.resources = new.resources;
-                step.tool = new.tool;
-                step.model = new.model;
-                step.revision = step.revision.saturating_add(1);
-                step.updated_at_ms = now_ms;
-                step.updated_by = actor_id;
-                validate_step(step)?;
-                step.clone()
             }
             None => {
-                let planned = file
-                    .steps
-                    .iter()
-                    .filter(|record| record.step.owner_checkout_id == owner_checkout_id)
-                    .count();
-                if planned >= MAX_PLAN_STEPS || file.steps.len() >= MAX_PLAN_STEPS_TOTAL {
+                if steps.len() >= MAX_PLAN_STEPS {
                     return Err(OrchestrationError::Capacity);
                 }
                 let step = PlanStep {
@@ -889,45 +1085,65 @@ impl PlanRegistry {
                     updated_by: actor_id,
                 };
                 validate_step(&step)?;
-                file.steps.push(PlanRecord {
-                    step: step.clone(),
-                    published: None,
-                });
-                step
+                steps.push(SharedStep::of(&step));
+                (step, true)
             }
         };
-        prune_tickets(&mut file);
-        for (target, update) in observed {
-            apply_observation(&mut file, owner_checkout_id, &target, update);
+        if changed {
+            shared.write_locked(current.as_ref(), steps.clone(), tx)?;
         }
-        self.write_file(&file)?;
-        Ok((step, true))
+        let definitions: Vec<PlanStep> = steps
+            .iter()
+            .map(|step| step.step(owner_checkout_id))
+            .collect();
+        let mut seen = false;
+        if changed {
+            seen |= prune(&mut file, owner_checkout_id, &definitions);
+        }
+        for (target, update) in observed {
+            seen |= apply_observation(&mut file, owner_checkout_id, &definitions, &target, update);
+        }
+        if seen {
+            self.write_file(&file)?;
+        }
+        Ok((step, changed))
     }
 
-    /// Withdraw a step. Readings kept only for it are forgotten.
+    /// Withdraw a step. Readings kept only for it, and its level, are forgotten here.
     pub fn remove(
         &self,
         owner_checkout_id: &str,
         step_id: &str,
+        tx: &mut Transaction<'_>,
     ) -> Result<PlanStep, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         valid_token(step_id)?;
+        let shared = self.shared(owner_checkout_id)?;
+        let _shared_lock = shared.lock()?;
         let _lock = self.storage.lock()?;
         let mut file = self.read_file()?;
-        let index = file
-            .steps
+        let (_, current) = self.migrate_locked(owner_checkout_id, &shared, &mut file, false, tx)?;
+        let mut steps: Vec<SharedStep> = current
+            .as_ref()
+            .map(|document| document.steps.clone())
+            .unwrap_or_default();
+        let index = steps
             .iter()
-            .position(|record| {
-                record.step.owner_checkout_id == owner_checkout_id && record.step.step_id == step_id
-            })
+            .position(|step| step.step_id == step_id)
             .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))?;
-        let removed = file.steps.remove(index).step;
-        prune_tickets(&mut file);
-        self.write_file(&file)?;
+        let removed = steps.remove(index).step(owner_checkout_id);
+        shared.write_locked(current.as_ref(), steps.clone(), tx)?;
+        let definitions: Vec<PlanStep> = steps
+            .iter()
+            .map(|step| step.step(owner_checkout_id))
+            .collect();
+        if prune(&mut file, owner_checkout_id, &definitions) {
+            self.write_file(&file)?;
+        }
         Ok(removed)
     }
 
-    /// The tickets read for the owner's plan.
+    /// The tickets this machine read for the owner's plan.
     pub fn tickets(
         &self,
         owner_checkout_id: &str,
@@ -952,9 +1168,17 @@ impl PlanRegistry {
     ) -> Result<bool, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         validate_update(target, &update)?;
+        let store = self.shared(owner_checkout_id)?;
+        // Read the checked-in steps only under this machine's lock: a definition
+        // written meanwhile has its reads stored before this lock is free, so they are
+        // never pruned against an older list of steps.
         let _lock = self.storage.lock()?;
+        let shared = store.read()?;
         let mut file = self.read_file()?;
-        if !apply_observation(&mut file, owner_checkout_id, target, update) {
+        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        let pruned = prune(&mut file, owner_checkout_id, &definitions);
+        if !apply_observation(&mut file, owner_checkout_id, &definitions, target, update) && !pruned
+        {
             return Ok(false);
         }
         self.write_file(&file)?;
@@ -970,41 +1194,60 @@ impl PlanRegistry {
         now_ms: u64,
     ) -> Result<Vec<LevelChange>, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        let store = self.shared(owner_checkout_id)?;
+        // As in `observe`: the steps are read under this machine's lock.
         let _lock = self.storage.lock()?;
+        let shared = store.read()?;
         let mut file = self.read_file()?;
+        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        let pruned = prune(&mut file, owner_checkout_id, &definitions);
         let mut changes = Vec::new();
-        for record in &mut file.steps {
-            if record.step.owner_checkout_id != owner_checkout_id {
-                continue;
-            }
-            let Some((_, level)) = levels.iter().find(|(id, _)| *id == record.step.step_id) else {
+        for step in &definitions {
+            let Some((_, level)) = levels.iter().find(|(id, _)| *id == step.step_id) else {
                 continue;
             };
-            let from = record.published.as_ref().map(|published| published.level);
+            let at = file.levels.iter().position(|record| {
+                record.owner_checkout_id == owner_checkout_id && record.step_id == step.step_id
+            });
+            let from = at.map(|at| file.levels[at].published.level);
             if from == Some(*level) {
                 continue;
             }
-            let seq = record
-                .published
-                .as_ref()
-                .map_or(1, |published| published.seq.saturating_add(1));
-            record.published = Some(PublishedLevel {
+            let seq = at.map_or(1, |at| file.levels[at].published.seq.saturating_add(1));
+            let published = PublishedLevel {
                 level: *level,
                 since_ms: now_ms,
                 seq,
-            });
+            };
+            match at {
+                Some(at) => file.levels[at].published = published,
+                None => file.levels.push(LevelRecord {
+                    owner_checkout_id: owner_checkout_id.into(),
+                    step_id: step.step_id.clone(),
+                    published,
+                }),
+            }
             changes.push(LevelChange {
-                step_id: record.step.step_id.clone(),
+                step_id: step.step_id.clone(),
                 from,
                 to: *level,
                 seq,
             });
         }
-        if !changes.is_empty() {
+        if !changes.is_empty() || pruned {
             self.write_file(&file)?;
         }
         Ok(changes)
     }
+}
+
+/// The owner's definitions this machine kept before the plan was checked in.
+fn legacy(file: &PlanFile, owner_checkout_id: &str) -> Vec<SharedStep> {
+    file.steps
+        .iter()
+        .filter(|record| record.step.owner_checkout_id == owner_checkout_id)
+        .map(|record| SharedStep::of(&record.step))
+        .collect()
 }
 
 /// Every ticket the owner's steps work or require.
@@ -1024,11 +1267,12 @@ fn validate_update(target: &RunTarget, update: &TicketUpdate) -> Result<(), Orch
 fn apply_observation(
     file: &mut PlanFile,
     owner_checkout_id: &str,
+    steps: &[PlanStep],
     target: &RunTarget,
     update: TicketUpdate,
 ) -> bool {
     let key = ticket_key(target);
-    if !named(file, owner_checkout_id).contains(&key) {
+    if !named(steps).contains(&key) {
         return false;
     }
     let index = match file.tickets.iter().position(|record| {
@@ -1063,38 +1307,33 @@ fn apply_observation(
     *facts != before
 }
 
-fn named(file: &PlanFile, owner_checkout_id: &str) -> BTreeSet<TicketKey> {
-    file.steps
+/// Every ticket the steps work or require.
+fn named(steps: &[PlanStep]) -> BTreeSet<TicketKey> {
+    steps
         .iter()
-        .filter(|record| record.step.owner_checkout_id == owner_checkout_id)
-        .flat_map(|record| {
-            record
-                .step
-                .prerequisites
+        .flat_map(|step| {
+            step.prerequisites
                 .iter()
                 .filter_map(Prerequisite::ticket_key)
-                .chain([ticket_key(&record.step.target)])
+                .chain([ticket_key(&step.target)])
         })
         .collect()
 }
 
-fn prune_tickets(file: &mut PlanFile) {
-    let owners: BTreeSet<String> = file
-        .tickets
-        .iter()
-        .map(|record| record.owner_checkout_id.clone())
-        .collect();
-    let keep: BTreeMap<String, BTreeSet<TicketKey>> = owners
-        .into_iter()
-        .map(|owner| {
-            let named = named(file, &owner);
-            (owner, named)
-        })
-        .collect();
+/// HS2-YDY5HJ: forget this machine's reads of tickets the owner's steps no longer
+/// name and its levels of steps that are gone, wherever they were removed. Returns
+/// whether anything was forgotten.
+fn prune(file: &mut PlanFile, owner_checkout_id: &str, steps: &[PlanStep]) -> bool {
+    let keep = named(steps);
+    let (tickets, levels) = (file.tickets.len(), file.levels.len());
     file.tickets.retain(|record| {
-        keep.get(&record.owner_checkout_id)
-            .is_some_and(|named| named.contains(&ticket_key(&record.target)))
+        record.owner_checkout_id != owner_checkout_id || keep.contains(&ticket_key(&record.target))
     });
+    file.levels.retain(|record| {
+        record.owner_checkout_id != owner_checkout_id
+            || steps.iter().any(|step| step.step_id == record.step_id)
+    });
+    tickets != file.tickets.len() || levels != file.levels.len()
 }
 
 fn valid_native(value: &str) -> Result<(), OrchestrationError> {

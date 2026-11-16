@@ -2582,7 +2582,11 @@ paths:
       description:
         "`define` plans or changes a step and `refresh` reads the named tickets again; both read the target, which
         never asks (HS2-XHQ1EH). `show`, `plan` and `ready` answer from the records of this machine and contact nothing.
-        `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`. `speculation` lists the work
+        `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`. The step definitions are checked
+        in beside the manifest in `.hotsheet2/orchestration-plan.json` and merged by step id; ticket reads, levels,
+        runs and gates stay on this machine (HS2-YDY5HJ). A `define` with a stale `expected_revision`, or a
+        machine-local definition that differs from the checked-in one, is 409 `plan_conflict`; `migrate` moves the
+        definitions this machine kept before the plan was checked in, and `discard_local` drops conflicting ones. `speculation` lists the work
         that was started ahead of a pending gate, with each gate and its result, and `reopen` records that the fix of
         a failed prerequisite invalidated a step's provisional work (HS2-JSF985); a step without such work is 409
         `readiness_not_provisional`."
@@ -2596,8 +2600,8 @@ paths:
         '200':
           description:
             The step's readiness (`define`, `show`), the plan (`plan`, `refresh`), the work that could start now
-            (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`) or the reopened
-            work (`reopen`).
+            (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`), the reopened
+            work (`reopen`) or what moved into the checked-in plan (`migrate`).
           content:
             application/json:
               schema:
@@ -2608,6 +2612,7 @@ paths:
                   - $ref: '#/components/schemas/PlanStep'
                   - $ref: '#/components/schemas/ProvisionalStatus'
                   - $ref: '#/components/schemas/ProvisionalWork'
+                  - $ref: '#/components/schemas/PlanMigration'
                   - type: array
                     items:
                       $ref: '#/components/schemas/ReadyItem'
@@ -2642,6 +2647,7 @@ paths:
             - ready
             - refresh
             - remove
+            - migrate
   /checkouts/{owner}/orchestration/sessions:
     description: The AI sessions this orchestration project started on the servers that host its targets (HS2-GDJXGZ);
       machine-local.
@@ -22006,7 +22012,8 @@ components:
       description:
         Body of a readiness operation (HS2-42TARA). `define` takes `ticket`, `target_id`, `connection_id`, `native_id`
         and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`; `plan`, `ready`
-        and `speculation` take nothing; `reopen` takes `step_id` and `reason` (HS2-JSF985).
+        and `speculation` take nothing; `reopen` takes `step_id` and `reason` (HS2-JSF985); `migrate` takes an
+        optional `discard_local` (HS2-YDY5HJ).
       type: object
       properties:
         actor:
@@ -22061,6 +22068,20 @@ components:
           type: string
           maxLength: 64
           pattern: ^[a-z0-9_-]+$
+        expected_revision:
+          description:
+            '`define` only (HS2-YDY5HJ). The revision of the step working this ticket that the caller read, 0 when none
+            was planned. A step changed since is refused with 409 `plan_conflict`. Left out, the change applies to the
+            step as it is now.'
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        discard_local:
+          description:
+            '`migrate` only (HS2-YDY5HJ). Drop machine-local definitions that conflict with the checked-in plan. Only a
+            person may ask; anyone else is refused with `forbidden`.'
+          type: boolean
       additionalProperties: false
     PlanPrerequisite:
       description:
@@ -22247,6 +22268,9 @@ components:
         - steps
         - counts
       properties:
+        revision:
+          description: HS2-YDY5HJ. The checked-in plan's revision, when one is checked in.
+          type: string
         steps:
           type: array
           items:
@@ -25657,6 +25681,30 @@ components:
           properties:
             provisional:
               $ref: '#/components/schemas/ClaimProvisional'
+    PlanMigration:
+      description:
+        HS2-YDY5HJ. What moving this machine's pre-sharing plan definitions into the checked-in plan did. Repeating it
+        changes nothing.
+      type: object
+      required:
+        - migrated
+        - already_shared
+        - discarded
+      properties:
+        migrated:
+          type: array
+          items:
+            type: string
+        already_shared:
+          type: array
+          items:
+            type: string
+        discarded:
+          type: array
+          items:
+            type: string
+        revision:
+          type: string
     RemoteIdentity:
       type: object
       required:

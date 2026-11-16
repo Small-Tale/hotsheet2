@@ -447,6 +447,8 @@ mod tests {
             "/checkouts/owner/orchestration/readiness/ready",
             "/checkouts/owner/orchestration/readiness/refresh",
             "/checkouts/owner/orchestration/readiness/remove",
+            // HS2-YDY5HJ: moving this machine's plan into the checked-in one.
+            "/checkouts/owner/orchestration/readiness/migrate",
             // HS2-JSF985: the provisional ledger is this machine's too.
             "/checkouts/owner/orchestration/readiness/speculation",
             "/checkouts/owner/orchestration/readiness/reopen",

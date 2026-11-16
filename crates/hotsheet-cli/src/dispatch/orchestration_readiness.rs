@@ -67,6 +67,11 @@ enum ReadinessCmd {
         /// HS2-TH53NN: the model preferred for this work, a preference like `--tool`.
         #[arg(long)]
         model: Option<String>,
+        /// HS2-YDY5HJ: the revision of this ticket's step you read (0 when none is
+        /// planned). A step changed since, here or on another machine, is refused
+        /// with plan_conflict instead of overwritten.
+        #[arg(long)]
+        expected_revision: Option<u32>,
     },
     /// One step's level and the reason for each prerequisite that does not hold.
     /// Answers from this machine's records and contacts nothing.
@@ -80,8 +85,18 @@ enum ReadinessCmd {
     /// Read again the tickets a step, or the whole plan, names (tickets_read). A
     /// ticket that cannot be confirmed is listed under `unverified` and is stale.
     Refresh { step_id: Option<String> },
-    /// Withdraw a step from the plan. Only this machine's record changes.
+    /// Withdraw a step from the plan: from the checked-in plan, and this machine's
+    /// reads and level for it.
     Remove { step_id: String },
+    /// HS2-YDY5HJ: move the plan definitions this machine kept before the plan was
+    /// checked in into `.hotsheet2/orchestration-plan.json`, merged by step id.
+    /// Repeating it changes nothing. A definition that conflicts with a checked-in one
+    /// is refused (plan_conflict) unless a person passes --discard-local, which drops
+    /// the conflicting local definitions. Levels and reads stay on this machine.
+    Migrate {
+        #[arg(long)]
+        discard_local: bool,
+    },
     /// HS2-JSF985: which work was started ahead of a pending gate, on which gate,
     /// and what became of it: provisional, confirmed, at_risk or reopened, with the
     /// prerequisites to repair first and the gates to re-evaluate. Contacts nothing.
@@ -130,6 +145,7 @@ pub(super) fn route(
             resources,
             tool,
             model,
+            expected_revision,
         } => {
             let mut needs = Vec::new();
             for spec in &resources {
@@ -159,7 +175,8 @@ pub(super) fn route(
                 format!("{base}/define"),
                 json!({"ticket": {"connection_id": source, "native_id": ticket},
                     "target_id": target, "connection_id": connection, "native_id": id,
-                    "prerequisites": all, "resources": needs, "tool": tool, "model": model}),
+                    "prerequisites": all, "resources": needs, "tool": tool, "model": model,
+                    "expected_revision": expected_revision}),
             )
         }
         ReadinessCmd::Show { step_id } => {
@@ -176,6 +193,11 @@ pub(super) fn route(
             "POST",
             format!("{base}/remove"),
             json!({"step_id": step_id}),
+        ),
+        ReadinessCmd::Migrate { discard_local } => (
+            "POST",
+            format!("{base}/migrate"),
+            json!({"discard_local": discard_local}),
         ),
         ReadinessCmd::Speculation => ("POST", format!("{base}/speculation"), json!({})),
         ReadinessCmd::Reopen { step_id, reason } => (

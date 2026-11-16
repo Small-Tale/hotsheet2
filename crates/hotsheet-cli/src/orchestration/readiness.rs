@@ -71,6 +71,22 @@ pub struct DefinePlanStep {
     /// HS2-TH53NN: the model preferred for the work. A preference.
     #[serde(default)]
     pub model: Option<String>,
+    /// HS2-YDY5HJ: the revision of the step working this ticket that the caller read
+    /// (0 when none was planned). A step that changed since is refused with
+    /// `plan_conflict` instead of overwritten. Omitted, the change applies to the
+    /// step as it is now.
+    #[serde(default)]
+    pub expected_revision: Option<u32>,
+}
+
+/// HS2-YDY5HJ: move this machine's pre-sharing plan definitions into the checked-in
+/// plan. `discard_local` drops local definitions that conflict with checked-in ones;
+/// only a person may ask for it.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MigratePlan {
+    #[serde(default)]
+    pub discard_local: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,6 +121,9 @@ pub struct StepView {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanView {
+    /// HS2-YDY5HJ: the checked-in plan's revision, when one is checked in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
     pub steps: Vec<StepView>,
     /// How many steps stand at each level; levels with none are left out.
     pub counts: BTreeMap<&'static str, usize>,
@@ -239,8 +258,47 @@ fn named_tickets(step: &PlanStep) -> impl Iterator<Item = RunTarget> + '_ {
 pub const OVERRIDE_OPTIONS: [&str; 2] = ["Start anyway", "Wait until it is ready"];
 
 impl OrchestrationRuntime {
+    /// HS2-YDY5HJ: the step definitions are checked in under each orchestration
+    /// project's checkout; what this machine observed and published stays in its home.
     pub(super) fn plan(&self) -> PlanRegistry {
-        PlanRegistry::new(&self.home)
+        let checkouts = self.checkouts.clone();
+        PlanRegistry::new(&self.home, move |owner_id| {
+            let checkout = checkouts
+                .describe(owner_id)
+                .map_err(super::checkout_error)?;
+            if checkout.id != owner_id {
+                return Err(OrchestrationError::Invalid(
+                    "registered checkout id required",
+                ));
+            }
+            Ok(std::path::PathBuf::from(checkout.root))
+        })
+    }
+
+    /// HS2-YDY5HJ: move this machine's plan definitions kept before the plan was
+    /// checked in into `.hotsheet2/orchestration-plan.json`, merged by step id. It is
+    /// idempotent; a conflict is refused with `plan_conflict` unless a person asks to
+    /// discard the conflicting local definitions. Levels and reads stay here.
+    pub fn readiness_migrate(
+        &self,
+        owner_id: &str,
+        request: &MigratePlan,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<hotsheet_ticketing::orchestration::PlanMigration, OrchestrationError> {
+        self.owner(owner_id)?;
+        if request.discard_local
+            && !actor.is_some_and(|actor| actor.role == hotsheet_ticketing::actor::ActorRole::Human)
+        {
+            return Err(OrchestrationError::Forbidden(
+                "only a person may discard local plan definitions",
+            ));
+        }
+        let migration = self.plan().migrate(owner_id, request.discard_local, tx)?;
+        if !migration.migrated.is_empty() || !migration.discarded.is_empty() {
+            self.readiness_reevaluate(owner_id, tx.clock.now_ms());
+        }
+        Ok(migration)
     }
 
     pub(super) fn plan_step(
@@ -449,6 +507,7 @@ impl OrchestrationRuntime {
             }
         }
         PlanView {
+            revision: None,
             steps,
             counts,
             cycles: cycles.into_iter().collect(),
@@ -462,9 +521,9 @@ impl OrchestrationRuntime {
         owner_id: &str,
         tx: &mut Transaction<'_>,
     ) -> Result<PlanView, OrchestrationError> {
-        Ok(Self::plan_view(
-            self.plan_evaluate(owner_id, tx.clock.now_ms())?,
-        ))
+        let mut view = Self::plan_view(self.plan_evaluate(owner_id, tx.clock.now_ms())?);
+        view.revision = self.plan().revision(owner_id)?;
+        Ok(view)
     }
 
     /// The work that could be started now: confirmed items first, then provisional
@@ -685,6 +744,7 @@ impl OrchestrationRuntime {
                     tool: request.tool.clone(),
                     model: request.model.clone(),
                 },
+                request.expected_revision,
                 observed,
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
@@ -725,9 +785,9 @@ impl OrchestrationRuntime {
         self.readiness(owner_id, &step.step_id, tx)
     }
 
-    /// Withdraw a step from the plan. Only this machine's record changes, so it works
-    /// while a target is unbound or unreachable; it needs an identified actor and is
-    /// audited.
+    /// Withdraw a step from the plan. Only the checked-in plan and this machine's
+    /// records change (HS2-YDY5HJ), so it works while a target is unbound or
+    /// unreachable; it needs an identified actor and is audited.
     pub fn readiness_remove(
         &self,
         owner_id: &str,
@@ -759,7 +819,7 @@ impl OrchestrationRuntime {
                 Err(error) => return Err(error),
             }
         }
-        let step = self.plan().remove(owner_id, &request.step_id)?;
+        let step = self.plan().remove(owner_id, &request.step_id, tx)?;
         self.readiness_audit(
             owner_id,
             &step.target.target_id,

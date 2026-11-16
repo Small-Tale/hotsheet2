@@ -2311,8 +2311,9 @@ scheduler's (HS2-AH8CRS), and the workspace view is HS2-XM692S.
 
 Orchestrated work across projects has an order: a change in one target must be
 finished, and its gates green, before work in another starts on top of it. The
-**plan** records that order on the orchestrating machine, and **readiness** is
-computed from what this machine has confirmed. Nothing is written to a target, and
+**plan** records that order, checked in with the orchestration project so every
+machine that orchestrates it plans the same steps (HS2-YDY5HJ), and **readiness** is
+computed on each machine from what that machine has confirmed. Nothing is written to a target, and
 no provider's own dependency or blocking field is read or changed: a GitHub, Jira,
 GitLab or git ticket keeps its own semantics.
 
@@ -2344,12 +2345,53 @@ planned. The step and those reads are stored in one write, so no evaluation sees
 step before its tickets are observed and publishes it as `stale` (HS2-E7HR4R). A step
 cannot require its own ticket. An owner plans at most 256 steps.
 
-The plan is `${HOTSHEET_HOME}/orchestration-plan.json` (private, locked, atomically
-replaced, version 1, at most 8 MiB): the steps, the last read of each ticket they
-name, and the level last published per step. A read never creates it, and damaged or
-newer data is an error that is never overwritten. It belongs to this machine like
-the runs, gates and validation records it is computed from; sharing a plan between
-machines is HS2-YDY5HJ.
+### Where the plan lives (HS2-YDY5HJ)
+
+The plan has two halves, kept apart so that intent is shared and no machine's facts
+cross:
+
+| Half                      | File                                                              | Holds                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Step definitions (intent) | `.hotsheet2/orchestration-plan.json` in the orchestration project | Each step: orchestration ticket, target ticket, prerequisites, resources, preferred tool and model, revision |
+| Observations and levels   | `${HOTSHEET_HOME}/orchestration-plan.json` on each machine        | The last read of each ticket the steps name and the level this machine last published per step               |
+
+The checked-in file sits beside the target manifest and the policy and follows their
+pattern: version 1, at most 4 MiB, replaced under a lock with a fresh document
+`revision` on every change, never created by a read. A shared step carries no owner
+checkout id, because a checkout id is a per-machine path identity: each machine reads
+the steps as its own checkout's. The machine-local file (private, locked, atomically
+replaced, version 1, at most 8 MiB) keeps the reads and levels by owner and step id,
+beside the runs, gates and validation records readiness is also computed from.
+Damaged or newer data in either file, for example merge markers left by a text merge,
+is an error that is never overwritten.
+
+**Merging.** Every change is a read-modify-write of the checked-in file under its
+lock, merged by step id: a step on one side only is kept and an identical step is
+kept; the same step id with a different definition, or one target ticket under two
+step ids, is refused with 409 `plan_conflict` and nothing is written. A conflict is
+never guessed. `define` takes an optional `expected_revision`, the revision of the
+ticket's step the caller read (0 when none was planned): a step changed since, on this
+machine or another, is refused with `plan_conflict`. Without it the change applies to
+the step as it is now. Removing a step removes it from the checked-in file; each
+machine forgets its own reads and level of a step that is gone at its next write.
+
+**Readiness stays local.** A machine that reads a checked-in step it never observed
+evaluates it from its own records only, so the step is `stale` there until that
+machine reads the tickets itself; its published levels and readiness events are its
+own. Runs, gates and validation evidence never cross machines.
+
+**Migration.** A plan kept on a machine before HS2-YDY5HJ still has its step
+definitions in the machine-local file. Reads merge them with the checked-in steps (a
+conflict is refused); the next change, or `readiness migrate`, moves them into the
+checked-in file and keeps their published levels local. Migration is idempotent.
+When a local definition conflicts with a checked-in one it is refused and nothing
+moves; a person may pass `--discard-local` (`discard_local`) to drop exactly the
+conflicting local definitions, which an AI caller may not.
+
+```sh
+hotsheet-cli ... orchestration readiness migrate --project <owner> [--discard-local]
+hotsheet-cli ... orchestration readiness define ... --expected-revision <n>
+```
 
 A step may also name up to four **resources** its session must hold (§26.20). They
 are not prerequisites: readiness ignores them, and the scheduler waits on them.
