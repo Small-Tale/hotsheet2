@@ -109,11 +109,26 @@ async function open(
     }
   });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-component="ticket-list"] [data-ticket-slug]').first()).toBeVisible();
+  // HS2-4HHYHR: wait on the project's ready state, not on whatever budget the next action has left.
+  // The open is done when the first ticket row renders and the corner loading status is gone; a view
+  // switch clicked while the project still loads could otherwise be lost and only fail at the test timeout.
+  await test.step('open the project and wait until it is ready', async () => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.locator('[data-component="ticket-list"] [data-ticket-slug]').first()).toBeVisible();
+    await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
+  });
+}
+
+/** Switch views and wait until the toolbar reports the switch, so a lost click fails here (HS2-4HHYHR). */
+async function showView(page: Page, name: 'Columns View' | 'List View') {
+  await test.step(`switch to ${name}`, async () => {
+    const control = page.getByRole('button', { name, exact: true });
+    await control.click();
+    await expect(control).toHaveAttribute('data-selected', 'true');
+  });
 }
 
 const list = (page: Page) => page.locator('[data-component="ticket-list"]');
@@ -271,7 +286,7 @@ test('HS2-HV8S4Y shows each column’s members of a group and collapses it every
   test.setTimeout(180_000);
   await withServer(async (server) => {
     await open(page, server);
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const view = board(page);
     await expect(group(view, BOARD, 'not-started').locator('[data-ticket-slug]')).toHaveCount(1);
     await expect(group(view, BOARD, 'started').locator('[data-ticket-slug]')).toHaveCount(2);
@@ -311,7 +326,7 @@ test('HS2-HV8S4Y shows each column’s members of a group and collapses it every
     await capture(page, 'columns-collapsed-group-dark-1100');
     await page.emulateMedia({ colorScheme: 'light' });
     // The list view shares the same preference.
-    await page.getByLabel('List View').click();
+    await showView(page, 'List View');
     await expect(group(list(page), SEARCH).locator('[data-action="toggle-ticket-group"]')).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -490,7 +505,7 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
 
     // Columns (HS2-K2QA1J): from another column the whole column is the target, even over a group,
     // so the drop changes only the status.
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const columns = board(page),
       onboarding = tickets['Onboarding checklist copy review'],
       startedColumn = columns.locator('[data-column-id="started"]'),
@@ -756,7 +771,7 @@ test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column fr
     await expect.poll(() => selectedIn(view)).toEqual(searchMembers);
 
     // Column view: only that column's share of the group.
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const columns = board(page),
       started = group(columns, BOARD, 'started');
     await expect(started.locator('[data-ticket-slug]')).toHaveCount(2);
@@ -849,7 +864,7 @@ test('HS2-HKXSB1 opens the group menu from the header overflow button without to
     };
 
     await exercise(group(list(page), BOARD), list(page), 'list');
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     await expect(group(board(page), BOARD, 'started').locator('[data-ticket-slug]')).toHaveCount(2);
     await exercise(group(board(page), BOARD, 'started'), board(page), 'column');
   }, page);
