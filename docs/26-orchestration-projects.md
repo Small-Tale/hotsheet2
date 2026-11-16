@@ -54,7 +54,8 @@
 > propose the dry-run plan from its goal tickets (§26.25, HS2-HCW7MD),
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
-> ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7),
+> ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
+> inspector's Plan section (§26.30, HS2-15G5T4),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -5266,3 +5267,26 @@ The whole sequence runs end to end across two servers in
 `remote_servers/e2e_roles.rs` (HS2-1NJ04Q): a dispatcher started on a remote target
 before its worker and seen to join, an integrator started for the handoff, and all
 three sessions wound down when nothing is left.
+
+## 26.30 Orchestration details in the inspector (HS2-2XJSJK)
+
+The maintainer signed off one home for the orchestration details that eight follow-ups
+asked to show (design HS2-2XJSJK, Design v1, answer A to every question): no new
+screen, tab or menu. A selected card's inspector gains sections in place, and the
+inspector with no card selected becomes the orchestration overview. Every section is
+a Kerf `ListHeader` over a `ValueTable` (`OrchestrationInspectorSection`), as the
+sections of §26.26 are. The sections read what the view already reads or one
+orchestration route per change of the timeline's version (§26.26): nothing polls.
+
+### Plan (HS2-15G5T4)
+
+After what the card waits on, and before its Run, **Plan** shows the step's readiness
+level in words (Confirmed, Provisional, Blocked, Not confirmed, In a cycle, In
+progress, Finished), **Why**: each prerequisite it waits on with its reason code in
+words ("API-12: integrated; its CI is still running"), then the step's own reasons
+(a cycle reads "Its prerequisites lead back to this step"), and **Unblocks**: the
+unfinished steps that wait on it, or "Nothing waits on it". It reads the timeline
+item's `level`, `reasons` and `waits_on` (`clients/web/src/orchestration-plan.ts`),
+so it adds no request. A card whose Prerequisites section already lists what it waits
+on leaves those out of Why. A person's override of the dispatch guard (§26.15) is the
+person's own dispatch; the inspector offers no override control.

@@ -450,6 +450,10 @@ describe('UX demo catalog', () => {
       'phase-estimate':
         'Testing-phase time-left label rendered within TicketRow (demoes its estimate and overrun states) and the inspector status line.',
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
+      'orchestration-inspector-section':
+        'Titled section shell of the cataloged OrchestrationInspector, rendered by every one of its sections (demoed).',
+      'orchestration-plan-section':
+        'Plan section of the cataloged OrchestrationInspector, rendered for every selected card (HS2-15G5T4, demoed).',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',
       'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',

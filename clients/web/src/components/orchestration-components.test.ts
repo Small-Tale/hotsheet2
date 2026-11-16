@@ -137,6 +137,31 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(inspector('step-1')).not.toContain('data-control=');
   });
 
+  it('HS2-15G5T4 places the Plan section after what the card waits on, before its Run', () => {
+    const sections = (markup: string) =>
+      [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(sections(inspector('step-3'))).toEqual(['Where It Runs', 'Plan', 'Run']);
+    expect(sections(inspector('step-8'))).toEqual(['Where It Runs', 'Why It Is Not Running', 'Plan']);
+    expect(sections(inspector('step-9'))).toEqual(['Where It Runs', 'Prerequisites', 'Plan']);
+    const running = inspector('step-3');
+    expect(running).toContain('In progress');
+    expect(running).toContain('WEB-30');
+    const ready = inspector('step-8');
+    expect(ready).toContain('Confirmed');
+    expect(ready).toContain('Nothing waits on it');
+    expect(inspector('step-7')).toContain('API-12: integrated; its CI is still running');
+    // Prerequisites already lists API-15; Plan does not repeat it as a Why row.
+    expect(inspector('step-9').match(/>Why</g)).toBeNull();
+    const cyclic = String(
+      OrchestrationInspector({
+        item: { ...item('step-8'), state: 'waits_for_prerequisite', level: 'cyclic', reasons: ['plan_cycle'] },
+        timeline: demoTimeline('running'),
+      }),
+    );
+    expect(cyclic).toContain('In a cycle');
+    expect(cyclic).toContain('Its prerequisites lead back to this step');
+  });
+
   it('is a right-rail panel with an empty selection', () => {
     expect(String(OrchestrationInspector({}))).toContain('Select a card');
     const panel = orchestrationInspectorPanel({ item: item('step-3'), timeline: demoTimeline('running') });

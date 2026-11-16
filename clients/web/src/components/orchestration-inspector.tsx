@@ -1,8 +1,6 @@
-import type { KerfUiContent } from '@kerfjs/ui';
 import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
-import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
@@ -34,6 +32,8 @@ import {
   stateBadge,
   toolLabel,
 } from '../orchestration-timeline-board';
+import { OrchestrationInspectorSection } from './orchestration-inspector-section';
+import { OrchestrationPlanSection } from './orchestration-plan-section';
 import { inspectorToggle, type SidebarPanelParts } from './sidebar-panel';
 
 /** What the inspector read about the selected item's run: its gates, validation steps, and events. */
@@ -62,17 +62,6 @@ const sentence = (code: string) => {
   const text = words(code);
   return text.charAt(0).toUpperCase() + text.slice(1);
 };
-
-function Section({ label, children }: { label: string; children?: KerfUiContent }) {
-  return (
-    <section aria-label={label} data-orchestration-section={label}>
-      <List gap="xs">
-        <ListHeader label={label} />
-        {children}
-      </List>
-    </section>
-  );
-}
 
 function Note({ text }: { text: string }) {
   return (
@@ -167,7 +156,7 @@ function WhereItRuns({
 }) {
   const working = item.state === 'running' || item.state === 'provisional';
   return (
-    <Section label="Where It Runs">
+    <OrchestrationInspectorSection label="Where It Runs">
       <ValueTable label="Where it runs" density="compact" stackBelow="narrow">
         <ValueTableRow
           label="Project"
@@ -196,14 +185,14 @@ function WhereItRuns({
           }
         />
       </ValueTable>
-    </Section>
+    </OrchestrationInspectorSection>
   );
 }
 
 function RunSection({ item, busy, clock }: { item: TimelineItem; busy: boolean; clock: ClockFormat }) {
   const run = item.run!;
   return (
-    <Section label="Run">
+    <OrchestrationInspectorSection label="Run">
       <ValueTable label="Run" density="compact" stackBelow="narrow">
         <ValueTableRow label="State" value={`${sentence(run.state)}${run.paused ? ', paused' : ''}`} />
         <ValueTableRow
@@ -230,7 +219,7 @@ function RunSection({ item, busy, clock }: { item: TimelineItem; busy: boolean; 
         ) : undefined}
       </ValueTable>
       {(item.state === 'running' || item.state === 'provisional') && <RunControls item={item} busy={busy} />}
-    </Section>
+    </OrchestrationInspectorSection>
   );
 }
 
@@ -239,7 +228,7 @@ function stateDetail(item: TimelineItem) {
     case 'waits_for_permission': {
       const permission = item.permission;
       return (
-        <Section label="Waits for Permission">
+        <OrchestrationInspectorSection label="Waits for Permission">
           <Note
             text={`The orchestrator asked to ${permission ? (ASKED[permission.action] ?? words(permission.action)) : 'act'} in ${item.project_label}. ${
               permission?.kind === 'permission'
@@ -257,12 +246,12 @@ function stateDetail(item: TimelineItem) {
               Show Request
             </Button>
           </Row>
-        </Section>
+        </OrchestrationInspectorSection>
       );
     }
     case 'waits_for_decision':
       return (
-        <Section label="Waits for Your Decision">
+        <OrchestrationInspectorSection label="Waits for Your Decision">
           <Note
             text={`Whether this goes ahead before its prerequisite is confirmed is asked on ${
               item.goal_slug ?? 'its goal ticket'
@@ -277,11 +266,11 @@ function stateDetail(item: TimelineItem) {
               {`Open ${item.goal_slug ?? 'Goal'}`}
             </Button>
           </Row>
-        </Section>
+        </OrchestrationInspectorSection>
       );
     case 'waits_for_prerequisite':
       return (
-        <Section label="Prerequisites">
+        <OrchestrationInspectorSection label="Prerequisites">
           {item.waits_on && item.waits_on.length > 0 ? (
             <ValueTable label="Prerequisites" density="compact" stackBelow="narrow">
               {item.waits_on.map((wait) => (
@@ -291,11 +280,11 @@ function stateDetail(item: TimelineItem) {
           ) : (
             <Note text={(item.reasons ?? []).map(sentence).join('. ') || 'Its prerequisites are not confirmed yet.'} />
           )}
-        </Section>
+        </OrchestrationInspectorSection>
       );
     case 'ready':
       return (
-        <Section label="Why It Is Not Running">
+        <OrchestrationInspectorSection label="Why It Is Not Running">
           <Note
             text={
               item.placement?.reason
@@ -303,7 +292,7 @@ function stateDetail(item: TimelineItem) {
                 : 'It is ready; it starts when a session is free for it.'
             }
           />
-        </Section>
+        </OrchestrationInspectorSection>
       );
     case 'provisional':
       return (
@@ -328,7 +317,7 @@ function Evidence({ details, clock }: { details: OrchestrationInspectorDetails; 
   return (
     <>
       {details.error && <Note text={details.error} />}
-      <Section label="Gates">
+      <OrchestrationInspectorSection label="Gates">
         {details.gates && details.gates.length > 0 ? (
           <ValueTable label="Gates" density="compact" stackBelow="narrow">
             {details.gates.map((gate) => (
@@ -341,17 +330,17 @@ function Evidence({ details, clock }: { details: OrchestrationInspectorDetails; 
         ) : (
           <Note text="No gate is linked to this run yet." />
         )}
-      </Section>
+      </OrchestrationInspectorSection>
       {details.validations && details.validations.length > 0 && (
-        <Section label="Validation">
+        <OrchestrationInspectorSection label="Validation">
           <ValueTable label="Validation" density="compact" stackBelow="narrow">
             {details.validations.map((step) => (
               <ValueTableRow label={step.step_id} value={sentence(step.state)} />
             ))}
           </ValueTable>
-        </Section>
+        </OrchestrationInspectorSection>
       )}
-      <Section label="Events">
+      <OrchestrationInspectorSection label="Events">
         {details.events && details.events.length > 0 ? (
           <ValueTable label="Run events" density="compact" stackBelow="narrow">
             {details.events.map((event) => (
@@ -366,7 +355,7 @@ function Evidence({ details, clock }: { details: OrchestrationInspectorDetails; 
         ) : (
           <Note text="No events yet." />
         )}
-      </Section>
+      </OrchestrationInspectorSection>
     </>
   );
 }
@@ -409,6 +398,7 @@ export function OrchestrationInspector({
       </List>
       <WhereItRuns item={item} timeline={timeline} clock={clock} />
       {stateDetail(item)}
+      <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.run && <RunSection item={item} busy={busy} clock={clock} />}
       {item.run && details && <Evidence details={details} clock={clock} />}
     </List>
