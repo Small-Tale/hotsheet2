@@ -1547,6 +1547,13 @@ when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the develo
 registry, machine secrets, bootstrap server or HS1 data. A fixture server that needs a home names
 its own.
 
+The bridge starts a detached bootstrap `hotsheet-server` for `<home>/server-bootstrap.hs2` the first
+time a spec opens a project through it. Removing the home does not stop that server, so the exit
+handler first runs `hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force` through
+`scripts/playwright-bridge-home.mjs`, then removes the directories (HS2-B0WP94). A failed stop is
+reported as a warning, never thrown. A runner killed by `SIGKILL` skips exit handlers, so that one
+path can still leave the server running.
+
 A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
 `Process from config.webServer was not able to start`. Choose another port and rerun the whole
 affected set. A `--last-failed` pass after such a refusal is not a clean run. Runs never stop

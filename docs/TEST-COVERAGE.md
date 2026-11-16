@@ -2861,6 +2861,13 @@ discard flow remains covered by its existing real-router test.
 - End to end: `clients/web/scripts/owned-server.e2e.test.mjs # HS2-F6F8MA` launches real processes the way Playwright does and proves runner `SIGKILL`/`SIGTERM` release the owned port and every owned descendant (same-group straggler, detached stdin-bound descendant), foreign same-command processes survive, `SIGTERM`-ignoring servers are force-killed, and a real Vite tree including esbuild exits; fixtures are identified by pid and start time.
 - Manual: none; reproduced before and after the fix with an interrupted `npx playwright test` stage (ticket HS2-F6F8MA notes).
 
+### Playwright runs stop the bridge home's bootstrap server (HS2-B0WP94)
+
+- Behavior: when a Playwright runner exits, `clients/web/playwright.config.ts` stops the detached bootstrap `hotsheet-server` the dev bridge started under the run's temporary `HOTSHEET_HOME` (`hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force`) before removing the run's directories; a run that opened no project runs nothing, and a failed stop warns and still removes every directory.
+- Unit: `clients/web/scripts/playwright-bridge-home.test.mjs # HS2-B0WP94` covers CLI resolution (override, repo root, debug build, Windows suffix), stop-before-remove ordering with the run home in the environment, the no-store case, and failed, unlaunchable, and silent-failure stops.
+- End to end: none automated; a runner-level leak check needs a nested Playwright run.
+- Manual: `npx playwright test tests/follow-up-link.spec.ts` left one orphaned `server-bootstrap.hs2` server before the fix and none in two runs after it (ticket HS2-B0WP94 notes).
+
 ### Generic MCP HTTP redirect confinement (HS2-0BTSX8)
 
 - Behavior: generic proxied tool GETs and mutations reject every 3xx before decoding a body, preserve the original status, and never follow the Location. The anonymous auth-diagnostic health probe uses the same no-redirect agent and accepts only 2xx metadata. CoreBackend and existing success/error/partial/truncated contracts remain unchanged. Separate startup/presence owners are HS2-081PXN.
