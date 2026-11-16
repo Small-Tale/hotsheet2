@@ -1086,6 +1086,149 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     );
 }
 
+/// Whether the change bus carries a `terminal_orchestrator` within `wait`.
+async fn terminal_orchestrator_within(
+    events: &mut tokio::sync::broadcast::Receiver<hotsheet_server::ChangeEvent>,
+    wait: std::time::Duration,
+) -> bool {
+    tokio::time::timeout(wait, async {
+        loop {
+            match events.recv().await {
+                Ok(event) if event.kind == "terminal_orchestrator" => return true,
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return false,
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// HS2-R0HSNK: the orchestrator starting a session on this machine is announced to its
+/// clients once, as a takeover, pause or stop is, so every drawer lists the new terminal
+/// without waiting for the tool to connect to Hot Sheet. The fake idle tool never
+/// connects. A repeated start and a refused one launch nothing and announce nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_r0hsnk_a_hosted_start_is_announced_once_before_its_tool_connects() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home)
+        .with_capacity_source(Box::new(Roomy))
+        .with_capacity_cache(std::time::Duration::ZERO)
+        .with_plugin_dirs(vec![fake_plugins(root.path())]);
+    let project = root.path().join("project");
+    git_project(&project);
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let router = app(host.clone());
+    let mut events = host.subscribe();
+    host.spawn_hosted_session_follower();
+    let hosted = format!("/checkouts/{}/target-sessions", checkout.id);
+    let start = |operation: &str, tool: &str| {
+        json!({
+            "session": {
+                "operation_id": operation,
+                "tool": tool,
+                "origin": {"owner_checkout_id": "owner-0123456789ab", "project": "Synthetic"}
+            },
+            "actor": {"role":"ai","id":"scheduler-1"},
+        })
+    };
+    let quiet = std::time::Duration::from_millis(1_500);
+    assert!(drawer(&router).await.is_empty());
+
+    let (status, started) = api(
+        router.clone(),
+        "POST",
+        &hosted,
+        start("op-r0hsnk", IDLE_TOOL),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["outcome"], "started", "{started}");
+    let terminal = started["session"]["session"]["session_id"].clone();
+    assert!(
+        terminal_orchestrator_within(&mut events, std::time::Duration::from_secs(15)).await,
+        "the start was not announced"
+    );
+    // Once: nothing else follows the one announcement.
+    assert!(!terminal_orchestrator_within(&mut events, quiet).await);
+    // What a client refetches on that event lists the terminal, alive, although its tool
+    // never connected to Hot Sheet.
+    let listed = drawer(&router).await;
+    assert_eq!(listed.len(), 1);
+    let shown = tab(&listed, &terminal);
+    assert_eq!(shown["alive"], true, "{shown}");
+    assert_eq!(
+        shown["orchestrator"]["operation_id"], "op-r0hsnk",
+        "{shown}"
+    );
+    assert!(
+        shown.get("ai_connection").is_none_or(Value::is_null),
+        "{shown}"
+    );
+    assert_ne!(shown["mcp_connected"], true, "{shown}");
+
+    // The same operation again is the same session: nothing launched, nothing announced.
+    for _ in 0..2 {
+        let (status, again) = api(
+            router.clone(),
+            "POST",
+            &hosted,
+            start("op-r0hsnk", IDLE_TOOL),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{again}");
+        assert_eq!(again["outcome"], "existing", "{again}");
+    }
+    assert!(!terminal_orchestrator_within(&mut events, quiet).await);
+    // A refused start (a tool this machine does not have) announces nothing either.
+    let (status, refused) = api(
+        router.clone(),
+        "POST",
+        &hosted,
+        start("op-r0hsnk-missing", "not-installed"),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{refused}");
+    assert_eq!(refused["outcome"], "refused", "{refused}");
+    assert!(!terminal_orchestrator_within(&mut events, quiet).await);
+    assert_eq!(drawer(&router).await.len(), 1);
+
+    // A second session is announced in its turn.
+    let (_, second) = api(
+        router.clone(),
+        "POST",
+        &hosted,
+        start("op-r0hsnk-2", BUSY_TOOL),
+        true,
+    )
+    .await;
+    assert_eq!(second["outcome"], "started", "{second}");
+    assert!(terminal_orchestrator_within(&mut events, std::time::Duration::from_secs(15)).await);
+    assert_eq!(drawer(&router).await.len(), 2);
+    for operation in ["op-r0hsnk", "op-r0hsnk-2"] {
+        let (status, stopped) = api(
+            router.clone(),
+            "DELETE",
+            &hosted,
+            json!({"operation_id":operation,"force":true,
+                "actor":{"role":"human","id":"maintainer"}}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{stopped}");
+    }
+    host.begin_stopping();
+}
+
 /// HS2-WHR4GS: a stop that finds no record fences the operation on a live service, so
 /// the start request that arrives after it launches nothing.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

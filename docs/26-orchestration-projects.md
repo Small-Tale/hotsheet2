@@ -2747,7 +2747,10 @@ and Pause** while the orchestrator owns it. A takeover, pause or stop writes a t
 platform file watcher, publishes `terminal_orchestrator`, so every client refetches its
 terminals and stops offering the takeover (HS2-DX1PQB). The server reads the signal's
 current token before it starts that waiter, so a takeover recorded while the waiter is
-still starting is announced too (HS2-TWSXK7). The orchestrator learns of it on its next sync or from
+still starting is announced too (HS2-TWSXK7). A start that launches a terminal writes the same token, so every drawer on the
+hosting machine's clients lists the new session at once, before its tool connects to Hot
+Sheet; a repeated start (`existing`) or a refused one launched nothing and announces
+nothing (HS2-R0HSNK). The orchestrator learns of it on its next sync or from
 the host's refusal of a wind-down. Typing into the terminal does not take it over;
 whether it should is HS2-8BY9Y1. Closing the tab is a person's stop (HS2-HVKS7M): the drawer sends it through the hosted stop with `force`, which records `person_stopped`, so the orchestrator never reads it as a crash (`host_lost`).
 

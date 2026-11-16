@@ -1182,6 +1182,11 @@ impl OrchestrationRuntime {
             let _ = self.sessions.stop(&checkout, &reserved.session_id);
             return Ok(withdrawn());
         }
+        // HS2-R0HSNK: a new terminal runs here. Every server on this machine announces
+        // it (`terminal_orchestrator`), so drawers list it without waiting for the tool
+        // to connect. A repeated start (`Existing`) or a refusal launched nothing and
+        // announces nothing.
+        self.hosted_session_signal();
         // HS2-2DPGDY: the prompt went with the launch, or it is pushed now; a tool
         // that is not ready yet is tried again on its readiness events.
         let attempt = (!launched.prompt_at_launch).then(|| {
