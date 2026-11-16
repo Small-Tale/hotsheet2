@@ -14003,6 +14003,7 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
 
     // The machine host, anchored on the bootstrap store, exactly as headless launch starts it.
     let cli_bin = workspace_bin::path("hotsheet-cli");
+    let serve_log = root.path().join("serve.stderr");
     let mut serve = std::process::Command::new(&cli_bin)
         .arg("--test-fixture-credentials")
         .arg("-C")
@@ -14017,7 +14018,8 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
         .env("CLAUDE_CONFIG_DIR", home.join("claude-home"))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        // HS2-TX1AZ7: keep the host's diagnostics, so an exit during startup says why.
+        .stderr(std::fs::File::create(&serve_log).unwrap())
         .spawn()
         .unwrap();
     let mut ready = false;
@@ -14026,10 +14028,12 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
             ready = true;
             break;
         }
-        assert!(
-            serve.try_wait().unwrap().is_none(),
-            "machine host exited during startup"
-        );
+        if let Some(status) = serve.try_wait().unwrap() {
+            panic!(
+                "machine host exited during startup ({status}): {}",
+                std::fs::read_to_string(&serve_log).unwrap_or_default()
+            );
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(ready, "machine host did not become ready");
