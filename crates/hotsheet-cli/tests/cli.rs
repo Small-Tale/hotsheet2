@@ -8,6 +8,11 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 #[test]
 fn hs2_f1qj03_note_doctor_reads_real_store_and_filters_notes() {
     let root = tempfile::tempdir().unwrap();
@@ -233,7 +238,7 @@ fn hs2_b14hyw_control_commands_ignore_startup_owner_sentinel() {
     let store = fixture.path().join("store");
     std::fs::create_dir(&store).unwrap();
     let store = store.canonicalize().unwrap();
-    let server = assert_cmd::cargo::cargo_bin("hotsheet-cli")
+    let server = workspace_bin::path("hotsheet-cli")
         .with_file_name(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
 
     // Startup must still reject this invalid PID before creating state or reading
@@ -273,7 +278,7 @@ fn hs2_b14hyw_control_commands_ignore_startup_owner_sentinel() {
             .is_string()
     );
 
-    let mut stop = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut stop = Command::new(workspace_bin::path("hotsheet-cli"));
     stop.arg("serve")
         .arg("-C")
         .arg(&store)
@@ -329,8 +334,7 @@ fn hs2_gdcmxe_processes_lists_machine_local_session_provenance() {
     journal
         .finish(&record.launch_id, ExitReason::Completed)
         .unwrap();
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .arg("processes")
         .output()
@@ -358,7 +362,7 @@ impl TemporaryLaunchHost {
         // HS2-B14HYW: a normally built server may block on the real OS Keychain even
         // with a temporary HOTSHEET_HOME. Check the actual sibling artifact before any
         // launch, rather than assuming Cargo feature unification rebuilt another package.
-        let server = assert_cmd::cargo::cargo_bin("hotsheet-cli")
+        let server = workspace_bin::path("hotsheet-cli")
             .with_file_name(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
         let output = std::process::Command::new(&server)
             .arg("--test-fixture-capabilities")
@@ -385,7 +389,7 @@ impl TemporaryLaunchHost {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command
             .arg("--test-fixture-credentials")
             .env("HOTSHEET_HOME", &self.home)
@@ -497,8 +501,7 @@ fn hs2_b4eq87_reroute_bootstrap_usage_moves_only_provable_rows() {
     )
     .unwrap();
     let run = |args: &[&str]| {
-        let output = Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        let output = Command::new(workspace_bin::path("hotsheet-cli"))
             .current_dir(root.path())
             .env("HOTSHEET_HOME", &home)
             .args(["metrics", "reroute-bootstrap-usage", "--claude-projects"])
@@ -579,7 +582,7 @@ fn hs2_38saet_reprice_cli_previews_and_applies_without_rewriting_raw() {
     let raw_path = dir.path().join("metrics/raw/2026-10-22.jsonl");
     let original = std::fs::read(&raw_path).unwrap();
     let run = |args: &[&str]| {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.args(["-C", dir.path().to_str().unwrap()]).args(args);
         let output = cmd.output().unwrap();
         assert!(
@@ -1689,7 +1692,7 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
     )))
     .unwrap();
     let command = || {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command
             .env("HOTSHEET_HOME", &home)
             .env("PATH", &path)
@@ -1817,8 +1820,7 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
 
     let project_two = root.path().join("project-two");
     std::fs::create_dir(&project_two).unwrap();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", &home)
         .env("PATH", &path)
         .arg("-C")
@@ -2062,7 +2064,7 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
         }
     });
     let cli = |args: &[&str]| {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command
             .env("HOTSHEET_HOME", &home)
             .args(["-C", store.to_str().unwrap(), "commands"])
@@ -2164,7 +2166,7 @@ fn terminal_message_cli_uses_authenticated_session_push_route() {
         }
     });
     let cli = |text: &str| {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command.env("HOTSHEET_HOME", &home).args([
             "-C",
             store.to_str().unwrap(),
@@ -2288,8 +2290,7 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
         }
     });
     let cli = |args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .args(["-C", store.to_str().unwrap()])
             .args(args)
@@ -2415,8 +2416,7 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
         }
     });
     let cli = |args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .args(["-C", store.to_str().unwrap()])
             .args(args)
@@ -2532,8 +2532,7 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
         bodies
     });
     let cli = |cwd: &std::path::Path, args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .current_dir(cwd)
             .args(["-C", store.to_str().unwrap()])
@@ -2616,8 +2615,13 @@ const INHERITED_HOOK_SESSION_ENV: &[&str] = &[
 
 /// A `hotsheet-cli` child for permission-hook fixtures, without inherited session identity.
 /// Fixture-owned `.env(...)` calls after this still apply; toolchain and home settings stay.
+/// The binary is launched once first: the hook fixtures' fake servers time how long the hook
+/// takes to connect, and the macOS first-launch assessment must not count (HS2-04D6DW).
 fn hook_cli() -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(first_launch::launched(
+        workspace_bin::path("hotsheet-cli"),
+        &["--version"],
+    ));
     for name in INHERITED_HOOK_SESSION_ENV {
         command.env_remove(name);
     }
@@ -3295,7 +3299,7 @@ fn run_codex_hook(codex_args: &[&str], url: &str, input: &str) -> std::process::
     }
     let mut child = command
         .args(codex_args)
-        .env("HOOK", assert_cmd::cargo::cargo_bin("hotsheet-cli"))
+        .env("HOOK", workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         // What a daemon started from the first Codex tab would carry.
         .env("HOTSHEET_SERVER", url)
@@ -3423,7 +3427,7 @@ fn hs(dir: &Path) -> Command {
         std::fs::create_dir_all(&path).unwrap();
         path
     });
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     // An ambient actor role (HS2-RD4M29) must not change unrelated tests' behavior.
     cmd.arg("--test-fixture-credentials")
         .env("HOTSHEET_HOME", home)
@@ -3798,7 +3802,7 @@ fn concurrent_checkout_register_processes_preserve_every_entry() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     std::fs::create_dir(&home).unwrap();
-    let binary = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let binary = workspace_bin::path("hotsheet-cli");
     let children = (0..24)
         .map(|index| {
             let checkout = root.path().join(format!("project-{index}"));
@@ -5422,7 +5426,7 @@ fn checkout_repo_size_reports_code_store_attachments_and_unsupported_sources() {
     )
     .unwrap();
     let cli = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.env("HOTSHEET_HOME", home.path());
         cmd
     };
@@ -5547,7 +5551,7 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
         &["remote", "add", "origin", &remote.to_string_lossy()],
     );
     git(&store_root, &["push", "-q", "origin", "main"]);
-    let mut register = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut register = Command::new(workspace_bin::path("hotsheet-cli"));
     register
         .env("HOTSHEET_HOME", &home)
         .args(["checkout", "register"])
@@ -5558,7 +5562,7 @@ fn checkout_compact_previews_and_requires_exact_execution_confirmation() {
         .success();
     let source = hotsheet_ticketing::checkouts::TicketSource::git(&store_root).connection_id;
     let cli = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.env("HOTSHEET_HOME", &home);
         cmd
     };
@@ -5669,7 +5673,7 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/web","default":false,"settings":{}}]}"#,
     )
     .unwrap();
-    let mut register = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut register = Command::new(workspace_bin::path("hotsheet-cli"));
     register
         .env("HOTSHEET_HOME", home.path())
         .args([
@@ -5687,14 +5691,14 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .success()
         .stdout(predicate::str::contains("\"alias\": \"web\""));
 
-    let mut list = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut list = Command::new(workspace_bin::path("hotsheet-cli"));
     list.env("HOTSHEET_HOME", home.path())
         .args(["checkout", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("github.com/acme/web"));
 
-    let mut resolve = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut resolve = Command::new(workspace_bin::path("hotsheet-cli"));
     resolve
         .env("HOTSHEET_HOME", home.path())
         .args(["checkout", "resolve", "web"])
@@ -5702,7 +5706,7 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .success()
         .stdout(predicate::str::contains(checkout.path().to_str().unwrap()));
 
-    let mut add_source = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut add_source = Command::new(workspace_bin::path("hotsheet-cli"));
     add_source
         .env("HOTSHEET_HOME", home.path())
         .arg("-C")
@@ -5721,8 +5725,7 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .stdout(predicate::str::contains(
             r#""default_source": "github-main""#,
         ));
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args([
             "checkout",
@@ -5741,7 +5744,7 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .stdout(predicate::str::contains(
             "\"default_source\": \"github-main\"",
         ));
-    let mut remove_source = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut remove_source = Command::new(workspace_bin::path("hotsheet-cli"));
     remove_source
         .env("HOTSHEET_HOME", home.path())
         .env_remove("HOTSHEET_STORE")
@@ -5754,7 +5757,7 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .stdout(predicate::str::contains(
             "Removed ticket source 'github-main'",
         ));
-    let mut resolved = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut resolved = Command::new(workspace_bin::path("hotsheet-cli"));
     resolved
         .env("HOTSHEET_HOME", home.path())
         .args(["checkout", "resolve", "web"])
@@ -5771,8 +5774,7 @@ fn checkout_clear_default_survives_fresh_cli_processes_and_reregistration() {
     let root = project.path().to_str().unwrap();
     let store_path = store.path().to_str().unwrap();
     let run = |args: &[&str]| -> serde_json::Value {
-        let output = Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        let output = Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", home.path())
             .args(args)
             .assert()
@@ -5811,8 +5813,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
     let first_root = first.path().to_str().unwrap();
     let second_root = second.path().to_str().unwrap();
     let run = |args: &[&str]| -> serde_json::Value {
-        let output = Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        let output = Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", home.path())
             .arg("-C")
             .arg(store.path())
@@ -5872,8 +5873,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
     assert_eq!(second_color["color"], "#ef4444");
     assert_eq!(inspect(first_root)["color"], "#3b82f6");
 
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args([
             "checkout",
@@ -5885,8 +5885,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("unsupported ticket source color"));
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args(["checkout", "source-color", first_root, "missing"])
         .assert()
@@ -5905,8 +5904,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
     );
     assert_eq!(inspect(first_root)["color"], "#6b7280");
     assert_eq!(inspect(second_root)["color"], "#ef4444");
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args([
             "checkout",
@@ -5935,8 +5933,7 @@ fn setup_refresh_preserves_a_project_github_source() {
         r#"{"connections":[{"id":"github-issues","provider":"github","locator":"acme/issues","default":false,"settings":{}}]}"#,
     )
     .unwrap();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .arg("-C")
         .arg(store_dir.path())
@@ -5949,8 +5946,7 @@ fn setup_refresh_preserves_a_project_github_source() {
         ])
         .assert()
         .success();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .arg("-C")
         .arg(store_dir.path())
@@ -5966,8 +5962,7 @@ fn setup_refresh_preserves_a_project_github_source() {
         .assert()
         .success();
 
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args([
             "-C",
@@ -5980,8 +5975,7 @@ fn setup_refresh_preserves_a_project_github_source() {
         ])
         .assert()
         .success();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args(["checkout", "resolve", project.path().to_str().unwrap()])
         .assert()
@@ -6269,10 +6263,9 @@ fn launch_releases_the_claims_its_session_left_behind() {
     };
     let left = ticket("left claimed by the session");
     let other = ticket("claimed by someone else");
-    let cli = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let cli = workspace_bin::path("hotsheet-cli");
     let store_arg = store_path.display().to_string();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .args([
             "-C",
             &store_arg,
@@ -6372,15 +6365,13 @@ command = "hotsheet-cli permission-hook"
     assert_eq!(reread(&other).claimed_by.as_deref(), Some("someone"));
 
     // `release --all` releases one worker's claims and nobody else's.
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .args(["-C", &store_arg, "release", "--all", "--worker", "someone"])
         .assert()
         .success()
         .stdout(format!("Released {}\n", other.slug));
     assert_eq!(reread(&other).claimed_by, None);
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .args(["-C", &store_arg, "release", "--all", "--worker", "someone"])
         .assert()
         .success()
@@ -6552,8 +6543,7 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
 fn setup_registers_a_source_free_code_project_without_a_server() {
     let project = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(project.path())
         .env("HOTSHEET_HOME", home.path())
         .args([
@@ -6758,8 +6748,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
         .assert()
         .success();
 
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&project)
         .args([
             "init",
@@ -6805,8 +6794,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
     );
 
     // The link is immediately useful: a command from the code repo needs no -C.
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&project)
         .env("HOTSHEET_HOME", root.path().join("hotsheet-home"))
         .arg("ls")
@@ -6814,8 +6802,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
         .success();
 
     // Creating a "new" standalone store never overwrites an existing destination.
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&project)
         .args(["init", "--standalone", "--at", store.to_str().unwrap()])
         .assert()
@@ -6867,8 +6854,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
     std::fs::write(&mcp_bin, "").unwrap();
     let mut user_bytes = None;
     for expected in ["Initialized standalone", "Reused standalone"] {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .env("HOTSHEET_CLAUDE_USER_CONFIG", &claude_config)
             .env("HOTSHEET_MCP_BIN", &mcp_bin)
@@ -6958,8 +6944,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         remote.to_str().unwrap()
     );
 
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", &home)
         .args([
             "bootstrap",
@@ -6985,8 +6970,7 @@ fn bootstrap_prints_exact_remote_instructions_when_origin_is_absent() {
     let project = root.path().join("project with spaces");
     let store = root.path().join("store with spaces.hs2");
     std::fs::create_dir(&project).unwrap();
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", root.path().join("home"))
         .args([
             "bootstrap",
@@ -7024,7 +7008,7 @@ fn bootstrap_into_a_registered_sourceless_checkout_records_the_store_identity() 
     let store = root.path().join("lecture.hs2");
     std::fs::create_dir(&project).unwrap();
     let cli = || {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command.env("HOTSHEET_HOME", &home);
         command
     };
@@ -7064,8 +7048,7 @@ fn init_standalone_defaults_under_hs2_home_not_hs1_home() {
     let home = root.path().join("hs2-home");
     std::fs::create_dir(&project).unwrap();
 
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&project)
         .env("HOTSHEET_HOME", &home)
         .args(["init", "--standalone", "--prefix", "NP"])
@@ -7341,6 +7324,90 @@ fn blocked_by_set_clear_and_reject() {
         .assert()
         .success()
         .stdout(predicate::str::contains("blocked_by").not());
+}
+
+/// HS2-CHH28E: `--add-blocked-by` and `--remove-blocked-by` change one blocker at a time,
+/// matching the Inspector's Add Blocker and Remove actions, and a dependency cycle is refused
+/// with the same message the server and MCP return.
+#[test]
+fn hs2_chh28e_edit_adds_and_removes_single_blockers_and_refuses_cycles() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let a = new_ticket(p, "first blocker");
+    let b = new_ticket(p, "second blocker");
+    let target = new_ticket(p, "blocked ticket");
+    let ulid = |slug: &str| {
+        let out = hs(p).args(["show", slug]).assert().success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("id: "))
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    let blockers = |slug: &str| {
+        let out = hs(p).args(["show", slug]).assert().success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        stdout
+            .lines()
+            .skip_while(|line| !line.starts_with("blocked_by:"))
+            .skip(1)
+            .take_while(|line| line.starts_with("- "))
+            .map(|line| line.trim_start_matches("- ").trim().to_string())
+            .collect::<Vec<_>>()
+    };
+    let (a_id, b_id) = (ulid(&a), ulid(&b));
+
+    hs(p)
+        .args(["edit", &target, "--add-blocked-by", &a])
+        .assert()
+        .success();
+    hs(p)
+        .args([
+            "edit",
+            &target,
+            "--add-blocked-by",
+            &b,
+            "--add-blocked-by",
+            &a,
+        ])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![a_id.clone(), b_id.clone()]);
+
+    // a now waits on the target's own blocker chain: target -> a closes a cycle.
+    hs(p)
+        .args(["edit", &a, "--add-blocked-by", &target])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "{target} already depends on {a}, so it cannot also block {a} (dependency cycle)"
+        )));
+    assert!(blockers(&a).is_empty(), "a refused cycle writes nothing");
+
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", &a])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![b_id.clone()]);
+    // Removing a ticket that is not a blocker changes nothing.
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", &a])
+        .assert()
+        .success();
+    assert_eq!(blockers(&target), vec![b_id]);
+    // Replacing and incrementing the set at once is ambiguous and refused by the parser.
+    hs(p)
+        .args(["edit", &target, "--blocked-by", &a, "--add-blocked-by", &b])
+        .assert()
+        .failure();
+    hs(p)
+        .args(["edit", &target, "--remove-blocked-by", "HS-NOPE00"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no ticket matching"));
 }
 
 #[test]
@@ -8526,7 +8593,7 @@ fn edit_records_note_confidence_on_completion() {
         (vec!["--clear-note-confidence"], "--edit-note"),
         (
             vec!["--edit-note", "01ARZ3NDEKTSV4RRFFQ69G5FAV"],
-            "--edit-note requires --note, --note-file, --note-confidence, or",
+            "--edit-note requires --note, --note-file, --note-confidence,",
         ),
         (
             vec![
@@ -9614,7 +9681,7 @@ fn simultaneous_cli_settings_writers_keep_each_key() {
     let project = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
     hs(project.path()).args(["init"]).assert().success();
-    let binary = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let binary = workspace_bin::path("hotsheet-cli");
     let children = (0..16)
         .map(|index| {
             std::process::Command::new(&binary)
@@ -10278,13 +10345,133 @@ fn hs2_6act5y_sync_reports_a_stale_git_lock_as_blocked_headlessly() {
             .unwrap()
             .contains(".git/index.lock")
     );
-    assert!(lock.is_file(), "Hot Sheet never removes a lock by itself");
+    assert!(
+        lock.is_file(),
+        "a young lock is never moved (HS2-T0V269 only moves provably stale ones)"
+    );
 
     std::fs::remove_file(&lock).unwrap();
     hs(a.path()).arg("sync").assert().success();
     let synced = status_json(a.path());
     assert_eq!(synced["state"], "synced");
     assert_eq!(synced["unpublished_commits"], 0);
+    hs(a.path()).args(["show", &slug]).assert().success();
+}
+
+/// HS2-T0V269: headless parity for stale-lock recovery. `sync --recover-stale-locks` moves
+/// an abandoned lock aside (never deletes it) and prints exactly what it moved; it keeps
+/// a young lock and exits non-zero naming it; and a plain `sync` moves an abandoned lock by
+/// itself, says so, and publishes. Synthetic stores only.
+#[cfg(unix)]
+#[test]
+fn hs2_t0v269_sync_recovers_stale_git_locks_headlessly() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    fn plant(lock: &Path, age_seconds: u64) {
+        std::fs::create_dir_all(lock.parent().unwrap()).unwrap();
+        std::fs::write(lock, "stale\n").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(lock)
+            .unwrap()
+            .set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(age_seconds),
+            )
+            .unwrap();
+    }
+    fn stashed(store: &Path) -> Vec<std::path::PathBuf> {
+        let mut found = Vec::new();
+        for dir in std::fs::read_dir(store.join(".git/hotsheet-stale-locks"))
+            .map(|dirs| dirs.flatten().map(|dir| dir.path()).collect::<Vec<_>>())
+            .unwrap_or_default()
+        {
+            for file in ["index.lock", "HEAD.lock"] {
+                if dir.join(file).is_file() {
+                    found.push(dir.join(file));
+                }
+            }
+        }
+        found
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    hs(a.path()).arg("sync").assert().success();
+    hs(a.path())
+        .args(["sync", "--recover-stale-locks"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "No Git lock that sync needs is held",
+        ));
+
+    // A ticket saved before the locks, which the recovered sync publishes.
+    let slug = new_ticket(a.path(), "saved before the locks");
+    // An abandoned index lock and a young HEAD lock.
+    let index = a.path().join(".git/index.lock");
+    plant(&index, 3600);
+    let head = a.path().join(".git/HEAD.lock");
+    plant(&head, 0);
+    hs(a.path())
+        .args(["sync", "--recover-stale-locks"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Moved .git/index.lock to .git/hotsheet-stale-locks/",
+        ))
+        .stdout(predicate::str::contains(
+            "Not moved automatically: .git/HEAD.lock is younger than 10 minutes",
+        ))
+        .stderr(predicate::str::contains("still held: .git/HEAD.lock"));
+    assert!(!index.exists());
+    assert!(head.is_file());
+    assert_eq!(stashed(a.path()).len(), 1, "moved, never deleted");
+
+    // A plain sync recovers it by itself once it is old, and publishes a new ticket.
+    plant(&head, 3600);
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Moved a stale Git lock aside: .git/HEAD.lock to .git/hotsheet-stale-locks/",
+        ));
+    assert!(!head.exists());
+    assert_eq!(stashed(a.path()).len(), 2);
+    let out = hs(a.path())
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let synced: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    // The ticket's own best-effort push may already have published it.
+    assert!(
+        synced["state"] == "synced" || synced["state"] == "up_to_date",
+        "{synced}"
+    );
+    assert_eq!(synced["unpublished_commits"], 0);
+    assert!(
+        synced["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("Moved a stale Git lock aside"),
+        "{synced}"
+    );
     hs(a.path()).args(["show", &slug]).assert().success();
 }
 
@@ -10312,7 +10499,7 @@ impl HeadlessRepairFixture {
     }
 
     fn cli(&self) -> Command {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.env("HOTSHEET_HOME", self.home.path())
             .env_remove("HOTSHEET_ACTOR_ROLE")
             .env_remove("HOTSHEET_ACTOR_ID")
@@ -11260,7 +11447,7 @@ fn reindex_prunes_index_files_from_older_schema_generations() {
     std::fs::write(index_dir.join("notes.txt"), "keep").unwrap();
 
     let reindex = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.env("HOTSHEET_HOME", home.path())
             .arg("-C")
             .arg(p)
@@ -11358,8 +11545,7 @@ fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
     for dir in [&store, &project, &home] {
         std::fs::create_dir(dir).unwrap();
     }
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", &home)
         .arg("-C")
         .arg(&store)
@@ -11367,8 +11553,7 @@ fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
         .assert()
         .success();
     // Register `project` as a checkout of `store` (writes the STORE_LINK + registry entry).
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&project)
         .env("HOTSHEET_HOME", &home)
         .arg("link")
@@ -11376,8 +11561,7 @@ fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
         .assert()
         .success();
     // Run a mutation with cwd = the ticket store (the bug trigger).
-    Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .current_dir(&store)
         .env("HOTSHEET_HOME", &home)
         .arg("-C")
@@ -11861,7 +12045,7 @@ fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
 #[test]
 fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     let hs = |dir: &Path| {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command.arg("-C").arg(dir);
         // HS2-XTQHPK: this Linux-only test drives a fake `secret-tool` shim on PATH,
         // never a real keyring, so it lifts the cargo-forced keychain deny.
@@ -13655,8 +13839,7 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
         }
     });
     let cli = |arg: &str| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .args(["-C", store.to_str().unwrap(), "lifecycle", arg])
             .output()
@@ -13693,8 +13876,7 @@ fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
     hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let cli = |args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .args(["-C", store.to_str().unwrap()])
             .args(args)
@@ -13815,7 +13997,7 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
     FsStore::init_git(&stray, &StoreMetadata::new("ST")).unwrap();
 
     // The machine host, anchored on the bootstrap store, exactly as headless launch starts it.
-    let cli_bin = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let cli_bin = workspace_bin::path("hotsheet-cli");
     let mut serve = std::process::Command::new(&cli_bin)
         .arg("--test-fixture-credentials")
         .arg("-C")
@@ -13852,8 +14034,7 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
     );
 
     let cli = |store: &Path, args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .current_dir(root.path())
             .args(["-C", store.to_str().unwrap()])
@@ -13897,8 +14078,7 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
     // A host-wide command needs no store: no -C, no link, no $HOTSHEET_STORE.
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
-    let status = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let status = Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", &home)
         .env_remove("HOTSHEET_STORE")
         .current_dir(&elsewhere)
@@ -13927,7 +14107,7 @@ fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation(
     hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let cli = || {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command.env("HOTSHEET_HOME", home.path());
         command
     };
@@ -14406,6 +14586,175 @@ fn hs2_cv5nmc_explicit_regular_and_kind_only_correction_flow() {
     assert_eq!(read()["title"], "Synthetic explicit kind");
 }
 
+/// HS2-J4G9GB: `edit --edit-note --response-to` links an existing note idempotently, the
+/// provider command matches it, an invalid link writes nothing, and the link can be cleared.
+#[test]
+fn hs2_j4g9gb_cli_links_relinks_and_clears_an_existing_note_response() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let slug = new_ticket(dir.path(), "Synthetic response link");
+    for (text, kind) in [
+        (
+            "FEEDBACK NEEDED: first synthetic question",
+            "feedback_needed",
+        ),
+        (
+            "FEEDBACK NEEDED: second synthetic question",
+            "feedback_needed",
+        ),
+        ("Synthetic decision: option A", "regular"),
+    ] {
+        hs(dir.path())
+            .args(["edit", &slug, "--note", text, "--note-kind", kind])
+            .assert()
+            .success();
+    }
+    let providers = hs(dir.path())
+        .args(["providers", "--json"])
+        .assert()
+        .success();
+    let providers: serde_json::Value =
+        serde_json::from_slice(&providers.get_output().stdout).unwrap();
+    let connection = providers[0]["connection_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        providers[0]["capabilities"]["note_response_link"], true,
+        "{providers}"
+    );
+    let read = || {
+        let out = hs(dir.path())
+            .args(["provider-get", &connection, &slug])
+            .assert()
+            .success();
+        serde_json::from_slice::<serde_json::Value>(&out.get_output().stdout).unwrap()
+    };
+    let initial = read();
+    let id_of = |text: &str| {
+        initial["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["text"] == text)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let first = id_of("FEEDBACK NEEDED: first synthetic question");
+    let second = id_of("FEEDBACK NEEDED: second synthetic question");
+    let decision = id_of("Synthetic decision: option A");
+    let link_of = |ticket: &serde_json::Value| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == decision.as_str())
+            .unwrap()
+            .get("response_to")
+            .cloned()
+    };
+
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+        ])
+        .assert()
+        .success();
+    let linked = read();
+    assert_eq!(link_of(&linked), Some(serde_json::json!(first)));
+    assert_eq!(linked["notes"].as_array().unwrap().len(), 3);
+    // Already linked: idempotent.
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+        ])
+        .assert()
+        .success();
+    assert_eq!(read(), linked);
+    // Relink through the provider command, with its optimistic token.
+    let token = linked["concurrency_token"].as_str().unwrap().to_owned();
+    hs(dir.path())
+        .args([
+            "provider-edit",
+            &connection,
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &second,
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .success();
+    assert_eq!(link_of(&read()), Some(serde_json::json!(second)));
+    // A stale token is refused and leaves the link alone.
+    hs(dir.path())
+        .args([
+            "provider-edit",
+            &connection,
+            &slug,
+            "--edit-note",
+            &decision,
+            "--response-to",
+            &first,
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .failure();
+    assert_eq!(link_of(&read()), Some(serde_json::json!(second)));
+    // An invalid link (a request cannot answer another request) refuses the whole edit.
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "must not write",
+            "--edit-note",
+            &first,
+            "--response-to",
+            &second,
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("requires a regular note"));
+    assert_eq!(read()["title"], "Synthetic response link");
+    // --clear-response-to needs --edit-note and conflicts with --response-to.
+    hs(dir.path())
+        .args(["edit", &slug, "--clear-response-to"])
+        .assert()
+        .failure();
+    hs(dir.path())
+        .args(["edit", &slug, "--response-to", &first])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--response-to requires --note"));
+    hs(dir.path())
+        .args([
+            "edit",
+            &slug,
+            "--edit-note",
+            &decision,
+            "--clear-response-to",
+        ])
+        .assert()
+        .success();
+    assert_eq!(link_of(&read()), None);
+}
+
 fn hs2_4j6v46_command(home: &Path, source: &Path, capability: bool) -> Command {
     for directory in [
         "user-home",
@@ -14418,7 +14767,7 @@ fn hs2_4j6v46_command(home: &Path, source: &Path, capability: bool) -> Command {
     ] {
         std::fs::create_dir_all(home.join(directory)).unwrap();
     }
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .timeout(std::time::Duration::from_secs(20))
         .current_dir(home)

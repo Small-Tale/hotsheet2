@@ -12,8 +12,11 @@ import {
 } from '../components/repository-status-popover';
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { copyText } from '../copy-text';
+import { createCoalescedInput } from '../debounced-autosave';
+import type { FollowUpLinkController } from '../features/follow-up-link';
+import { readerScopeOf } from '../features/linked-reader-subject';
 import { HostOnlyActionError } from '../host-only-actions';
-import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
+import { REPOSITORY_ACTIONS, REPOSITORY_TARGETS } from '../interaction-attrs/repository';
 import { data } from './dom';
 import { type Control, type Project, type RepositoryDetailState } from './types';
 
@@ -44,6 +47,8 @@ export interface RepositoryInteractionsDependencies {
   readonly changeEvidenceReader: Signal<string | undefined>;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly codeReviewMessage: Signal<string>;
+  /** Code Review's Link Existing Ticket as Follow-Up flow (HS2-MCGCPQ). */
+  readonly followUpLink: FollowUpLinkController;
   readonly openProject: (
     root: string,
     ticketStore?: string,
@@ -80,6 +85,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     changeEvidenceReader,
     selectedTicket,
     codeReviewMessage,
+    followUpLink,
     openProject,
   } = dependencies;
   lifetime.add(
@@ -257,6 +263,68 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       event.preventDefault();
       const root = (target.querySelector('[name="project-root"]') as Control).value;
       void openProject(root);
+    }),
+  );
+  // HS2-MCGCPQ: the field keeps the live query; the dialog state and search catch up per typing pause.
+  const followUpLinkSearchInput = createCoalescedInput<string>((query) => {
+    followUpLink.search(query);
+  });
+  const focusFollowUpLinkSearch = () => {
+    queueMicrotask(() => document.querySelector<Control>(REPOSITORY_TARGETS.followUpLinkSearchField.selector)?.focus());
+  };
+  const closeFollowUpLink = () => {
+    followUpLinkSearchInput.cancel();
+    followUpLink.close();
+  };
+  lifetime.add(() => {
+    followUpLinkSearchInput.cancel();
+  });
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openFollowUpLink.selector, (_event, target) => {
+      followUpLinkSearchInput.cancel();
+      // From the modal reader, the dialog opens for that reader frame's ticket and inside it (HS2-NXSMC7).
+      if (followUpLink.open(readerScopeOf(target))) focusFollowUpLinkSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', REPOSITORY_TARGETS.followUpLinkSearchField.selector, (_event, target) => {
+      followUpLinkSearchInput.schedule((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', REPOSITORY_TARGETS.followUpLinkSearchField.selector, () => {
+      followUpLinkSearchInput.flush();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.selectFollowUpLinkTarget.selector, (_event, target) => {
+      followUpLinkSearchInput.cancel();
+      followUpLink.select(data(target).itemId ?? '');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.clearFollowUpLinkTarget.selector, () => {
+      followUpLinkSearchInput.cancel();
+      followUpLink.clear();
+      focusFollowUpLinkSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', REPOSITORY_ACTIONS.submitFollowUpLink.selector, (event) => {
+      event.preventDefault();
+      followUpLinkSearchInput.cancel();
+      void followUpLink.submit();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.cancelFollowUpLink.selector, () => {
+      closeFollowUpLink();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'kui-request-close', REPOSITORY_TARGETS.followUpLinkDialog.selector, (event, target) => {
+      if (event.composedPath()[0] !== target) return;
+      closeFollowUpLink();
     }),
   );
   return () => {

@@ -51,12 +51,15 @@ export function NoteRepairReview({
           <p>The deterministic doctor found no known structural issue.</p>
         )}
         {!response && <p>Waiting for the AI proposal. The note will not change until you accept it.</p>}
-        {issue ? <StateBanner tone="warning" title="Proposal Needs Review" detail={issue} /> : null}
+        {issue ? (
+          <StateBanner tone="warning" title="Proposal Needs Review" detail={issue} copyLayout="stacked" />
+        ) : null}
         {stale && (
           <StateBanner
             tone="warning"
             title="Ticket Changed"
             detail="Close this review and start a fresh repair from the current note."
+            copyLayout="stacked"
           />
         )}
         {proposal && (
@@ -85,7 +88,14 @@ export function NoteRepairReview({
             {proposal.response_to !== undefined && <p>Response link: {proposal.response_to ?? 'clear'}</p>}
             {proposal.explanation && <p>{proposal.explanation}</p>}
             {preview.unavailable.map((reason) => (
-              <StateBanner tone="warning" title="Cannot Apply" detail={reason} />
+              // Each reason is a distinct sentence, so its text keys the banner for Kerf's diff (HS2-3TNEJF).
+              <StateBanner
+                rootAttributes={{ 'data-key': `cannot-apply:${reason}` }}
+                tone="warning"
+                title="Cannot Apply"
+                detail={reason}
+                copyLayout="stacked"
+              />
             ))}
           </div>
         )}

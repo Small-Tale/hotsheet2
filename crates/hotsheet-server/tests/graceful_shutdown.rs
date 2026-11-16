@@ -20,6 +20,17 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 use notify::{RecursiveMode, Watcher};
 use serde_json::json;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-server"), &["--version"])
+}
+
 /// A drivable AI tool on the fixture `PATH` whose probe hangs during startup discovery.
 #[derive(Clone, Copy)]
 enum SlowTool {
@@ -39,20 +50,46 @@ impl SlowTool {
         }
     }
 
-    /// Each hanging invocation appends its pid to `<tool>.calls` before it hangs.
+    /// Each hanging invocation appends its pid to `<tool>.calls` before it hangs. Every
+    /// script first exits at once for [`FIRST_LAUNCH_ARG`], which no probe passes.
     fn script(self) -> &'static str {
         match self {
-            Self::Opencode => "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n",
+            Self::Opencode => {
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 echo $$ >> \"$0.calls\"\nexec sleep 30\n"
+            }
             Self::OpencodeBeforeMarker => {
-                "#!/bin/sh\nread token < \"$0.gate\"\necho $$ >> \"$0.calls\"\nexec sleep 30\n"
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 read token < \"$0.gate\"\necho $$ >> \"$0.calls\"\nexec sleep 30\n"
             }
             Self::CodexAppServer => {
-                "#!/bin/sh\ncase \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 case \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
                  app-server) echo $$ >> \"$0.calls\"; exec sleep 30 ;;\nesac\n"
             }
         }
     }
+
+    /// Write this tool's script into `tools` and launch it once to completion, without a
+    /// deadline, before the server starts (HS2-BNVW5V). macOS assesses a newly written
+    /// executable on its first exec, shell scripts included, through one queue for the
+    /// whole host (HS2-04D6DW). Measured during a workspace run: a fresh script's first exec
+    /// took about 0.08 s against 0.01 s for later ones, and the same queue once held a fresh
+    /// binary's first launch for 27 s. The startup warmup's first probe was that first
+    /// exec, so the queue rather than the warmup could use up the setup window in
+    /// [`Server::slow_tool_pids`]. With the script launched here, the window times only the
+    /// server: about 0.1 s from `ready()` to the probe marker under the same load.
+    fn install(self, tools: &std::path::Path) -> PathBuf {
+        let tool = tools.join(self.name());
+        fs::write(&tool, self.script()).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+        first_launch::launched(tool, &[FIRST_LAUNCH_ARG])
+    }
 }
+
+/// The argument every [`SlowTool`] script answers by exiting at once, with no marker and no
+/// hang, so the fixture can take its first launch off the clock (HS2-BNVW5V).
+const FIRST_LAUNCH_ARG: &str = "--hs2-first-launch";
 
 struct Server {
     child: Child,
@@ -111,10 +148,7 @@ impl Server {
         let path = if let Some((_, slow_tool)) = slow_discovery {
             let tools = fixture.path().join("tools");
             fs::create_dir(&tools).unwrap();
-            let tool = tools.join(slow_tool.name());
-            fs::write(&tool, slow_tool.script()).unwrap();
-            fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-                .unwrap();
+            let tool = slow_tool.install(&tools);
             if matches!(slow_tool, SlowTool::OpencodeBeforeMarker) {
                 use std::os::unix::ffi::OsStrExt;
                 let gate =
@@ -137,7 +171,7 @@ impl Server {
             let file = fs::File::create(&log).unwrap();
             (file.try_clone().unwrap().into(), file.into())
         });
-        let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"));
+        let mut command = Command::new(server_binary());
         if slow_discovery.is_some() {
             // HS2-7W3D7V: the test environment disables tool probes; this fixture probes
             // only its own hanging tool, so it opts back in.
@@ -184,9 +218,11 @@ impl Server {
 
     /// Wait until discovery has probed the hanging tool; return every probe's pid so far.
     fn slow_tool_pids(&self) -> Vec<i32> {
-        // Catalog warmup is scheduled after the server registers itself. Under a busy
-        // parallel suite, that background task can start well after `ready()` returns;
-        // this wait is setup, not the probe/queue latency assertion below.
+        // Catalog warmup is scheduled after the server registers itself. This wait is
+        // setup, not the probe/queue latency assertion below. The tool's first launch is
+        // already done (`SlowTool::install`), so it times only the server's warmup, which
+        // reaches the marker in about 0.1 s after `ready()` under a workspace run
+        // (HS2-BNVW5V).
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let pids: Vec<i32> = fs::read_to_string(self.slow_tool_calls())
@@ -340,7 +376,7 @@ fn hs2_bnghkm_interrupted_test_owner_reaps_detached_broker() {
     let socket = fixture.path().join("broker.sock");
     let log = fixture.path().join("broker.log");
     let mut owner = Command::new("sleep").arg("30").spawn().unwrap();
-    let mut broker = Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let mut broker = Command::new(server_binary())
         .arg("--terminal-broker-process")
         .arg(&socket)
         .args(["--terminal-broker-project", "test-project"])

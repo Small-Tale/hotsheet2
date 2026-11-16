@@ -319,17 +319,33 @@ export function addCommandEditorSetting() {
 }
 export function CommandSettingsEditorDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
-      <CommandSettingsEditor
-        commands={commandEditorCommands.value}
-        extraGroups={commandEditorExtraGroups.value}
-        editingId={commandEditorEditingId.value}
-        selectedIds={commandEditorSelection.value}
-        iconSearch={commandEditorIconSearch.value}
-        message={commandEditorMessage.value}
-      />
-      <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor
+          commands={commandEditorCommands.value}
+          extraGroups={commandEditorExtraGroups.value}
+          editingId={commandEditorEditingId.value}
+          selectedIds={commandEditorSelection.value}
+          iconSearch={commandEditorIconSearch.value}
+          message={commandEditorMessage.value}
+        />
+        <CommandGroupDialog state={commandEditorGroupDialog.state.value} />
+      </CatalogExample>
+      {/* Before the project's first command settings read answers, and after it fails (HS2-BZKTDC). Each
+          extra editor names its own dialog so the page keeps unique ids (HS2-CP5F46). */}
+      <CatalogExample label="Loading" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor commands={[]} loadState="loading" dialogId="command-editor-dialog-loading" />
+      </CatalogExample>
+      <CatalogExample label="Load Failed" viewport={{ width: 'full' }}>
+        <CommandSettingsEditor
+          commands={[]}
+          loadState="failed"
+          loadError="Hot Sheet could not reach the server."
+          dialogId="command-editor-dialog-load-failed"
+          message={commandEditorMessage.value}
+        />
+      </CatalogExample>
+    </>
   );
 }
 export function DriveControlDemo() {
@@ -832,9 +848,15 @@ export function ProjectSidebarDemo() {
 }
 export function SettingsNavigationDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
-      <SettingsNavigation selected="guidance" collapseControl />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
+        <SettingsNavigation selected="guidance" collapseControl />
+      </CatalogExample>
+      {/* Pairing requests waiting for approval count on Devices (HS2-BZHMEV). */}
+      <CatalogExample label="Pairing Requests Waiting" viewport={{ width: 'sidebar' }}>
+        <SettingsNavigation selected="general" pairingRequests={2} collapseControl />
+      </CatalogExample>
+    </>
   );
 }
 export function NotificationNavigationDemo() {
@@ -868,6 +890,9 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
       deleteCommand: deleteCommandEditorSetting,
       addGroup: addCommandEditorGroup,
       deleteGroup: deleteCommandEditorGroup,
+      retryLoad: () => {
+        commandEditorMessage.value = 'Retry requested.';
+      },
       selection: () => commandEditorSelection.value,
       orderedIds: () => commandEditorCommands.value.map((command) => command.id),
       selectRow: selectCommandEditorRow,

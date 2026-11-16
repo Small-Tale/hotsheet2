@@ -51,6 +51,7 @@ import {
   parseTicketStoreSyncReport,
   parseTrashPurge,
   parseTrashSettings,
+  parseTtsVoices,
   type ResponseParser,
   ServerResponseShapeError,
 } from './server-response-parsers';
@@ -348,6 +349,38 @@ describe('server response parsers (HS2-34P6XY)', () => {
       legacy: false,
       duplicate: false,
     });
+    // HS2-VFYSQK: the registry's publication status (HS2-9EGWC4) is kept with its Rust field names mapped.
+    expect(
+      parseGroupList({
+        registry: true,
+        groups: [],
+        registry_sync: {
+          state: 'failed',
+          detail: 'could not commit the group registry: hook refused',
+          committed: false,
+          at: '2026-11-13T00:40:00Z',
+        },
+      }),
+    ).toStrictEqual({
+      registry: true,
+      groups: [],
+      registrySync: {
+        state: 'failed',
+        detail: 'could not commit the group registry: hook refused',
+        committed: false,
+        at: '2026-11-13T00:40:00Z',
+      },
+    });
+    expect(
+      parseGroupList({ registry: true, groups: [], registry_sync: { state: 'blocked', detail: 'pull first' } })
+        .registrySync,
+    ).toStrictEqual({ state: 'blocked', detail: 'pull first', committed: false, at: '' });
+    // Without a published registry the field is absent, not undefined-valued.
+    expect(parseGroupList({ registry: true, groups: [] })).toStrictEqual({ registry: true, groups: [] });
+    expect(parseGroupList({ registry: true, groups: [], registry_sync: null })).toStrictEqual({
+      registry: true,
+      groups: [],
+    });
     expect(parseGroupCreate({ id: '7K3M9P2QXA', name: 'Sprint', created: true })).toEqual({
       id: '7K3M9P2QXA',
       name: 'Sprint',
@@ -355,6 +388,10 @@ describe('server response parsers (HS2-34P6XY)', () => {
     });
     expect(parseGroupRename({ id: '7K3M9P2QXA', name: 'Sprint', updated: 0 }).id).toBe('7K3M9P2QXA');
     expect(parseStringList(['a'])).toEqual(['a']);
+    expect(parseTtsVoices([{ name: 'Anna (German (Germany))', lang: 'de-DE' }])).toEqual([
+      { name: 'Anna (German (Germany))', lang: 'de-DE' },
+    ]);
+    expect(parseTtsVoices([])).toEqual([]);
   });
 
   it.each([
@@ -376,9 +413,16 @@ describe('server response parsers (HS2-34P6XY)', () => {
     ['group list', () => parseGroupList({ groups: [{ id: 7, name: 'Board', count: 1 }] })],
     ['group list', () => parseGroupList({ groups: [{ id: 'X', name: 'Board', count: 1, duplicate: 'yes' }] })],
     ['group list', () => parseGroupList({ registry: 'yes', groups: [] })],
+    ['group list', () => parseGroupList({ groups: [], registry_sync: { state: 'stuck', detail: 'x' } })],
+    ['group list', () => parseGroupList({ groups: [], registry_sync: { state: 'failed' } })],
+    ['group list', () => parseGroupList({ groups: [], registry_sync: { state: 'failed', detail: 'x', committed: 1 } })],
+    ['group list', () => parseGroupList({ groups: [], registry_sync: { state: 'failed', detail: 'x', at: 0 } })],
+    ['group list', () => parseGroupList({ groups: [], registry_sync: 'failed' })],
     ['group create', () => parseGroupCreate({ id: 'X', name: 'Board' })],
     ['group rename', () => parseGroupRename({ id: 1, name: 'Board', updated: 0 })],
     ['string list', () => parseStringList(['a', 1])],
+    ['speech voice list', () => parseTtsVoices([{ name: 'Anna' }])],
+    ['speech voice list', () => parseTtsVoices({ name: 'Anna', lang: 'de-DE' })],
   ])('rejects a malformed %s body', (what, parse) => {
     expect(parse).toThrow(new ServerResponseShapeError(what));
   });

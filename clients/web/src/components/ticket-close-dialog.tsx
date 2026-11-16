@@ -1,18 +1,15 @@
 import './ticket-close-dialog.css';
 
 import { Button } from '@kerfjs/ui/button';
-import { rem, remify, uiColor } from '@kerfjs/ui/css-values';
+import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
-import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Spacer } from '@kerfjs/ui/spacer';
-import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
-import { TextField } from '@kerfjs/ui/text-field';
-import { CheckCircle2, CopyX, Search } from 'lucide';
+import { CopyX } from 'lucide';
 
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import {
@@ -22,6 +19,7 @@ import {
   type TicketCloseReason,
   validateTicketClose,
 } from '../ticket-close';
+import { TicketReferencePicker } from './ticket-reference-picker';
 
 export interface TicketCloseDialogState {
   source: DuplicateTarget;
@@ -67,71 +65,16 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
             {duplicate && (
               <section aria-label="Duplicate Target">
                 <List gap="xs">
-                  <TextField
-                    name="ticket-close-target-search"
-                    label="Existing Ticket"
-                    placeholder="Search by ticket number or title"
-                    value={state.query}
-                    icon={<LucideIcon icon={Search} name="search" size={16} color={uiColor('neutral-on-quiet')} />}
+                  <TicketReferencePicker
+                    fieldName="ticket-close-target-search"
+                    query={state.query}
+                    candidates={candidates}
+                    selected={state.selected}
+                    searching={state.searching}
+                    selectAction={TICKET_SELECTION_ACTIONS.selectTicketCloseTarget.value}
+                    clearAction={TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.value}
+                    candidateIcon={<LucideIcon icon={CopyX} name="copy-x" />}
                   />
-                  {state.selected && (
-                    <StateBanner
-                      tone="success"
-                      icon={<LucideIcon icon={CheckCircle2} name="check-circle-2" />}
-                      title={state.selected.slug}
-                      badge={state.selected.projectName}
-                      detail={state.selected.title}
-                      copyLayout="stacked"
-                      action={
-                        <Button
-                          type="button"
-                          emphasis="plain"
-                          size="compact"
-                          action={TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.value}
-                        >
-                          Change
-                        </Button>
-                      }
-                    />
-                  )}
-                  {!state.selected && Boolean(state.query.trim()) && (
-                    // Kerf's framed, bounded result picker (KF-SHW2J9, HS2-Z46VA7) owns the border,
-                    // radius, focus-ring inset, and min/max scroll bounds.
-                    <List
-                      scrollable
-                      frame
-                      minHeight={rem(4.25)}
-                      maxHeight={rem(14)}
-                      className="ticket-close-dialog__results"
-                      rootAttributes={{
-                        'aria-label': 'Matching tickets',
-                        'aria-busy': String(Boolean(state.searching)),
-                      }}
-                    >
-                      {candidates.map((candidate) => (
-                        <ListItem
-                          action="select-ticket-close-target"
-                          itemId={duplicateTargetKey(candidate)}
-                          icon={<LucideIcon icon={CopyX} name="copy-x" />}
-                          label={
-                            <>
-                              {candidate.slug}{' '}
-                              <Text variant="span" size="compact" tone="quiet">
-                                {candidate.projectName}
-                              </Text>
-                            </>
-                          }
-                          description={
-                            <Text variant="span" wrap="truncate">
-                              {candidate.title}
-                            </Text>
-                          }
-                          multiline
-                        />
-                      ))}
-                      {!state.searching && candidates.length === 0 && <Text tone="quiet">No matching tickets.</Text>}
-                    </List>
-                  )}
                   <Text size="compact" tone="quiet">
                     The selected ticket becomes the canonical target. This relationship is stored as structured
                     duplicate metadata.

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Api, Capabilities, TicketRow } from '../api';
 import type { Project } from '../interactions/types';
+import type { CheckoutGroupList } from '../server-response-parsers';
 import {
   collapsedTicketGroups,
+  projectGroupRegistrySync,
   projectTicketGroups,
   ticketGroupCollapsed,
   ticketGroupDialog,
@@ -49,7 +51,7 @@ function setup(
     refreshProject = vi.fn(() => Promise.resolve()),
     showToast = vi.fn(),
     api = {
-      checkoutGroups: vi.fn(() =>
+      checkoutGroups: vi.fn((): Promise<CheckoutGroupList> =>
         Promise.resolve({ registry: true, groups: [summary(UNLOADED, 'Unloaded', { count: 4 })] }),
       ),
       createCheckoutGroup: vi.fn((_checkout: string, name: string) =>
@@ -89,6 +91,7 @@ describe('ticket groups controller (HS2-3XNTSD)', () => {
   beforeEach(() => {
     collapsedTicketGroups.value = new Set();
     projectTicketGroups.value = {};
+    projectGroupRegistrySync.value = {};
     ticketGroupDialog.value = undefined;
     ticketGroupDropTarget.value = undefined;
     vi.stubGlobal('document', { querySelector: () => null });
@@ -111,6 +114,76 @@ describe('ticket groups controller (HS2-3XNTSD)', () => {
     api.checkoutGroups.mockRejectedValueOnce(new Error('404'));
     await controller.refreshGroups();
     expect(controller.groupNames()).toEqual(['Board', 'Kept']);
+  });
+
+  it('records the registry publication status with each read and drops it when it clears (HS2-VFYSQK)', async () => {
+    const { controller, api, setProject } = setup();
+    const failed = { state: 'failed', detail: 'hook refused', committed: false, at: '2026-11-13T00:40:00Z' } as const;
+    api.checkoutGroups.mockResolvedValueOnce({ registry: true, groups: [], registrySync: failed });
+    await controller.refreshGroups();
+    expect(projectGroupRegistrySync.value).toEqual({ p: failed });
+    // A failed read keeps the last status rather than clearing a real problem.
+    api.checkoutGroups.mockRejectedValueOnce(new Error('offline'));
+    await controller.refreshGroups();
+    expect(projectGroupRegistrySync.value).toEqual({ p: failed });
+    // Another project's status is its own.
+    setProject({ id: 'q', apiPath: '/api' } as Project);
+    api.checkoutGroups.mockResolvedValueOnce({
+      registry: true,
+      groups: [],
+      registrySync: { ...failed, state: 'blocked', detail: 'pull first' },
+    });
+    await controller.refreshGroups();
+    expect(projectGroupRegistrySync.value.q?.state).toBe('blocked');
+    expect(projectGroupRegistrySync.value.p).toEqual(failed);
+    // A read with no status (published registry cleared to untracked, or an older server) removes it.
+    setProject({ id: 'p', apiPath: '/api' } as Project);
+    await controller.refreshGroups();
+    expect(projectGroupRegistrySync.value).toEqual({ q: expect.objectContaining({ state: 'blocked' }) });
+    const before = projectGroupRegistrySync.value;
+    await controller.refreshGroups();
+    expect(projectGroupRegistrySync.value).toBe(before);
+  });
+
+  it('rereads the shown project on a registry change event and keeps only the newest read (HS2-1CWD0H)', async () => {
+    const { controller, api, setProject } = setup();
+    const failed = { state: 'failed', detail: 'hook refused', committed: false, at: '2026-11-15T00:00:00Z' } as const;
+    // An event for a project that is not shown reads nothing; it rereads when shown.
+    await controller.reloadGroups({ id: 'other' });
+    expect(api.checkoutGroups).not.toHaveBeenCalled();
+    api.checkoutGroups.mockResolvedValueOnce({ registry: true, groups: [], registrySync: failed });
+    await controller.reloadGroups({ id: 'p' });
+    expect(api.checkoutGroups).toHaveBeenCalledWith('p');
+    expect(projectGroupRegistrySync.value).toEqual({ p: failed });
+    // Two events in quick succession: the earlier read answers last and must not restore
+    // the failure the later read cleared.
+    let answerFirst!: (list: CheckoutGroupList) => void;
+    api.checkoutGroups
+      .mockReturnValueOnce(
+        new Promise<CheckoutGroupList>((resolve) => {
+          answerFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ registry: true, groups: [] });
+    const first = controller.reloadGroups({ id: 'p' }),
+      second = controller.reloadGroups({ id: 'p' });
+    await second;
+    expect(projectGroupRegistrySync.value).toEqual({});
+    answerFirst({ registry: true, groups: [], registrySync: failed });
+    await first;
+    expect(projectGroupRegistrySync.value).toEqual({});
+    // A later event reads again and shows a new failure.
+    api.checkoutGroups.mockResolvedValueOnce({
+      registry: true,
+      groups: [],
+      registrySync: { ...failed, state: 'blocked', detail: 'pull first' },
+    });
+    await controller.reloadGroups({ id: 'p' });
+    expect(projectGroupRegistrySync.value.p?.state).toBe('blocked');
+    // Switching projects is unaffected: the newest read per project wins independently.
+    setProject({ id: 'q', apiPath: '/api' } as Project);
+    await controller.reloadGroups({ id: 'p' });
+    expect(api.checkoutGroups).toHaveBeenCalledTimes(4);
   });
 
   it('sets a group through the bulk path, reusing an existing group’s stored value', async () => {

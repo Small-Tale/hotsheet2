@@ -199,13 +199,19 @@ pub(crate) fn do_update_with_ticket(
             "cannot clear a newly appended note summary",
         ));
     }
-    if req.response_to.is_some()
-        && (edit_note_id.is_some() || req.note.as_deref().is_none_or(str::is_empty))
+    // With `note_id` the link applies to that existing note (HS2-J4G9GB).
+    if edit_note_id.is_none()
+        && req.response_to.is_some()
+        && req.note.as_deref().is_none_or(str::is_empty)
     {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "response_to requires an appended note",
+            "response_to requires an appended note or note_id",
         ));
+    }
+    // An invalid existing-note link refuses the whole request before any field writes.
+    if let (Some(note_id), Some(Some(request_id))) = (edit_note_id, req.response_to.as_ref()) {
+        ops::validate_note_response_link(&ticket, &note_id, req.note_kind, request_id)?;
     }
     let confidence_change = req.note_confidence_change(edit_note_id.is_some())?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
@@ -270,6 +276,7 @@ pub(crate) fn do_update_with_ticket(
                 confidence: confidence_change,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                 allow_feedback_prompt_edit: req.edit_feedback_prompt,
+                response_to: req.response_to,
             };
             if edit.is_empty() {
                 updated
@@ -292,7 +299,7 @@ pub(crate) fn do_update_with_ticket(
                     confidence: confidence_change.flatten(),
                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                     ai_feedback: None,
-                    response_to: req.response_to,
+                    response_to: req.response_to.flatten(),
                 },
                 text,
             )?,

@@ -15,9 +15,10 @@
 //! - [`locks_in_output`] reads the lock paths from a failed Git step's output, for a lock
 //!   another process took while the cycle ran.
 //!
-//! Hot Sheet never removes a lock by itself: the file looks the same whether its owner
-//! crashed or is still running, and removing a live process's lock can corrupt the index
-//! or a ref. The recovery is manual and spelled out in [`LOCK_RECOVERY_ACTION`].
+//! The file looks the same whether its owner crashed or is still running, and removing a
+//! live process's lock can corrupt the index or a ref, so a lock is never deleted. Sync
+//! moves one aside only when [`crate::sync_stale_locks`] proves it stale (HS2-T0V269);
+//! otherwise the recovery is manual and spelled out in [`LOCK_RECOVERY_ACTION`].
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -25,10 +26,12 @@ use std::time::SystemTime;
 use crate::sync::git_stdout;
 
 /// The next step a blocked store's health reports.
-pub const LOCK_RECOVERY_ACTION: &str = "No ticket merge conflict was found. Make sure no Git \
-     process is running in the store (an editor's Git integration, a terminal, or another \
-     Hot Sheet), then remove the stale lock file and run `hotsheet-cli sync`. Hot Sheet never \
-     removes a Git lock by itself.";
+pub const LOCK_RECOVERY_ACTION: &str = "No ticket merge conflict was found. Sync moves a lock \
+     aside by itself once it is over 10 minutes old and no process has the store's Git \
+     directory open; `hotsheet-cli sync --recover-stale-locks` runs that check now. \
+     Otherwise make sure no Git process is running in the store (an editor's Git \
+     integration, a terminal, or another Hot Sheet), then remove the stale lock file and run \
+     `hotsheet-cli sync`.";
 
 /// How many lock files a reason names before it summarizes the rest.
 const MAX_NAMED_LOCKS: usize = 3;
@@ -133,7 +136,7 @@ fn blocked_reason_at(store_path: &Path, step: &str, locks: &[PathBuf], now: Syst
 
 /// A lock path relative to the store when it is inside it (`.git/index.lock`), else as Git
 /// printed it (a linked worktree's Git directory lives elsewhere).
-fn display_path(store_path: &Path, lock: &Path) -> String {
+pub(crate) fn display_path(store_path: &Path, lock: &Path) -> String {
     let canonical_store = store_path.canonicalize().ok();
     let canonical_lock = lock
         .parent()

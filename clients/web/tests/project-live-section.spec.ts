@@ -4,7 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
@@ -21,7 +21,7 @@ async function openProject(page: Page, server: Server, beforeLoad?: () => Promis
     const incoming = new URL(route.request().url()),
       path = incoming.pathname.slice(apiPath.length);
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,
@@ -134,7 +134,7 @@ test('project sidebar Live section is compact by default and remembers the detai
     await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -179,7 +179,7 @@ test('keeps 16px between the Live gauges and a host callout in both modes (HS2-0
     await expect(live.locator('button').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-0eqmzz-live-compact-callout-1440.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -211,7 +211,7 @@ test('Workers view choice names live workers and last progress (HS2-6B9S7P)', as
     await server.request(`/tickets/${ticket.id}/release`, 'POST', { worker: 'worker-a' });
     await expect(workers).toHaveAccessibleName('Workers View', { timeout: 30_000 });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -348,13 +348,17 @@ test('HS2-HWMW0D keeps the real Workers view and edit through worker updates and
         if (await showInspector.isVisible()) await showInspector.click();
         await expect(page.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
         const detailsButton = inspector.getByRole('button', { name: 'Edit Ticket details' });
+        // Collapsing the rail at a narrower width blurs the editor, which saves the draft and swaps the
+        // textbox for the preview button. Read whichever one is present in a single bounded step: a
+        // count followed by an unbounded inputValue() hung on the removed textbox (HS2-3JPQZH, HS2-DE8BDH).
         await expect
-          .poll(async () =>
-            (await editor.count())
-              ? await editor.inputValue()
-              : (await detailsButton.count())
-                ? await detailsButton.textContent()
-                : '',
+          .poll(() =>
+            editor
+              .or(detailsButton)
+              .evaluate((node) => (node instanceof HTMLTextAreaElement ? node.value : node.textContent), undefined, {
+                timeout: 1_000,
+              })
+              .catch(() => ''),
           )
           .toContain('Unsaved synthetic worker edit');
         await expect(inspector.getByRole('combobox', { name: 'Category' })).toBeVisible();
@@ -365,7 +369,8 @@ test('HS2-HWMW0D keeps the real Workers view and edit through worker updates and
         });
       }
     }
-    if (await editor.count()) await editor.blur();
+    // The same save can still be removing the textbox; never wait unbounded on it (HS2-3JPQZH).
+    if (await editor.count()) await editor.blur({ timeout: 1_000 }).catch(() => undefined);
     await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
     await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
     const longWorker = columns.getByRole('region', { name: `${workerId} Worker Column` });

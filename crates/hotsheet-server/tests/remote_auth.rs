@@ -908,3 +908,415 @@ async fn hs2_dxm0yn_device_list_long_poll_wakes_on_change_and_rechecks_access() 
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 }
+
+/// The `browser_grants` events emitted after `since`, through the cursored long-poll channel
+/// every open page already follows.
+async fn grant_events_since(router: &axum::Router, since: u64) -> (u64, Vec<Value>) {
+    let page = json_body(
+        router
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={since}&timeout_ms=0"),
+                None,
+                None,
+                None,
+                true,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let events = page["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "browser_grants")
+        .cloned()
+        .collect();
+    (page["cursor"].as_u64().unwrap(), events)
+}
+
+#[tokio::test]
+async fn hs2_a3tdnh_grant_changes_push_a_cursored_event_without_identities() {
+    let (_dir, state) = fixture();
+    let router = app(state);
+    let (_tablet, _csrf, tablet) =
+        paired(&router, "Synthetic tablet", json!({"role": "read_write"})).await;
+    let (phone_cookie, phone_csrf, _phone) =
+        paired(&router, "Synthetic phone", json!({"role": "read_only"})).await;
+    let tablet_path = format!(
+        "/remote-auth/owner/devices/{}",
+        tablet["id"].as_str().unwrap()
+    );
+    let (mut cursor, _) = grant_events_since(&router, 0).await;
+
+    // A pairing request changes no open page's grants and pushes nothing.
+    pending(&router, "Synthetic stranger").await;
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+    cursor = next;
+
+    // Granting, then removing, each push one cursored event; repeats push again.
+    for grant in [
+        json!({"admin": true}),
+        json!({"local": true}),
+        json!({"admin": false, "local": false}),
+        json!({"admin": true}),
+    ] {
+        assert_eq!(
+            status(
+                &router,
+                request("PATCH", &tablet_path, Some(grant), None, None, true)
+            )
+            .await,
+            StatusCode::OK
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), 1, "{events:?}");
+        let event = &events[0];
+        assert!(event["cursor"].as_u64().unwrap() > cursor);
+        // Machine-wide and anonymous: no store, device id, or grant values reach other sessions.
+        assert_eq!(event["store"], "");
+        assert_eq!(event["id"], "");
+        assert_eq!(event["slug"], "");
+        assert!(event.get("message").is_none());
+        cursor = next;
+    }
+
+    // A change to an unknown device pushes nothing.
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "PATCH",
+                "/remote-auth/owner/devices/missing",
+                Some(json!({"admin": true})),
+                None,
+                None,
+                true
+            )
+        )
+        .await,
+        StatusCode::NOT_FOUND
+    );
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+    cursor = next;
+
+    // Revoking a device pushes; revoking it again (already gone) does not.
+    for expected in [1, 0] {
+        assert_eq!(
+            status(
+                &router,
+                request("DELETE", &tablet_path, None, None, None, true)
+            )
+            .await,
+            StatusCode::NO_CONTENT
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), expected, "{events:?}");
+        cursor = next;
+    }
+
+    // A browser signing itself out pushes, so its other tabs learn the session is gone.
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "POST",
+                "/remote-auth/logout",
+                None,
+                Some(&phone_cookie),
+                Some(&phone_csrf),
+                false
+            )
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let (next, events) = grant_events_since(&router, cursor).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    cursor = next;
+
+    // Revoke-all pushes only when it removed a session.
+    paired(&router, "Synthetic laptop", json!({"role": "read_only"})).await;
+    let (next, _) = grant_events_since(&router, cursor).await;
+    cursor = next;
+    for expected in [1, 0] {
+        assert_eq!(
+            status(
+                &router,
+                request(
+                    "POST",
+                    "/remote-auth/owner/revoke-all",
+                    None,
+                    None,
+                    None,
+                    true
+                )
+            )
+            .await,
+            StatusCode::NO_CONTENT
+        );
+        let (next, events) = grant_events_since(&router, cursor).await;
+        assert_eq!(events.len(), expected, "{events:?}");
+        cursor = next;
+    }
+}
+
+/// Every event one subscriber's long poll returns after `since`, polled as the trusted host
+/// (`cookie` absent) or as one browser session, plus the page's new cursor (HS2-BZHMEV).
+async fn poll_as(router: &axum::Router, cookie: Option<&str>, since: u64) -> (u64, Vec<Value>) {
+    let page = json_body(
+        router
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/ws/poll?since={since}&timeout_ms=0"),
+                None,
+                cookie,
+                None,
+                cookie.is_none(),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    (
+        page["cursor"].as_u64().unwrap(),
+        page["events"].as_array().unwrap().clone(),
+    )
+}
+
+fn pairing_events(events: &[Value]) -> Vec<&Value> {
+    events
+        .iter()
+        .filter(|event| event["kind"] == "pairing_requests")
+        .collect()
+}
+
+#[tokio::test]
+async fn hs2_bzhmev_pairing_request_events_reach_only_device_managers_over_poll() {
+    let (_dir, state) = fixture();
+    let router = app(state);
+    let (admin, _admin_csrf, admin_device) = paired(
+        &router,
+        "Synthetic tablet",
+        json!({"role": "read_only", "admin": true}),
+    )
+    .await;
+    let (reader, _reader_csrf, _reader_device) =
+        paired(&router, "Synthetic phone", json!({"role": "read_write"})).await;
+    let (start, _) = poll_as(&router, None, 0).await;
+
+    // A new request pushes one anonymous event to the host and the admin session.
+    let (request_id, challenge) = pending(&router, "Synthetic stranger").await;
+    let (host_cursor, host_events) = poll_as(&router, None, start).await;
+    let host_pairing = pairing_events(&host_events);
+    assert_eq!(host_pairing.len(), 1, "{host_events:?}");
+    let event = host_pairing[0];
+    assert!(event["cursor"].as_u64().unwrap() > start);
+    assert_eq!(event["store"], "");
+    assert_eq!(event["id"], "");
+    assert_eq!(event["slug"], "");
+    assert!(event.get("message").is_none());
+    let wire = event.to_string();
+    for secret in [
+        request_id.as_str(),
+        challenge.as_str(),
+        "Synthetic stranger",
+        ORIGIN,
+    ] {
+        assert!(!wire.contains(secret), "event leaked {secret}: {wire}");
+    }
+    let (admin_cursor, admin_events) = poll_as(&router, Some(&admin), start).await;
+    assert_eq!(pairing_events(&admin_events).len(), 1, "{admin_events:?}");
+    assert_eq!(admin_cursor, host_cursor);
+
+    // A session without the admin grant never sees it, but its cursor still moves past it.
+    let (reader_cursor, reader_events) = poll_as(&router, Some(&reader), start).await;
+    assert!(
+        pairing_events(&reader_events).is_empty(),
+        "{reader_events:?}"
+    );
+    assert_eq!(reader_cursor, host_cursor);
+
+    // Approving and rejecting each push one event; a refused reject pushes none.
+    let (second, _) = pending(&router, "Synthetic laptop").await;
+    let (mut cursor, _) = poll_as(&router, None, host_cursor).await;
+    for (path, body, expected) in [
+        (
+            "/remote-auth/owner/approve",
+            json!({"id": request_id, "role": "read_only"}),
+            StatusCode::NO_CONTENT,
+        ),
+        (
+            "/remote-auth/owner/reject",
+            json!({"id": second}),
+            StatusCode::NO_CONTENT,
+        ),
+        (
+            "/remote-auth/owner/reject",
+            json!({"id": "missing"}),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        assert_eq!(
+            status(&router, request("POST", path, Some(body), None, None, true)).await,
+            expected
+        );
+        let (next, events) = poll_as(&router, None, cursor).await;
+        let want = usize::from(expected == StatusCode::NO_CONTENT);
+        assert_eq!(pairing_events(&events).len(), want, "{path}: {events:?}");
+        cursor = next;
+    }
+    // A refused pairing request pushes nothing either.
+    let invalid = status(
+        &router,
+        request(
+            "POST",
+            "/remote-auth/pair",
+            Some(json!({"label": ""})),
+            None,
+            None,
+            false,
+        ),
+    )
+    .await;
+    assert_eq!(invalid, StatusCode::UNAUTHORIZED);
+    let (next, events) = poll_as(&router, None, cursor).await;
+    assert!(pairing_events(&events).is_empty(), "{events:?}");
+    cursor = next;
+
+    // Removing the admin grant stops the events at once: the grant is checked per page.
+    let admin_path = format!(
+        "/remote-auth/owner/devices/{}",
+        admin_device["id"].as_str().unwrap()
+    );
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "PATCH",
+                &admin_path,
+                Some(json!({"admin": false})),
+                None,
+                None,
+                true
+            )
+        )
+        .await,
+        StatusCode::OK
+    );
+    pending(&router, "Synthetic watch").await;
+    let (_, demoted) = poll_as(&router, Some(&admin), cursor).await;
+    assert!(pairing_events(&demoted).is_empty(), "{demoted:?}");
+    assert!(
+        demoted
+            .iter()
+            .any(|event| event["kind"] == "browser_grants"),
+        "{demoted:?}"
+    );
+
+    // A waiting poll woken by a gated event answers without it.
+    let (now, _) = poll_as(&router, None, 0).await;
+    let waiting = router.clone().oneshot(request(
+        "GET",
+        &format!("/ws/poll?since={now}&timeout_ms=5000"),
+        None,
+        Some(&reader),
+        None,
+        false,
+    ));
+    let (woken, _) = tokio::join!(waiting, pending(&router, "Synthetic speaker"));
+    let woken = json_body(woken.unwrap()).await;
+    assert!(
+        pairing_events(woken["events"].as_array().unwrap()).is_empty(),
+        "{woken}"
+    );
+}
+
+type SyncSocket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// One remote session's `/ws/sync` socket, carrying the session and CSRF cookies the way a
+/// browser's upgrade does.
+async fn sync_socket(addr: std::net::SocketAddr, session: &str, csrf: &str) -> SyncSocket {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut upgrade = format!("ws://{addr}/ws/sync")
+        .into_client_request()
+        .unwrap();
+    let headers = upgrade.headers_mut();
+    headers.insert("origin", ORIGIN.parse().unwrap());
+    headers.insert(
+        "cookie",
+        format!("{session}; hs2_remote_csrf={csrf}")
+            .parse()
+            .unwrap(),
+    );
+    tokio_tungstenite::connect_async(upgrade).await.unwrap().0
+}
+
+/// The kind of the next text event a socket delivers.
+async fn next_kind(socket: &mut SyncSocket) -> String {
+    use futures_util::StreamExt;
+    loop {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(10), socket.next())
+            .await
+            .expect("an event arrives")
+            .expect("the socket stays open")
+            .unwrap();
+        if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+            let event: Value = serde_json::from_str(&text).unwrap();
+            return event["kind"].as_str().unwrap().to_owned();
+        }
+    }
+}
+
+#[tokio::test]
+async fn hs2_bzhmev_pairing_request_events_reach_only_device_managers_over_websocket() {
+    let (_dir, state) = fixture();
+    let router = app(state.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let served = app(state);
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    let (admin, admin_csrf, _admin_device) = paired(
+        &router,
+        "Synthetic tablet",
+        json!({"role": "read_only", "admin": true}),
+    )
+    .await;
+    let (reader, reader_csrf, reader_device) =
+        paired(&router, "Synthetic phone", json!({"role": "read_only"})).await;
+    let mut admin_socket = sync_socket(addr, &admin, &admin_csrf).await;
+    let mut reader_socket = sync_socket(addr, &reader, &reader_csrf).await;
+
+    pending(&router, "Synthetic stranger").await;
+    assert_eq!(next_kind(&mut admin_socket).await, "pairing_requests");
+
+    // The reader's socket skips the pairing event: the next one it delivers is a later grant
+    // change, which every session receives.
+    let reader_path = format!(
+        "/remote-auth/owner/devices/{}",
+        reader_device["id"].as_str().unwrap()
+    );
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "PATCH",
+                &reader_path,
+                Some(json!({"role": "read_write"})),
+                None,
+                None,
+                true
+            )
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(next_kind(&mut reader_socket).await, "browser_grants");
+    assert_eq!(next_kind(&mut admin_socket).await, "browser_grants");
+}

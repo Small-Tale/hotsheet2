@@ -3,6 +3,9 @@
 //! create, rename, ungroup, merge, and the explicit migration. Names live in the
 //! project's group registry, found from the working directory; a bare store takes ids.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::{Path, PathBuf};
@@ -56,7 +59,7 @@ impl Project {
             std::fs::create_dir_all(&path).unwrap();
             path
         });
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.arg("--test-fixture-credentials")
             .current_dir(cwd)
             .env("HOTSHEET_HOME", home)

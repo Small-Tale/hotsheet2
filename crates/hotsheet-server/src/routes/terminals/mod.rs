@@ -22,12 +22,12 @@ pub use launch::{
     prune_orphaned_terminal_names, release_orphaned_drive_sessions, resume_broker_terminal_sessions,
 };
 pub(crate) use signals::{
-    TerminalAiConnectionReq, answer_terminal_question, ask_terminal_question, clear_terminal_halt,
-    connect_terminal_ai, disconnect_terminal_ai, emit_permission_rules_changed, halt_terminal,
-    kill_terminal, list_permission_rules, list_terminals, poll_terminal_question_answer,
-    read_terminal, remember_permission_after_allow, rename_terminal, resolve_permission,
-    resolve_terminal_question, revoke_permission_rule, try_live_terminal_infos,
-    update_permission_rule, write_terminal,
+    TerminalAiConnectionReq, answer_terminal_question, ask_terminal_question, clear_terminal,
+    clear_terminal_halt, connect_terminal_ai, disconnect_terminal_ai,
+    emit_permission_rules_changed, halt_terminal, kill_terminal, list_permission_rules,
+    list_terminals, poll_terminal_question_answer, read_terminal, remember_permission_after_allow,
+    rename_terminal, resolve_permission, resolve_terminal_question, revoke_permission_rule,
+    try_live_terminal_infos, update_permission_rule, write_terminal,
 };
 
 use crate::AppState;

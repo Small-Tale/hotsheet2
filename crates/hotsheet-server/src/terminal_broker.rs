@@ -16,6 +16,12 @@ use hotsheet_terminals::{
     BrokerClient, BrokerIdentity, BrokerRequest, BrokerResponse, BrokerTermInfo,
 };
 
+#[path = "terminal_broker_startup.rs"]
+mod startup;
+use startup::{
+    BROKER_STARTUP, ContenderState, STARTUP_POLL, StartupContender, StartupWindow, keep_waiting,
+};
+
 /// A project's broker coordinates: the Unix socket + the project id the broker serves.
 #[derive(Debug, Clone)]
 pub struct TerminalBroker {
@@ -138,7 +144,7 @@ impl TerminalBroker {
     /// infrequent, so a pooled connection isn't worth the complexity yet).
     pub async fn call(&self, req: BrokerRequest) -> std::io::Result<BrokerResponse> {
         let mut client = self
-            .connect_or_restart(|| spawn_broker(&self.socket, &self.project).map(|_| ()))
+            .connect_or_restart(|| spawn_broker(&self.socket, &self.project))
             .await?;
         client.request(&req).await
     }
@@ -170,9 +176,12 @@ impl TerminalBroker {
         }
     }
 
-    async fn connect_or_restart(
+    /// Connect, or start a broker and wait for it to accept. The spawned process is kept so
+    /// the wait follows it (HS2-KCM23W): a slow first launch that is still running is waited
+    /// for up to the startup ceiling, and one that exited fails without waiting it out.
+    async fn connect_or_restart<C: StartupContender>(
         &self,
-        spawn: impl FnOnce() -> std::io::Result<()>,
+        spawn: impl FnOnce() -> std::io::Result<C>,
     ) -> std::io::Result<BrokerClient> {
         if let Ok(client) = BrokerClient::connect(&self.socket).await {
             return Ok(client);
@@ -181,24 +190,45 @@ impl TerminalBroker {
         if let Ok(client) = BrokerClient::connect(&self.socket).await {
             return Ok(client);
         }
-        spawn()?;
-        let mut last_error = None;
-        for _ in 0..40 {
-            match BrokerClient::connect(&self.socket).await {
+        let mut contender = spawn()?;
+        let started = std::time::Instant::now();
+        let mut attempts = 0;
+        loop {
+            let error = match BrokerClient::connect(&self.socket).await {
                 Ok(client) => return Ok(client),
-                Err(error) => last_error = Some(error),
+                Err(error) => error,
+            };
+            attempts += 1;
+            let absent = matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+            ) && matches!(
+                hotsheet_terminals::broker_socket::owner_lock_held(&self.socket),
+                Ok(false)
+            );
+            let state = contender.state();
+            if !keep_waiting(BROKER_STARTUP, attempts, started.elapsed(), &state, absent) {
+                return Err(std::io::Error::new(
+                    error.kind(),
+                    format!(
+                        "terminal broker did not come up on {} after {} ms ({}; last connect: {error})",
+                        self.socket.display(),
+                        started.elapsed().as_millis(),
+                        state.describe()
+                    ),
+                ));
             }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            tokio::time::sleep(STARTUP_POLL).await;
         }
-        Err(last_error.unwrap_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!(
-                    "terminal broker did not come up on {}",
-                    self.socket.display()
-                ),
-            )
-        }))
+    }
+}
+
+impl StartupContender for SpawnedBroker {
+    fn state(&mut self) -> ContenderState {
+        match self {
+            Self::Direct(child) => tracked_child_state(child),
+            Self::Relayed { pid } => relayed_state(*pid),
+        }
     }
 }
 
@@ -207,56 +237,72 @@ fn wait_for_broker_startup(
     child: &mut hotsheet_process_journal::TrackedChild,
 ) -> anyhow::Result<()> {
     let pid = child.id();
-    wait_for_startup(socket, pid, "spawned", || tracked_child_state(child))
-}
-
-/// A relayed broker is the relay's child, not this server's (HS2-HYF56Y); its state after a
-/// failed startup is read with a signal-0 probe instead of `wait`.
-fn wait_for_relayed_startup(socket: &Path, pid: u32) -> anyhow::Result<()> {
-    wait_for_startup(socket, pid, "relayed", || {
-        // SAFETY: signal 0 only checks that the pid exists; nothing is delivered.
-        if pid <= i32::MAX as u32 && unsafe { libc::kill(pid as i32, 0) } == 0 {
-            "relayed broker still running".to_owned()
-        } else {
-            "relayed broker exited".to_owned()
-        }
+    wait_for_startup(socket, pid, "spawned", BROKER_STARTUP, || {
+        tracked_child_state(child)
     })
 }
 
+/// A relayed broker is the relay's child, not this server's (HS2-HYF56Y); its state is read
+/// with a signal-0 probe instead of `wait`.
+fn wait_for_relayed_startup(socket: &Path, pid: u32) -> anyhow::Result<()> {
+    wait_for_startup(socket, pid, "relayed", BROKER_STARTUP, || {
+        relayed_state(pid)
+    })
+}
+
+fn relayed_state(pid: u32) -> ContenderState {
+    // SAFETY: signal 0 only checks that the pid exists; nothing is delivered.
+    if pid <= i32::MAX as u32 && unsafe { libc::kill(pid as i32, 0) } == 0 {
+        ContenderState::Running("relayed broker still running".to_owned())
+    } else {
+        ContenderState::Exited("relayed broker exited".to_owned())
+    }
+}
+
+/// Probe until the broker answers Ping, following the started process (HS2-KCM23W). A
+/// healthy socket is adopted before the process is consulted, so an exited contender still
+/// adopts another healthy broker (HS2-C8J6WS).
 fn wait_for_startup(
     socket: &Path,
     pid: u32,
     how: &str,
-    state: impl FnOnce() -> String,
+    window: StartupWindow,
+    mut state: impl FnMut() -> ContenderState,
 ) -> anyhow::Result<()> {
-    let mut last_probe = None;
-    for _ in 0..40 {
-        last_probe = Some(match is_live(socket) {
+    let started = std::time::Instant::now();
+    let mut attempts = 0;
+    loop {
+        let (last_probe, absent) = match is_live(socket) {
             Ok(true) => return Ok(()),
-            Ok(false) => "absent".to_owned(),
-            Err(error) => format!("{:?} (os error {:?})", error.kind(), error.raw_os_error()),
-        });
-        std::thread::sleep(std::time::Duration::from_millis(50));
+            Ok(false) => ("absent".to_owned(), true),
+            Err(error) => (
+                format!("{:?} (os error {:?})", error.kind(), error.raw_os_error()),
+                false,
+            ),
+        };
+        attempts += 1;
+        let contender = state();
+        if !keep_waiting(window, attempts, started.elapsed(), &contender, absent) {
+            anyhow::bail!(
+                "terminal broker did not come up on {} after {} ms ({how} pid {pid}; {}; last probe: {last_probe})",
+                socket.display(),
+                started.elapsed().as_millis(),
+                contender.describe()
+            );
+        }
+        std::thread::sleep(STARTUP_POLL);
     }
-    // HS2-C8J6WS: only observe the contender after failure. An exited contender must
-    // never prevent adoption of another healthy broker during the existing window.
-    let child_state = state();
-    anyhow::bail!(
-        "terminal broker did not come up on {} ({how} pid {pid}; {child_state}; last probe: {})",
-        socket.display(),
-        last_probe.as_deref().unwrap_or("not observed")
-    )
 }
 
-fn tracked_child_state(child: &mut hotsheet_process_journal::TrackedChild) -> String {
+fn tracked_child_state(child: &mut hotsheet_process_journal::TrackedChild) -> ContenderState {
     match child.try_wait() {
-        Ok(Some(status)) => format!("child exited: {status}"),
-        Ok(None) => "child still running".to_owned(),
-        Err(error) => format!(
+        Ok(Some(status)) => ContenderState::Exited(format!("child exited: {status}")),
+        Ok(None) => ContenderState::Running("child still running".to_owned()),
+        Err(error) => ContenderState::Unknown(format!(
             "child status unavailable: {:?} (os error {:?})",
             error.kind(),
             error.raw_os_error()
-        ),
+        )),
     }
 }
 
@@ -620,7 +666,9 @@ mod tests {
                 Arc::new(TerminalManager::new()),
             ));
             let mut client = second
-                .connect_or_restart(|| panic!("the other handle already owns the restarted broker"))
+                .connect_or_restart(|| -> std::io::Result<()> {
+                    panic!("the other handle already owns the restarted broker")
+                })
                 .await
                 .unwrap();
             assert!(matches!(

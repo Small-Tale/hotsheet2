@@ -932,6 +932,38 @@ pub(crate) fn cmd_attachment_actor(
     Ok(())
 }
 
+/// The ticket's blocker set after `--remove-blocked-by`, then `--add-blocked-by`
+/// (HS2-CHH28E). Removal matches a slug or ULID that resolves, or the raw ULID of a blocker
+/// that no longer exists. Kept blockers stay as stored; additions pass the shared
+/// self-block and dependency-cycle checks.
+fn adjusted_blockers(
+    store: &FsStore,
+    ticket: &hotsheet_model::Ticket,
+    add: &[String],
+    remove: &[String],
+) -> Result<Vec<Ulid>> {
+    let mut removed = Vec::with_capacity(remove.len());
+    for needle in remove {
+        removed.push(match ops::resolve(store, needle)? {
+            Some(found) => found.id,
+            None => Ulid::from_string(needle)
+                .map_err(|_| anyhow::anyhow!("no ticket matching '{needle}'"))?,
+        });
+    }
+    let mut ids: Vec<Ulid> = ticket
+        .blocked_by
+        .iter()
+        .filter(|id| !removed.contains(id))
+        .copied()
+        .collect();
+    for id in ops::resolve_blockers(store, Some(&ticket.id), add)? {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
 pub(crate) fn cmd_edit(
     actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &PathBuf,
@@ -950,6 +982,8 @@ pub(crate) fn cmd_edit(
         tags,
         blocked_by,
         clear_blocked_by,
+        add_blocked_by,
+        remove_blocked_by,
         blocked_reason,
         clear_blocked_reason,
         group,
@@ -976,6 +1010,10 @@ pub(crate) fn cmd_edit(
     {
         bail!("note '{note_id}' was not found on ticket '{}'", ticket.slug);
     }
+    // HS2-J4G9GB: an invalid existing-note link refuses the edit before any field writes.
+    if let (Some(note_id), Some(Some(request_id))) = (edit_note, response_to.as_ref()) {
+        ops::validate_note_response_link(&ticket, &note_id, note_kind, request_id)?;
+    }
     let up_next = if up_next {
         Some(true)
     } else if no_up_next {
@@ -987,6 +1025,13 @@ pub(crate) fn cmd_edit(
     // neither leaves it unchanged.
     let blocked_by = if clear_blocked_by {
         Some(Vec::new())
+    } else if !add_blocked_by.is_empty() || !remove_blocked_by.is_empty() {
+        Some(adjusted_blockers(
+            &store,
+            &ticket,
+            &add_blocked_by,
+            &remove_blocked_by,
+        )?)
     } else if blocked_by.is_empty() {
         None
     } else {
@@ -1054,6 +1099,7 @@ pub(crate) fn cmd_edit(
             confidence: note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
             allow_feedback_prompt_edit: false,
+            response_to,
         };
         if !edit.is_empty() {
             updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;
@@ -1075,7 +1121,7 @@ pub(crate) fn cmd_edit(
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
                 ai_feedback: None,
-                response_to,
+                response_to: response_to.flatten(),
             },
             text,
         )?;
@@ -1405,11 +1451,22 @@ pub(crate) struct TicketEditArgs {
     #[arg(long = "tag")]
     tags: Vec<String>,
     /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
-    #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
+    #[arg(
+        long = "blocked-by",
+        conflicts_with_all = ["clear_blocked_by", "add_blocked_by", "remove_blocked_by"]
+    )]
     blocked_by: Vec<String>,
     /// Clear all blockers.
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["add_blocked_by", "remove_blocked_by"])]
     clear_blocked_by: bool,
+    /// Add a blocker (slug or ULID) to the existing set, repeatable; one already in the set
+    /// is kept once. A dependency cycle is refused (HS2-CHH28E).
+    #[arg(long = "add-blocked-by")]
+    add_blocked_by: Vec<String>,
+    /// Remove a blocker (slug or ULID) from the existing set, repeatable; one that is not in
+    /// the set changes nothing (HS2-CHH28E).
+    #[arg(long = "remove-blocked-by")]
+    remove_blocked_by: Vec<String>,
     /// Set the user-facing explanation for why this ticket is blocked.
     #[arg(long, conflicts_with = "clear_blocked_reason")]
     blocked_reason: Option<String>,
@@ -1450,9 +1507,13 @@ pub(crate) struct TicketEditArgs {
     /// Clear an existing note's timeline headline.
     #[arg(long, requires = "edit_note", conflicts_with = "note_summary")]
     clear_note_summary: bool,
-    /// Feedback request note ULID answered by this note.
-    #[arg(long, conflicts_with = "edit_note")]
+    /// Feedback request note ULID answered by the appended note, or by the note named by
+    /// --edit-note (HS2-J4G9GB).
+    #[arg(long, conflicts_with = "clear_response_to")]
     response_to: Option<String>,
+    /// Remove the response link from the note named by --edit-note.
+    #[arg(long, requires = "edit_note")]
+    clear_response_to: bool,
     /// AI completion confidence (integer 0-100) recorded on the appended note, or the
     /// corrected score of the note named by --edit-note (note text then optional).
     #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
@@ -1583,6 +1644,9 @@ pub(crate) struct TicketEdit {
     tags: Vec<String>,
     blocked_by: Vec<String>,
     clear_blocked_by: bool,
+    /// Incremental blocker changes applied to the current set (HS2-CHH28E).
+    add_blocked_by: Vec<String>,
+    remove_blocked_by: Vec<String>,
     blocked_reason: Option<String>,
     clear_blocked_reason: bool,
     /// Absent leaves the group; `Some(None)` clears it (HS2-PDSHNN).
@@ -1594,7 +1658,8 @@ pub(crate) struct TicketEdit {
     note: Option<String>,
     note_kind: Option<NoteKind>,
     note_summary: Option<Option<String>>,
-    response_to: Option<String>,
+    /// `Some(None)` removes an existing note's link (HS2-J4G9GB).
+    response_to: Option<Option<String>>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
 }
@@ -1603,7 +1668,15 @@ impl TicketEdit {
     /// Read `--note`/`--note-file` and validate the note modifiers before any write.
     fn prepare(args: TicketEditArgs) -> Result<Self> {
         let note = read_note_input(args.note, args.note_file, args.allow_literal_backslash_n)?;
-        if args.response_to.is_some() && note.as_deref().is_none_or(str::is_empty) {
+        let response_to = if args.clear_response_to {
+            Some(None)
+        } else {
+            args.response_to.map(Some)
+        };
+        if args.edit_note.is_none()
+            && response_to.is_some()
+            && note.as_deref().is_none_or(str::is_empty)
+        {
             anyhow::bail!("--response-to requires --note or --note-file");
         }
         let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
@@ -1618,6 +1691,7 @@ impl TicketEdit {
             note_summary.as_ref().map(Option::as_ref),
             note_confidence,
             args.edit_note.as_ref(),
+            response_to.is_some(),
         )?;
         Ok(Self {
             title: args.title,
@@ -1630,6 +1704,8 @@ impl TicketEdit {
             tags: args.tags,
             blocked_by: args.blocked_by,
             clear_blocked_by: args.clear_blocked_by,
+            add_blocked_by: args.add_blocked_by,
+            remove_blocked_by: args.remove_blocked_by,
             blocked_reason: args.blocked_reason,
             clear_blocked_reason: args.clear_blocked_reason,
             group: if args.clear_group {
@@ -1643,7 +1719,7 @@ impl TicketEdit {
             note,
             note_kind: args.note_kind.as_deref().map(parse_note_kind).transpose()?,
             note_summary,
-            response_to: args.response_to,
+            response_to,
             note_confidence,
             edit_note: args.edit_note,
         })

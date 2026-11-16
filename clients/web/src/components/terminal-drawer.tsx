@@ -1,3 +1,4 @@
+import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './terminal-drawer.css';
 
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
@@ -125,6 +126,15 @@ export interface TerminalDrawerProps {
 export interface TerminalDrawerSearch {
   model: SearchFieldModel;
   open: boolean;
+  /** The searched terminal's match count ("3 of 12", "No matches"; HS2-M5QPED); omitted while nothing is searched. */
+  count?: string;
+  /** Whether the search has a match to step to; the count control is disabled without one. */
+  hasMatches?: boolean;
+  /**
+   * The rail has no room for the count control (HS2-HPDX81): the count leaves the rail and stays
+   * available as a visually hidden polite status. `wireTerminalSearchCountFit` measures it.
+   */
+  countCompact?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -489,6 +499,23 @@ export function TerminalDrawer({
                       />
                     </ToolbarControlGroup>
                   )}
+                  {selectedSession && search?.open && search.count && !search.countCompact && (
+                    // The match count beside the open field (HS2-M5QPED), as a borderless text control that
+                    // steps to the next match (Enter does the same in the field). SearchField has no in-field
+                    // result readout and the rail's end zone holds only controls (KF-8CDT8B).
+                    <ToolbarControlGroup appearance="borderless" single content="text">
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.nextTerminalSearchMatch.attrs}
+                        data-terminal-search-count=""
+                        disabled={!search.hasMatches}
+                        aria-label={`Next Match, ${search.count}`}
+                        title="Next match"
+                      >
+                        {search.count}
+                      </button>
+                    </ToolbarControlGroup>
+                  )}
                   <ToolbarControlGroup
                     className="terminal-drawer__actions"
                     appearance="borderless"
@@ -541,6 +568,13 @@ export function TerminalDrawer({
               {tabs}
             </TabBar>
           </div>
+          {selectedSession && search?.open && search.countCompact && (
+            // A narrow rail gives the count's room to the field, Clear, and Hide (HS2-HPDX81); screen
+            // readers still hear it. The TabBar's end zone holds only control groups, so it sits beside.
+            <span class="wa-visually-hidden" role="status" data-terminal-search-count-status="">
+              {search.count ?? ''}
+            </span>
+          )}
         </header>
       )}
       <div class="terminal-drawer__content">

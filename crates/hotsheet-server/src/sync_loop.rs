@@ -134,9 +134,11 @@ fn sync_hosted(
             }
             // HS2-ADHFKZ: tell open clients when this store's sync health changes state
             // (for example offline -> rejected, or rejected -> synced), not on every pass.
-            let before = hotsheet_ticketing::sync_health::read_record(path)
-                .and_then(|record| record.outcome);
+            let record = hotsheet_ticketing::sync_health::read_record(path);
+            let before = record.as_ref().and_then(|record| record.outcome);
+            let recovered = record.and_then(|record| record.stale_lock_recovery);
             let report = sync_once(path);
+            log_stale_lock_recovery(path, recovered.as_ref());
             let after = SyncState::from(report);
             // Offline (and a Git lock, HS2-6ACT5Y) becomes banner-worthy only once it
             // persists, so that crossing is a change too.
@@ -170,6 +172,25 @@ fn sync_hosted(
         .collect()
 }
 
+/// Log the stale Git locks a pass moved aside (HS2-T0V269): the store's activity line for
+/// a recovery, beside the health reason that names them. `before` is the recorded recovery
+/// from before the pass, so an older one is not logged again.
+fn log_stale_lock_recovery(
+    store: &Path,
+    before: Option<&hotsheet_ticketing::sync_health::StaleLockRecovery>,
+) {
+    if let Some(recovery) = hotsheet_ticketing::sync_health::read_record(store)
+        .and_then(|record| record.stale_lock_recovery)
+        .filter(|recovery| Some(recovery) != before)
+    {
+        tracing::warn!(
+            store = %store.display(),
+            "{}",
+            hotsheet_ticketing::sync_stale_locks::moved_line(&recovery.moved)
+        );
+    }
+}
+
 /// Sync every Git store `scope` covers that is linked to a registered checkout but not
 /// hosted (HS2-D9ZGAE): the stores of projects no client opened since the host started.
 /// The pass reads the checkout registry only; it never opens a project, and announces
@@ -190,9 +211,11 @@ pub fn sync_registered(state: &AppState, scope: &PassScope) -> Vec<(String, Sync
         .into_iter()
         .filter(|root| !hosted.contains(root) && scope.covers(root))
         .map(|root| {
-            let before = hotsheet_ticketing::sync_health::read_record(&root)
-                .and_then(|record| record.outcome);
+            let record = hotsheet_ticketing::sync_health::read_record(&root);
+            let before = record.as_ref().and_then(|record| record.outcome);
+            let recovered = record.and_then(|record| record.stale_lock_recovery);
             let report = sync_once(&root);
+            log_stale_lock_recovery(&root, recovered.as_ref());
             let after = SyncState::from(report);
             if report != SyncReport::NoRemote && before != Some(after) {
                 tracing::info!(store = %root.display(), state = ?after, "registered store sync");

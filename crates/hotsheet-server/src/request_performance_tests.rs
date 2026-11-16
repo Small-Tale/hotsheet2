@@ -4,6 +4,7 @@ use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{NewTicket, TicketPatch, ops};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::time::Instant;
 
 /// Hold a real shared resource outside the async runtime, releasing even on failure.
 struct HeldResource {
@@ -279,21 +280,37 @@ fn routed(uri: &str) -> axum::http::Request<axum::body::Body> {
 /// the held index lock must not starve an unrelated ticket detail or health check
 /// (HS2-9Z0Q8N). Without the blocking-offload layer the list handler parks the only worker
 /// and both of these time out.
+///
+/// HS2-YRHRP7: every step is gated on an event, not on a sleep or a fixed duration. The
+/// unrelated requests start only after the list request has started its index wait, and the
+/// reported wait is compared with the interval the test itself held the lock after that
+/// event, so a slow or loaded runner cannot make the assertion fail.
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
+    use crate::routes::tickets::index_wait_probe;
     use tower::ServiceExt;
     let _serial = crate::blocking_offload::OFFLOAD_TIMING_TESTS.lock().await;
     let (_root, state, project, ticket) = project_fixture();
-    let held = HeldResource::with_hold(state.index.clone(), Duration::from_secs(30));
+    let index = state.index.clone();
+    index_wait_probe::forget(&index);
+    let held = HeldResource::with_hold(index.clone(), Duration::from_secs(60));
     let router = app(state);
     let list = tokio::spawn(router.clone().oneshot(routed("/tickets")));
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Yield (never sleep a fixed time) until the list request is waiting on the index.
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while !index_wait_probe::attempted(&index) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the list request reaches the held index lock");
+    let waiting_since = Instant::now();
     for uri in [
         "/health".to_string(),
         format!("/checkouts/{project}/tickets/{}", ticket.id),
     ] {
         let response = tokio::time::timeout(
-            Duration::from_secs(8),
+            Duration::from_secs(30),
             tokio::spawn(router.clone().oneshot(routed(&uri))),
         )
         .await
@@ -302,10 +319,14 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
         .unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{uri}");
     }
-    assert!(held.active.load(Ordering::SeqCst));
+    assert!(
+        held.active.load(Ordering::SeqCst),
+        "the index lock is still held"
+    );
     assert!(!list.is_finished(), "the list request waits for the index");
+    let held_after_wait_began = waiting_since.elapsed();
     drop(held);
-    let list = tokio::time::timeout(Duration::from_secs(8), list)
+    let list = tokio::time::timeout(Duration::from_secs(30), list)
         .await
         .unwrap()
         .unwrap()
@@ -324,9 +345,13 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
         .and_then(|rest| rest.split(',').next())
         .and_then(|ms| ms.trim().parse().ok())
         .unwrap_or_else(|| panic!("no index-wait entry in {timing:?}"));
+    // The wait timer started before the probe fired and the lock was taken only after the
+    // release, so the reported wait covers at least the interval measured here. The 0.1 ms
+    // allows for the header's one-decimal rounding.
+    let held_ms = held_after_wait_began.as_secs_f64() * 1000.0;
     assert!(
-        wait_ms >= 40.0,
-        "the held lock shows as index wait: {timing:?}"
+        wait_ms + 0.1 >= held_ms,
+        "the held lock shows as index wait ({held_ms:.1} ms held after the wait began): {timing:?}"
     );
     for phase in [
         "index-query",

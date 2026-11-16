@@ -5,6 +5,9 @@
 //! byte-for-byte unchanged (no commits, no config change, notably no `core.bare`) and
 //! the store must hold the expected history.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -122,7 +125,7 @@ fn assert_sentinel_unchanged(before: &BTreeMap<PathBuf, Vec<u8>>, sentinel: &Pat
 /// `hotsheet-cli` with the sentinel exported the way a git hook would.
 fn hostile_cli(sentinel: &Path, home: &Path) -> Command {
     let git_dir = sentinel.join(".git");
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     cmd.env("HOTSHEET_HOME", home)
         .envs(IDENTITY)
         .env("GIT_DIR", &git_dir)

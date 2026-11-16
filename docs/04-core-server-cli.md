@@ -276,7 +276,11 @@ asks an AI through the same workflow as the server and reports it in `ai_help`;
 `hotsheet-cli sync --adopt <commit>` adopts a history resolved in a temporary worktree
 (§2.12.4).
 `hotsheet-cli sync` exits non-zero for `rejected`, `blocked` (a Git lock file,
-HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. The background loop emits `ticket_store_sync` change
+HS2-6ACT5Y), `rebase_in_progress`, and `history_recovery_required`. Each pass first moves
+aside a provably stale Git lock it needs and prints what it moved;
+`hotsheet-cli sync --recover-stale-locks` runs only that recovery, prints each moved and
+kept lock, and exits non-zero while one stays held ([02](02-ticket-storage.md) §2.12.2,
+HS2-T0V269). The background loop emits `ticket_store_sync` change
 events, with the new state in `slug` and no reason text.
 
 **Sync after headless writes (HS2-D9ZGAE).** The background loop also syncs every Git
@@ -524,9 +528,13 @@ cursor-addressable stdout/stderr lines and cancellation. `/notifications` persis
 bounded server-process routing feed with checkout/store/ticket targets, deduplication, and
 acknowledgement while also publishing live events. `/tts/synthesize` accepts text,
 provider id, and voice only; provider adapters and their credential resolution remain in
-the server process. `/tts/providers` lists configured server adapters. On macOS the
-server supplies `macos-say`, passing narration through stdin and converting the
-temporary audio to WAV; the temporary files are removed after the response is built.
+the server process. `/tts/providers` lists configured server adapters, and
+`/tts/voices?provider=<id>` lists one adapter's voices as `{name, lang}` entries (an
+adapter that cannot list voices returns an empty list; an unknown provider is 404 and a
+failed listing 503, HS2-CEZVSE). On macOS the server supplies `macos-say`, passing
+narration through stdin and converting the temporary audio to WAV; the temporary files
+are removed after the response is built. Its voices come from `say -v '?'`, parsed by
+`tts::parse_say_voices`.
 
 #### Route reference: runs, views, lifecycle, bridge probe, announce
 
@@ -1026,6 +1034,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
+hotsheet edit HS-7f3k9q --add-blocked-by HS-abc123                      # add one blocker
+hotsheet edit HS-7f3k9q --remove-blocked-by HS-abc123                   # remove one blocker
 hotsheet batch HS-7f3k9q HS-abc123 --priority high --note-file update.md # one update, per-ticket results
 hotsheet delete-note HS-7f3k9q <note-ulid>                                # remove a git ticket note
 hotsheet claim-next --worker worker-1                       # self-select + claim + start
@@ -1318,9 +1328,23 @@ regular reply or `No response needed` acknowledgement. The request must be a not
 that ticket that reads present as a feedback request: a typed `feedback_needed` note or
 a legacy implicit regular note carrying the marker, never an explicit Regular note
 (HS2-VBFSZJ). An invalid target is a 400, not a stale-token conflict. The server PATCH routes and MCP
-`hotsheet_update` accept the same `response_to` JSON field; it is invalid on an
-edit or without note text. New feedback requests are independently tracked, while
+`hotsheet_update` accept the same `response_to` JSON field. Without `note_id` it needs
+note text. New feedback requests are independently tracked, while
 older notes without the linkage retain sequential review state (HS2-W1ENZD).
+
+An existing note can become the response itself (HS2-J4G9GB). Use `--edit-note <id>
+--response-to <request-id>`, or `note_id` plus `response_to` in the API and MCP, so a
+decision recorded without the link closes its request without a duplicate note.
+`--clear-response-to`, or JSON `null`, removes the link. The target follows the append
+rule and must also be a different request created before the note. The note must read
+as Regular after any kind change in the same edit. An invalid link is a 400 that
+refuses the whole request before any field changes. Repeating the same link writes
+nothing. The edit bumps `edited_at` and, for a human linking AI text, sets
+`human_edited` while keeping the author. The ticket's `expected_token` guards
+concurrent edits (HTTP, provider routes, MCP `hotsheet_update`, and
+`provider-edit --expected-token`). Git advertises `note_response_link: true`. GitHub,
+Jira and GitLab advertise false and refuse with `Unsupported { capability:
+"note_response_link" }` (HTTP 409, CLI error) before any accompanying field changes.
 `--note-kind regular` explicitly preserves a Regular note even if its text contains
 the legacy feedback marker (HS2-CV5NMC). Omitting the flag retains legacy inference.
 With `--edit-note <id>`, `--note-kind <kind>` intentionally corrects only that note's
@@ -1437,7 +1461,17 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 `hotsheet_create` / `hotsheet_update` and the server's `POST` / `PATCH /tickets` — on
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
-resolved on close.
+resolved on close. `edit --add-blocked-by` and `--remove-blocked-by` (repeatable) change
+one blocker at a time against the stored set, like the web Inspector's Add Blocker and
+Remove actions (HS2-CHH28E). Removal also accepts the raw ULID of a blocker that no longer
+exists. They conflict with `--blocked-by` and `--clear-blocked-by`. The shared resolver
+also refuses a **dependency cycle** (HS2-CHH28E): when a new blocker already depends on
+the edited ticket, directly or through its own blockers, every surface fails with
+"`<blocker>` already depends on `<ticket>`, so it cannot also block `<ticket>` (dependency
+cycle)". The server answers 400, and MCP answers a bad request. The walk follows the
+blockers' stored `blocked_by` through the same resolver, ends a branch at a ticket that no
+longer resolves, and terminates on an already-cyclic store. A create has no target yet,
+so it cannot close a cycle.
 `follow_ups` is a separate durable relation from a source ticket to tickets created as
 follow-ups (HS2-2Z11A5). `hotsheet new --follow-up-to <source> --project <checkout-id>`
 creates a target and then records its project, connection, and native identity on the
@@ -1980,7 +2014,18 @@ from the URL, peer address, `Host` or forwarded headers: Tailscale Serve reaches
 the browser host through the same loopback port the owner opens locally, so the
 request cannot tell them apart. A plain session keeps the remote route set. The
 grants persist in the catalog; a catalog written before them loads with both
-false.
+false. Changing a device's grants, revoking one device or all of them, and a
+session signing out push a `browser_grants` change event on the cursored change
+channel (`/ws/sync`, `/ws/poll`). It names no store, device, or grant value;
+each open remote-mode page re-reads its own `GET /remote-auth/me` (HS2-A3TDNH).
+A new pairing request, and approving or rejecting one, push a `pairing_requests`
+change event on the same channel (HS2-BZHMEV). It names no request id, label,
+origin or challenge, and the server delivers it only to subscribers that may
+manage devices: the machine-secret or client-certificate host, or a browser
+session that holds the admin grant when the event is sent. `/ws/sync` checks
+that per event and `/ws/poll` per page, so a session without the grant never
+receives it (its cursor still advances past it). A device manager's page then
+re-reads `GET /remote-auth/owner`.
 
 **Host-only server routes (HS2-S8R3PD).** The bridge forwards any project API path,
 so the server enforces the local grant itself. After authentication
@@ -2082,6 +2127,41 @@ settings migration, HS2 reads schema-marked files from the former `.hotsheet` lo
 and writes their values to `.hotsheet2`; it never treats an unmarked HS1 settings file as
 HS2 input and does not delete the compatibility source. The machine-wide default was
 already `${HOTSHEET_HOME:-~/.hotsheet2}` and is unchanged.
+
+Every binary resolves that machine home through one resolver,
+`hotsheet_ticketing::machine_home` (HS2-1D4DQF). An unset, empty, or whitespace-only
+`HOTSHEET_HOME` counts as unset and falls back to `~/.hotsheet2`; a blank `HOME` falls
+back to `<temp>/.hotsheet2`, so a failed `HOTSHEET_HOME=$(mktemp -d)` substitution never
+writes the index, settings, or checkout registry into the working directory. A non-empty
+relative value is an explicit choice and is used as given, relative to the working
+directory. `HOTSHEET_CACHE_DIR` follows the same blank-means-unset rule. The web
+client's Node bridges apply the same rule to `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`
+(default `~/.hotsheet`) through `clients/web/src/machine-home.ts` (HS2-N2HB7G).
+
+The rule itself lives in the dependency-free `hotsheet_sync::env_path` (HS2-15ZN8E) so
+crates that do not depend on `hotsheet-ticketing` apply it too: the terminal relay's
+`HOTSHEET_LAUNCH_AGENTS_DIR`, `HOTSHEET_LAUNCHCTL` and `HOME` fallback, and the terminal
+broker's `HOTSHEET_PROCESS_JOURNAL_HOME`. The desktop shell, a separate Cargo workspace,
+keeps a local copy for `HOTSHEET_DESKTOP_STORAGE_DIRECTORY`, and the Node local host reads
+the same variable through `machine-home.ts`'s `nonBlank` (HS2-1VF50T). A blank LaunchAgents override
+falls back to `~/Library/LaunchAgents`, a blank `HOME` is an error rather than a relative
+`Library/LaunchAgents`, a blank `launchctl` override runs `/bin/launchctl`, and a blank
+journal home disables broker provenance.
+
+The web client's other path-valued overrides read through the same `nonBlank` (HS2-GVSJ5Y):
+`HOTSHEET_REPO_ROOT`, `HOTSHEET_CLI_BIN`, `HOTSHEET_MIGRATE_BIN`, `HOTSHEET_SERVER_BIN`,
+`HOTSHEET_HOOK_CLI_BIN`, `HOTSHEET_MCP_BIN`, `HOTSHEET_MIGRATOR`, `HOTSHEET_MIGRATION_JOBS`,
+`HOTSHEET_CLIENT_READY_FILE`, `HOTSHEET_DEV_LATENCY_LOG`, and `HOTSHEET_VITE_CACHE_DIR`. A blank
+binary override selects the checkout's (or the production host's selected) binary, and a blank
+`HOTSHEET_REPO_ROOT` resolves to the checkout two levels above the working directory, as an unset
+one does, rather than to the working directory itself.
+
+The plain-Node launchers in `clients/web/scripts/` apply the same rule through
+`scripts/non-blank.mjs`, a twin of `nonBlank` that `machine-home.test.ts` pins to it (HS2-MVF6X3):
+`stable-dev.mjs` reads `HOTSHEET_REPO_ROOT`, `HOTSHEET_WEB_STABLE_TEMP_ROOT`, and
+`HOTSHEET_WEB_STABLE_SOURCE_ROOT`, and `prepare-desktop.mjs` reads `HOTSHEET_DESKTOP_NODE`. A blank
+value takes the unset default: the checkout two levels above the web package, the per-user cache
+directory, the web package itself, and the running Node executable.
 
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)

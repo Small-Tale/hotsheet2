@@ -12,6 +12,17 @@ use std::time::{Duration, Instant};
 use hotsheet_index::{Index, index_file_name};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
+/// The `hotsheet-server` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn server_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-server"), &["--version"])
+}
+
 struct Server(Child);
 
 impl Drop for Server {
@@ -78,7 +89,7 @@ fn server_start_prunes_idle_older_generation_indexes_and_keeps_held_ones() {
     let log = home.path().join("server.log");
     let output = fs::File::create(&log).unwrap();
     let mut server = Server(
-        Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        Command::new(server_binary())
             .arg("-C")
             .arg(store_dir.path())
             .args(["--bind", "127.0.0.1:0", "--secret", "prune-test"])

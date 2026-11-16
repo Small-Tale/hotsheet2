@@ -1,6 +1,9 @@
 //! HS2-JHHXJM headless E2E: `hotsheet-cli checkout views|set-view|remove-view` manage a
 //! checkout's saved views, the same shared setting the web client's `/views` routes edit.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use assert_cmd::Command;
 use predicates::str::contains;
 use serde_json::{Value, json};
@@ -15,7 +18,7 @@ fn hs2_jhhxjm_saved_views_are_listed_set_idempotently_and_removed() {
     hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let hs = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.env("HOTSHEET_HOME", &home)
             .env_remove("HOTSHEET_STORE")
             .arg("-C")

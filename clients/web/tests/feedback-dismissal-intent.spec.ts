@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
@@ -46,7 +46,7 @@ async function openFeedbackProjects(
         path = url.pathname.slice(apiPath.length),
         patch = request.method() === 'PATCH' && /\/checkouts\/[^/]+\/tickets\/[^/]+$/u.test(path);
       if (patch && server === target) await beforePatch();
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${url.search}`,
         headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
       });

@@ -28,7 +28,7 @@ import {
 } from './ticket-group-dialog-demo';
 
 const INITIAL_NAME = 'Board drag & drop';
-const INITIAL_EVENT = 'Toggle the group, or right-click its header for the group actions.';
+const INITIAL_EVENT = 'Toggle the group, or open the group actions from its “…” button or a right-click.';
 
 export const TICKET_GROUP_DEMO_TICKETS: TicketRowProps[] = [
   {

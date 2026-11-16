@@ -95,6 +95,7 @@ import type {
   ToolSession,
   TrashPurgePreview,
   TrashSettings,
+  TtsVoice,
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
@@ -552,14 +553,67 @@ export interface CheckoutGroupSummary {
   duplicate: boolean;
 }
 
+/** How the group registry's Git publication last went (HS2-9EGWC4), mirroring the Rust `RegistrySyncState`. */
+export const GROUP_REGISTRY_SYNC_STATES = [
+  'synced',
+  'local_only',
+  'waiting',
+  'blocked',
+  'failed',
+  'untracked',
+] as const;
+export type GroupRegistrySyncState = (typeof GROUP_REGISTRY_SYNC_STATES)[number];
+
+/** The group registry's last publication attempt (HS2-9EGWC4, HS2-VFYSQK). */
+export interface GroupRegistrySync {
+  state: GroupRegistrySyncState;
+  /** One line for people: what happened or what is needed. */
+  detail: string;
+  /** Whether that attempt made a commit. */
+  committed: boolean;
+  /** When it was recorded (RFC 3339, UTC); empty when unknown. */
+  at: string;
+}
+
+/** The group list: whether names come from a registry, the groups, and the registry's publication status. */
+export interface CheckoutGroupList {
+  registry: boolean;
+  groups: CheckoutGroupSummary[];
+  /** Absent without a registry Hot Sheet publishes, before its first attempt, or from an older server. */
+  registrySync?: GroupRegistrySync;
+}
+
+function parseGroupRegistrySync(value: unknown): GroupRegistrySync {
+  const sync = record(value, 'group list');
+  if (
+    typeof sync.state !== 'string' ||
+    !(GROUP_REGISTRY_SYNC_STATES as readonly string[]).includes(sync.state) ||
+    typeof sync.detail !== 'string' ||
+    (sync.committed !== undefined && typeof sync.committed !== 'boolean') ||
+    (sync.at !== undefined && typeof sync.at !== 'string')
+  )
+    invalid('group list');
+  return {
+    state: sync.state as GroupRegistrySyncState,
+    detail: sync.detail,
+    committed: sync.committed === true,
+    at: typeof sync.at === 'string' ? sync.at : '',
+  };
+}
+
 /**
  * `GET /checkouts/{id}/groups` (HS2-PDSHNN, HS2-9KZSD4). A server before the group registry
- * lists names only, so a missing id reads as that legacy name and missing flags default.
+ * lists names only, so a missing id reads as that legacy name and missing flags default. The
+ * registry's publication status (`registry_sync`, HS2-9EGWC4) is kept when present (HS2-VFYSQK).
  */
-export const parseGroupList: ResponseParser<{ registry: boolean; groups: CheckoutGroupSummary[] }> = (value) => {
+export const parseGroupList: ResponseParser<CheckoutGroupList> = (value) => {
   const body = record(value, 'group list');
   if (!Array.isArray(body.groups) || (body.registry !== undefined && typeof body.registry !== 'boolean'))
     invalid('group list');
+  const registrySync =
+    body.registry_sync === undefined || body.registry_sync === null
+      ? undefined
+      : parseGroupRegistrySync(body.registry_sync);
   const groups = (body.groups as unknown[]).map((entry): CheckoutGroupSummary => {
     const group = record(entry, 'group list');
     if (typeof group.name !== 'string' || typeof group.count !== 'number') invalid('group list');
@@ -577,7 +631,9 @@ export const parseGroupList: ResponseParser<{ registry: boolean; groups: Checkou
       duplicate: flag('duplicate') ?? false,
     };
   });
-  return { registry: body.registry === true, groups };
+  return registrySync
+    ? { registry: body.registry === true, groups, registrySync }
+    : { registry: body.registry === true, groups };
 };
 
 /** `POST /checkouts/{id}/groups` (HS2-9KZSD4): the registry entry a name resolves to. */
@@ -669,6 +725,9 @@ export const parseProviderDescriptor = shape<ProviderDescriptor>(
   { connection_id: isString, provider: isString, display_name: isString, locator: isString, capabilities: isObject },
   { default: isBoolean, color: isString, ticket_prefix: isString },
 );
+
+/** `GET /tts/voices` (HS2-CEZVSE). */
+export const parseTtsVoices = shape<TtsVoice>('speech voice', { name: isString, lang: isString }).list;
 
 /** `PUT /checkouts/{reference}/sources/{connection_id}/ticket-prefix` (HS2-8QJ6W3). */
 export const parseTicketPrefix = shape<{ ticket_prefix: string }>('ticket prefix', { ticket_prefix: isString });

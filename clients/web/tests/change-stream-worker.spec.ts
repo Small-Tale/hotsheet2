@@ -1,5 +1,8 @@
 import { expect, type Page, test, type WebSocketRoute, type Worker } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+import { proxyFetch } from './real-ticket-server';
+
 /**
  * HS2-SH9179: the shared change-stream worker, opted in through its local setting, follows two
  * projects' live streams from a dedicated worker while the user switches, searches, and updates.
@@ -103,7 +106,7 @@ async function installProjects(page: Page) {
       );
     });
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
@@ -544,11 +547,11 @@ test('a worker-owned bridge socket relays the host client build to the newer-ver
   const STAMPED = 'bundle-0123456789abcdef';
   // Registered after the fixture, so these run first: the projects advertise the change bridge, and
   // the document is stamped with another bundle than the dev bridge serves.
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (request.resourceType() === 'document') {
-      const response = await route.fetch();
+      const response = await proxyFetch(route);
       const html = (await response.text()).replace(
         /(<meta name="hotsheet-client-build" content=")[^"]*(")/u,
         `$1${STAMPED}$2`,

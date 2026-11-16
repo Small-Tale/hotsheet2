@@ -311,7 +311,7 @@ fn base_tools_list() -> Value {
                 "note": str_prop("Markdown note text to append, or replacement text when note_id is present. AI authors: lead with the outcome; use short sections and bullets for substantial notes; avoid dense prose and raw-log dumps"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; explicit selection wins inference; omitted append kind retains legacy inference; with note_id intentionally corrects kind (feedback_draft refused)"),
                 "note_summary": { "type": ["string", "null"], "description": "concise plain-text timeline headline; with note_id, null clears the existing summary" },
-                "response_to": str_prop("feedback request note id answered by this appended note"),
+                "response_to": { "type": ["string", "null"], "description": "feedback request note id answered by the appended note; with note_id, links that existing note as the response (null removes the link; providers without note_response_link refuse)" },
                 "note_confidence": { "type": ["integer", "null"], "minimum": 0, "maximum": 100, "description": "AI completion confidence (0-100) for the appended note; required with status completed by AI authors, alongside a ## Confidence section in the note. With note_id it corrects that note's score (note text optional), and null clears it" },
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
@@ -3549,11 +3549,42 @@ mod core_backend {
                             return Err(bad_request("note_summary must be a string or null"));
                         }
                     };
-                    if body.get("response_to").is_some()
-                        && (edit_note_id.is_some()
-                            || str_field(body, "note").is_none_or(|note| note.is_empty()))
+                    // The optimistic token guards every edit, as on the HTTP route (HS2-J4G9GB).
+                    if str_field(body, "expected_token")
+                        .is_some_and(|token| token != t.updated_at.as_str())
                     {
-                        return Err(bad_request("response_to requires an appended note"));
+                        return Err(BackendError {
+                            status: Some(409),
+                            message: format!("ticket '{}' changed since it was read", t.slug),
+                        });
+                    }
+                    // With note_id the link applies to that existing note; null removes it.
+                    let response_to = match body.get("response_to") {
+                        None => None,
+                        Some(Value::Null) => Some(None),
+                        Some(Value::String(id)) => Some(Some(id.clone())),
+                        Some(_) => {
+                            return Err(bad_request("response_to must be a string or null"));
+                        }
+                    };
+                    if response_to.is_some()
+                        && edit_note_id.is_none()
+                        && str_field(body, "note").is_none_or(|note| note.is_empty())
+                    {
+                        return Err(bad_request(
+                            "response_to requires an appended note or note_id",
+                        ));
+                    }
+                    if let (Some(note_id), Some(Some(request_id))) =
+                        (edit_note_id, response_to.as_ref())
+                    {
+                        ops::validate_note_response_link(
+                            &t,
+                            &note_id,
+                            opt_enum(body, "note_kind")?,
+                            request_id,
+                        )
+                        .map_err(store_err)?;
                     }
                     let confidence_change = note_confidence_change(body, edit_note_id.is_some())?;
                     let new_note_kind = opt_enum(body, "note_kind")?;
@@ -3630,6 +3661,7 @@ mod core_backend {
                                 confidence: confidence_change,
                                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                                 allow_feedback_prompt_edit: false,
+                                response_to: response_to.clone(),
                             };
                             if edit.is_empty() {
                                 updated
@@ -3659,7 +3691,7 @@ mod core_backend {
                                     confidence: confidence_change.flatten(),
                                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                                     ai_feedback: None,
-                                    response_to: str_field(body, "response_to"),
+                                    response_to: response_to.clone().flatten(),
                                 },
                                 text,
                             )
@@ -4159,12 +4191,7 @@ mod core_backend {
     }
 
     fn checkout_registry() -> hotsheet_ticketing::checkouts::CheckoutRegistry {
-        let home = std::env::var_os("HOTSHEET_HOME")
-            .map(std::path::PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME").map(|v| std::path::PathBuf::from(v).join(".hotsheet2"))
-            })
-            .unwrap_or_else(std::env::temp_dir);
+        let home = hotsheet_ticketing::machine_home::hotsheet_home();
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
     }
 
@@ -4379,10 +4406,10 @@ mod core_backend {
     fn op_err(e: OpError) -> BackendError {
         match e {
             OpError::Store(s) => store_err(s),
-            e
-            @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_) | OpError::InvalidEta(_)) => {
-                bad_request(e.to_string())
-            }
+            e @ (OpError::DuplicateNeedsTarget
+            | OpError::SelfBlock(_)
+            | OpError::BlockerCycle { .. }
+            | OpError::InvalidEta(_)) => bad_request(e.to_string()),
             e @ OpError::UnknownTicket(_) => not_found(&e.to_string()),
             other => BackendError {
                 status: Some(409),
@@ -6861,6 +6888,82 @@ mod tests {
         assert!(invalid.get("error").is_some(), "{invalid}");
         let reread = call(&backend, "hotsheet_get", json!({"id":id}));
         assert_eq!(reread["title"], "Synthetic explicit kind");
+    }
+
+    /// HS2-J4G9GB: `hotsheet_update` with `note_id` links, relinks, and clears an existing
+    /// note's response, honors the optimistic token, and refuses an invalid link atomically.
+    #[test]
+    fn hs2_j4g9gb_mcp_links_an_existing_note_as_a_response() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"Synthetic response link"}),
+        );
+        let id = created["id"].as_str().unwrap();
+        let mut last = Value::Null;
+        for (text, kind) in [
+            (
+                "FEEDBACK NEEDED: first synthetic question",
+                "feedback_needed",
+            ),
+            (
+                "FEEDBACK NEEDED: second synthetic question",
+                "feedback_needed",
+            ),
+            ("Synthetic decision: option A", "regular"),
+        ] {
+            last = call(
+                &backend,
+                "hotsheet_update",
+                json!({"id":id,"note":text,"note_kind":kind}),
+            );
+        }
+        let notes = last["notes"].as_array().unwrap().clone();
+        let (first, second, decision) = (&notes[0]["id"], &notes[1]["id"], &notes[2]["id"]);
+        let link_of = |ticket: &Value| ticket["notes"][2].get("response_to").cloned();
+        let token = last["concurrency_token"].clone();
+
+        let linked = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":decision,"response_to":first,"expected_token":token}),
+        );
+        assert_eq!(link_of(&linked), Some(first.clone()), "{linked}");
+        assert_eq!(linked["notes"].as_array().unwrap().len(), 3);
+        let repeat = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":decision,"response_to":first}),
+        );
+        assert_eq!(repeat["updated_at"], linked["updated_at"], "idempotent");
+        // The pre-link token is stale now.
+        let stale = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":decision,"response_to":second,"expected_token":token}),
+        );
+        assert!(stale.get("error").is_some(), "{stale}");
+        let relinked = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":decision,"response_to":second}),
+        );
+        assert_eq!(link_of(&relinked), Some(second.clone()));
+        let invalid = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":first,"response_to":second,"title":"must not write"}),
+        );
+        assert!(invalid.get("error").is_some(), "{invalid}");
+        let reread = call(&backend, "hotsheet_get", json!({"id":id}));
+        assert_eq!(reread["title"], "Synthetic response link");
+        let cleared = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note_id":decision,"response_to":null}),
+        );
+        assert_eq!(link_of(&cleared), None);
     }
 
     #[test]

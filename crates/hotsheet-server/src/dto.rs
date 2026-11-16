@@ -297,8 +297,10 @@ pub(crate) struct UpdateReq {
     /// Set, clear with JSON null on an existing note, or leave the timeline headline unchanged.
     #[serde(default, deserialize_with = "deserialize_nullable_patch")]
     pub(crate) note_summary: Option<Option<String>>,
-    /// Request note id answered by the appended note.
-    pub(crate) response_to: Option<String>,
+    /// Request note id answered by the appended note, or by the existing note named by
+    /// `note_id` (HS2-J4G9GB), where JSON null removes the link. Absent leaves it unchanged.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    pub(crate) response_to: Option<Option<String>>,
     /// Optional AI completion confidence (integer 0-100) on the appended note
     /// (HS2-DWTJ43), or on the note named by `note_id`, where JSON null clears it
     /// (HS2-CY4CWC). Kept as raw JSON so a malformed value gets an explicit 400.

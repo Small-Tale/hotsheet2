@@ -22,6 +22,7 @@ import { ClientUpdateNoticeBanner } from '../components/client-update-notice-ban
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
 import { corruptTicketKey } from '../components/corrupt-ticket-row';
+import { GroupRegistrySyncBanner } from '../components/group-registry-sync-banner';
 import {
   Hs1CleanupBanner,
   Hs1JobBanner,
@@ -96,6 +97,7 @@ import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import { canBulkUpdate } from '../ticket-bulk-operations';
+import { projectGroupRegistrySync } from '../ticket-group-state';
 import {
   ALL_TICKETS_SCOPE,
   canCreateTicketInView,
@@ -138,6 +140,8 @@ export interface HotSheetShellDependencies {
   pendingPermissions: () => PermissionItem[];
   pendingRestoreEntries: <T>(item: (root: string) => T) => { rank: number; item: T }[];
   permissionCount: (projectId?: string) => number;
+  /** Pairing requests waiting for this host's approval, counted on the Settings choice (HS2-BZHMEV). */
+  pairingRequestCount?: () => number;
   /** Live AI workers for the Workers view choice's name and title (HS2-6B9S7P). */
   workersLive?: (projectId: string) => WorkersLive | undefined;
   /** HS2-J89JC7: the Orchestration view's tab, page header and inspector for the current project. */
@@ -176,6 +180,8 @@ export interface HotSheetShellDependencies {
   settingsCategory: () => SettingsCategory;
   /** Settings → Orchestration's selected project detail, shown in the inspector (HS2-W27N1D). */
   settingsInspector?: (current: Project) => SidebarPanelParts | undefined;
+  /** Whether a project's command settings have loaded (HS2-A6K8D5). */
+  commandSettingsReady: (projectId: string) => boolean;
   shellMode: Signal<ProjectStripMode>;
   statsProjectId: Signal<string | undefined>;
   sidebarCollapsed: Signal<boolean>;
@@ -206,7 +212,7 @@ export interface HotSheetShellDependencies {
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   /** The project strip's tabs overflow, so its New ticket launcher shows the compact "Ticket…" label
-   * (HS2-RNR35H); `wireProjectTabActionFit` measures it. */
+   * (HS2-RNR35H); `projectTabActionFit` decides it from Kerf's fit report. */
   projectTabActionCompact: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
   guidanceSearchModel: SearchFieldModel;
@@ -249,6 +255,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     pendingPermissions,
     pendingRestoreEntries,
     permissionCount,
+    pairingRequestCount = () => 0,
     workersLive,
     orchestration,
     permissionPopupSurface,
@@ -277,6 +284,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     selectedView,
     settingsCategory,
     settingsInspector,
+    commandSettingsReady,
     shellMode,
     statsProjectId,
     sidebarCollapsed,
@@ -541,7 +549,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         : settingsCategory() === 'sources'
           ? { kind: 'add-data-source' }
           : settingsCategory() === 'commands'
-            ? { kind: 'command-settings', size: viewportMobile.value ? 'compact' : 'default' }
+            ? {
+                kind: 'command-settings',
+                size: viewportMobile.value ? 'compact' : 'default',
+                ready: commandSettingsReady(current.id),
+              }
             : undefined;
     const headingAction = !['settings', 'notifications', 'workers', 'orchestration'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
@@ -637,6 +649,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             sort={sort.value}
             sortDirection={sortDirection.value}
             notificationCount={permissionCount(current.id)}
+            settingsCount={pairingRequestCount()}
             workers={workersLive?.(current.id)}
             orchestration={orchestration?.available(current.id) ?? false}
             selectedTicketCount={selection.length}
@@ -694,6 +707,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               projectId: current.id,
             })}
             {TicketStoreSyncBanner({ report: ticketStoreSyncReport(current.id) })}
+            {GroupRegistrySyncBanner({ status: projectGroupRegistrySync.value[current.id] })}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { isRecord, parseJson } from './json-value';
+import { hotsheetHome } from './machine-home';
 
 export interface ClientDiscovery {
   pid: number;
@@ -12,7 +12,7 @@ export interface ClientDiscovery {
   id: string;
 }
 
-export function clientDiscoveryPath(home = process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2')): string {
+export function clientDiscoveryPath(home = hotsheetHome()): string {
   return resolve(home, 'client.json');
 }
 

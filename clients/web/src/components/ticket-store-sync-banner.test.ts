@@ -46,9 +46,9 @@ const BLOCKED = health('blocked', {
   unpublished_commits: 2,
   consecutive_failures: PERSISTENT_OFFLINE_FAILURES,
   reason:
-    'a Git lock file blocked sync during the pre-sync check: .git/index.lock (created 3 hours ago). Git leaves a lock behind when one of its processes crashes or is killed; the store was not merged.',
+    'a Git lock file blocked sync during the pre-sync check: .git/index.lock (created 3 hours ago). Git leaves a lock behind when one of its processes crashes or is killed; the store was not merged.\nNot moved automatically: .git/index.lock may still be in use: process 4242 (git) runs Git in the store.',
   next_action:
-    "No ticket merge conflict was found. Make sure no Git process is running in the store (an editor's Git integration, a terminal, or another Hot Sheet), then remove the stale lock file and run `hotsheet-cli sync`. Hot Sheet never removes a Git lock by itself.",
+    "No ticket merge conflict was found. Sync moves a lock aside by itself once it is over 10 minutes old and no process has the store's Git directory open; `hotsheet-cli sync --recover-stale-locks` runs that check now. Otherwise make sure no Git process is running in the store (an editor's Git integration, a terminal, or another Hot Sheet), then remove the stale lock file and run `hotsheet-cli sync`.",
 });
 
 describe('failingTicketStores (HS2-ADHFKZ)', () => {

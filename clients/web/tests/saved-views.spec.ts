@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const project = {
   id: 'saved-views',
   root: '/work/saved-views',
@@ -40,7 +42,7 @@ const rows = [
 
 async function mockSavedViews(page: Page) {
   let views: Array<{ id: string; name: string; query: string }> = [];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

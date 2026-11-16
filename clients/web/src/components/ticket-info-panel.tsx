@@ -25,6 +25,7 @@ import { MarkdownPreview } from './markdown-preview';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
 import { PhaseEstimate } from './phase-estimate';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
+import { TicketBlockers, type TicketBlockersProps } from './ticket-blockers';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInspectorPanel } from './ticket-inspector-panel';
 import { TicketNotes } from './ticket-notes';
@@ -67,6 +68,8 @@ export interface TicketInfoPanelProps {
   blockedReason?: string;
   blockedReasonEditing?: boolean;
   blockedReasonDraft?: string;
+  /** The editable Blocked By section (HS2-CHH28E); absent where blockers are not edited. */
+  blockers?: TicketBlockersProps;
   providerName?: string;
   updatedLabel?: string;
   attachmentContext?: AttachmentReferenceContext;
@@ -177,6 +180,7 @@ function LoadedTicketInfoPanel({
   blockedReason = '',
   blockedReasonEditing = false,
   blockedReasonDraft = blockedReason,
+  blockers,
   providerName = 'Hot Sheet Git',
   updatedLabel = 'Updated now',
   attachmentContext,
@@ -260,6 +264,7 @@ function LoadedTicketInfoPanel({
           <ListItem action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" />
         ) : undefined}
       </List>
+      {blockers && <TicketBlockers {...blockers} />}
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
         <ContentItem

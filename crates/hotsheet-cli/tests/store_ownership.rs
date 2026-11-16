@@ -4,6 +4,9 @@
 //! command twice to prove idempotence, and checks that the enclosing repository of a
 //! designated root keeps its other paths, staged changes, and remotes untouched.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
@@ -42,7 +45,7 @@ fn head(dir: &Path) -> Option<String> {
 }
 
 fn cli(home: &Path) -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .env("HOTSHEET_HOME", home)
         .env_remove("HOTSHEET_ACTOR_ROLE")

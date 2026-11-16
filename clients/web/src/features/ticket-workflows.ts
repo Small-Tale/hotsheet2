@@ -64,6 +64,7 @@ import {
 } from '../new-ticket-source';
 import { submitNotWorkingReport } from '../not-working-workflow';
 import { noteAuthorship } from '../note-authorship';
+import { responseLinkUnavailable } from '../note-response-link';
 import { type PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import {
   bulkTagChoices,
@@ -79,7 +80,6 @@ import {
   type DuplicateTarget,
   duplicateTargetKey,
   parseDuplicateReference,
-  prioritizeExactDuplicateTargets,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -123,6 +123,7 @@ import {
   type TicketReaderFrame,
   updateTicketReaderFrame,
 } from '../ticket-reader-stack';
+import { searchTicketReferences } from '../ticket-reference-search';
 import { ticketTimelineEntries, timelineShares } from '../ticket-timeline-data';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import { copiedTicketPlacement, ticketClipboardText } from '../ticket-transfer';
@@ -1015,6 +1016,24 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function replaceLinkedReaderFrame(id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) {
     linkedReaderStack.value = updateTicketReaderFrame(linkedReaderStack.value, id, update);
   }
+  /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
+  async function refreshLinkedCodeReview(frameId: string) {
+    const frame = linkedReaderStack.value.find((item) => item.id === frameId);
+    if (!frame || frame.codeReview?.loading) return;
+    const setReview = (codeReview: TicketReaderFrame['codeReview']) => {
+      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, codeReview }));
+    };
+    setReview({ review: frame.codeReview?.review, loading: true, message: '' });
+    try {
+      setReview({
+        review: await new Api(frame.apiPath).codeReview(frame.projectId, frame.ticket.qualified_id),
+        loading: false,
+        message: '',
+      });
+    } catch (reason) {
+      setReview({ loading: false, message: reason instanceof Error ? reason.message : String(reason) });
+    }
+  }
   async function updateLinkedReader(frameId: string, patch: Record<string, unknown>, dismissedRequestId?: string) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
     if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
@@ -1845,6 +1864,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   function timelineUsage(ticket: FullTicket) {
     return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).breakdown;
   }
+  /** HS2-J4G9GB: the note menu's response link stays visible with its reason when unavailable. */
+  function linkState(ticket: FullTicket, noteId: string) {
+    const reason = responseLinkUnavailable(ticket.notes, noteId, capabilitiesFor(ticket.connection_id));
+    return reason ? { responseLinkable: false, responseLinkReason: reason } : { responseLinkable: true };
+  }
   function notes(ticket: FullTicket) {
     return ticket.notes.map((note) => {
       // Authorship comes from the note's recorded actor (HS2-32QDZ3).
@@ -1865,6 +1889,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           capabilitiesFor(ticket.connection_id)?.note_edit && capabilitiesFor(ticket.connection_id)?.note_confidence,
         ),
         hasLinkedResponses: ticket.notes.some((item) => item.response_to === note.id),
+        ...linkState(ticket, note.id),
         aiAuthored,
         humanEdited: note.human_edited,
         aiTool,
@@ -2334,16 +2359,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     };
     if (!query.trim()) return;
     ticketCloseSearchTimer = window.setTimeout(() => {
-      void Promise.allSettled(
-        projects.value.map(async (project) => ({
-          project,
-          result: await new Api(project.apiPath).checkoutTickets(project.id, {
-            text: query,
-            compact: true,
-            limit: 500,
-          }),
-        })),
-      ).then((results) => {
+      void searchTicketReferences(projects.value, query, (project) =>
+        new Api(project.apiPath).checkoutTickets(project.id, { text: query, compact: true, limit: 500 }),
+      ).then(({ candidates, errors }) => {
         const active = ticketCloseDialog.value;
         if (
           generation !== ticketCloseSearchGeneration ||
@@ -2351,26 +2369,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           duplicateTargetKey(active.source) !== duplicateTargetKey(state.source)
         )
           return;
-        const candidates = new Map<string, DuplicateTarget>(),
-          errors: string[] = [];
-        for (const result of results) {
-          if (result.status === 'rejected') {
-            errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
-            continue;
-          }
-          if (result.value.result.partial || result.value.result.truncated)
-            errors.push(`Search results may be incomplete for ${result.value.project.name}.`);
-          for (const row of result.value.result.items) {
-            const candidate = duplicateTarget(result.value.project, row);
-            candidates.set(duplicateTargetKey(candidate), candidate);
-          }
-        }
-        ticketCloseDialog.value = {
-          ...active,
-          candidates: prioritizeExactDuplicateTargets([...candidates.values()], query).slice(0, 20),
-          searching: false,
-          error: errors.join(' · '),
-        };
+        ticketCloseDialog.value = { ...active, candidates, searching: false, error: errors.join(' · ') };
       });
     }, 150);
   }
@@ -2887,6 +2886,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     linkedReaderFrame,
     linkedReaderAutosaves,
     replaceLinkedReaderFrame,
+    refreshLinkedCodeReview,
     linkedReaderSaves,
     flushLinkedReader,
     selectedRows,

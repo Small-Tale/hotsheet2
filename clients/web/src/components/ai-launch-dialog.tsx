@@ -40,7 +40,12 @@ export function AiLaunchDialog({ state }: { state?: AiLaunchDialogState }) {
             ]}
           />
           {state.message ? (
-            <StateBanner tone="danger" title="Launch Could Not Be Prepared" detail={state.message} />
+            <StateBanner
+              tone="danger"
+              title="Launch Could Not Be Prepared"
+              detail={state.message}
+              copyLayout="stacked"
+            />
           ) : null}
           <Row vAlign="middle" gap="xs">
             <Button emphasis="plain" type="button" action={actions.cancelAiLaunch.value}>

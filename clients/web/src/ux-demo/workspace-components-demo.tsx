@@ -55,6 +55,7 @@ import { insertSearchSyntax, wireTicketSearchFields } from '../interactions/tick
 import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
 import { isPopupMenuOpen } from '../popup-menu-state';
 import { keepSearchOpenForShadowTarget } from '../search-collapse';
+import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import { DemoEvent } from './components/demo-event';
@@ -77,6 +78,7 @@ import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
 import { demoClock, demoTimeline } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
+import { terminalSearchDemoModel, terminalSearchDemoOpen } from './terminal-components-demo';
 import { collectionEvent, collectionTickets, recordCollectionEvent } from './ticket-collections-demo';
 import { statusMenuDemoStartedPhase, statusMenuDemoStatus } from './ticket-metadata-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
@@ -844,6 +846,8 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         'workspace-search': workspaceSearchModel,
         ...ticketSearchDemoModels,
         'saved-view-query': savedViewDemoSearchModel,
+        // The TerminalDrawer demo's terminal search (HS2-174S6X), registered as production registers it.
+        [TERMINAL_SEARCH_FIELD_ID]: terminalSearchDemoModel,
       },
       // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
       onSubmit: ({ id }) => {
@@ -856,6 +860,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
           'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
           'ticket-search-demo-grow': ticketSearchDemoGrowOpen,
           'ticket-search-demo-row': ticketSearchDemoRowOpen,
+          [TERMINAL_SEARCH_FIELD_ID]: terminalSearchDemoOpen,
         },
       },
     }),

@@ -3,14 +3,16 @@ import { fileURLToPath } from 'node:url';
 
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
 import { uxReviewPlugin } from '@kerfjs/ui/vite-ux-review';
-import { defineConfig, type HtmlTagDescriptor, type Plugin, type UserConfig } from 'vite';
+import { defineConfig, type HtmlTagDescriptor, type Plugin, type UserConfig, type ViteDevServer } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
 import { scanBrowserDependencies } from './src/browser-dependency-scan';
 import { CLIENT_BUILD_META_NAME } from './src/client-build';
 import { localClientUrl, publishClientUrl } from './src/client-discovery';
 import { devServerRouteExclude } from './src/dev-server-routes';
+import { nonBlank } from './src/machine-home';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
+import { warmClientModuleGraph } from './src/vite-module-warmup';
 
 /**
  * The frozen stable-dev snapshot never discovers dependencies at runtime (a mid-session re-optimize
@@ -22,9 +24,10 @@ export function viteDependencyIsolation(
   environment: NodeJS.ProcessEnv = process.env,
   browserDependencies: () => string[] = () => scanBrowserDependencies(fileURLToPath(new URL('.', import.meta.url))),
 ): Pick<UserConfig, 'cacheDir' | 'optimizeDeps'> {
-  const cacheDir = environment.HOTSHEET_VITE_CACHE_DIR;
+  // A blank cache directory counts as unset (HS2-GVSJ5Y).
+  const cacheDir = nonBlank(environment.HOTSHEET_VITE_CACHE_DIR);
   return {
-    ...(cacheDir ? { cacheDir } : {}),
+    ...(cacheDir === undefined ? {} : { cacheDir }),
     ...(environment.HOTSHEET_WEB_STABLE_DEV === '1'
       ? { optimizeDeps: { noDiscovery: true, include: browserDependencies() } }
       : {}),
@@ -87,25 +90,54 @@ export function stableDevClientStripPlugin(environment: NodeJS.ProcessEnv = proc
 /** Path prefix whose only successful answer is a browser-test server's own identity (HS2-BJ00D1). */
 export const TEST_SERVER_IDENTITY_PATH = '/__hotsheet-test-server/';
 
+/** The browser entry `index.html` loads. */
+const CLIENT_ENTRY = '/src/main.tsx';
+
 /**
  * Playwright's readiness check only asks whether its URL answers. When two concurrent runs share a
  * port, the later run's Vite cannot bind, yet another run's server answers the shared URL, so the later
  * run tests the other worktree's source and loses its server when that run ends (HS2-BJ00D1). Each run
  * passes its own `HOTSHEET_WEB_TEST_SERVER_ID` and waits on this path, which answers 200 only for that
  * id: a foreign or id-less server returns 404, so the colliding run refuses instead of borrowing it.
+ *
+ * In the frozen stable-dev snapshot Playwright uses, the first identity request also transforms the
+ * client module graph once, and the identity answers 503 (not ready) until that finishes. Otherwise
+ * the first wave of tests shares about 900 cold module transforms inside their own test budgets
+ * (HS2-15EYK1). Hot dev servers skip the warm-up: their dependency discovery may still re-optimize.
  */
-export function testServerIdentityPlugin(environment: NodeJS.ProcessEnv = process.env): Plugin {
+export function testServerIdentityPlugin(
+  environment: NodeJS.ProcessEnv = process.env,
+  warm: (server: ViteDevServer) => Promise<unknown> = async (server) => {
+    const started = performance.now(),
+      modules = await warmClientModuleGraph(server.environments.client, CLIENT_ENTRY);
+    server.config.logger.info(
+      `Warmed ${modules} client modules in ${Math.round(performance.now() - started)} ms (HS2-15EYK1).`,
+    );
+  },
+): Plugin {
   return {
     name: 'hotsheet-test-server-identity',
     configureServer(server) {
       const own = environment.HOTSHEET_WEB_TEST_SERVER_ID;
+      let warmed: boolean | undefined = environment.HOTSHEET_WEB_STABLE_DEV === '1' ? undefined : true;
       server.middlewares.use((request, response, next) => {
         const path = request.url?.split('?', 1)[0] ?? '';
         if (!path.startsWith(TEST_SERVER_IDENTITY_PATH)) {
           next();
           return;
         }
-        response.statusCode = own && path === `${TEST_SERVER_IDENTITY_PATH}${own}` ? 200 : 404;
+        const ownIdentity = Boolean(own) && path === `${TEST_SERVER_IDENTITY_PATH}${own}`;
+        if (ownIdentity && warmed === undefined) {
+          warmed = false;
+          void warm(server)
+            .catch((error: unknown) => {
+              server.config.logger.warn(`Could not warm the client module graph: ${String(error)}`);
+            })
+            .finally(() => {
+              warmed = true;
+            });
+        }
+        response.statusCode = ownIdentity ? (warmed === true ? 200 : 503) : 404;
         response.end();
       });
     },

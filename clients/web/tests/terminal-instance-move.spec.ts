@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 // HS2-EYD24K / HS2-QV814W: a tile can cold-mount a full instance within the warm cap. A drawer visit
@@ -54,7 +55,7 @@ async function openProject(
     }
     Object.assign(window, { WebSocket: FakeSocket });
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

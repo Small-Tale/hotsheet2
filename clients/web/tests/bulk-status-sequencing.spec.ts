@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 const project = {
@@ -68,7 +69,7 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
   const staleRefreshResponse = new Promise<void>((resolve) => {
     releaseStaleRefresh = resolve;
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.startsWith('/__hotsheet/')) return route.continue();

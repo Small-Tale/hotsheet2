@@ -36,6 +36,7 @@
 }
 .terminal-drawer__rail {
   display: flex;
+  container: terminal-drawer-rail / inline-size;
   min-height: remify(44px);
   align-items: center;
   border-bottom: 1px solid var(--wa-color-surface-border);
@@ -53,12 +54,23 @@
   --kui-tab-bar-strip-padding: var(--kui-space-2xs);
   --kui-tab-bar-strip-flex: 0 1 auto;
   --kui-tab-bar-strip-gap: var(--kui-space-xs);
+  /* Cap the open terminal search's width so a long query wraps inside the field instead of pushing
+     the rail's end controls out of the drawer (HS2-HPDX81). Kerf's public expanded-search token, as
+     its "Room for an expanded search" guidance prescribes. */
+  --kui-search-field-expanded-width: 15rem;
   display: grid;
   /* Fill the rail so the TabBar's `end` action (hide drawer) reaches the trailing edge (HS2-RGF5NE). */
   flex: 1 1 auto;
   min-width: 0;
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
+}
+/* A phone-width rail gives the field less room so the tabs keep some (HS2-HPDX81); the match count
+   yields its room there too (terminal-search-count-fit.ts). */
+@container terminal-drawer-rail (max-width: 30rem) {
+  .terminal-drawer__views {
+    --kui-search-field-expanded-width: 9rem;
+  }
 }
 .terminal-drawer__content {
   min-width: 0;

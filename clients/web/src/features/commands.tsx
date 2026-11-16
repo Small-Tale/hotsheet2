@@ -17,7 +17,7 @@ import {
 } from '../command-settings-workflow';
 import { CommandGroupDialog } from '../components/command-group-dialog';
 import { commandIconNeedsCatalog } from '../components/command-icon';
-import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
+import { COMMAND_EDITOR_DIALOG_ID, type CommandSettingsLoadState } from '../components/command-settings-editor';
 import { CommandDialogSurface } from '../components/reader-overlay-surfaces';
 import type { TicketStatus } from '../components/status-badge';
 import type { Control, Project } from '../interactions/types';
@@ -86,6 +86,10 @@ export function createCommandsController({
     commandSettingsMessagesByProject = signal<Record<string, string>>({}),
     commandSettingsSelectedByProject = signal<Record<string, string[]>>({}),
     commandSettingsExtraGroupsByProject = signal<Record<string, string[]>>({}),
+    /** Projects whose command settings have loaded the revisions a write must name (HS2-A6K8D5). */
+    commandSettingsReadyByProject = signal<Partial<Record<string, true>>>({}),
+    /** Why a project's first command settings read failed, until a retry or a later read succeeds (HS2-BZKTDC). */
+    commandSettingsLoadErrorsByProject = signal<Partial<Record<string, string>>>({}),
     commandIconSearch = signal('');
   let commandSelectionAnchor: string | undefined;
   const messageRevisions = new Map<string, number>();
@@ -248,11 +252,57 @@ export function createCommandsController({
     changeCommandGroups(projectId, commandGroupsAfterEdit(before, after, commandSettingsExtraGroups(projectId)));
   }
   /** Adopt the server's kept command groups unless a local group save is still in flight. */
-  function loadCommandGroups(projectId: string, groups: readonly string[]) {
-    commandSettingsSaves.loadGroups(projectId, groups);
+  function loadCommandGroups(projectId: string, groups: readonly string[], since?: string) {
+    commandSettingsSaves.loadGroups(projectId, groups, since);
   }
-  function loadCommandRevisions(projectId: string, commands: string, groups: string) {
-    commandSettingsSaves.loadRevisions(projectId, commands, groups);
+  function loadCommandRevisions(projectId: string, commands: string, groups: string, since?: string) {
+    commandSettingsSaves.loadRevisions(projectId, commands, groups, since);
+    if (commandSettingsSaves.hasRevisions(projectId) && !commandSettingsReadyByProject.value[projectId]) {
+      commandSettingsReadyByProject.value = { ...commandSettingsReadyByProject.value, [projectId]: true };
+      clearCommandSettingsLoadError(projectId);
+    }
+  }
+  function clearCommandSettingsLoadError(projectId: string) {
+    if (commandSettingsLoadErrorsByProject.value[projectId] === undefined) return;
+    commandSettingsLoadErrorsByProject.value = Object.fromEntries(
+      Object.entries(commandSettingsLoadErrorsByProject.value).filter(([id]) => id !== projectId),
+    );
+  }
+  /**
+   * Record that a command settings read failed. Before the project's first load succeeds the editor
+   * shows this as its failed-load state with a Retry action, and returns true; afterwards the caller
+   * reports the failure in the editor's status line instead (HS2-BZKTDC).
+   */
+  function commandSettingsLoadFailed(projectId: string, message: string) {
+    if (commandSettingsReady(projectId)) return false;
+    commandSettingsLoadErrorsByProject.value = { ...commandSettingsLoadErrorsByProject.value, [projectId]: message };
+    return true;
+  }
+  /** Retry a failed first load: the editor shows its loading state again until the read answers (HS2-BZKTDC). */
+  function retryCommandSettingsLoad(projectId: string) {
+    clearCommandSettingsLoadError(projectId);
+  }
+  /**
+   * The editor's load state: `loading` until the first read supplies the revisions, `failed` when that
+   * read failed and no retry is under way, then `ready` (HS2-BZKTDC). Never "no commands" while loading.
+   */
+  function commandSettingsLoadState(projectId: string): CommandSettingsLoadState {
+    if (commandSettingsReady(projectId)) return 'ready';
+    return commandSettingsLoadErrorsByProject.value[projectId] === undefined ? 'loading' : 'failed';
+  }
+  function commandSettingsLoadError(projectId: string) {
+    return commandSettingsLoadErrorsByProject.value[projectId];
+  }
+  /**
+   * Before its first load a project's editor shows no commands or groups, and a write would name no
+   * revision, so the server rejects it as a conflict that only a reload clears (HS2-A6K8D5).
+   */
+  function commandSettingsReady(projectId: string) {
+    return commandSettingsReadyByProject.value[projectId] === true;
+  }
+  /** Capture before a refresh reads the server, then pass to the loads (HS2-A6K8D5). */
+  function commandSettingsWriteVersion(projectId: string) {
+    return commandSettingsSaves.writeVersion(projectId);
   }
   function hasCommandSettingsConflict(projectId: string) {
     return commandSettingsSaves.hasConflict(projectId);
@@ -368,6 +418,12 @@ export function createCommandsController({
     commandSettingsExtraGroups,
     loadCommandGroups,
     loadCommandRevisions,
+    commandSettingsWriteVersion,
+    commandSettingsReady,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
+    commandSettingsLoadFailed,
+    retryCommandSettingsLoad,
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,

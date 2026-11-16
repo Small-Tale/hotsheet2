@@ -328,7 +328,9 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect(banner).toHaveCount(0);
   releaseRemote();
   await expect(banner).toBeVisible();
-  await expect(banner.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
+  // Both controls sit directly in Kerf's action zone, without a Row wrapper (HS2-W77711).
+  await expect(banner.locator('.kui-state-banner__action > button')).toHaveCount(2);
+  await expect(banner.locator('.kui-state-banner__action .kui-row')).toHaveCount(0);
   await page.setViewportSize({ width: 2048, height: 900 });
   await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 760, height: 720 });

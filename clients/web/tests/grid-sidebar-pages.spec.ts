@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { LiveStoreState } from '../src/api';
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 test.use({ deviceScaleFactor: 2 });
@@ -82,7 +83,7 @@ async function openWorkspaceGrid(page: Page) {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/demo', '/work/other', '/work/quiet']));
     localStorage.setItem('hotsheet.workspace.active-project-root.v1', '/work/demo');
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,

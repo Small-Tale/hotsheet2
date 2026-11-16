@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
 
@@ -43,7 +43,7 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     await page.route(`**${apiPath}/**`, async (route) => {
       const incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -114,6 +114,6 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     ).toBe(true);
     await page.screenshot({ path: test.info().outputPath('cadence-dark-returned-wide.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

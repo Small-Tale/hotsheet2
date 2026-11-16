@@ -418,6 +418,9 @@ it('closes a project from Project Settings through the same entry point as its t
   let current: Pick<Project, 'id'> | undefined = { id: 'b' };
   wireTerminalInteractions({
     terminalSearchModel: createSearchFieldModel(),
+    terminalSearchOpen: signal(false),
+    terminalSearchResults: signal(undefined),
+    terminalDrawerSelected: signal('grid'),
     requestProjectClose: (ids: readonly string[]) => {
       requested.push([...ids]);
     },
@@ -456,6 +459,9 @@ it('keeps LAN visibility identities stable on rename and distinct after delete/r
     menu = signal<{ id: string; x: number; y: number } | undefined>(undefined);
   wireTerminalInteractions({
     terminalSearchModel: createSearchFieldModel(),
+    terminalSearchOpen: signal(false),
+    terminalSearchResults: signal(undefined),
+    terminalDrawerSelected: signal('grid'),
     terminalVisibility: state,
     terminalVisibilityNamePrompt: prompt,
     terminalVisibilityContextMenu: menu,
@@ -781,6 +787,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderStack: signal([]),
       readerOpen: signal(true),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: editing,
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),
@@ -851,6 +859,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderFrame: () => undefined,
       linkedReaderStack: signal([]),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: editing,
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),
@@ -911,6 +921,8 @@ describe('HS2-VBFSZJ response input lifecycle', () => {
       linkedReaderFrame: () => undefined,
       linkedReaderStack: signal([]),
       feedbackResponseDrafts: drafts,
+      // HS2-CHH28E: the wiring disposes the blocker dialog controller with its lifetime.
+      ticketBlockers: { search() {}, close() {}, open: () => false, dispose() {} },
       readerEditingNoteId: signal<string | undefined>(undefined),
       readerNoteDraft: readerDraft,
       noteDraft: signal(''),

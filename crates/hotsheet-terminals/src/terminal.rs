@@ -20,7 +20,7 @@ use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
 use crate::input_queue::InputQueue;
 use crate::osc::{OscScanner, TermState};
-use crate::sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
+use crate::sizing::{Decision, SizeArbiter, SizeClaimOwner, SizePolicy, ViewportClaim};
 
 /// How much recent PTY output to retain for a re-attaching viewer when no limit is
 /// configured (HS2-Y5DYC0 sizes new terminals from `crate::limits`).
@@ -215,6 +215,28 @@ impl Ring {
     fn snapshot(&self) -> Vec<u8> {
         self.buf.iter().map(|byte| byte.value).collect()
     }
+    /// Whether a snapshot could start at retained index `index` (the end counts when the parser
+    /// is between sequences, so the next pushed byte starts cleanly).
+    fn safe_start_at(&self, index: usize) -> bool {
+        match self.buf.get(index) {
+            Some(byte) => byte.safe_start,
+            None => matches!(self.ansi, AnsiState::Ground),
+        }
+    }
+    /// A shared clear (HS2-HA0Z3A): drop every retained byte before the start of the cursor's
+    /// line, which is what xterm's `clear()` keeps, so a later replay shows the prompt line and
+    /// nothing before it. The line starts after the last newline that ends at a parser-safe
+    /// position; a newline inside an escape string does not count. Without one, the whole ring
+    /// is the cursor's line and stays (a prompt alone, a repeated clear, or a full-screen program
+    /// that addresses the cursor instead of writing newlines). The stream offset is unchanged: it
+    /// counts produced bytes, not retained ones.
+    fn clear_before_cursor_line(&mut self) {
+        let line_start = (0..self.buf.len())
+            .rev()
+            .find(|&index| self.buf[index].value == b'\n' && self.safe_start_at(index + 1))
+            .map_or(0, |index| index + 1);
+        self.buf.drain(..line_start);
+    }
     fn replay(&self, stream: u64) -> Replay {
         Replay {
             data: self.snapshot(),
@@ -291,14 +313,24 @@ pub fn replay_suffix(replay: &[u8], max: usize) -> &[u8] {
     &[]
 }
 
+/// Whether a chunk from a terminal's live output fan-out is the replay-rewritten marker
+/// (HS2-HA0Z3A): an empty chunk, which real output never is. It means the retained replay was
+/// rewritten by a shared clear; a viewer drops what it holds and resyncs from a fresh snapshot.
+/// It travels on the output channel itself, so it is ordered exactly with the output around it,
+/// and a byte consumer that does not know it (an OSC scanner) sees nothing.
+pub fn is_replay_rewritten(chunk: &[u8]) -> bool {
+    chunk.is_empty()
+}
+
 /// Owns retained and live output as one synchronization boundary. Publishing and taking a
 /// snapshot+subscription are mutually exclusive, so a chunk is either in the snapshot or in
 /// the receiver created with it, never both and never neither (HS2-5W0V9M).
 struct OutputReplay {
     ring: Mutex<Ring>,
     tx: broadcast::Sender<Vec<u8>>,
-    /// This PTY's output-stream id (HS2-K93QHA).
-    stream: u64,
+    /// The output-stream id of the retained replay (HS2-K93QHA). A shared clear starts a new
+    /// one (HS2-HA0Z3A), so no viewer resumes across it. Only changed under the ring lock.
+    stream: std::sync::atomic::AtomicU64,
 }
 
 impl OutputReplay {
@@ -306,16 +338,35 @@ impl OutputReplay {
         Self {
             ring: Mutex::new(Ring::new(bytes)),
             tx: broadcast::channel(chunks).0,
-            stream: new_stream_id(),
+            stream: std::sync::atomic::AtomicU64::new(new_stream_id()),
         }
     }
 
     fn publish(&self, bytes: &[u8]) {
+        // An empty chunk is the rewrite marker, never output.
+        if bytes.is_empty() {
+            return;
+        }
         let mut ring = self.ring.lock_or_recover();
         ring.push(bytes);
         // Broadcast while the ring lock is held. `subscribe_with_snapshot` takes the same
         // lock before subscribing, which makes the handoff sequence-exact.
         let _ = self.tx.send(bytes.to_vec());
+    }
+
+    /// Clear the retained replay back to the cursor's line, start a new stream id, and tell
+    /// live viewers to resync, all under the ring lock (HS2-HA0Z3A).
+    fn clear(&self) -> StreamPosition {
+        let mut ring = self.ring.lock_or_recover();
+        ring.clear_before_cursor_line();
+        let stream = new_stream_id();
+        self.stream
+            .store(stream, std::sync::atomic::Ordering::Relaxed);
+        let _ = self.tx.send(Vec::new());
+        StreamPosition {
+            stream,
+            end_offset: ring.end,
+        }
     }
 
     fn snapshot(&self) -> Vec<u8> {
@@ -336,7 +387,8 @@ impl OutputReplay {
     fn subscribe_with_replay(&self) -> (Replay, broadcast::Receiver<Vec<u8>>) {
         let ring = self.ring.lock_or_recover();
         let receiver = self.tx.subscribe();
-        (ring.replay(self.stream), receiver)
+        let stream = self.stream.load(std::sync::atomic::Ordering::Relaxed);
+        (ring.replay(stream), receiver)
     }
 }
 
@@ -344,7 +396,8 @@ impl OutputReplay {
 enum Decided {
     /// Resize the PTY and broadcast the decision.
     Resize(Decision),
-    /// Broadcast the unchanged applied size because the query answerer changed (HS2-0GZZHV).
+    /// Broadcast the unchanged applied size because the driver or the query answerer changed
+    /// (HS2-0GZZHV, HS2-G1ADYV).
     Notice(Decision),
     Nothing,
 }
@@ -397,6 +450,53 @@ fn resize_pty(
             pixel_height: 0,
         })
         .map_err(pty_err)
+}
+
+/// Apply one arbiter decision: broadcast it, then resize the PTY. Callers hold the arbiter lock,
+/// so decisions reach the PTY and the viewers in the order the arbiter made them (HS2-AYVQ9Q).
+fn apply_decided(
+    size_tx: &broadcast::Sender<Decision>,
+    master: &Mutex<Box<dyn MasterPty + Send>>,
+    decided: Decided,
+) -> Option<Decision> {
+    #[cfg(test)]
+    pause_before_apply();
+    match decided {
+        Decided::Resize(d) => {
+            // Announce before resizing: the program's reaction to SIGWINCH (often a cursor
+            // position query) must reach each viewer after the frame naming the new answerer,
+            // or the old driver answers it too (HS2-0GZZHV).
+            let _ = size_tx.send(d.clone());
+            let _ = resize_pty(master, d.rows, d.cols);
+            Some(d)
+        }
+        // Same size, new driver or answerer: every viewer learns who drives and who answers
+        // queries now (HS2-0GZZHV, HS2-G1ADYV).
+        Decided::Notice(d) => {
+            let _ = size_tx.send(d);
+            None
+        }
+        Decided::Nothing => None,
+    }
+}
+
+#[cfg(test)]
+type ApplyPause = (std::sync::Arc<std::sync::Barrier>, std::time::Duration);
+
+#[cfg(test)]
+thread_local! {
+    /// Test hook (one-shot, this thread only): stall the next decision this thread makes between
+    /// deciding and applying it, as a descheduled thread on a loaded machine does. The barrier
+    /// tells the test the stall has begun (HS2-AYVQ9Q).
+    static APPLY_PAUSE: std::cell::Cell<Option<ApplyPause>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn pause_before_apply() {
+    if let Some((reached, stall)) = APPLY_PAUSE.with(std::cell::Cell::take) {
+        reached.wait();
+        std::thread::sleep(stall);
+    }
 }
 
 /// The launcher-assigned session worker id variable (mirrors `hotsheet_aitools::WORKER_ID_ENV`).
@@ -695,32 +795,79 @@ impl Terminal {
     /// changed, resize the PTY and broadcast the decision to all viewers. Returns the decision
     /// when a resize happened. `now_ms` is the injected clock (real millis from the caller).
     pub fn claim_size(&self, claim: ViewportClaim, now_ms: u64) -> Option<Decision> {
-        let decided = {
-            let mut s = self.sizer.lock_or_recover();
-            s.upsert(claim, now_ms);
-            Self::decide_or_notice(&mut s, now_ms)
-        };
-        self.apply_size(decided)
+        self.arbitrate(
+            |s| {
+                s.upsert(claim, now_ms);
+                true
+            },
+            now_ms,
+        )
+    }
+
+    /// [`Self::claim_size`] for one attach connection, which owns the claim until another
+    /// connection claims the same viewer id (HS2-CCNRVW).
+    pub fn claim_size_owned(
+        &self,
+        claim: ViewportClaim,
+        owner: SizeClaimOwner,
+        now_ms: u64,
+    ) -> Option<Decision> {
+        self.arbitrate(
+            |s| {
+                s.upsert_owned(claim, owner, now_ms);
+                true
+            },
+            now_ms,
+        )
+    }
+
+    /// An attach connection ended: drop the claims it still owns and recompute (self-heal). A
+    /// viewport a newer connection reclaimed under the same id keeps its claim (HS2-CCNRVW).
+    pub fn release_owner(&self, owner: SizeClaimOwner, now_ms: u64) -> Option<Decision> {
+        self.arbitrate(|s| s.release_owner(owner) > 0, now_ms)
     }
 
     /// A viewport disconnected: drop its claim and recompute (self-heal).
     pub fn drop_viewer(&self, viewer_id: &str, now_ms: u64) -> Option<Decision> {
-        let decided = {
-            let mut s = self.sizer.lock_or_recover();
-            s.remove(viewer_id);
-            Self::decide_or_notice(&mut s, now_ms)
-        };
-        self.apply_size(decided)
+        self.arbitrate(
+            |s| {
+                s.remove(viewer_id);
+                true
+            },
+            now_ms,
+        )
     }
 
-    /// Decide the PTY size; when nothing resizes but the query answerer changed, the applied
-    /// size naming the new answerer to broadcast instead (HS2-0GZZHV).
+    /// Apply `change` to the arbiter and, when it returns true, decide and apply the decision
+    /// while still holding the arbiter lock (HS2-AYVQ9Q). Deciding under the lock but
+    /// broadcasting and resizing after releasing it let two concurrent passes (a viewer's claim
+    /// and the trailing re-decide, or two viewers' claims) apply in the opposite order to the
+    /// one they decided in. The older size then reached the PTY and every viewer last, while
+    /// the arbiter recorded the newer size as applied and never resized again. Applying in
+    /// decision order keeps the PTY, the viewers, and the arbiter's applied size equal.
+    fn arbitrate(
+        &self,
+        change: impl FnOnce(&mut SizeArbiter) -> bool,
+        now_ms: u64,
+    ) -> Option<Decision> {
+        let decision = {
+            let mut s = self.sizer.lock_or_recover();
+            if !change(&mut s) {
+                return None;
+            }
+            let decided = Self::decide_or_notice(&mut s, now_ms);
+            apply_decided(&self.size_tx, &self.master, decided)
+        };
+        self.schedule_trailing_resize();
+        decision
+    }
+
+    /// Decide the PTY size; when nothing resizes but the driver or the query answerer changed,
+    /// the applied size naming them to broadcast instead (HS2-0GZZHV, HS2-G1ADYV).
     fn decide_or_notice(s: &mut SizeArbiter, now_ms: u64) -> Decided {
         match s.decide(now_ms) {
             Some(decision) => Decided::Resize(decision),
-            None => s
-                .answerer_notice()
-                .map_or(Decided::Nothing, Decided::Notice),
+            None => s.notice().map_or(Decided::Nothing, Decided::Notice),
         }
     }
 
@@ -742,27 +889,6 @@ impl Terminal {
     /// Subscribe to reconciled-size changes (each viewer forwards these to its client).
     pub fn subscribe_size(&self) -> broadcast::Receiver<Decision> {
         self.size_tx.subscribe()
-    }
-
-    fn apply_size(&self, decided: Decided) -> Option<Decision> {
-        let decision = match decided {
-            Decided::Resize(d) => {
-                // Announce before resizing: the program's reaction to SIGWINCH (often a cursor
-                // position query) must reach each viewer after the frame naming the new answerer,
-                // or the old driver answers it too (HS2-0GZZHV).
-                let _ = self.size_tx.send(d.clone());
-                let _ = self.resize(d.rows, d.cols);
-                Some(d)
-            }
-            // Same size, new answerer: every viewer learns who answers queries now.
-            Decided::Notice(d) => {
-                let _ = self.size_tx.send(d);
-                None
-            }
-            Decided::Nothing => None,
-        };
-        self.schedule_trailing_resize();
-        decision
     }
 
     /// The trailing edge of the resize rate limit (HS2-GSRZX6): when the arbiter deferred a
@@ -790,15 +916,14 @@ impl Terminal {
                     std::thread::sleep(std::time::Duration::from_millis(
                         at.saturating_sub(wall_ms()),
                     ));
-                    let (decision, next) =
-                        sizer.with_lock(|s| (s.decide(wall_ms()), s.deferred_until()));
-                    if let Some(d) = decision {
-                        // Announce first, as in `apply_size` (HS2-0GZZHV).
-                        let (rows, cols) = (d.rows, d.cols);
-                        let _ = size_tx.send(d);
-                        let _ = resize_pty(&master, rows, cols);
-                    }
-                    due = next;
+                    // Applied under the arbiter lock, in decision order (HS2-AYVQ9Q). A focus-hold
+                    // takeover by a viewport with the same grid lands here without a resize, so
+                    // the notice announces its new driver (HS2-G1ADYV).
+                    due = sizer.with_lock(|s| {
+                        let decided = Self::decide_or_notice(s, wall_ms());
+                        apply_decided(&size_tx, &master, decided);
+                        s.deferred_until()
+                    });
                 }
                 pending.store(false, std::sync::atomic::Ordering::SeqCst);
                 // A claim deferred between the last decide and clearing the flag saw a pending
@@ -861,6 +986,14 @@ impl Terminal {
     /// A snapshot of the scrollback ring (what a re-attaching viewer replays).
     pub fn scrollback(&self) -> Vec<u8> {
         self.output.snapshot()
+    }
+
+    /// Clear the terminal for every viewer (HS2-HA0Z3A): the replay ring keeps only the cursor's
+    /// line, the output stream gets a new id so no viewer resumes from before the clear, and
+    /// every attached viewer receives a replacement snapshot. The shell is not told. Returns the
+    /// new stream position.
+    pub fn clear_replay(&self) -> StreamPosition {
+        self.output.clear()
     }
 
     /// How many bytes of recent output the scrollback ring retains (HS2-Y5DYC0).
@@ -1052,6 +1185,93 @@ mod tests {
         assert_eq!(replay.after(7), None);
     }
 
+    /// HS2-HA0Z3A: a shared clear keeps exactly the cursor's line, whatever surrounds it.
+    #[test]
+    fn hs2_ha0z3a_clear_keeps_only_the_cursor_line() {
+        let cleared = |chunks: &[&[u8]]| {
+            let mut ring = Ring::new(1024);
+            for chunk in chunks {
+                ring.push(chunk);
+            }
+            ring.clear_before_cursor_line();
+            ring.snapshot()
+        };
+        // The prompt after the last newline stays; everything above it goes.
+        assert_eq!(
+            cleared(&[b"one\r\ntwo\r\n\x1b[1m$ \x1b[0m"]),
+            b"\x1b[1m$ \x1b[0m"
+        );
+        // At the start of an empty line nothing is kept.
+        assert_eq!(cleared(&[b"one\r\ntwo\r\n"]), b"");
+        // An empty ring stays empty.
+        assert_eq!(cleared(&[]), b"");
+        // A newline inside an escape string is not a line start (OSC title with a newline).
+        assert_eq!(cleared(&[b"one\n\x1b]0;a\nb\x07$ "]), b"\x1b]0;a\nb\x07$ ");
+        // A trailing newline inside an unfinished escape string is not a line start either.
+        assert_eq!(cleared(&[b"one\n\x1b]0;a\n"]), b"\x1b]0;a\n");
+        // No newline at all: the whole ring is the cursor's line and stays.
+        assert_eq!(cleared(&[b"$ "]), b"$ ");
+        assert_eq!(
+            cleared(&[b"\x1b[Hscreen\x1b[38;5"]),
+            b"\x1b[Hscreen\x1b[38;5"
+        );
+        assert_eq!(cleared(&["é".as_bytes()]), "é".as_bytes());
+    }
+
+    /// HS2-HA0Z3A: clear then output, clear twice, and the stream offset across a clear.
+    #[test]
+    fn hs2_ha0z3a_clear_transitions_keep_offsets_and_later_output() {
+        let mut ring = Ring::new(1024);
+        ring.push(b"old\n$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ");
+        // The offset still counts produced bytes; the replay window starts after the clear.
+        let replay = ring.replay(9);
+        assert_eq!(replay.position.end_offset, 6);
+        assert_eq!(replay.after(4), Some(&b"$ "[..]));
+        assert_eq!(
+            replay.after(3),
+            None,
+            "a cleared byte cannot be resumed from"
+        );
+        ring.push(b"ls\nfile\n$ ");
+        assert_eq!(ring.snapshot(), b"$ ls\nfile\n$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"$ ", "clearing twice is idempotent");
+        // Trimming after a clear still lands on safe starts.
+        ring.resize(4);
+        ring.push(b"\x1b[31mred");
+        assert_eq!(ring.snapshot(), b"red");
+    }
+
+    /// HS2-HA0Z3A: the clear marker reaches live receivers in order with output, a fresh
+    /// subscription after the clear sees only the cursor line on a new stream, and the marker is
+    /// never stored as output.
+    #[test]
+    fn hs2_ha0z3a_clear_marks_live_receivers_in_order_and_starts_a_new_stream() {
+        let output = OutputReplay::new(1024, 16);
+        output.publish(b"old\n$ ");
+        let (before, mut live) = output.subscribe_with_replay();
+        output.publish(b"x");
+        let position = output.clear();
+        output.publish(b"y");
+        assert_eq!(live.try_recv().unwrap(), b"x");
+        assert!(is_replay_rewritten(&live.try_recv().unwrap()));
+        assert_eq!(live.try_recv().unwrap(), b"y");
+        assert_ne!(position.stream, before.position.stream);
+        assert_eq!(position.end_offset, 7);
+        let (after, _) = output.subscribe_with_replay();
+        assert_eq!(after.data, b"$ xy");
+        assert_eq!(after.position.stream, position.stream);
+        assert_eq!(after.position.end_offset, 8);
+        // Publishing an empty chunk is not output and never looks like a clear.
+        output.publish(b"");
+        assert!(live.try_recv().is_err());
+        assert!(!is_replay_rewritten(b"x"));
+    }
+
     #[test]
     fn replay_resize_trims_at_safe_boundaries_and_retains_new_output_after_growth() {
         let mut ring = Ring::new(64);
@@ -1169,6 +1389,220 @@ mod tests {
         let _ = term.kill();
     }
 
+    /// HS2-G1ADYV: a focus-hold takeover by a viewport with the same grid lands on the trailing
+    /// re-decide without a resize. Before, that pass broadcast only resizes, so every viewer kept
+    /// the old driver and the new driver's viewer never started answering terminal queries.
+    #[test]
+    fn a_same_size_takeover_is_announced_once_without_a_resize() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Terminal::spawn(spec).expect("spawn");
+        let mut sizes = term.subscribe_size();
+        let claim = |viewer: &str, interacting| ViewportClaim {
+            viewer_id: viewer.into(),
+            cols: 100,
+            rows: 30,
+            focus: true,
+            visible: true,
+            interacting,
+            answers_queries: true,
+            activity_at_ms: 0,
+        };
+        assert!(term.claim_size(claim("desk", true), wall_ms()).is_some());
+        let first = sizes.blocking_recv().expect("the desk size");
+        assert_eq!(first.driven_by.as_deref(), Some("desk"));
+        // A later interaction than the desk's, so the phone is the takeover candidate.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(
+            term.claim_size(claim("phone", true), wall_ms()).is_none(),
+            "held inside the focus-hold"
+        );
+        let handoff = recv_within(&mut sizes, std::time::Duration::from_secs(5))
+            .expect("the held handoff is announced on its own");
+        assert_eq!(
+            (
+                handoff.cols,
+                handoff.rows,
+                handoff.driven_by.as_deref(),
+                handoff.answered_by.as_deref()
+            ),
+            (100, 30, Some("phone"), Some("phone"))
+        );
+        assert_eq!(pty_grid(&term), (100, 30), "nothing resized");
+        // The old driver's connection ends and the phone heartbeats: nothing more to announce.
+        assert!(term.drop_viewer("desk", wall_ms()).is_none());
+        assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
+        settle_trailing_resize(&term);
+        assert!(sizes.try_recv().is_err(), "one notice, no repeats");
+        assert_eq!(
+            term.current_size().and_then(|d| d.driven_by).as_deref(),
+            Some("phone")
+        );
+        let _ = term.kill();
+    }
+
+    /// The next broadcast size within `limit`, so a missing frame fails instead of hanging.
+    fn recv_within(
+        sizes: &mut broadcast::Receiver<Decision>,
+        limit: std::time::Duration,
+    ) -> Option<Decision> {
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            match sizes.try_recv() {
+                Ok(decision) => return Some(decision),
+                Err(broadcast::error::TryRecvError::Empty) => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
+    /// The PTY's real grid, as the program sees it through `TIOCGWINSZ`.
+    fn pty_grid(term: &Terminal) -> (u16, u16) {
+        let size = term.master.lock_or_recover().get_size().expect("pty size");
+        (size.cols, size.rows)
+    }
+
+    /// Wait (bounded) until no trailing re-decide is pending or running.
+    fn settle_trailing_resize(term: &Terminal) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while term
+            .trailing_resize
+            .load(std::sync::atomic::Ordering::SeqCst)
+            || term.sizer.with_lock(|s| s.deferred_until()).is_some()
+        {
+            assert!(Instant::now() < deadline, "the trailing re-decide settles");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// The last broadcast size, the PTY's real size, and the arbiter's applied size agree.
+    fn assert_applied_everywhere(term: &Terminal, sizes: &mut broadcast::Receiver<Decision>) {
+        let applied = term.current_size().expect("an applied size");
+        let mut last = None;
+        loop {
+            match sizes.try_recv() {
+                Ok(decision) => last = Some((decision.cols, decision.rows)),
+                Err(broadcast::error::TryRecvError::Lagged(_)) => {}
+                Err(_) => break,
+            }
+        }
+        assert_eq!(
+            last,
+            Some((applied.cols, applied.rows)),
+            "viewers were told the applied size last"
+        );
+        assert_eq!(
+            pty_grid(term),
+            (applied.cols, applied.rows),
+            "the PTY has the applied size"
+        );
+    }
+
+    fn lone_claim(cols: u16, rows: u16) -> ViewportClaim {
+        ViewportClaim {
+            viewer_id: "zoomed".into(),
+            cols,
+            rows,
+            focus: true,
+            visible: true,
+            interacting: false,
+            answers_queries: true,
+            activity_at_ms: 0,
+        }
+    }
+
+    /// HS2-AYVQ9Q: a pass that decided first but was descheduled before applying its decision
+    /// must not apply it after a newer pass. Before, the decision was broadcast and applied to the
+    /// PTY after the arbiter lock was released, so the older size landed last: the zoomed Workspace
+    /// Grid viewer saw the PTY stay at the other device's size while the arbiter believed its own
+    /// size was applied, and no later claim changed anything.
+    #[test]
+    fn a_stalled_older_decision_never_lands_after_a_newer_one() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["5".into()];
+        let term = Arc::new(Terminal::spawn(spec).expect("spawn"));
+        let mut sizes = term.subscribe_size();
+        let started = wall_ms();
+        let reached = Arc::new(Barrier::new(2));
+        let older = {
+            let (term, reached) = (term.clone(), reached.clone());
+            std::thread::spawn(move || {
+                APPLY_PAUSE.with(|pause| {
+                    pause.set(Some((reached, Duration::from_millis(300))));
+                });
+                term.claim_size(lone_claim(60, 16), started)
+            })
+        };
+        // The older pass has decided 60x16 and is stalled before applying it.
+        reached.wait();
+        // A newer claim, past the resize min-interval on the injected clock.
+        let newer = term.claim_size(lone_claim(80, 24), started + 1_000);
+        let older = older.join().expect("older pass");
+        assert_eq!(older.map(|d| (d.cols, d.rows)), Some((60, 16)));
+        assert_eq!(newer.map(|d| (d.cols, d.rows)), Some((80, 24)));
+        settle_trailing_resize(&term);
+        assert_applied_everywhere(&term, &mut sizes);
+        assert_eq!(pty_grid(&term), (80, 24), "the newest claim wins");
+        let _ = term.kill();
+    }
+
+    /// HS2-AYVQ9Q: many concurrent claims with interleaved, out-of-order clocks and stalls between
+    /// deciding and applying, repeated, always settle with the viewers, the PTY, and the arbiter
+    /// on one size, including after an empty-then-refill pass (the viewer leaves and returns).
+    #[test]
+    fn concurrent_out_of_order_claims_settle_on_one_applied_size() {
+        let mut spec = TermSpec::new("sleep");
+        spec.args = vec!["30".into()];
+        let term = Arc::new(Terminal::spawn(spec).expect("spawn"));
+        let mut sizes = term.subscribe_size();
+        // A clock in the past, so a deferred trailing decide is due at once on the wall clock.
+        let clock = Arc::new(std::sync::atomic::AtomicU64::new(wall_ms() - 3_600_000));
+        for round in 0..3u16 {
+            let start = Arc::new(Barrier::new(6));
+            let workers: Vec<_> = (0..6u16)
+                .map(|worker| {
+                    let (term, clock, start) = (term.clone(), clock.clone(), start.clone());
+                    std::thread::spawn(move || {
+                        start.wait();
+                        for step in 0..30u16 {
+                            // Take the clock before contending for the lock, as an attach does;
+                            // a thread that loses the race carries an older time.
+                            let now = clock.fetch_add(150, std::sync::atomic::Ordering::SeqCst);
+                            if (step + worker) % 3 == 0 {
+                                APPLY_PAUSE.with(|pause| {
+                                    pause.set(Some((
+                                        Arc::new(Barrier::new(1)),
+                                        Duration::from_millis(u64::from(worker % 3)),
+                                    )));
+                                });
+                            }
+                            let cols = 40 + 2 * ((worker * 31 + step * 7 + round) % 60);
+                            let rows = 10 + 2 * ((worker + step) % 20);
+                            term.claim_size(lone_claim(cols, rows), now);
+                        }
+                    })
+                })
+                .collect();
+            for worker in workers {
+                worker.join().expect("worker");
+            }
+            settle_trailing_resize(&term);
+            assert_applied_everywhere(&term, &mut sizes);
+            // Empty, then refill: the viewer leaves (the size holds) and claims again.
+            term.drop_viewer("zoomed", clock.load(std::sync::atomic::Ordering::SeqCst));
+            settle_trailing_resize(&term);
+            let refill = clock.fetch_add(1_000, std::sync::atomic::Ordering::SeqCst) + 1_000;
+            term.claim_size(lone_claim(100 + round * 4, 30), refill);
+            settle_trailing_resize(&term);
+            assert_applied_everywhere(&term, &mut sizes);
+            assert_eq!(pty_grid(&term), (100 + round * 4, 30));
+        }
+        let _ = term.kill();
+    }
+
     /// HS2-0GZZHV: an answerer change that resizes nothing is still broadcast, once, so the new
     /// answerer starts replying to the program's queries and the old one stops.
     #[test]
@@ -1201,10 +1635,11 @@ mod tests {
             (
                 notice.cols,
                 notice.rows,
-                notice.driven_by,
+                notice.driven_by.as_deref(),
                 notice.answered_by.as_deref()
             ),
-            (120, 40, None, Some("phone"))
+            // The focused survivor also drives the held size (HS2-G1ADYV).
+            (120, 40, Some("phone"), Some("phone"))
         );
         assert!(term.claim_size(claim("phone", false), wall_ms()).is_none());
         std::thread::sleep(std::time::Duration::from_millis(150));

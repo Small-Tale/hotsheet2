@@ -1,10 +1,12 @@
-import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { FullTicket } from '../src/api';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 /**
  * Ticket groups in the real app against a private real server (HS2-3XNTSD): rendering in the list
@@ -94,7 +96,7 @@ async function open(
   await page.route(`**${apiPath}/**`, async (route) => {
     const incoming = new URL(route.request().url());
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,
@@ -107,11 +109,26 @@ async function open(
     }
   });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-component="ticket-list"] [data-ticket-slug]').first()).toBeVisible();
+  // HS2-4HHYHR: wait on the project's ready state, not on whatever budget the next action has left.
+  // The open is done when the first ticket row renders and the corner loading status is gone; a view
+  // switch clicked while the project still loads could otherwise be lost and only fail at the test timeout.
+  await test.step('open the project and wait until it is ready', async () => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await expect(page.locator('[data-component="ticket-list"] [data-ticket-slug]').first()).toBeVisible();
+    await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
+  });
+}
+
+/** Switch views and wait until the toolbar reports the switch, so a lost click fails here (HS2-4HHYHR). */
+async function showView(page: Page, name: 'Columns View' | 'List View') {
+  await test.step(`switch to ${name}`, async () => {
+    const control = page.getByRole('button', { name, exact: true });
+    await control.click();
+    await expect(control).toHaveAttribute('data-selected', 'true');
+  });
 }
 
 const list = (page: Page) => page.locator('[data-component="ticket-list"]');
@@ -218,7 +235,8 @@ test('HS2-WZ3JGZ renders list groups as segments, aligned and collapsible', asyn
 
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
-      for (const width of [1440, 900, 390, 1440]) {
+      // Kerf's summary-row leading edge keeps the title on the icons through 384px (HS2-HKXSB1).
+      for (const width of [1440, 900, 768, 390, 384, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await settle(page);
         await expect(boardGroup).toBeVisible();
@@ -268,7 +286,7 @@ test('HS2-HV8S4Y shows each column’s members of a group and collapses it every
   test.setTimeout(180_000);
   await withServer(async (server) => {
     await open(page, server);
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const view = board(page);
     await expect(group(view, BOARD, 'not-started').locator('[data-ticket-slug]')).toHaveCount(1);
     await expect(group(view, BOARD, 'started').locator('[data-ticket-slug]')).toHaveCount(2);
@@ -308,7 +326,7 @@ test('HS2-HV8S4Y shows each column’s members of a group and collapses it every
     await capture(page, 'columns-collapsed-group-dark-1100');
     await page.emulateMedia({ colorScheme: 'light' });
     // The list view shares the same preference.
-    await page.getByLabel('List View').click();
+    await showView(page, 'List View');
     await expect(group(list(page), SEARCH).locator('[data-action="toggle-ticket-group"]')).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -487,7 +505,7 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
 
     // Columns (HS2-K2QA1J): from another column the whole column is the target, even over a group,
     // so the drop changes only the status.
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const columns = board(page),
       onboarding = tickets['Onboarding checklist copy review'],
       startedColumn = columns.locator('[data-column-id="started"]'),
@@ -545,6 +563,109 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
     await drag(page, rowOf(columns, onboarding.slug), columns.locator('[data-column-id="completed"] > header'));
     await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['completed', null]);
     await expect(group(columns, SEARCH, 'completed')).toHaveCount(0);
+  }, page);
+});
+
+test('HS2-1BBXER keeps a column’s drop highlight while the pointer crosses its children', async ({ page }) => {
+  test.setTimeout(120_000);
+  await withServer(async (server, tickets) => {
+    await open(page, server);
+    await page.getByLabel('Columns View').click();
+    const columns = board(page),
+      onboarding = tickets['Onboarding checklist copy review'],
+      persist = tickets['Persist column widths per view'],
+      startedColumn = columns.locator('[data-column-id="started"]'),
+      completedColumn = columns.locator('[data-column-id="completed"]'),
+      header = group(columns, BOARD, 'started').locator('[data-component="list-header"]'),
+      toggle = header.locator('[data-action="toggle-ticket-group"]'),
+      center = async (target: Locator) => {
+        const box = (await target.boundingBox())!;
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+    await settle(page);
+    // Every point is resolved before the drag, so the pointer moves only between them.
+    const label = await center(toggle.getByText(BOARD, { exact: true })),
+      toggleBox = (await toggle.boundingBox())!,
+      columnHeader = await center(startedColumn.locator(':scope > header')),
+      stops: readonly (readonly [string, { x: number; y: number }])[] = [
+        ['group label', label],
+        // The toggle's own padding, left of its label: the move HS2-HKXSB1 found clearing the column.
+        ['toggle padding', { x: toggleBox.x + 2, y: toggleBox.y + toggleBox.height / 2 }],
+        ['group label again', label],
+        ['overflow button', await center(header.getByRole('button', { name: `${BOARD} Group Actions` }))],
+        ['grouped row', await center(rowOf(startedColumn, persist.slug))],
+        ['group label from a row', label],
+        ['column header', columnHeader],
+      ],
+      outside = await center(completedColumn.locator(':scope > header'));
+    // Count every time the started column loses its highlight.
+    await startedColumn.evaluate((column) => {
+      const record = window as unknown as { columnHighlightCleared: number };
+      record.columnHighlightCleared = 0;
+      new MutationObserver(() => {
+        if ((column as HTMLElement).dataset.draggingTicket !== 'true') record.columnHighlightCleared += 1;
+      }).observe(column, { attributes: true, attributeFilter: ['data-dragging-ticket'] });
+    });
+    const cleared = () =>
+      page.evaluate(() => (window as unknown as { columnHighlightCleared: number }).columnHighlightCleared);
+
+    const from = await center(rowOf(columns, onboarding.slug));
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 12, from.y + 12, { steps: 4 });
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 12 });
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    // One step per stop: each move crosses straight onto the next child with no resting dragover after it.
+    for (const [name, point] of stops) {
+      await page.mouse.move(point.x, point.y);
+      await expect(startedColumn, name).toHaveAttribute('data-dragging-ticket', 'true');
+      expect(await cleared(), name).toBe(0);
+    }
+    await capture(page, 'drag-across-column-children-light-1440');
+
+    // Leaving the column clears it, and the column now under the pointer takes the highlight.
+    await page.mouse.move(outside.x, outside.y, { steps: 6 });
+    await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await expect(completedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+
+    // Back across the started column's children, a drop there clears every highlight.
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 6 });
+    await page.mouse.move(label.x, label.y);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await expect(completedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.up();
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', null]);
+    await expect(columns.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+
+    // Within its own column, entering a group hands the highlight to the group at once, and back
+    // out on the column header the column takes it again.
+    await settle(page);
+    const search = group(columns, SEARCH, 'started'),
+      searchLabel = await center(
+        search.locator('[data-action="toggle-ticket-group"]').getByText(SEARCH, { exact: true }),
+      ),
+      own = await center(rowOf(startedColumn, onboarding.slug));
+    await page.mouse.move(own.x, own.y);
+    await page.mouse.down();
+    await page.mouse.move(own.x + 12, own.y + 12, { steps: 4 });
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 12 });
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(searchLabel.x, searchLabel.y);
+    await expect(search).toHaveAttribute('data-drop-target', 'true');
+    await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(columnHeader.x, columnHeader.y);
+    await expect(search).not.toHaveAttribute('data-drop-target', 'true');
+    // The column marks itself on dragover, which a real pointer repeats while it rests.
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(searchLabel.x, searchLabel.y);
+    await expect(search).toHaveAttribute('data-drop-target', 'true');
+    await page.mouse.up();
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', SEARCH]);
+    await expect(search).not.toHaveAttribute('data-drop-target', 'true');
+    await expect(columns.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
   }, page);
 });
 
@@ -650,7 +771,7 @@ test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column fr
     await expect.poll(() => selectedIn(view)).toEqual(searchMembers);
 
     // Column view: only that column's share of the group.
-    await page.getByLabel('Columns View').click();
+    await showView(page, 'Columns View');
     const columns = board(page),
       started = group(columns, BOARD, 'started');
     await expect(started.locator('[data-ticket-slug]')).toHaveCount(2);
@@ -665,6 +786,87 @@ test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column fr
     await notStarted.locator('[data-component="list-header"]').click({ button: 'right' });
     await menu.getByRole('menuitem', { name: 'Select All in Group' }).click();
     await expect.poll(() => selectedIn(columns)).toEqual(await slugsIn(notStarted));
+  }, page);
+});
+
+test('HS2-HKXSB1 opens the group menu from the header overflow button without toggling, in the list and columns', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await withServer(async (server) => {
+    await open(page, server);
+    const menu = page.locator('[data-ticket-group-menu="true"]'),
+      selectedIn = (scope: Locator) =>
+        scope
+          .locator('[data-row-selected="true"]')
+          .evaluateAll((rows) =>
+            rows.map((row) => row.querySelector<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug),
+          );
+    /** Exercise one group container's overflow button, keyboard route, and context menu. */
+    const exercise = async (container: Locator, view: Locator, label: string) => {
+      const toggle = container.locator('[data-action="toggle-ticket-group"]'),
+        overflow = container.getByRole('button', { name: `${BOARD} Group Actions` }),
+        members = await slugsIn(container);
+      await expect(overflow).toHaveAttribute('data-action', 'open-ticket-group-menu');
+      await expect(overflow).toHaveAttribute('aria-haspopup', 'menu');
+      // One trailing button, outside the disclosure toggle and after it.
+      expect(await overflow.evaluate((node) => node.closest('[data-action="toggle-ticket-group"]'))).toBeNull();
+      const [toggleBox, overflowBox] = [(await toggle.boundingBox())!, (await overflow.boundingBox())!];
+      expect(overflowBox.x, `${label} overflow trails the toggle`).toBeGreaterThanOrEqual(
+        toggleBox.x + toggleBox.width - 1,
+      );
+
+      // A pointer click opens the group menu and leaves the group expanded.
+      await overflow.click();
+      await expect(menu.getByRole('menuitem', { name: 'Rename Group…' })).toBeVisible();
+      await expect(menu.getByRole('menuitem', { name: 'Select All in Group' })).toBeInViewport();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(container.locator('[data-ticket-slug]')).toHaveCount(members.length);
+      await capture(page, `group-overflow-menu-${label}-light-1440`);
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+      // The keyboard reaches the button as its own stop after the toggle, and opens the same menu.
+      await toggle.focus();
+      await page.keyboard.press('Tab');
+      await expect(overflow).toBeFocused();
+      await page.keyboard.press('Enter');
+      const selectAll = menu.getByRole('menuitem', { name: 'Select All in Group' });
+      await expect(selectAll).toBeVisible();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      // Escape closes it and gives focus back to the button, which opens it again.
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(overflow).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(selectAll).toBeVisible();
+      // Its commands act on the container it was opened from.
+      await selectAll.click();
+      await expect(menu).toHaveCount(0);
+      await expect.poll(() => selectedIn(view)).toEqual(members);
+
+      // The context menu remains a route to the same commands.
+      await container.locator('[data-component="list-header"]').click({ button: 'right' });
+      await expect(menu.getByRole('menuitem', { name: 'Ungroup' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+
+      // A collapsed group keeps its overflow button, and opening it does not expand the group.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await overflow.click();
+      await expect(menu.getByRole('menuitem', { name: 'Rename Group…' })).toBeVisible();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await page.keyboard.press('Escape');
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    };
+
+    await exercise(group(list(page), BOARD), list(page), 'list');
+    await showView(page, 'Columns View');
+    await expect(group(board(page), BOARD, 'started').locator('[data-ticket-slug]')).toHaveCount(2);
+    await exercise(group(board(page), BOARD, 'started'), board(page), 'column');
   }, page);
 });
 
@@ -714,4 +916,95 @@ test('HS2-44W3TP searches by group and keeps results grouped', async ({ page }) 
     await run('group:missing');
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(0);
   }, page);
+});
+
+/** A Git work tree for the code checkout whose pre-commit hook refuses every commit (HS2-VFYSQK). */
+function refusingCheckout({ root, env }: RealTicketFixtureContext): Promise<void> {
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-C', root, ...args], { env: withoutGitRepositoryEnv(env), stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  const hooks = join(root, '.git', 'hooks');
+  mkdirSync(hooks, { recursive: true });
+  // Pin the hooks path so a developer's global core.hooksPath cannot bypass the refusing hook.
+  git('config', 'core.hooksPath', hooks);
+  writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\necho "synthetic hook refused the commit" >&2\nexit 1\n', {
+    mode: 0o755,
+  });
+  return Promise.resolve();
+}
+
+const registrySyncState = (server: Server) =>
+  server
+    .request<{ registry_sync?: { state: string } }>(`/checkouts/${server.checkoutId}/groups`)
+    .then((body) => body.registry_sync?.state ?? 'none');
+
+test('HS2-VFYSQK HS2-1CWD0H warns in the project shell while the group registry cannot publish, and follows server changes live', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ autoCommit: true, seed: refusingCheckout });
+  try {
+    // Seeding names groups in the registry; the server's background commit is refused by the hook.
+    await seed(server);
+    await expect.poll(() => registrySyncState(server), { timeout: 30_000 }).toBe('failed');
+    await open(page, server);
+    // The real shell renders it in its header banner slot, beside the other application banners.
+    const banner = page.locator('.app-shell__banner [data-component="group-registry-sync-banner"]');
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute('data-tone', 'warning');
+    await expect(banner).toContainText('Ticket groups are not publishing changes');
+    await expect(banner).toContainText('Could not commit the group registry');
+    await expect(banner).toContainText('synthetic hook refused the commit');
+    await expect(banner).toContainText('other clones do not see new or renamed groups');
+    await expect(banner).toContainText('Hot Sheet tries again on its next sync.');
+    const shots = join('target', 'visual-captures', 'hs2-vfysqk');
+    mkdirSync(shots, { recursive: true });
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 900],
+      ['narrow', 420],
+      ['wide-again', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      await expect(banner, label).toBeVisible();
+      const box = await banner.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return { left: rect.left, right: window.innerWidth - rect.right };
+      });
+      expect(box.left, `${label}: inside the viewport`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${label}: inside the viewport`).toBeGreaterThanOrEqual(0);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `${label}: no horizontal page scroll`).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: join(shots, `group-registry-sync-banner-${label}-${width}.png`) });
+    }
+
+    // Once the hook stops refusing, another client's registry write commits in the server's
+    // background burst (no upstream: local_only). This page makes no group operation and has no
+    // timer: the server's `group_registry_sync` change event makes it reread, so the banner
+    // clears (HS2-1CWD0H).
+    const hook = join(server.root, '.git', 'hooks', 'pre-commit');
+    const groupReads: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/groups'))
+        groupReads.push(request.url());
+    });
+    rmSync(hook);
+    await server.request(`/checkouts/${server.checkoutId}/groups`, 'POST', { name: 'Recovered' });
+    await expect(banner).toHaveCount(0, { timeout: 30_000 });
+    expect(await registrySyncState(server)).toBe('local_only');
+    // The banner returns the same way when a later background commit is refused again.
+    writeFileSync(hook, '#!/bin/sh\necho "synthetic hook refused the commit" >&2\nexit 1\n', { mode: 0o755 });
+    await server.request(`/checkouts/${server.checkoutId}/groups`, 'POST', { name: 'Refused again' });
+    await expect(banner).toBeVisible({ timeout: 30_000 });
+    await expect(banner).toContainText('synthetic hook refused the commit');
+    // One reread per announced state change, not a polling loop.
+    const reads = groupReads.length;
+    expect(reads, 'a reread per state change').toBeGreaterThanOrEqual(2);
+    await settle(page);
+    expect(groupReads.length, 'no further reads while the state holds').toBe(reads);
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
 });

@@ -16,6 +16,14 @@
 //! Identity and configuration variables that do not pick a repository
 //! (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`,
 //! `GIT_SSH_COMMAND`, `GIT_TERMINAL_PROMPT`, ...) are deliberately kept.
+//!
+//! [`command`] also sets `GIT_OPTIONAL_LOCKS=0` (HS2-NM6E27). Without it, a read such as
+//! `git status` or `git diff` takes `index.lock` to refresh the index's stat cache, and a
+//! commit that runs at the same moment in the same repository (the group registry
+//! publisher, a ticket-store autocommit, or the user's own `git commit`) fails with
+//! `Unable to create '.../index.lock': File exists`. Hot Sheet's reads of a code checkout
+//! (repository status, the checkout watcher, code review) and of a store never need that
+//! refresh; every write still takes Git's mandatory locks.
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -62,8 +70,13 @@ pub fn command() -> Command {
     // This is the one sanctioned bare git spawn; every other site goes through here.
     let mut cmd = Command::new("git");
     remove_repository_env(&mut cmd);
+    // HS2-NM6E27: reads never take `index.lock` behind a concurrent commit's back.
+    cmd.env(OPTIONAL_LOCKS_VAR, "0");
     cmd
 }
+
+/// The variable that stops Git's optional `index.lock` refresh in reads (HS2-NM6E27).
+pub const OPTIONAL_LOCKS_VAR: &str = "GIT_OPTIONAL_LOCKS";
 
 /// A [`Command`] for any non-git program Hot Sheet launches (an AI tool, a configured
 /// command, the terminal broker, an external app), with every [`REPOSITORY_ENV_VARS`]
@@ -363,6 +376,17 @@ mod tests {
                     .any(|(k, v)| k == key && v.as_deref() == Some(value))
             );
         }
+    }
+
+    /// HS2-NM6E27: every git subprocess runs without optional locks, so a Hot Sheet
+    /// `git status` never holds `index.lock` while a commit in the same repository runs.
+    #[test]
+    fn hs2_nm6e27_command_disables_optional_index_locks() {
+        let cmd = command();
+        assert!(
+            cmd.get_envs()
+                .any(|(k, v)| k == OPTIONAL_LOCKS_VAR && v == Some(OsStr::new("0")))
+        );
     }
 
     #[test]

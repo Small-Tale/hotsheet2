@@ -1,5 +1,4 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Row } from '@kerfjs/ui/row';
 import { CircleFadingArrowUp } from 'lucide';
 
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
@@ -20,14 +19,14 @@ export function ClientUpdateNoticeBanner() {
       actionPlacement="below"
       icon={<LucideIcon icon={CircleFadingArrowUp} name="circle-fading-arrow-up" />}
       action={
-        <Row gap="xs">
+        <>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissClientUpdateNotice.attrs}>
             Dismiss
           </button>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.reloadForClientUpdate.attrs}>
             Reload
           </button>
-        </Row>
+        </>
       }
     />
   );

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { PollResponse } from './api';
 import {
+  containsGroupRegistrySyncChange,
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
@@ -75,6 +76,16 @@ describe('project change long polling', () => {
     expect(containsTicketStoreSyncChange(changed, 'checkout-one')).toBe(true);
     expect(containsTicketStoreSyncChange(changed, 'checkout-two')).toBe(false);
     expect(containsRepositorySizeChange(changed, 'checkout-one')).toBe(false);
+    expect(containsTicketChange(changed)).toBe(false);
+  });
+
+  it('scopes group registry publication changes to their checkout (HS2-1CWD0H)', () => {
+    const changed = response(5, 'group_registry_sync');
+    changed.events[0].id = 'checkout-one';
+    expect(containsGroupRegistrySyncChange(changed, 'checkout-one')).toBe(true);
+    expect(containsGroupRegistrySyncChange(changed, 'checkout-two')).toBe(false);
+    expect(containsTicketStoreSyncChange(changed, 'checkout-one')).toBe(false);
+    expect(containsGroupRegistrySyncChange(response(6, 'ticket_store_sync'), '01')).toBe(false);
     expect(containsTicketChange(changed)).toBe(false);
   });
 

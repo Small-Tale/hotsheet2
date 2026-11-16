@@ -216,6 +216,25 @@ describe('ProjectSidebar component slice', () => {
     expect(menu).toContain('data-action="delete-saved-view"');
   });
 
+  it('renders the ticket drop highlight from its prop so a re-render keeps it (HS2-G8EK08)', () => {
+    const items = [
+      { id: 'all', label: 'All Tickets', icon: 'all' as const },
+      { id: 'backlog', label: 'Backlog', icon: 'backlog' as const },
+      { id: 'errors', label: 'Ticket errors', icon: 'errors' as const },
+    ];
+    const idle = String(ViewNavigation({ selectedId: 'all', items }));
+    expect(idle).toContain('data-ticket-drop-key="view:backlog"');
+    expect(idle).not.toContain('data-dragging-ticket');
+    expect(idle).not.toContain('data-state="drag-target"');
+    const over = String(ViewNavigation({ selectedId: 'all', items, dropTargetId: 'backlog' }));
+    expect(over.match(/<button[^>]*data-state="drag-target"[^>]*>/g)?.join('')).toContain('data-item-id="backlog"');
+    expect(over.match(/data-dragging-ticket="true"/g)).toHaveLength(1);
+    // A row that takes no ticket drop never shows the highlight.
+    const errors = String(ViewNavigation({ selectedId: 'all', items, dropTargetId: 'errors' }));
+    expect(errors).not.toContain('data-dragging-ticket');
+    expect(errors).not.toContain('data-ticket-drop-key="view:errors"');
+  });
+
   it('gives parsing errors a distinct shared navigation item', () => {
     const markup = String(
       ViewNavigation({

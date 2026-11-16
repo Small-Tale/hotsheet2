@@ -31,6 +31,8 @@ export interface ProjectSidebarProps {
   repositoryError?: boolean;
   views: ViewNavigationItem[];
   selectedViewId: string;
+  /** The view row a dragged ticket is over (HS2-G8EK08). */
+  dropTargetViewId?: string;
   commandGroupLabel: string;
   commands: CommandNavigationItem[];
   commandGroupExpanded: boolean;
@@ -161,7 +163,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
         conflicted={props.conflicted}
         error={props.repositoryError}
       />
-      <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
+      <ViewNavigation items={props.views} selectedId={props.selectedViewId} dropTargetId={props.dropTargetViewId} />
       {props.commands.length > 0 ? (
         <CommandNavigation
           label={props.commandGroupLabel}

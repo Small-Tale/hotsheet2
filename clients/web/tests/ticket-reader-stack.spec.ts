@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { Attachment } from '../src/api';
+import { appRequests } from './app-requests';
 import { attachmentRevealLabel } from './platform-labels';
 import { ticketsJson } from './ticket-page-fixture';
 
@@ -95,7 +96,7 @@ async function mockLayeredProjects(
   capabilityOverrides: Record<string, Record<string, unknown>> = {},
 ) {
   const chooser = ['/work/target', '/work/deep'];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);

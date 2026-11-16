@@ -1,3 +1,5 @@
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 use assert_cmd::Command;
 use hotsheet_model::{AiFeedbackRating, AttachmentActorRole, NoteActor, Timestamp, Ulid};
 use hotsheet_ticketing::{
@@ -60,8 +62,7 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
     .unwrap();
     let connection = git_connection_id(&store);
     let run = |args: &[&str]| {
-        Command::cargo_bin("hotsheet-cli")
-            .unwrap()
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .env("HOTSHEET_HOME", &home)
             .args(["-C", root.to_str().unwrap()])
             .args(args)

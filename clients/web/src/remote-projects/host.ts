@@ -2,10 +2,10 @@
  * the OS private secret store; browser routes return only reviewed server/project metadata. */
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { spawn } from '../child-process';
+import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from '../machine-home';
 import { developmentRepositoryRoot } from '../repository-root';
 import { remoteRequest, type RemoteTls } from './transport';
 
@@ -75,8 +75,12 @@ export interface RemoteTlsFiles {
 const pendingPairs = new Map<string, PendingPair>();
 const MAX_CLI_OUTPUT = 2 * 1024 * 1024;
 
-function cliBinary(): string {
-  return process.env.HOTSHEET_CLI_BIN || `${developmentRepositoryRoot()}/target/debug/hotsheet-cli`;
+/** `HOTSHEET_CLI_BIN`, else the checkout's debug CLI; a blank override counts as unset (HS2-GVSJ5Y). */
+export function cliBinary(environment: MachineHomeEnvironment = process.env): string {
+  return (
+    nonBlank(environment.HOTSHEET_CLI_BIN) ??
+    `${developmentRepositoryRoot(process.cwd(), environment)}/target/debug/hotsheet-cli`
+  );
 }
 
 export function normalizeRemoteAddress(value: string): string {
@@ -172,7 +176,7 @@ export const removeRemoteServer = (id: string, revision: number) =>
 /** An opened tab must stop forwarding immediately when this machine revokes or reviews the
  * binding. The registry contains no credential; the secret remains in the private store. */
 export async function requireCurrentRemoteBinding(connection: PrivateRemoteConnection): Promise<void> {
-  const home = process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2');
+  const home = hotsheetHome();
   const file = JSON.parse(await readFile(resolve(home, 'remotes.json'), 'utf8')) as {
     servers?: Array<{
       id: string;

@@ -447,6 +447,10 @@ pub struct ProviderCapabilities {
     /// Intentional atomic note-kind correction (HS2-CV5NMC).
     #[serde(default)]
     pub note_kind_edit: bool,
+    /// Link an existing note as the response to a feedback request (HS2-J4G9GB).
+    /// Providers without Hot Sheet response metadata reject the edit explicitly.
+    #[serde(default)]
+    pub note_response_link: bool,
     pub note_delete: bool,
     pub attachments: bool,
     /// Existing attachments can be renamed, deleted, re-labelled, and annotated
@@ -521,6 +525,7 @@ impl ProviderCapabilities {
             close: true,
             notes: true,
             note_kind_edit: true,
+            note_response_link: true,
             note_edit: true,
             note_delete: true,
             attachments: true,
@@ -1346,6 +1351,12 @@ pub trait TicketProvider: Send + Sync {
                 capability: "note_confidence",
             });
         }
+        if edit.response_to.is_some() {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "note_response_link",
+            });
+        }
         match edit.text {
             Some(text) => self.edit_note(native_id, note_id, now, text),
             None => self.get(native_id),
@@ -2048,6 +2059,7 @@ impl TicketProvider for GitProvider {
                 confidence: None,
                 actor: None,
                 allow_feedback_prompt_edit: false,
+                response_to: None,
             },
         )
     }
@@ -2075,6 +2087,12 @@ impl TicketProvider for GitProvider {
             return Err(ProviderError::Unsupported {
                 connection_id: self.connection_id.clone(),
                 capability: "note_confidence",
+            });
+        }
+        if edit.response_to.is_some() && !self.capabilities().note_response_link {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "note_response_link",
             });
         }
         let ticket = self.ticket(native_id)?;
@@ -3869,6 +3887,7 @@ mod tests {
                         id: None,
                     }),
                     allow_feedback_prompt_edit: false,
+                    response_to: None,
                 },
             )
             .unwrap();
@@ -4383,6 +4402,110 @@ mod tests {
     /// HS2-DWTJ43: a confidence score is preserved by a capable provider (including
     /// across a transfer) and fails explicitly, never silently, everywhere else.
     #[test]
+    fn hs2_j4g9gb_note_response_link_is_a_reported_capability() {
+        assert!(ProviderCapabilities::git().note_response_link);
+        // An older capability document without the field reads as unsupported.
+        let mut legacy = serde_json::to_value(ProviderCapabilities::git()).unwrap();
+        legacy.as_object_mut().unwrap().remove("note_response_link");
+        let legacy: ProviderCapabilities = serde_json::from_value(legacy).unwrap();
+        assert!(!legacy.note_response_link);
+
+        let draft = || ProviderDraft {
+            group: None,
+            title: "synthetic link".into(),
+            category: "task".into(),
+            priority: Priority::Default,
+            status: Status::NotStarted,
+            details: String::new(),
+            tags: vec![],
+            up_next: false,
+            blocked_by: vec![],
+            transfer: None,
+            created_by: None,
+        };
+        let request_and_decision = |provider: &GitProvider, id: Ulid| {
+            provider
+                .create(ctx(id, "2026-11-01T00:00:00Z"), draft())
+                .unwrap();
+            let request = provider
+                .add_note_with_metadata(
+                    &id.to_string(),
+                    ctx(Ulid::new(), "2026-11-01T00:01:00Z"),
+                    NoteKind::FeedbackNeeded,
+                    NoteMetadataInput {
+                        kind_explicit: true,
+                        ..Default::default()
+                    },
+                    "FEEDBACK NEEDED: synthetic".into(),
+                )
+                .unwrap()
+                .notes[0]
+                .id
+                .clone();
+            let decision = provider
+                .add_note_with_metadata(
+                    &id.to_string(),
+                    ctx(Ulid::new(), "2026-11-01T00:02:00Z"),
+                    NoteKind::Regular,
+                    NoteMetadataInput::default(),
+                    "Synthetic decision".into(),
+                )
+                .unwrap()
+                .notes[1]
+                .id
+                .clone();
+            (request, decision)
+        };
+        let link = |request: &str| crate::ops::NoteEditInput {
+            response_to: Some(Some(request.to_owned())),
+            ..Default::default()
+        };
+
+        let (_dir, git) = git_provider();
+        let id = Ulid::new();
+        let (request, decision) = request_and_decision(&git, id);
+        let linked = git
+            .edit_note_with_metadata(
+                &id.to_string(),
+                &decision,
+                Timestamp::new("2026-11-01T00:03:00Z"),
+                link(&request),
+            )
+            .unwrap();
+        assert_eq!(
+            linked.notes[1].response_to.as_deref(),
+            Some(request.as_str())
+        );
+
+        // A connection without the capability refuses before writing anything.
+        let (_plain_dir, plain) = git_provider();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.note_response_link = false;
+        let plain = plain.with_test_capabilities(capabilities);
+        let plain_id = Ulid::new();
+        let (request, decision) = request_and_decision(&plain, plain_id);
+        let error = plain
+            .edit_note_with_metadata(
+                &plain_id.to_string(),
+                &decision,
+                Timestamp::new("2026-11-01T00:03:00Z"),
+                link(&request),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            ProviderError::Unsupported {
+                capability: "note_response_link",
+                ..
+            }
+        ));
+        assert_eq!(
+            plain.get(&plain_id.to_string()).unwrap().notes[1].response_to,
+            None
+        );
+    }
+
+    #[test]
     fn note_confidence_is_preserved_or_rejected_explicitly() {
         let (_source_dir, source) = git_provider();
         let source_id = Ulid::new();
@@ -4484,6 +4607,7 @@ mod tests {
                     confidence: Some(Some(Confidence::new(10).unwrap())),
                     actor: None,
                     allow_feedback_prompt_edit: false,
+                    response_to: None,
                 },
             )
             .unwrap_err();
@@ -4508,6 +4632,7 @@ mod tests {
                         confidence,
                         actor: None,
                         allow_feedback_prompt_edit: false,
+                        response_to: None,
                     },
                 )
                 .unwrap()

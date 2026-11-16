@@ -2,6 +2,9 @@
 //! Node exporter) is exercised by the migrator's vitest suite; here we cover the
 //! arg surface + the missing-migrator error offline.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 
@@ -23,7 +26,7 @@ fn migration_command(
     store: &std::path::Path,
     exporter: &std::path::Path,
 ) -> Command {
-    let mut command = Command::cargo_bin("hotsheet-migrate").unwrap();
+    let mut command = Command::new(workspace_bin::path("hotsheet-migrate"));
     command
         .env("GIT_AUTHOR_NAME", "Hot Sheet test")
         .env("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid")
@@ -42,8 +45,7 @@ fn migration_command(
 #[test]
 fn reports_a_missing_migrator() {
     let dir = tempfile::tempdir().unwrap();
-    Command::cargo_bin("hotsheet-migrate")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-migrate"))
         .args([
             "/tmp/nonexistent-hotsheet",
             "-C",
@@ -58,8 +60,7 @@ fn reports_a_missing_migrator() {
 
 #[test]
 fn has_its_own_help() {
-    Command::cargo_bin("hotsheet-migrate")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-migrate"))
         .arg("--help")
         .assert()
         .success()
@@ -172,7 +173,7 @@ fn verifies_manually_pushed_import_and_rejects_old_remote_or_changed_origin() {
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );
     let verify = || {
-        let mut command = Command::cargo_bin("hotsheet-migrate").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-migrate"));
         command.args(["-C", store.to_str().unwrap(), "--verify-backup"]);
         command
     };

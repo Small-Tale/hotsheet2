@@ -45,6 +45,7 @@ import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and
 import { ticketCloseReasonLabel } from '../ticket-close';
 import { ticketDisplayNumber } from '../ticket-display-number';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
+import type { FollowUpLinkAvailability } from '../ticket-follow-up-link';
 import { isTicketTitleExpanded } from '../ticket-title-disclosure';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
@@ -55,6 +56,7 @@ import type { NoteCardProps } from './note-card';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import type { TicketStatus } from './status-badge';
 import { type TicketAttachmentItem, TicketAttachments } from './ticket-attachments';
+import type { TicketBlockersProps } from './ticket-blockers';
 import { TicketCodeReview } from './ticket-code-review';
 import {
   type DuplicateTargetSummary,
@@ -121,6 +123,10 @@ export interface TicketInspectorProps {
   codeReviewLoading?: boolean;
   codeReviewMessage?: string;
   expandedCodeReviewCommits?: readonly string[];
+  /** Code Review's Link Existing Ticket as Follow-Up action; absent where linking is not offered (HS2-MCGCPQ). */
+  followUpLink?: FollowUpLinkAvailability;
+  /** The Info tab's editable Blocked By section; absent where blockers are not edited (HS2-CHH28E). */
+  blockers?: TicketBlockersProps;
   attachmentsEnabled?: boolean;
   /** Existing attachments can be edited (the provider reports `attachment_edit`, HS2-HSA64D). */
   attachmentsEditable?: boolean;
@@ -214,6 +220,8 @@ export function ticketInspectorPanel({
   codeReviewLoading = false,
   codeReviewMessage = '',
   expandedCodeReviewCommits,
+  followUpLink,
+  blockers,
   attachmentsEnabled = true,
   attachmentsEditable = attachmentsEnabled,
   attachmentsRemovable = attachmentsEditable,
@@ -411,7 +419,7 @@ export function ticketInspectorPanel({
             tone="warning"
             actionPlacement="below"
             action={
-              <Row wrap gap="xs">
+              <>
                 {feedbackDelivery.sessions.map((session) => (
                   <Button
                     type="button"
@@ -423,7 +431,7 @@ export function ticketInspectorPanel({
                     {`${session.tool} ${session.id.slice(-6)}`}
                   </Button>
                 ))}
-              </Row>
+              </>
             }
           />
         </div>
@@ -433,6 +441,7 @@ export function ticketInspectorPanel({
           <StateBanner
             title="Start an AI Session"
             detail="Your note was saved. Start a session in this project to continue work on the ticket."
+            copyLayout="stacked"
             tone="warning"
             action={
               <Button type="button" emphasis="secondary" action="start-feedback-session">
@@ -611,6 +620,7 @@ export function ticketInspectorPanel({
           blockedReason={blockedReason}
           blockedReasonEditing={blockedReasonEditing}
           blockedReasonDraft={blockedReasonDraft}
+          blockers={blockers}
           providerName={providerName}
           updatedLabel={updatedLabel}
           attachmentContext={attachmentContext}
@@ -636,6 +646,7 @@ export function ticketInspectorPanel({
           message={codeReviewMessage}
           expandedCommits={expandedCodeReviewCommits}
           presentation={presentation}
+          followUpLink={followUpLink}
         />
       )}
       {!contentLoading && activeTab === 'attachments' && (

@@ -1,5 +1,8 @@
 //! HTTP E2E for the server, driven through the router in-process (no real socket).
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
@@ -5734,7 +5737,7 @@ async fn compatibility_reports_a_server_built_from_older_local_source() {
 
 #[test]
 fn server_binary_reports_its_revision_without_opening_a_store() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let output = std::process::Command::new(workspace_bin::path("hotsheet-server"))
         .arg("--revision-status")
         .arg("-C")
         .arg("/this-store-does-not-exist")
@@ -10597,6 +10600,125 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
             .unwrap()
             .iter()
             .all(|row| { matches!(row["status"].as_str(), Some("not_started" | "started")) })
+    );
+}
+
+/// HS2-CHH28E: the Inspector edits blockers through the checkout route the web client uses.
+/// The route replaces the set with native ids, honors `expected_token`, and refuses a
+/// dependency cycle and a self-block with a message the dialog shows as-is; a refused write
+/// changes nothing.
+#[tokio::test]
+async fn hs2_chh28e_checkout_blockers_set_remove_and_refuse_cycles() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let send = |method: &'static str, path: String, body: Option<serde_json::Value>| {
+        let router = router.clone();
+        async move {
+            let body = body.map(|value| value.to_string());
+            router
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let create = |title: &'static str| {
+        send(
+            "POST",
+            format!("/checkouts/{checkout_id}/tickets"),
+            Some(serde_json::json!({ "title": title })),
+        )
+    };
+    let blocker = body_json(create("Blocker").await).await;
+    let blocked = body_json(create("Blocked").await).await;
+    let ticket_path = |ticket: &serde_json::Value| {
+        format!(
+            "/checkouts/{checkout_id}/tickets/{}",
+            ticket["qualified_id"].as_str().unwrap()
+        )
+    };
+    let blocker_native = blocker["native_id"].as_str().unwrap();
+    let blocked_native = blocked["native_id"].as_str().unwrap();
+
+    let set = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({
+            "blocked_by": [blocker_native],
+            "expected_token": blocked["concurrency_token"],
+        })),
+    )
+    .await;
+    assert_eq!(set.status(), StatusCode::OK);
+    let set = body_json(set).await;
+    assert_eq!(set["blocked_by"], serde_json::json!([blocker_native]));
+
+    // The reverse dependency closes a cycle: refused with both ticket numbers.
+    let cycle = send(
+        "PATCH",
+        ticket_path(&blocker),
+        Some(serde_json::json!({ "blocked_by": [blocked_native] })),
+    )
+    .await;
+    assert_eq!(cycle.status(), StatusCode::BAD_REQUEST);
+    let message = body_json(cycle).await.to_string();
+    assert!(
+        message.contains(&format!(
+            "{} already depends on {}",
+            blocked["slug"].as_str().unwrap(),
+            blocker["slug"].as_str().unwrap()
+        )) && message.contains("dependency cycle"),
+        "{message}"
+    );
+    let unchanged = body_json(send("GET", ticket_path(&blocker), None).await).await;
+    assert_eq!(unchanged["blocked_by"], serde_json::json!([]));
+
+    let own = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({ "blocked_by": [blocked_native] })),
+    )
+    .await;
+    assert!(own.status().is_client_error(), "{}", own.status());
+    assert!(
+        body_json(own)
+            .await
+            .to_string()
+            .contains("cannot block itself")
+    );
+
+    // Removing the only blocker is a replacement with the empty set.
+    let removed = send(
+        "PATCH",
+        ticket_path(&blocked),
+        Some(serde_json::json!({
+            "blocked_by": [],
+            "expected_token": set["concurrency_token"],
+        })),
+    )
+    .await;
+    assert_eq!(removed.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(removed).await["blocked_by"],
+        serde_json::json!([])
     );
 }
 
@@ -15741,6 +15863,85 @@ async fn tts_runs_behind_server_provider_boundary_without_client_secrets() {
         resp.into_body().collect().await.unwrap().to_bytes(),
         "hello"
     );
+}
+
+struct FakeVoicedTts(Result<Vec<hotsheet_server::tts::TtsVoice>, String>);
+impl hotsheet_server::tts::TtsProvider for FakeVoicedTts {
+    fn id(&self) -> &str {
+        "voiced"
+    }
+    fn synthesize(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<hotsheet_server::tts::TtsAudio, String> {
+        Err("not used".into())
+    }
+    fn voices(&self) -> Result<Vec<hotsheet_server::tts::TtsVoice>, String> {
+        self.0.clone()
+    }
+}
+
+#[tokio::test]
+async fn hs2_cezvse_tts_voices_list_the_named_provider_voices() {
+    let (_d, st) = state();
+    let voices = vec![hotsheet_server::tts::TtsVoice {
+        name: "Anna (German (Germany))".into(),
+        lang: "de-DE".into(),
+    }];
+    let app = app(st.with_tts_providers(vec![
+        std::sync::Arc::new(FakeTts),
+        std::sync::Arc::new(FakeVoicedTts(Ok(voices))),
+    ]));
+    let listed = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices?provider=voiced", None))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(listed).await,
+        serde_json::json!([{ "name": "Anna (German (Germany))", "lang": "de-DE" }])
+    );
+    // The first provider is the default, and one that cannot list voices offers none.
+    let default = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices", None))
+        .await
+        .unwrap();
+    assert_eq!(default.status(), StatusCode::OK);
+    assert_eq!(body_json(default).await, serde_json::json!([]));
+    let missing = app
+        .clone()
+        .oneshot(authed("GET", "/tts/voices?provider=missing", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let unauthenticated = app
+        .oneshot(
+            Request::builder()
+                .uri("/tts/voices?provider=voiced")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn hs2_cezvse_tts_voices_report_an_unavailable_listing() {
+    let (_d, st) = state();
+    let app = app(
+        st.with_tts_providers(vec![std::sync::Arc::new(FakeVoicedTts(Err(
+            "local speech voices are unavailable".into(),
+        )))]),
+    );
+    let resp = app
+        .oneshot(authed("GET", "/tts/voices?provider=voiced", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[tokio::test]
@@ -32794,6 +32995,196 @@ async fn hs2_vbfszj_response_to_accepts_a_legacy_request_and_refuses_explicit_re
         .filter(|note| note["response_to"] == legacy.to_string())
         .count();
     assert_eq!(link, 1);
+}
+
+/// HS2-J4G9GB: an existing note becomes a feedback response through the real checkout
+/// route, idempotently, guarded by the optimistic token, and atomically refused.
+#[tokio::test]
+async fn hs2_j4g9gb_links_an_existing_note_as_a_response_through_the_checkout_route() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init_git(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Synthetic response link"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let patch = |body: serde_json::Value| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/tickets/{id}");
+        async move {
+            let response = router
+                .oneshot(authed("PATCH", &uri, Some(&body.to_string())))
+                .await
+                .unwrap();
+            let status = response.status();
+            (status, body_json(response).await)
+        }
+    };
+    let note_id = |ticket: &serde_json::Value, text: &str| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["text"] == text)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let note = |ticket: &serde_json::Value, id: &str| {
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == id)
+            .unwrap()
+            .clone()
+    };
+    let (_, first) = patch(serde_json::json!({
+        "note":"FEEDBACK NEEDED: first synthetic question","note_kind":"feedback_needed",
+        "actor":{"role":"ai","id":"synthetic-agent"}
+    }))
+    .await;
+    let first_id = note_id(&first, "FEEDBACK NEEDED: first synthetic question");
+    let (_, second) = patch(serde_json::json!({
+        "note":"FEEDBACK NEEDED: second synthetic question","note_kind":"feedback_needed"
+    }))
+    .await;
+    let second_id = note_id(&second, "FEEDBACK NEEDED: second synthetic question");
+    let (_, decided) = patch(serde_json::json!({
+        "note":"Synthetic decision: option A","note_kind":"regular",
+        "actor":{"role":"ai","id":"synthetic-agent"}
+    }))
+    .await;
+    let decision = note_id(&decided, "Synthetic decision: option A");
+    let notes_before = decided["notes"].as_array().unwrap().len();
+    let stale_token = decided["concurrency_token"].as_str().unwrap().to_owned();
+
+    // Link with a fresh token: no reply is appended, the human edit keeps the AI author.
+    let (status, linked) = patch(serde_json::json!({
+        "note_id":decision,"response_to":first_id,"expected_token":stale_token,
+        "actor":{"role":"human"}
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{linked}");
+    assert_eq!(linked["notes"].as_array().unwrap().len(), notes_before);
+    let linked_note = note(&linked, &decision);
+    assert_eq!(linked_note["response_to"], first_id);
+    assert_eq!(linked_note["human_edited"], true);
+    assert_eq!(linked_note["actor"]["role"], "ai");
+    assert_eq!(
+        linked["feedback_needed"], true,
+        "the second request is open"
+    );
+    let token = linked["concurrency_token"].as_str().unwrap().to_owned();
+
+    // Already linked: idempotent, so the token does not move.
+    let (status, repeat) = patch(serde_json::json!({
+        "note_id":decision,"response_to":first_id,"expected_token":token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{repeat}");
+    assert_eq!(repeat["concurrency_token"], token);
+
+    // A concurrent writer holding the pre-link token is refused as a retryable change.
+    let (status, conflict) = patch(serde_json::json!({
+        "note_id":decision,"response_to":second_id,"expected_token":stale_token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
+    assert_eq!(conflict["code"], "ticket_changed");
+
+    // Relink to the second request with the current token.
+    let (status, relinked) = patch(serde_json::json!({
+        "note_id":decision,"response_to":second_id,"expected_token":token
+    }))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{relinked}");
+    assert_eq!(note(&relinked, &decision)["response_to"], second_id);
+    assert_eq!(
+        relinked["feedback_needed"], true,
+        "the first request reopens"
+    );
+
+    // An invalid link refuses the whole request, including a title in the same patch.
+    let (status, refused) = patch(serde_json::json!({
+        "title":"must not write","note_id":first_id,"response_to":second_id
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    assert!(refused.get("code").is_none(), "not a retry: {refused}");
+    let (_, current) = patch(serde_json::json!({})).await;
+    assert_eq!(current["title"], "Synthetic response link");
+
+    // JSON null unlinks; the request link is gone and a later read agrees.
+    let (status, unlinked) =
+        patch(serde_json::json!({"note_id":decision,"response_to":null})).await;
+    assert_eq!(status, StatusCode::OK, "{unlinked}");
+    assert!(note(&unlinked, &decision).get("response_to").is_none());
+    let store = FsStore::open(&ticket_store).unwrap();
+    let stored = store
+        .read_ticket(&hotsheet_model::Ulid::from_string(&id).unwrap())
+        .unwrap();
+    assert!(stored.notes.iter().all(|note| note.response_to.is_none()));
+}
+
+#[tokio::test]
+async fn hs2_j4g9gb_remote_response_link_refuses_before_any_write_or_lookup() {
+    let (_dir, st) = state();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(Vec::new().into()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+    let response = app
+        .oneshot(authed(
+            "PATCH",
+            "/providers/github-main/tickets/42",
+            Some(r#"{"title":"must not write","note_id":"91","response_to":"90"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response).await;
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("note_response_link"),
+        "{body}"
+    );
+    assert!(transport.requests.lock().unwrap().is_empty());
 }
 
 #[tokio::test]

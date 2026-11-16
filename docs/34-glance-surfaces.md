@@ -302,7 +302,8 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
   seconds, the core count, and a per-core LED meter (`CpuCoreMeter`), long-polled only while Stats is
   visible. Each other monitored, connected disk gets its own Disk card after the store's, and a newly
   detected disk asks once in a Kerf `StateBanner` whether host health should watch it (Monitor or Ignore;
-  HS2-NHK8V8).
+  HS2-NHK8V8). The banner uses the stacked copy layout, so its detail wraps and a phone shows the whole
+  question (HS2-4JRM43).
   The largest growing directory waits on a bounded, private measurement (HS2-KK02QB); the left column
   beside the cards is reserved for the Overnight timeline.
 - **Host health sampler (HS2-DTAVQA):** a server-side sampler of those signals pushes threshold crossings

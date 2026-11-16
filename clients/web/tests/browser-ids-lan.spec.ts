@@ -2,7 +2,7 @@ import { expect, test, webkit } from '@playwright/test';
 
 import type { FullTicket, ToolConnection } from '../src/api';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 for (const width of [390, 1280]) {
   test(`WebKit LAN identities survive draft, attachment, group and chat transitions at ${width}px (HS2-76ZR5P)`, async ({
@@ -127,7 +127,7 @@ for (const width of [390, 1280]) {
           // readback below must wait for committed uploads, not intercepted ones (HS2-MCAKGQ).
           if (uploads.length === 4) await new Promise((resolve) => setTimeout(resolve, 750));
         }
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${url.search}`,
           headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -198,6 +198,7 @@ for (const width of [390, 1280]) {
       }
       await page.screenshot({ path: testInfo.outputPath(`LAN-tickets-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       const drawer = page.locator('[data-component="terminal-drawer"]'),
         create = drawer.getByRole('button', { name: 'New Drawer Item' });
       for (let index = 0; index < 2; index++) {

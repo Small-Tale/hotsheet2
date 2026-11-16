@@ -2,6 +2,16 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
+import { nonBlank } from './non-blank.mjs';
+
+/**
+ * The Node executable to bundle: `${HOTSHEET_DESKTOP_NODE}`, else the running Node. A blank override
+ * counts as unset (HS2-MVF6X3); `||` kept a whitespace-only value as the executable path.
+ */
+export function desktopNodeRuntime(environment = process.env, execPath = process.execPath) {
+  return nonBlank(environment.HOTSHEET_DESKTOP_NODE) ?? execPath;
+}
+
 /** Tauri's externalBin resource names use the host target triple (HS2-KY5X6J). */
 export function desktopTarget(platform = process.platform, arch = process.arch) {
   const triples = {

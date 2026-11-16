@@ -271,11 +271,22 @@ async fn hs2_d9zgae_a_cli_write_to_a_registered_store_is_pushed_without_opening_
         !fixture.hosts_project(),
         "the project was published without being opened"
     );
+    // HS2-AVGCKP: the kicked pass records `Synced`, but the host's regular registered-store
+    // pass may run after it and find local and remote in agreement (`UpToDate`). Either is a
+    // successful outcome; `last_success_at` proves a pass succeeded.
     let health = hotsheet_ticketing::sync_health::read_record(&fixture.project).unwrap();
-    assert_eq!(
-        health.outcome,
-        Some(hotsheet_ticketing::sync_health::SyncState::Synced)
+    assert!(
+        matches!(
+            health.outcome,
+            Some(
+                hotsheet_ticketing::sync_health::SyncState::Synced
+                    | hotsheet_ticketing::sync_health::SyncState::UpToDate
+            )
+        ),
+        "the store synced successfully: {:?}",
+        health.outcome
     );
+    assert!(health.last_success_at.is_some(), "a pass recorded success");
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 interface KerfProfile {
@@ -13,6 +14,89 @@ interface KerfDoctorConfig {
   cache: boolean;
   failOn?: string;
   suppressions: { id: string; rules: string[]; target: string; rationale: string }[];
+}
+
+function sourceFiles(directory: URL): URL[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+    return entry.isDirectory()
+      ? sourceFiles(path)
+      : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
+        ? [path]
+        : [];
+  });
+}
+
+type JsxElementLike = ts.JsxSelfClosingElement | ts.JsxOpeningElement;
+
+function stateBannerElements(): Array<{ file: string; line: number; element: JsxElementLike }> {
+  return sourceFiles(new URL('./', import.meta.url)).flatMap((url) => {
+    const source = readFileSync(url, 'utf8');
+    if (!source.includes('<StateBanner')) return [];
+    const file = url.pathname.split('/src/')[1] ?? url.pathname;
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const found: Array<{ file: string; line: number; element: JsxElementLike }> = [];
+    const visit = (node: ts.Node): void => {
+      if (
+        (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+        node.tagName.getText(tree) === 'StateBanner'
+      ) {
+        found.push({ file, line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1, element: node });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    return found;
+  });
+}
+
+function jsxAttribute(element: JsxElementLike, name: string): ts.JsxAttribute | undefined {
+  return element.attributes.properties.find(
+    (property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText() === name,
+  );
+}
+
+/**
+ * Whether a JSX element is what a `.map()` or `.flatMap()` callback returns: the arrow body or a
+ * `return` operand, through parentheses, `cond ? a : b`, and `cond && a` (HS2-3TNEJF).
+ */
+function isMapCallbackResult(element: ts.Node): boolean {
+  let node = element;
+  for (;;) {
+    const parent = node.parent;
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      (ts.isConditionalExpression(parent) && parent.condition !== node) ||
+      (ts.isBinaryExpression(parent) &&
+        parent.right === node &&
+        [
+          ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken,
+          ts.SyntaxKind.QuestionQuestionToken,
+        ].includes(parent.operatorToken.kind))
+    ) {
+      node = parent;
+      continue;
+    }
+    let callback: ts.Node | undefined;
+    if (ts.isArrowFunction(parent) && parent.body === node) callback = parent;
+    else if (ts.isReturnStatement(parent)) callback = ts.findAncestor(parent, ts.isFunctionLike);
+    if (callback === undefined || !ts.isCallExpression(callback.parent)) return false;
+    const call = callback.parent;
+    return (
+      call.arguments[0] === callback &&
+      ts.isPropertyAccessExpression(call.expression) &&
+      ['map', 'flatMap'].includes(call.expression.name.text)
+    );
+  }
+}
+
+/** The text of a `"literal"`, `{'literal'}`, or substitution-free template initializer; otherwise undefined. */
+function constantString(initializer: ts.JsxAttributeValue): string | undefined {
+  const value = ts.isJsxExpression(initializer) ? initializer.expression : initializer;
+  return value !== undefined && (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))
+    ? value.text
+    : undefined;
 }
 
 describe('Kerf application UI profile', () => {
@@ -108,6 +192,91 @@ describe('Kerf application UI profile', () => {
       }))
       .filter(({ count }) => count > 0);
     expect(usages).toEqual([]);
+  });
+
+  it('HS2-W77711 passes StateBanner action controls directly, never wrapped in a Row (KF-8TF7Y8)', () => {
+    const root = new URL('./', import.meta.url);
+    const files = (directory: URL): URL[] =>
+      readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+        return entry.isDirectory()
+          ? files(path)
+          : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
+            ? [path]
+            : [];
+      });
+    // The banner's action zone lays several controls out itself; a Row there duplicates that layout.
+    const wrapped = files(root)
+      .filter((file) => /<(?:StateBanner|ShellBanner)\b/.test(readFileSync(file, 'utf8')))
+      .flatMap((file) =>
+        [...readFileSync(file, 'utf8').matchAll(/\baction=\{\s*(?:\/\/[^\n]*\n\s*)*(?:[^<{}]*\?\s*\(\s*)?<Row\b/g)].map(
+          () => file.pathname.split('/src/')[1],
+        ),
+      );
+    expect(wrapped).toEqual([]);
+  });
+
+  it('HS2-NRDDPY stacks a StateBanner whose detail is not a constant string', () => {
+    // Kerf's default inline copy layout keeps the detail on one ellipsized line, so a server or validation
+    // message is cut off at phone width. A computed detail must use copyLayout="stacked", which wraps it.
+    const inlineComputed = stateBannerElements().flatMap(({ file, line, element }) => {
+      const detail = jsxAttribute(element, 'detail');
+      if (detail?.initializer === undefined || constantString(detail.initializer) !== undefined) return [];
+      const layout = jsxAttribute(element, 'copyLayout')?.initializer;
+      return layout !== undefined && constantString(layout) === 'stacked' ? [] : [`${file}:${line}`];
+    });
+    expect(inlineComputed).toEqual([]);
+  });
+
+  it('HS2-QCVKZ5 passes StateBanner data attributes through rootAttributes, never as bare props', () => {
+    // TypeScript does not check hyphenated JSX attributes, and StateBanner renders only its named props,
+    // so a bare data-key silently disappears and conditional sibling banners lose their diff identity.
+    const bare = stateBannerElements().flatMap(({ file, line, element }) =>
+      element.attributes.properties
+        .filter(ts.isJsxAttribute)
+        .map((property) => property.name.getText())
+        .filter((name) => name.startsWith('data-'))
+        .map((name) => `${file}:${line} ${name}`),
+    );
+    expect(bare).toEqual([]);
+  });
+
+  it('HS2-3TNEJF keys every StateBanner that a .map() callback returns through rootAttributes data-key', () => {
+    // Kerf diffs list items by id, then data-key; an unkeyed mapped banner is matched by position when an
+    // item is added or removed. Only the callback's returned root needs the key: a banner nested inside
+    // another element of the item is keyed by that element.
+    const unkeyed = stateBannerElements().flatMap(({ file, line, element }) => {
+      if (!isMapCallbackResult(ts.isJsxOpeningElement(element) ? element.parent : element)) return [];
+      const attributes = jsxAttribute(element, 'rootAttributes')?.initializer;
+      const object = attributes !== undefined && ts.isJsxExpression(attributes) ? attributes.expression : undefined;
+      const keyed =
+        object !== undefined &&
+        ts.isObjectLiteralExpression(object) &&
+        object.properties.some(
+          (property) =>
+            ts.isPropertyAssignment(property) && ts.isStringLiteral(property.name) && property.name.text === 'data-key',
+        );
+      return keyed ? [] : [`${file}:${line}`];
+    });
+    expect(unkeyed).toEqual([]);
+  });
+
+  it('HS2-3TNEJF recognizes only the returned root of a .map() or .flatMap() callback', () => {
+    const banners = (source: string) => {
+      const tree = ts.createSourceFile('probe.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const results: boolean[] = [];
+      const visit = (node: ts.Node): void => {
+        if (ts.isJsxSelfClosingElement(node)) results.push(isMapCallbackResult(node));
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+      return results;
+    };
+    expect(banners('xs.map((x) => <StateBanner />)')).toEqual([true]);
+    expect(banners('xs.flatMap((x) => (x ? <StateBanner /> : []))')).toEqual([true]);
+    expect(banners('xs.map(function (x) { return <StateBanner />; })')).toEqual([true]);
+    expect(banners('xs.map((x) => <div data-key={x}><StateBanner /></div>)')).toEqual([false]);
+    expect(banners('const f = () => <StateBanner />; xs.filter((x) => <StateBanner />)')).toEqual([false, false]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

@@ -10,6 +10,17 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
+/// The broker binary, launched once without arguments (a usage exit) before any bind window
+/// starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn broker_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-terminal-broker"), &[])
+}
+
 struct BrokerChild(Child);
 
 impl Drop for BrokerChild {
@@ -23,7 +34,7 @@ async fn start_broker(dead_bootstrap: bool) -> (tempfile::TempDir, BrokerChild, 
     let home = tempfile::tempdir_in("/tmp").unwrap();
     std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = home.path().join("broker.sock");
-    let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-terminal-broker"));
+    let mut command = Command::new(broker_binary());
     command
         .arg(&socket)
         .arg("project-1")

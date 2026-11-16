@@ -69,6 +69,12 @@ does not fork Kerf's guidance.
   Kerf `List` (`controlInsets="trl"`) on the header surface, through `ShellBanner`
   (HS2-YCB15Z). No banner is a flush full-width strip.
 
+- A `StateBanner` whose detail is computed (a server or validation message, or an
+  interpolated sentence) sets Kerf's `copyLayout="stacked"`, so the detail wraps
+  instead of ending in an ellipsis at phone width (HS2-4JRM43, HS2-NRDDPY). The
+  default inline layout stays for constant short details. `kerf-ui-profile.test.ts`
+  pins the rule.
+
 - App Settings → General offers a **Theme** choice (HS2-EFTHS6): Auto (the default,
   following `prefers-color-scheme`), Light, or Dark, per browser in
   `localStorage hotsheet.theme`. This is a maintainer-requested departure from
@@ -77,14 +83,21 @@ does not fork Kerf's guidance.
   shows a stylized Hot Sheet window in that scheme, after news-cloud2's Appearance
   picker. Kerf has no preview-tile choice, so the tiles are native radios with an
   app-owned frame (`components/theme-picker.css`) until `KF-C29WJ9` ships.
+  The pin also reaches the chrome outside the document (HS2-15W35F). Both
+  `theme-color` metas keep their `prefers-color-scheme` media queries; a pinned
+  choice gives both the pinned scheme's color (`#ffffff` or `#1c1c1e`), so the
+  browser toolbar and an installed web app's title bar match whatever the system
+  is, and Auto restores each meta's own color. In the packaged desktop app the
+  main window's native theme (macOS title bar and traffic-light area) is set
+  through Tauri's `set_theme` with `light` or `dark`, and Auto passes `null` so
+  the window follows the system again. The launch-origin capability grants only
+  `core:window:allow-set-theme` for this; a browser or a debug desktop build
+  without that capability skips the call.
 
-- Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) carry two interim
-  decisions that wait on Kerf. A group's Rename and Ungroup actions open from a
-  context menu on the group header, because `ListHeader` cannot pair its toggle
-  with a trailing action (`KF-X2MRCT`); replace it with a visible overflow button
-  when that ships. The group title follows `SummaryRow`'s compaction width in an
-  app container query to stay aligned with the ticket type icons (`KF-J8GMA2`);
-  remove the query when Kerf offers a public alignment (HS2-8CDFKR, HS2-WZ3JGZ).
+- Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) follow Kerf's Lists
+  and selection defaults with no deviation: the group header's commands open from
+  a `ListHeader` `overflowAction` button and from its context menu, and the title
+  aligns with the ticket rows through `leadingEdge="summary-row"` (HS2-HKXSB1).
 
 - Controlled dialogs (`src/controlled-open.ts`) carry one interim decision that waits on
   Kerf: when `openDialog` runs after a DialogSurface's exit motion has closed it but

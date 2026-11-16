@@ -1,15 +1,20 @@
 import { spawnSync } from 'node:child_process';
 
+import { launchOnce } from './first-launch.mjs';
+
 /** HS2-SFVWN5: verify the actual artifact before any fixture state or credentials open. */
-export function assertFixtureServer(binary, execute = spawnSync) {
-  assertCapability(binary, true, execute);
+export function assertFixtureServer(binary, execute = spawnSync, warm = launchOnce) {
+  assertCapability(binary, true, execute, warm);
 }
 
-export function assertFixtureCli(binary, execute = spawnSync) {
-  assertCapability(binary, false, execute);
+export function assertFixtureCli(binary, execute = spawnSync, warm = launchOnce) {
+  assertCapability(binary, false, execute, warm);
 }
 
-function assertCapability(binary, server, execute) {
+function assertCapability(binary, server, execute, warm) {
+  // The bounded probe below is often a fresh binary's first launch; launch it once untimed first,
+  // so the macOS first-launch assessment cannot spend the 5 s bound (HS2-04D6DW).
+  warm(binary);
   const result = execute(binary, ['--test-fixture-capabilities'], {
     encoding: 'utf8',
     timeout: 5000,

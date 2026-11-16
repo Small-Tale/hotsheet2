@@ -1,3 +1,4 @@
+import { effect } from 'kerfjs';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -98,5 +99,37 @@ describe('HS2-85W6BE session grants decide local versus remote on a remote-mode 
     expect(canManageRemoteDevices(doc('remote'))).toBe(false);
     setBrowserSessionGrants({ local: false, admin: true });
     expect(canManageRemoteDevices(doc('remote'))).toBe(true);
+  });
+
+  it('HS2-A3TDNH notifies renders and effects of a grant change in both directions, and only on change', () => {
+    const remoteDoc = doc('remote');
+    const seen: string[] = [];
+    const stop = effect(() => {
+      seen.push(
+        `${isRemoteClient(loopback, remoteDoc) ? 'remote' : 'host'}/${canManageRemoteDevices(remoteDoc) ? 'admin' : 'plain'}`,
+      );
+    });
+    try {
+      expect(seen).toEqual(['remote/plain']);
+      setBrowserSessionGrants({ local: true, admin: true });
+      // The same grants again (a re-read that found nothing new) re-run nothing.
+      const same = setBrowserSessionGrants({ local: true, admin: true, label: 'renamed' });
+      expect(same).toBe(browserSessionGrants());
+      setBrowserSessionGrants({ local: false, admin: true });
+      setBrowserSessionGrants({ local: false, admin: false });
+      setBrowserSessionGrants({ local: true, admin: false });
+      // A session that ended elsewhere drops every grant.
+      setBrowserSessionGrants(undefined);
+      expect(seen).toEqual([
+        'remote/plain',
+        'host/admin',
+        'remote/admin',
+        'remote/plain',
+        'host/plain',
+        'remote/plain',
+      ]);
+    } finally {
+      stop();
+    }
   });
 });

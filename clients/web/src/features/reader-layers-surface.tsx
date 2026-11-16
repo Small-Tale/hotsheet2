@@ -20,6 +20,9 @@ import type {
 } from '../components/reader-overlay-surfaces';
 import { ReaderLayerSurface } from '../components/reader-overlay-surfaces';
 import { type TicketStatus } from '../components/status-badge';
+import type { TicketBlockerDialogState } from '../components/ticket-blocker-dialog';
+import type { TicketBlockersProps } from '../components/ticket-blockers';
+import type { TicketFollowUpLinkDialogState } from '../components/ticket-follow-up-link-dialog';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketPriority } from '../components/ticket-row';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
@@ -27,6 +30,7 @@ import { type InlineFeedbackReply } from '../feedback-replies';
 import type { FeedbackResponseDrafts } from '../feedback-response-drafts';
 import { type GallerySource, type Project } from '../interactions/types';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
+import type { FollowUpLinkAvailability } from '../ticket-follow-up-link';
 import { linkedReaderCanUpdate, type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
@@ -67,6 +71,14 @@ export interface ReaderLayersSurfaceDependencies {
     ticket: FullTicket,
   ) => { id: string; projectName: string; slug: string; title: string } | undefined;
   expandedCodeReviewCommits: Signal<string[]>;
+  /** Code Review's Link Existing Ticket as Follow-Up action for a frame's own source (HS2-NXSMC7). */
+  followUpLinkFor: (projectId: string, connectionId: string) => FollowUpLinkAvailability;
+  /** The follow-up link dialog a reader frame owns, which renders inside that reader (HS2-NXSMC7). */
+  followUpLinkDialogFor: (readerScope: string) => TicketFollowUpLinkDialogState | undefined;
+  /** A reader frame's Blocked By section, edited against that frame's own ticket (HS2-15PE59). */
+  blockersFor: (readerScope: string) => TicketBlockersProps | undefined;
+  /** The Add Blocker dialog a reader frame owns, which renders inside that reader (HS2-15PE59). */
+  blockerDialogFor: (readerScope: string) => TicketBlockerDialogState | undefined;
   fieldConflict: Signal<TicketFieldConflict | undefined>;
   fieldConflictResolution: Signal<string>;
   linkedReaderStack: Signal<TicketReaderFrame[]>;
@@ -150,6 +162,10 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     composingNote,
     duplicateTargetFor,
     expandedCodeReviewCommits,
+    followUpLinkFor,
+    followUpLinkDialogFor,
+    blockersFor,
+    blockerDialogFor,
     fieldConflict,
     fieldConflictResolution,
     linkedReaderStack,
@@ -303,6 +319,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         codeReviewLoading={frame ? Boolean(frame.codeReview?.loading) : editable && codeReviewLoading.value}
         codeReviewMessage={frame ? (frame.codeReview?.message ?? '') : editable ? codeReviewMessage.value : ''}
         expandedCodeReviewCommits={frame || editable ? expandedCodeReviewCommits.value : []}
+        followUpLink={followUpLinkFor(current.id, ticket.connection_id)}
         attachmentsEnabled={frame ? active && capabilities!.attachments : editable && canUseAttachments()}
         attachmentsEditable={
           frame
@@ -334,6 +351,9 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         stackSize={stackSize}
         attachmentMenu={attachmentMenuSurfaceProps({ readerScope })}
         evidence={changeEvidenceSurfaceProps(readerScope)}
+        followUpLinkDialog={followUpLinkDialogFor(readerScope)}
+        blockers={blockersFor(readerScope)}
+        blockerDialog={blockerDialogFor(readerScope)}
         readOnly={frame ? !capabilities!.update && !capabilities!.note_edit && !capabilities!.notes : !editable}
       />
     );

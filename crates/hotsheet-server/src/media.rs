@@ -269,8 +269,9 @@ fn video_poster_cache_path(root: &Path, bytes: &[u8]) -> PathBuf {
 /// (HS2-FQEESP): `${HOTSHEET_CACHE_DIR}` when set, else the platform cache directory.
 /// Request handlers use the root injected on `AppState`, never the environment.
 pub fn default_cache_root() -> PathBuf {
-    if let Some(path) = std::env::var_os("HOTSHEET_CACHE_DIR") {
-        return PathBuf::from(path);
+    // A blank override counts as unset rather than the working directory (HS2-1D4DQF).
+    if let Some(path) = hotsheet_ticketing::machine_home::env_path("HOTSHEET_CACHE_DIR") {
+        return path;
     }
     if cfg!(target_os = "windows") {
         std::env::var_os("LOCALAPPDATA")

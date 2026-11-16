@@ -1,7 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-1NBJZH: compare the actual painted list/column surfaces with a private real server.
 test('quietly paints ordinary AI ticket surfaces without dimming content', async ({ page }, testInfo) => {
@@ -26,7 +26,7 @@ test('quietly paints ordinary AI ticket surfaces without dimming content', async
     await page.route(`**${apiPath}/**`, async (route) => {
       const incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,

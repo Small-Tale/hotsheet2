@@ -1,5 +1,4 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Row } from '@kerfjs/ui/row';
 import { OctagonAlert, TriangleAlert } from 'lucide';
 
 import type { RepositorySizeLevel, RepositorySizeReport } from '../api';
@@ -61,7 +60,7 @@ export function RepositorySizeBanner({
         )
       }
       action={
-        <Row gap="xs">
+        <>
           <button
             type="button"
             {...PROJECT_LIFECYCLE_ACTIONS.dismissRepositorySizeWarning.attrs}
@@ -72,7 +71,7 @@ export function RepositorySizeBanner({
           <button type="button" {...NAVIGATION_AND_TABS_ACTIONS.openProjectStats.attrs} data-project-id={projectId}>
             View Repository Size
           </button>
-        </Row>
+        </>
       }
     />
   );

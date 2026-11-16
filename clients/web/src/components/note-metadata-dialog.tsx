@@ -11,7 +11,9 @@ import { TextField } from '@kerfjs/ui/text-field';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import type { NoteKind } from './note-card';
 
-export type NoteMetadataMode = 'kind' | 'summary' | 'confidence';
+export type NoteMetadataMode = 'kind' | 'summary' | 'confidence' | 'response';
+/** Sentinel choice that removes an existing response link (HS2-J4G9GB). */
+export const NO_RESPONSE_LINK = 'none';
 export interface NoteMetadataDialogState {
   noteId: string;
   ticketId: string;
@@ -23,6 +25,13 @@ export interface NoteMetadataDialogState {
   summary?: string;
   confidence?: number;
   hasResponses: boolean;
+  /** Current response link and the earlier requests this note may answer (HS2-J4G9GB). */
+  responseTo?: string;
+  responseTargets?: ReadonlyArray<{ value: string; label: string }>;
+  /** The picker's current, unsaved choice. */
+  responseChoice?: string;
+  /** The Change Type picker's current, unsaved choice (HS2-6T8C1D). */
+  kindChoice?: NoteKind;
   submitting?: boolean;
   error?: string;
 }
@@ -41,7 +50,9 @@ export function NoteMetadataDialog({ state }: { state?: NoteMetadataDialogState 
       ? 'Change note type'
       : state.mode === 'summary'
         ? 'Edit timeline summary'
-        : 'Correct confidence';
+        : state.mode === 'response'
+          ? 'Link as feedback response'
+          : 'Correct confidence';
   return (
     <div data-component="note-metadata-dialog" {...INSPECTOR_AND_EDITOR_TARGETS.noteMetadataDialog.attrs}>
       <DialogSurface
@@ -54,7 +65,7 @@ export function NoteMetadataDialog({ state }: { state?: NoteMetadataDialogState 
           <List gap="m">
             {state.mode === 'kind' && (
               <>
-                <Select name="note-metadata-kind" label="Type" value={state.kind} choices={kinds} />
+                <Select name="note-metadata-kind" label="Type" value={state.kindChoice ?? state.kind} choices={kinds} />
                 {state.kind === 'feedback_needed' && !state.hasResponses && (
                   <Text size="compact" tone="danger">
                     Changing this type closes the unanswered feedback request. Save to confirm.
@@ -73,6 +84,19 @@ export function NoteMetadataDialog({ state }: { state?: NoteMetadataDialogState 
                 />
                 <Text size="compact" tone="quiet">
                   Leave this blank to clear the summary.
+                </Text>
+              </>
+            )}
+            {state.mode === 'response' && (
+              <>
+                <Select
+                  name="note-metadata-response"
+                  label="Feedback Request"
+                  value={state.responseChoice ?? state.responseTo ?? NO_RESPONSE_LINK}
+                  choices={[{ value: NO_RESPONSE_LINK, label: 'Not a Response' }, ...(state.responseTargets ?? [])]}
+                />
+                <Text size="compact" tone="quiet">
+                  This note answers the selected request. No new note is added.
                 </Text>
               </>
             )}

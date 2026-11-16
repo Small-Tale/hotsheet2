@@ -1,3 +1,4 @@
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 export const project = {
@@ -141,7 +142,7 @@ export async function installTerminalFixture(
       ticketRow('shared-b', 'HS2-SHARED', 'Shared terminal destination B'),
       ticketRow('qualified', 'HS2-QUALIFIED', 'Qualified terminal destination'),
     ];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

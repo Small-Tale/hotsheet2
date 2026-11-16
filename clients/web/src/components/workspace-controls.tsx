@@ -41,6 +41,7 @@ import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection'
 import { type WorkersLive, workersLiveTitle } from '../project-live-summary';
 import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
+import { pairingRequestsLabel } from './settings-navigation';
 import { TicketSearchField } from './ticket-search-field';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'workers' | 'orchestration' | 'notifications' | 'settings';
@@ -121,6 +122,8 @@ export interface WorkspaceHeaderProps {
   sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
   notificationCount?: number;
+  /** Pairing requests waiting for this host's approval, counted on the Settings choice (HS2-BZHMEV). */
+  settingsCount?: number;
   /**
    * Live AI workers for the Workers view choice's accessible name and title (HS2-6B9S7P); the
    * visible count badge waits on Kerf KF-170258.
@@ -160,13 +163,21 @@ export function WorkspaceIdentity({
  * data so each placement renders it as literal zone JSX that Kerf's composition rule can check
  * (HS2-PNCDAE). */
 export type TicketViewActionSpec =
-  | { kind: 'new-ticket'; attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' }
+  | {
+      kind: 'new-ticket';
+      attachmentsEnabled?: boolean;
+      label?: string;
+      size?: 'default' | 'compact';
+      /** A dragged ticket is over the launcher (HS2-G8EK08). */
+      dropTarget?: boolean;
+    }
   | { kind: 'empty-trash' }
   /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
   | { kind: 'add-data-source' }
   /** Settings → Commands: add a command group, then add a command (HS2-YKB7HS). `compact` (the
-   * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. */
-  | { kind: 'command-settings'; size?: 'default' | 'compact' };
+   * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. `ready: false`
+   * disables both until the project's command settings have loaded (HS2-A6K8D5). */
+  | { kind: 'command-settings'; size?: 'default' | 'compact'; ready?: boolean };
 
 /** The Trash view's standalone outlined danger action. */
 export function EmptyTrashAction() {
@@ -191,7 +202,12 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
       return <EmptyTrashAction />;
     case 'new-ticket':
       return (
-        <QuickTicketLauncher attachmentsEnabled={action.attachmentsEnabled} label={action.label} size={action.size} />
+        <QuickTicketLauncher
+          attachmentsEnabled={action.attachmentsEnabled}
+          label={action.label}
+          size={action.size}
+          dropTarget={action.dropTarget}
+        />
       );
     case 'add-data-source':
       return (
@@ -212,6 +228,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
             shape="pill"
             size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a command group"
+            disabled={action.ready === false}
             action={COMMANDS_AND_AI_ACTIONS.addCommandGroup.value}
             icon={<LucideIcon size="s" icon={FolderPlus} name="folder-plus" />}
           >
@@ -222,6 +239,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
             shape="pill"
             size={action.size === 'compact' ? 'compact' : 'default'}
             title="Add a custom command"
+            disabled={action.ready === false}
             action={COMMANDS_AND_AI_ACTIONS.addCommandSetting.value}
             icon={<LucideIcon size="s" icon={Plus} name="plus" />}
           >
@@ -236,6 +254,7 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
 
 function workspaceModeChoices(
   count: number,
+  settingsCount: number,
   presentation: WorkspaceControlsPresentation,
   workers?: WorkersLive,
   orchestration = false,
@@ -255,11 +274,13 @@ function workspaceModeChoices(
       // Only an orchestration project has an Orchestration view, and the rail has none (HS2-J89JC7).
       .filter(({ value }) => value !== 'orchestration' || (orchestration && presentation !== 'rail'))
       .map(({ value, label, icon, iconName }) => {
-        const badge = value === 'notifications' ? count : 0,
-          live = value === 'workers' ? workers : undefined;
+        const badge = value === 'notifications' ? count : value === 'settings' ? settingsCount : 0,
+          live = value === 'workers' ? workers : undefined,
+          // Settings counts pairing requests waiting for approval (HS2-BZHMEV).
+          pending = badge ? (value === 'settings' ? `, ${pairingRequestsLabel(badge)}` : `, ${badge} pending`) : '';
         return {
           value,
-          label: `${label} View${badge ? `, ${badge} pending` : ''}${live ? `, ${live.live} live` : ''}`,
+          label: `${label} View${pending}${live ? `, ${live.live} live` : ''}`,
           title: live ? workersLiveTitle(live) : `${label} view`,
           content: (
             <span class="view-mode-switcher__content">
@@ -336,6 +357,7 @@ function WorkspaceOverflowControls({
   sortDirection,
   visibleSortOptions,
   notificationCount,
+  settingsCount,
   selectedTicketsUpNext,
   selectedTicketsUpNextEligible,
   presentation,
@@ -354,6 +376,7 @@ function WorkspaceOverflowControls({
   sortDirection: WorkspaceSortDirection;
   visibleSortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }>;
   notificationCount: number;
+  settingsCount: number;
   selectedTicketsUpNext: WorkspaceUpNextState;
   selectedTicketsUpNextEligible: boolean;
   presentation: WorkspaceControlsPresentation;
@@ -371,7 +394,12 @@ function WorkspaceOverflowControls({
       icon: Bell,
       iconName: 'bell',
     },
-    { value: 'settings', label: 'Show Settings', icon: Settings, iconName: 'settings' },
+    {
+      value: 'settings',
+      label: `Show Settings${settingsCount ? ` (${pairingRequestsLabel(settingsCount)})` : ''}`,
+      icon: Settings,
+      iconName: 'settings',
+    },
   ];
   const overflowIcon = (icon: IconNode, name: string) => <LucideIcon icon={icon} name={name} />;
   const menu = (
@@ -496,6 +524,7 @@ export function WorkspaceControls({
   sort = 'updated',
   sortDirection = defaultWorkspaceSortDirection(sort),
   notificationCount = 0,
+  settingsCount = 0,
   workers,
   orchestration = false,
   selectedTicketCount = 0,
@@ -529,7 +558,7 @@ export function WorkspaceControls({
         id="workspace-view-mode"
         label="View mode"
         value={mode}
-        choices={workspaceModeChoices(notificationCount, presentation, workers, orchestration)}
+        choices={workspaceModeChoices(notificationCount, settingsCount, presentation, workers, orchestration)}
         action="set-view-mode"
         appearance="toolbar"
         shape={rail ? 'rounded' : 'pill'}
@@ -605,6 +634,7 @@ export function WorkspaceControls({
       sortDirection={sortDirection}
       visibleSortOptions={visibleSortOptions}
       notificationCount={notificationCount}
+      settingsCount={settingsCount}
       selectedTicketsUpNext={selectedTicketsUpNext}
       selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
       presentation={presentation}

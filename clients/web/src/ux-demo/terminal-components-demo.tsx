@@ -1,7 +1,9 @@
 import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
-import { delegate, signal } from 'kerfjs';
+import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { batch, delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { AIConversationToolbar } from '../components/ai-conversation';
@@ -27,6 +29,7 @@ import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
 import {
@@ -36,10 +39,15 @@ import {
   type TerminalModifiers,
   toggleTerminalModifier,
 } from '../terminal-keys';
+import { terminalDrawerSearch, type TerminalSearchDirection, type TerminalSearchResults } from '../terminal-search';
+import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
+import { pointInFixedContainingBlock } from './fixed-containing-block';
 import { TERMINAL_DRAWER_DEMO_PROVIDERS } from './fixtures';
+import { syncSettingsControls } from './settings-controls';
 import { syncTerminalDemoViewports } from './terminal-demo';
 
 export const drawerFocusDemoColumns = signal(60);
@@ -70,6 +78,77 @@ export const editMenuDemo = signal<TerminalEditMenuState | undefined>(undefined)
   editMenuDemoOutput = signal('');
 export const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 export const terminalDashboardHaltCleared = signal(false);
+
+// HS2-174S6X: the rail's terminal search (HS2-TWZSZF) and match count (HS2-M5QPED) over a real Kerf
+// SearchField model. A demo terminal has no xterm search addon, so each state supplies the results a
+// searched terminal would report; production's count text and drawer mapping present them.
+const TERMINAL_SEARCH_DEMO_STATES = {
+  collapsed: { label: 'Collapsed', open: false, query: '', results: undefined },
+  open: { label: 'Open, Empty', open: true, query: '', results: undefined },
+  count: { label: 'Open, Match Count', open: true, query: 'root', results: { resultIndex: 2, resultCount: 12 } },
+  none: { label: 'Open, No Matches', open: true, query: 'webpack', results: { resultIndex: -1, resultCount: 0 } },
+  limit: { label: 'Open, Highlight Limit', open: true, query: 'e', results: { resultIndex: -1, resultCount: 1000 } },
+} as const satisfies Record<
+  string,
+  { label: string; open: boolean; query: string; results: TerminalSearchResults | undefined }
+>;
+export type TerminalSearchDemoState = keyof typeof TERMINAL_SEARCH_DEMO_STATES;
+const TERMINAL_SEARCH_DEMO_CHOICES: SelectChoice[] = Object.entries(TERMINAL_SEARCH_DEMO_STATES).map(
+  ([value, { label }]) => ({ value, label }),
+);
+/** The terminal search demo's field model and open state, registered with the catalog's `wireSearchFields`. */
+export const terminalSearchDemoModel = createSearchFieldModel(),
+  terminalSearchDemoOpen = signal(false),
+  terminalSearchDemoState = signal<TerminalSearchDemoState>('collapsed'),
+  terminalSearchDemoResults = signal<TerminalSearchResults | undefined>(undefined),
+  // Measured by production's wireTerminalSearchCountFit, not a setting: a narrow catalog compacts the count (HS2-HPDX81).
+  terminalSearchDemoCountCompact = signal(false);
+
+/** Put the terminal search demo in one of its states: the field's text, open state, and reported results. */
+export function applyTerminalSearchDemoState(state: TerminalSearchDemoState): void {
+  const fixture = TERMINAL_SEARCH_DEMO_STATES[state];
+  batch(() => {
+    terminalSearchDemoState.value = state;
+    terminalSearchDemoModel.replace({ query: fixture.query, tokens: [] });
+    terminalSearchDemoOpen.value = fixture.open;
+    terminalSearchDemoResults.value = fixture.results && { ...fixture.results };
+  });
+}
+
+/** Step the reported active match the way the terminal's search addon wraps through its matches. */
+export function stepTerminalSearchDemo(direction: TerminalSearchDirection): void {
+  const results = terminalSearchDemoResults.value;
+  if (!results || results.resultCount <= 0) return;
+  const total = results.resultCount,
+    index =
+      direction === 'next'
+        ? (results.resultIndex + 1) % total
+        : results.resultIndex <= 0
+          ? total - 1
+          : results.resultIndex - 1;
+  terminalSearchDemoResults.value = { resultIndex: index, resultCount: total };
+}
+
+export function resetTerminalDrawerDemo(root?: ParentNode): void {
+  applyTerminalSearchDemoState('collapsed');
+  if (root) syncSettingsControls(root, 'terminal-drawer', { values: { 'search-state': 'collapsed' } });
+}
+
+export function TerminalDrawerSettings() {
+  return (
+    <DemoSettingsForm settings="terminal-drawer">
+      <Select
+        name="search-state"
+        label="Terminal Search"
+        value={terminalSearchDemoState.value}
+        choices={TERMINAL_SEARCH_DEMO_CHOICES}
+      />
+      <Button type="button" action={'reset-settings'}>
+        Reset
+      </Button>
+    </DemoSettingsForm>
+  );
+}
 
 export function TerminalDrawerDemo() {
   const shell = {
@@ -126,6 +205,32 @@ export function TerminalDrawerDemo() {
           contextMenu={terminalDashboardContextMenu.value}
           aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS}
           defaultAiProvider="claude"
+        />
+      </CatalogExample>
+      {/* The rail's terminal search beside Hide (HS2-TWZSZF) and its match count (HS2-M5QPED, HS2-174S6X).
+          As in production, emptying or closing the field clears the count. */}
+      <CatalogExample
+        label="Terminal Search"
+        note="Choose a search state in Settings. The match count steps to the next match (Shift: previous)."
+        viewport={drawerFrame}
+      >
+        <TerminalDrawer
+          projectId="demo-search"
+          projectName="Demo project"
+          sessions={[{ ...shell, projectId: 'demo-search' }]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="shell"
+          search={terminalDrawerSearch(
+            terminalSearchDemoModel,
+            terminalSearchDemoOpen.value,
+            terminalSearchDemoOpen.value && terminalSearchDemoModel.state.value.query
+              ? terminalSearchDemoResults.value
+              : undefined,
+            terminalSearchDemoCountCompact.value,
+          )}
         />
       </CatalogExample>
       {/* With one installed AI provider the AI shell entry is named for it instead of a submenu (HS2-3HT4PA). */}
@@ -583,6 +688,12 @@ export function TerminalRenameDialogDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  // The search specimen's count yields its room on a narrow rail through production's wiring (HS2-HPDX81).
+  demoListeners.add(
+    wireTerminalSearchCountFit(root, (compact) => {
+      terminalSearchDemoCountCompact.value = compact;
+    }),
+  );
   // Dashboard and long-press menus close with Web Awesome's own hide, an outside press, or Escape,
   // through the dismissal helper production's shell uses (HS2-AFCWNG).
   demoListeners.add(
@@ -623,7 +734,14 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   demoListeners.add(
     wireTerminalDashboardMenu(root, {
       open: (menu) => {
-        terminalDashboardContextMenu.value = menu;
+        // The menu renders inside the dashboard, whose app-height example frame is the containing block
+        // of its fixed context anchor; anchor it at the requested viewport point (HS2-CY6A6K).
+        const dashboard = [...root.querySelectorAll(TERMINALS_TARGETS.terminalTile.selector)]
+          .find((tile) => (tile as HTMLElement).dataset.terminalKey === menu.key)
+          ?.closest('[data-component="terminal-dashboard"]');
+        terminalDashboardContextMenu.value = dashboard
+          ? { key: menu.key, ...pointInFixedContainingBlock(dashboard, menu.x, menu.y) }
+          : menu;
       },
       clearHalt: () => {
         terminalDashboardHaltCleared.value = true;
@@ -674,6 +792,35 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       paste: (target) => {
         reportClipboardAction(target, 'paste');
       },
+    }),
+  );
+  // The terminal search demo (HS2-174S6X): Settings choose a state; the count control and Enter in the
+  // field step the reported match as production's do (HS2-M5QPED), keeping the keyboard in the field.
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="terminal-drawer"] [name="search-state"]', (_event, target) => {
+      const state = (target as FormControl).value;
+      if (Object.hasOwn(TERMINAL_SEARCH_DEMO_STATES, state))
+        applyTerminalSearchDemoState(state as TerminalSearchDemoState);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'mousedown', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
+      stepTerminalSearchDemo((event as MouseEvent).shiftKey ? 'previous' : 'next');
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'keydown', TERMINALS_TARGETS.terminalSearchEditor.selector, (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'Enter' || keyboard.isComposing || keyboard.altKey || keyboard.ctrlKey || keyboard.metaKey)
+        return;
+      keyboard.preventDefault();
+      keyboard.stopPropagation();
+      stepTerminalSearchDemo(keyboard.shiftKey ? 'previous' : 'next');
     }),
   );
   // The rename dialog demo reports what each production action would do (HS2-2Q7KTX).
@@ -766,7 +913,12 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders: terminal drawer, dashboard, keyboard, and clipboard surfaces over deterministic sessions (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'terminal-drawer': { catalogExamples: true, Demo: TerminalDrawerDemo },
+    'terminal-drawer': {
+      catalogExamples: true,
+      Demo: TerminalDrawerDemo,
+      Settings: TerminalDrawerSettings,
+      reset: resetTerminalDrawerDemo,
+    },
     'terminal-dashboard': { catalogExamples: true, Demo: TerminalDashboardDemo },
     'terminal-key-bar': { catalogExamples: true, Demo: TerminalKeyBarDemo },
     'fixed-aspect-terminal-card': { catalogExamples: true, Demo: FixedAspectTerminalCardDemo },

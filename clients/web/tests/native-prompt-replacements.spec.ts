@@ -82,6 +82,41 @@ async function captureWidths(page: Page, surface: Locator, name: string) {
   await page.emulateMedia({ colorScheme: 'light' });
 }
 
+/** HS2-NRDDPY: a free-text error detail wraps inside its StateBanner instead of ending in an ellipsis. */
+async function expectWrappedBannerDetail(page: Page, banner: Locator, text: string, name: string) {
+  const detail = banner.locator('.kui-state-banner__detail');
+  const initial = page.viewportSize();
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [state, width] of [
+      ['wide', 1280],
+      ['medium', 768],
+      ['narrow', 390],
+      ['wide-return', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectProjectSidebarLayout(page, width >= 1024);
+      await expect(detail).toHaveText(text);
+      const clip = await detail.evaluate((node) => {
+        const owner = node.closest('.kui-state-banner')?.getBoundingClientRect(),
+          box = node.getBoundingClientRect(),
+          inner = node.firstElementChild ?? node;
+        return {
+          hidden: inner.scrollWidth - inner.clientWidth,
+          right: (owner?.right ?? 0) - box.right,
+          left: box.left - (owner?.left ?? 0),
+        };
+      });
+      expect(clip.hidden).toBeLessThanOrEqual(1);
+      expect(clip.right).toBeGreaterThanOrEqual(0);
+      expect(clip.left).toBeGreaterThanOrEqual(0);
+      await page.screenshot({ path: `target/visual-captures/hs2-nrddpy-${name}-${scheme}-${state}.png` });
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  if (initial) await page.setViewportSize(initial);
+}
+
 test('a reload restores the project once its open is remembered and lists a ticket created meanwhile (HS2-ED4A0G)', async ({
   context,
   baseURL,
@@ -253,6 +288,151 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
     }
   });
 
+  test('wraps a long duplicate-name error in the New Command Group dialog at every width (HS2-NRDDPY)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await openedApp(context, baseURL!);
+    try {
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const dialog = page.getByRole('dialog', { name: 'New Command Group' });
+      const name = dialog.getByRole('textbox', { name: 'Group Name' });
+      const longName = 'Release candidate verification and staging checks';
+      const groups = () => app.server.request<string[]>(`/checkouts/${app.server.checkoutId}/command-groups`);
+      await addGroup.click();
+      await settledDialog(dialog);
+      await name.fill(longName);
+      await name.press('Enter');
+      await expect.poll(groups).toEqual([longName]);
+      await addGroup.click();
+      await settledDialog(dialog);
+      await name.fill(longName);
+      await name.press('Enter');
+      await expectWrappedBannerDetail(
+        page,
+        dialog.locator('.kui-state-banner'),
+        `A group named "${longName}" already exists.`,
+        'command-group-error',
+      );
+      await name.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      await expect.poll(groups).toEqual([longName]);
+    } finally {
+      await page.close();
+      await app.stop();
+    }
+  });
+
+  test('holds command setting writes until the project has loaded its command revisions (HS2-A6K8D5)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await launchedApp(context, baseURL!);
+    // A slow runner delivered the open's command-groups read after the test had already created a
+    // group. That write named no revision, the server rejected it as a conflict, and only a reload
+    // cleared it. Hold the read (after the real server answered it) to reproduce that order.
+    const held = app.pauseApi((method, path) => method === 'GET' && path.endsWith('/command-groups'));
+    try {
+      await clickOpenProject(page);
+      await app.projectRemembered();
+      await held.started;
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const addCommand = page.getByRole('button', { name: 'Add command…', exact: true });
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await page.screenshot({ path: 'target/visual-captures/hs2-a6k8d5-commands-loading-wide.png' });
+      held.release();
+      await expect(addGroup).toBeEnabled();
+      await expect(addCommand).toBeEnabled();
+      await page.screenshot({ path: 'target/visual-captures/hs2-a6k8d5-commands-ready-wide.png' });
+      const dialog = page.getByRole('dialog', { name: 'New Command Group' });
+      const name = dialog.getByRole('textbox', { name: 'Group Name' });
+      const groups = () => app.server.request<string[]>(`/checkouts/${app.server.checkoutId}/command-groups`);
+      for (const [group, expected] of [
+        ['Ideas', ['Ideas']],
+        ['Second', ['Ideas', 'Second']],
+      ] as const) {
+        await addGroup.click();
+        await settledDialog(dialog);
+        await name.fill(group);
+        await name.press('Enter');
+        await expect(dialog).toHaveCount(0);
+        await expect.poll(groups).toEqual(expected);
+      }
+      await expect(page.locator('[data-component="command-settings-editor"]')).not.toContainText('changed elsewhere');
+    } finally {
+      held.release();
+      await page.close();
+      await app.stop();
+    }
+  });
+
+  test('shows loading, then a failed first command settings read with Retry, never an empty state (HS2-BZKTDC)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await launchedApp(context, baseURL!);
+    const commandGroupsRead = (method: string, path: string) => method === 'GET' && path.endsWith('/command-groups');
+    // Hold the open's real command-groups read, and fail it, so the editor's first load is observable.
+    let fails = true;
+    let held = app.pauseApi(commandGroupsRead);
+    app.failApiWhen((method, path) => fails && commandGroupsRead(method, path));
+    try {
+      await clickOpenProject(page);
+      await app.projectRemembered();
+      await held.started;
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const editor = page.locator('[data-component="command-settings-editor"]');
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const addCommand = page.getByRole('button', { name: 'Add command…', exact: true });
+      const loading = editor.locator('[data-component="empty-state"][aria-busy="true"]');
+      const failure = editor.getByRole('alert').filter({ hasText: 'Commands could not be loaded.' });
+      const retry = failure.getByRole('button', { name: 'Retry', exact: true });
+      // Loading: a busy state, never the empty state, while the read is outstanding.
+      await expect(editor).toHaveAttribute('data-load-state', 'loading');
+      await expect(loading).toContainText('Loading Commands');
+      await expect(editor).not.toContainText('No custom commands yet.');
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await captureWidths(page, editor, 'hs2-bzktdc-commands-loading');
+      // The first read fails: a danger banner with Retry replaces the loading state.
+      held.release();
+      await expect(editor).toHaveAttribute('data-load-state', 'failed');
+      await expect(failure).toBeVisible();
+      await expect(failure).toContainText('Synthetic operation rejected.');
+      await expect(loading).toHaveCount(0);
+      await expect(editor).not.toContainText('No custom commands yet.');
+      await expect(addGroup).toBeDisabled();
+      await expect(addCommand).toBeDisabled();
+      await captureWidths(page, editor, 'hs2-bzktdc-commands-failed');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      // Retry: the editor shows loading again while the new read is held, then the loaded empty state.
+      fails = false;
+      held = app.pauseApi(commandGroupsRead);
+      await retry.click();
+      await held.started;
+      await expect(editor).toHaveAttribute('data-load-state', 'loading');
+      await expect(loading).toBeVisible();
+      await expect(failure).toHaveCount(0);
+      held.release();
+      await expect(editor).toHaveAttribute('data-load-state', 'ready');
+      await expect(editor).toContainText('No custom commands yet.');
+      await expect(loading).toHaveCount(0);
+      await expect(addGroup).toBeEnabled();
+      await expect(addCommand).toBeEnabled();
+    } finally {
+      fails = false;
+      held.release();
+      await page.close();
+      await app.stop();
+    }
+  });
+
   test('customizes a real drawer launch with whole-dialog cancel, defaults, validation and a subsequent launch @ci-smoke @ci-webkit', async ({
     context,
     baseURL,
@@ -267,6 +447,7 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
         await route.fulfill({ status: 500, json: { error: 'Synthetic launch refused.' } });
       });
       await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       const drawer = page.locator('[data-component="terminal-drawer"]');
       const open = async () => {
         await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -293,6 +474,16 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
       await provider.fill('unknown');
       await dialog.getByRole('button', { name: 'Create Terminal', exact: true }).click();
       await expect(dialog).toContainText('Unknown AI provider: unknown');
+      expect(created).toHaveLength(0);
+      const longProvider = 'synthetic-provider-with-a-deliberately-long-name-for-phone-widths';
+      await provider.fill(longProvider);
+      await dialog.getByRole('button', { name: 'Create Terminal', exact: true }).click();
+      await expectWrappedBannerDetail(
+        page,
+        dialog.locator('.kui-state-banner'),
+        `Unknown AI provider: ${longProvider}`,
+        'ai-launch-error',
+      );
       expect(created).toHaveLength(0);
       await provider.fill('Fixture AI');
       await expect(effort).toHaveJSProperty('value', 'low');

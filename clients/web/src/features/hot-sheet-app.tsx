@@ -59,7 +59,12 @@ import {
   TerminalVisibilityNameDialog,
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
+import { TicketBlockerDialog, type TicketBlockerDialogState } from '../components/ticket-blocker-dialog';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
+import {
+  TicketFollowUpLinkDialog,
+  type TicketFollowUpLinkDialogState,
+} from '../components/ticket-follow-up-link-dialog';
 import { TicketGroupDialog } from '../components/ticket-group-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
@@ -72,6 +77,7 @@ import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSourc
 import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
+import { isTicketDropTarget, NEW_TICKET_COMPOSER_DROP_KEY } from '../ticket-drop-target';
 import { ticketGroupDialog } from '../ticket-group-state';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
@@ -220,6 +226,10 @@ export interface HotSheetAppDependencies {
   terminalVisibilityDialogScope: Signal<string | undefined>;
   terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
+  /** The Inspector's Link Existing Ticket as Follow-Up dialog (HS2-MCGCPQ). */
+  followUpLinkDialog: Signal<TicketFollowUpLinkDialogState | undefined>;
+  /** The Info tab's Add Blocker dialog (HS2-CHH28E). */
+  ticketBlockerDialog: Signal<TicketBlockerDialogState | undefined>;
   ticketCollectionState: Signal<{ projectId: string; view: TicketView; status: 'loading' | 'error' } | undefined>;
   ticketLinkChoice: Signal<{ kind: 'choose'; reference: TicketLinkReference; matches: TicketLinkMatch[] } | undefined>;
   ticketRenderScheduled: () => boolean;
@@ -363,6 +373,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
     ticketCloseDialog,
+    followUpLinkDialog,
+    ticketBlockerDialog,
     ticketCollectionState,
     ticketLinkChoice,
     ticketRenderScheduled,
@@ -576,6 +588,14 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         <BulkTicketDialog state={bulkTicketDialog.value} />
         <TicketGroupDialog state={ticketGroupDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
+        {/* A dialog opened from the modal reader renders inside that reader instead (HS2-NXSMC7). */}
+        <TicketFollowUpLinkDialog
+          state={followUpLinkDialog.value?.readerScope === undefined ? followUpLinkDialog.value : undefined}
+        />
+        {/* A dialog opened from the modal reader renders inside that reader instead (HS2-15PE59). */}
+        <TicketBlockerDialog
+          state={ticketBlockerDialog.value?.readerScope === undefined ? ticketBlockerDialog.value : undefined}
+        />
         <ConfirmationDialog request={confirmation.current.value} />
         <QuickTicketComposer
           expanded={composerExpanded.value}
@@ -600,6 +620,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           busy={composerScreening.value}
           recoveryBlocked={composerRecovery.blocked}
           submitting={composerSubmitting.value}
+          dropTarget={isTicketDropTarget(NEW_TICKET_COMPOSER_DROP_KEY)}
         />
         {target.slug && (
           <NotWorkingSurface

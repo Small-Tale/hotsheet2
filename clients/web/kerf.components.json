@@ -1817,7 +1817,7 @@
       "id": "ticket-group",
       "name": "TicketGroup",
       "kind": "component",
-      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column, whose header overflow button opens the group actions.",
       "source": "src/components/ticket-group.tsx",
       "publicExports": [
         {
@@ -4198,6 +4198,258 @@
       "selection": {
         "useWhen": ["Hot Sheet needs structured close outcomes with duplicate-target search and validation."],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketCloseDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-follow-up-link-dialog",
+      "name": "TicketFollowUpLinkDialog",
+      "kind": "component",
+      "purpose": "Link an existing ticket as a follow-up of the inspected ticket with qualified search, an idempotent repeat notice, and validation (HS2-MCGCPQ).",
+      "source": "src/components/ticket-follow-up-link-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "TicketFollowUpLinkDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-follow-up-link-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-follow-up-link-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-follow-up-link-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-follow-up-link-dialog.tsx",
+        "composition": "src/components/ticket-follow-up-link-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs to link an existing ticket as a follow-up of the inspected ticket."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketFollowUpLinkDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-blocker-dialog",
+      "name": "TicketBlockerDialog",
+      "kind": "component",
+      "purpose": "Add a same-source dependency blocker to the inspected ticket with the shared ticket picker, validation, and in-dialog refusals such as a dependency cycle (HS2-CHH28E).",
+      "source": "src/components/ticket-blocker-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "TicketBlockerDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-blocker-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-blocker-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-blocker-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blocker-dialog.tsx",
+        "composition": "src/components/ticket-blocker-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the person to choose a ticket that blocks the inspected ticket."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketBlockerDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-blockers",
+      "name": "TicketBlockers",
+      "kind": "component",
+      "purpose": "The Info tab's Blocked By section: blocker rows that open and remove, with an Add Blocker header action disabled with a reason where the source lacks dependencies (HS2-CHH28E).",
+      "source": "src/components/ticket-blockers.tsx",
+      "publicExports": [
+        {
+          "name": "TicketBlockers"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-blockers.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-blockers"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-blockers"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blockers.tsx",
+        "composition": "src/components/ticket-blockers.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet shows and edits a ticket's dependency blockers."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketBlockers behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-reference-picker",
+      "name": "TicketReferencePicker",
+      "kind": "component",
+      "purpose": "Shared existing-ticket search with framed results and a selected-ticket banner, used by the close and follow-up link dialogs (HS2-MCGCPQ).",
+      "source": "src/components/ticket-reference-picker.tsx",
+      "publicExports": [
+        {
+          "name": "TicketReferencePicker"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-reference-picker.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-reference-picker"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-reference-picker"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-reference-picker.tsx",
+        "composition": "src/components/ticket-reference-picker.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the person to choose one existing ticket from any open project."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketReferencePicker behavior."],
         "documentation": "../../docs/ux-components.md"
       }
     },
@@ -7557,6 +7809,75 @@
           "The server-computed ticket-store sync health for the open project reports a store that is not publishing."
         ],
         "avoidWhen": ["A repository is over a GitHub size limit; RepositorySizeBanner owns that warning."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "group-registry-sync-banner",
+      "name": "GroupRegistrySyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while the project's group registry is not publishing (blocked or failed), repeating the server's one-line detail and saying that other clones do not see new or renamed groups (HS2-VFYSQK).",
+      "source": "src/components/group-registry-sync-banner.tsx",
+      "publicExports": [
+        {
+          "name": "GroupRegistrySyncBanner"
+        },
+        {
+          "name": "groupRegistryNeedsAttention"
+        },
+        {
+          "name": "groupRegistrySyncSentence"
+        }
+      ],
+      "sourceLinks": ["src/components/group-registry-sync-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/group-registry-sync-banner.tsx",
+        "composition": "src/components/group-registry-sync-banner.tsx"
+      },
+      "selection": {
+        "useWhen": ["The group list for the open project reports a registry_sync state of blocked or failed."],
+        "avoidWhen": ["A linked ticket store is not publishing; TicketStoreSyncBanner owns that warning."],
         "documentation": "../../docs/ux-components.md"
       }
     },

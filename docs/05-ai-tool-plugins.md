@@ -934,6 +934,17 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   single chunk is accepted into an empty queue). `POST /terminals/{id}/input` and the broker
   `input` request await the write result asynchronously. Dropping a terminal discards its
   unwritten input.
+- **Shared clear (HS2-HA0Z3A).** `POST /terminals/{id}/clear` (broker op `clear_replay`) marks
+  a replay boundary instead of writing to the PTY or appending clear-screen bytes to the ring.
+  Under the ring lock it drops every retained byte before the cursor's line (the bytes after
+  the last newline at a parser-safe position; with no such newline the whole ring is that line),
+  gives the replay a new output-stream id so no viewer can `resume_from` across the clear, and
+  publishes an in-band rewrite marker (an empty chunk) on the live fan-out. Each viewer pump
+  resyncs on the marker and sends its existing replacement frame, so attached viewers in every
+  client clear in order with surrounding output; broker attaches carry it as a `scrollback`
+  frame. The shell is not told. The route answers `204`, `404` for an unknown terminal, and
+  `501` when a detached broker predates the op (it answers `bad request` and its terminal is
+  unchanged).
 - **A killed terminal never strands its input writer (HS2-RA494E).** The PTY master is
   non-blocking: the writer thread waits for input room in `poll(2)` with a short local
   timeout and, once the child has exited or the terminal is gone, fails the in-progress and
@@ -1091,8 +1102,17 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
     the spawned PID, observed exit status or still-running state, and last probe error
     kind/numeric OS error (HS2-C8J6WS). No raw child output, command or environment is
     logged. A healthy Pong still succeeds even if this launch's contender exited; startup
-    does not change ownership or shorten/extend its readiness window. The intermittent
-    historical failure's cause remains tracked separately in HS2-2ETGGC.
+    does not change ownership. The intermittent historical failure's cause remains tracked
+    separately in HS2-2ETGGC.
+    The readiness window follows the spawned broker (HS2-KCM23W), at server startup and when
+    a request restarts an idle broker: every start gets the 2 s grace window (40 probes,
+    50 ms apart); after it the server keeps waiting only while the spawned process is still
+    running, up to a 30 s ceiling, because the first launch of a newly installed or copied
+    executable on macOS can wait more than 3.5 s in the host's assessment queue
+    (HS2-04D6DW). A broker process that has exited while nothing owns its socket fails at
+    once instead of waiting out the window; an exited contender whose socket another broker
+    owns keeps the grace window so it can still adopt that winner. A relayed broker's state
+    is read with a signal-0 probe. The failure text also names the elapsed wait.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
   child shells — HS1 §22.13.1). Every launched process also drops the inherited
   repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;
@@ -1302,7 +1322,15 @@ may run `hotsheet-cli -C <store> claim-run <slug> --worker <id> -- <command>
 claim attempt before starting the local command, again from the persisted lease
 deadline while the command runs, and once more before reporting success. The
 supervisor watches the lease deadline while a renewal waits for the ticket lock;
-authority time is sampled inside that transaction after the lock is acquired. A
+authority time is sampled inside that transaction after the lock is acquired.
+Because the store refuses to renew an expired lease, a renewal result it has
+already delivered is read before the previous deadline applies, so a confirmed
+renewal is never reported as missed; a renewal not delivered by that deadline
+still fails, and the renewed lease must still be live (HS2-DG53Y3). While the
+command runs, the guard likewise samples its clock before it reads a delivered
+renewal, so a stall of the guard itself cannot void a confirmed renewal. Each
+renewal starts a third of the lease before the deadline, at least 1 s and at
+most 60 s early; the default 1800 s lease renews 60 s early (HS2-J4BAQS). A
 failed renewal, expired deadline, changed attempt or owner, or failed command
 returns an error. The guard stops its owned process tree, including descendants
 that inherited standard streams, before a blocking final check or on authority

@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 
 import type { CompatibilityAssessment } from '../src/compatibility';
 import { releaseBinaryEnvironment } from '../src/local-host';
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 test('selects current local server, CLI, and migrator binaries from the real checkout', () => {
@@ -27,7 +28,7 @@ async function openWithCompatibility(
   compatibility: CompatibilityAssessment,
   project: Record<string, unknown> = {},
 ) {
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path))
       return route.fulfill({

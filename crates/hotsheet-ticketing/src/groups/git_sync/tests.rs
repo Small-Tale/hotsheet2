@@ -410,6 +410,74 @@ fn hs2_9egwc4_non_git_and_ignored_checkouts_are_untracked() {
     assert_eq!(subjects(&root)[0], "Ignore everything Hot Sheet");
 }
 
+/// HS2-1CWD0H: a listener hears each change of recorded state once, from a write and from
+/// sync passes, and never a repeat of the same state; dropping its guard stops it.
+#[test]
+fn hs2_1cwd0h_listeners_hear_each_state_change_once_and_not_repeats() {
+    let (_world, root) = World::new();
+    let heard: Arc<Mutex<Vec<Option<RegistrySyncState>>>> = Arc::default();
+    let listener = {
+        let heard = Arc::clone(&heard);
+        let root = root.clone();
+        // Other tests record statuses concurrently in this process; keep this checkout's.
+        on_status_change(move |changed, state| {
+            if changed == root {
+                heard.lock().unwrap().push(state);
+            }
+        })
+    };
+    let take = || std::mem::take(&mut *heard.lock().unwrap());
+
+    let hooks = root.join(".git/hooks");
+    write(
+        &hooks,
+        "pre-push",
+        "#!/bin/sh\necho 'gate refused this push' >&2\nexit 1\n",
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(hooks.join("pre-push"), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let registry = GroupRegistry::for_checkout(&root);
+    registry.find_or_create("Sprint").unwrap();
+    assert_eq!(take(), [Some(RegistrySyncState::Failed)]);
+    // Failing again, on a pass and on another write, is no change.
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Failed);
+    registry.find_or_create("Later").unwrap();
+    assert_eq!(take(), []);
+    // A recovery by a sync pass is a change; a further synced pass is not.
+    fs::remove_file(hooks.join("pre-push")).unwrap();
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Synced);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Synced);
+    assert_eq!(take(), [Some(RegistrySyncState::Synced)]);
+    // Once the registry is ignored its status disappears, which is a change too.
+    write(&root, ".gitignore", "/.hotsheet2/\n");
+    git_in(&root, &["commit", "-q", "-am", "Ignore Hot Sheet"]);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert_eq!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert_eq!(take(), [None]);
+
+    // After the guard drops, a change is not heard.
+    drop(listener);
+    write(&root, ".gitignore", "/.hotsheet2/*\n!/.hotsheet2/groups/\n");
+    git_in(&root, &["commit", "-q", "-am", "Publish groups again"]);
+    assert_ne!(sync_checkout(&root).state, RegistrySyncState::Untracked);
+    assert!(read_status(&root).is_some());
+    assert_eq!(take(), []);
+}
+
+#[test]
+fn hs2_1cwd0h_state_names_match_their_serialized_form() {
+    use RegistrySyncState::{Blocked, Failed, LocalOnly, Synced, Untracked, Waiting};
+    for state in [Synced, LocalOnly, Waiting, Blocked, Failed, Untracked] {
+        assert_eq!(
+            serde_json::to_value(state).unwrap(),
+            serde_json::Value::String(state.as_str().into())
+        );
+    }
+}
+
 #[test]
 fn hs2_9egwc4_a_burst_of_background_writes_is_one_commit() {
     assert_eq!(coalesced_message(&[]), PENDING_COMMIT_MESSAGE);
@@ -556,4 +624,294 @@ fn hs2_9egwc4_a_fresh_clone_sees_upstream_groups_and_then_its_own_pull_clears_th
     // A corrupt overlay is ignored.
     write(&fresh, GROUP_REMOTE_OVERLAY_FILE, "{ not json");
     assert_eq!(registry.names().unwrap()[&id], "Arrived");
+}
+
+// ---- HS2-NM6E27: concurrent Git work in one repository ----------------------------------
+
+/// Write a new registry entry file directly, as the registry does before it publishes.
+fn write_entry(root: &Path, name: &str) {
+    let id = hotsheet_model::new_group_id();
+    write(
+        root,
+        &format!(".hotsheet2/groups/{id}.json"),
+        &format!("{{\n  \"name\": \"{name}\"\n}}\n"),
+    );
+}
+
+/// A pre-commit hook that counts its runs in `counter` and refuses every commit.
+fn refusing_hook(root: &Path, counter: &Path) {
+    let hooks = root.join(".git/hooks");
+    write(
+        &hooks,
+        "pre-commit",
+        &format!(
+            "#!/bin/sh\necho ran >> '{}'\necho 'synthetic hook refused the commit' >&2\nexit 1\n",
+            counter.display()
+        ),
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(hooks.join("pre-commit"), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+/// Publishes, sync passes, and Hot Sheet's own status and diff reads overlap in one
+/// checkout; every publication succeeds and the remote ends with every entry.
+#[test]
+fn hs2_nm6e27_overlapping_publish_sync_and_status_reads_all_succeed() {
+    use std::sync::atomic::AtomicBool;
+    let (world, root) = World::new();
+    let done = Arc::new(AtomicBool::new(false));
+    let syncer = {
+        let (root, done) = (root.clone(), Arc::clone(&done));
+        std::thread::spawn(move || {
+            let mut statuses = Vec::new();
+            while !done.load(Ordering::Relaxed) {
+                statuses.push(sync_checkout(&root));
+            }
+            statuses
+        })
+    };
+    let reader = {
+        let (root, done) = (root.clone(), Arc::clone(&done));
+        std::thread::spawn(move || {
+            let mut reads = 0_u32;
+            while !done.load(Ordering::Relaxed) {
+                crate::repository_status::snapshot(&root).unwrap();
+                let diff = crate::git::command()
+                    .arg("-C")
+                    .arg(&root)
+                    .args(["diff", "--stat"])
+                    .output()
+                    .unwrap();
+                assert!(diff.status.success());
+                reads += 1;
+            }
+            reads
+        })
+    };
+    let mut published = Vec::new();
+    for round in 0..12 {
+        write_entry(&root, &format!("Group {round}"));
+        published.push(publish(&root, Some(&format!("Create group {round}"))));
+    }
+    done.store(true, Ordering::Relaxed);
+    let synced = syncer.join().unwrap();
+    assert!(reader.join().unwrap() > 0);
+    for status in published.iter().chain(&synced) {
+        assert_eq!(status.state, RegistrySyncState::Synced, "{status:?}");
+    }
+    // A sync pass may commit an entry before its own publish does; together they commit
+    // every entry, each once.
+    let commits = published
+        .iter()
+        .chain(&synced)
+        .filter(|s| s.committed)
+        .count();
+    assert_eq!(commits, 12);
+    let last = sync_checkout(&root);
+    assert_eq!(last.state, RegistrySyncState::Synced, "{last:?}");
+    assert_eq!(ahead(&root), 0);
+    assert_eq!(world.remote_log().len(), 13);
+    assert_eq!(git_in(&root, &["status", "--porcelain", ".hotsheet2"]), "");
+}
+
+/// A fresh `index.lock` another program holds is waited out, and the commit lands once it
+/// is released.
+#[test]
+fn hs2_nm6e27_a_live_index_lock_is_waited_out() {
+    let (world, root) = World::new();
+    let lock = root.join(".git/index.lock");
+    fs::write(&lock, "").unwrap();
+    let releaser = {
+        let lock = lock.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            fs::remove_file(lock).unwrap();
+        })
+    };
+    write_entry(&root, "Sprint");
+    let status = publish(&root, Some("Create group Sprint"));
+    releaser.join().unwrap();
+    assert_eq!(
+        (status.state, status.committed),
+        (RegistrySyncState::Synced, true),
+        "{status:?}"
+    );
+    assert_eq!(world.remote_log()[0], "Create group Sprint");
+}
+
+/// A stale `index.lock` (a crashed Git) is reported at once with its age and never
+/// removed; once the user removes it, the next pass commits.
+#[test]
+fn hs2_nm6e27_a_stale_index_lock_is_reported_at_once_and_kept() {
+    let (_world, root) = World::new();
+    let lock = root.join(".git/index.lock");
+    fs::File::create(&lock)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(2 * 60 * 60))
+        .unwrap();
+    write_entry(&root, "Sprint");
+    let started = Instant::now();
+    let status = publish(&root, Some("Create group Sprint"));
+    assert!(started.elapsed() < Duration::from_secs(2), "no retries");
+    assert_eq!(status.state, RegistrySyncState::Failed, "{status:?}");
+    assert!(status.detail.contains("index.lock"), "{status:?}");
+    assert!(status.detail.contains("120 minutes old"), "{status:?}");
+    assert!(lock.exists(), "a lock is never removed");
+    assert_eq!(subjects(&root), ["Seed"]);
+    fs::remove_file(&lock).unwrap();
+    let status = sync_checkout(&root);
+    assert_eq!(
+        (status.state, status.committed),
+        (RegistrySyncState::Synced, true)
+    );
+}
+
+/// A refusing hook is reported with its own message after one attempt, even while a
+/// concurrent reader runs, and is never retried as if it were lock contention.
+#[test]
+fn hs2_nm6e27_a_refusing_hook_reports_its_message_without_retrying() {
+    let (_world, root) = World::new();
+    let counter = root.join(".git/hook-runs");
+    refusing_hook(&root, &counter);
+    write_entry(&root, "Sprint");
+    let reader = {
+        let root = root.clone();
+        std::thread::spawn(move || {
+            for _ in 0..20 {
+                crate::repository_status::snapshot(&root).unwrap();
+            }
+        })
+    };
+    let status = publish(&root, Some("Create group Sprint"));
+    reader.join().unwrap();
+    assert_eq!(status.state, RegistrySyncState::Failed, "{status:?}");
+    assert!(
+        status
+            .detail
+            .starts_with("could not commit the group registry: "),
+        "{status:?}"
+    );
+    assert!(
+        status.detail.contains("synthetic hook refused the commit"),
+        "{status:?}"
+    );
+    assert!(!status.detail.contains("index.lock"), "{status:?}");
+    assert_eq!(fs::read_to_string(&counter).unwrap().lines().count(), 1);
+}
+
+/// The retry policy across its transitions: a released lock is retried with doubling,
+/// bounded waits; a lock still held after every retry, a failure without a lock, and a
+/// stale lock each return without further attempts.
+#[test]
+fn hs2_nm6e27_retry_policy_transitions() {
+    let failure = |locks: Vec<PathBuf>| CommitFailure {
+        status: RegistrySyncStatus::new(RegistrySyncState::Failed, "could not commit"),
+        locks,
+    };
+    let gone = PathBuf::from("/nonexistent/hs2-nm6e27/index.lock");
+    // Contended twice, then committed.
+    let mut attempts = 0;
+    let mut waits = Vec::new();
+    let result = retry_live_lock(
+        || {
+            attempts += 1;
+            if attempts < 3 {
+                Err(failure(vec![gone.clone()]))
+            } else {
+                Ok(true)
+            }
+        },
+        |delay| waits.push(delay),
+        SystemTime::now,
+    );
+    assert!(result.unwrap());
+    assert_eq!(
+        waits,
+        [Duration::from_millis(25), Duration::from_millis(50)]
+    );
+    // Held through every retry: bounded, capped waits, then the last failure.
+    let mut attempts = 0;
+    let mut waits = Vec::new();
+    let result = retry_live_lock(
+        || {
+            attempts += 1;
+            Err(failure(vec![gone.clone()]))
+        },
+        |delay| waits.push(delay),
+        SystemTime::now,
+    );
+    assert_eq!(result.unwrap_err().detail, "could not commit");
+    assert_eq!(attempts, LOCK_RETRIES + 1);
+    assert_eq!(waits.len(), LOCK_RETRIES);
+    assert!(waits.iter().all(|delay| *delay <= LOCK_RETRY_MAX_DELAY));
+    assert_eq!(waits.last(), Some(&LOCK_RETRY_MAX_DELAY));
+    // No lock named (a hook refusal): one attempt, no wait.
+    let mut attempts = 0;
+    let result = retry_live_lock(
+        || {
+            attempts += 1;
+            Err(failure(Vec::new()))
+        },
+        |_| panic!("a refusal is never retried"),
+        SystemTime::now,
+    );
+    assert!(result.is_err());
+    assert_eq!(attempts, 1);
+    // A stale lock: one attempt, no wait, and its age in the detail.
+    let dir = tempfile::tempdir().unwrap();
+    let stale = dir.path().join("index.lock");
+    fs::write(&stale, "").unwrap();
+    let later = SystemTime::now() + STALE_LOCK_AGE + Duration::from_secs(5 * 60);
+    let mut attempts = 0;
+    let result = retry_live_lock(
+        || {
+            attempts += 1;
+            Err(failure(vec![stale.clone()]))
+        },
+        |_| panic!("a stale lock is never retried"),
+        move || later,
+    );
+    let detail = result.unwrap_err().detail;
+    assert_eq!(attempts, 1);
+    assert!(detail.contains("6 minutes old"), "{detail}");
+    // The same file while it is still young is retried.
+    let mut attempts = 0;
+    let result = retry_live_lock(
+        || {
+            attempts += 1;
+            if attempts == 1 {
+                Err(failure(vec![stale.clone()]))
+            } else {
+                Ok(false)
+            }
+        },
+        |_| {},
+        SystemTime::now,
+    );
+    assert!(!result.unwrap());
+    assert_eq!(attempts, 2);
+}
+
+/// A push that lost the remote's ref lock to a concurrent push is a race worth retrying;
+/// a rejection, an offline remote, or a hook refusal is not (HS2-NM6E27).
+#[test]
+fn hs2_nm6e27_only_a_lost_ref_race_is_retried() {
+    for raced in [
+        "remote: error: cannot lock ref 'refs/heads/main': is at 1f04c46 but expected 541bde8",
+        "error: failed to update ref 'refs/remotes/origin/main'",
+        "remote: error: incorrect old value provided",
+    ] {
+        assert!(lost_ref_race(raced), "{raced}");
+    }
+    for other in [
+        "! refs/heads/main:refs/heads/main [rejected] (non-fast-forward)",
+        "fatal: unable to access 'https://example.invalid/': Could not resolve host",
+        "remote: pre-receive hook declined",
+        "",
+    ] {
+        assert!(!lost_ref_race(other), "{other}");
+    }
 }

@@ -1,0 +1,4 @@
+/* Reserve one line for the validation alert so it does not shift the actions as it toggles. */
+.ticket-blocker-dialog__error {
+  min-height: 1.2em;
+}

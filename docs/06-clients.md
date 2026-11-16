@@ -66,7 +66,10 @@ or Web Awesome editable control, or open dialog always retains native Cmd/Ctrl+C
 Dragging an unselected ticket moves only it, while
 dragging a selected ticket moves the selection; Queue, Backlog, Archive, and (when shown)
 Trash sidebar destinations apply the corresponding status — Trash soft-deletes — and
-visibly highlight during dragover. A newly created ticket is inserted into both the active
+visibly highlight during dragover. A sidebar view, board column, or new-ticket target
+renders that highlight from the drag's current target, so a render mid-drag, such as the
+sidebar after a view switch, keeps it; it clears when the drag leaves the target, drops, or
+ends (HS2-G8EK08). A newly created ticket is inserted into both the active
 collection and its project cache before it is selected, so that first selected presentation
 can be dragged immediately without a deselect/reselect workaround (HS2-6E9RRS).
 Right-clicking either a list or board TicketRow preserves an existing multi-selection
@@ -304,6 +307,13 @@ same explanation (HS2-CGXGWY).
   merge base even when an older server save is held; failure to create this local copy
   must prevent success acknowledgement. A durable recovery copy does not require a
   successful ordinary server save. Crash and force-termination guarantees remain outside this contract.
+
+- **Window chrome follows the app theme.** A pinned App Settings → General → Theme
+  (HS2-EFTHS6) sets the main window's native theme, so the macOS title bar and
+  traffic-light area match the document; Auto releases it to follow the system
+  (HS2-15W35F). The same choice sets both PWA `theme-color` metas to the pinned
+  scheme's color and restores their per-media colors under Auto. The choice applies
+  at startup and live on change; details are in `docs/ui-design-philosophy.md`.
 
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before
   adding its Tauri host. A `/ux-demo` route renders the real production components
@@ -544,8 +554,9 @@ same explanation (HS2-CGXGWY).
   project with its attention badge at 1024px with the inspector open), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). The overflow and strip widths come from Kerf's public `wireTabBars`
-  `onFitChange` report and the TabBar root's width, never from TabBar's private parts (HS2-A2CSNB). The Workspace Grid and Cross-project Stats strips keep it
+  boundary (HS2-RNR35H). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
+  Kerf's public `wireTabBars` `onFitChange` report, never from TabBar's private parts or the app's own
+  measurement (HS2-A2CSNB, HS2-YATB6S). The Workspace Grid and Cross-project Stats strips keep it
   beside the last project tab too, never on the far edge (HS2-YFKQT1). Workspace Grid and Cross-project
   Stats retain their existing main-toolbar titles. Mobile retains its two compact project
   and view rows, including the New ticket action in the view row (HS2-9R1F91).
@@ -660,7 +671,10 @@ same explanation (HS2-CGXGWY).
   before Rust installation or any server stop (HS2-R0XY7S). The production host prefers
   **release** binaries (HS2-D2JQ9A): when
   `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
-  release server only when current. It probes the CLI and migrator independently, preferring each
+  release server only when current. The `--revision-status` probe waits as long as the binary is
+  still running, up to the 90 s server start deadline, and fails at once when it exits, because on
+  macOS the first launch of a fresh build or copy can wait seconds in a host-wide assessment queue
+  (HS2-B74N07). It probes the CLI and migrator independently, preferring each
   current release binary and falling back to its current debug binary. Every chosen binary must
   match the workspace source and the selected server revision. If a required binary has no current
   build, startup requests a rebuild before project setup or migration can run. On Windows,
@@ -912,6 +926,28 @@ same explanation (HS2-CGXGWY).
   that editor on double-click. Existing blocked reasons and ordinary notes do not add
   redundant per-item Edit buttons; their content surfaces support pointer plus
   Enter/Space keyboard entry instead.
+  Below the blocked reason, the Info tab of the sidebar and rail Inspector and of the modal
+  ticket reader (HS2-15PE59) shows a **Blocked By** section for dependency blockers
+  (HS2-CHH28E). A Kerf `ListHeader` holds the count and a
+  logical-end action, "Add Blocker…". Each blocker is a Kerf `ListActionRow` showing its
+  number and title. A blocker that is completed or verified shows a Done status, and one
+  that no longer resolves says it is unavailable. The row's primary action opens the
+  blocker through the qualified `@project/connection:native` route. Its trailing button,
+  "Remove <number> as a blocker of <number>", removes that dependency and reports a
+  failure in a toast. "Add Blocker…" opens "Add Blocker to <slug>". The dialog searches
+  the inspected project with the shared `TicketReferencePicker` and offers only other
+  tickets from the same ticket source, because `blocked_by` holds native ids from the
+  ticket's own source. It refuses an existing blocker locally. A server refusal, such as
+  a self-block or a dependency cycle, stays in the dialog. Every write rereads the ticket
+  and replaces `blocked_by` through the checkout ticket route with its `expected_token`,
+  retrying once after a concurrent edit, so another client's blocker is kept. A source
+  without the `dependencies` capability, or a ticket the person cannot update, keeps the
+  action mounted but disabled, and its reason names the provider. In the reader the section
+  edits that reader frame's ticket: the workspace reader's selected ticket, or a linked
+  reader's own ticket, written to its own checkout and shown in that frame, as the reader's
+  other edits are (HS2-KRVWKF). Only the top reader can edit. The dialog renders inside that
+  modal reader, so it opens above the reader and stays interactive, and Escape closes only
+  the dialog.
   Rendered Markdown fields — ticket details and editable notes, in the inspector and the
   reader alike — enter their editor on a **single click** (or tap), with Enter/Space as
   the keyboard entry (HS2-H1K9YY). A click that starts on a link, ticket reference,
@@ -975,6 +1011,15 @@ same explanation (HS2-CGXGWY).
   cannot replace a newer local
   edit or a reopened project's settings; group writes run in edit
   order and an in-flight group save keeps an older refresh from discarding an empty group.
+  `Add group…` and `Add command…` stay disabled until the project's first command settings read
+  has supplied both revisions, so no write is sent without one. A refresh that read the server
+  before a save started or settled is ignored for that save's revision and groups, so it cannot
+  rewind the next write into a conflict with this tab's own save (HS2-A6K8D5).
+  Until that first read lands, the editor body shows Kerf's busy `EmptyState` ("Loading
+  Commands"), never the "No custom commands yet." empty state. If the first read fails, a danger
+  `StateBanner` ("Commands could not be loaded.") shows the reason with a `Retry` action, which
+  returns to the loading state and reads again; any later successful refresh also clears it. A
+  failure after the first load stays in the editor's status line (HS2-BZKTDC).
   Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.
@@ -1210,8 +1255,29 @@ same explanation (HS2-CGXGWY).
   (cursor replay, 1 s to 30 s failure backoff, no fixed interval) and stops when it hides. A
   host in local browser mode is the trusted owner. On a remote-mode host a session without
   the admin grant sees the category with "Administrator access required." and never loads the
-  list. Grants a page reads at load (`/remote-auth/me`) apply until it reloads; the bridge and
-  server re-check them on every request. The pairing screen proposes a device name from the
+  list. The bridge and server re-check the grants on every request, and an open page follows
+  them without a reload (HS2-A3TDNH): the server pushes an anonymous `browser_grants` change
+  event when a device's grants change, a device is revoked, every device is revoked, or a
+  session signs out, and `features/browser-grants.ts` then re-reads `/remote-auth/me` once
+  (coalescing events that land during the read). Every change-stream resync (first connect,
+  reconnect, overflow) re-reads it too, as does a Devices read refused with 401 or 403. A 401
+  drops every grant. The grants are a signal in `client-origin.ts`, so host-only controls,
+  the Open Project flow, and this category (which starts or refuses its long poll on every
+  grant change) update in place. Nothing polls on a timer.
+  An admin or host page learns about a new pairing request without opening the category
+  (HS2-BZHMEV). The server pushes `pairing_requests`, only to device managers, when a request
+  arrives or is approved or rejected; `features/pairing-requests.ts` then re-reads
+  `/remote-auth/owner` once (coalesced like the grants) and on every change-stream resync, and
+  the open category's own long poll feeds it too. Requests still waiting for approval are
+  counted on the Settings view-mode choice (the same count badge as Notifications, with "N
+  pairing requests waiting" in its name and in the overflow menu's Show Settings item) and on
+  the Devices category row (a Kerf `Badge` in its trailing slot), which leads to the requests.
+  A request that arrives after the first read also raises a transient notice naming the
+  device and the route ("Open Settings → Devices to approve or reject it"), except while
+  Devices is showing; the badges stay as its record. A local display timer drops a request
+  when it expires and issues no request. A page that may not manage devices reads nothing and
+  shows no count; losing the admin grant clears it, and gaining it reads again. A host without
+  remote authentication (503) stops resync reads until a pairing event arrives. The pairing screen proposes a device name from the
   user agent and low-entropy client hints (`device-name.ts`), such as "Safari on iPhone" or
   "Chrome on macOS"; the person may edit it.
 
@@ -1730,8 +1796,16 @@ same explanation (HS2-CGXGWY).
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, `create-kerf-component`, and
-  `eslint-plugin-kerfjs` at 5.0.0-beta.126 (HS2-2055AY). Its Kerf/Web Awesome
+  `eslint-plugin-kerfjs` at 5.0.0-beta.130 (HS2-2TXT6F). Its Kerf/Web Awesome
   spike remains pinned to beta.117 for its compatibility proof (HS2-F83DZZ).
+  `npx kerfjs setup --ui --write --yes`, run from `clients/web`, installs the Kerf
+  `kerf-app`, `kerf-ui`, and `kerf-ui-design-mock` skills under `clients/web/.claude/skills`
+  (the design-mock skill is mirrored under `clients/web/.agents/skills`). It records its
+  conflict resolutions in `clients/web/.kerf-ai-setup.json`: authored scripts, ESLint
+  config, dependency ranges, and catalog paths are `keep`; Kerf's proposed `check` and
+  `kerf:*` scripts, `@typescript-eslint/parser`, and `noUncheckedIndexedAccess` are `skip`.
+  The root `.prettierrc.json` owns formatting, so the `prettier.config.mjs` that setup
+  proposes is not committed (KF-G54HNG).
   Since beta.124 (KF-JPE38T, `KUI-L303`) the client renders no raw `<form>`: forms are Kerf `Form`, and
   both entry points install `wireForms` so a submission never navigates the page (HS2-GAJSX9).
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
@@ -2783,6 +2857,24 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   If creation returns a target with `follow_up_link_error`, the client retries
   only the idempotent source-link request and retains the created ticket even
   if repair remains unavailable (HS2-2Z11A5).
+  The Follow-Ups header's logical-end action, "Link Existing Ticket as Follow-Up…",
+  links a ticket that already exists (HS2-MCGCPQ). It appears in the sidebar and rail
+  Inspector and in the modal ticket reader (HS2-NXSMC7), and it shows even when the
+  ticket has no follow-ups yet. It opens
+  "Link Follow-Up to <slug>". The inspected ticket is the source. The person searches
+  every open project for the target with `TicketReferencePicker`, the picker the close
+  dialog's duplicate target also uses. Results never include the source. Link Follow-Up
+  posts both qualified `@project/connection:native` references to the target checkout's
+  idempotent `follow-up-links` route, which `hotsheet-cli link-follow-up` and MCP
+  `hotsheet_link_follow_up` also call. Choosing a ticket that is already a follow-up is
+  allowed: the dialog says linking again changes nothing, and the toast says the ticket
+  was already a follow-up. A refusal stays in the dialog. Success refreshes Code Review.
+  For a source whose provider is not Hot Sheet Git, the action stays mounted but
+  disabled, and its reason names the provider. In the reader the source is that reader
+  frame's ticket: the workspace reader's selected ticket, or a linked reader's own ticket
+  in its own project. The dialog renders inside that modal reader, as the change-evidence
+  popover does (HS2-EZ10RS), so it opens above the reader and stays interactive. Escape
+  closes only the dialog. Success refreshes that frame's Code Review.
   The shared review surface uses 16px between evidence/comparison/history regions, 8px
   within cards and commit/range rows, and 4px for connected headings, icon-label pairs,
   commit body details, and Git ref clusters; fixed graph, action, icon, and row dimensions
@@ -3731,16 +3823,47 @@ fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). While a termin
 selected, the rail's borderless end group shows **Clear Terminal** (Lucide `eraser`) before the
 hide action (pressing it leaves keyboard focus in the terminal), and physical Command-K clears the focused terminal, like Command-K in macOS Terminal
 (HS2-N2AG8V). Inside a terminal, Command-K clears instead of opening search; Control-K still
-reaches the shell. Clearing is a view action in this client: every mounted viewport of that
-terminal (dedicated, grid preview, parked) drops its scrollback and screen but keeps the cursor
-line, and nothing is sent to the shell. The server replay ring is unchanged, so a reload or
-another client replays earlier output (shared clear: HS2-HA0Z3A). Beside them, a
+reaches the shell. Clearing is a view action: every mounted viewport of that terminal in this
+client (dedicated, grid preview, parked) drops its scrollback and screen at once but keeps the
+cursor line, and nothing is sent to the shell. The clear is then shared through
+`POST /terminals/{id}/clear` (HS2-HA0Z3A): the server's replay keeps only the cursor's line and
+starts a new output stream, so a reload, another client, or a remounted or reconnecting warm
+viewport no longer replays the cleared output, and every attached viewport in any client receives
+a replacement with that line. When the server cannot share it (an older server, or a detached
+broker that predates the op and answers `501`), the local clear still stands. Beside them, a
 borderless Kerf search icon (collapsible `SearchField` in its own toolbar group) expands into a
 field when activated and searches the selected terminal with xterm's search addon (HS2-TWZSZF):
 typing selects the next match incrementally and scrolls it into view, Enter and Shift-Enter step
 to the next and previous match, an emptied field clears the selection, and Escape or blur on an
-empty field collapses it back to the icon. Only the active match is highlighted; match
-decorations need xterm's proposed API, which stays off. Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
+empty field collapses it back to the icon. Every match is highlighted and the active one more
+strongly (HS2-M5QPED), in the `--hs-terminal-search-match` and `--hs-terminal-search-active-match`
+theme tokens (`light-dark()` pairs resolved to the `#rrggbb` form xterm decorations need, and
+repainted when the color scheme changes). While matches are highlighted, xterm's
+`minimumContrastRatio` is 4.5 so text stays legible on them (the DOM renderer misses
+inverse-video default-color text: `HS2-1930X3`). A borderless text control in its own Kerf `ToolbarControlGroup` after the open field shows the count (clicking it steps to the next match, Shift-click to the previous one, and keeps typing in the field; it is disabled with no matches):
+"3 of 12", "No matches", or "1000+ matches" past the addon's 1000-match highlight limit. The count
+follows query edits and re-counts when output arrives while the search is open. The active match
+survives a drawer or window resize (HS2-SWY5DQ). When the terminal reflows, xterm drops or strands the
+selection that the search addon steps from, and the addon refreshes its match list only after a delay.
+The viewport therefore remembers the active match's index. After a resize it re-highlights and
+re-selects that match through the addon's public API, keeping the scroll position. It does this
+before the next Enter or Shift-Enter step, and again whenever the addon's own re-search reports a
+different match, until a re-search confirms it. If a redraw at the new width changes how many matches
+exist, the same index stays active while it still exists. Emptying the field
+(typing or Clear) or closing it removes the highlights and the count. Selecting another terminal
+moves the search there and clears the terminal it left, including a terminal whose runtime loads
+or is restored from the parked pool after the switch. Decorations are xterm's proposed API, so a
+terminal turns on `allowProposedApi` at its first search; Hot Sheet calls no other proposed API.
+The count sits beside the field rather than inside it because SearchField's trailing zone holds
+only a compact control and the rail's end zone accepts only controls (Kerf gap `KF-8CDT8B`).
+The open field's width is capped (Kerf's `--kui-search-field-expanded-width`: 15rem, 9rem on a rail
+at or below 30rem); a longer query wraps inside the field. On a phone-width rail, and whenever a wider
+rail's end would still push Hide past the drawer's edge, the count control leaves the rail so the
+field, Clear, and Hide fit (HS2-HPDX81). The count stays available to screen readers as a visually
+hidden polite status, and Enter and Shift-Enter still step through the matches. The count control
+returns once the rail is wide enough again; `terminal-search-count-fit.ts` decides this from the
+app-owned rail wrapper and Hide button, with width hysteresis. A long query still wraps the field
+and widens Kerf's end zone beyond the field's width (Kerf gap `KF-X9A8X9`). Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
@@ -4287,6 +4410,28 @@ server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId, answeredBy: vie
   that disconnects leaves its interaction time behind (the last 64 are remembered), so the
   authority that reconnects under the same id regains the size after the hold, while a passive
   viewer that reconnects stays passive (**HS2-1YX5VS**).
+- A claim belongs to the attach connection that made it most recently. When an attach ends (a
+  close, a dropped socket, or a revoked remote session), the server and the detached broker
+  release only the claims that connection still owns, every viewer id it claimed included. A
+  viewer that reconnected under the same id before its old socket ended keeps driving
+  (**HS2-CCNRVW**).
+- The server applies each size decision (the size frame to every viewer, then the PTY resize)
+  while it still holds the arbiter, so decisions reach the PTY and the viewers in the order they
+  were made. Before, two concurrent passes (a viewer's claim or release and the trailing
+  re-decide that ends a focus-hold or rate limit) could apply in reverse order on a loaded host.
+  The older size then landed last while the arbiter recorded the newer one as applied, so no
+  later claim corrected it, and a zoomed Workspace Grid terminal stayed at another device's size
+  (**HS2-AYVQ9Q**).
+- A driver change that resizes nothing is still announced. When the new driver's grid is within
+  the min-delta of the applied size (two Workspace Grid zooms at 80×24, or a survivor at the
+  departed driver's grid), the arbiter records it as the applied size's driver without resizing
+  the PTY and sends every viewer the unchanged size naming the new `driven_by` and `answered_by`,
+  once. That includes a focus-hold takeover that lands on the trailing re-decide. Before, the
+  old driver stayed `driven_by` (or the size became undriven once it left), the new driver's
+  viewport never set `data-driving="true"`, and the earliest-attached viewer answered terminal
+  queries instead of the driver. A lone focused viewer whose grid matches the spawn size drives
+  it from its first claim. A hold with nothing focused keeps the driver it holds for
+  (**HS2-G1ADYV**).
 - **Exactly one viewer answers the program's terminal queries (HS2-0GZZHV).** Every attached
   xterm answers a query such as a cursor-position request (`ESC[6n`), device attributes, a mode
   or colour report, and reports focus changes. With several viewers the program read one reply
@@ -4766,7 +4911,11 @@ shows the returned note-level proposal beside the transcript. A human reviews th
 before and after text, kind, confidence, and any unavailable operation before
 accepting. The update uses the ticket's optimistic token; a changed ticket needs
 a fresh proposal. The proposal cannot create a response or alter ticket-wide
-fields. Providers that cannot apply a proposed operation explain it in the preview.
+fields. It may propose `response_to` to link this existing note to an earlier request
+on the ticket, or `null` to remove a wrong link. The preview applies that link to the
+note itself. It names the reason when the source lacks `note_response_link`, the note
+is not regular, or the target is not an earlier request (HS2-J4G9GB). Providers that
+cannot apply a proposed operation explain it in the preview.
 
 The same stored-note menu offers explicit **Change type**, **Edit timeline summary**
 for activity and status notes, and **Correct confidence** (HS2-Q0GWXT). Each opens
@@ -4774,7 +4923,20 @@ a confirmation dialog; an empty summary or confidence clears that value. A type
 change that closes an unanswered feedback request is called out before saving,
 and a request with linked responses cannot change type. Unsupported provider
 actions stay visible with a reason. Saves use the optimistic token and retain the
-original author and response links.
+original author and response links. When an unrelated write has advanced the token,
+the client refetches and resends the chosen value for that note unless the server
+already holds it, so the dialog never reports a correction it did not write; the
+confirmed value wins over a concurrent change to the same note field (HS2-WZSFHK).
+The dialog keeps an unsaved type choice in its
+state, so a re-render such as a window resize does not reset it (HS2-6T8C1D).
+
+**Link as feedback response** (HS2-J4G9GB) opens the same dialog with a picker of the
+ticket's feedback requests created before the note, plus **Not a response** to remove
+an existing link. Saving links the note itself, so its request closes without a new
+note. The item stays visible but disabled with a reason in three cases: the source
+does not support `note_response_link`, the note is not regular, or no earlier
+request exists. The picker is controlled, so a re-render or resize keeps the unsaved
+choice.
 
 Note cards use the canonical spacing ladder: a 16px card inset, 8px between ordinary
 card regions, and 4px inside connected icon/metadata and inline-feedback clusters. The
@@ -5066,6 +5228,17 @@ transition history (HS2-XKXE7V).
 
   It has no dismiss and clears when a sync publishes again. The state contract is
   [02](02-ticket-storage.md) §2.12.2.
+
+- **Group registry publication failures (HS2-VFYSQK):** the group-list read the client
+  already makes (on project load, after each group operation, and on a
+  `group_registry_sync` change event for the shown project, HS2-1CWD0H) carries
+  `registry_sync`. While it is `blocked` or `failed`, the shell shows
+  `GroupRegistrySyncBanner`, a warning-toned `ShellBanner` directly after
+  `TicketStoreSyncBanner`, with the server's one-line detail and a sentence saying other
+  clones do not see new or renamed groups yet. It adds no timer, has no dismiss, and
+  clears on the next read that reports another state, so it follows the server's
+  background commit and sync-loop recoveries without a group operation. Only the newest
+  read for a project is kept ([35](35-ticket-groups.md) §35.7).
 
 - **Narrow widths:** value tables stack under their labels.
 - **Load start:** opening the view starts both reports outside the opening effect's

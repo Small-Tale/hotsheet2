@@ -1,5 +1,8 @@
 //! A committed MCP entry resolves the code project, including from a nested directory.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
@@ -20,7 +23,7 @@ fn portable_project_entry_opens_its_linked_store_and_lists_tools() {
     )
     .unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
         .arg("--path")
         .arg(".")
         .current_dir(&nested)
@@ -149,7 +152,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
             ],
         )
     });
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
         .args(&args)
         .current_dir(&nested)
         .env("HOTSHEET_HOME", &home)
@@ -337,7 +340,7 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
     // SAFETY: nextest runs each test in its own process, and no other thread is running.
     unsafe {
         std::env::set_var("HOTSHEET_CLAUDE_USER_CONFIG", &claude_config);
-        std::env::set_var("HOTSHEET_MCP_BIN", env!("CARGO_BIN_EXE_hotsheet-mcp"));
+        std::env::set_var("HOTSHEET_MCP_BIN", workspace_bin::path("hotsheet-mcp"));
     }
     hotsheet_cli::setup::run_setup_in(&bootstrap, &project, Some("claude"), false, &[]).unwrap();
 
@@ -353,7 +356,10 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
     let project_abs = project.canonicalize().unwrap();
     let entry = &user["projects"][project_abs.to_str().unwrap()]["mcpServers"]["hotsheet"];
     let command = entry["command"].as_str().unwrap();
-    assert_eq!(command, env!("CARGO_BIN_EXE_hotsheet-mcp"));
+    assert_eq!(
+        std::path::Path::new(command),
+        workspace_bin::path("hotsheet-mcp")
+    );
     let args: Vec<&str> = entry["args"]
         .as_array()
         .unwrap()

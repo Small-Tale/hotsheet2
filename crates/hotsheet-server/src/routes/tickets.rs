@@ -267,6 +267,8 @@ pub(crate) fn list_entry_tickets(
     let bound = ops::StoreReadBound::new(query.limit)?;
     query.limit = Some(bound.fetch_limit());
     let started = Instant::now();
+    #[cfg(test)]
+    index_wait_probe::attempting(&entry.index);
     let (mut rows, typical_phases, locked, queried) = {
         let index = entry.index.lock_or_recover();
         let locked = started.elapsed();
@@ -409,4 +411,32 @@ pub(crate) fn contextualize_api_ticket(
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     ticket.auto_context = auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
     Ok(ticket)
+}
+
+/// HS2-YRHRP7: lets a test observe that a list request has started its `index-wait` timer
+/// and is about to take the index lock, so it can gate on that event instead of a sleep.
+/// Entries are keyed by the index's address; a test forgets its index before it starts.
+#[cfg(test)]
+pub(crate) mod index_wait_probe {
+    use hotsheet_sync::LockExt;
+    use std::sync::{Arc, Mutex};
+
+    static ATTEMPTS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+    fn key<T>(index: &Arc<Mutex<T>>) -> usize {
+        Arc::as_ptr(index).cast::<()>() as usize
+    }
+
+    pub(crate) fn attempting<T>(index: &Arc<Mutex<T>>) {
+        ATTEMPTS.lock_or_recover().push(key(index));
+    }
+
+    pub(crate) fn forget<T>(index: &Arc<Mutex<T>>) {
+        let key = key(index);
+        ATTEMPTS.lock_or_recover().retain(|seen| *seen != key);
+    }
+
+    pub(crate) fn attempted<T>(index: &Arc<Mutex<T>>) -> bool {
+        ATTEMPTS.lock_or_recover().contains(&key(index))
+    }
 }

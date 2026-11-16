@@ -5,6 +5,8 @@ import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { nonBlank } from './non-blank.mjs';
+
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const excludedTopLevel = new Set(['coverage', 'dist', 'node_modules', 'playwright-report', 'target', 'test-results']);
 
@@ -20,7 +22,9 @@ const OWNERLESS_GRACE_MS = 10 * 60 * 1000;
  * running snapshot and was served as `index.html`. The per-user cache directory is never swept that way.
  */
 export function stableSnapshotParent(environment = process.env, platform = process.platform, home = homedir()) {
-  if (environment.HOTSHEET_WEB_STABLE_TEMP_ROOT) return resolve(environment.HOTSHEET_WEB_STABLE_TEMP_ROOT);
+  // HS2-MVF6X3: a blank override counts as unset, so it falls through to the per-platform cache.
+  const override = nonBlank(environment.HOTSHEET_WEB_STABLE_TEMP_ROOT);
+  if (override !== undefined) return resolve(override);
   if (platform === 'darwin') return join(home, 'Library', 'Caches', 'hotsheet-web-stable');
   if (platform === 'win32')
     return join(environment.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'hotsheet-web-stable');
@@ -96,7 +100,8 @@ export async function removeStableSnapshot(snapshotRoot) {
 }
 
 export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = process.env) {
-  const repoRoot = environment.HOTSHEET_REPO_ROOT ?? resolve(sourceRoot, '../..');
+  // HS2-MVF6X3: `??` kept an empty root, which the bridges then resolved against the working directory.
+  const repoRoot = nonBlank(environment.HOTSHEET_REPO_ROOT) ?? resolve(sourceRoot, '../..');
   return {
     ...environment,
     HOTSHEET_REPO_ROOT: repoRoot,
@@ -105,8 +110,13 @@ export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = pro
   };
 }
 
+/** The web source to snapshot: `${HOTSHEET_WEB_STABLE_SOURCE_ROOT}` unless blank (HS2-MVF6X3), else this package. */
+export function stableSourceRoot(environment = process.env) {
+  return resolve(nonBlank(environment.HOTSHEET_WEB_STABLE_SOURCE_ROOT) ?? scriptRoot);
+}
+
 export async function runStableDev({
-  sourceRoot = resolve(process.env.HOTSHEET_WEB_STABLE_SOURCE_ROOT ?? scriptRoot),
+  sourceRoot = stableSourceRoot(),
   temporaryRoot = stableSnapshotParent(),
   viteArguments = process.argv.slice(2),
   environment = process.env,

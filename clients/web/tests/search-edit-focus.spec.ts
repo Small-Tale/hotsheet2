@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-6AXG6Z: with a workspace search active, selecting a matching ticket that is not on the base
 // view's first page and then editing it (whose autosave change event triggers a background refresh)
 // must not deselect the ticket or tear down the inspector. Before the fix, refreshProject replaced the
@@ -63,7 +65,7 @@ const match = row('HS2-MATCH', 'Parser fix');
 test('keeps a search-selected ticket selected through a background refresh (HS2-6AXG6Z)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const polls: import('@playwright/test').Route[] = [];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

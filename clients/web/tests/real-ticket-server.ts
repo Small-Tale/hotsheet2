@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import type { Page } from '@playwright/test';
+import type { Page, WebSocketRoute } from '@playwright/test';
 import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
@@ -15,6 +15,48 @@ import { assertFixtureCli, assertFixtureServer } from '../scripts/test-fixture-c
 
 const execute = promisify(execFile);
 const fixtureCleanup = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
+
+/**
+ * Upstream sockets that test `routeWebSocket` handlers opened to a real server, by its host, and
+ * the hosts whose server has stopped (HS2-N8FTCK). Playwright 1.63 has no way to remove a
+ * WebSocket route (`unrouteAll` clears only HTTP routes), so a page that reconnects after `stop()`
+ * still reaches the handler; `openUpstreamSocket` refuses it instead of dialing the closed port.
+ */
+const upstreamSockets = new Map<string, Set<WebSocket>>();
+const stoppedHosts = new Set<string>();
+
+/**
+ * Open the real-server side of a test WebSocket proxy (HS2-N8FTCK). Every routed upstream goes
+ * through here, so it always has an `error` listener (a refused or reset dial closes the route
+ * instead of throwing an unhandled `ECONNREFUSED`), closes with its route in both directions, and
+ * is refused once the target server's `stop()` has begun. Returns `undefined` when refused.
+ * The helper owns `route.onClose`; callers wire only messages.
+ */
+export function openUpstreamSocket(route: WebSocketRoute, target: string | URL): WebSocket | undefined {
+  const host = new URL(target).host;
+  const closeRoute = () => {
+    void route.close().catch(() => undefined);
+  };
+  if (stoppedHosts.has(host)) {
+    closeRoute();
+    return undefined;
+  }
+  const upstream = new WebSocket(target),
+    sockets = upstreamSockets.get(host) ?? new Set<WebSocket>();
+  upstreamSockets.set(host, sockets.add(upstream));
+  upstream.on('error', closeRoute);
+  upstream.on('close', () => {
+    sockets.delete(upstream);
+    closeRoute();
+  });
+  route.onClose(() => {
+    if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close();
+  });
+  return upstream;
+}
+
+/** A page or browser context whose routes proxy to a real ticket server. */
+export type RouteOwner = Pick<Page, 'unrouteAll'>;
 
 export interface RealTicketFixtureContext {
   store: string;
@@ -84,8 +126,21 @@ export async function realTicketServer(
     ['-C', store, '--bind', '127.0.0.1:0', '--secret', secret, '--no-terminal-broker', '--exit-on-stdin-eof'],
     { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] },
   );
-  let output = '';
-  const stop = async () => {
+  let output = '',
+    host: string | undefined;
+  /**
+   * Stop the server. Pass every page or context that proxies to it: its routes are removed first
+   * (`unrouteAll({ behavior: 'ignoreErrors' })`), so a poll the page sends while the server goes
+   * down is not proxied to a closed port and does not fail the test (HS2-QY232J). WebSocket routes
+   * cannot be removed, so their upstreams are closed and refused from here on (HS2-N8FTCK).
+   */
+  const stop = async (...proxies: RouteOwner[]) => {
+    for (const proxy of proxies) await proxy.unrouteAll({ behavior: 'ignoreErrors' });
+    if (host) {
+      stoppedHosts.add(host);
+      for (const upstream of upstreamSockets.get(host) ?? []) upstream.close();
+      upstreamSockets.delete(host);
+    }
     if (child.pid && child.exitCode === null && child.signalCode === null) {
       const exited = once(child, 'exit');
       child.kill('SIGTERM');
@@ -124,6 +179,9 @@ export async function realTicketServer(
         reject(new Error(`Ticket server stopped: ${output}`));
       });
     });
+    // A later server may reuse a stopped server's port (HS2-N8FTCK).
+    host = new URL(url).host;
+    stoppedHosts.delete(host);
     const request = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
       const response = await fetch(`${url}${path}`, {
         method,
@@ -151,6 +209,9 @@ export async function realTicketServer(
   }
 }
 
+// HS2-QY232J: the helper lives in its own types-only module so `src/` integration tests share it.
+export { proxyFetch } from './proxy-fetch.ts';
+
 /**
  * Route a mocked project's change WebSocket to this real server (HS2-B3Z8DS). Tests that mock the
  * project as `demo-checkout` and proxy only its HTTP routes left `/ws/sync` to reach the shared
@@ -177,27 +238,18 @@ export async function routeProjectChangeSocket(
     if (server.checkoutId) target.searchParams.set('checkout', server.checkoutId);
     const client = incoming.searchParams.get('client');
     if (client) target.searchParams.set('client', client);
-    const upstream = new WebSocket(target),
-      pending: Array<string | Buffer> = [];
-    let closed = false;
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close();
-      void route.close();
-    };
+    const upstream = openUpstreamSocket(route, target);
+    if (!upstream) return;
+    const pending: Array<string | Buffer> = [];
     route.onMessage((message) => {
       if (upstream.readyState === WebSocket.OPEN) upstream.send(message);
       else pending.push(message);
     });
-    route.onClose(close);
     upstream.on('open', () => {
       for (const message of pending.splice(0)) upstream.send(message);
     });
     upstream.on('message', (data: Buffer, binary) => {
-      if (!closed) route.send(binary ? data : data.toString('utf8'));
+      if (upstream.readyState === WebSocket.OPEN) route.send(binary ? data : data.toString('utf8'));
     });
-    upstream.on('close', close);
-    upstream.on('error', close);
   });
 }

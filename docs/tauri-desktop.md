@@ -12,7 +12,8 @@ port (HS2-RKZKX7). Before the client starts, the release shell restores Hot Shee
 localStorage keys from private per-key records in the native app-data directory
 under `browser-preferences-v1`, then saves subsequent changes through its local
 bridge. An explicit `HOTSHEET_DESKTOP_STORAGE_DIRECTORY` overrides that directory
-for isolated native verification; use an absolute path and an isolated
+for isolated native verification (an empty or whitespace-only value counts as unset,
+HS2-15ZN8E, and in the Node local host HS2-1VF50T); use an absolute path and an isolated
 `HOTSHEET_HOME` with a synthetic application identifier. Separate app-data directories remain isolated; simultaneous bridges save
 unrelated keys independently. Ordinary browser and development sessions retain
 their existing origin-scoped storage. Credentials remain owned by the server.

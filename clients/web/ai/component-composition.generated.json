@@ -3022,6 +3022,76 @@
       }
     },
     {
+      "key": "hotsheet-web:group-registry-sync-banner",
+      "package": "hotsheet-web",
+      "id": "group-registry-sync-banner",
+      "name": "GroupRegistrySyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while the project's group registry is not publishing (blocked or failed), repeating the server's one-line detail and saying that other clones do not see new or renamed groups (HS2-VFYSQK).",
+      "publicExports": [
+        {
+          "name": "GroupRegistrySyncBanner"
+        },
+        {
+          "name": "groupRegistryNeedsAttention"
+        },
+        {
+          "name": "groupRegistrySyncSentence"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/group-registry-sync-banner.tsx"
+      ],
+      "source": "src/components/group-registry-sync-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/group-registry-sync-banner.tsx",
+        "composition": "src/components/group-registry-sync-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:guidance-settings",
       "package": "hotsheet-web",
       "id": "guidance-settings",
@@ -8699,6 +8769,142 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-blocker-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-blocker-dialog",
+      "name": "TicketBlockerDialog",
+      "kind": "component",
+      "purpose": "Add a same-source dependency blocker to the inspected ticket with the shared ticket picker, validation, and in-dialog refusals such as a dependency cycle (HS2-CHH28E).",
+      "publicExports": [
+        {
+          "name": "TicketBlockerDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-blocker-dialog.tsx"
+      ],
+      "source": "src/components/ticket-blocker-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-blocker-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-blocker-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blocker-dialog.tsx",
+        "composition": "src/components/ticket-blocker-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-blockers",
+      "package": "hotsheet-web",
+      "id": "ticket-blockers",
+      "name": "TicketBlockers",
+      "kind": "component",
+      "purpose": "The Info tab's Blocked By section: blocker rows that open and remove, with an Add Blocker header action disabled with a reason where the source lacks dependencies (HS2-CHH28E).",
+      "publicExports": [
+        {
+          "name": "TicketBlockers"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-blockers.tsx"
+      ],
+      "source": "src/components/ticket-blockers.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-blockers"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-blockers"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-blockers.tsx",
+        "composition": "src/components/ticket-blockers.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-board",
       "package": "hotsheet-web",
       "id": "ticket-board",
@@ -9042,12 +9248,80 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-follow-up-link-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-follow-up-link-dialog",
+      "name": "TicketFollowUpLinkDialog",
+      "kind": "component",
+      "purpose": "Link an existing ticket as a follow-up of the inspected ticket with qualified search, an idempotent repeat notice, and validation (HS2-MCGCPQ).",
+      "publicExports": [
+        {
+          "name": "TicketFollowUpLinkDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-follow-up-link-dialog.tsx"
+      ],
+      "source": "src/components/ticket-follow-up-link-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-follow-up-link-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-follow-up-link-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-follow-up-link-dialog.tsx",
+        "composition": "src/components/ticket-follow-up-link-dialog.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-group",
       "package": "hotsheet-web",
       "id": "ticket-group",
       "name": "TicketGroup",
       "kind": "component",
-      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column, whose header overflow button opens the group actions.",
       "publicExports": [
         {
           "name": "TicketGroup"
@@ -9734,6 +10008,74 @@
       "provenance": {
         "selection": "src/components/ticket-reader.tsx",
         "composition": "src/components/ticket-reader.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-reference-picker",
+      "package": "hotsheet-web",
+      "id": "ticket-reference-picker",
+      "name": "TicketReferencePicker",
+      "kind": "component",
+      "purpose": "Shared existing-ticket search with framed results and a selected-ticket banner, used by the close and follow-up link dialogs (HS2-MCGCPQ).",
+      "publicExports": [
+        {
+          "name": "TicketReferencePicker"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-reference-picker.tsx"
+      ],
+      "source": "src/components/ticket-reference-picker.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-reference-picker"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-reference-picker"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-reference-picker.tsx",
+        "composition": "src/components/ticket-reference-picker.tsx"
       }
     },
     {

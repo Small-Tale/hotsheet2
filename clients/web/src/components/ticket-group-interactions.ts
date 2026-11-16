@@ -1,8 +1,9 @@
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { viewportSafePointerPosition } from '../context-menu-position';
+import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
 import { TICKET_GROUP_ACTIONS, TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
+import { closedPopupMenuRoot } from '../popup-menu-state';
 import { insideOrchestrationView } from './orchestration-timeline-interactions';
 
 /**
@@ -31,11 +32,22 @@ export interface TicketGroupBindings {
 const groupSelector = TICKET_GROUP_TARGETS.group.selector;
 const groupOf = (target: Element) =>
   (target as HTMLElement).dataset.ticketGroup ?? target.closest<HTMLElement>(groupSelector)?.dataset.ticketGroup;
+/** The group header menu's footprint, so a menu opened from the overflow button stays on screen. */
+export const TICKET_GROUP_MENU_SIZE = { width: 232, height: 184 } as const;
 const scopeOf = (target: Element) => target.closest<HTMLElement>(groupSelector)?.dataset.ticketGroupScope ?? 'list';
+
+/** The overflow button of one group container, found again after a render may have replaced it. */
+function overflowButton(root: HTMLElement, group: string, scope: string): HTMLElement | undefined {
+  return [...root.querySelectorAll<HTMLElement>(TICKET_GROUP_ACTIONS.openTicketGroupMenu.selector)].find(
+    (button) => groupOf(button) === group && scopeOf(button) === scope,
+  );
+}
 
 /** Wire ticket group headers, their menu, and the group name dialog under `root`. */
 export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBindings): () => void {
   const lifetime = createScope();
+  /** The overflow button that opened the group menu, which gets focus back when it closes. */
+  let opener: { group: string; scope: string } | undefined;
   lifetime.add(
     delegate(root, 'click', TICKET_GROUP_ACTIONS.toggleTicketGroup.selector, (event, target) => {
       event.stopPropagation();
@@ -46,11 +58,48 @@ export function wireTicketGroups(root: HTMLElement, bindings: TicketGroupBinding
     }),
   );
   lifetime.add(
+    // The header's overflow button opens the same menu under itself, aligned to its trailing edge,
+    // and never toggles the group (HS2-HKXSB1).
+    delegate(root, 'click', TICKET_GROUP_ACTIONS.openTicketGroupMenu.selector, (event, target) => {
+      event.stopPropagation();
+      const group = groupOf(target);
+      if (!group) return;
+      const rect = target.getBoundingClientRect(),
+        position = viewportSafeContextMenuPosition(
+          rect.right - TICKET_GROUP_MENU_SIZE.width,
+          rect.bottom,
+          window.innerWidth,
+          window.innerHeight,
+          TICKET_GROUP_MENU_SIZE,
+        );
+      opener = { group, scope: scopeOf(target) };
+      bindings.openMenu(group, position.x, position.y, opener.scope);
+    }),
+  );
+  // Closing a menu the overflow button opened returns focus to that button, unless a command
+  // already moved it somewhere, such as into the rename dialog (HS2-HKXSB1).
+  const returnFocus = (event: Event) => {
+    const menu = closedPopupMenuRoot(event);
+    if (!menu?.matches(TICKET_GROUP_TARGETS.groupMenu.selector) || !opener) return;
+    const { group, scope } = opener;
+    opener = undefined;
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && !menu.contains(active)) return;
+      overflowButton(root, group, scope)?.focus();
+    });
+  };
+  root.addEventListener('toggle', returnFocus, true);
+  lifetime.add(() => {
+    root.removeEventListener('toggle', returnFocus, true);
+  });
+  lifetime.add(
     delegate(root, 'contextmenu', `${groupSelector} [data-component="list-header"]`, (event, target) => {
       const group = groupOf(target);
       if (!group || insideOrchestrationView(target)) return;
       event.preventDefault();
       event.stopPropagation();
+      opener = undefined;
       const pointer = event as MouseEvent,
         // A keyboard-opened context menu reports no pointer position; anchor it under the header.
         rect = target.getBoundingClientRect(),

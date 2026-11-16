@@ -1008,6 +1008,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "group-registry-sync-banner",
+      "name": "GroupRegistrySyncBanner",
+      "kind": "component",
+      "purpose": "Persistent project shell strip while the project's group registry is not publishing (blocked or failed), repeating the server's one-line detail and saying that other clones do not see new or renamed groups (HS2-VFYSQK).",
+      "useWhen": [
+        "The group list for the open project reports a registry_sync state of blocked or failed."
+      ],
+      "avoidWhen": [
+        "A linked ticket store is not publishing; TicketStoreSyncBanner owns that warning."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/group-registry-sync-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "guidance-settings",
       "name": "GuidanceSettings",
       "kind": "component",
@@ -2878,6 +2899,52 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ticket-blocker-dialog",
+      "name": "TicketBlockerDialog",
+      "kind": "component",
+      "purpose": "Add a same-source dependency blocker to the inspected ticket with the shared ticket picker, validation, and in-dialog refusals such as a dependency cycle (HS2-CHH28E).",
+      "useWhen": [
+        "Hot Sheet needs the person to choose a ticket that blocks the inspected ticket."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketBlockerDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-blocker-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-blocker-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-blockers",
+      "name": "TicketBlockers",
+      "kind": "component",
+      "purpose": "The Info tab's Blocked By section: blocker rows that open and remove, with an Add Blocker header action disabled with a reason where the source lacks dependencies (HS2-CHH28E).",
+      "useWhen": [
+        "Hot Sheet shows and edits a ticket's dependency blockers."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketBlockers behavior."
+      ],
+      "publicClasses": [
+        "ticket-blockers"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-blockers.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-board",
       "name": "TicketBoard",
       "kind": "composition",
@@ -2996,10 +3063,33 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "ticket-follow-up-link-dialog",
+      "name": "TicketFollowUpLinkDialog",
+      "kind": "component",
+      "purpose": "Link an existing ticket as a follow-up of the inspected ticket with qualified search, an idempotent repeat notice, and validation (HS2-MCGCPQ).",
+      "useWhen": [
+        "Hot Sheet needs to link an existing ticket as a follow-up of the inspected ticket."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketFollowUpLinkDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-follow-up-link-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-follow-up-link-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "ticket-group",
       "name": "TicketGroup",
       "kind": "component",
-      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column, whose header overflow button opens the group actions.",
       "useWhen": [
         "Hot Sheet needs one collapsible ticket group on a lowered panel, in a list or a board column."
       ],
@@ -3237,6 +3327,29 @@
         "notes": [
           "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
         ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-reference-picker",
+      "name": "TicketReferencePicker",
+      "kind": "component",
+      "purpose": "Shared existing-ticket search with framed results and a selected-ticket banner, used by the close and follow-up link dialogs (HS2-MCGCPQ).",
+      "useWhen": [
+        "Hot Sheet needs the person to choose one existing ticket from any open project."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketReferencePicker behavior."
+      ],
+      "publicClasses": [
+        "ticket-reference-picker"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-reference-picker.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
       },
       "documentation": "../../docs/ux-components.md"
     },

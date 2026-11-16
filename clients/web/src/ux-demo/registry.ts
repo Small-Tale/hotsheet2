@@ -25,6 +25,7 @@ import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
 import { demoModule as glanceSparkline } from './glance-sparkline-demo';
 import { demoModule as gridSidebar } from './grid-sidebar-demo';
+import { demoModule as groupRegistrySyncBanner } from './group-registry-sync-banner-demo';
 import { demoModule as haltedSession } from './halted-session-demo';
 import { demoModule as hostDiskSettings } from './host-disk-settings-demo';
 import { demoModule as inputDialogs } from './input-dialogs-demo';
@@ -118,6 +119,7 @@ export const demoModules: readonly DemoModule[] = [
   statsDashboard,
   repositorySize,
   ticketStoreSyncBanner,
+  groupRegistrySyncBanner,
   confidenceBadge,
   toolbarControlGroup,
   contentComponents,

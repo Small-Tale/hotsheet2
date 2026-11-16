@@ -221,6 +221,13 @@ describe('layered ticket reader stack', () => {
     expect(linkedReaderPatchAllowed(only('notes'), { ...add, expected_token: 't' })).toBe(true);
     expect(linkedReaderPatchAllowed(only('notes'), { ...add, title: 'x' })).toBe(false);
     expect(linkedReaderPatchAllowed(only('update'), {})).toBe(true);
+    // HS2-J4G9GB: an existing-note response link needs its own capability.
+    const link = { note_id: 'N1', response_to: 'R1' };
+    expect(linkedReaderPatchAllowed(only('note_edit'), link)).toBe(false);
+    expect(linkedReaderPatchAllowed({ ...only('note_edit'), note_response_link: true }, link)).toBe(true);
+    expect(
+      linkedReaderPatchAllowed({ ...only('note_edit'), note_response_link: true }, { ...link, response_to: null }),
+    ).toBe(true);
   });
 
   it('records a started phase and moves a not-yet-started ticket to Started (HS2-ANRXAE)', () => {

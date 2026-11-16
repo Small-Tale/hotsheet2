@@ -28,7 +28,7 @@ export function CommandGroupDialog({ state }: { state?: CommandGroupDialogState 
         <List gap="l">
           <TextField {...targets.groupName.attrs} label="Group Name" value={state.value} autofocus />
           {state.message ? (
-            <StateBanner tone="danger" title="Group Could Not Be Created" detail={state.message} />
+            <StateBanner tone="danger" title="Group Could Not Be Created" detail={state.message} copyLayout="stacked" />
           ) : null}
           <Row vAlign="middle" gap="xs">
             <Button emphasis="plain" type="button" action={actions.cancelCommandGroup.value}>

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-EQTXTJ profiling harness: per-keystroke Event Timing (input delay + handlers + next paint) while
 // typing into each text field of a realistically sized project. Opt-in: HOTSHEET_TYPING_PROFILE=1.
@@ -98,7 +98,7 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
       const incoming = new URL(route.request().url()),
         path = incoming.pathname.slice(apiPath.length);
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -171,6 +171,6 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     await expect(linkedSource).toBeVisible();
     await type('linked details', linkedSource);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

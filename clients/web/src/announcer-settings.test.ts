@@ -121,10 +121,29 @@ describe('announcer settings menu (HS2-PRCC6V)', () => {
     expect(zed?.attributes).toEqual({ 'data-announcer-setting': 'voice', 'data-announcer-value': 'Zed' });
   });
 
-  it('offers only the default voice for a server engine and disables an empty clear', () => {
-    const [voice, , clear] = items(menu({ provider: 'macos-say', voice: '', hasHistory: false }));
+  it('offers only the default voice for a server engine without listed voices and disables an empty clear', () => {
+    const [voice, , clear] = items(menu({ provider: 'macos-say', voices: [], voice: '', hasHistory: false }));
     expect(checked(voice.submenu ?? [])).toEqual(['Mac voice on server', 'Default voice']);
     expect(items(voice.submenu ?? []).some((entry) => entry.label === 'Alex')).toBe(false);
     expect(clear).toMatchObject({ disabled: true, disabledReason: 'No activity to clear' });
+  });
+
+  it('lists a server engine voices and checks the chosen one (HS2-CEZVSE)', () => {
+    const [voice] = items(
+      menu({ provider: 'macos-say', voices: ['Albert', 'Anna (German (Germany))'], voice: 'Albert' }),
+    );
+    expect(checked(voice.submenu ?? [])).toEqual(['Mac voice on server', 'Albert']);
+    expect(items(voice.submenu ?? []).map((entry) => entry.label)).toEqual([
+      'Browser voice',
+      'Mac voice on server',
+      'Default voice',
+      'Albert',
+      'Anna (German (Germany))',
+    ]);
+    const anna = items(voice.submenu ?? []).find((entry) => entry.label === 'Anna (German (Germany))');
+    expect(anna?.attributes).toEqual({
+      'data-announcer-setting': 'voice',
+      'data-announcer-value': 'Anna (German (Germany))',
+    });
   });
 });

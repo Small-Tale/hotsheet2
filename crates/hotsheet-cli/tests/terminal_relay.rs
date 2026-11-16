@@ -4,6 +4,9 @@
 //! are temporary, so nothing reaches the real launchd or `~/Library/LaunchAgents`.
 #![cfg(target_os = "macos")]
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
@@ -62,7 +65,7 @@ impl Fixture {
         let launchctl = dir.path().join("launchctl");
         fs::write(&launchctl, FAKE_LAUNCHCTL).unwrap();
         fs::set_permissions(&launchctl, fs::Permissions::from_mode(0o755)).unwrap();
-        let server = assert_cmd::cargo::cargo_bin("hotsheet-cli")
+        let server = workspace_bin::path("hotsheet-cli")
             .with_file_name("hotsheet-server")
             .canonicalize()
             .unwrap();
@@ -81,7 +84,7 @@ impl Fixture {
     }
 
     fn cli(&self, args: &[&str]) -> Command {
-        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
         command
             .current_dir(self.dir.path())
             .args(["terminal-relay"])

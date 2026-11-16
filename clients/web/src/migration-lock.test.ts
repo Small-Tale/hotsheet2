@@ -38,6 +38,28 @@ describe('migrationLockBinary (HS2-KFKE8W)', () => {
   });
 });
 
+describe('migrationLockBinary blank override (HS2-GVSJ5Y)', () => {
+  const checkout = '/work/hotsheet2/clients/web';
+  const debug = resolve(
+    '/work/hotsheet2',
+    'target/debug',
+    `hotsheet-migrate${process.platform === 'win32' ? '.exe' : ''}`,
+  );
+
+  it('falls back to the checkout build for an unset, empty, or whitespace-only override', () => {
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: blank }, checkout)).toBe(debug);
+      // A blank repository root is unset too, so the checkout comes from the working directory.
+      expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: blank, HOTSHEET_REPO_ROOT: blank }, checkout)).toBe(debug);
+    }
+  });
+
+  it('uses a relative or absolute override as given', () => {
+    expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: 'bin/hotsheet-migrate' })).toBe('bin/hotsheet-migrate');
+    expect(migrationLockBinary({ HOTSHEET_MIGRATE_BIN: '/pinned/hotsheet-migrate' })).toBe('/pinned/hotsheet-migrate');
+  });
+});
+
 describe('acquireMigrationLock preflight (HS2-KFKE8W)', () => {
   const previous = process.env.HOTSHEET_MIGRATE_BIN;
   afterEach(() => {

@@ -28,6 +28,8 @@ import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
+import { readerScopeOf } from '../features/linked-reader-subject';
+import type { TicketBlockersController } from '../features/ticket-blockers';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
@@ -90,6 +92,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   pointerDetailsFinish: DetailsFinishTask | undefined;
   readonly beginDetailsEdit: (reader?: boolean, frame?: TicketReaderFrame) => void;
   readonly linkedReaderFrame: (target: Element) => TicketReaderFrame | undefined;
+  /** Load a linked reader's Code Review tab from its own project (HS2-9Q4AFB). */
+  readonly refreshLinkedCodeReview: (frameId: string) => Promise<void>;
   readonly replaceLinkedReaderFrame: (id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) => void;
   readonly linkedReaderSaves: (id: string) => {
     details: DebouncedAutosave<string>;
@@ -121,6 +125,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly beginNoteMetadataEdit: (noteId: string, mode: NoteMetadataMode, frame?: TicketReaderFrame) => void;
   readonly saveNoteMetadata: (form: HTMLFormElement) => Promise<void>;
   readonly dismissNoteMetadata: () => void;
+  readonly chooseNoteResponseLink: (value: string) => void;
+  readonly chooseNoteKind: (value: string) => void;
   readonly feedbackResponseDrafts: FeedbackResponseDrafts;
   readonly dismissFeedbackRequest: (requestId: string, frameId?: string) => Promise<boolean>;
   readonly readerNoteAutosave: DebouncedAutosave<{ id: string; value: string }>;
@@ -159,6 +165,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly inspectorTab: Signal<InspectorTab>;
   readonly codeReviewMessage: Signal<string>;
   readonly codeReview: Signal<CodeReview | undefined>;
+  /** The Info tab's Blocked By section and Add Blocker dialog (HS2-CHH28E). */
+  readonly ticketBlockers: TicketBlockersController;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -188,6 +196,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     tagsAutosave,
     beginDetailsEdit,
     linkedReaderFrame,
+    refreshLinkedCodeReview,
     replaceLinkedReaderFrame,
     linkedReaderSaves,
     readerDetailsAutosave,
@@ -208,6 +217,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     beginNoteMetadataEdit,
     saveNoteMetadata,
     dismissNoteMetadata,
+    chooseNoteResponseLink,
+    chooseNoteKind,
     dismissFeedbackRequest,
     feedbackResponseDrafts,
     readerNoteAutosave,
@@ -1316,7 +1327,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.selector, (_event, target) => {
       const noteId = data(target).noteId,
         mode = data(target).mode;
-      if (noteId && (mode === 'kind' || mode === 'summary' || mode === 'confidence'))
+      if (noteId && (mode === 'kind' || mode === 'summary' || mode === 'confidence' || mode === 'response'))
         beginNoteMetadataEdit(noteId, mode, linkedReaderFrame(target));
     }),
   );
@@ -1324,6 +1335,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteMetadata.selector, (event, target) => {
       event.preventDefault();
       void saveNoteMetadata(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    // HS2-J4G9GB: the response picker is controlled, so a re-render keeps the person's choice.
+    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.noteResponseLinkField.selector, (_event, target) => {
+      chooseNoteResponseLink((target as HTMLSelectElement).value);
+    }),
+  );
+  lifetime.add(
+    // HS2-6T8C1D: the type picker is controlled, so a re-render keeps the person's choice.
+    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.noteKindField.selector, (_event, target) => {
+      chooseNoteKind((target as HTMLSelectElement).value);
     }),
   );
   lifetime.add(
@@ -1591,24 +1614,83 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
     }),
   );
-  /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
-  async function refreshLinkedCodeReview(frameId: string) {
-    const frame = linkedReaderStack.value.find((item) => item.id === frameId);
-    if (!frame || frame.codeReview?.loading) return;
-    const setReview = (codeReview: TicketReaderFrame['codeReview']) => {
-      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, codeReview }));
-    };
-    setReview({ review: frame.codeReview?.review, loading: true, message: '' });
-    try {
-      setReview({
-        review: await new Api(frame.apiPath).codeReview(frame.projectId, frame.ticket.qualified_id),
-        loading: false,
-        message: '',
-      });
-    } catch (reason) {
-      setReview({ loading: false, message: reason instanceof Error ? reason.message : String(reason) });
-    }
-  }
+  // HS2-CHH28E: the field keeps the live query; the dialog state and search catch up per typing pause.
+  const { ticketBlockers } = dependencies;
+  const blockerSearchInput = createCoalescedInput<string>((query) => {
+    ticketBlockers.search(query);
+  });
+  const focusBlockerSearch = () => {
+    queueMicrotask(() =>
+      document.querySelector<Control>(INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector)?.focus(),
+    );
+  };
+  const closeBlockerDialog = () => {
+    blockerSearchInput.cancel();
+    ticketBlockers.close();
+  };
+  lifetime.add(() => {
+    blockerSearchInput.cancel();
+    ticketBlockers.dispose();
+  });
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openBlockerDialog.selector, (_event, target) => {
+      blockerSearchInput.cancel();
+      // From the modal reader, the dialog opens for that reader frame's ticket and inside it (HS2-15PE59).
+      if (ticketBlockers.open(readerScopeOf(target))) focusBlockerSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.removeBlocker.selector, (_event, target) => {
+      const nativeId = data(target).blockerId;
+      if (nativeId) void ticketBlockers.remove(nativeId, readerScopeOf(target));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector, (_event, target) => {
+      blockerSearchInput.schedule((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.blockerSearchField.selector, () => {
+      blockerSearchInput.flush();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.selectBlocker.selector, (_event, target) => {
+      blockerSearchInput.cancel();
+      ticketBlockers.select(data(target).itemId ?? '');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.clearBlocker.selector, () => {
+      blockerSearchInput.cancel();
+      ticketBlockers.clear();
+      focusBlockerSearch();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.submitBlocker.selector, (event) => {
+      event.preventDefault();
+      blockerSearchInput.cancel();
+      void ticketBlockers.submit();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelBlocker.selector, () => {
+      closeBlockerDialog();
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'kui-request-close',
+      INSPECTOR_AND_EDITOR_TARGETS.blockerDialog.selector,
+      (event, target) => {
+        if (event.composedPath()[0] !== target) return;
+        closeBlockerDialog();
+      },
+    ),
+  );
   /** Open a linked reader's commit in the diff tool against that reader's project (HS2-9Q4AFB). */
   function openLinkedCodeReview(frame: TicketReaderFrame, target: Element) {
     const reviewTarget = codeReviewTarget(data(target));

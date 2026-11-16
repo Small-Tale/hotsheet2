@@ -35,7 +35,13 @@ type TicketBoardProps = Parameters<typeof TicketBoard>[0];
 type TicketListProps = Parameters<typeof TicketList>[0];
 
 export type SidebarSurfaceProps =
-  | { kind: 'settings'; selected: SettingsCategory; orchestration?: boolean }
+  | {
+      kind: 'settings';
+      selected: SettingsCategory;
+      orchestration?: boolean;
+      /** Pairing requests waiting for approval, counted on the Devices category (HS2-BZHMEV). */
+      pairingRequests?: number;
+    }
   | {
       kind: 'notifications';
       selected: NotificationView;
@@ -47,7 +53,14 @@ export type SidebarSurfaceProps =
 
 export function SidebarSurface(props: SidebarSurfaceProps) {
   if (props.kind === 'settings')
-    return <SettingsNavigation selected={props.selected} orchestration={props.orchestration} collapseControl />;
+    return (
+      <SettingsNavigation
+        selected={props.selected}
+        orchestration={props.orchestration}
+        pairingRequests={props.pairingRequests}
+        collapseControl
+      />
+    );
   if (props.kind === 'notifications')
     return (
       <NotificationNavigation selected={props.selected} counts={props.counts} paused={props.paused} collapseControl />
@@ -58,7 +71,11 @@ export function SidebarSurface(props: SidebarSurfaceProps) {
 /** The shell's left-rail panel for the same routing, composed by the Workbench (HS2-RWGQWN). */
 export function sidebarSurfacePanel(props: SidebarSurfaceProps): SidebarPanelParts {
   if (props.kind === 'settings')
-    return settingsNavigationPanel({ selected: props.selected, orchestration: props.orchestration });
+    return settingsNavigationPanel({
+      selected: props.selected,
+      orchestration: props.orchestration,
+      pairingRequests: props.pairingRequests,
+    });
   if (props.kind === 'notifications')
     return notificationNavigationPanel({ selected: props.selected, counts: props.counts, paused: props.paused });
   return projectSidebarPanel(props.sidebar);

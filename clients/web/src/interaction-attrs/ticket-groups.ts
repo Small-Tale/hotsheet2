@@ -8,6 +8,8 @@ import { action } from 'kerfjs/actions';
  */
 export const TICKET_GROUP_ACTIONS = {
   toggleTicketGroup: action('toggle-ticket-group'),
+  /** The group header's trailing overflow button, which opens the group header menu (HS2-HKXSB1). */
+  openTicketGroupMenu: action('open-ticket-group-menu'),
   submitTicketGroupName: action('submit-ticket-group-name'),
   cancelTicketGroupName: action('cancel-ticket-group-name'),
   /** Select every ticket a group shows in the list or column it was opened in (HS2-EYEGDQ). */

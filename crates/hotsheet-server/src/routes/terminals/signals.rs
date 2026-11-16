@@ -1153,6 +1153,45 @@ pub(crate) async fn write_terminal(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `POST /terminals/{id}/clear` — clear a terminal for every viewer, like Command-K in macOS
+/// Terminal but shared (HS2-HA0Z3A). The replay ring keeps only the cursor's line, so a reload,
+/// another client, or a remounted viewport no longer replays the cleared output, and every
+/// attached viewer receives a replacement snapshot. The shell is not told. `204` on success,
+/// `404` for an unknown terminal, and `501` when the detached broker predates the op (the
+/// terminal is unchanged; the caller's own view clear still stands).
+pub(crate) async fn clear_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if let Some(tb) = &state.terminal_broker {
+        let resp = tb
+            .call(hotsheet_terminals::BrokerRequest::ClearReplay { id: id.clone() })
+            .await
+            .map_err(|e| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
+            })?;
+        return match resp {
+            hotsheet_terminals::BrokerResponse::Ok => Ok(StatusCode::NO_CONTENT),
+            hotsheet_terminals::BrokerResponse::Err { message }
+                if message.starts_with("bad request") =>
+            {
+                Err(ApiError::new(
+                    StatusCode::NOT_IMPLEMENTED,
+                    "the running terminal broker predates the shared clear; it applies after the \
+                     broker restarts",
+                ))
+            }
+            other => Err(broker_err(other)),
+        };
+    }
+    let term = state
+        .terminals
+        .get(&term_key(&state, &id))
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    term.clear_replay();
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub(crate) async fn kill_terminal(
     State(state): State<AppState>,
     Path(id): Path<String>,

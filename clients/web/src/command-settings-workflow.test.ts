@@ -318,4 +318,55 @@ describe('command settings workflow (HS2-1M05KF)', () => {
     saves.loadGroups('a', ['Keep', 'Later']);
     expect(loaded).toEqual([['Keep', 'Later']]);
   });
+  it('ignores a refresh that read the server before a save settled, then accepts a later one (HS2-A6K8D5)', async () => {
+    let revision = 'g0';
+    const groups = ['Ideas'],
+      messages: string[] = [],
+      loaded: string[][] = [],
+      saves = new CommandSettingsSaves({
+        projectPath: () => '/api/a',
+        definitions: () => [],
+        groups: () => [...groups],
+        setMessage: (_project, message) => messages.push(message),
+        commandSaved: () => undefined,
+        groupsLoaded: (_id, values) => {
+          loaded.push([...values]);
+        },
+        saveCommands: async () => [],
+        saveGroups: async (_path, values, expected) => {
+          if (expected !== revision) throw new ApiHttpError('conflict', 409);
+          revision = `g${String(Number(revision.slice(1)) + 1)}`;
+          return { groups: values, revision };
+        },
+      });
+    expect(saves.hasRevisions('a')).toBe(false);
+    saves.loadRevisions('a', 'r0', 'g0', saves.writeVersion('a'));
+    expect(saves.hasRevisions('a')).toBe(true);
+    // A refresh starts, the save completes, then the refresh's older snapshot arrives.
+    const stale = saves.writeVersion('a');
+    await saves.saveGroups('a');
+    saves.loadRevisions('a', 'r0', 'g0', stale);
+    saves.loadGroups('a', [], stale);
+    expect(loaded).toEqual([]);
+    // The next save names the revision its own write returned, not the stale one.
+    groups.push('Second');
+    await saves.saveGroups('a');
+    expect(messages.filter(Boolean)).toEqual([]);
+    expect(saves.hasConflict('a')).toBe(false);
+    expect(revision).toBe('g2');
+    // A refresh that started after both writes settled is current.
+    const fresh = saves.writeVersion('a');
+    saves.loadRevisions('a', 'r1', 'g2', fresh);
+    saves.loadGroups('a', ['Ideas', 'Second'], fresh);
+    expect(loaded).toEqual([['Ideas', 'Second']]);
+    // A command save in flight makes only the command revision stale.
+    const beforeCommand = saves.writeVersion('a');
+    await saves.save('a');
+    saves.loadRevisions('a', 'r-stale', 'g2', beforeCommand);
+    saves.loadGroups('a', ['Ideas', 'Second'], beforeCommand);
+    expect(loaded).toEqual([
+      ['Ideas', 'Second'],
+      ['Ideas', 'Second'],
+    ]);
+  });
 });

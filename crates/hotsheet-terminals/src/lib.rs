@@ -48,10 +48,10 @@ pub use input_queue::INPUT_BUDGET_BYTES;
 pub use limits::{REPLAY_BYTES_BOUNDS, physical_memory_bytes};
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
-pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
+pub use sizing::{Decision, SizeArbiter, SizeClaimOwner, SizePolicy, ViewportClaim};
 pub use terminal::{
     ProcessProvenance, Replay, SCROLLBACK_BYTES, StreamPosition, TermError, TermSpec, Terminal,
-    TerminalKind, replay_after, replay_suffix,
+    TerminalKind, is_replay_rewritten, replay_after, replay_suffix,
 };
 pub use viewer_output::{
     MAX_COALESCED_BYTES, PendingOutput, VIEWER_QUEUE_FRAMES, ViewerClosed, ViewerFrame,

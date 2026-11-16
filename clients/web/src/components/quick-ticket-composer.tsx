@@ -15,6 +15,7 @@ import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
+import { NEW_TICKET_COMPOSER_DROP_KEY, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { TicketCategorySelect } from './ticket-category-select';
 
@@ -47,6 +48,8 @@ export interface QuickTicketComposerProps {
   /** Unresolved recovery copies must be recovered or explicitly removed before Create. */
   recoveryBlocked?: boolean;
   submitting?: boolean;
+  /** A dragged ticket is over the composer form (HS2-G8EK08). */
+  dropTarget?: boolean;
 }
 
 export interface QuickTicketDialogElement extends HTMLElement {
@@ -103,7 +106,8 @@ export function QuickTicketLauncher({
   attachmentsEnabled = true,
   label = 'New ticket…',
   size = 'default',
-}: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' } = {}) {
+  dropTarget = false,
+}: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact'; dropTarget?: boolean } = {}) {
   // The app-owned drop shell carries drag feedback without styling Kerf's Button root.
   return (
     <span
@@ -113,6 +117,8 @@ export function QuickTicketLauncher({
       {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
       {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
       {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
+      data-ticket-drop-key={NEW_TICKET_LAUNCHER_DROP_KEY}
+      data-dragging-ticket={dropTarget ? 'true' : undefined}
     >
       <Button
         tone="brand"
@@ -151,6 +157,7 @@ export function QuickTicketComposer({
   busy = false,
   recoveryBlocked = false,
   submitting = false,
+  dropTarget = false,
 }: QuickTicketComposerProps) {
   // Files staged for a source that takes attachments stay listed after switching to one that does
   // not; creation is blocked until the user removes them or switches back (HS2-8HHHK3).
@@ -177,6 +184,8 @@ export function QuickTicketComposer({
           {...SEARCH_AND_COMPOSER_ACTIONS.createTicketForm.attrs}
           {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
           {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
+          data-ticket-drop-key={NEW_TICKET_COMPOSER_DROP_KEY}
+          data-dragging-ticket={dropTarget ? 'true' : undefined}
           data-submitting={String(submitting)}
         >
           {!sourceIsDefault && (

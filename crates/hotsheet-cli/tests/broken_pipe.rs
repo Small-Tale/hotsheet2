@@ -1,13 +1,15 @@
 //! HS2-4BT3VF: a reader that closes the pipe early (`hotsheet-cli ls | head -1`) must end
 //! output quietly instead of panicking with "failed printing to stdout: Broken pipe".
 
-use assert_cmd::cargo::CommandCargoExt;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 fn cli(home: &Path, store: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     cmd.env("HOTSHEET_HOME", home)
         .env_remove("HOTSHEET_ACTOR_ROLE")
         .env_remove("HOTSHEET_ACTOR_ID")

@@ -13306,6 +13306,51 @@ paths:
                 type: array
                 items:
                   type: string
+  /tts/voices:
+    get:
+      operationId: list_tts_voices
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          description: Speech provider identifier; the first configured provider when omitted.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The voices the server speech provider offers; empty when it offers only its default voice.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - name
+                    - lang
+                  properties:
+                    name:
+                      type: string
+                    lang:
+                      type: string
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /tts/synthesize:
     post:
       operationId: synthesize_speech
@@ -13761,6 +13806,41 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TerminalInput'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /terminals/{id}/clear:
+    post:
+      operationId: clear_terminal
+      summary: Clear a terminal for every viewer
+      description:
+        The replay keeps only the cursor's line and starts a new output stream, and every attached viewer receives a
+        replacement; the shell is not told (HS2-HA0Z3A). A detached broker that predates the operation answers 501 and
+        its terminal is unchanged.
+      responses:
+        '204':
+          description: Completed with no response body.
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: The running terminal broker predates the shared clear.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     parameters:
       - name: id
         in: path
@@ -26124,7 +26204,12 @@ components:
             - type: 'null'
           description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description:
+            Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+            null with note_id removes the link. Requires the note_response_link capability.
         note_confidence:
           anyOf:
             - type: integer
@@ -26830,7 +26915,12 @@ components:
             - type: 'null'
           description: Set or clear the existing note summary with note_id; omitted edits leave it unchanged.
         response_to:
-          type: string
+          anyOf:
+            - type: string
+            - type: 'null'
+          description:
+            Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+            null with note_id removes the link. Requires the note_response_link capability.
         note_confidence:
           anyOf:
             - type: integer
@@ -27132,7 +27222,12 @@ components:
                   - type: string
                   - type: 'null'
               response_to:
-                type: string
+                anyOf:
+                  - type: string
+                  - type: 'null'
+                description:
+                  Feedback request note id answered by the appended note, or with note_id by that existing note (HS2-J4G9GB);
+                  null with note_id removes the link. Requires the note_response_link capability.
               note_confidence:
                 anyOf:
                   - type: integer
@@ -29068,6 +29163,10 @@ components:
           type: boolean
           default: false
           description: Atomic persisted note kind correction. Git supports it; remote providers refuse before mutation.
+        note_response_link:
+          type: boolean
+          default: false
+          description: Link an existing note as a feedback response (HS2-J4G9GB). Git supports it; remote providers refuse before mutation.
         groups:
           type: boolean
           description: Tickets carry a `group` id and the connection lists, ungroups, and merges groups (HS2-PDSHNN, HS2-9KZSD4).

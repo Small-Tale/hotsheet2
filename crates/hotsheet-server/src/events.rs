@@ -375,6 +375,52 @@ impl AppState {
         }
     }
 
+    /// Tell clients that the publication state of the group registry in the code checkout at
+    /// `checkout_root` changed (HS2-1CWD0H): one replayable `group_registry_sync` event per
+    /// checkout registered at that root (`store` and `id` = checkout id, `slug` = the new
+    /// state, or `none` once there is no status), so an open client rereads that project's
+    /// group list and its `registry_sync` without polling. Carries no detail text or paths.
+    pub fn announce_group_registry_sync(
+        &self,
+        checkout_root: &FsPath,
+        state: Option<hotsheet_ticketing::groups::git_sync::RegistrySyncState>,
+    ) {
+        let Ok(checkouts) = self.checkout_registry.list() else {
+            return;
+        };
+        let slug = state.map_or("none", |state| state.as_str());
+        for checkout in checkouts
+            .into_iter()
+            .filter(|checkout| same_path(FsPath::new(&checkout.root), checkout_root))
+        {
+            self.emit(ChangeEvent {
+                live: None,
+                cursor: None,
+                store: checkout.id.clone(),
+                kind: "group_registry_sync".into(),
+                id: checkout.id,
+                slug: slug.into(),
+                message: None,
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+        }
+    }
+
+    /// Announce every group registry publication state change in this process
+    /// ([`Self::announce_group_registry_sync`]) until the returned guard drops (HS2-1CWD0H).
+    /// The server holds it for its run; the changes come from the background committer about
+    /// 400 ms after a group write, from an inline publish, and from sync-loop passes.
+    pub fn watch_group_registry_sync(
+        &self,
+    ) -> hotsheet_ticketing::groups::git_sync::StatusListener {
+        let state = self.clone();
+        hotsheet_ticketing::groups::git_sync::on_status_change(move |root, sync| {
+            state.announce_group_registry_sync(root, sync);
+        })
+    }
+
     /// Tell clients that a sync raised the ticket store at `store_root` across a GitHub size
     /// limit (HS2-KKFEY5): one replayable `repository_size` event per checkout that links the
     /// store (`id` = checkout id, `slug` = the new level, `message` = the warning), so an

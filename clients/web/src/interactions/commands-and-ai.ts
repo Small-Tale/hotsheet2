@@ -39,6 +39,7 @@ import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
 import type { OrchestrationSettings } from '../features/orchestration-settings';
+import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { wireInputDialogs } from '../input-dialog-interactions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
@@ -171,6 +172,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly deleteCommandSetting: (projectId: string, id: string) => void;
   readonly addCommandGroup: (projectId: string) => void;
   readonly deleteCommandGroup: (projectId: string, group: string) => void;
+  /** Retry a project's failed first command settings read (HS2-BZKTDC). */
+  readonly retryCommandSettingsLoad: (projectId: string) => void;
   readonly selectCommandRow: (projectId: string, id: string, intent: { toggle?: boolean; range?: boolean }) => void;
   readonly commandSelection: (projectId?: string) => string[];
   readonly commandSettingsDefinitions: (projectId?: string) => CommandDefinition[];
@@ -342,6 +345,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     deleteCommandSetting,
     addCommandGroup,
     deleteCommandGroup,
+    retryCommandSettingsLoad,
     selectCommandRow,
     commandSelection,
     commandSettingsDefinitions,
@@ -841,6 +845,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         const current = projectId();
         if (current) deleteCommandGroup(current, group);
       },
+      retryLoad: () => {
+        const current = projectId();
+        if (current) retryCommandSettingsLoad(current);
+      },
       selection: () => {
         const current = projectId();
         return current ? commandSelection(current) : [];
@@ -909,6 +917,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       themePreference.value = preference;
       storeThemePreference(localStorage, preference);
       applyThemePreference(document.documentElement, preference);
+      void syncDesktopWindowTheme(preference);
     }),
   );
   lifetime.add(

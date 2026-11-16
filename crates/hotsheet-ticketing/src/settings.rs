@@ -116,14 +116,9 @@ impl Scope {
 /// The machine-wide Hot Sheet 2 home (`${HOTSHEET_HOME}`, else `~/.hotsheet2`). Kept in
 /// sync with `hotsheet_plugins::hotsheet_home` but resolved here so `ticketing` stays free
 /// of a dependency on the plugin crate (`docs/12` §12.2.1). NOT `~/.hotsheet` (HS1's).
+/// Resolved by [`crate::machine_home`], where a blank value counts as unset (HS2-1D4DQF).
 pub(crate) fn hotsheet_home() -> PathBuf {
-    if let Some(h) = std::env::var_os("HOTSHEET_HOME") {
-        return PathBuf::from(h);
-    }
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join(".hotsheet2")
+    crate::machine_home::hotsheet_home()
 }
 
 /// Read/write settings owned by a code project.

@@ -43,6 +43,24 @@ describe('NoteCard', () => {
     const regular = String(NoteCard({ ...base, storedKind: 'regular', metadataEditable: true }));
     expect(regular).toContain('Only activity and status notes have timeline summaries.');
   });
+  it('HS2-J4G9GB keeps Link as Feedback Response visible with its unavailable reason', () => {
+    const base = { id: 'synthetic-note', kind: 'regular' as const, author: 'AI', time: 'Now', body: 'Decision: A' };
+    const unsupported = String(NoteCard({ ...base, repairable: true }));
+    expect(unsupported).toContain('Link as Feedback Response');
+    expect(unsupported).toContain('This source cannot link an existing note as a feedback response.');
+    const noRequest = String(
+      NoteCard({
+        ...base,
+        repairable: true,
+        responseLinkReason: 'No earlier feedback request on this ticket.',
+      }),
+    );
+    expect(noRequest).toContain('No earlier feedback request on this ticket.');
+    const enabled = String(NoteCard({ ...base, repairable: true, responseLinkable: true }));
+    expect(enabled).toContain('data-mode="response"');
+    expect(enabled).not.toContain('cannot link an existing note');
+    expect(String(NoteCard(base))).not.toContain('Link as Feedback Response');
+  });
   it.each([
     ['regular', 'message-square-text', 'Note'],
     ['status', 'refresh-cw', 'Status update'],

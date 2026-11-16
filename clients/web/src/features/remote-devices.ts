@@ -39,18 +39,23 @@ const messageOf = (reason: unknown) => (reason instanceof Error ? reason.message
  * App Settings → Devices (HS2-DXM0YN): the host's paired and pending browser devices. While the
  * category shows, one genuine long poll (`/remote-auth/owner/changes?after=<revision>`) keeps the list
  * current; a failure retries with bounded backoff, and nothing polls on a fixed interval. A 401 or
- * 403 means this session lacks the admin grant, which the category explains instead of retrying.
+ * 403 means this session lacks the admin grant, which the category explains instead of retrying, and
+ * asks the page to re-read its grants (`onForbidden`). `start` re-checks the grant on every call, so
+ * the runtime effect that calls it follows a grant changed elsewhere without a reload (HS2-A3TDNH).
  */
 export function createRemoteDevices(
   dependencies: {
     request?: typeof fetch;
     canManage?: () => boolean;
+    /** A gated read answered 401 or 403: this page's grants may be stale (HS2-A3TDNH). */
+    onForbidden?: () => void;
     wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   } = {},
 ) {
   const request = dependencies.request ?? ((input, init) => fetch(input, init)),
     canManage = dependencies.canManage ?? (() => canManageRemoteDevices()),
-    wait = dependencies.wait ?? pause;
+    wait = dependencies.wait ?? pause,
+    onForbidden = dependencies.onForbidden;
   const list = signal<RemoteDeviceList | undefined>(undefined),
     state = signal<RemoteDevicesState>('idle'),
     message = signal(''),
@@ -89,9 +94,8 @@ export function createRemoteDevices(
       );
       if (outcome === 'aborted') return;
       if (outcome === 'forbidden') {
-        current = undefined;
-        list.value = undefined;
-        state.value = 'forbidden';
+        refuse();
+        onForbidden?.();
         return;
       }
       if (outcome === 'ok') backoff = REMOTE_DEVICES_BACKOFF.initialMs;
@@ -102,13 +106,24 @@ export function createRemoteDevices(
     }
   }
 
-  /** Begin following the list when the category shows; a second call keeps the running poll. */
+  /** Show the refusal: stop following and drop the list this session may no longer see. A later
+   * `start` with the grant back follows again. */
+  function refuse() {
+    running?.abort();
+    running = undefined;
+    current = undefined;
+    list.value = undefined;
+    state.value = 'forbidden';
+  }
+
+  /** Begin following the list when the category shows; a second call keeps the running poll. Each call
+   * re-checks the admin grant, so a caller re-running on a grant change starts or refuses (HS2-A3TDNH). */
   function start() {
-    if (running) return;
     if (!canManage()) {
-      state.value = 'forbidden';
+      refuse();
       return;
     }
+    if (running) return;
     running = new AbortController();
     if (!current) state.value = 'loading';
     void follow(running.signal);

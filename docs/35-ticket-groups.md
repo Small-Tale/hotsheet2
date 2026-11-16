@@ -84,8 +84,8 @@ in one write and one commit per store. A rerun finds nothing and changes nothing
 ## 35.3 Rendering (HS2-WZ3JGZ, HS2-HV8S4Y)
 
 One shared `TicketGroup` component renders a group in both views: a Kerf
-`SunkenPanel` holding a `ListHeader` disclosure (size `m`, wrapping, with a count)
-and the group's tickets. Groups are keyed by id (HS2-9KZSD4), so two groups with one name
+`SunkenPanel` holding a `ListHeader` disclosure (size `m`, wrapping, with a count
+and a trailing overflow button) and the group's tickets. Groups are keyed by id (HS2-9KZSD4), so two groups with one name
 render separately. The title is the registry name, which keeps the user's casing, a legacy
 group's own name, or the `Group <id>` placeholder. The client reads names from `GET
 /checkouts/{reference}/groups` when the project loads, after each group operation, and
@@ -101,9 +101,10 @@ once more when loaded tickets name an id it has no name for; it never polls.
   group's first ticket in that column sorts, with a per-column count. One group can
   therefore appear in several columns at once.
 - **Title alignment.** The group title starts on the left edge of the ticket type
-  icons below it, in both views. The app sets only the public
-  `--kui-layout-inline-margin` token on its own wrapper; a browser test measures the
-  alignment.
+  icons below it, in both views and at every width. The header uses Kerf's
+  `ListHeader` `leadingEdge="summary-row"`, which compacts with the ticket rows at
+  their own width; the app sets no inset token and has no container query for it
+  (HS2-HKXSB1). A browser test measures the alignment from 1440px down to 384px.
 - **Collapse.** Collapsing a group hides its tickets and keeps its header and count
   in place. The choice is a per-viewer preference for one project, view, and group,
   stored in the browser under `hotsheet.ticket-groups.collapsed` and keyed by group
@@ -161,7 +162,10 @@ once more when loaded tickets name an id it has no name for; it never polls.
   the column view, a group takes the drop only when every dragged ticket is already
   in that group's column (HS2-K2QA1J). A drag from another column is a status change:
   the whole column is the target even over one of its groups, and the drop changes
-  only the status and keeps each ticket's group.
+  only the status and keeps each ticket's group. A column's or group's drop
+  highlight stays while the pointer moves between its children, such as from a
+  group header's label onto its toggle or overflow button, and clears only when
+  the pointer leaves it or the tickets drop (HS2-1BBXER).
 - **Leaving a group by dragging.** In the list view, dropping a grouped ticket on
   the list outside every group removes its group. In the column view, dropping it
   in its own column outside every group removes its group; dropping it in another
@@ -174,8 +178,14 @@ once more when loaded tickets name an id it has no name for; it never polls.
 
 ## 35.5 Managing a group (HS2-8CDFKR)
 
-Right-clicking a group header, or pressing the keyboard's context-menu key on it,
-opens a menu with **Select All in Group**, **Rename Group…**, and **Ungroup**.
+Each group header has a trailing **Group Actions** overflow button (Lucide
+`ellipsis`, named "_name_ Group Actions") that opens the group menu under itself
+(HS2-HKXSB1). It is its own keyboard stop after the header's toggle. The header's
+label and arrow collapse or expand the group; the overflow button never does, so it
+also opens the menu on a collapsed group without expanding it. Closing a menu it
+opened returns focus to the button unless a command moved focus elsewhere. Right-clicking a
+group header, or pressing the keyboard's context-menu key on it, opens the same
+menu. The menu offers **Select All in Group**, **Rename Group…**, and **Ungroup**.
 
 **Select All in Group** (HS2-EYEGDQ, Lucide `check-check`) selects the tickets that
 this one container shows, in drawn order: the whole group in the list view, or only the
@@ -189,10 +199,10 @@ placeholder group. A group flagged as a duplicate also offers **Merge Duplicate 
 actions go through the server so they also reach members that the current view has not
 loaded. Migration has no graphical entry point; it is headless (§35.2).
 
-A visible overflow button on the header is preferred, but Kerf's `ListHeader`
-cannot yet pair its toggle with a separate trailing action. That gap is filed
-upstream as `KF-X2MRCT`; the context menu is the interim entry point and is removed
-in favor of the overflow button when a Kerf release ships it.
+The overflow button is Kerf's `ListHeader` `overflowAction` (shipped as
+`KF-X2MRCT`), following Kerf's Lists and selection convention: a collapsible
+section's own commands open from one trailing overflow button, and the row's
+context menu exposes the same commands.
 
 ## 35.6 Search (HS2-44W3TP)
 
@@ -238,6 +248,17 @@ ticket store publishes tickets, without disturbing anything else in that checkou
   uncommitted and committed by the next write or sync pass. A checkout that is not a Git
   work tree, or that ignores `.hotsheet2/groups/`, is not committed at all; neither is any
   checkout while `HOTSHEET_NO_AUTOCOMMIT` is set.
+- **Concurrent Git work (HS2-NM6E27).** Each registry commit holds the same
+  per-repository Git transaction lock as the ticket store's autocommit and sync, so the
+  background committer, a sync pass, a CLI or MCP write, and a ticket store inside the
+  same repository never commit at once. Hot Sheet's own reads of a checkout (repository
+  status, the checkout watcher, code review) run with `GIT_OPTIONAL_LOCKS=0` and never
+  take `index.lock`. When another program holds a Git lock (the user's own `git`, an
+  editor), the commit is retried with bounded backoff (about 3.5 s) while the lock is
+  younger than 60 s. A hook refusal is reported at once with the hook's own message. A
+  lock that is still held after the retries is also reported at once, and so is a stale
+  lock, which is reported with its age. Hot Sheet never removes a lock. The next write
+  or sync pass tries again.
 - **Pull.** On the ticket store's sync cadence (every 30 s while the server runs), the
   server fetches the upstream branch of each checkout linked to a hosted store. Entries
   the upstream added or renamed, and that this checkout has not changed since the two
@@ -250,8 +271,24 @@ ticket store publishes tickets, without disturbing anything else in that checkou
   `synced`, `local_only`, `waiting`, `blocked`, or `failed`, with one line of detail; a
   registry Hot Sheet does not publish (no Git, ignored, disabled) has none. `GET /checkouts/{reference}/groups` returns it as `registry_sync`, and so does
   `hotsheet-cli groups --json`. `hotsheet-cli groups` prints a warning for `blocked` and
-  `failed`, and the server logs them. Showing it in the graphical client is
-  `HS2-VFYSQK`.
+  `failed`, and the server logs them.
+- **Change events (HS2-1CWD0H).** Whenever the recorded state changes (not on a repeat of
+  the same state), the server emits one replayable `group_registry_sync` change event per
+  checkout registered at that code checkout, with `id` the checkout id and `slug` the new
+  state (`none` once there is no status). It comes from whichever step recorded it: the
+  background committer about 400 ms after a write, or a sync-loop pass that fails or
+  recovers. It carries no detail text or paths.
+- **Web client (HS2-VFYSQK).** The web client keeps `registry_sync` from each group-list
+  read (on project load, after each group operation, and on a `group_registry_sync` event
+  for the shown project; no timer) and shows
+  `GroupRegistrySyncBanner`, a warning-toned project shell banner beside the ticket-store
+  sync banner, while the state is `blocked` or `failed`. Its title is "Ticket groups are
+  not publishing changes"; its detail repeats the server's line (which names the next
+  step), says that groups are saved on this computer but other clones do not see new or
+  renamed groups until they are published, and for `failed` that Hot Sheet tries again on
+  its next sync. It has no dismiss and clears when a later read reports another state; the
+  change event triggers that read, so the banner appears and clears without a group
+  operation.
 
 **This repository's hooks.** Measured on a loaded maintainer machine, the pre-commit
 format check took 64-78 s, a pre-push of `main` needs a main-integration window and is

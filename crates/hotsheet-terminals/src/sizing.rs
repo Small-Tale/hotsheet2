@@ -17,6 +17,21 @@
 //! it gets transition-matrix + adversarial-sequence tests directly.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// The attach connection that holds a viewport's claim (HS2-CCNRVW). A client that reconnects
+/// reuses its viewer id, so a viewer id alone cannot say which connection a claim belongs to;
+/// each connection takes a process-unique token and releases only the claims it still owns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SizeClaimOwner(u64);
+
+impl SizeClaimOwner {
+    /// A token no other connection in this process holds.
+    pub fn next() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
 
 /// Hold the current size for this long after a focus change before following the new
 /// viewport — debounces a rapid focus flip (`docs/06` §6.7 `SIZE_FOCUS_HOLD_MS`).
@@ -95,6 +110,9 @@ struct Seen {
 pub struct SizeArbiter {
     policy: SizePolicy,
     claims: HashMap<String, ViewportClaim>,
+    /// The connection that made each viewport's latest claim, when the caller named one, so a
+    /// late close of an older connection cannot release a reconnected viewport (HS2-CCNRVW).
+    owners: HashMap<String, SizeClaimOwner>,
     /// Per live viewport: its attach order (the final tiebreak) and when its last claim arrived
     /// (the lease clock for [`Self::expire`]).
     seen: HashMap<String, Seen>,
@@ -117,9 +135,17 @@ pub struct SizeArbiter {
     /// When the owner should decide again: the trailing edge of the min-interval rate limit or
     /// the end of a focus-hold takeover, until a later `decide` applies or drops it.
     deferred_until_ms: Option<u64>,
-    /// The answerer named by the last size frame the owner broadcast, so an answerer change
-    /// without a resize is still announced (HS2-0GZZHV).
-    announced_answerer: Option<String>,
+    /// The driver and answerer named by the last size frame the owner broadcast, so a change of
+    /// either without a resize is still announced: an answerer change (HS2-0GZZHV) or a
+    /// same-size driver handoff (HS2-G1ADYV).
+    announced: Announced,
+}
+
+/// The roles the last broadcast size frame named.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct Announced {
+    driven_by: Option<String>,
+    answered_by: Option<String>,
 }
 
 impl Default for SizeArbiter {
@@ -133,6 +159,7 @@ impl SizeArbiter {
         Self {
             policy,
             claims: HashMap::new(),
+            owners: HashMap::new(),
             seen: HashMap::new(),
             next_seq: 0,
             departed: HashMap::new(),
@@ -142,7 +169,7 @@ impl SizeArbiter {
             driver: None,
             focus_changed_at_ms: 0,
             deferred_until_ms: None,
-            announced_answerer: None,
+            announced: Announced::default(),
         }
     }
 
@@ -192,16 +219,22 @@ impl SizeArbiter {
             .map(|c| c.viewer_id.clone())
     }
 
-    /// The applied size naming a new answerer, when the answerer changed since the last
-    /// broadcast frame without a resize: a viewport attaching to an undriven terminal, or the
-    /// answerer leaving. The owner broadcasts it so the new answerer starts and the old one
-    /// stops at once (HS2-0GZZHV). `None` when the announced answerer is still current.
-    pub fn answerer_notice(&mut self) -> Option<Decision> {
+    /// The applied size naming a new driver or answerer, when either changed since the last
+    /// broadcast frame without a resize: a viewport attaching to an undriven terminal, the
+    /// answerer leaving (HS2-0GZZHV), or a driver handoff between viewports with the same grid
+    /// (HS2-G1ADYV). The owner broadcasts it so the new driver and answerer start and the old
+    /// ones stop at once. `None` when the announced roles are still current; each change is
+    /// announced once.
+    pub fn notice(&mut self) -> Option<Decision> {
         let current = self.applied()?;
-        if current.answered_by == self.announced_answerer {
+        let roles = Announced {
+            driven_by: current.driven_by.clone(),
+            answered_by: current.answered_by.clone(),
+        };
+        if roles == self.announced {
             return None;
         }
-        self.announced_answerer = current.answered_by.clone();
+        self.announced = roles;
         Some(current)
     }
 
@@ -253,12 +286,39 @@ impl SizeArbiter {
                 claimed_at_ms: now_ms,
             },
         );
+        // An unowned claim takes the viewport from whichever connection held it.
+        self.owners.remove(&claim.viewer_id);
         self.claims.insert(claim.viewer_id.clone(), claim);
+    }
+
+    /// [`Self::upsert`] on behalf of one attach connection, which then owns the viewport's
+    /// claim until another connection claims the same viewer id (HS2-CCNRVW).
+    pub fn upsert_owned(&mut self, claim: ViewportClaim, owner: SizeClaimOwner, now_ms: u64) {
+        let viewer_id = claim.viewer_id.clone();
+        self.upsert(claim, now_ms);
+        self.owners.insert(viewer_id, owner);
+    }
+
+    /// Drop every viewport whose claim `owner` still holds (its connection ended), leaving any
+    /// viewport a newer connection reclaimed under the same id (HS2-CCNRVW). Returns how many
+    /// viewports were dropped.
+    pub fn release_owner(&mut self, owner: SizeClaimOwner) -> usize {
+        let owned: Vec<String> = self
+            .owners
+            .iter()
+            .filter(|(_, held_by)| **held_by == owner)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in &owned {
+            self.remove(id);
+        }
+        owned.len()
     }
 
     /// Drop a viewport (it disconnected). If it was the driver, the size recomputes
     /// immediately on the next `decide` (self-heal — no hold on a disconnect).
     pub fn remove(&mut self, viewer_id: &str) {
+        self.owners.remove(viewer_id);
         self.seen.remove(viewer_id);
         if let Some(gone) = self.claims.remove(viewer_id)
             && gone.activity_at_ms > 0
@@ -303,9 +363,14 @@ impl SizeArbiter {
         stale.len()
     }
 
-    /// Compute the PTY size to apply **now**, or `None` if nothing should change (no viewers,
+    /// Compute the PTY size to apply **now**, or `None` if nothing should resize (no viewers,
     /// within the min-interval, or a sub-min-delta change). A returned `Decision` is recorded
     /// as the applied size.
+    ///
+    /// A new driver whose grid is within the min-delta of the applied size takes over without a
+    /// resize: it is recorded as the applied size's driver and [`Self::notice`] announces it
+    /// (HS2-G1ADYV). Otherwise the old driver stayed `driven_by`, or the size became undriven
+    /// once it left, and the new driver's viewer never learned it drives.
     pub fn decide(&mut self, now_ms: u64) -> Option<Decision> {
         self.deferred_until_ms = None;
         let target = self.target(now_ms)?;
@@ -315,6 +380,10 @@ impl SizeArbiter {
             let d_cols = c.abs_diff(target.cols);
             let d_rows = r.abs_diff(target.rows);
             if d_cols < SIZE_MIN_DELTA && d_rows < SIZE_MIN_DELTA {
+                // A hold (`driven_by: None`) keeps the driver it holds for.
+                if target.driven_by.is_some() {
+                    self.applied_by = target.driven_by;
+                }
                 return None;
             }
         }
@@ -330,7 +399,10 @@ impl SizeArbiter {
         self.applied_by = target.driven_by.clone();
         self.applied_at_ms = now_ms;
         let answered_by = self.answerer();
-        self.announced_answerer = answered_by.clone();
+        self.announced = Announced {
+            driven_by: self.applied_by.clone(),
+            answered_by: answered_by.clone(),
+        };
         Some(Decision {
             answered_by,
             ..target
@@ -1118,6 +1190,229 @@ mod tests {
         assert!(a.claims.contains_key("busy"));
     }
 
+    // HS2-CCNRVW: a connection releases only the claims it still owns.
+
+    /// A viewport reconnects under the same id; the old connection's late release leaves the
+    /// new connection driving, and the new connection's release still self-heals.
+    #[test]
+    fn a_late_release_of_an_old_connection_keeps_the_reconnected_claim() {
+        let (old, new) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        assert_ne!(old, new);
+        let mut a = SizeArbiter::default();
+        a.set_applied(80, 24);
+        a.upsert(interacting_claim("stay", 90, 28, true, 0), 1_000);
+        assert_eq!(a.decide(1_000).unwrap().driven_by.as_deref(), Some("stay"));
+        a.upsert_owned(interacting_claim("phone", 120, 40, true, 0), old, 2_000);
+        assert_eq!(a.decide(3_000).unwrap().driven_by.as_deref(), Some("phone"));
+        a.upsert_owned(interacting_claim("phone", 110, 36, true, 0), new, 4_000);
+        assert_eq!(a.decide(4_000).unwrap().cols, 110);
+
+        assert_eq!(a.release_owner(old), 0, "the old connection owns nothing");
+        assert_eq!(a.viewer_count(), 2);
+        assert!(a.decide(4_500).is_none(), "the size holds");
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("phone"));
+        // Repeating the late release changes nothing either.
+        assert_eq!(a.release_owner(old), 0);
+
+        assert_eq!(a.release_owner(new), 1);
+        let healed = a.decide(5_000).expect("the remaining viewport drives");
+        assert_eq!(
+            (healed.cols, healed.driven_by.as_deref()),
+            (90, Some("stay"))
+        );
+        assert_eq!(a.release_owner(new), 0, "a second release is a no-op");
+    }
+
+    // HS2-AYVQ9Q: the claim states of a Workspace Grid zoom, unzoom, zoom against another device.
+
+    /// One step of a zoom cycle, as the server sees it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ZoomEvent {
+        /// The previous magnified viewport's connection ends (unzoom), however late it arrives.
+        ReleasePrevious,
+        /// The other device taps its terminal (an interacting claim at its own size).
+        OtherInteracts,
+        /// The other device's steady heartbeat.
+        OtherHeartbeat,
+        /// The remounted grid tile's passive 80×24 claim.
+        TileClaims,
+        /// The new magnified viewport mounts: a hidden first claim, then its gesture claim.
+        ZoomOpens,
+    }
+
+    /// Apply each event and decide after it, as `Terminal` does, then run the trailing
+    /// re-decides the arbiter asks for until none is pending. Returns the applied size.
+    fn run_zoom_cycle(
+        a: &mut SizeArbiter,
+        now: &mut u64,
+        owners: &mut Vec<SizeClaimOwner>,
+        cycle: usize,
+        order: &[ZoomEvent],
+    ) -> Decision {
+        let zoomed = format!("magnified-{cycle}");
+        for event in order {
+            *now += 40;
+            match event {
+                ZoomEvent::ReleasePrevious => {
+                    if let Some(previous) = owners.first().copied() {
+                        a.release_owner(previous);
+                    }
+                }
+                ZoomEvent::OtherInteracts => {
+                    a.upsert(interacting_claim("other", 60, 16, true, 0), *now);
+                }
+                ZoomEvent::OtherHeartbeat => a.upsert(claim("other", 60, 16, true, 0), *now),
+                ZoomEvent::TileClaims => {
+                    a.upsert(claim(&format!("tile-{cycle}"), 80, 24, true, 0), *now);
+                }
+                ZoomEvent::ZoomOpens => {
+                    let owner = SizeClaimOwner::next();
+                    a.upsert_owned(
+                        ViewportClaim {
+                            visible: false,
+                            ..claim(&zoomed, 80, 24, true, 0)
+                        },
+                        owner,
+                        *now,
+                    );
+                    a.upsert_owned(interacting_claim(&zoomed, 80, 24, true, 0), owner, *now);
+                    owners.push(owner);
+                }
+            }
+            let _ = a.decide(*now);
+        }
+        while let Some(at) = a.deferred_until() {
+            *now = (*now).max(at);
+            let _ = a.decide(*now);
+        }
+        // The previous cycle's connection is gone once its (possibly late) release ran.
+        if owners.len() > 1 {
+            owners.remove(0);
+        }
+        a.applied().expect("an applied size")
+    }
+
+    /// Every order the server can see a zoom cycle in, with the unzoomed viewport's release
+    /// arriving before or after the other device's tap, the tile's remount, and even the new
+    /// zoom, ends with the newly zoomed viewport driving 80×24 after the focus-hold. Repeated
+    /// over several cycles so each starts from the previous cycle's end state.
+    #[test]
+    fn every_zoom_unzoom_zoom_order_hands_the_size_to_the_newest_zoom() {
+        use ZoomEvent::*;
+        // The test sends the other device's tap before clicking zoom, so that order is fixed;
+        // the release, the tile, and the heartbeat may land anywhere.
+        let orders: [&[ZoomEvent]; 8] = [
+            &[ReleasePrevious, OtherInteracts, TileClaims, ZoomOpens],
+            &[OtherInteracts, ReleasePrevious, TileClaims, ZoomOpens],
+            &[OtherInteracts, TileClaims, ReleasePrevious, ZoomOpens],
+            &[OtherInteracts, TileClaims, ZoomOpens, ReleasePrevious],
+            &[
+                TileClaims,
+                OtherInteracts,
+                ZoomOpens,
+                OtherHeartbeat,
+                ReleasePrevious,
+            ],
+            &[
+                OtherInteracts,
+                ZoomOpens,
+                ReleasePrevious,
+                TileClaims,
+                OtherHeartbeat,
+            ],
+            &[
+                OtherHeartbeat,
+                ReleasePrevious,
+                OtherInteracts,
+                OtherHeartbeat,
+                ZoomOpens,
+            ],
+            &[
+                ReleasePrevious,
+                ReleasePrevious,
+                OtherInteracts,
+                ZoomOpens,
+                OtherHeartbeat,
+            ],
+        ];
+        for first in orders {
+            for second in orders {
+                let mut a = SizeArbiter::default();
+                a.set_applied(80, 24);
+                let mut now = 1_000;
+                // The other device last interacted at its small size; this browser zooms once.
+                a.upsert(interacting_claim("other", 60, 16, true, 0), now);
+                let mut owners = Vec::new();
+                let zoomed = run_zoom_cycle(&mut a, &mut now, &mut owners, 0, &[ZoomOpens]);
+                assert_eq!((zoomed.cols, zoomed.rows), (80, 24), "first zoom");
+                for (cycle, order) in [first, second].into_iter().enumerate() {
+                    let cycle = cycle + 1;
+                    let applied = run_zoom_cycle(&mut a, &mut now, &mut owners, cycle, order);
+                    // The applied size names the new zoom even when it took over from the
+                    // previous one at the same 80×24 grid (HS2-G1ADYV).
+                    let zoomed = format!("magnified-{cycle}");
+                    assert_eq!(
+                        (
+                            applied.cols,
+                            applied.rows,
+                            applied.driven_by.as_deref(),
+                            applied.answered_by.as_deref(),
+                            a.driver.as_deref(),
+                        ),
+                        (
+                            80,
+                            24,
+                            Some(zoomed.as_str()),
+                            Some(zoomed.as_str()),
+                            Some(zoomed.as_str())
+                        ),
+                        "cycle {cycle} in order {order:?} after {first:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// One connection that claimed several viewer ids releases all of them, and only them.
+    #[test]
+    fn an_owner_release_drops_every_viewport_it_still_holds() {
+        let (conn, other) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        let mut a = SizeArbiter::default();
+        a.upsert_owned(claim("left", 80, 24, false, 0), conn, 0);
+        a.upsert_owned(claim("right", 80, 24, false, 0), conn, 0);
+        a.upsert_owned(claim("elsewhere", 80, 24, false, 0), other, 0);
+        a.upsert(claim("unowned", 80, 24, false, 0), 0);
+        assert_eq!(a.release_owner(conn), 2);
+        let mut left: Vec<&String> = a.claims.keys().collect();
+        left.sort();
+        assert_eq!(left, ["elsewhere", "unowned"]);
+    }
+
+    /// A plain claim, a removal, or an expiry ends ownership, so a stale owner never drops a
+    /// viewport it no longer holds, and an emptied-then-refilled id belongs to its new owner.
+    #[test]
+    fn unowned_claims_removal_and_expiry_end_ownership() {
+        let (first, second) = (SizeClaimOwner::next(), SizeClaimOwner::next());
+        let mut a = SizeArbiter::default();
+        a.upsert_owned(claim("v", 80, 24, true, 0), first, 0);
+        a.upsert(claim("v", 80, 24, true, 0), 100);
+        assert_eq!(a.release_owner(first), 0, "a plain claim took the viewport");
+
+        a.upsert_owned(claim("v", 80, 24, true, 0), first, 200);
+        a.remove("v");
+        a.upsert_owned(claim("v", 80, 24, true, 0), second, 300);
+        assert_eq!(
+            a.release_owner(first),
+            0,
+            "removed, then refilled by another"
+        );
+        assert_eq!(a.viewer_count(), 1);
+
+        assert_eq!(a.expire(10_000, 3_000), 1);
+        assert_eq!(a.release_owner(second), 0, "expiry ended its ownership");
+        assert_eq!(a.viewer_count(), 0);
+    }
+
     // HS2-0GZZHV: exactly one viewport answers the program's terminal queries.
 
     fn hidden(id: &str) -> ViewportClaim {
@@ -1134,29 +1429,31 @@ mod tests {
         }
     }
 
-    /// A lone viewport answers from its first claim, even when that claim resizes nothing.
+    /// A lone viewport answers from its first claim, even when that claim resizes nothing. It
+    /// also drives the spawn size it matches, so its viewer knows it is authoritative
+    /// (HS2-G1ADYV).
     #[test]
     fn a_lone_viewport_answers_from_its_first_claim() {
         let mut a = SizeArbiter::default();
         a.set_applied(80, 24);
         assert_eq!(a.answerer(), None, "nobody attached");
-        assert_eq!(a.answerer_notice(), None, "nothing to announce yet");
+        assert_eq!(a.notice(), None, "nothing to announce yet");
         a.upsert(claim("solo", 80, 24, true, 0), 1_000);
         assert!(a.decide(1_000).is_none(), "the spawn size already fits");
-        let notice = a.answerer_notice().expect("the new answerer is announced");
+        let notice = a.notice().expect("the new answerer is announced");
         assert_eq!(
             (
                 notice.cols,
                 notice.rows,
-                notice.driven_by,
+                notice.driven_by.as_deref(),
                 notice.answered_by.as_deref()
             ),
-            (80, 24, None, Some("solo"))
+            (80, 24, Some("solo"), Some("solo"))
         );
         // Heartbeats announce nothing more.
         a.upsert(claim("solo", 80, 24, true, 0), 6_000);
         assert!(a.decide(6_000).is_none());
-        assert_eq!(a.answerer_notice(), None);
+        assert_eq!(a.notice(), None);
         assert_eq!(a.applied().unwrap().answered_by.as_deref(), Some("solo"));
     }
 
@@ -1166,11 +1463,7 @@ mod tests {
     fn the_driver_answers_and_the_answerer_follows_a_handoff() {
         let mut a = desk_driving_with_a_passive_phone();
         assert_eq!(a.answerer().as_deref(), Some("desk"));
-        assert_eq!(
-            a.answerer_notice(),
-            None,
-            "the resize frame already named the desk"
-        );
+        assert_eq!(a.notice(), None, "the resize frame already named the desk");
         a.upsert(interacting_claim("phone", 80, 24, true, 0), 3_000);
         assert!(a.decide(3_000).is_none(), "within the focus-hold");
         assert_eq!(
@@ -1183,7 +1476,7 @@ mod tests {
             .expect("the phone takes over");
         assert_eq!(takeover.driven_by.as_deref(), Some("phone"));
         assert_eq!(takeover.answered_by.as_deref(), Some("phone"));
-        assert_eq!(a.answerer_notice(), None);
+        assert_eq!(a.notice(), None);
         a.upsert(interacting_claim("desk", 200, 50, true, 0), 5_000);
         let back = a
             .decide(5_000 + SIZE_FOCUS_HOLD_MS)
@@ -1192,7 +1485,7 @@ mod tests {
             (back.driven_by.as_deref(), back.answered_by.as_deref()),
             (Some("desk"), Some("desk"))
         );
-        assert_eq!(a.answerer_notice(), None);
+        assert_eq!(a.notice(), None);
     }
 
     /// With no driver, the earliest-attached live viewport answers. When it leaves, the next
@@ -1205,7 +1498,7 @@ mod tests {
         for (at, id) in [(1_000, "first"), (2_000, "second"), (3_000, "third")] {
             a.upsert(hidden(id), at);
             assert!(a.decide(at).is_none(), "nothing eligible holds the size");
-            let notice = a.answerer_notice();
+            let notice = a.notice();
             if id == "first" {
                 assert_eq!(notice.unwrap().answered_by.as_deref(), Some("first"));
             } else {
@@ -1215,28 +1508,17 @@ mod tests {
         assert_eq!(a.applied().unwrap().driven_by, None);
         a.remove("first");
         assert!(a.decide(4_000).is_none());
-        assert_eq!(
-            a.answerer_notice().unwrap().answered_by.as_deref(),
-            Some("second")
-        );
+        assert_eq!(a.notice().unwrap().answered_by.as_deref(), Some("second"));
         // "second" reattaches under its id: it is now the newest attach, so "third" answers.
         a.remove("second");
         a.upsert(hidden("second"), 5_000);
         assert!(a.decide(5_000).is_none());
-        assert_eq!(
-            a.answerer_notice().unwrap().answered_by.as_deref(),
-            Some("third")
-        );
-        assert_eq!(a.answerer_notice(), None, "announced once");
+        assert_eq!(a.notice().unwrap().answered_by.as_deref(), Some("third"));
+        assert_eq!(a.notice(), None, "announced once");
         a.remove("third");
-        assert_eq!(
-            a.answerer_notice().unwrap().answered_by.as_deref(),
-            Some("second")
-        );
+        assert_eq!(a.notice().unwrap().answered_by.as_deref(), Some("second"));
         a.remove("second");
-        let empty = a
-            .answerer_notice()
-            .expect("the empty answerer is announced");
+        let empty = a.notice().expect("the empty answerer is announced");
         assert_eq!((empty.cols, empty.rows, empty.answered_by), (80, 24, None));
     }
 
@@ -1249,11 +1531,116 @@ mod tests {
         assert!(a.decide(1_000).is_some());
         a.upsert(claim("phone", 120, 40, true, 0), 2_000);
         assert!(a.decide(2_000).is_none());
-        assert_eq!(a.answerer_notice(), None);
+        assert_eq!(a.notice(), None);
         a.remove("desk");
         assert!(a.decide(3_000).is_none(), "the same size is not a resize");
-        let notice = a.answerer_notice().expect("the survivor is announced");
-        assert_eq!(notice.answered_by.as_deref(), Some("phone"));
+        let notice = a.notice().expect("the survivor is announced");
+        assert_eq!(
+            (notice.driven_by.as_deref(), notice.answered_by.as_deref()),
+            (Some("phone"), Some("phone")),
+            "the survivor drives the held size too (HS2-G1ADYV)"
+        );
+        assert_eq!(a.notice(), None, "announced once");
+    }
+
+    // HS2-G1ADYV: a driver change that resizes nothing is recorded and announced.
+
+    /// The roles one notice frame names, or `None` when there is nothing to announce.
+    fn noticed(a: &mut SizeArbiter) -> Option<(u16, u16, Option<String>, Option<String>)> {
+        a.notice()
+            .map(|n| (n.cols, n.rows, n.driven_by, n.answered_by))
+    }
+
+    fn roles(cols: u16, rows: u16, id: &str) -> Option<(u16, u16, Option<String>, Option<String>)> {
+        Some((cols, rows, Some(id.into()), Some(id.into())))
+    }
+
+    /// Two viewports with one grid hand the size back and forth: each handoff lands after the
+    /// focus-hold without a resize and is announced exactly once; heartbeats, a passive
+    /// reconnect under the same id, and the old driver leaving announce nothing more.
+    #[test]
+    fn a_same_size_handoff_is_announced_once() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("a", 80, 24, true, 0), 1_000);
+        assert!(a.decide(1_000).is_some());
+        assert_eq!(noticed(&mut a), None, "the resize frame named the driver");
+
+        // B taps at the same size: held, then it drives without a resize.
+        a.upsert(interacting_claim("b", 80, 24, true, 0), 2_000);
+        assert!(a.decide(2_000).is_none());
+        assert_eq!(noticed(&mut a), None, "A drives until the hold ends");
+        assert_eq!(a.deferred_until(), Some(2_000 + SIZE_FOCUS_HOLD_MS));
+        assert!(
+            a.decide(2_000 + SIZE_FOCUS_HOLD_MS).is_none(),
+            "the same grid is not a resize"
+        );
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("b"));
+        assert_eq!(noticed(&mut a), roles(80, 24, "b"));
+        assert_eq!(noticed(&mut a), None, "announced once");
+
+        // Heartbeats from both, and A reconnecting passively under its id, change nothing.
+        for at in [3_000, 4_000] {
+            a.upsert(claim("a", 80, 24, true, 0), at);
+            a.upsert(claim("b", 80, 24, true, 0), at);
+            assert!(a.decide(at).is_none());
+            assert_eq!(noticed(&mut a), None, "heartbeat at {at}");
+        }
+        a.remove("a");
+        a.upsert(claim("a", 80, 24, true, 0), 4_500);
+        assert!(a.decide(4_500).is_none());
+        assert_eq!(noticed(&mut a), None, "a passive reconnect takes nothing");
+
+        // A taps back: the size returns to A, announced once.
+        a.upsert(interacting_claim("a", 80, 24, true, 0), 5_000);
+        assert!(a.decide(5_000 + SIZE_FOCUS_HOLD_MS).is_none());
+        assert_eq!(noticed(&mut a), roles(80, 24, "a"));
+        // The ticket's case: the previous driver's connection ends after the handoff.
+        a.remove("b");
+        assert!(a.decide(6_000).is_none());
+        assert_eq!(noticed(&mut a), None, "A already drives");
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("a"));
+    }
+
+    /// A handoff to a grid within the min-delta keeps the applied size but names the new driver;
+    /// a handoff to a different grid still resizes and names it in the resize frame.
+    #[test]
+    fn a_sub_threshold_handoff_names_the_driver_and_a_real_one_resizes() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 120, 40, true, 0), 1_000);
+        assert!(a.decide(1_000).is_some());
+        a.upsert(interacting_claim("phone", 121, 40, true, 0), 2_000);
+        assert!(a.decide(2_000 + SIZE_FOCUS_HOLD_MS).is_none());
+        assert_eq!(
+            noticed(&mut a),
+            roles(120, 40, "phone"),
+            "the PTY keeps 120x40"
+        );
+        a.upsert(interacting_claim("tablet", 90, 30, true, 0), 3_000);
+        let resized = a.decide(3_000 + SIZE_FOCUS_HOLD_MS).expect("a real resize");
+        assert_eq!(
+            (resized.cols, resized.rows, resized.driven_by.as_deref()),
+            (90, 30, Some("tablet"))
+        );
+        assert_eq!(noticed(&mut a), None, "the resize frame named the tablet");
+    }
+
+    /// Holding the size with nothing focused keeps the driver it holds for; a pinned size keeps
+    /// whatever it named.
+    #[test]
+    fn a_hold_keeps_the_driver_it_holds_for() {
+        let mut a = SizeArbiter::default();
+        a.upsert(interacting_claim("desk", 120, 40, true, 0), 1_000);
+        assert!(a.decide(1_000).is_some());
+        a.upsert(claim("desk", 120, 40, false, 0), 2_000);
+        assert!(a.decide(2_000).is_none());
+        assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("desk"));
+        assert_eq!(noticed(&mut a), None);
+        a.set_policy(SizePolicy::Pinned {
+            cols: 120,
+            rows: 40,
+        });
+        assert!(a.decide(3_000).is_none());
+        assert_eq!(noticed(&mut a), None);
     }
 
     /// A viewport that cannot answer (a read-only preview) is never chosen, even as the
@@ -1278,10 +1665,7 @@ mod tests {
             a.decide(2_000).is_none(),
             "the preview is still the smallest"
         );
-        assert_eq!(
-            a.answerer_notice().unwrap().answered_by.as_deref(),
-            Some("tile")
-        );
+        assert_eq!(a.notice().unwrap().answered_by.as_deref(), Some("tile"));
         assert_eq!(a.applied().unwrap().driven_by.as_deref(), Some("preview"));
     }
 }

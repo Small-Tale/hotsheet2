@@ -33,6 +33,7 @@ async function openProject(page: Page) {
 async function openFocusedDrawerTerminal(page: Page) {
   await openProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -280,6 +281,7 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
   await installPhone(page);
   await openProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -382,6 +384,7 @@ test.describe('desktop', () => {
     await installTerminalFixture(page);
     await openProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -407,6 +410,7 @@ test.describe('touch tablet at a desktop width', () => {
     await openProject(page);
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.getByRole('menuitem', { name: 'Terminal' }).click();

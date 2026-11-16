@@ -25,6 +25,7 @@ import {
 import { wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
+import { TicketBlockers } from '../components/ticket-blockers';
 import { TicketCategorySelect } from '../components/ticket-category-select';
 import { TicketCodeReview } from '../components/ticket-code-review';
 import { TicketInfoPanel } from '../components/ticket-info-panel';
@@ -540,6 +541,66 @@ export function AttachmentGalleryDemo() {
     </CatalogExample>
   );
 }
+/** The Info tab's Blocked By section: open, done, and unavailable blockers, an empty section, and an unsupported source (HS2-CHH28E). */
+export function TicketBlockersDemo() {
+  const viewport = { width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true } as const;
+  return (
+    <>
+      <CatalogExample label="Blockers" viewport={viewport}>
+        <TicketBlockers
+          slug="HS2-29MDFH"
+          availability={{ enabled: true }}
+          rows={[
+            {
+              nativeId: 'open',
+              reference: '@hotsheet2/hs2-git:open',
+              slug: 'HS2-8WG3W9',
+              title: 'Measure render cost after the stability fix',
+              state: 'open',
+            },
+            {
+              nativeId: 'done',
+              reference: '@hotsheet2/hs2-git:done',
+              slug: 'HS2-4QK2PA',
+              title: 'Land the shared list virtualization',
+              state: 'done',
+            },
+            { nativeId: '01JZZZZZZZZZZZZZZZZZZZZZZZ', reference: '@hotsheet2/hs2-git:missing', state: 'unavailable' },
+          ]}
+        />
+      </CatalogExample>
+      <CatalogExample label="Removing" viewport={viewport}>
+        <TicketBlockers
+          slug="HS2-29MDFH"
+          availability={{ enabled: true }}
+          removing={['open']}
+          rows={[
+            {
+              nativeId: 'open',
+              reference: '@hotsheet2/hs2-git:open',
+              slug: 'HS2-8WG3W9',
+              title: 'Measure render cost after the stability fix',
+              state: 'open',
+            },
+          ]}
+        />
+      </CatalogExample>
+      <CatalogExample label="No Blockers" viewport={viewport}>
+        <TicketBlockers slug="HS2-29MDFH" availability={{ enabled: true }} rows={[]} />
+      </CatalogExample>
+      <CatalogExample label="Unsupported Source" viewport={viewport}>
+        <TicketBlockers
+          slug="GH-42"
+          availability={{
+            enabled: false,
+            disabledReason: 'GitHub Issues tickets cannot record blocking dependencies.',
+          }}
+          rows={[]}
+        />
+      </CatalogExample>
+    </>
+  );
+}
 export function TicketCodeReviewDemo() {
   return (
     <>
@@ -641,6 +702,41 @@ export function TicketCodeReviewDemo() {
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
+      </CatalogExample>
+      <CatalogExample
+        label="Follow-Ups — Link Existing Ticket"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        {/* The Inspector's Follow-Ups header action opens the link dialog (HS2-MCGCPQ). */}
+        <TicketCodeReview
+          followUpLink={{ enabled: true }}
+          review={{
+            difftool: 'Meld',
+            truncated: false,
+            ranges: [],
+            commits: [],
+            follow_ups: [
+              {
+                target: { project_id: 'hotsheet2', connection_id: 'hs2-git', native_id: 'follow-up' },
+                state: 'resolved',
+                slug: 'HS2-8WG3W9',
+                title: 'Measure render cost after the stability fix',
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Follow-Ups — Unsupported Provider"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview
+          followUpLink={{
+            enabled: false,
+            disabledReason: 'GitHub Issues tickets cannot record follow-up links. Only Hot Sheet Git tickets can.',
+          }}
+          review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }}
+        />
       </CatalogExample>
       <CatalogExample
         label="Loading / Error"
@@ -792,6 +888,7 @@ export const demoModule: DemoModule = {
     'ticket-info-panel': { catalogExamples: true, Demo: TicketInfoPanelDemo },
     'ticket-timeline': { catalogExamples: true, Demo: TicketTimelineDemo },
     'ticket-code-review': { catalogExamples: true, Demo: TicketCodeReviewDemo },
+    'ticket-blockers': { catalogExamples: true, Demo: TicketBlockersDemo },
     'ticket-attachments': { catalogExamples: true, Demo: TicketAttachmentsDemo },
     'attachment-gallery': { catalogExamples: true, Demo: AttachmentGalleryDemo },
   },

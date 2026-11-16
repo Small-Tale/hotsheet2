@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod close_lifecycle;
+mod env_path;
 use close_lifecycle::{CloseLifecycle, caller_allowed};
 mod external_links;
 use external_links::{LinkRoute, navigation_route, new_window_route};
@@ -124,7 +125,7 @@ fn launch_bridge(
         .arg(script)
         .args(["--host", "127.0.0.1", "--port", "0"])
         .env("HOTSHEET_REPO_ROOT", root)
-        .env("HOTSHEET_DESKTOP_STORAGE_DIRECTORY", storage)
+        .env(env_path::STORAGE_DIRECTORY_ENV, storage)
         .env(
             "HOTSHEET_SERVER_BIN",
             required(binaries, "hotsheet-server")?,
@@ -203,10 +204,14 @@ pub fn run() {
                 let binaries = executable
                     .parent()
                     .ok_or("Hot Sheet executable has no parent directory")?;
-                let storage = match std::env::var_os("HOTSHEET_DESKTOP_STORAGE_DIRECTORY") {
-                    Some(directory) => PathBuf::from(directory),
-                    None => app.path().app_data_dir()?.join("browser-preferences-v1"),
-                };
+                let storage = env_path::resolve_storage_directory(
+                    std::env::var_os(env_path::STORAGE_DIRECTORY_ENV),
+                    || {
+                        app.path()
+                            .app_data_dir()
+                            .map(|data| data.join("browser-preferences-v1"))
+                    },
+                )?;
                 // HS2-HYF56Y: launched from the Dock, the app is in a healthy desktop session,
                 // the moment the relay can be installed; servers it starts then launch their
                 // terminal brokers through it.
@@ -227,6 +232,8 @@ pub fn run() {
                         "remote": { "urls": [format!("{origin}/*")] },
                         "permissions": [
                             "allow-desktop-flush-complete",
+                            // HS2-15W35F: the window chrome follows the app's pinned theme.
+                            "core:window:allow-set-theme",
                             "notification:allow-is-permission-granted",
                             "notification:allow-request-permission",
                             "notification:allow-notify"

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const row = {
   connection_id: 'git',
   native_id: '1',
@@ -41,7 +43,7 @@ const ticket = {
 };
 
 test('each image in one note opens its own gallery attachment', async ({ page }) => {
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

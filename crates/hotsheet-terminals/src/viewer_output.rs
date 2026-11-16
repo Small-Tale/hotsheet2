@@ -9,13 +9,14 @@
 //!   into a small frame queue. When the queue is full it coalesces further output into one
 //!   pending frame ([`PendingOutput`]) instead of letting the fan-out lag, and falls back to a
 //!   scrollback [`ViewerFrame::Replace`] only once the coalesced bytes exceed
-//!   [`MAX_COALESCED_BYTES`] (the default replay size);
+//!   [`MAX_COALESCED_BYTES`] (the default replay size). A shared clear's rewrite marker
+//!   ([`is_replay_rewritten`]) sends a replacement too (HS2-HA0Z3A);
 //! - a **writer** owns the transport's send half and writes queued frames;
 //! - the attach task itself only **reads input**, so typing reaches the PTY no matter how far
 //!   behind the viewer's output is.
 
 use crate::sizing::Decision;
-use crate::terminal::{SCROLLBACK_BYTES, StreamPosition, Terminal};
+use crate::terminal::{SCROLLBACK_BYTES, StreamPosition, Terminal, is_replay_rewritten};
 use std::sync::Arc;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::{self, error::TrySendError};
@@ -179,6 +180,9 @@ pub async fn pump_viewer_output<F: From<ViewerFrame> + Send>(
                 Err(RecvError::Closed) => break,
             },
             chunk = output.recv() => match chunk {
+                // A shared clear rewrote the replay (HS2-HA0Z3A): everything this viewer shows or
+                // has pending is superseded by the cleared snapshot and its new stream position.
+                Ok(chunk) if is_replay_rewritten(&chunk) => resync(&term, &mut output, &mut pending),
                 Ok(chunk) => {
                     if pending.push(chunk, &frames).is_err() {
                         return;

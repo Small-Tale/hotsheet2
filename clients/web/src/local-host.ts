@@ -21,7 +21,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,8 +36,14 @@ import { desktopStorageBridge } from './desktop-storage-bridge';
 import { createDevApp } from './dev-server';
 import { signMacOSSnapshotIfConfigured } from './dev-signing';
 import { isRecord, parseJson } from './json-value';
+import { hotsheetHome, type MachineHomeEnvironment, nonBlank } from './machine-home';
 import { installPeerWebSocketGateway, peerGateway } from './peer-gateway';
-import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV, remoteBrowserAuthRequired } from './project-bridge';
+import {
+  developmentRepositoryRoot,
+  LOCAL_HOST_SNAPSHOT_ENV,
+  remoteBrowserAuthRequired,
+  SERVER_START_DEADLINE_MS,
+} from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
@@ -64,14 +70,29 @@ export function parseBinaryRevisionStatus(value: unknown): BinaryRevisionStatus 
 }
 
 /**
- * Probe one binary. `full` runs `--revision-status`, which hashes the source tree; otherwise
- * `--build-revision` reads only the embedded revision (HS2-7JGDCC).
+ * Liveness-based ceiling for the `--revision-status` probe (HS2-B74N07). On macOS the first launch
+ * of a newly linked or copied executable waits in a host-wide assessment queue; a fresh copy took
+ * 3.6 s under load against 0.19 s idle, so a short deadline misreported a current binary as unknown.
+ * `spawnSync` returns as soon as the child exits, so the probe already fails fast on a crash or
+ * a non-zero exit; it waits only while the child is still alive. The ceiling only stops a binary
+ * that never exits, and is the server's own start deadline.
  */
-function binaryRevisionStatus(path: string, full = true): BinaryRevisionStatus | undefined {
+export const REVISION_PROBE_CEILING_MS = SERVER_START_DEADLINE_MS;
+
+/**
+ * Probe one binary; anything but a zero exit with the expected JSON is unknown. `full` runs
+ * `--revision-status`, which hashes the source tree; otherwise `--build-revision` reads only the
+ * embedded revision (HS2-7JGDCC).
+ */
+export function binaryRevisionStatus(
+  path: string,
+  full = true,
+  ceilingMs = REVISION_PROBE_CEILING_MS,
+): BinaryRevisionStatus | undefined {
   try {
     const result = spawnSync(path, [full ? '--revision-status' : '--build-revision'], {
       encoding: 'utf8',
-      timeout: 10_000,
+      timeout: ceilingMs,
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     return result.status === 0 ? parseBinaryRevisionStatus(parseJson(result.stdout.toString())) : undefined;
@@ -99,7 +120,8 @@ const executableName = (name: string, platform = process.platform) => `${name}${
  * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
  * server is built, each binary prefers its current release build and falls back to its current
  * debug build independently. A local binary is eligible only when its embedded revision matches
- * the current workspace source and the selected server revision.
+ * the current workspace source and the selected server revision. A blank override counts as unset
+ * and gets a selected binary (HS2-GVSJ5Y).
  */
 export function releaseBinaryEnvironment(
   repositoryRoot: string,
@@ -126,7 +148,7 @@ export function releaseBinaryEnvironment(
     return currentRevision(status);
   };
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
-    if (environment[variable]) continue;
+    if (nonBlank(environment[variable]) !== undefined) continue;
     let selected: { path: string; revision: string } | undefined;
     for (const path of [release(name), debug(name)]) {
       const revision = exists(path) ? current(path) : undefined;
@@ -164,7 +186,7 @@ export function mcpBinaryEnvironment(
   exists: (path: string) => boolean = existsSync,
   platform = process.platform,
 ): Record<string, string> {
-  if (environment.HOTSHEET_MCP_BIN) return {};
+  if (nonBlank(environment.HOTSHEET_MCP_BIN) !== undefined) return {};
   const profiles =
     serverBinary && /[\\/]target[\\/]release[\\/]/.test(serverBinary) ? ['release', 'debug'] : ['debug', 'release'];
   for (const profile of profiles) {
@@ -185,7 +207,7 @@ export function snapshotLocalHostArtifacts(
   const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
     environment = { ...binaryEnvironment },
     dispose = () => {
-      const stable = environment.HOTSHEET_HOOK_CLI_BIN,
+      const stable = nonBlank(environment.HOTSHEET_HOOK_CLI_BIN),
         pinnedCli = resolve(snapshotRoot, 'bin', executableName('hotsheet-cli', platform));
       if (stable && existsSync(stable) && existsSync(pinnedCli)) {
         // Sessions opened before a setup refresh may still hold this snapshot path. Leave a
@@ -212,8 +234,8 @@ export function snapshotLocalHostArtifacts(
     cpSync(distRoot, pinnedDistRoot, { recursive: true, dereference: true });
     mkdirSync(resolve(snapshotRoot, 'bin'));
     for (const [variable, name] of Object.entries(HOST_BINARIES)) {
-      const source = environment[variable];
-      if (!source || !isAbsolute(source)) continue;
+      const source = nonBlank(environment[variable]);
+      if (source === undefined || !isAbsolute(source)) continue;
       const pinned = resolve(snapshotRoot, 'bin', executableName(name, platform));
       copyFileSync(source, pinned);
       chmodSync(pinned, statSync(source).mode & 0o777);
@@ -279,11 +301,26 @@ export function stampBrowserAuthMode(html: string, remote = remoteBrowserAuthReq
   return html.replace(/<\/head>/i, `${tag}</head>`);
 }
 
+/**
+ * The desktop shell's preference directory (HS2-1VF50T). Like the Rust path overrides (HS2-15ZN8E),
+ * an unset, empty, or whitespace-only value counts as unset, so a blank value never mounts the
+ * storage bridge on a directory named by spaces in the working directory. A non-blank value,
+ * relative or absolute, is used as given.
+ */
+export function desktopStorageDirectoryFrom(environment: MachineHomeEnvironment = process.env): string | undefined {
+  return nonBlank(environment.HOTSHEET_DESKTOP_STORAGE_DIRECTORY);
+}
+
+/** The file the desktop shell waits on for the host URL; a blank value means none (HS2-GVSJ5Y). */
+export function clientReadyFile(environment: MachineHomeEnvironment = process.env): string | undefined {
+  return nonBlank(environment.HOTSHEET_CLIENT_READY_FILE);
+}
+
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
 export function createLocalHostApp(
   distRoot: string,
   bridge: Hono = createDevApp(true),
-  desktopStorageDirectory = process.env.HOTSHEET_DESKTOP_STORAGE_DIRECTORY,
+  desktopStorageDirectory = desktopStorageDirectoryFrom(),
   gateway: MiddlewareHandler = peerGateway(),
 ): Hono {
   const app = new Hono();
@@ -291,8 +328,9 @@ export function createLocalHostApp(
     if (DEVELOPMENT_ONLY.test(context.req.path)) return context.notFound();
     await next();
   });
-  if (desktopStorageDirectory && !remoteBrowserAuthRequired())
-    app.route('/', desktopStorageBridge(desktopStorageDirectory));
+  const storageDirectory = nonBlank(desktopStorageDirectory);
+  if (storageDirectory !== undefined && !remoteBrowserAuthRequired())
+    app.route('/', desktopStorageBridge(storageDirectory));
   app.route('/', bridge);
   // A paired peer reaches this host's machine server through the same proxy (HS2-H4REBS).
   app.use('*', gateway);
@@ -363,12 +401,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
   // A packaged desktop host supplies all binaries from its own resources. It has no
   // source checkout or target directory to inspect (HS2-5R706Q).
-  const release = Object.keys(HOST_BINARIES).every((variable) => process.env[variable])
+  // A blank override counts as unset (HS2-GVSJ5Y).
+  const release = Object.keys(HOST_BINARIES).every((variable) => nonBlank(process.env[variable]) !== undefined)
     ? {}
     : releaseBinaryEnvironment(developmentRepositoryRoot());
   const selected: Record<string, string> = { ...release };
   for (const variable of Object.keys(HOST_BINARIES)) {
-    if (process.env[variable]) selected[variable] = process.env[variable];
+    const explicit = nonBlank(process.env[variable]);
+    if (explicit !== undefined) selected[variable] = explicit;
   }
   // Announce the selection before the snapshot copies several hundred megabytes of binaries, so a
   // slow start shows which phase it is in (HS2-SNH42P).
@@ -380,7 +420,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const snapshot = snapshotLocalHostArtifacts(
     fileURLToPath(new URL('../dist', import.meta.url)),
     selected,
-    process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2'),
+    hotsheetHome(),
   );
   Object.assign(
     process.env,
@@ -397,8 +437,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   server.once('close', snapshot.dispose);
   const address = server.address(),
     listening = typeof address === 'object' && address ? address.port : port;
-  const readyFile = process.env.HOTSHEET_CLIENT_READY_FILE;
-  if (readyFile)
+  const readyFile = clientReadyFile();
+  if (readyFile !== undefined)
     writeFileSync(readyFile, JSON.stringify({ url: localClientUrl(host, listening), pid: process.pid }), {
       mode: 0o600,
     });
@@ -407,7 +447,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const stop = () => {
     if (stopping) return;
     stopping = true;
-    if (readyFile) rmSync(readyFile, { force: true });
+    if (readyFile !== undefined) rmSync(readyFile, { force: true });
     // Upgraded terminal sockets can keep server.close pending after the desktop
     // window disappears. Bound bridge teardown; the Rust server stays detached.
     const finish = async () => {

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 2,
+  "setupVersion": "5.0.0-beta.130",
+  "packageManager": "npm",
+  "packages": {
+    ".": {
+      "mode": "ui",
+      "package": "hotsheet-web",
+      "packagePath": ".",
+      "managed": {
+        ".claude/skills/kerf-app/SKILL.md": {
+          "sha256": "9880f36aa1994da1b02c35fed72079d2484c0f384f68e22ae47d0634b233a1cb"
+        },
+        ".claude/skills/kerf-ui/SKILL.md": {
+          "sha256": "ee6e0e1d4028c37c3cc868ec12459e23cfa42c9dcaac791011c656984ae19310"
+        },
+        ".claude/skills/kerf-ui-design-mock/SKILL.md": {
+          "sha256": "fafe468c79e66b27d8d8ed5ee8b6e22a42a1a0c1e3c7afd2642e233f3e7d2aef"
+        },
+        ".agents/skills/kerf-ui-design-mock/SKILL.md": {
+          "sha256": "fafe468c79e66b27d8d8ed5ee8b6e22a42a1a0c1e3c7afd2642e233f3e7d2aef"
+        },
+        "package.json#scripts.typecheck": {
+          "sha256": "9a8999f9c52288059269c0f40ff8eafd14c9941076ccee86cd4bebb7c09d6b60"
+        },
+        "package.json#scripts.catalog:generate": {
+          "sha256": "21e32a4ee5fab87a3e86ebe05bde3e5ae6852f207af2b107b2cbbe4d86f215c6"
+        },
+        "package.json#scripts.catalog:check": {
+          "sha256": "01d54b2ca5c6d487dff7805f7ba7cb7ac3c69381e491c77b370741c3ac2bea7d"
+        },
+        "package.json#devDependencies.eslint-plugin-kerfjs": {
+          "sha256": "2553cce52341c963721a1468b9224109d6e5b92d5468442470d88df54778937d"
+        },
+        "package.json#devDependencies.create-kerf-component": {
+          "sha256": "2553cce52341c963721a1468b9224109d6e5b92d5468442470d88df54778937d"
+        },
+        "package.json#devDependencies.eslint-plugin-simple-import-sort": {
+          "sha256": "fa6a7973ae2f660d323bbf0056dadcf9b0472352e2fc75213a5ee709f99a9348"
+        },
+        "tsconfig.json#compilerOptions.target": {
+          "sha256": "ffd3bb846b04292d57ed5357a4319c441d352d4ba467da97570bb82cb402b688"
+        },
+        "tsconfig.json#compilerOptions.module": {
+          "sha256": "52a87becd2ebe2cea48252b8205c9f1322185b8ccef0149445034e603471a0a8"
+        },
+        "tsconfig.json#compilerOptions.moduleResolution": {
+          "sha256": "ed996be4f8fcb188f22d4ac4b5f56e672f9fda1f7dac739ab1f1570b2b619474"
+        },
+        "tsconfig.json#compilerOptions.strict": {
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        "tsconfig.json#compilerOptions.jsx": {
+          "sha256": "c201ebc9de09896641e7a9444d8aa81b0583bc26a42c624c6d8e6d7c2dfbff4b"
+        },
+        "tsconfig.json#compilerOptions.jsxImportSource": {
+          "sha256": "d135eae45f7e35e79f394a40253fc30d83707b6f2c8051d8d8a0b265e87d87b9"
+        },
+        ".kerf-ui-profile.json#schemaVersion": {
+          "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+        },
+        ".kerf-ui-profile.json#scope": {
+          "sha256": "1871de04d1a88117af90b3e8bb6f40ad1047eadb38e21078e89c0913d8d8807b"
+        }
+      },
+      "resolutions": {
+        "package.json#scripts.lint": "keep",
+        "package.json#devDependencies.eslint": "keep",
+        "package.json#devDependencies.typescript": "keep",
+        "package.json#devDependencies.@eslint/js": "keep",
+        "package.json#devDependencies.@stylistic/eslint-plugin": "keep",
+        "package.json#devDependencies.prettier": "keep",
+        "package.json#devDependencies.typescript-eslint": "keep",
+        "package.json#kerfComponentCatalog": "keep",
+        "eslint.config.mjs": "keep",
+        ".kerf-ui-profile.json#$schema": "keep",
+        ".kerf-ui-profile.json#catalogs.hotsheet-web": "keep",
+        "package.json#scripts.check": "skip",
+        "package.json#scripts.kerf:check": "skip",
+        "package.json#scripts.kerf:doctor": "skip",
+        "package.json#scripts.kerf:doctor:changed": "skip",
+        "package.json#devDependencies.@typescript-eslint/parser": "skip",
+        "tsconfig.json#compilerOptions.noUncheckedIndexedAccess": "skip"
+      }
+    }
+  }
+}

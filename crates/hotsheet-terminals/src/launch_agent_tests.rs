@@ -354,3 +354,66 @@ fn hs2_hyf56y_tests_never_target_the_real_launch_agents() {
     assert_ne!(program, PathBuf::from("/bin/launchctl"));
     assert!(!program.exists(), "{}", program.display());
 }
+
+fn os(value: &str) -> Option<std::ffi::OsString> {
+    Some(std::ffi::OsString::from(value))
+}
+
+/// Pure resolver only: injected values, never the real home or launchd (HS2-15ZN8E).
+#[test]
+fn hs2_15zn8e_agents_dir_treats_blank_override_and_home_as_unset() {
+    // Unset override falls back to HOME.
+    assert_eq!(
+        resolve_agents_dir(None, os("/users/a")).unwrap(),
+        PathBuf::from("/users/a/Library/LaunchAgents")
+    );
+    for blank in ["", " ", "\t", " \n "] {
+        // A blank override is unset, so HOME decides.
+        assert_eq!(
+            resolve_agents_dir(os(blank), os("/users/a")).unwrap(),
+            PathBuf::from("/users/a/Library/LaunchAgents"),
+            "override {blank:?}"
+        );
+        // A blank HOME is unset too: an error, never a relative Library/LaunchAgents.
+        let error = resolve_agents_dir(None, os(blank)).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound, "HOME {blank:?}");
+        assert!(resolve_agents_dir(os(blank), os(blank)).is_err());
+    }
+    assert!(resolve_agents_dir(None, None).is_err());
+    // Real values are kept as given.
+    assert_eq!(
+        resolve_agents_dir(os("/tmp/agents"), os("/users/a")).unwrap(),
+        PathBuf::from("/tmp/agents")
+    );
+    assert_eq!(
+        resolve_agents_dir(os("rel/agents"), None).unwrap(),
+        PathBuf::from("rel/agents")
+    );
+    assert_eq!(
+        resolve_agents_dir(None, os("rel-home")).unwrap(),
+        PathBuf::from("rel-home/Library/LaunchAgents")
+    );
+}
+
+#[test]
+fn hs2_15zn8e_launchctl_program_treats_a_blank_override_as_unset() {
+    assert_eq!(
+        resolve_launchctl_program(None),
+        PathBuf::from("/bin/launchctl")
+    );
+    for blank in ["", " ", "\t", " \n "] {
+        assert_eq!(
+            resolve_launchctl_program(os(blank)),
+            PathBuf::from("/bin/launchctl"),
+            "{blank:?}"
+        );
+    }
+    assert_eq!(
+        resolve_launchctl_program(os("/tmp/fake-launchctl")),
+        PathBuf::from("/tmp/fake-launchctl")
+    );
+    assert_eq!(
+        resolve_launchctl_program(os("bin/fake-launchctl")),
+        PathBuf::from("bin/fake-launchctl")
+    );
+}

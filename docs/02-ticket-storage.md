@@ -983,7 +983,8 @@ engine** so the user effectively never runs git by hand:
   collides with a concurrent autocommit on `index.lock` and a slow remote never blocks
   local writes (HS2-V454FB). The replay itself never runs in the working tree, and an
   autocommit never commits while a rebase or merge is unfinished (§2.12.3, HS2-QR1K8R).
-  Hot Sheet never deletes another process's Git lock. Exhausted contention or any
+  Hot Sheet never deletes another process's Git lock; sync only moves aside one it
+  proves stale (§2.12.2, HS2-T0V269). Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).
 - **Push** automatically after local commits, with backoff + retry on failure. A
@@ -1047,6 +1048,14 @@ bare (HS2-RRD417). A source-scan test rejects any bare git `Command` under `crat
 outside that constructor. Web test helpers that spawn Hot Sheet binaries or git
 (`clients/web/tests/real-ticket-server.ts`, `clients/web/scripts/scale-stress.mjs`)
 strip the same list through `clients/web/scripts/repository-env.mjs`.
+
+The constructor also sets `GIT_OPTIONAL_LOCKS=0` (HS2-NM6E27). A plain `git status` or
+`git diff` otherwise takes `index.lock` for a moment to refresh the index's stat cache.
+A commit that runs in the same repository during that moment, such as the group registry
+publisher or a ticket-store autocommit, then fails with `Unable to create
+'.../index.lock': File exists`. Hot Sheet's reads never need that refresh. Its writes
+still take Git's mandatory locks, and Hot Sheet's own commits in one repository serialize
+on the shared Git transaction lock.
 
 The repository's own Node scripts and test fixtures do the same (HS2-KKDZF4). A linked
 worktree's `pre-push` hook runs `scripts/check.sh` with an absolute `GIT_DIR`, and
@@ -1123,13 +1132,43 @@ exists`. Before any Git step a cycle checks for the locks it needs (`index.lock`
   rebase, or push) and is also `blocked`. The remote's own locks (`remote:` lines) are
   not. A rebase a lock interrupts is never aborted, because an abort that cannot lock
   the branch detaches `HEAD`; a later cycle continues it once the lock is gone. The
-  reason names each lock file (store-relative when inside the store) and its age. The
-  next step says to check that no Git process is running in the store, remove the
-  stale lock, and run `hotsheet-cli sync`. Hot Sheet never removes a lock by itself:
-  the file looks the same whether its owner crashed or still runs, and removing a live
-  process's lock can corrupt the index or a ref. Automatic recovery of a provably stale
-  lock is HS2-T0V269. A recorded `blocked` outranks a live unfinished rebase in the
-  health read, because that rebase cannot continue until the lock is gone.
+  reason names each lock file (store-relative when inside the store) and its age. A
+  recorded `blocked` outranks a live unfinished rebase in the health read, because that
+  rebase cannot continue until the lock is gone.
+- **A provably stale lock is moved aside, never deleted (HS2-T0V269).** The file looks
+  the same whether its owner crashed or still runs, and removing a live process's lock
+  can corrupt the index or a ref, so the pre-check moves a held lock only with proof
+  that it is abandoned. All three must hold:
+  1. The lock file is at least 10 minutes old.
+  2. No process has a file open under the store's Git directory or its common Git
+     directory. Hot Sheet's own `hotsheet-*.lock` coordination files do not count: the
+     cycle holds the Git transaction lock, so no other Hot Sheet Git transaction runs.
+  3. No `git` process has its working directory in the store, in any worktree of its
+     repository, or in the Git directory.
+
+  The process check reads `/proc` on Linux and runs `lsof` on macOS and other Unix
+  systems. It covers the current user's processes only; other accounts' processes are
+  not visible, and the age threshold covers them. The check must see this process's own
+  open coordination lock. If it cannot (a sandbox or a missing `lsof`), nothing is
+  proven and nothing moves. On Windows no process check exists, so recovery always
+  refuses and the lock stays a manual recovery (HS2-8D34QV).
+
+  Recovery runs only in the pre-check, under the transaction lock, and only for the
+  locks the cycle needs. Each lock is tried once per pass; a lock that is held again
+  after the move blocks the pass. A moved lock is renamed into
+  `<common-git-dir>/hotsheet-stale-locks/<UTC timestamp>/`, keeping its path relative to
+  that directory, beside a `recovery.json` that records what moved, from where, its age,
+  and the proof. The cycle then continues in the same pass. Its health reason names
+  each moved lock and where it went, after any failure sentence. The durable record
+  keeps the last recovery (`stale_lock_recovery`), the server logs a warning line, and
+  `hotsheet-cli sync` prints it. A lock that stays held keeps the pass `blocked`, and
+  the reason says why: too young, the PID and command of the process that may own it,
+  or the check could not run. The next step names the automatic rule and
+  `hotsheet-cli sync --recover-stale-locks`. That command runs the same recovery under
+  the same locks without syncing, prints every lock it moved and kept, and exits
+  non-zero while one stays held. Otherwise the person checks that no Git process is
+  running in the store, removes the stale lock, and runs `hotsheet-cli sync`.
+
 - **Never stack replays.** A cycle first checks for `rebase-merge`, `rebase-apply`, or
   `MERGE_HEAD` in the store's Git directory. If one exists and needs a decision, the
   cycle stops before committing or fetching; a rebase with nothing to decide is

@@ -228,7 +228,7 @@ paths. Hot Sheet's server and CLI build scripts deliberately embed the worktree'
 `HOT_SHEET_LOCAL_SOURCE_ROOT`; a reused artifact carrying another checkout's root
 would defeat the source-revision safeguards. See the HS2-ZJXAXY findings in §12.7.9.
 
-Two other local environment effects look like regressions but are not:
+Three other local environment effects look like regressions but are not:
 
 - A shell that inherits the local host's `HOT_SHEET_BUILD_REVISION` pin builds an
   explicitly revisioned binary that monitors no source root. The server compatibility and
@@ -237,6 +237,45 @@ Two other local environment effects look like regressions but are not:
 - `terminal_ws` drives the workspace `hs-fake-agent` binary, which `-p hotsheet-server`
   alone does not build; run nextest with `--workspace` or first run
   `cargo build -p hotsheet-terminals --bin hs-fake-agent`.
+- macOS assesses a newly linked executable on its first launch, one queue for the whole
+  host: 40 fresh copies launched together waited 0.2 to 0.8 s each on an idle machine, and a
+  700-launch flood held a freshly relinked `hs-fake-agent` past the 5 s windows of the
+  `hotsheet-terminals` `fake_agent` tests, which then saw no output and no exit. Those tests
+  launch the binary once to completion before timing anything, so a busy host only slows
+  them (HS2-W00050). A test that times a freshly built or freshly copied binary's first
+  output, readiness, or exit must do the same through the shared helper (HS2-04D6DW):
+  Rust integration tests include `crates/test-support/first_launch.rs` with
+  `#[path = "../../test-support/first_launch.rs"] mod first_launch;` and spawn
+  `first_launch::launched(exe, &["--version"])`; Node fixtures use `launchOnce` from
+  `clients/web/scripts/first-launch.mjs`, which `assertFixtureServer` and
+  `assertFixtureCli` already call before their 5 s capability probe. A copy is a new
+  executable to macOS, so launch each copy once after copying it. Do not raise the window
+  instead.
+- Every Cargo command replaces each uplifted binary in the profile directory
+  (`target/debug/hotsheet-cli` and its siblings), even when nothing needs rebuilding. It
+  removes the file and clones it again from `deps/`. A command that selects other packages
+  also resolves other features, so it rebuilds and replaces the binary. Five no-op
+  `cargo nextest run --workspace --no-run` commands left `target/debug/hotsheet-cli` missing
+  on 77 of about one million `stat` calls. As a result, a test that spawns the uplifted path
+  while another Cargo command shares the target directory fails with
+  `No such file or directory` (HS2-4TCTEW). Rust integration tests therefore spawn workspace
+  binaries only through `crates/test-support/workspace_bin.rs`
+  (`#[path = "../../test-support/workspace_bin.rs"] mod workspace_bin;`, then
+  `workspace_bin::path("hotsheet-cli")`). For each build, it copies every profile executable
+  into `target/<profile>/test-bin-snapshots/<build identity>/` and publishes the directory
+  with one rename. On APFS each copy is a clone that shares blocks, so it costs no extra disk
+  space. Exactly one process builds each snapshot, under the `test-bin-snapshots/.lock` file
+  lock. The others wait on that lock and reuse the published directory, so a filesystem
+  without reflinks (Linux CI) pays for one copy per build, not one per test process. The
+  snapshot holds every profile executable, not a fixed list, so a binary that another binary
+  starts as its sibling is never missing. The siblings stay together, and a replaced uplift
+  cannot remove them. The snapshot
+  must hold private copies, not hard links. On macOS, unlinking another name of an inode
+  while a process makes its first exec of that inode can SIGKILL the process: a hard-linked
+  snapshot lost 6 of 180 parallel first execs in an isolated repro, and 9 of 40
+  `checkout_remove` runs. Snapshots unused for two hours are pruned. The policy test `hotsheet-cli::workspace_bin_policy` rejects `Command::cargo_bin`
+  and `env!("CARGO_BIN_EXE_…")` anywhere else. Compose the two helpers as
+  `first_launch::launched(workspace_bin::path(name), args)`.
 
 ### 12.6.2 Isolated Clippy artifacts
 
@@ -1493,6 +1532,16 @@ server, including one with no id, answers 404. Before this check, a run that los
 to another run's starting server tested that server's worktree and lost its connection when the
 other run ended (`ERR_CONNECTION_REFUSED`).
 
+In the frozen stable-dev snapshot Playwright uses, the first request for the run's own identity
+also transforms the client module graph once (`src/vite-module-warmup.ts`, about 900 modules in
+under a second on an idle host). The identity answers 503 until that finishes, so Playwright's
+readiness wait, not the first wave of tests, pays for the cold transforms (HS2-15EYK1). Every
+browser context still fetches the roughly 850 unbundled modules itself. A fixture whose handler
+only fakes app and API responses therefore routes `appRequests` (`tests/app-requests.ts`) rather
+than `'**/*'`, so those module requests never round-trip through the test worker. Every browser
+fixture does so, and a policy test in `src/eslint-policy.test.ts` rejects a new `'**/*'` or `'**'`
+route unless an allowlist entry gives the reason its handler must see every request (HS2-7YN9VV).
+
 The Vite child also gets its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_HOME`, removed
 when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the developer's real remote
 registry, machine secrets, bootstrap server or HS1 data. A fixture server that needs a home names
@@ -1532,6 +1581,13 @@ or on `SIGINT`, `SIGTERM`, or `SIGHUP`, the launcher sends `SIGTERM` to its own 
 `SIGKILL` after a 5 s grace. When it leads its group, which it does under Playwright's
 `sh -c`, it then sends one `SIGKILL` to that group, ending any same-group straggler and itself.
 Vite stays in the launcher's group, so Playwright's normal group `SIGKILL` still covers both.
+
+One group signal reaches the launcher and Vite together, and under CPU load the launcher can
+observe Vite's exit before its own signal listener runs (HS2-DXVH3Q). When the server closes
+without a recorded stop, the launcher therefore lets one full event-loop pass (two nested
+`setImmediate` calls) deliver any signal already queued for it before it decides between the group
+sweep and the server's own exit code. Without that pass it skipped the sweep, and a `SIGTERM`-ignoring
+same-group straggler outlived it.
 
 Ownership is only the launcher's `ChildProcess` handle and its own live group. Nothing searches
 for processes by name, command, or port. Node disables `kill` on a reaped handle, so a reused pid
@@ -1596,8 +1652,33 @@ ticket server also routes the change WebSocket there with `routeProjectChangeSoc
 (HS2-B3Z8DS). Otherwise `/ws/sync` reaches the shared Vite bridge, which has no session
 for the mocked project and refuses it (1006). The page then runs only on its long-poll
 fallback, so under parallel load live events such as a terminal halt arrived late. Such a
-test calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before stopping the server, so
-the fallback poll that follows the socket's close does not fail the test.
+test removes its routes before stopping the server, so the fallback poll that follows the
+socket's close does not fail the test. `realTicketServer().stop(page)` does that: it calls
+`unrouteAll({ behavior: 'ignoreErrors' })` on each page or context it is given, then stops
+the server. The first `HS2-QY232J` case in `src/eslint-policy.test.ts` rejects a bare
+`await server.stop()` in a proxying spec unless the routes are already removed or the
+page's context or browser is already closed.
+Playwright cannot remove a `routeWebSocket` route (`unrouteAll` clears only HTTP routes), so
+a page that reconnects after `stop()` still reaches the test's WebSocket handler. A handler
+that proxies to a real server opens its upstream with `openUpstreamSocket(route, target)`
+from `tests/real-ticket-server.ts` (HS2-N8FTCK). The helper always listens for `error`, so a
+refused dial closes the route instead of throwing an unhandled `ECONNREFUSED` (HS2-6TK3SB);
+`stop()` closes that server's open upstreams, and the helper then refuses new ones without
+dialing. The `HS2-N8FTCK` policy case parses `tests/` and rejects a raw `new …WebSocket(`
+inside a `routeWebSocket` handler; `tests/real-ticket-server.spec.ts` covers the stop and
+refusal.
+Every proxied request goes through `proxyFetch(route, options)`, never a raw `route.fetch`
+(HS2-6E87E4). Playwright reuses keep-alive sockets, and the server closes an idle
+connection after 30 s, so a request that picks up a closing socket fails with
+`socket hang up` (HS2-NWFZ7J). `proxyFetch` retries GET and HEAD twice and never replays
+POST, PUT, PATCH, or DELETE. It lives in the types-only `tests/proxy-fetch.ts`, which
+`tests/real-ticket-server.ts` re-exports and vitest integration tests under `src/` import
+(HS2-QY232J). The `HS2-6E87E4` case rejects a raw `.fetch(` anywhere under `tests/`, and in
+any `src/` file that imports Playwright, outside that helper.
+A test that clicks `New Drawer Item` right after `Show Terminal Drawer` first waits for
+`.app-shell` to report `data-terminal-drawer-transitioning="false"`, because the button
+slides with the ~220 ms open transition (HS2-S4FJ85). The second `HS2-QY232J` policy case
+rejects the click without that wait.
 
 ### Local Playwright parallelism and timeouts
 

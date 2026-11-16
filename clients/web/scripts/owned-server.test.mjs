@@ -6,7 +6,13 @@ import { leadsOwnProcessGroup, parseOwnedServerArguments, runOwnedServer } from 
 
 // HS2-F6F8MA: the launcher's stop transitions with fake processes; owned-server.e2e.test.mjs covers
 // the same paths with real process groups, pipes, and Vite.
-function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100, platform = 'linux' } = {}) {
+function harness({
+  exitOnStdinEof = true,
+  leadsGroup = true,
+  graceMs = 100,
+  platform = 'linux',
+  drainSignals = (callback) => callback(),
+} = {}) {
   const child = Object.assign(new EventEmitter(), { pid: 42, exitCode: null, signalCode: null, signals: [] });
   child.kill = (signal) => {
     // Node's ChildProcess.kill is a no-op once the child has been reaped.
@@ -50,6 +56,7 @@ function harness({ exitOnStdinEof = true, leadsGroup = true, graceMs = 100, plat
     leadsGroup: () => leadsGroup,
     platform,
     killTree: (pid) => killedTrees.push(pid),
+    drainSignals,
     spawnChild: (program, args, options) => {
       spawned.push({ program, args, options });
       return child;
@@ -183,6 +190,32 @@ describe('runOwnedServer', () => {
     late.timers.fire();
     expect(late.child.signals).toEqual(['SIGTERM']);
     exit(0);
+    expect(await result).toBe(0);
+    expect(processHost.groupKills).toEqual([[0, 'SIGKILL']]);
+  });
+
+  it('sweeps when the group signal is dispatched after the server close it caused (HS2-DXVH3Q)', async () => {
+    // One kill(-pgid, SIGTERM) ends the server and signals this launcher; under load the server's
+    // close can reach the launcher's event loop first. The decision waits for that pending signal.
+    const drains = [];
+    const { exit, processHost, result } = harness({ drainSignals: (callback) => drains.push(callback) });
+    exit(null, 'SIGTERM');
+    expect(drains).toHaveLength(1);
+    expect(processHost.groupKills).toEqual([]);
+    expect(processHost.listenerCount('SIGTERM')).toBe(1);
+    processHost.emit('SIGTERM');
+    drains.shift()();
+    expect(await result).toBe(143);
+    expect(processHost.groupKills).toEqual([[0, 'SIGKILL']]);
+    expect(processHost.listenerCount('SIGTERM')).toBe(0);
+  });
+
+  it('decides a recorded stop without waiting for pending signals (HS2-DXVH3Q)', async () => {
+    const drains = [];
+    const { exit, processHost, stdin, result } = harness({ drainSignals: (callback) => drains.push(callback) });
+    stdin.emit('end');
+    exit(0);
+    expect(drains).toEqual([]);
     expect(await result).toBe(0);
     expect(processHost.groupKills).toEqual([[0, 'SIGKILL']]);
   });

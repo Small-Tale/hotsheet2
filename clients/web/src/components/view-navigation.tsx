@@ -24,6 +24,7 @@ import {
 } from 'lucide';
 
 import { contextMenuAnchor } from '../context-menu-position';
+import { viewTicketDropKey } from '../ticket-drop-target';
 
 export interface ViewNavigationItem {
   id: string;
@@ -39,6 +40,8 @@ export interface ViewNavigationItem {
 export interface ViewNavigationProps {
   items: ViewNavigationItem[];
   selectedId: string;
+  /** The view row a dragged ticket is over (HS2-G8EK08), rendered so a re-render mid-drag keeps it. */
+  dropTargetId?: string;
 }
 export interface SavedViewContextMenuState {
   id: string;
@@ -55,7 +58,7 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
   errors: [FileWarning, 'file-warning'],
   custom: [Search, 'search'],
 };
-export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
+export function ViewNavigation({ items, selectedId, dropTargetId }: ViewNavigationProps) {
   return (
     <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket Views">
       <List gap="2xs">
@@ -142,7 +145,12 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                   <ListItem
                     action="select-view"
                     itemId={item.id}
-                    rootAttributes={{ 'data-ticket-drop-status': dropStatus }}
+                    rootAttributes={{
+                      'data-ticket-drop-status': dropStatus,
+                      'data-ticket-drop-key': dropStatus ? viewTicketDropKey(item.id) : undefined,
+                      'data-dragging-ticket': dropStatus && item.id === dropTargetId ? 'true' : undefined,
+                    }}
+                    state={dropStatus && item.id === dropTargetId ? 'drag-target' : undefined}
                     selected={item.id === selectedId}
                     icon={<LucideIcon icon={icon} name={name} />}
                     label={item.label}

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 // HS2-AMNNBR / HS2-TBQQ00: switching from a project's terminal grid into the workspace grid, and
@@ -45,7 +46,7 @@ async function openGridWorkspace(page: Page) {
     }
     Object.assign(window, { WebSocket: FakeSocket });
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

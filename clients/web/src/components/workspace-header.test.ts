@@ -139,6 +139,24 @@ describe('WorkspaceHeader', () => {
     else expect(markup).not.toContain('view-mode-switcher__badge');
   });
 
+  it.each([0, 1, 3, 120])(
+    'counts %s waiting pairing requests on the Settings choice and menu item (HS2-BZHMEV)',
+    (count) => {
+      const markup = String(WorkspaceControls({ mode: 'list', settingsCount: count })),
+        settingsButton = /<button[^>]*data-segment-value="settings"[^>]*>[\s\S]*?<\/button>/.exec(markup)?.[0] ?? '',
+        waiting = `${count} pairing request${count === 1 ? '' : 's'} waiting`;
+      expect(settingsButton).toContain(`aria-label="Settings View${count ? `, ${waiting}` : ''}"`);
+      expect(markup).toContain(count ? `Show Settings (${waiting})` : 'Show Settings');
+      if (count)
+        expect(settingsButton).toContain(
+          `class="view-mode-switcher__badge" aria-hidden="true">${count > 99 ? '99+' : count}</span>`,
+        );
+      else expect(settingsButton).not.toContain('view-mode-switcher__badge');
+      // The Notifications count stays its own concept.
+      expect(markup).toContain('aria-label="Notifications View"');
+    },
+  );
+
   it('names the live worker count and last progress on the Workers choice, and nothing at 0 (HS2-6B9S7P)', () => {
     const workersButton = (markup: string) => /<button[^>]*data-segment-value="workers"[^>]*>/.exec(markup)?.[0] ?? '';
     const live = workersButton(
@@ -629,5 +647,21 @@ describe('TicketViewAction settings actions', () => {
     expect(markup).toMatch(/data-size="compact"[^>]*title="Add a command group"[^]*Group…/);
     expect(markup).toMatch(/data-size="compact"[^>]*title="Add a custom command"[^]*Command…/);
     expect(markup).not.toContain('Add group…');
+  });
+  it('disables both actions until the project has loaded its command settings (HS2-A6K8D5)', () => {
+    const disabled = (markup: string) =>
+      ['add-command-group', 'add-command-setting'].map((action) =>
+        new RegExp(
+          `<button[^>]*\\bdisabled\\b[^>]*data-action="${action}"|<button[^>]*data-action="${action}"[^>]*\\bdisabled\\b`,
+        ).test(markup),
+      );
+    expect(disabled(String(TicketViewAction({ action: { kind: 'command-settings', ready: false } })))).toEqual([
+      true,
+      true,
+    ]);
+    expect(disabled(String(TicketViewAction({ action: { kind: 'command-settings', ready: true } })))).toEqual([
+      false,
+      false,
+    ]);
   });
 });

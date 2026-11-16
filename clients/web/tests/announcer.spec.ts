@@ -350,6 +350,143 @@ test('HS2-PRCC6V sets voice, speed, and clears history from the settings menu', 
   if (captureDir) await page.screenshot({ path: `${captureDir}/hs2-prcc6v-docked-wide.png` });
 });
 
+test('HS2-CEZVSE lists the server engine voices in the announcer settings menu', async ({ page }) => {
+  const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'language', { configurable: true, get: () => 'en-US' });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:synthetic-speech' });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: () => undefined });
+    Object.defineProperty(window, 'Audio', {
+      configurable: true,
+      value: class {
+        onended?: () => void;
+        onerror?: () => void;
+        constructor(readonly src: string) {}
+        play() {
+          return Promise.resolve();
+        }
+        pause() {}
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/tts/providers', (route) => route.fulfill({ json: ['macos-say'] }));
+  const voiceReads: string[] = [];
+  await page.route('**/tts/voices**', (route) => {
+    voiceReads.push(new URL(route.request().url()).searchParams.get('provider') ?? '');
+    return route.fulfill({
+      json: [
+        { name: 'Synthetic Server Alto', lang: 'en-US' },
+        { name: 'Synthetic Server Bass (English (UK))', lang: 'en-GB' },
+        { name: 'Synthetique Serveur', lang: 'fr-FR' },
+      ],
+    });
+  });
+  await page.route('**/tts/synthesize', (route) =>
+    route.fulfill({ status: 200, contentType: 'audio/wav', body: Buffer.from('synthetic audio') }),
+  );
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: [
+        {
+          store_id: 'synthetic-store',
+          event: {
+            id: 'voice-1',
+            ts: '2026-11-01T01:00:00Z',
+            tool: 'codex',
+            kind: 'decision',
+            summary: 'codex decided: keep the synthetic sample short',
+            importance: 'high',
+          },
+        },
+      ],
+    }),
+  );
+  const launch = page.getByRole('button', { name: 'Announcer', exact: true });
+  await launch.click();
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  await expect(overlay).toContainText('keep the synthetic sample short');
+  // The browser engine reads no server voices.
+  expect(voiceReads).toEqual([]);
+  await chooseAnnouncerSetting(page, overlay, 'Voice', 'Mac voice on server');
+  await expect.poll(() => voiceReads).toEqual(['macos-say']);
+
+  const openVoiceMenu = async () => {
+    await overlay.getByRole('button', { name: 'Announcer Settings' }).click();
+    await page.getByRole('menuitem', { name: 'Voice', exact: true }).click();
+  };
+  const closeMenus = async () => {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menuitem', { name: 'Speed', exact: true })).toBeHidden();
+  };
+  await openVoiceMenu();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Mac voice on server', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Default voice', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Synthetic Server Alto', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('menuitemcheckbox', { name: 'Synthetic Server Bass (English (UK))', exact: true }),
+  ).toBeVisible();
+  // Only voices for the page's language are offered.
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Synthetique Serveur', exact: true })).toHaveCount(0);
+  if (captureDir)
+    await page.screenshot({ path: `${captureDir}/hs2-cezvse-server-voices-wide.png`, animations: 'disabled' });
+  await closeMenus();
+
+  await chooseAnnouncerSetting(page, overlay, 'Voice', 'Synthetic Server Bass (English (UK))');
+  const serverSpeech = page.waitForRequest('**/tts/synthesize');
+  await overlay.getByRole('button', { name: 'Play Narration' }).click();
+  expect((await serverSpeech).postDataJSON()).toMatchObject({
+    provider: 'macos-say',
+    voice: 'Synthetic Server Bass (English (UK))',
+    text: 'codex decided: keep the synthetic sample short',
+  });
+
+  // The chosen server voice survives a reload, and the menu reads the voices again.
+  await page.reload();
+  await page.getByRole('button', { name: 'Announcer', exact: true }).click();
+  await expect.poll(() => voiceReads.length).toBe(2);
+  await openVoiceMenu();
+  await expect(
+    page.getByRole('menuitemcheckbox', { name: 'Synthetic Server Bass (English (UK))', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await closeMenus();
+
+  for (const [name, width, height] of [
+    ['medium', 768, 900],
+    ['narrow', 390, 844],
+    ['wide-again', 1280, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    if (name === 'narrow' && !(await overlay.isVisible()))
+      await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+    await expect(overlay).toBeVisible();
+    await openVoiceMenu();
+    const choice = page.getByRole('menuitemcheckbox', { name: 'Synthetic Server Alto', exact: true });
+    await expect(choice).toBeVisible();
+    const box = await choice.boundingBox();
+    if (!box) throw new Error('The server voice choice must be measurable');
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    if (captureDir)
+      await page.screenshot({ path: `${captureDir}/hs2-cezvse-server-voices-${name}.png`, animations: 'disabled' });
+    await closeMenus();
+  }
+
+  // Back on the browser engine, the server voices leave the menu.
+  await chooseAnnouncerSetting(page, overlay, 'Voice', 'Browser voice');
+  await openVoiceMenu();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Synthetic Server Alto', exact: true })).toHaveCount(0);
+  await closeMenus();
+});
+
 test('HS2-7YD7S9 grows the current item instead of listing history', async ({ page }) => {
   const captureDir = process.env.ANNOUNCER_VISUAL_CAPTURE;
   await page.setViewportSize({ width: 1280, height: 800 });

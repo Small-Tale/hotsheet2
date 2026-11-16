@@ -3,9 +3,14 @@
  *
  * Clearing is a view action: the shell is not told and the running program keeps its state. Every
  * mounted viewport of the terminal in this client (dedicated, grid preview, and parked keep-alive)
- * drops its scrollback and screen but keeps the cursor's line, so the prompt stays usable. Viewports
- * talk to the emulator through DOM events, like the clipboard actions. The server's replay ring is
- * unchanged, so a viewport mounted later replays earlier output (shared clear: HS2-HA0Z3A).
+ * drops its scrollback and screen at once but keeps the cursor's line, so the prompt stays usable.
+ * Viewports talk to the emulator through DOM events, like the clipboard actions.
+ *
+ * The clear is then shared (HS2-HA0Z3A): the server's replay keeps only the cursor's line, so a
+ * reload, another client, or a remounted viewport no longer replays the cleared output, and the
+ * server sends every attached viewport (in any client) a replacement with that line. When the server
+ * cannot share it (an older server, or a detached broker that predates the clear), the local clear
+ * still stands.
  */
 
 import { matchesShortcut } from './keyboard-shortcuts';
@@ -48,4 +53,25 @@ export function clearTerminalViewports(root: ParentNode, identity: TerminalViewp
     cleared += 1;
   }
   return cleared;
+}
+
+/** Whether the clear reached the server's replay (`shared`) or stayed in this client (`local`). */
+export type TerminalClearReach = 'shared' | 'local';
+
+/**
+ * Clear one terminal everywhere (HS2-HA0Z3A): this client's viewports first, so the clear is instant,
+ * then the server's replay through `share`. A failed share leaves the local clear in place.
+ */
+export async function clearTerminalEverywhere(
+  root: ParentNode,
+  identity: TerminalViewportIdentity,
+  share: (identity: TerminalViewportIdentity) => Promise<unknown>,
+): Promise<TerminalClearReach> {
+  clearTerminalViewports(root, identity);
+  try {
+    await share(identity);
+    return 'shared';
+  } catch {
+    return 'local';
+  }
 }

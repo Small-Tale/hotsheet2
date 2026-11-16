@@ -3,8 +3,18 @@
 use assert_cmd::Command;
 use std::{path::Path, time::Duration};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 fn command(root: &Path, home: &Path) -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    // Launched once first so the macOS first-launch assessment never counts against the
+    // 20 s run timeout below (HS2-04D6DW).
+    let mut command = Command::new(first_launch::launched(
+        workspace_bin::path("hotsheet-cli"),
+        &["--version"],
+    ));
     let system_root = std::env::var_os("SystemRoot");
     command.env_clear();
     if let Some(system_root) = system_root {

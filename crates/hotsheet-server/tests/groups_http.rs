@@ -1032,3 +1032,110 @@ async fn hs2_9egwc4_a_server_group_write_is_committed_and_pushed_and_the_sync_lo
     assert_eq!(again["id"], theirs.as_str(), "{again}");
     assert_eq!(again["created"], false);
 }
+
+/// The `group_registry_sync` events replayed by the long poll after `cursor`, as
+/// `(id, slug)`, and the new cursor.
+async fn registry_sync_events(router: &axum::Router, cursor: u64) -> (Vec<(String, String)>, u64) {
+    let polled = ok(
+        router,
+        "GET",
+        &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+        None,
+    )
+    .await;
+    let events = polled["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "group_registry_sync")
+        .map(|event| {
+            (
+                event["id"].as_str().unwrap().to_owned(),
+                event["slug"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    (events, polled["cursor"].as_u64().unwrap())
+}
+
+/// HS2-1CWD0H: a change of the group registry's publication state is announced once as a
+/// replayable `group_registry_sync` event for the checkout, from a group write and from a
+/// sync-loop pass that recovers it; a repeat of the same state announces nothing, and
+/// nothing is announced once the watch guard drops.
+#[cfg(unix)]
+#[tokio::test]
+async fn hs2_1cwd0h_registry_publication_changes_are_announced_on_the_change_stream() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = project();
+    let root = &project.root;
+    let parent = root.parent().unwrap();
+    run_git(parent, &["init", "-q", "--bare", "-b", "main", "code.git"]);
+    let remote = parent.join("code.git");
+    run_git(root, &["init", "-q", "-b", "main"]);
+    std::fs::write(
+        root.join(".gitignore"),
+        "/.hotsheet2/*\n!/.hotsheet2/groups/\n",
+    )
+    .unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-q", "-m", "Seed"]);
+    run_git(root, &["remote", "add", "origin", remote.to_str().unwrap()]);
+    run_git(root, &["push", "-q", "-u", "origin", "main"]);
+    let hook = root.join(".git/hooks/pre-push");
+    std::fs::write(&hook, "#!/bin/sh\necho 'gate refused' >&2\nexit 1\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let watch = project.state.watch_group_registry_sync();
+    let (_, cursor) = registry_sync_events(&project.router, 0).await;
+    let base = format!("/checkouts/{}", project.checkout);
+    ok(
+        &project.router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Sprint" })),
+    )
+    .await;
+    let (events, cursor) = registry_sync_events(&project.router, cursor).await;
+    assert_eq!(events, [(project.checkout.clone(), "failed".to_owned())]);
+
+    // Still refused: a pass and another write record the same state and announce nothing.
+    hotsheet_server::sync_loop::sync_group_registries(&project.state);
+    ok(
+        &project.router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Later" })),
+    )
+    .await;
+    let (events, cursor) = registry_sync_events(&project.router, cursor).await;
+    assert_eq!(events, []);
+
+    // The sync loop publishes once the hook passes; no group operation is involved.
+    std::fs::remove_file(&hook).unwrap();
+    hotsheet_server::sync_loop::sync_group_registries(&project.state);
+    hotsheet_server::sync_loop::sync_group_registries(&project.state);
+    let (events, cursor) = registry_sync_events(&project.router, cursor).await;
+    assert_eq!(events, [(project.checkout.clone(), "synced".to_owned())]);
+    let listed = ok(&project.router, "GET", &format!("{base}/groups"), None).await;
+    assert_eq!(listed["registry_sync"]["state"], "synced", "{listed}");
+
+    drop(watch);
+    std::fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    ok(
+        &project.router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Unwatched" })),
+    )
+    .await;
+    assert_eq!(
+        hotsheet_ticketing::groups::GroupRegistry::for_checkout(root)
+            .sync_status()
+            .map(|status| status.state),
+        Some(hotsheet_ticketing::groups::git_sync::RegistrySyncState::Failed)
+    );
+    let (events, _) = registry_sync_events(&project.router, cursor).await;
+    assert_eq!(events, []);
+}

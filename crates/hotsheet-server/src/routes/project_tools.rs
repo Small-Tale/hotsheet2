@@ -901,3 +901,29 @@ pub(crate) async fn synthesize_speech(
 pub(crate) async fn list_tts_providers(State(state): State<AppState>) -> Json<Vec<String>> {
     Json(state.tts.available())
 }
+
+#[derive(Deserialize)]
+pub(crate) struct TtsVoicesQuery {
+    provider: Option<String>,
+}
+
+/// The voices a server speech provider offers, for the announcer's Voice menu (HS2-CEZVSE).
+pub(crate) async fn list_tts_voices(
+    State(state): State<AppState>,
+    Query(query): Query<TtsVoicesQuery>,
+) -> Result<Json<Vec<tts::TtsVoice>>, ApiError> {
+    let providers = state.tts.clone();
+    tokio::task::spawn_blocking(move || providers.voices(query.provider.as_deref()))
+        .await
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "speech worker failed"))?
+        .map(Json)
+        .map_err(|error| match error {
+            tts::TtsVoicesError::UnknownProvider => ApiError::new(
+                StatusCode::NOT_FOUND,
+                "no matching TTS provider is configured",
+            ),
+            tts::TtsVoicesError::Unavailable(message) => {
+                ApiError::new(StatusCode::SERVICE_UNAVAILABLE, message)
+            }
+        })
+}

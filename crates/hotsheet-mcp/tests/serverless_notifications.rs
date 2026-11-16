@@ -14,6 +14,17 @@ mod git_fixture;
 use hotsheet_ticketing::StoreMetadata;
 use serde_json::{Value, json};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
+/// The `hotsheet-mcp` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn mcp_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-mcp"), &["--version"])
+}
+
 /// A request the loopback ntfy server received: its request line and `Title` header.
 struct Received {
     line: String,
@@ -93,7 +104,7 @@ fn hs2_fyz5s9_serverless_mcp_writes_notify_and_defer_to_a_live_server() {
     )
     .unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(mcp_binary())
         .arg("--path")
         .arg(&store)
         .current_dir(root.path())

@@ -38,8 +38,26 @@ export function storeThemePreference(
   }
 }
 
-/** Pin or release the document's color scheme through Kerf's appearance scope classes. */
+/** The browser and installed-app chrome color for each scheme; matches `index.html` and the surface tokens. */
+export const THEME_COLORS = { light: '#ffffff', dark: '#1c1c1e' } as const;
+
+/**
+ * The `theme-color` a meta tag carries (HS2-15W35F). Under Auto each tag keeps the color of its own
+ * `prefers-color-scheme` media query; a pinned scheme gives every tag the pinned color, so whichever
+ * query the system matches still reports the app's scheme.
+ */
+export function themeColorFor(media: string, preference: ThemePreference): string {
+  if (preference !== 'auto') return THEME_COLORS[preference];
+  return media.includes('dark') ? THEME_COLORS.dark : THEME_COLORS.light;
+}
+
+/**
+ * Pin or release the document's color scheme through Kerf's appearance scope classes, and keep the
+ * PWA `theme-color` metas (browser toolbar, installed web app title bar) on the same scheme.
+ */
 export function applyThemePreference(root: Element, preference: ThemePreference): void {
   root.classList.toggle('kui-light', preference === 'light');
   root.classList.toggle('kui-dark', preference === 'dark');
+  for (const meta of root.ownerDocument.querySelectorAll('meta[name="theme-color"]'))
+    meta.setAttribute('content', themeColorFor(meta.getAttribute('media') ?? '', preference));
 }

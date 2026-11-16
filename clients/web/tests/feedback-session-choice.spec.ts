@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 test('HS2-25TP3N saves human feedback and offers a project session chooser across resize', async ({ page }) => {
   const server = await realTicketServer();
@@ -33,7 +33,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
         });
         return;
       }
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...request.headers(), 'X-Hotsheet-Secret': server.secret },
       });

@@ -127,6 +127,7 @@ import {
   parseTrashPurge,
   parseTrashPurgePreview,
   parseTrashSettings,
+  parseTtsVoices,
   type ResponseParser,
 } from './server-response-parsers';
 import { parseStandbySettings, type StandbySettingsView } from './standby';
@@ -353,6 +354,8 @@ export type Capabilities = Record<
   query_fields: string[];
   /** Atomic note-kind correction; omitted older/provider capability is false. */
   note_kind_edit?: boolean;
+  /** Link an existing note as a feedback response (HS2-J4G9GB); omitted older/provider capability is false. */
+  note_response_link?: boolean;
   /** Append or correct a note's completion confidence; omitted older capability is false. */
   note_confidence?: boolean;
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
@@ -369,6 +372,13 @@ export type Capabilities = Record<
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
+/** One voice a server speech provider offers (`GET /tts/voices`, HS2-CEZVSE). */
+export interface TtsVoice {
+  /** The value the provider accepts as a synthesis `voice`. */
+  name: string;
+  /** A BCP 47 language tag such as `en-US`. */
+  lang: string;
+}
 export interface ProviderDescriptor {
   connection_id: string;
   provider: string;
@@ -2369,6 +2379,8 @@ export class Api {
     this.parsed(parseClientNotification, `/notifications/${encodeURIComponent(id)}/ack`, { method: 'POST' });
   /** Configured server speech adapters; browser speech is a separate local choice (HS2-5PSQJQ). */
   ttsProviders = () => this.parsed(parseStringList, '/tts/providers');
+  /** One server speech provider's voices, for the announcer's Voice menu (HS2-CEZVSE). */
+  ttsVoices = (provider: string) => this.parsed(parseTtsVoices, `/tts/voices?provider=${encodeURIComponent(provider)}`);
   synthesizeSpeech = async (text: string, provider: string, voice?: string): Promise<Blob> => {
     const headers = new Headers({ 'Content-Type': 'application/json', 'X-Hotsheet-Secret': this.secret });
     const response = await fetch(`${this.origin}/tts/synthesize`, {
@@ -3048,6 +3060,12 @@ export class Api {
     this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/halt?at=${encodeURIComponent(at)}`, {
       method: 'DELETE',
     });
+  /**
+   * Clear a terminal for every viewer (HS2-HA0Z3A): the server's replay keeps only the cursor's line,
+   * and attached viewports receive a replacement. Rejects with `501` when a detached broker predates it.
+   */
+  clearTerminal = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/clear`, { method: 'POST' });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
     this.parsed(parseTerminalName, `/terminals/${encodeURIComponent(id)}/name`, {

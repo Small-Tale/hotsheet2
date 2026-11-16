@@ -23,6 +23,18 @@ describe('TicketGroup (HS2-WZ3JGZ, HS2-HV8S4Y)', () => {
     expect(markup).not.toContain('data-drop-target');
   });
 
+  it('starts on the rows’ edge and offers a separate overflow button for the group menu (HS2-HKXSB1)', () => {
+    const markup = String(TicketGroup({ group: '7K3M9P2QXA', name: 'Sprint', count: 2, scope: 'list' }));
+    expect(markup).toMatch(/data-component="list-header"[^>]*data-leading-edge="summary-row"/);
+    const overflow = /<button[^>]*data-action="open-ticket-group-menu"[^>]*>/.exec(markup)![0];
+    expect(overflow).toContain('data-ticket-group="7K3M9P2QXA"');
+    expect(overflow).toContain('aria-haspopup="menu"');
+    expect(markup).toContain('Sprint Group Actions');
+    // The overflow button is its own control, not part of the disclosure toggle.
+    expect(overflow).not.toContain('toggle-ticket-group');
+    expect(overflow).not.toContain('aria-expanded');
+  });
+
   it('keeps the header and removes the region when collapsed', () => {
     const markup = String(
       TicketGroup({

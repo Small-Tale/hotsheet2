@@ -333,6 +333,36 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.commandSettingsMessage('a')).toBe('owned group failure');
   });
 
+  it('HS2-BZKTDC reports loading, then a failed first read, retry, and ready without claiming no commands', () => {
+    const owner = createCommandsController({
+      projects: signal([project('a'), project('b')]),
+      selectedProjectId: signal('a'),
+      storedWorkspacePreferences: DEFAULT_WORKSPACE_PREFERENCES,
+    });
+    expect(owner.commandSettingsLoadState('a')).toBe('loading');
+    // A first read that fails is the editor's failed-load state, not a status-line message.
+    expect(owner.commandSettingsLoadFailed('a', 'offline')).toBe(true);
+    expect(owner.commandSettingsLoadState('a')).toBe('failed');
+    expect(owner.commandSettingsLoadError('a')).toBe('offline');
+    expect(owner.commandSettingsLoadState('b')).toBe('loading');
+    // Retry goes back to loading; a second failure fails again with the newer reason.
+    owner.retryCommandSettingsLoad('a');
+    expect(owner.commandSettingsLoadState('a')).toBe('loading');
+    expect(owner.commandSettingsLoadError('a')).toBeUndefined();
+    owner.retryCommandSettingsLoad('a');
+    expect(owner.commandSettingsLoadState('a')).toBe('loading');
+    expect(owner.commandSettingsLoadFailed('a', 'still offline')).toBe(true);
+    expect(owner.commandSettingsLoadError('a')).toBe('still offline');
+    // A later read that succeeds (a retry or a change-stream refresh) makes it ready and clears the error.
+    owner.loadCommandRevisions('a', 'r1', 'g1');
+    expect(owner.commandSettingsLoadState('a')).toBe('ready');
+    expect(owner.commandSettingsLoadError('a')).toBeUndefined();
+    // After the first load a failure belongs in the status line; the editor stays ready.
+    expect(owner.commandSettingsLoadFailed('a', 'refresh failed')).toBe(false);
+    expect(owner.commandSettingsLoadState('a')).toBe('ready');
+    expect(owner.commandSettingsLoadState('b')).toBe('loading');
+  });
+
   it('rejects stale repository pages after project replacement and permits reset/empty/refill pagination', async () => {
     const active = signal<Project | undefined>(project('a'));
     const owner = createRepositoryController({
@@ -2527,7 +2557,12 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     ai: state.ai,
     permissions,
     terminals: {
-      terminalSearch: { model: createSearchFieldModel(), open: signal(false) },
+      terminalSearch: {
+        model: createSearchFieldModel(),
+        open: signal(false),
+        results: signal(undefined),
+        countCompact: signal(false),
+      },
       terminalGroups: groups,
       terminalGridFullscreen: signal(false),
       terminalDrawerPendingByProject: signal({}),

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import type { ViteDevServer } from 'vite';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   bundleClientBuildId,
@@ -7,6 +8,7 @@ import {
   stableDevHmr,
   stableDevInjectClientScript,
   stripStableDevClientTag,
+  testServerIdentityPlugin,
   viteDependencyIsolation,
 } from '../vite.config';
 
@@ -34,6 +36,14 @@ describe('Vite dependency isolation', () => {
       cacheDir: '/tmp/test-cache',
     });
     expect(viteDependencyIsolation({})).toEqual({});
+  });
+
+  it('HS2-GVSJ5Y ignores a blank cache directory and keeps a relative or absolute one', () => {
+    for (const blank of ['', ' ', '\t\n '])
+      expect(viteDependencyIsolation({ HOTSHEET_VITE_CACHE_DIR: blank })).toEqual({});
+    expect(viteDependencyIsolation({ HOTSHEET_VITE_CACHE_DIR: 'relative/cache' })).toEqual({
+      cacheDir: 'relative/cache',
+    });
   });
 
   it('disables HMR only in the frozen stable-dev snapshot (HS2-8JV12R)', () => {
@@ -103,5 +113,76 @@ describe('client build id stamping (HS2-KPJWBK)', () => {
   it('gives each development server process its own id', () => {
     expect(developmentClientBuildId(36, 'ab12cd34')).toBe('dev-10-ab12cd34');
     expect(developmentClientBuildId()).not.toBe(developmentClientBuildId());
+  });
+});
+
+describe('test server identity readiness (HS2-BJ00D1, HS2-15EYK1)', () => {
+  type Middleware = (
+    request: { url?: string },
+    response: { statusCode: number; end: () => void },
+    next: () => void,
+  ) => void;
+
+  function serve(environment: NodeJS.ProcessEnv, warm: () => Promise<unknown>) {
+    let middleware: Middleware | undefined;
+    const warn = vi.fn();
+    const server = {
+      middlewares: {
+        use: (handler: Middleware) => {
+          middleware = handler;
+        },
+      },
+      config: { logger: { warn } },
+    } as unknown as ViteDevServer;
+    const plugin = testServerIdentityPlugin(environment, warm);
+    (plugin.configureServer as (server: ViteDevServer) => void)(server);
+    const status = (url: string) => {
+      const response = { statusCode: 0, end: () => undefined };
+      const next = vi.fn();
+      middleware!({ url }, response, next);
+      return next.mock.calls.length > 0 ? 'next' : response.statusCode;
+    };
+    return { status, warn };
+  }
+
+  it('answers 503 until the module graph is warm, warms once, then answers 200', async () => {
+    let finish!: () => void;
+    const warm = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const { status } = serve({ HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: 'own' }, warm);
+    expect(status('/__hotsheet-test-server/own')).toBe(503);
+    expect(status('/__hotsheet-test-server/own?again')).toBe(503);
+    expect(status('/__hotsheet-test-server/other')).toBe(404);
+    expect(status('/src/main.tsx')).toBe('next');
+    expect(warm).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.waitFor(() => {
+      expect(status('/__hotsheet-test-server/own')).toBe(200);
+    });
+    expect(warm).toHaveBeenCalledTimes(1);
+  });
+
+  it('a foreign identity request never starts the warm-up', () => {
+    const warm = vi.fn(() => Promise.resolve());
+    const { status } = serve({ HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: 'own' }, warm);
+    expect(status('/__hotsheet-test-server/other')).toBe(404);
+    expect(warm).not.toHaveBeenCalled();
+  });
+
+  it('becomes ready after a failed warm-up and logs the failure', async () => {
+    const { status, warn } = serve({ HOTSHEET_WEB_STABLE_DEV: '1', HOTSHEET_WEB_TEST_SERVER_ID: 'own' }, () =>
+      Promise.reject(new Error('transform failed')),
+    );
+    expect(status('/__hotsheet-test-server/own')).toBe(503);
+    await vi.waitFor(() => {
+      expect(status('/__hotsheet-test-server/own')).toBe(200);
+    });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('transform failed'));
+  });
+
+  it('a hot dev server answers at once without warming, and an id-less server answers 404', () => {
+    const warm = vi.fn(() => Promise.resolve());
+    expect(serve({ HOTSHEET_WEB_TEST_SERVER_ID: 'own' }, warm).status('/__hotsheet-test-server/own')).toBe(200);
+    expect(serve({ HOTSHEET_WEB_STABLE_DEV: '1' }, warm).status('/__hotsheet-test-server/own')).toBe(404);
+    expect(warm).not.toHaveBeenCalled();
   });
 });

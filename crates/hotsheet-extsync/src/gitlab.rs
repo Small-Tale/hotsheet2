@@ -995,6 +995,7 @@ fn capabilities() -> ProviderCapabilities {
         close: true,
         notes: true,
         note_kind_edit: false,
+        note_response_link: false,
         note_edit: false,
         note_delete: false,
         // Native project uploads linked from marked notes (HS2-ENHE8K). The original upload
@@ -1291,6 +1292,23 @@ mod tests {
         let gitlab = provider(fake.clone());
         assert!(gitlab.supports_note_confidence());
         assert!(!gitlab.descriptor().capabilities.note_kind_edit);
+        // HS2-J4G9GB: linking an existing note is explicitly unsupported, never silent.
+        assert!(!gitlab.descriptor().capabilities.note_response_link);
+        assert!(matches!(
+            gitlab.edit_note_with_metadata(
+                "42",
+                "91",
+                Timestamp::new("2026-10-26T00:00:00Z"),
+                hotsheet_ticketing::ops::NoteEditInput {
+                    response_to: Some(Some("90".into())),
+                    ..Default::default()
+                }
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "note_response_link",
+                ..
+            })
+        ));
         assert!(matches!(
             gitlab.edit_note_with_metadata(
                 "42",

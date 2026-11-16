@@ -32,7 +32,7 @@ pub struct SocketCleanup;
 #[cfg(unix)]
 use crate::manager::TerminalManager;
 #[cfg(unix)]
-use crate::sizing::ViewportClaim;
+use crate::sizing::{SizeClaimOwner, ViewportClaim};
 #[cfg(unix)]
 use crate::terminal::TermSpec;
 use crate::terminal::TerminalKind;
@@ -42,6 +42,17 @@ use crate::wire_bytes::{BytesEncoding, WireBytes};
 
 /// Detached brokers exit after this long with no terminals and no connected clients.
 pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
+
+/// The machine home under which the broker journals the child processes it starts.
+pub const PROCESS_JOURNAL_HOME_ENV: &str = "HOTSHEET_PROCESS_JOURNAL_HOME";
+
+/// Pure resolution of [`PROCESS_JOURNAL_HOME_ENV`]: a blank value counts as unset, so the
+/// broker never journals into a relative `""` home in its working directory (HS2-15ZN8E).
+pub fn resolve_process_journal_home(
+    value: Option<std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    hotsheet_sync::env_path::non_blank(value)
+}
 
 /// A real millis clock for the broker process (the size arbiter is deterministic given it).
 /// Distinct from the terminal's injected test clock — the broker runs as its own process.
@@ -118,6 +129,11 @@ pub enum Request {
     Input { id: String, data: Vec<u8> },
     /// Kill + forget the terminal.
     Kill { id: String },
+    /// Clear the terminal for every viewer (HS2-HA0Z3A): the replay keeps only the cursor's line
+    /// and every attached stream receives a replacement [`StreamOut::Scrollback`]. Answered with
+    /// [`Response::Ok`] or [`Response::NotFound`]. Brokers that predate it answer
+    /// `Err { "bad request: …" }`, which callers report as unsupported; the terminal is unchanged.
+    ClearReplay { id: String },
     /// **Switch this connection into streaming mode** for terminal `id` (HS2-ERT00F item 4):
     /// the broker replays the scrollback then streams live output + size decisions as
     /// [`StreamOut`] frames, and reads [`StreamIn`] frames (input + size claims) until the
@@ -616,7 +632,9 @@ async fn stream_terminal(
     // once in either the replay or the live stream (HS2-5W0V9M).
     let (snapshot, out_rx) = term.subscribe_with_replay();
     let size_rx = term.subscribe_size();
-    let mut my_viewer: Option<String> = None;
+    // This connection's claims, released when it ends. A client that reconnected under the
+    // same viewer id keeps its newer claim (HS2-CCNRVW).
+    let owner = SizeClaimOwner::next();
 
     write_line(
         &mut write,
@@ -658,10 +676,10 @@ async fn stream_terminal(
                         match inbound {
                             StreamIn::Input { data } => { let _ = term.queue_input(data.into_vec()).await; }
                             StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting, answers_queries } => {
-                                my_viewer = Some(viewer_id.clone());
                                 let now = now_ms();
-                                term.claim_size(
+                                term.claim_size_owned(
                                     ViewportClaim { viewer_id, cols, rows, focus, visible, interacting, answers_queries, activity_at_ms: now },
+                                    owner,
                                     now,
                                 );
                             }
@@ -676,10 +694,9 @@ async fn stream_terminal(
     pump.abort();
     writer.abort();
 
-    // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
-    if let Some(v) = my_viewer {
-        term.drop_viewer(&v, now_ms());
-    }
+    // Self-heal: drop the claims this connection still owns so the PTY size recomputes for the
+    // rest.
+    term.release_owner(owner, now_ms());
     Ok(())
 }
 
@@ -731,14 +748,15 @@ async fn handle_request(
                 replay_bytes: replay_bytes.map_or(crate::SCROLLBACK_BYTES, |bytes| {
                     usize::try_from(bytes).unwrap_or(usize::MAX)
                 }),
-                provenance: std::env::var_os("HOTSHEET_PROCESS_JOURNAL_HOME").map(|home| {
-                    crate::ProcessProvenance {
-                        machine_home: std::path::PathBuf::from(home),
-                        supervisor: "terminal-broker".into(),
-                        project_id: project.to_string(),
-                        session_id: id.clone(),
-                        binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
-                    }
+                provenance: resolve_process_journal_home(std::env::var_os(
+                    PROCESS_JOURNAL_HOME_ENV,
+                ))
+                .map(|machine_home| crate::ProcessProvenance {
+                    machine_home,
+                    supervisor: "terminal-broker".into(),
+                    project_id: project.to_string(),
+                    session_id: id.clone(),
+                    binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
                 }),
             };
             // A new PTY would inherit this broker's dead bootstrap namespace and fail in
@@ -852,6 +870,13 @@ async fn handle_request(
                     message: e.to_string(),
                 },
             },
+            None => Response::NotFound,
+        },
+        Request::ClearReplay { id } => match manager.get(&key(&id)) {
+            Some(term) => {
+                term.clear_replay();
+                Response::Ok
+            }
             None => Response::NotFound,
         },
         Request::Kill { id } => match manager.kill(&key(&id)) {
@@ -1148,6 +1173,33 @@ impl BrokerStreamWriter {
 
     pub async fn send(&mut self, _frame: &StreamIn) -> std::io::Result<()> {
         Err(unsupported())
+    }
+}
+
+#[cfg(test)]
+mod journal_home_tests {
+    use super::resolve_process_journal_home;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    #[test]
+    fn hs2_15zn8e_process_journal_home_treats_blank_as_unset() {
+        assert_eq!(resolve_process_journal_home(None), None);
+        for blank in ["", " ", "\t", " \n "] {
+            assert_eq!(
+                resolve_process_journal_home(Some(OsString::from(blank))),
+                None,
+                "{blank:?}"
+            );
+        }
+        assert_eq!(
+            resolve_process_journal_home(Some(OsString::from("rel/home"))),
+            Some(PathBuf::from("rel/home"))
+        );
+        assert_eq!(
+            resolve_process_journal_home(Some(OsString::from("/abs/home"))),
+            Some(PathBuf::from("/abs/home"))
+        );
     }
 }
 

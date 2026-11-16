@@ -1,7 +1,7 @@
 import { type Browser, chromium, expect, type Locator, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
 
 // HS2-1YX5VS: a desktop with the terminal in its bottom drawer and a phone looking at the same
@@ -85,7 +85,7 @@ async function openViewer(
   await page.route('**/__hotsheet/project-api/terminal-feedback/terminals**', async (route) => {
     const url = new URL(route.request().url()),
       path = url.pathname.replace(project.apiPath, '');
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}${path}${url.search}`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
     });

@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-WGTQ6X: switching back to a project keeps its drawer terminal alive — the same emulator
 // and socket, painted on the first frame — instead of rebuilding it and replaying scrollback.
 
@@ -87,7 +89,7 @@ async function installWorkspace(page: Page, movedShell = false) {
     },
     { roots: projects.map((item) => item.root), ids: projects.map((item) => item.id) },
   );
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = decodeURIComponent(new URL(request.url()).pathname);
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path) && request.method() === 'POST') {

@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { launchOnce } from './first-launch.mjs';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
+
+const noWarm = () => {};
 
 describe('HS2-SFVWN5 unattended credential boundary', () => {
   it('HS2-63ZK8W builds the canonical isolated fixtures before the required WebKit cases', () => {
@@ -26,20 +29,24 @@ describe('HS2-SFVWN5 unattended credential boundary', () => {
 
   it('checks the CLI native capability without assuming permission-vault activation', () => {
     expect(() =>
-      assertFixtureCli('fixture', () => ({ status: 0, stdout: '{"isolated_native_credentials":true}' })),
+      assertFixtureCli('fixture', () => ({ status: 0, stdout: '{"isolated_native_credentials":true}' }), noWarm),
     ).not.toThrow();
     expect(() =>
-      assertFixtureCli('fixture', () => ({ status: 0, stdout: '{"isolated_native_credentials":false}' })),
+      assertFixtureCli('fixture', () => ({ status: 0, stdout: '{"isolated_native_credentials":false}' }), noWarm),
     ).toThrow(/HS2-SFVWN5/);
   });
   it('accepts only the actual compiled isolated capability with bounded execution', () => {
     expect(() =>
-      assertFixtureServer('fixture', (binary, args, options) => {
-        expect(binary).toBe('fixture');
-        expect(args).toEqual(['--test-fixture-capabilities']);
-        expect(options.timeout).toBe(5000);
-        return { status: 0, stdout: '{"isolated_permission_vault":true,"isolated_native_credentials":true}' };
-      }),
+      assertFixtureServer(
+        'fixture',
+        (binary, args, options) => {
+          expect(binary).toBe('fixture');
+          expect(args).toEqual(['--test-fixture-capabilities']);
+          expect(options.timeout).toBe(5000);
+          return { status: 0, stdout: '{"isolated_permission_vault":true,"isolated_native_credentials":true}' };
+        },
+        noWarm,
+      ),
     ).not.toThrow();
     for (const result of [
       { status: 0, stdout: '{"isolated_permission_vault":false}' },
@@ -48,7 +55,43 @@ describe('HS2-SFVWN5 unattended credential boundary', () => {
       { status: 1, stdout: '' },
       { status: null, error: new Error('deadline') },
     ])
-      expect(() => assertFixtureServer('fixture', () => result)).toThrow(/Temporary HOTSHEET_HOME/);
+      expect(() => assertFixtureServer('fixture', () => result, noWarm)).toThrow(/Temporary HOTSHEET_HOME/);
+  });
+
+  it('HS2-04D6DW launches the binary once untimed before the bounded probe', () => {
+    const calls = [];
+    const capable = '{"isolated_permission_vault":true,"isolated_native_credentials":true}';
+    for (const assert of [assertFixtureServer, assertFixtureCli])
+      assert(
+        'fixture',
+        (binary, args, options) => {
+          calls.push(['probe', binary, options.timeout]);
+          return { status: 0, stdout: capable };
+        },
+        (binary) => calls.push(['warm', binary]),
+      );
+    expect(calls).toEqual([
+      ['warm', 'fixture'],
+      ['probe', 'fixture', 5000],
+      ['warm', 'fixture'],
+      ['probe', 'fixture', 5000],
+    ]);
+  });
+
+  it('HS2-04D6DW launches each path once, without a deadline, and tolerates a missing binary', () => {
+    const calls = [];
+    const execute = (binary, args, options) => {
+      calls.push([binary, args, options]);
+      return { status: null, error: new Error('ENOENT') };
+    };
+    const path = `first-launch-fixture-${process.pid}-${Date.now()}`;
+    expect(launchOnce(path, ['--version'], execute)).toBe(path);
+    expect(launchOnce(path, ['--version'], execute)).toBe(path);
+    launchOnce(`${path}-other`, ['--exit', '0'], execute);
+    expect(calls).toEqual([
+      [path, ['--version'], { stdio: 'ignore' }],
+      [`${path}-other`, ['--exit', '0'], { stdio: 'ignore' }],
+    ]);
   });
 
   it('pins isolated builds and preflight before real browser fixture mutation', () => {

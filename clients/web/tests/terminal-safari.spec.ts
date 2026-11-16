@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { expect, type Locator, type Page, test, webkit } from '@playwright/test';
 
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
 import { printThenEcho } from './terminal-fixture-command';
 
@@ -87,7 +87,7 @@ for (const width of [390, 1280]) {
       await page.route('**/__hotsheet/project-api/terminal-feedback/terminals**', async (route) => {
         const url = new URL(route.request().url()),
           path = url.pathname.replace(project.apiPath, '');
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${url.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });

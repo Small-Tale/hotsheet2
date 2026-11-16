@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const project = {
   id: 'no-git',
   root: '/work/no-git',
@@ -14,7 +16,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
     remoteBody: unknown,
     remoteAttempts = 0;
   const fileCursors: number[] = [];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;

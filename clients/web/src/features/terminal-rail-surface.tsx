@@ -27,6 +27,7 @@ import { type Project } from '../interactions/types';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { ticketBoardGroups } from '../ticket-board-layout';
 import { canBulkUpdate } from '../ticket-bulk-operations';
+import { columnTicketDropKey, isTicketDropTarget } from '../ticket-drop-target';
 import {
   ALL_TICKETS_SCOPE,
   canCreateTicketInView,
@@ -184,6 +185,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
                 totalCount: group.tickets.length,
                 tickets: group.tickets.map(row),
                 ...ticketGroups.collectionProps(group.id),
+                dropTarget: isTicketDropTarget(columnTicketDropKey(group.id)),
               }))}
               label="Project board"
               layout="paged"

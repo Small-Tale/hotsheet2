@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
 
@@ -105,7 +105,7 @@ test('HS2-R0E39D crashed worker lease expires before a synthetic claim is taken 
     await page.route(`**${apiPath}/**`, async (route) => {
       const incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -218,6 +218,6 @@ test('HS2-R0E39D crashed worker lease expires before a synthetic claim is taken 
       worker.kill('SIGKILL');
       await exited;
     }
-    await server.stop();
+    await server.stop(page);
   }
 });

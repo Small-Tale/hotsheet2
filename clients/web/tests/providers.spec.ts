@@ -17,10 +17,11 @@ import { isFeedbackNeeded } from '../src/feedback-needed';
 import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
+import { appRequests } from './app-requests';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
-import { realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+import { openUpstreamSocket, proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 import { printThenEcho } from './terminal-fixture-command';
 import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
@@ -40,7 +41,7 @@ test('routes live server notices into the project inbox and bell (HS2-ZP869N)', 
         const path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         const query = new URLSearchParams(incoming.search);
         if (path === '/notifications') query.set('checkout', server.checkoutId);
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${query.size ? `?${query}` : ''}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -547,7 +548,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
       const incoming = new URL(route.request().url());
       incoming.searchParams.set('connection_id', realGitSource!);
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 35_000,
@@ -559,7 +560,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
       }
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -576,7 +577,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
     expect(workerStatuses.every((status) => status === 200)).toBe(true);
   } finally {
     await page.goto('about:blank').catch(() => undefined);
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -640,7 +641,7 @@ test('HS2-1Z3T0Z shows workers-first and late registration from real coordinatio
       const incoming = new URL(route.request().url());
       incoming.searchParams.set('connection_id', source!);
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/workers${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 35_000,
@@ -651,7 +652,7 @@ test('HS2-1Z3T0Z shows workers-first and late registration from real coordinatio
       }
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -1402,6 +1403,7 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -1542,7 +1544,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -4090,7 +4092,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
     await mockProject(page);
     const writes: string[] = [];
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -4101,7 +4103,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
       async (route) => {
         const connection = new URL(route.request().url()).pathname.split('/').at(-2)!;
         writes.push(route.request().postData() ?? '');
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}/checkouts/${server.checkoutId}/sources/${connection}/ticket-prefix`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -4164,7 +4166,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
     expect((await realProviders()).find((item) => item.connection_id === gitId)?.ticket_prefix).toBe('ACME');
   } finally {
     await page.goto('about:blank').catch(() => undefined);
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -7535,6 +7537,7 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7822,6 +7825,7 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   // A new chat launches with the provider's project default (Codex: never ask) and shows it on its tab.
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7927,6 +7931,7 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   // The chat tab keeps its permission shield at phone width.
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -7962,6 +7967,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect(page.locator('kui-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8061,7 +8067,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
     busy: boolean;
     cwd: string;
   }> = [];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (!path.endsWith('/terminals')) return route.fallback();
@@ -8086,6 +8092,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8130,6 +8137,7 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
@@ -8196,6 +8204,7 @@ test('names the AI shell after the only installed provider (HS2-3HT4PA)', async 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     menu = drawer.locator('[data-terminal-drawer-create]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -8223,6 +8232,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     create = drawer.getByRole('button', { name: 'New Drawer Item' });
@@ -8367,6 +8377,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -8428,6 +8439,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -8703,6 +8715,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9039,6 +9052,7 @@ test('selects and copies chat messages before saving that range without choosing
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -9255,6 +9269,7 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -9407,6 +9422,7 @@ test('selects single and non-contiguous messages with modifier keys in the drawe
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9434,6 +9450,7 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -9500,6 +9517,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -9696,6 +9714,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -9773,6 +9792,7 @@ test('previews running project resources with shared menus and explicit keep-run
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -9929,7 +9949,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       await page.route(pattern, async (route) => {
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -10017,7 +10037,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -10177,7 +10197,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -10402,8 +10422,11 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
   test.setTimeout(120_000);
   const server = await realTicketServer(),
     wideLine = `WIDE-PTY-${'0123456789'.repeat(11)}`,
-    connections: Array<{ claims: Array<{ focus?: boolean; interacting?: boolean }>; sizes: unknown[] }> = [],
-    upstreams: WebSocket[] = [];
+    connections: Array<{ claims: Array<{ focus?: boolean; interacting?: boolean }>; sizes: unknown[] }> = [];
+  // HS2-6TK3SB: `page.unrouteAll` removes HTTP routes but not WebSocket routes, so after teardown
+  // the drawer terminal's reconnect still reaches this handler. `openUpstreamSocket` refuses it once
+  // `server.stop(page)` begins, and a refused upstream closes its route rather than throwing an
+  // unhandled `ECONNREFUSED` (HS2-N8FTCK).
   const attachUrl = (id: string) =>
     `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(id)}/attach?secret=${server.secret}`;
   try {
@@ -10430,7 +10453,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -10442,11 +10465,11 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
       });
     await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
       const id = decodeURIComponent(new URL(route.url()).pathname.split('/').at(-2)!),
-        upstream = new WebSocket(attachUrl(id)),
-        pending: Array<string | Buffer> = [],
+        upstream = openUpstreamSocket(route, attachUrl(id));
+      if (!upstream) return;
+      const pending: Array<string | Buffer> = [],
         connection: (typeof connections)[number] = { claims: [], sizes: [] };
       connections.push(connection);
-      upstreams.push(upstream);
       route.onMessage((message) => {
         if (typeof message === 'string' && message.startsWith('{"resize"'))
           connection.claims.push((JSON.parse(message) as { resize: (typeof connection.claims)[number] }).resize);
@@ -10464,12 +10487,6 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         const text = (data as Buffer).toString();
         if (text.includes('"pty_size"')) connection.sizes.push(JSON.parse(text));
         route.send(text);
-      });
-      upstream.on('close', () => {
-        void route.close().catch(() => undefined);
-      });
-      route.onClose(() => {
-        upstream.close();
       });
     });
 
@@ -10528,10 +10545,10 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     await page.screenshot({ path: test.info().outputPath('hs2-7y1bq2-close-preview-390.png'), fullPage: true });
     await dialog.getByRole('button', { name: 'Cancel' }).click();
   } finally {
-    for (const upstream of upstreams) upstream.close();
-    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await server.stop();
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first
+    // (HS2-QY232J: `stop(page)` unroutes the HTTP proxies before the server goes down, and
+    // HS2-N8FTCK: it closes and then refuses this test's attach upstreams).
+    await server.stop(page);
   }
 });
 
@@ -10544,6 +10561,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -10662,6 +10680,7 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -10720,6 +10739,7 @@ test('restores an AI transcript and resumes its durable session after client and
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -10774,6 +10794,7 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -10920,6 +10941,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
+    // HS2-S4FJ85: New Drawer Item slides with the ~220 ms drawer-open transition; click it once open.
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
@@ -11157,6 +11180,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
@@ -11542,7 +11566,7 @@ test('shares a terminal rename with other devices and restores it through the re
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 60_000,
@@ -11673,6 +11697,7 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await handle.focus();
@@ -11723,6 +11748,7 @@ test('selects a drawer command after rapidly closing and reopening its popup', a
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     trigger = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]');
@@ -11828,26 +11854,73 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const shell = page.locator('.app-shell');
+  await expect(shell).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  // HS2-6X8AQP: the transitioning flag lasts one 220 ms visibility motion, which a loaded runner can
+  // miss between polls. Record each value the flag takes, with the DOM rendered beside it, from before
+  // each action, and assert the recorded sequence instead of polling the transient state.
+  interface TransitionRecord {
+    value: string | null;
+    collapsed: string | null;
+    drawer: number;
+    restore: number;
+  }
+  const recordTransitions = () =>
+      shell.evaluate((element) => {
+        const host = window as unknown as {
+          hs2DrawerTransitions?: TransitionRecord[];
+          hs2DrawerObserver?: MutationObserver;
+        };
+        host.hs2DrawerObserver?.disconnect();
+        const records: TransitionRecord[] = [];
+        let last = element.getAttribute('data-terminal-drawer-transitioning');
+        host.hs2DrawerTransitions = records;
+        host.hs2DrawerObserver = new MutationObserver(() => {
+          const value = element.getAttribute('data-terminal-drawer-transitioning');
+          if (value === last) return;
+          last = value;
+          records.push({
+            value,
+            collapsed: document.querySelector('#app-bottom-drawer')?.getAttribute('data-collapsed') ?? null,
+            drawer: document.querySelectorAll('[data-component="terminal-drawer"]').length,
+            restore: document.querySelectorAll('button[aria-label="Show Terminal Drawer"]').length,
+          });
+        });
+        host.hs2DrawerObserver.observe(element, {
+          attributes: true,
+          attributeFilter: ['data-terminal-drawer-transitioning'],
+        });
+      }),
+    transitions = () =>
+      page.evaluate(
+        () => (window as unknown as { hs2DrawerTransitions?: TransitionRecord[] }).hs2DrawerTransitions ?? [],
+      ),
+    transitionValues = async () => (await transitions()).map((record) => record.value);
+  await recordTransitions();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     content = region.locator('.kui-workbench__panel-content');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
   await expect(region).toHaveCSS('transition-duration', '0s');
   expect(await content.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.2s');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  await expect.poll(transitionValues).toEqual(['true', 'false']);
+  await recordTransitions();
   await handle.focus();
   await page.keyboard.press('ArrowUp');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await expect(region).toHaveCSS('transition-duration', '0s');
+  // A resize is not a visibility motion, so it never raises the flag.
+  expect(await transitionValues()).toEqual([]);
   await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
-  await expect(region).toHaveAttribute('data-collapsed', 'true');
-  await expect(drawer).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-x8fg23-drawer-hiding.png', fullPage: true });
+  await expect.poll(transitionValues).toEqual(['true', 'false']);
+  // While hiding, the region is already collapsed, the drawer stays mounted for the motion and the
+  // restore control is withheld; the drawer unmounts once the motion ends.
+  const [hiding, hidden] = await transitions();
+  expect(hiding).toEqual({ value: 'true', collapsed: 'true', drawer: 1, restore: 0 });
+  expect(hidden).toMatchObject({ value: 'false', collapsed: 'true' });
+  await expect(region).toHaveAttribute('data-collapsed', 'true');
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 });
@@ -13185,6 +13258,8 @@ test('renders the exact shared Code Review component in the inspector and reader
   const sidebarReview = sidebar.locator('[data-component="ticket-code-review"]');
   await expect(sidebarReview).toContainText('Code reviews open in Glassbox');
   await expect(sidebarReview).toContainText('No commits referencing this ticket were found.');
+  // The inspector and the reader both offer "Link Existing Ticket as Follow-Up…" (HS2-MCGCPQ, HS2-NXSMC7).
+  await expect(sidebarReview.getByRole('button', { name: 'Link Existing Ticket as Follow-Up…' })).toBeVisible();
   const sharedMarkup = await sidebarReview.evaluate((element) => element.outerHTML);
   await sidebar.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-inspector-after.png' });
   await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
@@ -13193,7 +13268,9 @@ test('renders the exact shared Code Review component in the inspector and reader
   const readerReview = reader.locator('[data-component="ticket-code-review"]');
   await expect(readerReview).toContainText('Code reviews open in Glassbox');
   await expect(readerReview).toContainText('No commits referencing this ticket were found.');
-  // Identical component markup; only the shared panel column carries its reader presentation variant (HS2-MGVE50).
+  // Identical component markup, including the follow-up link action (HS2-NXSMC7); only the shared panel
+  // column carries its reader presentation variant (HS2-MGVE50).
+  await expect(readerReview.getByRole('button', { name: 'Link Existing Ticket as Follow-Up…' })).toBeVisible();
   expect(await readerReview.evaluate((element) => element.outerHTML)).toBe(
     sharedMarkup.replace(
       'class="ticket-inspector-panel ',
@@ -13295,6 +13372,12 @@ test('keeps change evidence interactive when launched from the modal ticket read
   await page.setViewportSize({ width: 390, height: 844 });
   const navigation = evidenceDialog.getByRole('navigation', { name: 'Change Evidence Views' }),
     detail = evidenceDialog.getByRole('list', { name: 'tests Change Evidence' });
+  // HS2-V462N2: name the state the geometry depends on, so a failure says which one never arrived:
+  // the compact device class re-renders the views above the files (only that layout has the
+  // "Views" list header inside the navigation), and both regions are rendered.
+  await expect(navigation.getByText('Views', { exact: true })).toBeVisible();
+  await expect(navigation).toBeVisible();
+  await expect(detail).toBeVisible();
   await expect
     .poll(async () => {
       const [navigationBounds, detailBounds] = await Promise.all([navigation.boundingBox(), detail.boundingBox()]);
@@ -13574,7 +13657,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   };
   let claimed = true;
   const current = () => ({ ...row, ...(claimed ? claim : { claim_count: 1 }) });
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
@@ -15575,13 +15658,21 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await composer.getByRole('button', { name: 'Create ticket' }).click();
   const created = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]'),
     backlog = sidebar.locator('[data-ticket-drop-status="backlog"]');
+  // Creating a Not Started ticket from Backlog switches to All (HS2-F6937Q); drag only once that settles.
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="all"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await expect(created).toHaveAttribute('data-selected', 'true');
   await created.evaluate((node) => {
-    const transfer = new DataTransfer();
-    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
-    document
-      .querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!
-      .dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
+  });
+  // One dragover is enough: the highlight renders from state, so the sidebar renders that follow the
+  // create keep it (HS2-G8EK08; HS2-1DQ190 had to keep re-hovering while it was a node attribute).
+  await backlog.evaluate((node) => {
+    node.dispatchEvent(
+      new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+    );
   });
   await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
   await backlog.dispatchEvent('drop');
@@ -16369,6 +16460,7 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -17055,7 +17147,7 @@ test('serves the repository Quality commands from a real server and queues Every
     await mockProject(page);
     await page.route('**/__hotsheet/project-api/demo-checkout/commands', async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/checkouts/${server.checkoutId}/commands`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -17105,7 +17197,7 @@ test('serves the repository Quality commands from a real server and queues Every
         },
       ]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -17454,7 +17546,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
       const incoming = new URL(route.request().url()),
         path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -17491,7 +17583,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     await expect(editor.getByText('No custom commands yet.')).toBeVisible();
     await expect.poll(storedGroups).toEqual([]);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -17513,7 +17605,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
       const incoming = new URL(route.request().url()),
         path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -17617,7 +17709,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     await openCommandSettings();
     await expect(editor.locator('.command-settings-editor__row', { hasText: 'Remote edit' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -19277,7 +19369,7 @@ test('validates and applies the dedicated match editor through a real permission
     expect(await ask).toEqual({ decision: 'allow' });
     await mockProject(page);
     await page.route('**/permissions/rules', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/permissions/rules`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -20402,14 +20494,25 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.setViewportSize({ width, height: 800 });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Columns View' }).click();
+    // HS2-ESDMAV: each setup step waits on its own state, so a stall under full-gate load names the step that
+    // stalled instead of surfacing later as a board that never rendered.
+    await test.step('open the project and wait for its first ticket page', async () => {
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Local Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await expect(page.locator('[data-ticket-slug="HS2-SCROLL1000"]').first()).toBeVisible();
+      await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
+    });
     const popup = page.locator('[data-component="permission-request-popup"]'),
       columns = page.locator('.ticket-board-column__tickets');
-    await expect(columns).toHaveCount(4);
+    await test.step('switch to Columns View and wait for the four columns', async () => {
+      const columnsView = page.getByRole('button', { name: 'Columns View' });
+      await columnsView.click();
+      await expect(columnsView).toHaveAttribute('data-selected', 'true');
+      await expect(columns).toHaveCount(4);
+      await expect(columns.first().locator('[data-ticket-slug]').first()).toBeVisible();
+    });
     const before = await columns.evaluateAll((nodes) =>
       nodes.map((node, index) => {
         if (index > 1) return 0;
@@ -21142,7 +21245,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await mockProject(page);
     await page.route(/\/corrupt-tickets$/, async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/checkouts/${server.checkoutId}/corrupt-tickets`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -21211,7 +21314,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await corrupt.getByRole('button', { name: `Open recovery for ${created.slug}` }).click();
     await expect(page.locator('[data-component="corrupt-ticket-inspector"]')).toContainText(`${created.id}.md`);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -22118,6 +22221,7 @@ for (const viewport of [
       const drawer = page.locator('[data-component="terminal-drawer"]');
       await sample('terminal-tab', () => drawer.locator('[data-tab-kind="terminal"]').first().click());
       if (ptyProfile) await expect.poll(() => ptyRoutes.length).toBeGreaterThan(0);
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
       await sample('ai-chat-create', async () => {
         await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
         await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -23015,7 +23119,8 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   const inspector = page.locator('#app-right-rail'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
   await expect(info).toBeVisible();
-  await expect(info.locator('[data-component="list-header"]')).toHaveCount(4);
+  // Details, Blocked By (HS2-CHH28E), and the notes and tags sections each own a list header.
+  await expect(info.locator('[data-component="list-header"]')).toHaveCount(5);
   await expect(info.locator('[data-component="list-item"]')).toHaveCount(2);
   await expect(info.locator('.ticket-info-panel__details-section [data-component="list-header"]')).toHaveText(
     'Details',
@@ -24355,6 +24460,7 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   };
   // Drawer chat tab.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24517,6 +24623,7 @@ for (const width of [1280, 390] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     if (width >= 640) await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24536,6 +24643,7 @@ for (const width of [1280, 390] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     // Maximized at both widths: a six-row draft under the stuck banner is taller than the default phone drawer.
     await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
@@ -24688,6 +24796,7 @@ test("keeps the default-height drawer chat's last message clear of its composer 
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   // The drawer stays at its default height, where the HS2-KMNQ21 capture showed the overlap.
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24749,7 +24858,7 @@ for (const width of [390, 1280] as const)
     await mockProject(page);
     const messages: Array<{ text: string }> = [],
       driveCreates: unknown[] = [];
-    await page.route('**/*', (route) => {
+    await page.route(appRequests, (route) => {
       const request = route.request(),
         path = new URL(request.url()).pathname;
       if (path.endsWith('/connections') && request.method() === 'GET')
@@ -24806,7 +24915,7 @@ test('omits the removed terminal message action across viewport transitions (HS2
   await page.setViewportSize({ width: 2048, height: 1128 });
   await mockProject(page);
   const messages: Array<{ text: string }> = [];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;
     if (path.endsWith('/connections') && request.method() === 'GET')
@@ -24881,6 +24990,7 @@ for (const width of [390, 1280] as const)
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     // The drawer keeps its default (not maximized) height.
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -24978,6 +25088,7 @@ for (const [server, content] of [
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25057,6 +25168,7 @@ test('keeps a stopped turn ended when its interrupt reply arrives after the turn
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25106,6 +25218,7 @@ for (const [server, content] of [
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     let drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25192,6 +25305,7 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   const caretAt = (field: Locator) => field.evaluate((element: HTMLTextAreaElement) => element.selectionStart);
   // Drawer chat tab: send two messages, then browse them around an in-progress draft.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25261,6 +25375,37 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   await expect(dialogField).toHaveValue('');
 });
 
+test('clears the sending dialog composer while the drawer chat stays mounted with its own draft (HS2-YNCQ36)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const drawerField = drawer
+    .locator('[data-component="ai-conversation"]')
+    .getByRole('textbox', { name: 'Message Codex' });
+  await drawerField.fill('drawer draft kept');
+  // The drawer stays open, so its composer precedes the dialog's in the document.
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialogField = host.getByRole('textbox', { name: 'Message Codex' });
+  await expect(host).toBeVisible();
+  await dialogField.fill('What time is it in California?');
+  await dialogField.press('Enter');
+  await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute('data-status', 'completed');
+  await expect(dialogField).toHaveValue('');
+  await expect(drawerField).toHaveValue('drawer draft kept');
+});
+
 test('moves the chat model selector and export into the drawer and dialog toolbars (HS2-59F7WK, HS2-DMH8MX)', async ({
   page,
 }) => {
@@ -25271,6 +25416,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25410,6 +25556,7 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -25459,6 +25606,7 @@ test('reflows the shell and drawer chat across the phone breakpoint without a re
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25535,6 +25683,7 @@ test('collapses streamed chat activity to its latest item and toggles it on clic
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -25608,6 +25757,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -26486,6 +26636,36 @@ test('Stats This Mac asks once about a newly detected disk and shows each monito
       await thisMac.screenshot({ path: `target/visual-captures/hs2-nhk8v8-this-mac-disks-${scheme}-${label}.png` });
     }
   }
+  // The detail wraps rather than truncating, so a phone still shows the whole question (HS2-4JRM43).
+  const question = '931 GB at /Volumes/Scratch. Should host health watch its free space?';
+  const detail = prompt.locator('.kui-state-banner__detail');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 768],
+      ['narrow', 390],
+      ['wide-again', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(detail).toHaveText(question);
+      const clip = await detail.evaluate((node) => {
+        const banner = node.closest('.kui-state-banner')?.getBoundingClientRect(),
+          box = node.getBoundingClientRect(),
+          inner = node.firstElementChild ?? node;
+        return {
+          hidden: inner.scrollWidth - inner.clientWidth,
+          right: (banner?.right ?? 0) - box.right,
+          left: box.left - (banner?.left ?? 0),
+        };
+      });
+      expect(clip.hidden).toBeLessThanOrEqual(1);
+      expect(clip.right).toBeGreaterThanOrEqual(0);
+      expect(clip.left).toBeGreaterThanOrEqual(0);
+      expect(await thisMac.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await prompt.screenshot({ path: `target/visual-captures/hs2-4jrm43-new-disk-prompt-${scheme}-${label}.png` });
+    }
+  }
   await page.emulateMedia({ colorScheme: 'light' });
 
   // A failed save keeps the prompt and says why; a retry saves, clears both, and adds the disk's card.
@@ -26972,7 +27152,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
   ];
   const posters = new Map<string, Buffer>(),
     videoBodies = new Map<string, Buffer>();
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
       attachment = path.match(/\/tickets\/01\/attachments\/([^/]+)$/),
@@ -30281,7 +30461,7 @@ test('measures real local Git board performance for a 100-ticket verification an
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -30290,7 +30470,7 @@ test('measures real local Git board performance for a 100-ticket verification an
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -30478,7 +30658,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
     expect(measurement!.refillMs!).toBeLessThanOrEqual(100);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -33505,6 +33685,62 @@ test('drags single and selected tickets across columns, views, and the duplicate
   await page.screenshot({ path: 'target/visual-captures/hs2-w2743r-ticket-drag-targets.png', fullPage: true });
 });
 
+test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const patches = await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const sidebar = page.locator('[data-component="view-navigation"]'),
+    backlog = sidebar.locator('[data-ticket-drop-status="backlog"]'),
+    archive = sidebar.locator('[data-ticket-drop-status="archive"]'),
+    ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    hover = (target: Locator) =>
+      target.evaluate((node) => {
+        node.dispatchEvent(
+          new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+        );
+      });
+  await ticket.click();
+  await ticket.evaluate((node) => {
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
+  });
+  await hover(backlog);
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).toHaveAttribute('data-state', 'drag-target');
+  // Switching the view re-renders every sidebar row; the highlight comes from state, so it survives
+  // without another dragover (the old node attribute was morphed away until the next one).
+  await sidebar.locator('[data-action="select-view"][data-item-id="archive"]').click();
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="archive"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).toHaveAttribute('data-state', 'drag-target');
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-g8ek08-sidebar-drop-after-render-1280.png' });
+  // Moving to another view moves the highlight; leaving the sidebar clears it.
+  await hover(archive);
+  await expect(archive).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).not.toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).not.toHaveAttribute('data-state', 'drag-target');
+  await archive.evaluate((node) => {
+    node.dispatchEvent(new DragEvent('dragleave', { bubbles: true, clientX: 0, clientY: 0 }));
+  });
+  await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
+  // Back in All, where the dragged ticket is listed, hovering again and dropping clears it as well.
+  await sidebar.locator('[data-action="select-view"][data-item-id="all"]').click();
+  await expect(ticket).toBeVisible();
+  await hover(backlog);
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await backlog.dispatchEvent('drop');
+  await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
+  await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
+});
+
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
@@ -35520,7 +35756,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     stores: ['/work/demo.hs2'],
     apiPath: '/__hotsheet/project-api/demo-checkout',
   };
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const req = route.request(),
       path = new URL(req.url()).pathname;
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: proj });
@@ -35985,7 +36221,7 @@ test('preserves list and every board-column scroll position across ticket mutati
       up_next: false,
     }));
   let rows = [...items];
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/');
     if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) return route.fulfill({ status: 201, json: project });
@@ -37025,7 +37261,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37033,7 +37269,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     });
     // Capabilities come from the real server so its connection id matches the real ticket rows.
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37076,7 +37312,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     await expect(page.locator('.app-toast')).toContainText(`${created.slug} closed as works as designed.`);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-closed-outcome.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37113,7 +37349,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
         source?: string;
         target?: string;
       } | null;
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         ...(requestBody?.follow_up_to || requestBody?.source || requestBody?.target
@@ -37149,7 +37385,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37173,15 +37409,22 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
     // HS2-Y4Y7V6: the follow-up uses the standard composer layout, so the title leads the first
     // row beside the category and no "Follow-up to …" line pushes it aside.
     await expect(dialog.getByText(`Follow-up to ${source.slug}`, { exact: true })).toHaveCount(0);
-    const [titleBox, categoryBox, formBox] = await Promise.all([
-      dialog.locator('.quick-ticket-composer__title').boundingBox(),
-      dialog.locator('.quick-ticket-composer__metadata').boundingBox(),
-      dialog.locator('form.quick-ticket-composer').boundingBox(),
-    ]);
-    expect(titleBox!.x - formBox!.x).toBeLessThan(24);
-    expect(categoryBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width - 1);
-    expect(Math.abs(categoryBox!.y + categoryBox!.height - (titleBox!.y + titleBox!.height))).toBeLessThan(24);
-    await page.waitForTimeout(300);
+    // HS2-NWFZ7J: Web Awesome scales the panel from 0.8 while its `show` class animates, so three
+    // separate boundingBox reads under load sampled different scales. Wait for Web Awesome to
+    // remove that class at animationend, then read every box in one frame.
+    await expect(dialog.locator('[part="dialog"]')).toBeVisible();
+    await expect(dialog.locator('[part="dialog"]')).not.toHaveClass(/(^|\s)show(\s|$)/);
+    const { titleBox, categoryBox, formBox } = await dialog.evaluate((host) => {
+      const box = (selector: string) => host.querySelector(selector)!.getBoundingClientRect().toJSON() as DOMRect;
+      return {
+        titleBox: box('.quick-ticket-composer__title'),
+        categoryBox: box('.quick-ticket-composer__metadata'),
+        formBox: box('form.quick-ticket-composer'),
+      };
+    });
+    expect(titleBox.x - formBox.x).toBeLessThan(24);
+    expect(categoryBox.x).toBeGreaterThan(titleBox.x + titleBox.width - 1);
+    expect(Math.abs(categoryBox.y + categoryBox.height - (titleBox.y + titleBox.height))).toBeLessThan(24);
     await page.screenshot({ path: testInfo.outputPath('hs2-2z11a5-composer-wide.png') });
     await page.screenshot({ path: 'target/visual-captures/hs2-y4y7v6-follow-up-wide.png' });
     await dialog.getByRole('button', { name: 'Create ticket' }).click();
@@ -37229,6 +37472,8 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
         .getByRole('heading', { name: 'Synthetic follow-up ticket', level: 1 }),
     ).toBeVisible();
   } finally {
+    // Requests still in flight must not reach the stopped server (ECONNREFUSED in a route handler).
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
   }
 });
@@ -37262,14 +37507,14 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37338,7 +37583,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await reader.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
     await reader.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-reader-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37367,14 +37612,14 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37446,7 +37691,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await card.scrollIntoViewIfNeeded();
     await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-cy4cwc-cleared-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37481,14 +37726,14 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37564,7 +37809,7 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     await expect(timeline).toContainText('Started');
     await expect(timeline).not.toContainText('AI-generated');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37586,14 +37831,14 @@ test('quiets AI-created ticket summaries in the real list and column views (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37673,7 +37918,7 @@ test('quiets AI-created ticket summaries in the real list and column views (HS2-
       })
       .toEqual({ role: 'human' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37699,14 +37944,14 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37771,7 +38016,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     );
     await page.screenshot({ path: 'target/visual-captures/hs2-38rjmk-global-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -37803,14 +38048,14 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
         );
       if (path.endsWith('/repository/size')) sizeRequests += 1;
       if (path.endsWith('/confidence-report')) calibrationRequests += 1;
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -37849,7 +38094,7 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
     expect(pageOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-qf44t7-real-server-narrow.png' });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38231,14 +38476,14 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38266,7 +38511,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     await inspector.locator('[data-inspector-tab="timeline"]').click();
     await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Completed');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38291,7 +38536,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
           `/checkouts/${server.checkoutId}`,
         );
       if (incoming.searchParams.has('status')) boardRequests.push(incoming);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38326,7 +38571,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
     expect(boardRequests).toHaveLength(beforeCachedReveal);
     await expect(more('Completed')).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38354,7 +38599,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
           '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
           `/checkouts/${server.checkoutId}`,
         );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -38403,7 +38648,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await expect(row).toBeVisible();
     await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -38875,7 +39120,7 @@ test('surfaces a real server permission request through the live stream with no 
           path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
         forwarded.push(`${route.request().method()} ${path}`);
         try {
-          const response = await route.fetch({
+          const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
             headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
             timeout: 0,
@@ -38928,6 +39173,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
     await expect(drawer).toHaveAttribute('data-maximized', 'true');
@@ -38959,6 +39205,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Local Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -38993,6 +39240,7 @@ test('keeps a delayed completion from an earlier turn out of the next turn (HS2-
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39022,6 +39270,7 @@ test('restores an idle server failure when a persisted conversation still has an
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39067,6 +39316,7 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -39117,6 +39367,7 @@ test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', a
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
@@ -39183,6 +39434,7 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
@@ -39420,45 +39672,61 @@ test('opens row, gallery, and reference attachment menus through the shared open
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const menu = page.locator('[data-context-menu="attachment"]'),
-    items = () => menu.getByRole('menuitem').allTextContents(),
-    insideViewport = async () => {
-      const box = (await menu.getByRole('menu').first().boundingBox())!,
+    popup = menu.getByRole('menu').first(),
+    menuItem = (name: string) => menu.getByRole('menuitem', { name, exact: true }),
+    // HS2-FH0H93: the menu root and its data-kind render before Kerf shows the popover, and Kerf's
+    // positionPopup resolves asynchronously and writes data-placement last. An Escape sent before
+    // the popover is shown can reach the gallery dialog beneath instead, and geometry read before
+    // placement is not the final position, so every step waits for the placed menu.
+    expectMenu = async (kind: 'item' | 'host') => {
+      await expect(menu).toHaveAttribute('data-kind', kind);
+      await expect(popup).toBeVisible();
+      await expect(popup).toHaveAttribute('data-placement', /\S/);
+    },
+    dismissMenu = async () => {
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+    },
+    expectInsideViewport = async () => {
+      const box = (await popup.boundingBox())!,
         viewport = page.viewportSize()!;
-      return box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
     };
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const item = page.locator('[data-attachment-id="A1"]');
   // Row ellipsis and row right-click open the item menu (with Rename).
   await item.getByRole('button', { name: 'More Actions for proof.png' }).click();
-  await expect(menu).toHaveAttribute('data-kind', 'item');
-  expect(await items()).toContain('Rename');
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
+  await expectMenu('item');
+  await expect(menuItem('Rename')).toBeVisible();
+  await dismissMenu();
   await item.click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'item');
-  await page.keyboard.press('Escape');
+  await expectMenu('item');
+  await dismissMenu();
   // Gallery menu button and right-click on gallery media open the host menu (with Copy path).
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
   await gallery.getByRole('button', { name: 'More image actions' }).click();
-  await expect(menu).toHaveAttribute('data-kind', 'host');
-  expect(await items()).toContain('Copy path');
-  expect(await insideViewport()).toBe(true);
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  if (!(await gallery.isVisible())) await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  await expectMenu('host');
+  await expect(menuItem('Copy path')).toBeVisible();
+  await expectInsideViewport();
+  // Escape closes only the topmost surface: the menu, not the gallery beneath it.
+  await dismissMenu();
+  await expect(gallery).toBeVisible();
   await gallery.locator('[data-gallery-image="true"]').click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'host');
+  await expectMenu('host');
+  await dismissMenu();
+  await expect(gallery).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  if (await gallery.isVisible()) await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
   // A Markdown reference right-click opens the host menu at the pointer, clamped on a phone.
   await page.getByRole('tab', { name: 'Info' }).click();
   const reference = page.locator('.markdown-preview__attachment-image').first();
   await reference.click({ button: 'right' });
-  await expect(menu).toHaveAttribute('data-kind', 'host');
-  expect(await insideViewport()).toBe(true);
+  await expectMenu('host');
+  await expectInsideViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-1rqa1e-reference-menu-wide.png' });
 });
 
@@ -39513,6 +39781,7 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   await expect(badge).toHaveCount(0);
   // Drawer chat tab: the reply settles while the drawer is hidden.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
@@ -39666,7 +39935,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
             '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
             `/checkouts/${server.checkoutId}`,
           );
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -39674,7 +39943,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
       });
     }
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -39827,14 +40096,14 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -39890,7 +40159,7 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
     await page.keyboard.press('ContextMenu');
     await expect(page.getByRole('menuitem', { name: 'AI Fix This Note' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -39919,14 +40188,14 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -39957,12 +40226,16 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     await summary.getByRole('textbox', { name: 'Timeline Summary' }).fill('Corrected headline');
     await summary.getByRole('button', { name: 'Save' }).click();
     await expect(summary).toHaveCount(0);
-    let updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)).toMatchObject({
-      summary: 'Corrected headline',
-      human_edited: true,
-      actor: { role: 'ai', id: 'synthetic-session' },
-    });
+    // HS2-MBMDKT: a closed dialog is not the proof of a write; wait on the server's stored note itself.
+    const noteOf = async (id: string) =>
+      (await server.request<FullTicket>(`/tickets/${created.id}`)).notes.find((note) => note.id === id);
+    await expect
+      .poll(() => noteOf(activity.id))
+      .toMatchObject({
+        summary: 'Corrected headline',
+        human_edited: true,
+        actor: { role: 'ai', id: 'synthetic-session' },
+      });
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
     await page
@@ -39971,16 +40244,14 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
       .fill('');
     await page.getByRole('dialog', { name: 'Edit timeline summary' }).getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('dialog', { name: 'Edit timeline summary' })).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.summary).toBeUndefined();
+    await expect.poll(async () => (await noteOf(activity.id))?.summary).toBeUndefined();
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
     const confidence = page.getByRole('dialog', { name: 'Correct confidence' });
     await confidence.getByRole('spinbutton', { name: 'Confidence' }).fill('65');
     await confidence.getByRole('button', { name: 'Save' }).click();
     await expect(confidence).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBe(65);
+    await expect.poll(async () => (await noteOf(activity.id))?.confidence).toBe(65);
     await card.getByRole('button', { name: 'Note Actions' }).click();
     await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
     await page
@@ -39989,8 +40260,7 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
       .fill('');
     await page.getByRole('dialog', { name: 'Correct confidence' }).getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('dialog', { name: 'Correct confidence' })).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === activity.id)?.confidence).toBeUndefined();
+    await expect.poll(async () => (await noteOf(activity.id))?.confidence).toBeUndefined();
     await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
     await page.setViewportSize({ width: 390, height: 800 });
     const readerCard = page.getByRole('dialog').locator(`article[data-note-id="${regular.id}"]`);
@@ -40003,16 +40273,223 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     await kindSelect.locator('.kui-select__option[data-value="feedback_needed"]').click();
     await expect(kindSelect.locator('.kui-select__trigger')).toHaveAttribute('aria-expanded', 'false');
     await page.screenshot({ path: test.info().outputPath('hs2-q0gwxt-narrow-kind.png') });
+    // HS2-6T8C1D: an unsaved type choice survives re-renders of the open dialog.
+    for (const [label, width] of [
+      ['medium', 1100],
+      ['wide', 1440],
+      ['returned-narrow', 390],
+    ] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(kind).toBeVisible();
+      await expect(kindSelect).toHaveJSProperty('value', 'feedback_needed');
+      await page.screenshot({ path: test.info().outputPath(`hs2-6t8c1d-${label}.png`) });
+    }
     await kind.getByRole('button', { name: 'Save' }).click();
     await expect(kind).toHaveCount(0);
-    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
-    expect(updated.notes.find((note) => note.id === regular.id)).toMatchObject({
-      kind: 'feedback_needed',
-      feedback_request: true,
-    });
+    await expect.poll(() => noteOf(regular.id)).toMatchObject({ kind: 'feedback_needed', feedback_request: true });
     await expect(readerCard.getByRole('grid', { name: 'Feedback Choices' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
+  }
+});
+
+test('HS2-WZSFHK resends a note metadata edit after the ticket changed underneath it', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic metadata drift' });
+    const withActivity = await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+      note: 'Completed synthetic work',
+      note_kind: 'activity',
+      note_summary: 'First headline',
+      note_confidence: 80,
+      actor: { role: 'ai', id: 'synthetic-session' },
+    });
+    const activity = withActivity.notes[0];
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await proxyFetch(route, {
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await proxyFetch(route, {
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const card = page.locator(`#app-right-rail article[data-note-id="${activity.id}"]`);
+    const noteOf = async () =>
+      (await server.request<FullTicket>(`/tickets/${created.id}`)).notes.find((note) => note.id === activity.id);
+    // Another writer advances the ticket's token while this client's copy is unchanged (the client gets no
+    // change event here), so each save meets a stale-token 409 and must resend its value.
+    const drift = (text: string) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+        note: text,
+        note_kind: 'regular',
+        actor: { role: 'ai', id: 'synthetic-other' },
+      });
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit Timeline Summary' }).click();
+    const summary = page.getByRole('dialog', { name: 'Edit timeline summary' });
+    await summary.getByRole('textbox', { name: 'Timeline Summary' }).fill('');
+    await drift('Unrelated synthetic note one');
+    await summary.getByRole('button', { name: 'Save' }).click();
+    await expect(summary).toHaveCount(0);
+    expect((await noteOf())?.summary).toBeUndefined();
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Correct Confidence' }).click();
+    const confidence = page.getByRole('dialog', { name: 'Correct confidence' });
+    await confidence.getByRole('spinbutton', { name: 'Confidence' }).fill('65');
+    await drift('Unrelated synthetic note two');
+    await confidence.getByRole('button', { name: 'Save' }).click();
+    await expect(confidence).toHaveCount(0);
+    expect((await noteOf())?.confidence).toBe(65);
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback response through the real server', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Synthetic response link' });
+    const append = (note: string, note_kind: string) =>
+      server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', {
+        note,
+        note_kind,
+        actor: { role: 'ai', id: 'synthetic-session' },
+      });
+    await append('FEEDBACK NEEDED: Which synthetic layout?', 'feedback_needed');
+    await append('FEEDBACK NEEDED: Which synthetic color?', 'feedback_needed');
+    const seeded = await append('Decision: synthetic layout A', 'regular');
+    const [first, second, decision] = seeded.notes;
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url());
+      const path = incoming.pathname.replace(
+        '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+        `/checkouts/${server.checkoutId}`,
+      );
+      const response = await proxyFetch(route, {
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await proxyFetch(route, {
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const rail = page.locator('#app-right-rail');
+    const card = rail.locator(`article[data-note-id="${decision.id}"]`);
+    const linkItem = (noteId: string) =>
+      page.getByRole('menuitem', { name: 'Link as Feedback Response' }).and(page.locator(`[data-note-id="${noteId}"]`));
+
+    // A request cannot answer another request: visible, disabled, with its reason.
+    await rail.locator(`article[data-note-id="${first.id}"]`).getByRole('button', { name: 'Note Actions' }).click();
+    await expect(linkItem(first.id)).toHaveAttribute('aria-disabled', 'true');
+    await expect(linkItem(first.id)).toHaveAttribute('title', 'Only a regular note can answer a feedback request.');
+    await page.keyboard.press('Escape');
+
+    // Link: pick the first request for the existing decision note.
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    const dialog = page.getByRole('dialog', { name: 'Link as feedback response' });
+    const select = dialog.locator('[name="note-metadata-response"]');
+    await select.locator('.kui-select__trigger').click();
+    await expect(select.locator(`.kui-select__option[data-value="${second.id}"]`)).toContainText(
+      'Which synthetic color?',
+    );
+    await select.locator(`.kui-select__option[data-value="${first.id}"]`).click();
+    await expect(select.locator('.kui-select__trigger')).toHaveAttribute('aria-expanded', 'false');
+    for (const [label, width] of [
+      ['wide', 1440],
+      ['medium', 1100],
+      ['narrow', 390],
+      ['returned-wide', 1440],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveCSS('opacity', '1');
+      await page.waitForTimeout(180);
+      await page.screenshot({ path: test.info().outputPath(`hs2-j4g9gb-${label}.png`) });
+    }
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    let updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes).toHaveLength(3);
+    expect(updated.notes.find((note) => note.id === decision.id)).toMatchObject({
+      response_to: first.id,
+      human_edited: true,
+      actor: { role: 'ai', id: 'synthetic-session' },
+      text: 'Decision: synthetic layout A',
+    });
+    // The answered request now presents as an ordinary note; the second stays open.
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'regular');
+    await expect(rail.locator(`article[data-note-id="${second.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+    await page.screenshot({ path: test.info().outputPath('hs2-j4g9gb-linked-wide.png') });
+
+    // Relink through the keyboard path to the second request.
+    await card.focus();
+    await page.keyboard.press('ContextMenu');
+    await linkItem(decision.id).click();
+    await select.locator('.kui-select__trigger').click();
+    await select.locator(`.kui-select__option[data-value="${second.id}"]`).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === decision.id)?.response_to).toBe(second.id);
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+
+    // Already linked: saving the same request closes without another write.
+    const before = updated.updated_at;
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect((await server.request<FullTicket>(`/tickets/${created.id}`)).updated_at).toBe(before);
+
+    // Unlink, then reload: the stored link is gone.
+    await card.getByRole('button', { name: 'Note Actions' }).click();
+    await linkItem(decision.id).click();
+    await select.locator('.kui-select__trigger').click();
+    await select.locator('.kui-select__option[data-value="none"]').click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    updated = await server.request<FullTicket>(`/tickets/${created.id}`);
+    expect(updated.notes.find((note) => note.id === decision.id)?.response_to).toBeUndefined();
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await expect(rail.locator(`article[data-note-id="${first.id}"]`)).toHaveAttribute('data-kind', 'feedback_needed');
+  } finally {
+    await server.stop(page);
   }
 });
 
@@ -40039,14 +40516,14 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
         '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
         `/checkouts/${server.checkoutId}`,
       );
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}/providers`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -40136,7 +40613,7 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
     await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
     await desktopCapture('wide-again', 1440);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40171,7 +40648,7 @@ test('keeps the list Needs review marker aligned with details after a kind corre
         const path = prefix.startsWith('/checkouts/')
           ? incoming.pathname.replace('/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout', prefix)
           : prefix;
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${path}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -40243,7 +40720,7 @@ test('keeps the list Needs review marker aligned with details after a kind corre
       await page.screenshot({ path: test.info().outputPath(`hs2-4zfb8k-${label}.png`) });
     }
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40314,7 +40791,7 @@ test('records shell and AI command launches through the real server and lists th
           server.checkoutId,
           `${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
         ),
-        response = await route.fetch({
+        response = await proxyFetch(route, {
           url: `${server.url}${path}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         });
@@ -40420,7 +40897,7 @@ test('records shell and AI command launches through the real server and lists th
     await openHistory('Everything AI command');
     await expect(history.getByRole('link', { name: 'HS2-NEW001' })).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40501,7 +40978,7 @@ async function proxyRealServer(page: Page, server: Awaited<ReturnType<typeof rea
       return route.fulfill({ status: 503, json: { error: 'synthetic write failure' } });
     }
     if (method !== 'GET' && hold.next) await hold.next;
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}${path}${incoming.search}`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
     });
@@ -40515,7 +40992,7 @@ async function proxyRealServer(page: Page, server: Awaited<ReturnType<typeof rea
     await route.fulfill({ response });
   });
   await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
-    const response = await route.fetch({
+    const response = await proxyFetch(route, {
       url: `${server.url}/providers`,
       headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
     });
@@ -40635,7 +41112,7 @@ test('resolves a stale No Response Needed without a doomed write after its reque
     await expect(dismiss).toHaveCount(0);
     expect(writes).toHaveLength(1);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -40725,7 +41202,7 @@ test('dismisses a legacy implicit feedback request through failure, retry, selec
     await expect(dismiss).toHaveCount(0);
     expect(writes).toHaveLength(2);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -41091,7 +41568,7 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     // Only unrelated shell/repository-choice surfaces remain mocked. Accounts, create, persistence
     // and the resulting provider read use the real isolated server and actual HTTP transport.
     await page.route('**/accounts', async (route) => {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${actual.url}/accounts`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
       });
@@ -41101,7 +41578,7 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     await page.route('**/provider-connections', async (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       // Forward the actual submitted body unchanged; only the synthetic checkout URL is adapted.
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${actual.url}/checkouts/${actual.checkoutId}/provider-connections`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': actual.secret },
       });

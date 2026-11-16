@@ -10,10 +10,15 @@ import WebSocket from 'ws';
 
 import { CHANGE_WS_MUX_PATH } from './change-ws-mux';
 import { CLIENT_BUILD_META_NAME } from './client-build';
+import { DESKTOP_STORAGE_PATH } from './desktop-storage-contract';
 import {
+  binaryRevisionStatus,
+  clientReadyFile,
   createLocalHostApp,
+  desktopStorageDirectoryFrom,
   mcpBinaryEnvironment,
   releaseBinaryEnvironment,
+  REVISION_PROBE_CEILING_MS,
   snapshotLocalHostArtifacts,
   stampBrowserAuthMode,
   startLocalHost,
@@ -66,6 +71,112 @@ describe('local production host (HS2-587N4D)', () => {
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
+  });
+});
+
+describe('desktop storage directory override (HS2-1VF50T)', () => {
+  it('treats an unset, empty, or whitespace-only value as unset and keeps any other value as given', () => {
+    expect(desktopStorageDirectoryFrom({})).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: '' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: ' ' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: ' \t\n ' })).toBeUndefined();
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: 'relative/prefs' })).toBe(
+      'relative/prefs',
+    );
+    expect(desktopStorageDirectoryFrom({ HOTSHEET_DESKTOP_STORAGE_DIRECTORY: '/abs/prefs' })).toBe('/abs/prefs');
+  });
+
+  it('mounts the desktop storage bridge only for a non-blank directory', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-storage-')),
+      dist = resolve(root, 'dist'),
+      storage = resolve(root, 'prefs'),
+      url = `http://127.0.0.1:4175${DESKTOP_STORAGE_PATH}`;
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), '<!doctype html><title>Hot Sheet</title>');
+      for (const blank of [undefined, '', ' ', '\t']) {
+        const response = await createLocalHostApp(dist, new Hono(), blank).request(url);
+        // Without the bridge the path falls through to the client document, and no directory is made.
+        expect(response.headers.get('content-type')).toContain('text/html');
+      }
+      expect(existsSync(resolve(process.cwd(), ' '))).toBe(false);
+      const mounted = await createLocalHostApp(dist, new Hono(), storage).request(url);
+      expect(mounted.status).toBe(200);
+      expect(await mounted.json()).toEqual([]);
+      expect(statSync(storage).isDirectory()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('revision probe of a slow first launch (HS2-B74N07)', () => {
+  const revision = 'a'.repeat(40),
+    status = JSON.stringify({ build_revision: revision, source_revision: revision, source_stale: false });
+  let root: string;
+  beforeAll(async () => {
+    root = await mkdtemp(resolve(tmpdir(), 'hs-revision-probe-'));
+  });
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  /** A fake binary: a shell script in the temp dir, never a real Hot Sheet binary. */
+  const fake = async (path: string, body: string) => {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `#!/bin/sh\n${body}\n`);
+    await chmod(path, 0o755);
+    return path;
+  };
+  const timed = <T>(run: () => T) => {
+    const started = performance.now(),
+      value = run();
+    return { value, elapsed: performance.now() - started };
+  };
+
+  it('waits for a live child that is slow to start instead of a short deadline', async () => {
+    // macOS measured 3.6 s for a fresh copy's first launch under load; the old bound was 10 s.
+    expect(REVISION_PROBE_CEILING_MS).toBeGreaterThanOrEqual(60_000);
+    const slow = await fake(resolve(root, 'slow'), `sleep 1.5\necho '${status}'`);
+    const { value, elapsed } = timed(() => binaryRevisionStatus(slow));
+    expect(value).toEqual(JSON.parse(status));
+    expect(elapsed).toBeGreaterThanOrEqual(1_400);
+  });
+
+  it('fails fast once the child exits, and the ceiling still stops a child that never exits', async () => {
+    const failing = await fake(resolve(root, 'failing'), `echo '${status}'\nexit 3`);
+    const failed = timed(() => binaryRevisionStatus(failing));
+    expect(failed.value).toBeUndefined();
+    expect(failed.elapsed).toBeLessThan(5_000);
+    const garbage = await fake(resolve(root, 'garbage'), 'echo not-json');
+    expect(binaryRevisionStatus(garbage)).toBeUndefined();
+    expect(binaryRevisionStatus(resolve(root, 'missing'))).toBeUndefined();
+    const hung = await fake(resolve(root, 'hung'), 'exec sleep 30');
+    const stopped = timed(() => binaryRevisionStatus(hung, true, 300));
+    expect(stopped.value).toBeUndefined();
+    expect(stopped.elapsed).toBeLessThan(5_000);
+  });
+
+  it('selects a current binary whose first launch is slow through the shipped selection', async () => {
+    const repo = resolve(root, 'repo');
+    await fake(resolve(repo, 'target/release/hotsheet-server'), `sleep 1.5\necho '${status}'`);
+    await fake(resolve(repo, 'target/release/hotsheet-cli'), `echo '${status}'`);
+    await fake(resolve(repo, 'target/release/hotsheet-migrate'), `echo '${status}'`);
+    expect(releaseBinaryEnvironment(repo, {}, existsSync, undefined, 'linux')).toEqual({
+      HOTSHEET_SERVER_BIN: resolve(repo, 'target/release/hotsheet-server'),
+      HOTSHEET_CLI_BIN: resolve(repo, 'target/release/hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: resolve(repo, 'target/release/hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: revision,
+    });
+  });
+});
+
+describe('client ready file (HS2-GVSJ5Y)', () => {
+  it('treats unset, empty, and whitespace-only values as no ready file and uses any other as given', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: blank })).toBeUndefined();
+    expect(clientReadyFile({})).toBeUndefined();
+    expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: 'relative/ready.json' })).toBe('relative/ready.json');
+    expect(clientReadyFile({ HOTSHEET_CLIENT_READY_FILE: '/tmp/ready.json' })).toBe('/tmp/ready.json');
   });
 });
 
@@ -294,6 +405,27 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
       HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
     });
   });
+
+  it('HS2-GVSJ5Y selects a binary for an unset, empty, or whitespace-only override and keeps any other', () => {
+    const all = built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate');
+    const selected = {
+      HOTSHEET_SERVER_BIN: release('hotsheet-server'),
+      HOTSHEET_CLI_BIN: release('hotsheet-cli'),
+      HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+    };
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      const environment = { HOTSHEET_SERVER_BIN: blank, HOTSHEET_CLI_BIN: blank, HOTSHEET_MIGRATE_BIN: blank };
+      expect(releaseBinaryEnvironment(root, environment, all, current)).toEqual(selected);
+    }
+    for (const explicit of ['relative/hotsheet-cli', '/custom/hotsheet-cli']) {
+      expect(releaseBinaryEnvironment(root, { HOTSHEET_CLI_BIN: explicit }, all, current)).toEqual({
+        HOTSHEET_SERVER_BIN: release('hotsheet-server'),
+        HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+        HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
+      });
+    }
+  });
 });
 
 describe('pinned production artifacts (HS2-6VQ5RV)', () => {
@@ -490,6 +622,16 @@ describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
   it('keeps an explicit override and selects nothing when no shim is built', () => {
     expect(mcpBinaryEnvironment(root, undefined, { HOTSHEET_MCP_BIN: '/custom/mcp' }, present(debug))).toEqual({});
     expect(mcpBinaryEnvironment(root, server('debug'), {}, present())).toEqual({});
+  });
+
+  it('HS2-GVSJ5Y treats a blank override as unset and keeps a relative or absolute one', () => {
+    for (const blank of [undefined, '', ' ', '\t\n ']) {
+      expect(mcpBinaryEnvironment(root, server('debug'), { HOTSHEET_MCP_BIN: blank }, present(debug))).toEqual({
+        HOTSHEET_MCP_BIN: debug,
+      });
+    }
+    for (const explicit of ['relative/hotsheet-mcp', '/custom/hotsheet-mcp'])
+      expect(mcpBinaryEnvironment(root, server('debug'), { HOTSHEET_MCP_BIN: explicit }, present(debug))).toEqual({});
   });
 
   it('keeps the native executable extension when a Windows server selects its MCP shim (HS2-NRYAXT)', () => {

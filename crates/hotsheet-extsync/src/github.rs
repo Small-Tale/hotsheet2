@@ -2175,6 +2175,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         close: true,
         notes: true,
         note_kind_edit: false,
+        note_response_link: false,
         note_edit: false,
         note_delete: false,
         // The original asset stays immutable while markup updates the marked comment.
@@ -2848,6 +2849,23 @@ mod tests {
         let github = provider(transport.clone());
         assert!(github.supports_note_confidence());
         assert!(!github.descriptor().capabilities.note_kind_edit);
+        // HS2-J4G9GB: linking an existing note is explicitly unsupported, never silent.
+        assert!(!github.descriptor().capabilities.note_response_link);
+        assert!(matches!(
+            github.edit_note_with_metadata(
+                "42",
+                "91",
+                Timestamp::new("2026-10-26T00:00:00Z"),
+                hotsheet_ticketing::ops::NoteEditInput {
+                    response_to: Some(Some("90".into())),
+                    ..Default::default()
+                }
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "note_response_link",
+                ..
+            })
+        ));
         assert!(matches!(
             github.edit_note_with_metadata(
                 "42",

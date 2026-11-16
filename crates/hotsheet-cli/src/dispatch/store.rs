@@ -82,6 +82,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             json,
             abort_stalled_rebase,
             adopt,
+            recover_stale_locks,
             run_repair,
             repair_prompt,
             repair_project,
@@ -89,6 +90,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             (Some(stall), Some(prompt), Some(project)) => {
                 cmd_sync_run_repair(path, &stall, &prompt, &project)
             }
+            _ if recover_stale_locks => cmd_sync_recover_stale_locks(path),
             _ => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
         },
         Cmd::Doctor { project } => cmd_doctor(path, &project),
@@ -582,6 +584,32 @@ fn cmd_sync_run_repair(path: &Path, stall: &str, prompt: &str, project: &Path) -
     .map_err(|error| anyhow::anyhow!("the sync repair session did not complete: {error}"))
 }
 
+/// `hotsheet-cli sync --recover-stale-locks` (HS2-T0V269): the sync pass's own stale-lock
+/// recovery, run alone, printing every lock it moved and why each other one stayed.
+pub(crate) fn cmd_sync_recover_stale_locks(path: &Path) -> Result<()> {
+    FsStore::open_without_maintenance(path)?;
+    let pass = hotsheet_ticketing::sync::recover_stale_locks(path)?;
+    if pass.held.is_empty() {
+        println!("No Git lock that sync needs is held in this store.");
+        return Ok(());
+    }
+    for moved in &pass.recovery.moved {
+        println!("Moved {} to {}", moved.from, moved.to);
+    }
+    for line in pass.recovery.kept_lines() {
+        println!("{line}");
+    }
+    if pass.remaining.is_empty() {
+        println!("Run `hotsheet-cli sync` to integrate and publish.");
+        return Ok(());
+    }
+    bail!(
+        "still held: {}. {}",
+        pass.remaining.join(", "),
+        hotsheet_ticketing::sync_locks::LOCK_RECOVERY_ACTION
+    )
+}
+
 pub(crate) fn cmd_sync(
     path: &Path,
     status: bool,
@@ -648,7 +676,19 @@ pub(crate) fn cmd_sync(
     // so once (HS2-P1GYWH). One `git count-objects`, no attachment walk.
     let before = repository_size::git_object_size(path)
         .map_or(SizeLevel::Ok, |size| SizeLevel::for_bytes(size.total_bytes));
+    let recovered_before = hotsheet_ticketing::sync_health::read_record(path)
+        .and_then(|record| record.stale_lock_recovery);
     let report = hotsheet_ticketing::sync_once(path);
+    // HS2-T0V269: say which stale Git locks this pass moved aside, whatever it did next.
+    if let Some(recovery) = hotsheet_ticketing::sync_health::read_record(path)
+        .and_then(|record| record.stale_lock_recovery)
+        .filter(|recovery| Some(recovery) != recovered_before.as_ref())
+    {
+        eprintln!(
+            "{}",
+            hotsheet_ticketing::sync_stale_locks::moved_line(&recovery.moved)
+        );
+    }
     // HS2-QR1K8R: the same ask-the-AI workflow as the server's sync loop; a stall asks
     // once, and a publishing cycle closes the ask.
     if report != SyncReport::NoRemote {

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 const sourceProject = {
   id: 'source-project',
   root: '/work/source',
@@ -102,7 +104,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   let sourceRows = [source, collision],
     closeBody: Record<string, unknown> | undefined,
     canonicalOpened = false;
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);

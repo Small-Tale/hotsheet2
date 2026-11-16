@@ -65,7 +65,7 @@ import { browserOutboxId, browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import { claimHolderName } from '../claim-holder';
 import { createClientNotifications } from '../client-notifications';
-import { isRemoteClient } from '../client-origin';
+import { canManageRemoteDevices, isRemoteClient } from '../client-origin';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { APP_WORKBENCH_ID } from '../components/app-shell';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -78,7 +78,11 @@ import {
   selectDevelopmentStrategy,
 } from '../components/development-strategy-settings-interactions';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
-import type { NoteMetadataDialogState, NoteMetadataMode } from '../components/note-metadata-dialog';
+import {
+  NO_RESPONSE_LINK,
+  type NoteMetadataDialogState,
+  type NoteMetadataMode,
+} from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
 import { orchestrationInspectorPanel } from '../components/orchestration-inspector';
@@ -120,6 +124,7 @@ import { createConversationUnreadTracker, trackDocumentVisibility } from '../con
 import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
+import { syncDesktopWindowTheme } from '../desktop-window-theme';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
@@ -127,16 +132,19 @@ import { createAiConfigurationController } from '../features/ai-configuration';
 import { createAnnouncerController } from '../features/announcer-controller';
 import { createAutomaticTicketGrouping } from '../features/automatic-ticket-grouping';
 import { createBoardColumnPaging } from '../features/board-column-paging';
+import { createBrowserGrants } from '../features/browser-grants';
 import { createClaimClockController } from '../features/claim-clock';
 import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
 import { createCorruptTicketRecoveryController } from '../features/corrupt-ticket-recovery';
 import { createDriveConversationsController } from '../features/drive-conversations';
+import { createFollowUpLinkController } from '../features/follow-up-link';
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
+import { createLinkedReaderSubjects } from '../features/linked-reader-subject';
 import { createNotificationSettings } from '../features/notification-settings';
 import {
   createOrchestrationSettingsSurface,
@@ -148,6 +156,7 @@ import {
   createServerPlanner,
   orchestrationPersonId,
 } from '../features/orchestration-view';
+import { createPairingRequests, pairingRequestNotice } from '../features/pairing-requests';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -180,6 +189,7 @@ import { createTerminalOperationsSurface } from '../features/terminal-operations
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
+import { createTicketBlockersController } from '../features/ticket-blockers';
 import { createTicketGroupsController } from '../features/ticket-groups';
 import { createTicketStoreSync } from '../features/ticket-store-sync';
 import { createTicketViewSurface } from '../features/ticket-view-surface';
@@ -213,13 +223,14 @@ import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import { sendSystemNotification, shouldUseSystemNotification } from '../native-notifications';
 import { type ProjectTicketSources, resolveNewTicketSource } from '../new-ticket-source';
 import { parseNoteRepairProposal, previewNoteRepair } from '../note-repair-proposal';
+import { responseLinkLabel, responseLinkTargets, responseLinkUnavailable } from '../note-response-link';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
 import { projectLiveSummary, workersLive } from '../project-live-summary';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
-import { wireProjectTabActionFit } from '../project-tab-action-fit';
+import { projectTabActionFit } from '../project-tab-action-fit';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
@@ -250,6 +261,8 @@ import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers
 import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
+import { type TerminalSearchResults } from '../terminal-search';
+import { wireTerminalSearchCountFit } from '../terminal-search-count-fit';
 import { parseTerminalVisibilityState, TERMINAL_VISIBILITY_STORAGE_KEY } from '../terminal-visibility';
 import { applyThemePreference, readThemePreference } from '../theme-preference';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
@@ -265,6 +278,7 @@ import {
   reconcileReaderNoteDraft,
   type TicketFieldConflict,
 } from '../ticket-field-reconciliation';
+import { followUpLinkAvailability } from '../ticket-follow-up-link';
 import { projectTicketGroupName } from '../ticket-group-state';
 import { clusterTicketsByGroup, ticketGroupValue } from '../ticket-groups';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
@@ -442,6 +456,15 @@ export async function startHotSheetWebClient() {
     changeEvidenceSurfaceProps,
     changeEvidenceSurface,
   } = repositoryController;
+  const followUpLinkController = createFollowUpLinkController({
+    project: () => project(),
+    projects,
+    selectedTicket,
+    codeReview,
+    refreshCodeReview,
+    showToast,
+    linkedReader: (frameId) => linkedReaderSubject(frameId),
+  });
   const ticketScrollMemory = new TicketScrollMemory();
   const shellMode = signal<ProjectTabBarMode>('project'),
     statsProjectId = signal<string | undefined>(undefined),
@@ -593,6 +616,7 @@ export async function startHotSheetWebClient() {
   // App Settings → General → Theme (HS2-EFTHS6): pin the stored scheme before the first render.
   const themePreference = signal(readThemePreference(localStorage));
   applyThemePreference(document.documentElement, themePreference.value);
+  void syncDesktopWindowTheme(themePreference.value);
   const guidanceOverview = signal<GuidanceOverview | undefined>(undefined);
   const guidanceUpdates = signal<GuidanceSourceUpdate[]>([]);
   const guidanceUpdatesCheckedAt = signal<number | undefined>(undefined);
@@ -631,7 +655,11 @@ export async function startHotSheetWebClient() {
   const guidanceSearchOpen = signal(false);
   // The terminal drawer's collapsible search (HS2-TWZSZF): Kerf owns the text, clear, and open state.
   const terminalSearchModel = createSearchFieldModel(),
-    terminalSearchOpen = signal(false);
+    terminalSearchOpen = signal(false),
+    // The searched terminal's match count (HS2-M5QPED), published by the terminal interactions.
+    terminalSearchResults = signal<TerminalSearchResults | undefined>(undefined),
+    // The drawer rail has no room for the match count control (HS2-HPDX81); wireTerminalSearchCountFit measures it.
+    terminalSearchCountCompact = signal(false);
   const guidanceSearchModel = createGuidanceSearchModel(() => guidanceOverview.value);
   const guidanceOwnerFilter = signal('');
   const guidanceTagFilter = signal('');
@@ -1131,6 +1159,12 @@ export async function startHotSheetWebClient() {
     commandSettingsExtraGroups,
     loadCommandGroups,
     loadCommandRevisions,
+    commandSettingsWriteVersion,
+    commandSettingsReady,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
+    commandSettingsLoadFailed,
+    retryCommandSettingsLoad,
     hasCommandSettingsConflict,
     reorderCommandSettings,
     addCommandGroup,
@@ -1675,10 +1709,41 @@ export async function startHotSheetWebClient() {
   });
   // App Settings → Devices (HS2-DXM0YN): one long poll follows the host's device list while the category
   // shows, and stops when it hides.
-  const remoteDevices = createRemoteDevices();
+  // A grant changed elsewhere reaches this page over the change channel (HS2-A3TDNH); a refused list
+  // read also re-checks it. `start` reads the grant signal, so this effect follows it either way.
+  const browserGrants = createBrowserGrants();
+  const remoteDevices = createRemoteDevices({ onForbidden: () => void browserGrants.refresh() });
   effect(() => {
     if (selectedSettingsCategory.value === 'devices' && Boolean(project())) remoteDevices.start();
     else remoteDevices.stop();
+  });
+  // A new pairing request reaches an admin or host page without opening Devices (HS2-BZHMEV): badges on
+  // Settings and the Devices category, plus one notice per arrival unless Devices already shows it.
+  const pairingRequests = createPairingRequests({
+    onForbidden: () => void browserGrants.refresh(),
+    onArrival: (request) => {
+      if (viewMode.peek() === 'settings' && selectedSettingsCategory.peek() === 'devices') return;
+      showToast(pairingRequestNotice(request));
+    },
+  });
+  // The open Devices list already follows the host; its updates feed the badges without another read.
+  effect(() => {
+    const list = remoteDevices.list.value;
+    // Outside the effect, so a notice it raises subscribes this effect to nothing else.
+    if (list)
+      queueMicrotask(() => {
+        pairingRequests.observe(list.pending);
+      });
+  });
+  // A grant gained or lost elsewhere starts or drops the requests (HS2-A3TDNH); the first read comes from
+  // the change stream's initial resync. The device-list read itself runs after an await, untracked.
+  let managedDevices: boolean | undefined;
+  effect(() => {
+    const manages = canManageRemoteDevices(),
+      changed = managedDevices !== undefined && manages !== managedDevices;
+    managedDevices = manages;
+    if (!manages) pairingRequests.clear();
+    else if (changed) void pairingRequests.refresh();
   });
   // App Settings → Projects (HS2-R806FZ): the list loads each time the category opens; nothing polls.
   const registeredProjects = createRegisteredProjects();
@@ -1920,6 +1985,18 @@ export async function startHotSheetWebClient() {
     canUseAttachments() && Boolean(selectedTicket.value && attachmentsRemovableFor(selectedTicket.value.connection_id));
   const capabilitiesFor = (connectionId: string) => providerCapabilities.value[connectionId];
   const defaultProvider = () => defaultProviders.value[selectedProjectId.value];
+  // The Info tab's Blocked By editor (HS2-CHH28E).
+  const ticketBlockersController = createTicketBlockersController({
+    project: () => project(),
+    selectedTicket,
+    tickets,
+    capabilitiesFor: (connectionId) => providerCapabilities.value[connectionId],
+    sourceName: (projectId, connectionId) =>
+      defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId)?.name,
+    canUpdateSelected: () => canUpdateSelected(),
+    showToast,
+    linkedReader: (frameId) => linkedReaderSubject(frameId),
+  });
   const newTicketSource = () =>
     resolveNewTicketSource(
       defaultProvider(),
@@ -3362,7 +3439,7 @@ export async function startHotSheetWebClient() {
     coarsePointer.value = event.matches;
   });
   const viewportMobile = signal(isMobileViewport(window.innerWidth)),
-    // Measured by wireProjectTabActionFit: the project tabs overflow the strip (HS2-RNR35H).
+    // Decided by projectTabActionFit from Kerf's fit report: the project tabs overflow the strip (HS2-RNR35H).
     projectTabActionCompact = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
@@ -4262,6 +4339,8 @@ export async function startHotSheetWebClient() {
     try {
       const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         previous = JSON.stringify(commandDefinitions.value, null, 2),
+        // A save that starts or settles while these reads are in flight makes them stale (HS2-A6K8D5).
+        writes = commandSettingsWriteVersion(current.id),
         [commandResult, runs, groupResult] = await Promise.all([
           client.commandsWithRevision(),
           client.commandRuns(),
@@ -4280,9 +4359,9 @@ export async function startHotSheetWebClient() {
         draft = commandSettingsDraftsByProject.value[current.id];
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A project may not have opened the command settings editor yet.
       if (draft === undefined || draft === previous)
-        loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*');
+        loadCommandRevisions(current.id, revision, groupResult?.revision ?? '*', writes);
       commandDefinitions.value = definitions;
-      if (groups) loadCommandGroups(current.id, groups);
+      if (groups) loadCommandGroups(current.id, groups, writes);
       const projection = projectProjectionById.value[current.id];
       projectProjectionById.value = {
         ...projectProjectionById.value,
@@ -4302,7 +4381,9 @@ export async function startHotSheetWebClient() {
         setCommandSettingsDraft(current.id, JSON.stringify(definitions, null, 2));
       setCommandSettingsMessage(current.id, '');
     } catch (reason) {
-      if (active()) setCommandSettingsMessage(current.id, reason instanceof Error ? reason.message : String(reason));
+      const message = reason instanceof Error ? reason.message : String(reason);
+      // Before the first read succeeds, the editor shows a failed-load state with Retry (HS2-BZKTDC).
+      if (active() && !commandSettingsLoadFailed(current.id, message)) setCommandSettingsMessage(current.id, message);
     }
   }
   async function refreshCustomViews(current = project(), quiet = false) {
@@ -4506,9 +4587,12 @@ export async function startHotSheetWebClient() {
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
     orchestrationChanged: (target) => orchestrationSurfaceRef.current?.changed(target),
+    reloadTicketGroups: (target) => ticketGroups.reloadGroups(target),
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
+    browserGrants,
+    pairingRequests,
     onStreamHealth: standby.streamHealth,
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
@@ -4534,6 +4618,7 @@ export async function startHotSheetWebClient() {
     linkedReaderFrame,
     linkedReaderAutosaves,
     replaceLinkedReaderFrame,
+    refreshLinkedCodeReview,
     linkedReaderSaves,
     flushLinkedReader,
     selectedRows,
@@ -4764,6 +4849,13 @@ export async function startHotSheetWebClient() {
     draftScope,
     ago,
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
+  });
+  // A linked reader frame's own ticket, project, and Code Review for reader edits (HS2-NXSMC7).
+  const linkedReaderSubject = createLinkedReaderSubjects({
+    linkedReaderStack: () => linkedReaderStack.value,
+    projects: () => projects.value,
+    refreshCodeReview: refreshLinkedCodeReview,
+    replaceFrame: replaceLinkedReaderFrame,
   });
   document.body.addEventListener('click', (event) => {
     const target = event.target;
@@ -5057,6 +5149,7 @@ export async function startHotSheetWebClient() {
     projectConversationUnread,
     project: () => project(),
     settingsCategory: () => settingsCategory(),
+    pairingRequestCount: () => pairingRequests.waiting.value.length,
     projectPermissionHistory,
     projectPendingPermissions,
     projectTicketCounts,
@@ -5208,6 +5301,8 @@ export async function startHotSheetWebClient() {
     commandSelection,
     commandIconSearch,
     commandSettingsMessage,
+    commandSettingsLoadState,
+    commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
     trashRetentionDraftsByProject,
@@ -5306,6 +5401,29 @@ export async function startHotSheetWebClient() {
       owner = frame ? projects.peek().find((item) => item.id === frame.projectId) : project();
     if (!ticket || !note || !owner || !ticket.concurrency_token) return;
     const capabilities = frame ? frame.capabilities : capabilitiesFor(ticket.connection_id);
+    if (mode === 'response') {
+      // HS2-J4G9GB: link this existing note itself; the picker offers only earlier requests.
+      if (responseLinkUnavailable(ticket.notes, noteId, capabilities)) return;
+      const targets = responseLinkTargets(ticket.notes, noteId).map((request) => ({
+        value: request.id,
+        label: responseLinkLabel(request),
+      }));
+      if (note.response_to && !targets.some((target) => target.value === note.response_to))
+        targets.push({ value: note.response_to, label: 'Unavailable request' });
+      noteMetadataDialog.value = {
+        noteId,
+        ticketId: ticket.qualified_id,
+        projectId: owner.id,
+        frameId: frame?.id,
+        token: ticket.concurrency_token,
+        mode,
+        kind: note.kind,
+        hasResponses: false,
+        responseTo: note.response_to,
+        responseTargets: targets,
+      };
+      return;
+    }
     if (
       !capabilities.note_edit ||
       (mode === 'confidence' ? !capabilities.note_confidence : !capabilities.note_kind_edit)
@@ -5357,6 +5475,15 @@ export async function startHotSheetWebClient() {
         return;
       }
       patch.note_summary = summary || null;
+    } else if (state.mode === 'response') {
+      const choice = form.querySelector<HTMLSelectElement>('[name="note-metadata-response"]')?.value;
+      if (!choice) return;
+      const responseTo = choice === NO_RESPONSE_LINK ? undefined : choice;
+      if (responseTo === state.responseTo) {
+        noteMetadataDialog.value = undefined;
+        return;
+      }
+      patch.response_to = responseTo ?? null;
     } else {
       const raw = form.querySelector<HTMLInputElement>('[name="note-metadata-confidence"]')?.value.trim() ?? '';
       if (raw && (!/^\d{1,3}$/u.test(raw) || Number(raw) > 100)) {
@@ -5556,7 +5683,12 @@ export async function startHotSheetWebClient() {
         mobileMagnifiedTerminal,
         viewportMobile,
         coarsePointer,
-        terminalSearch: { model: terminalSearchModel, open: terminalSearchOpen },
+        terminalSearch: {
+          model: terminalSearchModel,
+          open: terminalSearchOpen,
+          results: terminalSearchResults,
+          countCompact: terminalSearchCountCompact,
+        },
       },
       conversations: {
         conversationStates,
@@ -5614,6 +5746,7 @@ export async function startHotSheetWebClient() {
       attachmentFilenameEditing,
       attachmentMessage,
       attachmentsEditableFor,
+      blockers: () => ticketBlockersController.sectionProps(),
       blockedReasonDraft,
       blockedReasonEditing,
       canAddNotes,
@@ -5680,6 +5813,13 @@ export async function startHotSheetWebClient() {
     composingNote,
     duplicateTargetFor,
     expandedCodeReviewCommits,
+    followUpLinkFor: (projectId, connectionId) =>
+      followUpLinkAvailability(
+        defaultProviders.value[projectId]?.sources.find((source) => source.connectionId === connectionId),
+      ),
+    followUpLinkDialogFor: (readerScope) => followUpLinkController.dialogFor(readerScope),
+    blockersFor: (readerScope) => ticketBlockersController.sectionProps(readerScope),
+    blockerDialogFor: (readerScope) => ticketBlockersController.dialogFor(readerScope),
     fieldConflict,
     fieldConflictResolution,
     linkedReaderStack,
@@ -5867,6 +6007,7 @@ export async function startHotSheetWebClient() {
     partialSourcesByProject,
     pendingPermissions,
     pendingRestoreEntries,
+    pairingRequestCount: () => pairingRequests.waiting.value.length,
     permissionCount: (projectId?: string) =>
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     workersLive: (projectId: string) =>
@@ -5917,6 +6058,7 @@ export async function startHotSheetWebClient() {
     selectedTicketSlugs,
     selectedView,
     settingsCategory,
+    commandSettingsReady,
     shellMode,
     statsProjectId,
     sidebarCollapsed,
@@ -6125,6 +6267,8 @@ export async function startHotSheetWebClient() {
     terminalVisibilityContextMenu,
     terminalVisibilityDialogScope,
     terminalVisibilityNamePrompt,
+    followUpLinkDialog: followUpLinkController.dialog,
+    ticketBlockerDialog: ticketBlockersController.dialog,
     ticketCloseDialog,
     ticketCollectionState,
     ticketLinkChoice,
@@ -6182,8 +6326,16 @@ export async function startHotSheetWebClient() {
   const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
-  const projectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
+  const projectTabFit = projectTabActionFit((compact) => {
     projectTabActionCompact.value = compact;
+  });
+  // The desktop project strip unmounts on mobile; the next one starts from the full label (HS2-YATB6S).
+  const disposeProjectTabFitReset = effect(() => {
+    if (viewportMobile.value) projectTabFit.reset();
+  });
+  // The drawer rail's search count yields its room at narrow widths (HS2-HPDX81).
+  const disposeTerminalSearchCountFit = wireTerminalSearchCountFit(appRoot, (compact) => {
+    terminalSearchCountCompact.value = compact;
   });
 
   const savedViewMenuRoot = document.createElement('div');
@@ -6417,6 +6569,8 @@ export async function startHotSheetWebClient() {
     changeEvidenceReader,
     selectedTicket,
     codeReviewMessage,
+    followUpLink: followUpLinkController,
+    ticketBlockers: ticketBlockersController,
     openProject,
     currentRememberedProjectRoots,
     persistDrawerTabOrder,
@@ -6435,7 +6589,7 @@ export async function startHotSheetWebClient() {
     terminalRailScreen,
     selectProjectTab,
     retryProjectRestore,
-    onTabBarFit: projectTabActionFit.onFit,
+    onTabBarFit: projectTabFit.onFit,
     terminalDrawerBounds,
     terminalDashboardSize,
     terminalGridFullscreen,
@@ -6625,6 +6779,15 @@ export async function startHotSheetWebClient() {
     dismissNoteMetadata: () => {
       noteMetadataDialog.value = undefined;
     },
+    chooseNoteResponseLink: (value: string) => {
+      const state = noteMetadataDialog.peek();
+      if (state?.mode === 'response') noteMetadataDialog.value = { ...state, responseChoice: value };
+    },
+    chooseNoteKind: (value: string) => {
+      const state = noteMetadataDialog.peek(),
+        kindChoice = (['regular', 'activity', 'status', 'feedback_needed'] as const).find((kind) => kind === value);
+      if (state?.mode === 'kind' && kindChoice) noteMetadataDialog.value = { ...state, kindChoice };
+    },
     dismissFeedbackRequest,
     runCommand,
     commandDialogId,
@@ -6639,6 +6802,11 @@ export async function startHotSheetWebClient() {
     addCommandGroup,
     commandGroupDialog,
     deleteCommandGroup,
+    retryCommandSettingsLoad: (projectId: string) => {
+      retryCommandSettingsLoad(projectId);
+      const current = project();
+      if (current?.id === projectId) void refreshCommands(current);
+    },
     selectCommandRow,
     commandSelection,
     commandSettingsDefinitions,
@@ -6739,6 +6907,7 @@ export async function startHotSheetWebClient() {
     guidanceSearchOpen,
     terminalSearchOpen,
     terminalSearchModel,
+    terminalSearchResults,
     workspaceSearchModel,
     guidanceSearchModel,
     guidanceSearchActive: () => viewMode.value === 'settings' && settingsCategory() === 'guidance',
@@ -6831,6 +7000,7 @@ export async function startHotSheetWebClient() {
     tagsAutosave,
     beginDetailsEdit,
     linkedReaderFrame,
+    refreshLinkedCodeReview,
     replaceLinkedReaderFrame,
     linkedReaderSaves,
     readerDetailsAutosave,
@@ -7206,7 +7376,8 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
-      projectTabActionFit.dispose();
+      disposeProjectTabFitReset();
+      disposeTerminalSearchCountFit();
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();

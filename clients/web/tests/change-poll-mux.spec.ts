@@ -1,5 +1,6 @@
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { realTicketServer } from './real-ticket-server';
 
 /**
@@ -141,7 +142,7 @@ async function installBridge(
       subscriptionClients.clear();
     });
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
@@ -486,7 +487,7 @@ for (const advertisesMux of [true, false]) {
     await page.routeWebSocket(/.*/, (socket) => {
       void socket.close();
     });
-    await page.route('**/*', async (route) => {
+    await page.route(appRequests, async (route) => {
       const request = route.request(),
         path = decodeURIComponent(new URL(request.url()).pathname);
       if (/^\/__hotsheet\/(?:remote\/)?projects\/open$/.test(path)) {

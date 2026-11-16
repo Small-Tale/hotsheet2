@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { capabilities, DEFAULT_TERMINALS, openDemoProject, project, ticket } from './mobile-project-fixture';
 
 type ToastEntranceWindow = Window & {
@@ -490,9 +491,13 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('#app-bottom-drawer[data-collapsed="false"]')).toBeVisible();
-  expect(await geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
+  await expect.poll(() => geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
+  // The view switch renders on the next animation frame, not inside the click: until then the workspace
+  // is still the edge-to-edge board (no bottom padding). A one-shot read raced that frame under load
+  // (HS2-474BX8), so wait for the list presentation and then for its padding.
   await page.getByLabel('List View').click();
-  expect(await geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
+  await expect(page.locator('.app-shell__workspace')).toHaveAttribute('data-presentation', 'inset');
+  await expect.poll(() => geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
 });
 
 test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays without changing desktop preferences (HS2-KN79XP)', async ({
@@ -635,7 +640,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname,
@@ -1199,6 +1204,13 @@ test('keeps overflowing phone drawer tabs and actions reachable with whole-tab s
     peers = drawer.locator('.terminal-drawer__views [data-tab-kind="terminal"]');
   await expect(peers).toHaveCount(3);
   await expect(strip).toHaveAttribute('data-snap-tabs', 'true');
+  // Tap only once the drawer has settled (HS2-DCD5SK). The shell re-renders when the open motion ends, and
+  // that morph drops Kerf's inline snap end room from the strip (KF-NNSAT8, HS2-7DJRA0): a strip already
+  // scrolled into that room clamps about 73px sideways, so a tap that began on the last tab ended elsewhere.
+  // The expanded drawer and `transitioning=true` render together, so a later `false` is the end of the motion.
+  const shell = page.locator('[data-component="app-shell"]');
+  await expect(page.locator('#app-bottom-drawer')).toHaveAttribute('data-collapsed', 'false');
+  await expect(shell).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   expect(await strip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
   const createBox = await drawer.locator('[data-terminal-drawer-create]').boundingBox();
   expect((createBox?.x ?? Infinity) + (createBox?.width ?? 0)).toBeLessThanOrEqual(390);

@@ -11,6 +11,17 @@ use std::sync::mpsc;
 
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
+/// The `hotsheet-mcp` binary, launched once to completion before any window that times its
+/// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
+fn mcp_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-mcp"), &["--version"])
+}
+
 /// Accept connections and report each request's `(method path, secret header, body)`.
 fn fake_server(listener: TcpListener, seen: mpsc::Sender<(String, String, String)>) {
     std::thread::spawn(move || {
@@ -120,7 +131,7 @@ fn serverless_shim_registers_presence_with_the_registry_server_and_releases_on_e
     )
     .unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(mcp_binary())
         .arg("--path")
         .arg(store_dir.path())
         .env("HOTSHEET_HOME", home.path())
@@ -161,7 +172,7 @@ fn serverless_shim_without_a_registered_server_stays_silent() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
     FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(mcp_binary())
         .arg("--path")
         .arg(store_dir.path())
         .env("HOTSHEET_HOME", home.path())
@@ -220,7 +231,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     )
     .unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(mcp_binary())
         .arg("--path")
         .arg(store_dir.path())
         .env("HOTSHEET_HOME", home.path())
@@ -291,7 +302,7 @@ fn lease_under_codex(codex_args: &[&str]) -> serde_json::Value {
     std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut child = Command::new(&codex)
         .args(codex_args)
-        .env("SHIM", env!("CARGO_BIN_EXE_hotsheet-mcp"))
+        .env("SHIM", mcp_binary())
         .env("STORE", store_dir.path())
         .env("HOTSHEET_HOME", home.path())
         // What a daemon started from the first Codex tab would carry.

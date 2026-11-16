@@ -21,6 +21,7 @@ import {
   reanchorReplacedContextPopupMenus,
   revealContextPopupMenu,
 } from '../context-menu-position';
+import { dragLeftElement } from '../drag-leave';
 import type { TicketGroupsController } from '../features/ticket-groups';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
@@ -38,6 +39,7 @@ import { terminalClearKeyTarget } from '../terminal-clear';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
+import { clearTicketDropTarget, markTicketDropTarget } from '../ticket-drop-target';
 import { ticketGroupDropTarget } from '../ticket-group-state';
 import { ticketGroupKey, ticketGroupValue } from '../ticket-groups';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
@@ -418,35 +420,25 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   }
   window.addEventListener('pointerup', finishAppRegionResize, { signal: lifetime.signal });
   window.addEventListener('pointercancel', finishAppRegionResize, { signal: lifetime.signal });
-  // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
-  // (project tabs, the composer) keep the app attribute only.
-  // A project tab renders its state from `projectTabDropTarget` through Kerf's `dropTarget` prop: the
-  // shell's next render morphs away attributes set on the tab's node mid-drag (HS2-6KNWYT).
+  // Every ticket drop target renders its highlight from state, so the shell's next render cannot morph
+  // it away mid-drag: project tabs from `projectTabDropTarget` through Kerf's `dropTarget` prop
+  // (HS2-6KNWYT), and sidebar views, board columns, and the new-ticket targets from `ticketDropTarget`,
+  // keyed by their `data-ticket-drop-key` (HS2-G8EK08).
   function markDragTarget(target: HTMLElement) {
-    const tabProject = data(target).ticketDropProject;
-    if (tabProject) {
-      markProjectTabDropTarget(tabProject, 'ticket');
-      return;
-    }
-    target.dataset.draggingTicket = 'true';
-    if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
+    const { ticketDropProject: tabProject, ticketDropKey: key } = data(target);
+    if (tabProject) markProjectTabDropTarget(tabProject, 'ticket');
+    else if (key) markTicketDropTarget(key);
   }
   function clearDragTarget(target: HTMLElement) {
-    const tabProject = data(target).ticketDropProject;
-    if (tabProject) {
-      clearProjectTabDropTarget(tabProject, 'ticket');
-      return;
-    }
-    delete target.dataset.draggingTicket;
-    if (target.dataset.state === 'drag-target') delete target.dataset.state;
+    const { ticketDropProject: tabProject, ticketDropKey: key } = data(target);
+    if (tabProject) clearProjectTabDropTarget(tabProject, 'ticket');
+    else if (key) clearTicketDropTarget(key);
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
     ticketGroupDropTarget.value = undefined;
     clearProjectTabDropTarget(undefined, 'ticket');
-    document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
-      clearDragTarget(target);
-    });
+    clearTicketDropTarget();
   }
   lifetime.add(
     delegate(document.body, 'dragstart', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
@@ -491,8 +483,11 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       document.body,
       'dragleave',
       '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-      (_event, target) => {
-        clearDragTarget(target as HTMLElement);
+      (event, target) => {
+        // Moving between a column's children, such as from a group header's label onto its
+        // toggle's padding, fires dragleave on the child left behind; only leaving the column
+        // itself clears its highlight (HS2-1BBXER).
+        if (dragLeftElement(event as DragEvent, target)) clearDragTarget(target as HTMLElement);
       },
     ),
   );
@@ -533,6 +528,10 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       return;
     }
     event.preventDefault();
+    // Only the group shows as the target, from the enter on, rather than after the column's next
+    // dragover (HS2-1BBXER): a move between the column's children no longer clears the column.
+    const column = target.closest<HTMLElement>('[data-ticket-drop-status]');
+    if (column) clearDragTarget(column);
     const { ticketGroup = '', ticketGroupScope = '' } = data(target),
       key = ticketGroupKey(ticketGroup),
       current = ticketGroupDropTarget.value;
@@ -545,12 +544,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(delegate(document.body, 'dragover', '[data-ticket-drop-group]', overTicketGroup));
   lifetime.add(
     delegate(document.body, 'dragleave', '[data-ticket-drop-group]', (event, target) => {
-      // Moving between a group's children also fires dragleave, and browsers often report no
-      // related target for it, so only a pointer outside the group's box leaves the group.
-      const { clientX, clientY } = event as DragEvent,
-        box = target.getBoundingClientRect();
-      if (clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) return;
-      ticketGroupDropTarget.value = undefined;
+      // Moving between a group's children also fires dragleave; only leaving the group clears it.
+      if (dragLeftElement(event as DragEvent, target)) ticketGroupDropTarget.value = undefined;
     }),
   );
   // A list has no status targets, so its groups take the drop directly; a group inside a board

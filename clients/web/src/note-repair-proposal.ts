@@ -1,4 +1,5 @@
 import type { Capabilities, Note } from './api';
+import { responseLinkTargets, responseLinkUnavailable } from './note-response-link';
 
 /** The only note-level fields an AI may suggest for human review (HS2-5E8Y9R). */
 export interface NoteRepairProposal {
@@ -87,11 +88,20 @@ export function previewNoteRepair(
   }
   if (proposal.summary !== undefined && proposal.summary !== (note.summary ?? null))
     unavailable.push('Editing an existing note summary is not supported yet.');
-  // HS2-J4G9GB: an existing response link is append-only today. Never create a reply for the user.
-  if (proposal.response_to !== undefined && proposal.response_to !== (note.response_to ?? null))
-    unavailable.push('Linking an existing note as a response is not supported yet.');
+  // HS2-J4G9GB: link the existing note itself; a repair never appends a reply for the user.
+  if (proposal.response_to !== undefined && proposal.response_to !== (note.response_to ?? null)) {
+    const notes = relatedNotes.some((item) => item.id === note.id) ? relatedNotes : [...relatedNotes, note];
+    const reason = responseLinkUnavailable(notes, note.id, capabilities, proposal.kind ?? note.kind);
+    if (reason) unavailable.push(reason);
+    else if (
+      proposal.response_to !== null &&
+      !responseLinkTargets(notes, note.id).some((request) => request.id === proposal.response_to)
+    )
+      unavailable.push('The proposed response link does not name an earlier feedback request on this ticket.');
+    else patch.response_to = proposal.response_to;
+  }
   const changed = Object.keys(patch).some((key) =>
-    ['note_kind', 'note', 'note_confidence', 'clear_note_confidence'].includes(key),
+    ['note_kind', 'note', 'note_confidence', 'clear_note_confidence', 'response_to'].includes(key),
   );
   return { proposal, unavailable, patch, changed };
 }

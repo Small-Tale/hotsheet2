@@ -136,8 +136,19 @@ test('clears the halted terminal example from its menu at wide and phone widths 
     await page.goto('/ux-demo?component=terminal-dashboard');
     const tile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo:halted"]');
     await expect(tile).toHaveAttribute('data-halted', 'true');
-    await tile.getByRole('button', { name: 'More Actions' }).click();
-    await page.getByRole('menuitem', { name: 'Clear stopped state' }).click();
+    const trigger = tile.getByRole('button', { name: 'More Actions' });
+    await trigger.click();
+    const clear = page.getByRole('menuitem', { name: 'Clear stopped state' });
+    // The example frame is the containing block of the menu's fixed anchor; the demo must still anchor the
+    // menu at its trigger's viewport point, not offset by the frame's position and off screen (HS2-CY6A6K).
+    await expect(clear).toBeInViewport();
+    if (width === 1280) {
+      // The wide tile is in view without scrolling, so its trigger stays put while the menu opens below it.
+      const opener = (await trigger.boundingBox())!,
+        menu = (await page.getByRole('menu', { name: 'Terminal Actions' }).boundingBox())!;
+      expect(Math.abs(menu.y - (opener.y + opener.height))).toBeLessThanOrEqual(8);
+    }
+    await clear.click();
     await expect(tile).not.toHaveAttribute('data-halted', 'true');
     await expect(tile.locator('.terminal-tile__halt')).toHaveCount(0);
   }
@@ -551,7 +562,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board', 3],
     ['ticket-board-column', 1],
     ['ticket-search-field', 6],
-    ['ticket-code-review', 5],
+    ['ticket-code-review', 7], // HS2-MCGCPQ adds the follow-up link action examples
     ['ticket-attachments', 6],
     ['attachment-gallery', 1],
     ['ticket-info-panel', 2],
@@ -599,7 +610,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     // HS2-4K43DK adds Locked, with Orchestrator Answers.
     ['permission-rules-settings', 6],
     ['project-sidebar', 1],
-    ['command-settings-editor', 1],
+    ['command-settings-editor', 3], // HS2-BZKTDC adds the loading and failed-load examples
     ['ai-tool-settings', 1],
     ['permission-request', 1],
     ['notification-center', 1],
@@ -1278,7 +1289,9 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
       // The banner itself keeps Kerf's inset StateBanner spacing like every application banner (HS2-YCB15Z).
     ).toEqual({ padding: '8px', gap: '8px', copyGap: '4px 8px', buttonPadding: ['11.2px', '11.2px'] });
   }
-  await expect(cleanup.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
+  // Both controls sit directly in Kerf's action zone, without a Row wrapper (HS2-W77711).
+  await expect(cleanup.locator('.kui-state-banner__action > button')).toHaveCount(2);
+  await expect(cleanup.locator('.kui-state-banner__action .kui-row')).toHaveCount(0);
   await page
     .getByRole('region', { name: 'Hs1MigrationBanner Examples' })
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-wide.png' });
@@ -7621,6 +7634,139 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
     .screenshot({ path: 'target/visual-captures/hs2-e3j0vv-fixed-layout-grid-tab.png' });
 });
 
+test('catalogs the terminal drawer search states with settings and reset (HS2-174S6X)', async ({ page }) => {
+  test.setTimeout(90_000);
+  const example = page.getByRole('region', { name: 'Terminal Search', exact: true }),
+    drawer = example.locator('[data-component="terminal-drawer"]'),
+    field = drawer.locator('[data-component="search-field"][data-search-field-id="terminal-search"]'),
+    editor = drawer.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    // A phone-width rail shows the count as a visually hidden polite status instead (HS2-HPDX81).
+    status = drawer.locator('[data-terminal-search-count-status]'),
+    hide = drawer.getByRole('button', { name: 'Hide Terminal Drawer' }),
+    inspector = page.getByRole('complementary', { name: 'TerminalDrawer Settings' }),
+    state = inspector.locator('kui-select[name="search-state"]');
+  const setState = async (next: string) => {
+    await setDemoSettingsOpen(page, true);
+    await state.evaluate((node: HTMLElement & { value: string }, to) => {
+      node.value = to;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, next);
+    await expect(state).toHaveJSProperty('value', next);
+    // The narrow catalog's settings overlay covers the stage; close it before reading the drawer.
+    await setDemoSettingsOpen(page, false);
+  };
+  const noPageOverflow = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  // The rail's controls lie inside the drawer's own box: nothing is clipped past its edge (HS2-HPDX81).
+  const expectInsideDrawer = async (...controls: ReturnType<typeof page.locator>[]) => {
+    const bounds = (await drawer.boundingBox())!;
+    for (const control of controls) {
+      const box = (await control.boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+  // The count reads through the visible control on a wide rail and the compact status on a phone rail.
+  const expectCount = async (phone: boolean, text: string) => {
+    if (phone) {
+      await expect(count).toHaveCount(0);
+      await expect(status).toHaveText(text);
+      await expect(status).toHaveAttribute('role', 'status');
+    } else {
+      await expect(count).toHaveText(text);
+      await expect(status).toHaveCount(0);
+    }
+  };
+  for (const [width, name] of [
+    [1280, 'wide'],
+    [390, 'phone'],
+  ] as const) {
+    const phone = name === 'phone';
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-drawer');
+    await expect(drawer).toBeVisible();
+    // The other drawer specimens take no search prop, so the field id stays unique on the page.
+    await expect(page.locator('[data-search-field-id="terminal-search"]')).toHaveCount(1);
+
+    // Collapsed: only the iconic trigger, and no count.
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(count).toHaveCount(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-collapsed-${name}.png` });
+
+    // Open, empty: the field is open and nothing is searched, so no count.
+    await setState('open');
+    await expect(field).toHaveAttribute('data-expanded', 'true');
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveText('');
+    await expect(count).toHaveCount(0);
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-open-${name}.png` });
+
+    // Open with a count: the count control steps forward, and Shift steps back.
+    await setState('count');
+    await expect(editor).toHaveText('root');
+    await expectCount(phone, '3 of 12');
+    await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-count-${name}.png` });
+    if (!phone) {
+      await expect(count).toBeEnabled();
+      await expect(count).toHaveAccessibleName('Next Match, 3 of 12');
+      await count.click();
+      await expect(count).toHaveText('4 of 12');
+      await count.click({ modifiers: ['Shift'] });
+      await expect(count).toHaveText('3 of 12');
+    }
+    // Enter in the field steps through matches instead of submitting, as in production.
+    await editor.focus();
+    await page.keyboard.press('Enter');
+    await expectCount(phone, '4 of 12');
+    await expect(editor).toBeFocused();
+
+    // No matches: the count reads so and cannot step.
+    await setState('none');
+    await expect(editor).toHaveText('webpack');
+    await expectCount(phone, 'No matches');
+    if (!phone) await expect(count).toBeDisabled();
+    await expect.poll(noPageOverflow).toBeLessThanOrEqual(0);
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
+    await example.screenshot({ path: `target/visual-captures/hs2-174s6x-search-none-${name}.png` });
+
+    // The highlight limit caps the count.
+    await setState('limit');
+    await expectCount(phone, '1000+ matches');
+    if (!phone) await expect(count).toBeEnabled();
+    await expectInsideDrawer(field, hide, ...(phone ? [] : [count]));
+
+    // Kerf's clear empties the real model, which clears the count as production's search does.
+    await drawer.getByRole('button', { name: 'Clear Terminal Search' }).click();
+    await expect(count).toHaveCount(0);
+    await expect(drawer.locator('[data-search-field-editor="terminal-search"]:not(:empty)')).toHaveCount(0);
+
+    // Reset restores the collapsed state and the live Settings control.
+    await setState('count');
+    await setDemoSettingsOpen(page, true);
+    await inspector.getByRole('button', { name: 'Reset' }).click();
+    await expect(state).toHaveJSProperty('value', 'collapsed');
+    await setDemoSettingsOpen(page, false);
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(count).toHaveCount(0);
+    // A further edit after Reset applies.
+    await setState('none');
+    await expectCount(phone, 'No matches');
+    await setState('collapsed');
+    await expect(field).toHaveAttribute('data-expanded', 'false');
+    await expect(status).toHaveCount(0);
+  }
+
+  // Wide again after the phone width (HS2-HPDX81): the full count control returns, inside the drawer.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await setState('none');
+  await expectCount(false, 'No matches');
+  await expectInsideDrawer(field, count, hide);
+});
+
 test('operates the project tab bar across pointer, keyboard, and responsive states', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tabs');
@@ -9253,16 +9399,32 @@ test('shows the chat model in the trigger and effort in the settings menu (HS2-X
 test('exposes a General app-settings entry in the settings navigator', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 800 });
   await page.goto('/ux-demo?component=settings-navigation');
-  const general = page.locator('[data-item-id="general"]');
+  // HS2-BZHMEV adds a second example (pairing requests waiting); this test reads the interactive navigator.
+  const interactive = page.getByRole('region', { name: 'Interactive' });
+  const general = interactive.locator('[data-item-id="general"]');
   await expect(general).toBeVisible();
   await expect(general).toContainText('General');
-  await expect(page.getByText('App Settings', { exact: true })).toBeVisible();
+  await expect(interactive.getByText('App Settings', { exact: true })).toBeVisible();
+});
+
+test('keeps element ids unique across the command settings editor examples', async ({ page }) => {
+  // The ready, loading, and failed-load examples each mount an editor dialog; they once shared
+  // `command-editor-dialog` (HS2-CP5F46).
+  await page.goto('/ux-demo?component=command-settings-editor');
+  await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(3);
+  await expect(page.locator('[data-command-editor-dialog]')).toHaveCount(3);
+  const duplicates = await page.evaluate(() => {
+    const counts = new Map<string, number>();
+    for (const element of document.querySelectorAll('[id]')) counts.set(element.id, (counts.get(element.id) ?? 0) + 1);
+    return [...counts].filter(([, count]) => count > 1).map(([id]) => id);
+  });
+  expect(duplicates).toEqual([]);
 });
 
 test('edits custom command color and icon in the command settings editor', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
-  const editor = page.locator('[data-component="command-settings-editor"]');
+  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]');
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
   // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
@@ -9279,6 +9441,7 @@ test('edits custom command color and icon in the command settings editor', async
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
   await verifyRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+  // The id is unique on the page now that each demo editor names its own dialog (HS2-CP5F46).
   const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
   const commandHeadingGroup = dialog
@@ -10609,7 +10772,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   // The label used to share a Toolbar row with the menu trigger and truncate to "AI config…" (HS2-XZ6Q5A).
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/ux-demo?component=command-settings-editor');
-  const editor = page.locator('[data-component="command-settings-editor"]');
+  const editor = page.locator('[data-component="command-settings-editor"][data-load-state="ready"]');
   const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
   await publishRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');

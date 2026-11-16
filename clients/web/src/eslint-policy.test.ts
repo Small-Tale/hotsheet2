@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { ESLint } from 'eslint';
+import ts from 'typescript';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import packageJson from '../package.json';
@@ -31,6 +32,159 @@ describe('web ESLint policy', () => {
         /networkidle/.test(readFileSync(new URL(name, tests), 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '')),
       );
     expect(offenders).toEqual([]);
+  });
+
+  it('HS2-6E87E4 proxies routed browser requests only through the shared idempotent-retry helper', () => {
+    // A raw `route.fetch` on a reused keep-alive socket fails with ECONNRESET when the server closes
+    // it idle (HS2-NWFZ7J); `proxyFetch` retries only GET and HEAD. HS2-QY232J moved the helper to
+    // the types-only `tests/proxy-fetch.ts` and extended the scan to `src/` files that drive Playwright.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    const scan = (directory: string, playwrightOnly: boolean) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path, playwrightOnly);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && path !== import.meta.filename) {
+          const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          if (playwrightOnly && !/from '(?:@playwright\/test|playwright(?:-core)?)'/.test(source)) continue;
+          const calls = source.match(/\.fetch\(/g)?.length ?? 0;
+          const allowed = path === join(tests, 'proxy-fetch.ts') ? 1 : 0;
+          // `bridge.fetch(request)` is an APIRequestContext, not a routed request (HS2-ZMVQR4).
+          const contexts = source.match(/\bbridge\.fetch\(/g)?.length ?? 0;
+          if (calls - contexts !== allowed) offenders.push(relative(join(tests, '..'), path).split(sep).join('/'));
+        }
+      }
+    };
+    scan(tests, false);
+    scan(import.meta.dirname, true);
+    expect(offenders).toEqual([]);
+    const helper = readFileSync(join(tests, 'proxy-fetch.ts'), 'utf8');
+    expect(helper).toMatch(/const idempotent = method === 'GET' \|\| method === 'HEAD';/);
+    // Types only, so `src/` tests can import it without pulling in the real-server fixture.
+    expect(helper.match(/^import .*$/gm)).toEqual(["import type { APIResponse, Route } from '@playwright/test';"]);
+    expect(readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8')).toContain(
+      "export { proxyFetch } from './proxy-fetch.ts';",
+    );
+  });
+
+  it('HS2-QY232J removes proxy routes before stopping the real server they target', () => {
+    // A page still routing to a stopped server proxies its next poll to a closed port, and the
+    // route handler's rejection fails the test. `stop(page)` unroutes first.
+    const tests = join(import.meta.dirname, '../tests');
+    const fixture = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    expect(fixture).toMatch(
+      /const stop = async \(\.\.\.proxies: RouteOwner\[\]\) => \{\n\s+for \(const proxy of proxies\) await proxy\.unrouteAll\(\{ behavior: 'ignoreErrors' \}\);/,
+    );
+    const offenders: string[] = [];
+    for (const name of readdirSync(tests).filter((entry) => entry.endsWith('.ts'))) {
+      const source = readFileSync(join(tests, name), 'utf8');
+      if (!source.includes('proxyFetch(')) continue;
+      const lines = source.split('\n');
+      lines.forEach((line, index) => {
+        if (!/^\s*await \w+\.stop\(\);$/.test(line)) return;
+        // A bare stop is fine once the routes are gone or the page's context or browser is closed.
+        const before = lines.slice(Math.max(0, index - 4), index).join('\n');
+        if (!/unrouteAll\(|\.close\(\)/.test(before)) offenders.push(`${name}:${String(index + 1)}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('HS2-N8FTCK opens routeWebSocket upstreams only through the error-listening, stop-aware helper', () => {
+    // `unrouteAll` leaves WebSocket routes installed, so after `stop()` a reconnecting page still
+    // reaches the handler. A raw upstream socket opened there dials the stopped server, and without
+    // an `error` listener its ECONNREFUSED is unhandled (HS2-6TK3SB). `openUpstreamSocket` listens
+    // for `error` and refuses a stopped server; a raw `new …WebSocket(` inside a handler is rejected.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          scan(path);
+          continue;
+        }
+        if (!/\.[cm]?[jt]sx?$/.test(entry.name)) continue;
+        const text = readFileSync(path, 'utf8');
+        if (!text.includes('routeWebSocket(')) continue;
+        const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+        const name = relative(tests, path).split(sep).join('/');
+        const visit = (node: ts.Node, handler: boolean) => {
+          if (
+            handler &&
+            ts.isNewExpression(node) &&
+            /WebSocket$/.test(node.expression.getText(file)) &&
+            !/WebSocketServer$/.test(node.expression.getText(file))
+          )
+            offenders.push(`${name}:${String(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1)}`);
+          const routed =
+            ts.isCallExpression(node) &&
+            ts.isPropertyAccessExpression(node.expression) &&
+            node.expression.name.text === 'routeWebSocket';
+          ts.forEachChild(node, (child) => {
+            visit(child, handler || routed);
+          });
+        };
+        visit(file, false);
+      }
+    };
+    scan(tests);
+    expect(offenders).toEqual([]);
+    const fixture = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    const helper = fixture.slice(fixture.indexOf('export function openUpstreamSocket('));
+    expect(helper).toMatch(/if \(stoppedHosts\.has\(host\)\) \{\n\s+closeRoute\(\);\n\s+return undefined;/);
+    expect(helper).toContain("upstream.on('error', closeRoute);");
+    expect(fixture).toMatch(/if \(host\) \{\n\s+stoppedHosts\.add\(host\);/);
+  });
+
+  it('HS2-QY232J waits for the terminal drawer to finish opening before using New Drawer Item', () => {
+    // New Drawer Item slides with the ~220 ms drawer-open transition; under load a click during it
+    // timed out on an unstable element (HS2-S4FJ85). Wait for the shell's transition flag first.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    for (const name of readdirSync(tests).filter((entry) => entry.endsWith('.ts'))) {
+      const lines = readFileSync(join(tests, name), 'utf8').split('\n');
+      lines.forEach((line, index) => {
+        if (!line.includes("name: 'Show Terminal Drawer' }).click()")) return;
+        for (const next of lines.slice(index + 1, index + 6)) {
+          if (next.includes("'data-terminal-drawer-transitioning', 'false'")) return;
+          if (next.includes("name: 'New Drawer Item' })")) {
+            offenders.push(`${name}:${String(index + 1)}`);
+            return;
+          }
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('HS2-7YN9VV routes app requests with appRequests instead of a catch-all glob', () => {
+    // A `'**/*'` or `'**'` route sends each of the ~850 unbundled Vite module requests of a cold page
+    // load through the test worker (HS2-15EYK1). Route `appRequests` from `tests/app-requests.ts`
+    // instead. A handler that must see every request, for example to count or delay all of them,
+    // goes in this allowlist as `'<file>': '<reason>'`.
+    const allowed: Record<string, string> = {};
+    const tests = join(import.meta.dirname, '../tests');
+    const found: Record<string, number> = {};
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name)) {
+          const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          const count = source.match(/\.route\(\s*(['"`])\*\*(?:\/\*)?\1/g)?.length ?? 0;
+          if (count > 0) found[relative(tests, path).split(sep).join('/')] = count;
+        }
+      }
+    };
+    scan(tests);
+    expect(Object.keys(found).filter((file) => !(file in allowed))).toEqual([]);
+    for (const [file, reason] of Object.entries(allowed)) {
+      expect(found[file], `${file} no longer needs its catch-all allowlist entry`).toBeGreaterThan(0);
+      expect(reason.trim()).not.toBe('');
+    }
+    const helper = readFileSync(join(tests, 'app-requests.ts'), 'utf8');
+    expect(helper).toContain('export const appRequests = /^(?![a-z]+:');
   });
 
   it('HS2-3TWWWD bounds the type-aware ESLint heap so it does not depend on machine memory', () => {
@@ -199,6 +353,89 @@ describe('web ESLint policy', () => {
     const globalIgnores = config.match(/ignores: \[([\s\S]*?)\]/)?.[1];
     expect(globalIgnores).toContain("'target/**'");
     expect(globalIgnores?.match(/'target\/\*\*'/g)).toHaveLength(1);
+  });
+
+  it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
+    // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
+    // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.
+    const read = /\.\s*HOTSHEET_(?:LEGACY_)?HOME\b|\[\s*['"`]HOTSHEET_(?:LEGACY_)?HOME['"`]\s*\]/;
+    const offenders: string[] = [];
+    const check = (path: string) => {
+      const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+      if (read.test(source))
+        offenders.push(
+          relative(join(import.meta.dirname, '..'), path)
+            .split(sep)
+            .join('/'),
+        );
+    };
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[jt]sx?$/.test(entry.name)) check(path);
+      }
+    };
+    scan(import.meta.dirname);
+    for (const name of ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'])
+      check(join(import.meta.dirname, '..', name));
+    expect(offenders).toEqual(['src/machine-home.ts']);
+  });
+
+  it('HS2-GVSJ5Y reads every other path-valued HOTSHEET_* variable through nonBlank', () => {
+    // `||`, `??`, and truthiness kept whitespace-only overrides as paths, and `??` resolved an empty
+    // HOTSHEET_REPO_ROOT against the working directory. Every read from an environment record, by
+    // name or through `[variable]`, must be the direct argument of `nonBlank` (HS2-N2HB7G's rule).
+    const names = [
+      'HOTSHEET_REPO_ROOT',
+      'HOTSHEET_CLI_BIN',
+      'HOTSHEET_MIGRATE_BIN',
+      'HOTSHEET_SERVER_BIN',
+      'HOTSHEET_HOOK_CLI_BIN',
+      'HOTSHEET_MCP_BIN',
+      'HOTSHEET_MIGRATOR',
+      'HOTSHEET_MIGRATION_JOBS',
+      'HOTSHEET_CLIENT_READY_FILE',
+      'HOTSHEET_DEV_LATENCY_LOG',
+      'HOTSHEET_VITE_CACHE_DIR',
+      'HOTSHEET_DESKTOP_STORAGE_DIRECTORY',
+      // HS2-MVF6X3: the plain-Node launchers in scripts/ use the non-blank.mjs twin.
+      'HOTSHEET_WEB_STABLE_TEMP_ROOT',
+      'HOTSHEET_WEB_STABLE_SOURCE_ROOT',
+      'HOTSHEET_DESKTOP_NODE',
+    ].join('|');
+    const read = new RegExp(
+      String.raw`\b(?:process\.env|environment|env)(?:\.\s*(?:${names})\b|\[\s*['"\x60](?:${names})['"\x60]\s*\]|\[\s*variable\s*\])`,
+      'g',
+    );
+    const offenders: string[] = [];
+    const check = (path: string) => {
+      const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+      const file = relative(join(import.meta.dirname, '..'), path)
+        .split(sep)
+        .join('/');
+      for (const match of source.matchAll(read)) {
+        const before = source.slice(0, match.index),
+          after = source.slice(match.index + match[0].length);
+        if (/^\s*=(?!=)/.test(after)) continue;
+        if (!/\bnonBlank\(\s*$/.test(before)) offenders.push(`${file}: ${match[0]}`);
+      }
+    };
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.test\.[jt]sx?$/.test(entry.name)) check(path);
+      }
+    };
+    scan(import.meta.dirname);
+    for (const name of ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'])
+      check(join(import.meta.dirname, '..', name));
+    // HS2-MVF6X3: the scripts/ launchers too; their test files set these variables rather than read them.
+    const scripts = join(import.meta.dirname, '..', 'scripts');
+    for (const entry of readdirSync(scripts))
+      if (/\.mjs$/.test(entry) && !/\.test\.mjs$/.test(entry)) check(join(scripts, entry));
+    expect(offenders).toEqual([]);
   });
 
   it('keeps the bootstrap and application runtime on the shared typed-rule baseline', () => {

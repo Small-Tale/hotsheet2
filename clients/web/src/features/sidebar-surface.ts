@@ -27,6 +27,7 @@ import {
 } from '../project-drive';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
+import { isTicketDropTarget, viewTicketDropKey } from '../ticket-drop-target';
 import { customTicketViewId, type TicketScope, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
 
@@ -69,6 +70,8 @@ export interface SidebarSurfaceDependencies {
   settingsCategory: () => SettingsCategory;
   /** The project is an Orchestration project, so Settings lists its Orchestration category (HS2-W27N1D). */
   settingsOrchestration?: () => boolean;
+  /** Pairing requests waiting for this host's approval (HS2-BZHMEV). */
+  pairingRequestCount?: () => number;
   projectPermissionHistory: (projectId: string) => ReadonlyArray<{ resolvedAt: number }>;
   projectPendingPermissions: (projectId: string) => readonly unknown[];
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
@@ -128,6 +131,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     projectConversationUnread,
     project,
     settingsCategory,
+    pairingRequestCount,
     projectPermissionHistory,
     projectPendingPermissions,
     projectTicketCounts,
@@ -160,6 +164,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         kind: 'settings',
         selected: settingsCategory(),
         orchestration: dependencies.settingsOrchestration?.() ?? false,
+        pairingRequests: pairingRequestCount?.() ?? 0,
       };
     if (!statsSelected && viewMode.value === 'notifications') {
       const history = projectPermissionHistory(current.id),
@@ -263,6 +268,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         repositoryError: Boolean(repositoryError.value),
         views,
         selectedViewId: statsSelected ? '' : searchScope(),
+        dropTargetViewId: views.find((view) => isTicketDropTarget(viewTicketDropKey(view.id)))?.id,
         statsSelected,
         commandGroupLabel: 'Project commands',
         commands: commandDefinitions.value.map((command) => {

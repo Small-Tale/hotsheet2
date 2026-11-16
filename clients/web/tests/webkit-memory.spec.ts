@@ -6,7 +6,7 @@ import { expect, test, webkit } from '@playwright/test';
 
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { seedLocalGitTickets } from './real-ticket-fixture';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
 
@@ -94,7 +94,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
       const path = url.pathname
         .replace('/__hotsheet/project-api/memory', '')
         .replace('/checkouts/memory', `/checkouts/${server.checkoutId}`);
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${url.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });

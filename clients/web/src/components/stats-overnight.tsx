@@ -82,7 +82,12 @@ export function StatsOvernight({
           />
         </Row>
         {status === 'error' ? (
-          <StateBanner tone="warning" title="Overnight history could not load." detail={message ?? ''} />
+          <StateBanner
+            tone="warning"
+            title="Overnight history could not load."
+            detail={message ?? ''}
+            copyLayout="stacked"
+          />
         ) : lanes.length === 0 ? (
           status === 'loading' ? (
             <Text variant="p" tone="quiet" flush>

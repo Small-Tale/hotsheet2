@@ -1,5 +1,8 @@
 //! Actual CLI + Git boundary coverage for explicit legacy attachment recovery.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
@@ -8,7 +11,7 @@ use hotsheet_ticketing::FsStore;
 use predicates::prelude::*;
 
 fn cli(store: &Path) -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .env("GIT_AUTHOR_NAME", "Hot Sheet test")
         .env("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid")
@@ -142,7 +145,7 @@ copyFileSync(join(bundle,'export.json'),out);
 for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,file),join(dirname(out),file));
 "#)).unwrap();
     let migrate = || {
-        let mut command = Command::cargo_bin("hotsheet-migrate").unwrap();
+        let mut command = Command::new(workspace_bin::path("hotsheet-migrate"));
         command
             .env("GIT_AUTHOR_NAME", "Hot Sheet test")
             .env("GIT_AUTHOR_EMAIL", "hotsheet@example.invalid")
@@ -198,8 +201,7 @@ for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,file),joi
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );
     git(&store_path, &["push", "origin", "HEAD"]);
-    Command::cargo_bin("hotsheet-migrate")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-migrate"))
         .arg("-C")
         .arg(&store_path)
         .arg("--verify-backup")
@@ -231,8 +233,7 @@ for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,file),joi
             .1,
         b"FIRST"
     );
-    Command::cargo_bin("hotsheet-migrate")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-migrate"))
         .arg("-C")
         .arg(&store_path)
         .arg("--verify-backup")
@@ -240,8 +241,7 @@ for(const file of ['first.txt','second.txt']) copyFileSync(join(bundle,file),joi
         .failure();
     migrate().assert().success();
     git(&store_path, &["push", "origin", "HEAD"]);
-    Command::cargo_bin("hotsheet-migrate")
-        .unwrap()
+    Command::new(workspace_bin::path("hotsheet-migrate"))
         .arg("-C")
         .arg(&store_path)
         .arg("--verify-backup")

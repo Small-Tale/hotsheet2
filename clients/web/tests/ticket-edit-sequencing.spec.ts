@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
+
 // HS2-K9SG2R: two rapid edits to the same field of the same ticket used to self-conflict — the second
 // edit read the same pre-first concurrency token and got a false "ticket was modified". Per-ticket
 // mutation sequencing now bases each edit off the previous edit's committed token (last-write-wins), so
@@ -86,7 +88,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
   const detailReleased = new Promise<void>((resolve) => {
     releaseDetail = resolve;
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
@@ -220,7 +222,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
     attachments: [],
     concurrency_token: 'T1',
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
@@ -342,7 +344,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
     attachments: [],
     concurrency_token: token,
   });
-  await page.route('**/*', async (route) => {
+  await page.route(appRequests, async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
@@ -483,7 +485,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
     attachments: [],
     concurrency_token: token,
   });
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),
@@ -613,7 +615,7 @@ for (const keepTyping of [true, false])
       attachments,
       concurrency_token: token,
     });
-    await page.route('**/*', async (route) => {
+    await page.route(appRequests, async (route) => {
       const request = route.request(),
         url = new URL(request.url()),
         path = url.pathname.replace(/\/tickets\/git-local%3A(?=[^/]+)/i, '/tickets/'),

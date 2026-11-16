@@ -13,6 +13,7 @@ async function openDrawerTerminal(page: Page) {
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
@@ -114,4 +115,275 @@ test('HS2-SW2YAZ double-clicking in the terminal search field never maximizes th
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await doubleClickRail();
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
+});
+
+type SearchSocketWindow = typeof window & {
+  __terminalFeedbackSockets: Array<EventTarget & { url: string; readyState: number }>;
+};
+
+/** Write output to a terminal through its newest open fake socket, as the PTY would. */
+async function writeTerminalOutput(page: Page, terminalId: string, output: string) {
+  await page.evaluate(
+    ({ terminalId, output }) => {
+      const socket = (window as SearchSocketWindow).__terminalFeedbackSockets
+        .filter((item) => item.url.includes(`/terminals/${terminalId}/`) && item.readyState === 1)
+        .at(-1)!;
+      socket.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
+    },
+    { terminalId, output },
+  );
+}
+
+test('HS2-M5QPED terminal search highlights every match and counts them through edits, output, clearing, closing, and terminal switches', async ({
+  page,
+}) => {
+  const { drawer, viewport } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    trigger = group.getByRole('button', { name: 'Search Terminal' }),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    // xterm draws one decoration per match plus one more over the active match (addon-search 0.16 marks
+    // neither with its active class), so N matches render N + 1 decorations.
+    highlights = (target = viewport) => target.locator('.xterm-find-result-decoration'),
+    replaceQuery = async (query: string) => {
+      await editor.click();
+      await page.keyboard.press('ControlOrMeta+a');
+      await page.keyboard.press('Backspace');
+      if (query) await page.keyboard.type(query);
+    };
+  await trigger.click();
+  await expect(editor).toBeFocused();
+  // An open, empty field shows no count.
+  await expect(count).toHaveCount(0);
+
+  // One match: highlighted as the active match, counted beside the field.
+  await page.keyboard.type('Justify');
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights()).toHaveCount(2);
+  // The count sits after the search group and before the Clear and Hide actions.
+  const searchBox = (await group.boundingBox())!,
+    countBox = (await count.boundingBox())!,
+    clearBox = (await drawer.getByRole('button', { name: 'Clear Terminal', exact: true }).boundingBox())!;
+  expect(countBox.width).toBeGreaterThan(0);
+  expect(countBox.x).toBeGreaterThanOrEqual(searchBox.x + searchBox.width - 1);
+  expect(countBox.x + countBox.width).toBeLessThanOrEqual(clearBox.x + 1);
+
+  // Query edits re-count: several matches, stepped with Enter and Shift-Enter.
+  await replaceQuery('File');
+  await expect(count).toHaveText(/^1 of \d+$/);
+  const total = Number((await count.textContent())!.split(' of ')[1]);
+  expect(total).toBeGreaterThanOrEqual(2);
+  await expect(highlights()).toHaveCount(total + 1);
+  await page.keyboard.press('Enter');
+  await expect(count).toHaveText(`2 of ${total}`);
+  await page.keyboard.press('Shift+Enter');
+  await expect(count).toHaveText(`1 of ${total}`);
+  await expect(highlights()).toHaveCount(total + 1);
+  // The count is a control too: a click steps to the next match and keeps typing in the field.
+  await count.click();
+  await expect(count).toHaveText(`2 of ${total}`);
+  await expect(editor).toBeFocused();
+  await count.click({ modifiers: ['Shift'] });
+  await expect(count).toHaveText(`1 of ${total}`);
+
+  // No match: the count says so and nothing is highlighted.
+  await page.keyboard.type('-absent');
+  await expect(count).toHaveText('No matches');
+  await expect(count).toBeDisabled();
+  await expect(highlights()).toHaveCount(0);
+
+  // Output arriving while the search is open re-counts the matches.
+  await replaceQuery('Justify');
+  await expect(count).toHaveText('1 of 1');
+  await writeTerminalOutput(page, 'terminal-new', '\u001b[6;1HJustify once more, Justify twice');
+  await expect(count).toHaveText(/^\d of 3$/);
+  await expect(highlights()).toHaveCount(4);
+  await page.screenshot({ path: test.info().outputPath('hs2-m5qped-matches-1280.png') });
+
+  // Clearing the field removes the highlights and the count; refilling brings them back.
+  await group.getByRole('button', { name: 'Clear Terminal Search' }).click();
+  await expect(editor).toBeFocused();
+  await expect(count).toHaveCount(0);
+  await expect(highlights()).toHaveCount(0);
+  await page.keyboard.type('Justify');
+  await expect(count).toHaveText(/^\d of 3$/);
+
+  // Switching terminals moves the search: the left terminal's highlights go, the new one is counted.
+  await drawer.locator('[data-tab-id="nano"] [data-action="select-drawer-item"]').click();
+  const nano = drawer.locator('[data-component="terminal-session"]:not([hidden]) [data-terminal-id="nano"]');
+  await expect(nano).toHaveAttribute('data-connection', 'connected');
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights(nano)).toHaveCount(2);
+  await expect(highlights(viewport)).toHaveCount(0);
+  await drawer.locator('[data-tab-id="terminal-new"] [data-action="select-drawer-item"]').click();
+  // Back on the first terminal (its fake PTY redrew the nano screen on resume, so one match again), the
+  // search follows and the second terminal's highlights go.
+  await expect(highlights()).toHaveCount(2);
+  await expect(count).toHaveText('1 of 1');
+  await expect(highlights(nano)).toHaveCount(0);
+
+  // Closing (empty the field, then Escape) removes the highlights and the count.
+  await replaceQuery('');
+  await page.keyboard.press('Escape');
+  await expect(group).toHaveAttribute('data-expanded', 'false');
+  await expect(count).toHaveCount(0);
+  await expect(highlights()).toHaveCount(0);
+});
+
+test('HS2-HPDX81 the open search, its count, and Hide stay inside a phone-width drawer through wide-narrow-wide resizes', async ({
+  page,
+}) => {
+  const { drawer } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    count = drawer.locator('[data-terminal-search-count]'),
+    status = drawer.locator('[data-terminal-search-count-status]'),
+    hide = drawer.getByRole('button', { name: 'Hide Terminal Drawer' }),
+    clear = drawer.getByRole('button', { name: 'Clear Terminal', exact: true });
+  // Every listed rail control lies inside the drawer's own box (no clipping past its right edge), once
+  // the shell's resize transitions have settled.
+  const expectInsideDrawer = async (...controls: ReturnType<typeof page.locator>[]) => {
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    );
+    const bounds = (await drawer.boundingBox())!;
+    for (const control of controls) {
+      const box = (await control.boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  };
+
+  // Wide: the full count control sits beside the field.
+  await group.getByRole('button', { name: 'Search Terminal' }).click();
+  await page.keyboard.type('File');
+  await expect(count).toHaveText(/^1 of \d+$/);
+  const total = Number((await count.textContent())!.split(' of ')[1]);
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+
+  // Narrow: the count yields its room; screen readers still hear it through a polite status.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(count).toHaveCount(0);
+  await expect(status).toHaveText(`1 of ${total}`);
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect(editor).toBeFocused();
+  await expectInsideDrawer(group, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-count-390.png') });
+  // No matches, the state that pushed Clear and Hide out of the drawer before the fix.
+  await page.keyboard.type('-absent');
+  await expect(status).toHaveText('No matches');
+  await expectInsideDrawer(group, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-390.png') });
+
+  // Medium: the full count control returns beside the field, still inside the drawer.
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(count).toHaveText('No matches');
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-768.png') });
+
+  // Wide again: the full count control returns and everything still fits.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(count).toHaveText('No matches');
+  await expect(status).toHaveCount(0);
+  await expectInsideDrawer(group, count, clear, hide);
+  await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-1280.png') });
+});
+
+interface SearchReport {
+  resultIndex: number;
+  resultCount: number;
+}
+
+test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes and Enter steps on from it', async ({
+  page,
+}) => {
+  const { drawer } = await openDrawerTerminal(page);
+  const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
+    editor = group.locator('[data-search-field-editor="terminal-search"]'),
+    // The full count control, or its screen-reader status when a narrow rail hides it (HS2-HPDX81).
+    count = drawer.locator('[data-terminal-search-count], [data-terminal-search-count-status]');
+  // Record every results report the viewport publishes, so a resize is judged by what it reported.
+  await page.evaluate(() => {
+    const reports: SearchReport[] = [];
+    (window as typeof window & { __searchReports: SearchReport[] }).__searchReports = reports;
+    document.addEventListener('hotsheet-terminal-search-results', (event) => {
+      reports.push((event as CustomEvent<SearchReport>).detail);
+    });
+  });
+  const reports = () =>
+    page.evaluate(() => (window as typeof window & { __searchReports: SearchReport[] }).__searchReports);
+  // The fake PTY redraws nano at each width, so the match total may differ by width; the active index may not.
+  const active = (index: number) => expect(count).toHaveText(new RegExp(`^${index} of \\d+$`));
+  const total = async () => Number((await count.textContent())!.split(' of ')[1]);
+  await group.getByRole('button', { name: 'Search Terminal' }).click();
+  await page.keyboard.type('File');
+  await active(1);
+  expect(await total()).toBeGreaterThanOrEqual(2);
+
+  // Resize, wait for the terminal to re-search its reflowed buffer and the shell to settle, and require
+  // that no report since the resize moved the active match.
+  const resizeKeeping = async (width: number, height: number, index: number) => {
+    const before = (await reports()).length;
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(async () => (await reports()).length, { message: `re-search at ${width}px` })
+      .toBeGreaterThan(before);
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation instanceof CSSTransition)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    );
+    const since = (await reports()).slice(before);
+    expect(since.map((report) => report.resultIndex + 1)).toEqual(since.map(() => index));
+    await active(index);
+    await expect(editor).toBeFocused();
+    expect(await total()).toBeGreaterThanOrEqual(2);
+    await page.screenshot({ path: test.info().outputPath(`hs2-swy5dq-active-${index}-${width}.png`) });
+  };
+
+  // Narrow: the first match stays active; Enter steps to the second and Shift-Enter back.
+  await resizeKeeping(390, 844, 1);
+  await page.keyboard.press('Enter');
+  await active(2);
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  await page.keyboard.press('Enter');
+  await active(2);
+
+  // Medium: the second match stays active and the steps go on from it.
+  await resizeKeeping(768, 900, 2);
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  await page.keyboard.press('Enter');
+  await active(2);
+
+  // Wide again: still the second match; Enter moves past it (wrapping after the last) and Shift-Enter returns.
+  await resizeKeeping(1280, 800, 2);
+  const wideTotal = await total();
+  await page.keyboard.press('Enter');
+  await active(wideTotal > 2 ? 3 : 1);
+  await page.keyboard.press('Shift+Enter');
+  await active(2);
+
+  // A step pressed straight after a resize, before the terminal re-searches, also goes on from the active
+  // match instead of restarting from the first.
+  await page.keyboard.press('Shift+Enter');
+  await active(1);
+  const before = (await reports()).length;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.keyboard.press('Enter');
+  await active(2);
+  await expect.poll(async () => (await reports()).length).toBeGreaterThan(before + 1);
+  await active(2);
 });

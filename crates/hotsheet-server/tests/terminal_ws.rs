@@ -10,6 +10,11 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 const SECRET: &str = "test-secret";
 
 #[tokio::test]
@@ -100,18 +105,6 @@ async fn wait_for_terminal_text(base: String, id: String, needle: &'static str) 
     .unwrap();
 }
 
-fn workspace_binary(name: &str) -> std::path::PathBuf {
-    if let Some(path) = std::env::var_os(format!("CARGO_BIN_EXE_{name}")) {
-        return path.into();
-    }
-    let exe = std::env::current_exe().expect("current test executable");
-    let profile = exe
-        .parent()
-        .and_then(std::path::Path::parent)
-        .expect("target profile directory");
-    profile.join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
-}
-
 #[tokio::test]
 async fn fake_agent_permission_round_trip_in_a_terminal_persists_always_rule() {
     let dir = tempfile::tempdir().unwrap();
@@ -121,12 +114,12 @@ async fn fake_agent_permission_round_trip_in_a_terminal_persists_always_rule() {
     let plugin = plugin_root.path().join("fake-permission");
     std::fs::create_dir(&plugin).unwrap();
     std::fs::write(plugin.join("instructions.md"), "Fake permission agent\n").unwrap();
-    let fake_agent = workspace_binary("hs-fake-agent");
-    assert!(
-        fake_agent.is_file(),
-        "build the workspace hs-fake-agent binary at {} (run nextest with --workspace, or cargo build -p hotsheet-terminals --bin hs-fake-agent into the same target dir)",
-        fake_agent.display()
-    );
+    // A missing hs-fake-agent fails here: run nextest with --workspace, or
+    // `cargo build -p hotsheet-terminals --bin hs-fake-agent` into the same target dir.
+    let fake_agent = workspace_bin::path("hs-fake-agent");
+    // The terminal's readiness windows below must not include the macOS first-launch
+    // assessment of a freshly linked fake agent (HS2-W00050, HS2-04D6DW).
+    let fake_agent = first_launch::launched(fake_agent, &["--exit", "0"]);
     std::fs::write(
         plugin.join("manifest.toml"),
         format!(

@@ -44,6 +44,22 @@ and narrow widths, then return to wide: the count and qualified target link must
 remain readable and open the target. Remove the target in an isolated test store
 and confirm the source still opens with a missing-target diagnostic. Repeat with
 an external source ticket and confirm the unsupported relation write is explicit.
+For HS2-MCGCPQ, open a synthetic Git ticket's Code Review tab and use the
+Follow-Ups action "Link Existing Ticket as Follow-Up…". Search another project's
+ticket, link it, link it again (expect the "already a follow-up" notice and one
+row), and check the dialog at wide, medium, and narrow widths. On a GitHub, Jira,
+or GitLab ticket, confirm the action is disabled and its tooltip names the provider.
+For HS2-NXSMC7, repeat the link from the modal reader's Code Review tab and from a
+linked reader opened from a follow-up row. Confirm the dialog opens above the reader,
+Escape closes only the dialog, and the new row appears in that reader.
+For HS2-CHH28E, open a synthetic Git ticket's Info tab and use Blocked By's
+"Add Blocker…" to add a same-project ticket, then try the reverse dependency from
+the blocker (expect the dependency-cycle refusal in the dialog). Remove the blocker
+from its row, and check the section and dialog at wide, medium, and narrow widths.
+On a GitHub or GitLab ticket, confirm the action is disabled and its tooltip names
+the provider. For HS2-15PE59, repeat the add and remove from the modal reader's Info tab
+and from a linked reader opened from the blocker row. Confirm the dialog opens above
+the reader and the change shows in that reader.
 
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.
@@ -179,6 +195,16 @@ result in the ticket.
 
 - In a project folder without Git, open Repository Status at wide and narrow widths. Initialize, enter an unavailable remote, retry with a valid remote, and confirm existing files remain untracked.
 - In a repository with more than one page of changed files or commits, scroll to load the next page. Switch projects while a page loads and check that the old result does not appear. Reset after an empty page and confirm new files appear.
+
+### Window chrome follows the pinned theme (HS2-15W35F)
+
+On the packaged macOS desktop app with the system in Light appearance, choose App
+Settings → General → Theme → Dark: the title bar and traffic-light area turn dark
+at once. Quit and relaunch: the window opens dark. Choose Light while the system
+is Dark, then Auto: the chrome follows the system again. Repeat in an installed
+Safari web app (Add to Dock) and confirm its title bar color follows the same
+choices. Automated coverage asserts the meta contents and the mocked Tauri call
+only; the native rendering needs this check.
 
 ### WebKit list scroll after ticket mutation (HS2-KTXBK2)
 
@@ -511,11 +537,16 @@ opened at `http://127.0.0.1:<port>` and one opened through the Serve URL. Approv
 the first with `--admin --local` and the second plainly. The loopback browser
 must show the native folder chooser from Open Project and open a project by path;
 the Serve browser keeps the registered-project picker. Grant the Serve browser
-admin from the first browser's Settings → Devices, reload it, and confirm it lists
-devices and can grant Host Access (HS2-KTHQE5); after granting it to itself and
-reloading, it shows the native folder chooser. A plain session sees "Administrator
+admin from the first browser's Settings → Devices and confirm, without reloading
+it, that its open Settings → Devices lists devices and can grant Host Access
+(HS2-KTHQE5, HS2-A3TDNH); after granting it to itself, Open Project shows the
+native folder chooser, again without a reload. Remove both grants and confirm the
+page returns to the refusal and the registered-project picker. A plain session sees "Administrator
 access required." Approve, reject and revoke from the Devices page and confirm
-another open Devices page updates without reload. Confirm a request still
+another open Devices page updates without reload. With both browsers on the ticket
+list, start pairing from a third device: the admin browser's Settings choice and
+Devices category show the count and a notice names the device, while the plain
+browser shows neither (HS2-BZHMEV); rejecting it clears the count. Confirm a request still
 redeems after 14 minutes and the proposed device name matches the browser and
 platform on an iPhone, an iPad, and a Mac.
 

@@ -1,7 +1,7 @@
 import { chromium, expect, type Page, test } from '@playwright/test';
 
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
 import { printThenReportSize } from './terminal-fixture-command';
 
@@ -41,7 +41,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
     await page.route('**/__hotsheet/project-api/terminal-feedback/terminals**', async (route) => {
       const url = new URL(route.request().url()),
         path = url.pathname.replace(project.apiPath, '');
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${url.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
@@ -62,7 +62,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
     await page.goto(remoteOrigin);
     // Another device last interacted with the terminal at a small size and keeps heartbeating.
     const driverUrl = `${server.url.replace(/^http/, 'ws')}/terminals/nano/attach?secret=${encodeURIComponent(server.secret)}`;
-    const otherDevice = async () => {
+    const otherDevice = async (viewerId = 'other-device', cols = 60, rows = 16) => {
       const { WebSocket: NodeWebSocket } = await import('ws');
       const socket = new NodeWebSocket(driverUrl);
       await new Promise((resolve, reject) => {
@@ -72,7 +72,7 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
       const claim = (interacting: boolean) => {
         socket.send(
           JSON.stringify({
-            resize: { viewer_id: 'other-device', cols: 60, rows: 16, focus: true, visible: true, interacting },
+            resize: { viewer_id: viewerId, cols, rows, focus: true, visible: true, interacting },
           }),
         );
       };
@@ -145,6 +145,18 @@ test('a zoomed Workspace Grid terminal claims 80x24 on the real PTY across zoom,
       await unzoom();
       await page.setViewportSize({ width: 1100, height: 640 });
       expect(await zoom('zoomed-narrow')).toBe(wide);
+      // HS2-G1ADYV: a device with the same 80×24 grid takes over and hands back without any
+      // resize; each handoff still moves `data-driving` because the server announces the driver.
+      const sameSize = await otherDevice('same-size-device', 80, 24);
+      try {
+        await expect(viewport).toHaveAttribute('data-driving', 'false');
+        await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+        await viewport.click();
+        await expect(viewport).toHaveAttribute('data-driving', 'true');
+        await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
+      } finally {
+        sameSize.stop();
+      }
       await unzoom();
     } finally {
       other.stop();

@@ -1,7 +1,7 @@
 //! HS2-1Y45MZ: real authenticated TLS, CLI and service/MCP compositions on synthetic homes.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use hotsheet_cli::remote_servers::{MtlsRemoteTransport, RemoteRuntime};
@@ -11,6 +11,11 @@ use hotsheet_ticketing::remote_servers::{RemoteCredentials, RemoteIdentity, Remo
 use hotsheet_ticketing::{FsStore, SecretError, SecretStore, StoreMetadata};
 use hotsheet_tls::Paths;
 use serde_json::Value;
+
+#[path = "../../../test-support/first_launch.rs"]
+mod first_launch;
+#[path = "../../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 pub(super) const SECRET: &str = "synthetic-remote-bearer";
 pub(super) const ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -119,7 +124,7 @@ pub(super) fn cli(home: &Path, arguments: &[&str]) -> Value {
 }
 
 pub(super) fn cli_named(home: &Path, prefix: &[&str], arguments: &[&str]) -> Value {
-    let binary = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let binary = workspace_bin::path("hotsheet-server")
         .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
     assert!(
         binary.is_file(),
@@ -301,7 +306,7 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
     } else {
         None
     };
-    let sibling = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"));
+    let sibling = workspace_bin::path("hotsheet-server");
     let cli = sibling.with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
     let checked = isolated_command(&cli, home)
         .arg("--test-fixture-capabilities")
@@ -310,7 +315,11 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
     assert!(checked.status.success());
     let checked: Value = serde_json::from_slice(&checked.stdout).unwrap();
     assert_eq!(checked["isolated_native_credentials"], true);
-    let binary = sibling.with_file_name(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX));
+    // Launched once before the 15 s fixture window below starts (HS2-04D6DW).
+    let binary = first_launch::launched(
+        sibling.with_file_name(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX)),
+        &["--version"],
+    );
     let mut child = OwnedChild(Some(
         isolated_command(&binary, home)
             .args(backend)

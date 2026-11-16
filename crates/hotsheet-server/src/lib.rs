@@ -190,14 +190,15 @@ pub use routes::terminals::{
     stop_claude_usage_follows,
 };
 pub(crate) use routes::terminals::{
-    answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal_halt,
-    connect_terminal_ai, disconnect_terminal_ai, get_checkout_terminal_settings,
-    get_checkout_trash_settings, get_terminal_limits, get_terminal_settings, halt_terminal,
-    kill_terminal, list_permission_rules, list_terminals, open_terminal,
-    poll_terminal_question_answer, put_checkout_terminal_settings, put_checkout_trash_settings,
-    put_terminal_limits, put_terminal_settings, read_terminal, reconcile_terminal_limits,
-    remember_permission_after_allow, rename_terminal, report_claude_turn, resolve_permission,
-    resolve_terminal_question, revoke_permission_rule, update_permission_rule, write_terminal,
+    answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal,
+    clear_terminal_halt, connect_terminal_ai, disconnect_terminal_ai,
+    get_checkout_terminal_settings, get_checkout_trash_settings, get_terminal_limits,
+    get_terminal_settings, halt_terminal, kill_terminal, list_permission_rules, list_terminals,
+    open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
+    put_checkout_trash_settings, put_terminal_limits, put_terminal_settings, read_terminal,
+    reconcile_terminal_limits, remember_permission_after_allow, rename_terminal,
+    report_claude_turn, resolve_permission, resolve_terminal_question, revoke_permission_rule,
+    update_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -2532,6 +2533,7 @@ pub fn app(state: AppState) -> Router {
             "/tts/providers",
             get(routes::project_tools::list_tts_providers),
         )
+        .route("/tts/voices", get(routes::project_tools::list_tts_voices))
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.
         .route("/terminals", get(list_terminals).post(open_terminal))
@@ -2550,6 +2552,8 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
         .route("/terminals/{id}/input", post(write_terminal))
+        // Shared clear (HS2-HA0Z3A): the replay restarts at the cursor's line for every viewer.
+        .route("/terminals/{id}/clear", post(clear_terminal))
         .route("/terminals/{id}/name", put(rename_terminal))
         .route(
             "/terminals/{id}/halt",

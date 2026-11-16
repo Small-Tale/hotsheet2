@@ -1,6 +1,8 @@
+import { resolve } from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { beginRemotePairing, normalizeRemoteAddress } from './host';
+import { beginRemotePairing, cliBinary, normalizeRemoteAddress } from './host';
 import { remoteRequest } from './transport';
 
 vi.mock('./transport', () => ({ remoteRequest: vi.fn() }));
@@ -64,5 +66,19 @@ describe('HS2-H4REBS remote server address', () => {
         beginRemotePairing('https://peer.example.ts.net', 'Synthetic', 'http://127.0.0.1:4174'),
       ).rejects.toThrow('This server is not a compatible Hot Sheet 2 peer.');
     }
+  });
+});
+
+describe('HS2-GVSJ5Y remote CLI binary', () => {
+  it('falls back to the checkout debug CLI for an unset, empty, or whitespace-only override', () => {
+    for (const blank of [undefined, '', ' ', '\t\n '])
+      expect(cliBinary({ HOTSHEET_CLI_BIN: blank, HOTSHEET_REPO_ROOT: '/work/hotsheet2' })).toBe(
+        `${resolve('/work/hotsheet2')}/target/debug/hotsheet-cli`,
+      );
+  });
+
+  it('uses a relative or absolute override as given', () => {
+    expect(cliBinary({ HOTSHEET_CLI_BIN: 'bin/hotsheet-cli' })).toBe('bin/hotsheet-cli');
+    expect(cliBinary({ HOTSHEET_CLI_BIN: '/pinned/hotsheet-cli' })).toBe('/pinned/hotsheet-cli');
   });
 });

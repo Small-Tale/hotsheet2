@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium, type Page } from '@playwright/test';
+import { chromium, type Page, type WebSocketRoute } from '@playwright/test';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
+import { proxyFetch } from '../tests/proxy-fetch';
 import { execFileAsync } from './child-process';
 import { createDevApp } from './dev-server';
 import { createLocalHostApp, startLocalHost } from './local-host';
@@ -31,6 +32,17 @@ async function waitForExit(pid: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
+
+/** Rails slide when the width changes; capture once every animation has finished. */
+const settled = (target: Page) =>
+  target.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== 'running',
+      ),
+  );
 
 describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
   let home = '';
@@ -374,6 +386,7 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     const target = await pending('Synthetic laptop');
     const woke = (await (await waiting).json()) as { pending: { id: string }[] };
     expect(woke.pending.map((entry) => entry.id)).toContain(target.id);
+    // HS2-KTHQE5: an admin may grant host access (local) when approving or updating a device.
     expect(
       (
         await request(
@@ -383,12 +396,13 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
           as(admin),
         )
       ).status,
-    ).toBe(403);
-    expect(
-      (await request('/remote-auth/owner/approve', 'POST', { id: target.id, role: 'read_only' }, as(admin))).status,
     ).toBe(204);
-    expect((await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: true }, as(admin))).status).toBe(
-      403,
+    const localized = await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: true }, as(admin));
+    expect(localized.status).toBe(200);
+    expect(((await localized.json()) as { local: boolean }).local).toBe(true);
+    // Later cases use this device as a session without host access, so take the grant back.
+    expect((await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { local: false }, as(admin))).status).toBe(
+      200,
     );
     const promoted = await request(`/remote-auth/owner/devices/${plain.id}`, 'PATCH', { admin: true }, as(host));
     expect(promoted.status).toBe(200);
@@ -408,16 +422,6 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
     const browser = await chromium.launch({ headless: true });
     const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
     const capture = (name: string) => join(captures, `hs2-dxm0yn-${name}.png`);
-    // Rails slide when the width changes; capture once every animation has finished.
-    const settled = (target: Page) =>
-      target.waitForFunction(() =>
-        document
-          .getAnimations()
-          .every(
-            (animation) =>
-              animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== 'running',
-          ),
-      );
     const signedIn = async (who: { session: string; csrf: string }) => {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       await context.addCookies([
@@ -479,6 +483,225 @@ describe.skipIf(!live)('HS2-7DBJMS real browser bridge and server', () => {
       await other.setViewportSize({ width: 375, height: 812 });
       await settled(other);
       await other.screenshot({ path: capture('admin-required-narrow'), fullPage: true });
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
+
+  it('HS2-BZHMEV tells an admin page about a new pairing request live, and a plain session nothing', async () => {
+    expect(granted.admin).toBeDefined();
+    expect(granted.plain).toBeDefined();
+    const bridge = createDevApp();
+    const cliRun = (args: string[]) =>
+      execFileAsync(cli, ['-C', store, 'remote', 'sessions', ...args], {
+        env: { ...process.env, HOTSHEET_HOME: home },
+      });
+    const request = (path: string, body: unknown) =>
+      bridge.request(`${origin}/__hotsheet${path}`, {
+        method: 'POST',
+        headers: { origin, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const pair = async (label: string) =>
+      (await (await request('/remote-auth/pair', { label })).json()) as { id: string; challenge: string };
+    // granted.plain has no admin grant here (the case after this one changes it). This case's one pairing
+    // request is the file's tenth within a minute, the host's limit: another pairing case needs its own host.
+    const reader = granted.plain;
+
+    const browser = await chromium.launch({ headless: true });
+    const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
+    const capture = (name: string) => join(captures, `hs2-bzhmev-${name}.png`);
+    /** One signed-in page with the project open, recording every change event and device-list read. */
+    const openAs = async (who: { session: string; csrf: string }) => {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await context.addCookies([
+        { name: 'hs2_remote_session', value: who.session, url: origin, httpOnly: true, sameSite: 'Strict' },
+        { name: 'hs2_remote_csrf', value: who.csrf, url: origin, sameSite: 'Strict' },
+      ]);
+      const kinds: string[] = [],
+        listReads: string[] = [];
+      let sockets = 0;
+      // Every page socket (the change stream runs in a worker) reaches the real host through a relay that
+      // records the kind of each change event the host sent this session.
+      const record = (text: string) => {
+        // An event may arrive nested (and escaped) inside a multiplexed envelope.
+        for (const match of text.matchAll(/\\?"kind\\?":\\?"([a-z_]+)/g)) kinds.push(match[1]);
+      };
+      await context.routeWebSocket(/.*/, (socket) => {
+        sockets += 1;
+        const server = socket.connectToServer();
+        server.onMessage((message) => {
+          if (typeof message === 'string') record(message);
+          socket.send(message);
+        });
+      });
+      // A long-poll stream (direct or multiplexed) carries the same events in its answers.
+      await context.route(/\/(?:ws|change-mux)\/poll/, async (route) => {
+        // HS2-QY232J: a long poll on a reused keep-alive socket can meet the host's idle close.
+        const response = await proxyFetch(route),
+          body = await response.text();
+        record(body);
+        await route.fulfill({ response, body });
+      });
+      const page = await context.newPage();
+      page.on('response', (response) => {
+        if (new URL(response.url()).pathname === '/__hotsheet/remote-auth/owner')
+          listReads.push(String(response.status()));
+      });
+      await page.goto(origin);
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.locator(`[data-checkout-root="${checkoutRoot}"]`).click();
+      await page.getByText('Open a Hot Sheet Project').waitFor({ state: 'detached', timeout: 20_000 });
+      return { page, kinds, listReads, sockets: () => sockets };
+    };
+    const settingsChoice = (page: Page) => page.locator('[data-segment-value="settings"]');
+    /** The Settings choice naming `count` waiting requests, as the admin page shows it. */
+    const settingsShowing = (page: Page, count: number) =>
+      page
+        .locator(
+          `[data-segment-value="settings"][aria-label="Settings View${count ? `, ${String(count)} pairing request${count === 1 ? '' : 's'} waiting` : ''}"]`,
+        )
+        .waitFor({ timeout: 15_000 });
+    // Earlier cases may leave requests waiting; the admin page counts those as well.
+    const waitingNow = async () =>
+      (JSON.parse((await cliRun(['status'])).stdout) as { pending: { approved: boolean }[] }).pending.filter(
+        (entry) => !entry.approved,
+      ).length;
+    try {
+      const baseline = await waitingNow();
+      const admin = await openAs(granted.admin);
+      const plain = await openAs(reader);
+      await settingsShowing(admin.page, baseline);
+
+      // A remote browser asks to pair: only the admin page hears of it, re-reads the list, and shows it.
+      const visitor = await pair('Synthetic visitor');
+      await settingsShowing(admin.page, baseline + 1);
+      await admin.page.locator('.app-toast', { hasText: '“Synthetic visitor” asks to pair' }).waitFor();
+      expect(admin.kinds).toContain('pairing_requests');
+      expect(admin.listReads.every((status) => status === '200')).toBe(true);
+      await settled(admin.page);
+      await admin.page.screenshot({ path: capture('live-admin-wide'), fullPage: true });
+
+      // Rejected headlessly: the admin page's count drops back live.
+      await cliRun(['reject', visitor.id]);
+      await settingsShowing(admin.page, baseline);
+
+      // A later grant change reaches every session, so the plain page's channel is past both pairing
+      // events by now; it carried neither, and the page never asked for the admin-only list.
+      // Rewriting the plain session's role to the value it already has leaves its grants as the next case expects.
+      await cliRun(['update', reader.id, '--role', 'read_write']);
+      expect(plain.sockets()).toBeGreaterThan(0);
+      await expect.poll(() => plain.kinds.includes('browser_grants'), { timeout: 15_000 }).toBe(true);
+      expect(plain.kinds).not.toContain('pairing_requests');
+      expect(plain.listReads).toEqual([]);
+      await expect(settingsChoice(plain.page).getAttribute('aria-label')).resolves.toBe('Settings View');
+      await expect(plain.page.locator('.app-toast', { hasText: 'asks to pair' }).count()).resolves.toBe(0);
+    } finally {
+      await browser.close();
+    }
+  }, 180_000);
+
+  it('HS2-A3TDNH applies grants changed elsewhere to the open page, repeatedly and across a reconnect, without a reload', async () => {
+    expect(granted.plain).toBeDefined();
+    const who = granted.plain;
+    const cliRun = (args: string[]) =>
+      execFileAsync(cli, ['-C', store, 'remote', 'sessions', ...args], {
+        env: { ...process.env, HOTSHEET_HOME: home },
+      });
+    const browser = await chromium.launch({ headless: true });
+    const captures = process.env.HOTSHEET_CAPTURE_DIR ?? tmpdir();
+    const capture = (name: string) => join(captures, `hs2-a3tdnh-${name}.png`);
+    try {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await context.addCookies([
+        { name: 'hs2_remote_session', value: who.session, url: origin, httpOnly: true, sameSite: 'Strict' },
+        { name: 'hs2_remote_csrf', value: who.csrf, url: origin, sameSite: 'Strict' },
+      ]);
+      // Every page socket reaches the real host through a handle the test can drop, to force a reconnect.
+      const sockets: WebSocketRoute[] = [];
+      let refuseSockets = false;
+      await context.routeWebSocket(/.*/, (socket) => {
+        if (refuseSockets) {
+          void socket.close();
+          return;
+        }
+        socket.connectToServer();
+        sockets.push(socket);
+      });
+      const page = await context.newPage();
+      const loads: string[] = [];
+      page.on('load', () => loads.push(page.url()));
+      await page.goto(origin);
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.locator(`[data-checkout-root="${checkoutRoot}"]`).click();
+      await page.getByText('Open a Hot Sheet Project').waitFor({ state: 'detached', timeout: 20_000 });
+      await page.getByLabel('Settings View').click();
+      await page.locator('nav[aria-label="Settings categories"] [data-item-id="devices"]').first().click();
+      const devices = page.locator('[data-component="remote-devices-settings"]');
+      const refused = devices.getByText('Administrator access required.');
+      const listed = devices.getByText('Synthetic tablet', { exact: true });
+      await refused.waitFor();
+      expect(sockets.length).toBeGreaterThan(0);
+
+      // The host-only folder flow follows the local grant at the moment the user asks for it.
+      const sourceChoice = async (expected: 'local' | 'remote') => {
+        await page.getByRole('button', { name: 'Add Project' }).first().click();
+        // Remote opens the registered-project dialog instead of the Local or Remote Project choice.
+        if (expected === 'local') await page.getByRole('button', { name: 'Local Project' }).waitFor();
+        else await page.locator('[data-remote-project-dialog][data-controlled-open="true"]').waitFor();
+        await expect(page.getByRole('button', { name: 'Local Project' }).count()).resolves.toBe(
+          expected === 'local' ? 1 : 0,
+        );
+        await page.keyboard.press('Escape');
+      };
+      await sourceChoice('remote');
+
+      // Granted elsewhere (the headless CLI here), then removed, then granted again: each lands live.
+      for (const round of [1, 2]) {
+        await cliRun(['update', who.id, '--admin', 'true', '--local', 'true']);
+        await listed.waitFor({ timeout: 15_000 });
+        await expect(refused.count()).resolves.toBe(0);
+        if (round === 1) {
+          await settled(page);
+          await page.screenshot({ path: capture('granted-wide'), fullPage: true });
+        }
+        await sourceChoice('local');
+        await cliRun(['update', who.id, '--admin', 'false', '--local', 'false']);
+        await refused.waitFor({ timeout: 15_000 });
+        await expect(listed.count()).resolves.toBe(0);
+        if (round === 1) {
+          await settled(page);
+          await page.screenshot({ path: capture('removed-wide'), fullPage: true });
+        }
+        await sourceChoice('remote');
+      }
+
+      // A grant that changes while the page's change connection is down applies once it reconnects.
+      refuseSockets = true;
+      for (const socket of sockets.splice(0)) await socket.close();
+      await cliRun(['update', who.id, '--admin', 'true']);
+      refuseSockets = false;
+      await listed.waitFor({ timeout: 30_000 });
+      await expect(refused.count()).resolves.toBe(0);
+      // Revoking the session drops every grant from the open page, too.
+      await cliRun(['revoke', who.id]);
+      await refused.waitFor({ timeout: 15_000 });
+      await sourceChoice('remote');
+
+      // Wide, medium, narrow, and back: the refusal the page reached live lays out like a loaded one.
+      for (const [name, width, height] of [
+        ['wide', 1280, 800],
+        ['medium', 768, 900],
+        ['narrow', 375, 812],
+        ['wide-again', 1280, 800],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await refused.waitFor();
+        await settled(page);
+        await page.screenshot({ path: capture(`revoked-${name}`), fullPage: true });
+      }
+      // None of it reloaded the page.
+      expect(loads).toHaveLength(1);
     } finally {
       await browser.close();
     }

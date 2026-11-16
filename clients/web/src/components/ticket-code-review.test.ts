@@ -104,6 +104,35 @@ describe('TicketCodeReview', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
     expect(css).not.toContain('follow-ups');
   });
+  it('HS2-MCGCPQ offers Link Existing Ticket as Follow-Up as the Follow-Ups header action', () => {
+    const section = (markup: string) => {
+      const start = markup.indexOf('aria-label="Follow-Up Tickets"');
+      return start < 0 ? '' : markup.slice(start, markup.indexOf('</section>', start));
+    };
+    const empty = { commits: [], ranges: [], truncated: false };
+    // An inspector with no follow-ups yet still shows the section so the action is reachable.
+    const enabled = section(String(TicketCodeReview({ review: empty, followUpLink: { enabled: true } })));
+    expect(enabled).toContain('>Follow-Ups<');
+    expect(enabled).not.toContain('follow-up</');
+    expect(enabled).toContain('data-action="open-follow-up-link"');
+    expect(enabled).toContain('aria-label="Link Existing Ticket as Follow-Up…"');
+    expect(enabled).not.toContain('data-kui-disabled');
+    // A provider without follow-up relations keeps the action mounted, disabled, with its reason.
+    const reason = 'GitHub Issues tickets cannot record follow-up links. Only Hot Sheet Git tickets can.';
+    const disabled = section(
+      String(TicketCodeReview({ review: empty, followUpLink: { enabled: false, disabledReason: reason } })),
+    );
+    expect(disabled).toContain('data-action="open-follow-up-link"');
+    expect(disabled).toContain(`title="${reason}" disabled data-kui-disabled="true"`);
+    // The action appears even when the review itself could not load.
+    expect(section(String(TicketCodeReview({ followUpLink: { enabled: true } })))).toContain(
+      'data-action="open-follow-up-link"',
+    );
+    // The repository popover's embedded review and the reader pass no action, so nothing changes there.
+    expect(section(String(TicketCodeReview({ review: empty, embedded: true })))).toBe('');
+    // While loading, the section waits for the review.
+    expect(section(String(TicketCodeReview({ loading: true, followUpLink: { enabled: true } })))).toBe('');
+  });
   it('uses canonical review-region spacing while keeping row and action geometry explicit', () => {
     const markup = String(TicketCodeReview({ review }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');

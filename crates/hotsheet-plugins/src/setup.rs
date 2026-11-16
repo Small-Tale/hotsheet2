@@ -3378,7 +3378,7 @@ fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
 /// (no PATH reliance, HS2-103), keeping the rest of the args.
 fn resolve_hook_command(command: &str) -> String {
     let configured = std::env::var_os("HOTSHEET_HOOK_CLI_BIN").map(std::path::PathBuf::from);
-    let home = std::env::var_os("HOTSHEET_HOME").map(std::path::PathBuf::from);
+    let home = hotsheet_ticketing::machine_home::env_path("HOTSHEET_HOME");
     let snapshot = std::env::var_os("HOTSHEET_LOCAL_HOST_SNAPSHOT").as_deref()
         == Some(std::ffi::OsStr::new("1"))
         || std::env::current_exe()

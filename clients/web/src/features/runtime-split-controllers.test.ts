@@ -568,6 +568,96 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.dispose();
   });
 
+  it('change streams: browser_grants events and every resync re-check this page grants, idle time reads nothing (HS2-A3TDNH)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      browserGrants = { applyEvents: vi.fn(() => undefined), resync: vi.fn(async () => undefined) },
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('stats'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        browserGrants,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get('/api/b')!('reconnect');
+    // A reconnect after an outage, or an overflow, may have missed a grants event: it re-reads too.
+    await streams.onResync.get('/api/a')!('overflow');
+    expect(browserGrants.resync).toHaveBeenCalledTimes(3);
+    const events = [{ cursor: 4, store: '', kind: 'browser_grants', id: '', slug: '' }];
+    await streams.onEvents.get('/api/a')!({ cursor: 4, overflow: false, events });
+    expect(browserGrants.applyEvents).toHaveBeenCalledWith(events);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(browserGrants.resync).toHaveBeenCalledTimes(3);
+    expect(browserGrants.applyEvents).toHaveBeenCalledTimes(1);
+    owner.dispose();
+  });
+
+  it('change streams: pairing_requests events and every resync re-read the waiting requests, idle time reads nothing (HS2-BZHMEV)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      pairingRequests = { applyEvents: vi.fn(() => undefined), resync: vi.fn(async () => undefined) },
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('stats'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        pairingRequests,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get('/api/b')!('reconnect');
+    // An overflow may have dropped a pairing event: it re-reads too.
+    await streams.onResync.get('/api/a')!('overflow');
+    expect(pairingRequests.resync).toHaveBeenCalledTimes(3);
+    const events = [{ cursor: 8, store: '', kind: 'pairing_requests', id: '', slug: '' }];
+    await streams.onEvents.get('/api/b')!({ cursor: 8, overflow: false, events });
+    expect(pairingRequests.applyEvents).toHaveBeenCalledWith(events);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(pairingRequests.resync).toHaveBeenCalledTimes(3);
+    expect(pairingRequests.applyEvents).toHaveBeenCalledTimes(1);
+    owner.dispose();
+  });
+
   it('change streams: report each stream health for standby freshness, not handler failures (HS2-EQVZTZ)', async () => {
     const projects = signal([project('a'), project('b')]),
       noop = vi.fn(async () => undefined),

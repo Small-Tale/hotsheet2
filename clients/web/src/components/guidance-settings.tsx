@@ -315,6 +315,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                   detail={`${props.updatesError} Previous results may be stale.`}
                   tone="warning"
                   urgency="status"
+                  copyLayout="stacked"
                 />
               ) : null}
               {overview?.sources.map((source) => {
@@ -339,6 +340,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                           title={`${source.id} Tag Moved`}
                           detail="This tag now points to a different commit. Verify the source manually before choosing a new pin."
                           tone="warning"
+                          copyLayout="stacked"
                           urgency="status"
                         />
                       )}
@@ -403,7 +405,13 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                 );
               })}
               {props.reviewError ? (
-                <StateBanner title="Review Failed" detail={props.reviewError} tone="warning" urgency="status" />
+                <StateBanner
+                  title="Review Failed"
+                  detail={props.reviewError}
+                  tone="warning"
+                  urgency="status"
+                  copyLayout="stacked"
+                />
               ) : null}
               {props.review && (
                 <section aria-label={`${props.review.update.id} Update Review`} data-guidance-review="">
@@ -494,7 +502,13 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
           {props.batchLoading ? 'Reviewing Source Refs…' : 'Review Exact Pins'}
         </Button>
         {props.batchError ? (
-          <StateBanner title="Source Review Failed" detail={props.batchError} tone="warning" urgency="status" />
+          <StateBanner
+            title="Source Review Failed"
+            detail={props.batchError}
+            tone="warning"
+            urgency="status"
+            copyLayout="stacked"
+          />
         ) : null}
         {props.batchReview && (
           <section aria-label="Reviewed Source Pins" class="guidance-batch-review">
@@ -685,6 +699,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                                         detail={preview.error}
                                         tone="warning"
                                         urgency="status"
+                                        copyLayout="stacked"
                                       />
                                     ) : null}
                                     {preview?.result && (

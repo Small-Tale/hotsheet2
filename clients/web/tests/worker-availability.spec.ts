@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
 
@@ -62,7 +62,7 @@ test('HS2-KX87JC replays a short worker lease into the rebuilt Workers view with
     await page.route(`**${apiPath}/**`, async (route) => {
       const incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -118,7 +118,7 @@ test('HS2-KX87JC replays a short worker lease into the rebuilt Workers view with
     });
     await page.screenshot({ path: test.info().outputPath('workers-returned-wide-expired.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -176,7 +176,7 @@ test('HS2-KX87JC source failure must not leave a stale Available worker card', a
     await page.route(`**${apiPath}/**`, async (route) => {
       const incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -227,6 +227,6 @@ test('HS2-KX87JC source failure must not leave a stale Available worker card', a
     await expect(page.locator('[data-worker-coverage-problems]')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('workers-same-cursor-recovered.png') });
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });

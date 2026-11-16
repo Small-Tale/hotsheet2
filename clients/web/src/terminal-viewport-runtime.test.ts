@@ -4,7 +4,14 @@ import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns'
 import { TERMINAL_CLEAR_EVENT } from './terminal-clear';
 import { TERMINAL_EDIT_MENU_EVENT } from './terminal-clipboard';
 import { applyTerminalLimits } from './terminal-limits';
-import { TERMINAL_SEARCH_EVENT, type TerminalSearchDetail } from './terminal-search';
+import {
+  TERMINAL_SEARCH_EVENT,
+  TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
+  TERMINAL_SEARCH_MINIMUM_CONTRAST,
+  TERMINAL_SEARCH_READY_EVENT,
+  TERMINAL_SEARCH_RESULTS_EVENT,
+  type TerminalSearchDetail,
+} from './terminal-search';
 import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -109,9 +116,14 @@ vi.mock('@xterm/xterm', () => ({
       this.scrollHandler = handler;
       return { dispose: vi.fn() };
     }
+    // xterm notifies every resize listener; the search (HS2-SWY5DQ) listens beside the viewport re-sync.
+    resizeHandlers: Array<() => void> = [];
     resizeHandler?: () => void;
     onResize(handler: () => void) {
-      this.resizeHandler = handler;
+      this.resizeHandlers.push(handler);
+      this.resizeHandler = () => {
+        for (const listener of this.resizeHandlers) listener();
+      };
       return { dispose: vi.fn() };
     }
     dataHandler?: (value: string) => void;
@@ -125,12 +137,21 @@ vi.mock('@xterm/xterm', () => ({
 const terminalTheme = vi.hoisted(() => ({
   theme: { background: 'rgb(0, 0, 0)' },
   stopFollowing: [] as Array<() => void>,
+  // HS2-M5QPED: the search highlight colors and the scheme watcher that repaints them.
+  searchColors: { matchBackground: '#fde68a', activeMatchBackground: '#f59e0b' },
+  schemeWatchers: [] as Array<{ apply: () => void; stop: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock('./terminal-theme', () => ({
   resolveTerminalTheme: () => terminalTheme.theme,
+  resolveTerminalSearchDecorations: () => ({ ...terminalTheme.searchColors }),
   followTerminalTheme: () => {
     const stop = vi.fn();
     terminalTheme.stopFollowing.push(stop);
+    return stop;
+  },
+  watchTerminalScheme: (apply: () => void) => {
+    const stop = vi.fn();
+    terminalTheme.schemeWatchers.push({ apply, stop });
     return stop;
   },
 }));
@@ -153,13 +174,24 @@ const searchAddons = vi.hoisted(
     [] as Array<{
       findNext: ReturnType<typeof vi.fn>;
       findPrevious: ReturnType<typeof vi.fn>;
+      clearDecorations: ReturnType<typeof vi.fn>;
+      options: unknown;
+      resultsListeners: Array<(results: { resultIndex: number; resultCount: number }) => void>;
+      resultsSubscription: { dispose: ReturnType<typeof vi.fn> };
     }>,
 );
 vi.mock('@xterm/addon-search', () => ({
   SearchAddon: class {
     findNext = vi.fn((query: string) => query !== 'missing');
     findPrevious = vi.fn(() => true);
-    constructor() {
+    clearDecorations = vi.fn();
+    resultsListeners: Array<(results: { resultIndex: number; resultCount: number }) => void> = [];
+    resultsSubscription = { dispose: vi.fn() };
+    onDidChangeResults = (listener: (results: { resultIndex: number; resultCount: number }) => void) => {
+      this.resultsListeners.push(listener);
+      return this.resultsSubscription;
+    };
+    constructor(public options: unknown) {
       searchAddons.push(this);
     }
     activate() {}
@@ -392,18 +424,35 @@ describe('Clear Terminal (HS2-N2AG8V)', () => {
 describe('terminal search (HS2-TWZSZF)', () => {
   it('loads the search addon on the first query, steps both ways, clears the selection, and ignores previews', () => {
     searchAddons.length = 0;
+    terminalTheme.schemeWatchers.length = 0;
     const { viewport, listeners } = element();
+    const dispatched = (viewport as unknown as { dispatchEvent: ReturnType<typeof vi.fn> }).dispatchEvent;
     const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    // HS2-M5QPED: once it can search, the viewport announces it so an open search reaches it.
+    const ready = dispatched.mock.calls
+      .map(([event]) => event as Event)
+      .filter((event) => event.type === TERMINAL_SEARCH_READY_EVENT);
+    expect(ready).toHaveLength(1);
+    expect(ready[0].bubbles).toBe(true);
     const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
     const ask = (query: string, direction: 'next' | 'previous' = 'next', incremental = true) => {
       const detail: TerminalSearchDetail = { query, direction, incremental };
       search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
       return detail.found;
     };
-    // An empty query before any search clears nothing and loads nothing.
+    const terminal = allocated.terminals.at(-1) as unknown as {
+      clearSelection: ReturnType<typeof vi.fn>;
+      options: Record<string, unknown>;
+    };
+    // An empty query before any search clears nothing and loads nothing, and leaves the proposed API off.
     expect(ask('')).toBe(false);
     expect(searchAddons).toHaveLength(0);
+    expect(terminal.options.allowProposedApi).toBeUndefined();
     expect(ask('nano')).toBe(true);
+    // HS2-M5QPED: the first search turns on xterm's proposed API, which match decorations need.
+    expect(terminal.options.allowProposedApi).toBe(true);
+    // While matches are highlighted, text keeps WCAG AA contrast against them.
+    expect(terminal.options.minimumContrastRatio).toBe(TERMINAL_SEARCH_MINIMUM_CONTRAST);
     expect(ask('nano', 'next', false)).toBe(true);
     expect(ask('nano', 'previous', false)).toBe(true);
     expect(ask('missing')).toBe(false);
@@ -414,17 +463,53 @@ describe('terminal search (HS2-TWZSZF)', () => {
     searchAddons[0].findPrevious.mockReturnValueOnce(false);
     expect(ask('nano', 'previous', false)).toBe(true);
     expect(searchAddons[0].findNext.mock.calls.filter(([query]) => query === 'missing')).toHaveLength(3);
-    const [addon] = searchAddons;
+    const addon = searchAddons[0];
+    expect(addon.options).toEqual({ highlightLimit: TERMINAL_SEARCH_HIGHLIGHT_LIMIT });
     expect(addon.findNext).toHaveBeenNthCalledWith(1, 'nano', expect.objectContaining({ incremental: true }));
     expect(addon.findNext).toHaveBeenNthCalledWith(2, 'nano', expect.objectContaining({ incremental: false }));
     expect(addon.findPrevious).toHaveBeenCalledWith('nano', expect.objectContaining({ incremental: false }));
-    // No decorations: they need xterm's proposed API, which stays off.
-    expect(addon.findNext.mock.calls[0]?.[1]).toEqual({ incremental: true });
-    const terminal = allocated.terminals.at(-1) as unknown as { clearSelection: ReturnType<typeof vi.fn> };
+    // Every search highlights all matches in the theme's colors.
+    expect(addon.findNext.mock.calls[0]?.[1]).toEqual({
+      incremental: true,
+      decorations: { matchBackground: '#fde68a', activeMatchBackground: '#f59e0b' },
+    });
+    // The addon's results (including re-counts after new output) bubble out of the viewport.
+    dispatched.mockClear();
+    addon.resultsListeners[0]({ resultIndex: 2, resultCount: 12 });
+    const reported = dispatched.mock.calls[0]?.[0] as CustomEvent<unknown>;
+    expect(reported.type).toBe(TERMINAL_SEARCH_RESULTS_EVENT);
+    expect(reported.bubbles).toBe(true);
+    expect(reported.detail).toEqual({ resultIndex: 2, resultCount: 12 });
+    // A scheme change repaints the highlights in the new colors without moving the active match.
+    terminalTheme.searchColors = { matchBackground: '#5c4813', activeMatchBackground: '#b45309' };
+    addon.findNext.mockClear();
+    const watcher = terminalTheme.schemeWatchers.at(-1)!;
+    (viewport as unknown as { isConnected: boolean }).isConnected = true;
+    watcher.apply();
+    expect(addon.clearDecorations).toHaveBeenCalledTimes(1);
+    expect(addon.findNext).toHaveBeenCalledWith('nano', {
+      incremental: true,
+      decorations: { matchBackground: '#5c4813', activeMatchBackground: '#b45309' },
+    });
+    // Emptying the field clears the highlights and the selection; a later scheme change repaints nothing.
     terminal.clearSelection.mockClear();
+    addon.clearDecorations.mockClear();
     expect(ask('')).toBe(false);
     expect(terminal.clearSelection).toHaveBeenCalledTimes(1);
+    expect(addon.clearDecorations).toHaveBeenCalledTimes(1);
+    // The terminal's own contrast setting returns, and a refill raises it again.
+    expect(terminal.options.minimumContrastRatio).toBe(1);
+    expect(ask('nano')).toBe(true);
+    expect(terminal.options.minimumContrastRatio).toBe(TERMINAL_SEARCH_MINIMUM_CONTRAST);
+    expect(ask('')).toBe(false);
+    expect(terminal.options.minimumContrastRatio).toBe(1);
+    addon.findNext.mockClear();
+    watcher.apply();
+    expect(addon.findNext).not.toHaveBeenCalled();
     dispose();
+    expect(addon.resultsSubscription.dispose).toHaveBeenCalledTimes(1);
+    expect(watcher.stop).toHaveBeenCalledTimes(1);
+    terminalTheme.searchColors = { matchBackground: '#fde68a', activeMatchBackground: '#f59e0b' };
 
     const preview = element();
     Object.assign(preview.viewport.dataset, { displayMode: 'scaled-preview', gridPolicy: 'dashboard-80x24' });
@@ -434,6 +519,109 @@ describe('terminal search (HS2-TWZSZF)', () => {
     });
     expect(preview.listeners.mock.calls.some(([name]) => name === TERMINAL_SEARCH_EVENT)).toBe(false);
     disposePreview();
+  });
+
+  it('HS2-SWY5DQ re-anchors the active match after a resize, before a report or a step, without scrolling', async () => {
+    searchAddons.length = 0;
+    const { viewport, listeners } = element();
+    const dispatched = (viewport as unknown as { dispatchEvent: ReturnType<typeof vi.fn> }).dispatchEvent;
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
+    const ask = (query: string, direction: 'next' | 'previous' = 'next', incremental = true) => {
+      const detail: TerminalSearchDetail = { query, direction, incremental };
+      search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
+      return detail.found;
+    };
+    const terminal = allocated.terminals.at(-1) as unknown as {
+      clearSelection: ReturnType<typeof vi.fn>;
+      scrollToLine: ReturnType<typeof vi.fn>;
+      buffer: { active: { viewportY: number } };
+      resizeHandler?: () => void;
+    };
+    const published = () =>
+      dispatched.mock.calls
+        .map(([event]) => event as CustomEvent<{ resultIndex: number; resultCount: number }>)
+        .filter((event) => event.type === TERMINAL_SEARCH_RESULTS_EVENT)
+        .map((event) => event.detail.resultIndex);
+    // A fake addon over three matches: each search reports the match it selects, as xterm's does.
+    let selected = -1;
+    const report = (resultIndex: number) => {
+      for (const listener of searchAddons[0].resultsListeners) listener({ resultIndex, resultCount: 3 });
+    };
+    expect(ask('File')).toBe(true);
+    const addon = searchAddons[0];
+    addon.findNext.mockImplementation(() => {
+      selected = (selected + 1) % 3;
+      report(selected);
+      return true;
+    });
+    addon.findPrevious.mockImplementation(() => {
+      selected = (selected + 2) % 3;
+      report(selected);
+      return true;
+    });
+    terminal.clearSelection.mockImplementation(() => {
+      selected = -1;
+    });
+    ask('File', 'next', false);
+    ask('File', 'next', false);
+    expect(published()).toEqual([0, 1]);
+
+    // The addon's own re-search after a resize lands on the last match; the viewport holds that report
+    // back and re-anchors on the second match once the addon has returned, keeping the scroll line.
+    dispatched.mockClear();
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 7;
+    terminal.scrollToLine.mockClear();
+    selected = -1;
+    report(2);
+    expect(published()).toEqual([]);
+    await Promise.resolve();
+    expect(published()).toEqual([1]);
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(7);
+    expect(selected).toBe(1);
+    // A later report outside a resize is published as it is.
+    report(2);
+    expect(published()).toEqual([1, 2]);
+    selected = 1;
+    report(1);
+
+    // A step pressed after a resize but before the re-search goes on from the active match, not the first,
+    // counting against a freshly highlighted buffer.
+    dispatched.mockClear();
+    addon.clearDecorations.mockClear();
+    terminal.resizeHandler!();
+    selected = -1;
+    ask('File', 'next', false);
+    expect(addon.clearDecorations).toHaveBeenCalledTimes(1);
+    expect(published()).toEqual([1, 2]);
+    // The addon's late re-search (after the redraw that followed the resize) moved it: re-anchored again.
+    selected = -1;
+    report(0);
+    await Promise.resolve();
+    expect(published()).toEqual([1, 2, 2]);
+    // Once a re-search confirms the match, reports are published as they are.
+    report(2);
+    report(0);
+    expect(published()).toEqual([1, 2, 2, 2, 0]);
+    selected = 2;
+    report(2);
+
+    // Shift-Enter after a resize steps back from the active match.
+    dispatched.mockClear();
+    terminal.resizeHandler!();
+    selected = -1;
+    ask('File', 'previous', false);
+    expect(published()).toEqual([2, 1]);
+
+    // Emptying the field forgets the match; a resize then re-anchors nothing.
+    expect(ask('')).toBe(false);
+    dispatched.mockClear();
+    addon.findNext.mockClear();
+    terminal.resizeHandler!();
+    expect(ask('File')).toBe(true);
+    expect(addon.findNext).toHaveBeenCalledTimes(1);
+    dispose();
   });
 });
 
@@ -1038,6 +1226,8 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
     );
     expect(viewport.dataset.renderer).toBe('dom');
     expect(allocated.terminals[0].focus).toHaveBeenCalled();
+    // HS2-M5QPED: a resumed terminal announces that an open terminal search can reach it.
+    expect(dispatched.filter((type) => type === TERMINAL_SEARCH_READY_EVENT)).toHaveLength(2);
     for (const frame of frames.splice(0)) frame();
     expect(webglAddons).toHaveLength(2);
     expect(viewport.dataset.renderer).toBe('webgl');

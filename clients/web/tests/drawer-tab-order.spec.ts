@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { appRequests } from './app-requests';
 import { ticketsJson } from './ticket-page-fixture';
 
 const project = {
@@ -79,7 +80,7 @@ async function installFixture(page: import('@playwright/test').Page) {
     { id: 'shell-one', alive: true, busy: false, cwd: project.root },
     { id: 'shell-two', alive: true, busy: false, cwd: project.root },
   ];
-  await page.route('**/*', (route) => {
+  await page.route(appRequests, (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       path = url.pathname;
@@ -236,6 +237,7 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toBeVisible();
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', 'shell-two']);
@@ -313,6 +315,7 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   for (let index = 0; index < 2; index += 1) {
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();

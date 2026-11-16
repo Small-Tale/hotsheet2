@@ -89,6 +89,8 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     for (const expanded of [false, true]) {
       const markup = String(ProjectLiveSection({ summary: quiet, callouts, expanded }));
       expect(markup).toContain('data-host-callout="disk"');
+      // Mapped banners carry a diff key (HS2-3TNEJF).
+      expect(markup).toContain('data-key="host-callout:disk"');
       expect(markup).toContain('Disk 4 GB free · full in ~2h');
       expect(markup).toContain('data-tone="danger"');
     }

@@ -72,6 +72,10 @@ export const containsOrchestrationChange = (response: PollResponse, checkoutId: 
       (event.kind === 'orchestration_changed' && event.id === checkoutId) || event.kind === 'orchestration_session',
   );
 
+/** The publication state of this checkout's group registry changed (HS2-1CWD0H). */
+export const containsGroupRegistrySyncChange = (response: PollResponse, checkoutId: string): boolean =>
+  response.events.some((event) => event.kind === 'group_registry_sync' && event.id === checkoutId);
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     const timeout = globalThis.setTimeout(resolve, milliseconds);

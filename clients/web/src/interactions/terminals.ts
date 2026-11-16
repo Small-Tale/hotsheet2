@@ -2,7 +2,7 @@ import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { type AiToolDefaults } from '../api';
+import { type AiToolDefaults, Api } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind, type AppTabMenuState } from '../components/project-tab-context-menu';
@@ -28,7 +28,7 @@ import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-orde
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
-import { clearTerminalViewports, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
+import { clearTerminalEverywhere, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
 import {
   pasteIntoTerminalViewport,
   readClipboardText,
@@ -53,7 +53,12 @@ import {
   type TerminalModifiers,
   toggleTerminalModifier,
 } from '../terminal-keys';
-import { searchTerminalViewport } from '../terminal-search';
+import {
+  createTerminalSearchSync,
+  TERMINAL_SEARCH_READY_EVENT,
+  TERMINAL_SEARCH_RESULTS_EVENT,
+  type TerminalSearchResults,
+} from '../terminal-search';
 import { type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -158,6 +163,12 @@ export interface TerminalInteractionsDependencies {
   readonly resetTerminalName: (projectId: string, terminalId: string) => void;
   /** The terminal drawer's Kerf-managed search field model (HS2-TWZSZF). */
   readonly terminalSearchModel: SearchFieldModel;
+  /** Whether the drawer's terminal search field is expanded (HS2-TWZSZF). */
+  readonly terminalSearchOpen: Signal<boolean>;
+  /** The searched terminal's match count and active match (HS2-M5QPED); undefined while nothing is searched. */
+  readonly terminalSearchResults: Signal<TerminalSearchResults | undefined>;
+  /** The drawer's selected item; a change moves the search to the newly selected terminal. */
+  readonly terminalDrawerSelected: Signal<string>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -222,6 +233,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     resetTerminalName,
     terminalSearchModel,
     takeOverHostedSession,
+    terminalSearchOpen,
+    terminalSearchResults,
+    terminalDrawerSelected,
   } = dependencies;
   // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
   // popovers; keep them in the top layer as Kerf renders them.
@@ -470,9 +484,15 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // Clear Terminal (HS2-N2AG8V): the rail button clears the selected terminal, and Command-K clears the
   // focused one. The key is captured before xterm, so it never reaches the shell, and the global
   // dispatcher skips Open Search for the same chord inside a terminal (`terminalClearKeyTarget`).
+  // The clear is then shared through the project's server (HS2-HA0Z3A), so a reload or another client
+  // no longer replays the cleared output; if the server cannot share it, the local clear stands.
   const clearTerminal = (viewport: HTMLElement | null | undefined) => {
     const identity = viewport ? terminalViewportIdentity(viewport) : undefined;
-    if (identity) clearTerminalViewports(document, identity);
+    if (!identity) return;
+    void clearTerminalEverywhere(document, identity, ({ projectId, terminalId }) => {
+      const target = projects.peek().find((item) => item.id === projectId);
+      return target ? new Api(target.apiPath).clearTerminal(terminalId) : Promise.reject(new Error('unknown project'));
+    });
   };
   // Pressing Clear leaves the keyboard in the terminal, as the key bar does, so typing continues.
   lifetime.add(
@@ -497,21 +517,52 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   // Terminal search (HS2-TWZSZF): typing in the drawer's search field searches the selected terminal
-  // incrementally, and Enter or Shift-Enter moves to the next or previous match. An emptied field
-  // clears the highlights. Kerf owns the field's text, clear button, and collapse.
+  // incrementally, and Enter or Shift-Enter moves to the next or previous match. HS2-M5QPED: every
+  // match is highlighted and counted; emptying or closing the field clears the highlights and the
+  // count, and selecting another terminal moves the search there. Kerf owns the field's text, clear
+  // button, and collapse.
   const searchViewport = () =>
     document.querySelector<HTMLElement>(
       '[data-component="terminal-drawer"] .terminal-session:not([hidden]) [data-display-mode="interactive"]',
     );
-  let searchedQuery = '';
+  const terminalSearch = createTerminalSearchSync({
+    viewport: searchViewport,
+    query: () => (terminalSearchOpen.peek() ? terminalSearchModel.state.peek().query : ''),
+    publish: (results) => {
+      terminalSearchResults.value = results;
+    },
+  });
   lifetime.add(
     effect(() => {
-      const { query } = terminalSearchModel.state.value;
-      if (query === searchedQuery) return;
-      searchedQuery = query;
-      const viewport = searchViewport();
-      if (viewport) searchTerminalViewport(viewport, query, 'next', true);
+      // Track the query, the field's open state, and the selected terminal; search once the render the
+      // change caused has placed the selected terminal's viewport.
+      void terminalSearchModel.state.value.query;
+      void terminalSearchOpen.value;
+      void terminalDrawerSelected.value;
+      queueMicrotask(() => {
+        terminalSearch.sync();
+      });
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      TERMINAL_SEARCH_RESULTS_EVENT,
+      TERMINALS_TARGETS.terminalViewport.selector,
+      (event, target) => {
+        terminalSearch.receive(target, (event as CustomEvent<TerminalSearchResults>).detail);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      TERMINAL_SEARCH_READY_EVENT,
+      TERMINALS_TARGETS.terminalViewport.selector,
+      (_event, target) => {
+        terminalSearch.ready(target);
+      },
+    ),
   );
   lifetime.add(
     delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalSearchEditor.selector, (event) => {
@@ -521,9 +572,19 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       // The terminal search has no submit: Enter steps through matches instead of reaching Kerf's submit.
       keyboard.preventDefault();
       keyboard.stopPropagation();
-      const query = terminalSearchModel.state.peek().query,
-        viewport = searchViewport();
-      if (query && viewport) searchTerminalViewport(viewport, query, keyboard.shiftKey ? 'previous' : 'next', false);
+      terminalSearch.step(keyboard.shiftKey ? 'previous' : 'next');
+    }),
+  );
+  // The match count steps to the next match (Shift-click to the previous one) and leaves the keyboard
+  // in the search field, so typing refines the query (HS2-M5QPED).
+  lifetime.add(
+    delegate(document.body, 'mousedown', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
+      terminalSearch.step((event as MouseEvent).shiftKey ? 'previous' : 'next');
     }),
   );
   // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard

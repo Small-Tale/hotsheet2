@@ -45,6 +45,7 @@ function bindings(selected: string[] = []): CommandSettingsEditorBindings & Reco
     deleteCommand: vi.fn(),
     addGroup: vi.fn(),
     deleteGroup: vi.fn(),
+    retryLoad: vi.fn(),
     selection: () => selected,
     orderedIds: () => ['a', 'b', 'c'],
     selectRow: vi.fn(),
@@ -87,6 +88,13 @@ describe('wireCommandSettingsEditor (HS2-RWY78R)', () => {
     expect(state.reorder).toHaveBeenCalledWith(['a', 'c'], { kind: 'row', id: 'b', position: 'before' });
     drop(plainEvent({ clientY: 25, target: rows[1] }), rows[1]);
     expect(state.reorder).toHaveBeenCalledOnce();
+  });
+
+  it('routes the failed-load Retry action (HS2-BZKTDC)', () => {
+    const state = bindings();
+    wireCommandSettingsEditor(root, state);
+    handler('click', '[data-action="retry-command-settings-load"]')(plainEvent(), row('a'));
+    expect(state.retryLoad).toHaveBeenCalledOnce();
   });
 
   it('selects a lone dragged row and ignores a drop on a dragged row', () => {
