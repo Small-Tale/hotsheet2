@@ -19,7 +19,7 @@ export function AttachmentFilenameEditor({ edit, name }: { edit?: AttachmentFile
           disabled={edit?.saving}
         />
         {edit?.message ? (
-          <StateBanner tone="danger" title="Filename Could Not Be Changed" detail={edit.message} />
+          <StateBanner tone="danger" title="Filename Could Not Be Changed" detail={edit.message} copyLayout="stacked" />
         ) : null}
       </List>
     </div>

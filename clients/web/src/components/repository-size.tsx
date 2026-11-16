@@ -189,7 +189,9 @@ function CompactionPreview({ state, checkout }: { state: CompactionPreviewState;
   if (state.status === 'idle') return null;
   if (state.status === 'loading') return <EmptyState busy title={`Checking ${state.source} Attachments`} />;
   if (state.status === 'error')
-    return <StateBanner tone="warning" title="Compaction preview unavailable." detail={state.message} />;
+    return (
+      <StateBanner tone="warning" title="Compaction preview unavailable." detail={state.message} copyLayout="stacked" />
+    );
   const { plan, source } = state;
   const command = `hotsheet-cli checkout compact '${source.replaceAll("'", "'\\''")}' '${checkout.replaceAll("'", "'\\''")}'`;
   const required = `rewrite ${plan.branch} ${plan.fingerprint}`;

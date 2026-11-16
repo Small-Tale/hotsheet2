@@ -82,6 +82,41 @@ async function captureWidths(page: Page, surface: Locator, name: string) {
   await page.emulateMedia({ colorScheme: 'light' });
 }
 
+/** HS2-NRDDPY: a free-text error detail wraps inside its StateBanner instead of ending in an ellipsis. */
+async function expectWrappedBannerDetail(page: Page, banner: Locator, text: string, name: string) {
+  const detail = banner.locator('.kui-state-banner__detail');
+  const initial = page.viewportSize();
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [state, width] of [
+      ['wide', 1280],
+      ['medium', 768],
+      ['narrow', 390],
+      ['wide-return', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectProjectSidebarLayout(page, width >= 1024);
+      await expect(detail).toHaveText(text);
+      const clip = await detail.evaluate((node) => {
+        const owner = node.closest('.kui-state-banner')?.getBoundingClientRect(),
+          box = node.getBoundingClientRect(),
+          inner = node.firstElementChild ?? node;
+        return {
+          hidden: inner.scrollWidth - inner.clientWidth,
+          right: (owner?.right ?? 0) - box.right,
+          left: box.left - (owner?.left ?? 0),
+        };
+      });
+      expect(clip.hidden).toBeLessThanOrEqual(1);
+      expect(clip.right).toBeGreaterThanOrEqual(0);
+      expect(clip.left).toBeGreaterThanOrEqual(0);
+      await page.screenshot({ path: `target/visual-captures/hs2-nrddpy-${name}-${scheme}-${state}.png` });
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  if (initial) await page.setViewportSize(initial);
+}
+
 test('a reload restores the project once its open is remembered and lists a ticket created meanwhile (HS2-ED4A0G)', async ({
   context,
   baseURL,
@@ -253,6 +288,43 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
     }
   });
 
+  test('wraps a long duplicate-name error in the New Command Group dialog at every width (HS2-NRDDPY)', async ({
+    context,
+    baseURL,
+  }) => {
+    const { app, page } = await openedApp(context, baseURL!);
+    try {
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('button', { name: 'Commands', exact: true }).click();
+      const addGroup = page.getByRole('button', { name: 'Add group…', exact: true });
+      const dialog = page.getByRole('dialog', { name: 'New Command Group' });
+      const name = dialog.getByRole('textbox', { name: 'Group Name' });
+      const longName = 'Release candidate verification and staging checks';
+      const groups = () => app.server.request<string[]>(`/checkouts/${app.server.checkoutId}/command-groups`);
+      await addGroup.click();
+      await settledDialog(dialog);
+      await name.fill(longName);
+      await name.press('Enter');
+      await expect.poll(groups).toEqual([longName]);
+      await addGroup.click();
+      await settledDialog(dialog);
+      await name.fill(longName);
+      await name.press('Enter');
+      await expectWrappedBannerDetail(
+        page,
+        dialog.locator('.kui-state-banner'),
+        `A group named "${longName}" already exists.`,
+        'command-group-error',
+      );
+      await name.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      await expect.poll(groups).toEqual([longName]);
+    } finally {
+      await page.close();
+      await app.stop();
+    }
+  });
+
   test('holds command setting writes until the project has loaded its command revisions (HS2-A6K8D5)', async ({
     context,
     baseURL,
@@ -402,6 +474,16 @@ test.describe('production prompt replacements (HS2-WMZ6Z5)', () => {
       await provider.fill('unknown');
       await dialog.getByRole('button', { name: 'Create Terminal', exact: true }).click();
       await expect(dialog).toContainText('Unknown AI provider: unknown');
+      expect(created).toHaveLength(0);
+      const longProvider = 'synthetic-provider-with-a-deliberately-long-name-for-phone-widths';
+      await provider.fill(longProvider);
+      await dialog.getByRole('button', { name: 'Create Terminal', exact: true }).click();
+      await expectWrappedBannerDetail(
+        page,
+        dialog.locator('.kui-state-banner'),
+        `Unknown AI provider: ${longProvider}`,
+        'ai-launch-error',
+      );
       expect(created).toHaveLength(0);
       await provider.fill('Fixture AI');
       await expect(effort).toHaveJSProperty('value', 'low');

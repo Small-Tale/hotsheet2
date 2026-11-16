@@ -51,7 +51,9 @@ export function NoteRepairReview({
           <p>The deterministic doctor found no known structural issue.</p>
         )}
         {!response && <p>Waiting for the AI proposal. The note will not change until you accept it.</p>}
-        {issue ? <StateBanner tone="warning" title="Proposal Needs Review" detail={issue} /> : null}
+        {issue ? (
+          <StateBanner tone="warning" title="Proposal Needs Review" detail={issue} copyLayout="stacked" />
+        ) : null}
         {stale && (
           <StateBanner
             tone="warning"
@@ -86,7 +88,7 @@ export function NoteRepairReview({
             {proposal.response_to !== undefined && <p>Response link: {proposal.response_to ?? 'clear'}</p>}
             {proposal.explanation && <p>{proposal.explanation}</p>}
             {preview.unavailable.map((reason) => (
-              <StateBanner tone="warning" title="Cannot Apply" detail={reason} />
+              <StateBanner tone="warning" title="Cannot Apply" detail={reason} copyLayout="stacked" />
             ))}
           </div>
         )}

@@ -38,7 +38,9 @@ export function AddHostDiskDialog({ state }: { state?: AddHostDiskDialogState })
             hint="Any folder on the disk, on the server's machine."
             autofocus
           />
-          {state.message ? <StateBanner tone="danger" title="Disk Not Added" detail={state.message} /> : null}
+          {state.message ? (
+            <StateBanner tone="danger" title="Disk Not Added" detail={state.message} copyLayout="stacked" />
+          ) : null}
           <Row vAlign="middle" gap="xs">
             <Button emphasis="plain" type="button" action={SHELL_AND_GLOBAL_ACTIONS.cancelAddHostDisk.value}>
               Cancel

@@ -58,6 +58,12 @@ does not fork Kerf's guidance.
   Kerf `List` (`controlInsets="trl"`) on the header surface, through `ShellBanner`
   (HS2-YCB15Z). No banner is a flush full-width strip.
 
+- A `StateBanner` whose detail is computed (a server or validation message, or an
+  interpolated sentence) sets Kerf's `copyLayout="stacked"`, so the detail wraps
+  instead of ending in an ellipsis at phone width (HS2-4JRM43, HS2-NRDDPY). The
+  default inline layout stays for constant short details. `kerf-ui-profile.test.ts`
+  pins the rule.
+
 - App Settings → General offers a **Theme** choice (HS2-EFTHS6): Auto (the default,
   following `prefers-color-scheme`), Light, or Dark, per browser in
   `localStorage hotsheet.theme`. This is a maintainer-requested departure from

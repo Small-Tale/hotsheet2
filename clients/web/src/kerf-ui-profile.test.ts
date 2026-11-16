@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 interface KerfProfile {
@@ -13,6 +14,54 @@ interface KerfDoctorConfig {
   cache: boolean;
   failOn?: string;
   suppressions: { id: string; rules: string[]; target: string; rationale: string }[];
+}
+
+function sourceFiles(directory: URL): URL[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+    return entry.isDirectory()
+      ? sourceFiles(path)
+      : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
+        ? [path]
+        : [];
+  });
+}
+
+type JsxElementLike = ts.JsxSelfClosingElement | ts.JsxOpeningElement;
+
+function stateBannerElements(): Array<{ file: string; line: number; element: JsxElementLike }> {
+  return sourceFiles(new URL('./', import.meta.url)).flatMap((url) => {
+    const source = readFileSync(url, 'utf8');
+    if (!source.includes('<StateBanner')) return [];
+    const file = url.pathname.split('/src/')[1] ?? url.pathname;
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const found: Array<{ file: string; line: number; element: JsxElementLike }> = [];
+    const visit = (node: ts.Node): void => {
+      if (
+        (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+        node.tagName.getText(tree) === 'StateBanner'
+      ) {
+        found.push({ file, line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1, element: node });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    return found;
+  });
+}
+
+function jsxAttribute(element: JsxElementLike, name: string): ts.JsxAttribute | undefined {
+  return element.attributes.properties.find(
+    (property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText() === name,
+  );
+}
+
+/** The text of a `"literal"`, `{'literal'}`, or substitution-free template initializer; otherwise undefined. */
+function constantString(initializer: ts.JsxAttributeValue): string | undefined {
+  const value = ts.isJsxExpression(initializer) ? initializer.expression : initializer;
+  return value !== undefined && (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))
+    ? value.text
+    : undefined;
 }
 
 describe('Kerf application UI profile', () => {
@@ -130,6 +179,18 @@ describe('Kerf application UI profile', () => {
         ),
       );
     expect(wrapped).toEqual([]);
+  });
+
+  it('HS2-NRDDPY stacks a StateBanner whose detail is not a constant string', () => {
+    // Kerf's default inline copy layout keeps the detail on one ellipsized line, so a server or validation
+    // message is cut off at phone width. A computed detail must use copyLayout="stacked", which wraps it.
+    const inlineComputed = stateBannerElements().flatMap(({ file, line, element }) => {
+      const detail = jsxAttribute(element, 'detail');
+      if (detail?.initializer === undefined || constantString(detail.initializer) !== undefined) return [];
+      const layout = jsxAttribute(element, 'copyLayout')?.initializer;
+      return layout !== undefined && constantString(layout) === 'stacked' ? [] : [`${file}:${line}`];
+    });
+    expect(inlineComputed).toEqual([]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {
