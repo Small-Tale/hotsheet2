@@ -79,7 +79,8 @@ export interface AppShellProps {
   mobile?: boolean;
   workspacePresentation?: 'inset' | 'edge-to-edge' | 'guidance';
   overlay?: SafeHtml;
-  /** Foreground anchored to the viewport, outside the mobile side-panel stacking contexts. */
+  /** Foreground anchored to the viewport, outside the mobile side-panel stacking contexts. A top-layer
+   * popup renders here at every width so a resize never remounts it (HS2-7VRFX0). */
   viewportOverlay?: SafeHtml;
   terminalDrawer?: SafeHtml;
   terminalDrawerVisible?: boolean;
@@ -387,7 +388,12 @@ export function AppShell({
         }
       />
       {announcer && !(leftRail && sidebarVisible) && announcer.corner}
-      {viewportOverlay}
+      {/* One keyed slot at every width: a top-layer popup here keeps its node, and so its presentation,
+          when the layout crosses between phone and desktop or the corner announcer above it toggles
+          (HS2-7VRFX0). Moving a node, even within the DOM, closes an open popover. */}
+      <div class="app-shell__viewport-overlay" data-key="app-shell-viewport-overlay">
+        {viewportOverlay}
+      </div>
     </section>
   );
 }

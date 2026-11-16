@@ -330,7 +330,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     if (!current && !restoreFailure && !openingRoot) return <AppEmptyState />;
     // A chat hosts the permission sidecar within its own modal top layer, and Settings → Permissions
     // lays it out above its automation controls (HS2-84XE8Q). Otherwise the shell popup uses the global
-    // top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2).
+    // top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2). It always renders in the viewport
+    // overlay slot, so crossing between phone and desktop keeps the presented node (HS2-7VRFX0).
     const settingsHostsPermission = !restoreFailure && !openingRoot && permissionPopupInSettings(),
       haltPopup = haltedSessionsController.popup(),
       popup =
@@ -452,13 +453,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
           workAreaFocusRing={!magnifiedTerminalKey.value}
-          overlay={
-            <>
-              {!viewportMobile.value && popup}
-              {ticketContextMenuSurface()}
-            </>
-          }
-          viewportOverlay={viewportMobile.value ? popup : undefined}
+          overlay={ticketContextMenuSurface()}
+          viewportOverlay={popup}
         />
       );
     }
@@ -473,8 +469,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           mobile={viewportMobile.value}
           workspace={<ProjectRestoreError {...restoreFailure} />}
           inspectorVisible={false}
-          overlay={viewportMobile.value ? undefined : popup}
-          viewportOverlay={viewportMobile.value ? popup : undefined}
+          viewportOverlay={popup}
         />
       );
     if (openingRoot) {
@@ -489,8 +484,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           mobile={viewportMobile.value}
           workspace={<ProjectOpeningState name={openingName} />}
           inspectorVisible={false}
-          overlay={viewportMobile.value ? undefined : popup}
-          viewportOverlay={viewportMobile.value ? popup : undefined}
+          viewportOverlay={popup}
         />
       );
     }
@@ -762,13 +756,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         inspector={inspectorContent}
         inspectorVisible={!inspectorCollapsed.value}
         inspectorSize={inspectorSize.value}
-        overlay={
-          <>
-            {!viewportMobile.value && popup}
-            {ticketContextMenuSurface()}
-          </>
-        }
-        viewportOverlay={viewportMobile.value ? popup : undefined}
+        overlay={ticketContextMenuSurface()}
+        viewportOverlay={popup}
       />
     );
   }

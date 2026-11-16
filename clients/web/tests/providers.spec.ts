@@ -18315,9 +18315,11 @@ test('answers identical permission requests for this chat and revokes the rememb
   await page.screenshot({ path: 'target/visual-captures/hs2-at46vg-popup-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(popup).toBeVisible();
-  // HS2-XM04W9: measure only the current phone branch after relocation and native presentation.
+  // HS2-XM04W9, HS2-7VRFX0: the presented popup in the shell's viewport-overlay slot, kept across the resize.
   const shell = page.locator('[data-component="app-shell"]');
-  const phonePopup = shell.locator(':scope > [data-component="permission-request-popup"]:popover-open');
+  const phonePopup = shell.locator(
+    ':scope > .app-shell__viewport-overlay > [data-component="permission-request-popup"]:popover-open',
+  );
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await expect(phonePopup).toHaveCount(1);
   await expect(phonePopup).toBeVisible();
@@ -19417,10 +19419,12 @@ test('validates and applies the dedicated match editor through a real permission
   }
 });
 
-/** HS2-NESKN3: at phone width the shell renders the permission popup in its viewport-overlay slot,
- * a new element, so a phone capture waits for that copy instead of the wide one. */
+/** HS2-NESKN3, HS2-7VRFX0: the shell renders the permission popup in its viewport-overlay slot at every
+ * width, so the phone capture finds the same element the wide one used. */
 function phonePermissionPopup(page: Page): Locator {
-  return page.locator('[data-component="app-shell"] > [data-component="permission-request-popup"]');
+  return page.locator(
+    '[data-component="app-shell"] > .app-shell__viewport-overlay > [data-component="permission-request-popup"]',
+  );
 }
 
 test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCSNZ0)', async ({ page }) => {
@@ -19481,8 +19485,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
   await page.setViewportSize({ width: 1280, height: 800 });
   await popup.screenshot({ path: 'target/visual-captures/hs2-jcsnz0-approval-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  // HS2-NESKN3: the phone shell renders the popup in its viewport-overlay slot, a new element.
-  // Wait for that copy, with the in-progress review kept, before capturing it.
+  // HS2-7VRFX0: the popup keeps its node across the resize, with the in-progress review kept.
   const phonePopup = phonePermissionPopup(page);
   await expect(phonePopup).toContainText('future matching actions without asking');
   await expect(phonePopup.getByLabel('Reviewed permission pattern')).toHaveValue(
@@ -34915,8 +34918,7 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   for (const name of ['Deny', 'Allow This AI Session', 'Always Allow', 'Allow Once', 'Ignore', 'Pause Notifications'])
     await expect(phonePermissionPopup(page).getByRole('button', { name, exact: true })).toBeVisible();
-  // HS2-4MSAQC (HS2-NESKN3 shape): the phone shell renders the popup in its viewport-overlay slot,
-  // a new element, so capture that copy rather than a handle to the wide one being removed.
+  // HS2-4MSAQC, HS2-7VRFX0: the popup keeps its viewport-overlay node across the resize.
   await phonePermissionPopup(page).screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-phone.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   // An installed clock keeps following wall time, so exact m:ss text races slow local runs (and a

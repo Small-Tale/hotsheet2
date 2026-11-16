@@ -207,3 +207,8 @@
   cursor: pointer;
   inset: 0;
 }
+/* The keyed slot only gives the top-layer popup a stable parent across re-layouts (HS2-7VRFX0); it
+   takes no box of its own. */
+.app-shell__viewport-overlay {
+  display: contents;
+}

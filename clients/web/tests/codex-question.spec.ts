@@ -70,6 +70,23 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
       (row) => row.id === TERMINAL,
     )?.question;
     expect(question).toMatchObject({ tool_use_id: 'item_synthetic_q', agent: 'codex' });
+    // HS2-7VRFX0: a resize, even across the phone/desktop boundary, keeps the one presented popup node:
+    // nothing removes it from the DOM and it never leaves the top layer.
+    // The popup first settles as a plain popover once the Open Project dialog beneath it has gone.
+    await expect.poll(() => popup.evaluate((dialog) => dialog.matches(':popover-open'))).toBe(true);
+    type ResizeWatch = { hs27vrfx0: { dialog: Element; events: string[] } };
+    await popup.evaluate((dialog) => {
+      const events: string[] = [];
+      // Only a close counts: Chromium may still deliver the toggle event of the first presentation.
+      dialog.addEventListener('toggle', (event) => {
+        if ((event as ToggleEvent).newState === 'closed') events.push('closed');
+      });
+      new MutationObserver((records) => {
+        if (records.some((record) => [...record.removedNodes].some((node) => node.contains(dialog))))
+          events.push('removed');
+      }).observe(document.body, { childList: true, subtree: true });
+      (window as unknown as ResizeWatch).hs27vrfx0 = { dialog, events };
+    });
     for (const [label, width] of [
       ['wide', 1280],
       ['medium', 900],
@@ -78,6 +95,15 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     ] as const) {
       await page.setViewportSize({ width, height: 844 });
       await expect(popup).toBeVisible();
+      const watch = await popup.evaluate((dialog) => {
+        const { hs27vrfx0 } = window as unknown as ResizeWatch;
+        return {
+          same: dialog === hs27vrfx0.dialog,
+          presented: dialog.matches(':popover-open'),
+          events: hs27vrfx0.events,
+        };
+      });
+      expect(watch, `${label}: the same presented popup`).toEqual({ same: true, presented: true, events: [] });
       await expectFooterActionsApart(popup, width);
       await page.screenshot({ path: test.info().outputPath(`hs2-d0qtgb-codex-question-${label}.png`) });
       await page.screenshot({
@@ -110,22 +136,13 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
 async function expectFooterActionsApart(popup: Locator, width: number) {
   const names = ['Dismiss', 'Pause Notifications', 'Answer in terminal'] as const;
   for (const name of names) await expect(popup.getByRole('button', { name, exact: true })).toBeVisible();
-  // HS2-4EK9BB: a viewport change renders the shell again, which mounts the popup anew; the
-  // new popover is closed until the top-layer watcher presents it a few milliseconds later.
-  // Measure once all three actions are on screen together, in the presented popup.
-  let boxes: { name: string; x: number; y: number; width: number; height: number }[] = [];
-  await expect
-    .poll(async () => {
-      const measured = await Promise.all(
-        names.map(async (name) => ({
-          name,
-          box: await popup.getByRole('button', { name, exact: true }).boundingBox(),
-        })),
-      );
-      boxes = measured.flatMap(({ name, box }) => (box ? [{ name, ...box }] : []));
-      return boxes.length;
-    }, 'every footer action is on screen')
-    .toBe(names.length);
+  // The popup keeps its node and presentation across the resize (HS2-7VRFX0), so it measures at once.
+  const boxes: { name: string; x: number; y: number; width: number; height: number }[] = [];
+  for (const name of names) {
+    const box = await popup.getByRole('button', { name, exact: true }).boundingBox();
+    expect(box, `${name} is on screen`).not.toBeNull();
+    if (box) boxes.push({ name, ...box });
+  }
   for (const box of boxes) {
     expect(box.x, box.name).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, box.name).toBeLessThanOrEqual(width);

@@ -926,7 +926,13 @@ describe('application shell components', () => {
     expect(markup).toContain('data-region-id="app-left-rail"');
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-right-rail"');
-    expect(markup.indexOf('viewport-overlay')).toBeGreaterThan(markup.indexOf('data-region-id="app-right-rail"'));
+    // HS2-7VRFX0: the viewport overlay sits in one keyed slot after the Workbench at every width.
+    expect(markup).toContain(
+      '<div class="app-shell__viewport-overlay" data-key="app-shell-viewport-overlay">viewport-overlay</div>',
+    );
+    expect(markup.indexOf('app-shell__viewport-overlay')).toBeGreaterThan(
+      markup.indexOf('data-region-id="app-right-rail"'),
+    );
     expect(markup).toContain('Ticket Workspace');
     // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
