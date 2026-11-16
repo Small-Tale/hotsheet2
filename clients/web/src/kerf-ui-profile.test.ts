@@ -193,6 +193,19 @@ describe('Kerf application UI profile', () => {
     expect(inlineComputed).toEqual([]);
   });
 
+  it('HS2-QCVKZ5 passes StateBanner data attributes through rootAttributes, never as bare props', () => {
+    // TypeScript does not check hyphenated JSX attributes, and StateBanner renders only its named props,
+    // so a bare data-key silently disappears and conditional sibling banners lose their diff identity.
+    const bare = stateBannerElements().flatMap(({ file, line, element }) =>
+      element.attributes.properties
+        .filter(ts.isJsxAttribute)
+        .map((property) => property.name.getText())
+        .filter((name) => name.startsWith('data-'))
+        .map((name) => `${file}:${line} ${name}`),
+    );
+    expect(bare).toEqual([]);
+  });
+
   it('runs every static doctor stage while keeping browser execution opt-in', () => {
     const config = JSON.parse(
       readFileSync(new URL('../.kerf-ui-doctor.json', import.meta.url), 'utf8'),

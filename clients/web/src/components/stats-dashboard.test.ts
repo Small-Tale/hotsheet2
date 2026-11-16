@@ -41,4 +41,20 @@ describe('HS2-38RJMK StatsDashboard states', () => {
     expect(html).toContain('Some Ticket Sources Are Unavailable');
     expect(html).toContain('excluded from these totals');
   });
+
+  it('HS2-QCVKZ5 keys each project error banner so Kerf diffs conditional siblings by identity', () => {
+    const html = String(
+      StatsDashboard({
+        projects: [
+          { id: 'one', name: 'One', state: { status: 'error', message: 'First failure' } },
+          { id: 'two', name: 'Two', state: { status: 'error', message: 'Second failure' } },
+        ],
+        crossProject: true,
+      }),
+    );
+    const keys = [...html.matchAll(/<[^>]*\bkui-state-banner\b[^>]*>/g)].map(
+      ([tag]) => /\bdata-key="([^"]*)"/.exec(tag)?.[1],
+    );
+    expect(keys).toEqual(['analytics-error:one', 'analytics-error:two']);
+  });
 });

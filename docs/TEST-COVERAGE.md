@@ -3025,7 +3025,7 @@ held rows while transport return was withheld. The corrected focused case and al
 locking and timeouts are unchanged; this verifies the fixture boundary, not a
 production persistence defect.
 
-- **Ticket-flow and usage dashboards (HS2-38RJMK):** `crates/hotsheet-server/tests/http.rs # checkout_analytics_reports_linked_store_and_missing_checkout` covers the checkout-scoped real API. `clients/web/src/stats-summary.test.ts` covers shared-store deduplication, UTC throughput gaps, unavailable provider counts, and small cost formatting. `clients/web/tests/providers.spec.ts # shows the project confidence calibration from the real server` now exercises the shipped Stats dashboard and cross-project switch at wide, medium, narrow, and restored-wide sizes. Historical cumulative flow requires HS2-XKXE7V.
+- **Ticket-flow and usage dashboards (HS2-38RJMK):** `crates/hotsheet-server/tests/http.rs # checkout_analytics_reports_linked_store_and_missing_checkout` covers the checkout-scoped real API. `clients/web/src/stats-summary.test.ts` covers shared-store deduplication, UTC throughput gaps, unavailable provider counts, and small cost formatting. `clients/web/src/components/stats-dashboard.test.ts` covers the empty and partial states and keys each per-project error banner through Kerf `rootAttributes` (HS2-QCVKZ5); `clients/web/src/kerf-ui-profile.test.ts` refuses bare `data-*` props on any StateBanner. `clients/web/tests/providers.spec.ts # shows the project confidence calibration from the real server` now exercises the shipped Stats dashboard and cross-project switch at wide, medium, narrow, and restored-wide sizes. Historical cumulative flow requires HS2-XKXE7V.
 
 ### Orchestration target declarations and bindings (HS2-4J6V46)
 
