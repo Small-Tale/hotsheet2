@@ -32,12 +32,45 @@ export interface TargetLinesApi extends OrchestrationTargetLinesClient {
   ) => Promise<OrchestrationTargetLines>;
 }
 
+/** HS2-SHBSQF: the two halves of a combined version, this machine's then the remote server's; `-` is unread. */
+const COMBINED = '~';
+const combinedVersion = (here?: OrchestrationTargetLines, there?: OrchestrationTargetLines) =>
+  `${here?.version ?? '-'}${COMBINED}${there?.version ?? '-'}`;
+
 /**
- * HS2-3D8D6V: where a shown project's lines come from. A local project asks its own server. A remote project's
- * tab first asks this machine's server, through any open local project, for the lines its orchestration projects
- * plan through a remote binding; the plan never leaves this machine. HS2-KB2Y51: when nothing here orchestrates
- * the remote project, the tab reads the remote project's own server instead, which shows the lines other machines
- * pushed to it, and keeps long polling there. Each first read (no `after`) decides again.
+ * HS2-SHBSQF: one answer from both halves. This machine's lines win per ticket; the remote server's lines (what
+ * other machines pushed to it, HS2-KB2Y51) fill the tickets this machine does not plan.
+ */
+export function mergeTargetLines(
+  here: OrchestrationTargetLines | undefined,
+  there: OrchestrationTargetLines | undefined,
+): OrchestrationTargetLines {
+  const mine = here?.lines ?? [],
+    taken = new Set(mine.map((line) => targetLineKey(line.item.target.connection_id, line.item.target.native_id)));
+  return {
+    version: combinedVersion(here, there),
+    orchestrated: Boolean(here?.orchestrated) || Boolean(there?.orchestrated),
+    lines: [
+      ...mine,
+      ...(there?.lines ?? []).filter(
+        (line) => !taken.has(targetLineKey(line.item.target.connection_id, line.item.target.native_id)),
+      ),
+    ],
+  };
+}
+
+type Half = 'here' | 'there';
+type Settled = { half: Half; value: OrchestrationTargetLines } | { half: Half; error: unknown };
+
+/**
+ * HS2-3D8D6V, HS2-SHBSQF: where a shown project's lines come from. A local project asks its own server. A remote
+ * project's tab with a local project open reads both halves: this machine's server, through that local project,
+ * for the lines its orchestration projects plan through a remote binding (the plan never leaves this machine),
+ * and the remote project's own server for the lines other machines pushed to it (HS2-KB2Y51). The two cursors
+ * travel as one combined version; a long poll waits on both halves at once and answers when either changes,
+ * cancelling the other. A half that fails keeps its last answer while the other still waits; only when both fail
+ * does the read fail, so the caller's bounded backoff applies. With no local project open the tab asks the remote
+ * project's server alone.
  */
 export function targetLinesClientFor(
   project: Project,
@@ -49,16 +82,56 @@ export function targetLinesClientFor(
   if (!remote || !local) return api(project.apiPath);
   const here = api(local.apiPath),
     there = api(project.apiPath);
-  let source: 'here' | 'there' = 'here';
-  const fromHere = (after?: string, signal?: AbortSignal) =>
-    here.orchestrationRemoteTargetLines(remote.bindingId, remote.checkoutId, after, signal);
+  const last: Partial<Record<Half, OrchestrationTargetLines>> = {};
+  const read = (half: Half, checkout: string, after: string | undefined, signal: AbortSignal): Promise<Settled> =>
+    (half === 'here'
+      ? here.orchestrationRemoteTargetLines(remote.bindingId, remote.checkoutId, after, signal)
+      : there.orchestrationTargetLines(checkout, after, signal)
+    ).then(
+      (value) => ({ half, value }),
+      (error: unknown) => ({ half, error }),
+    );
   return {
     orchestrationTargetLines: async (checkout, after, signal) => {
-      if (after !== undefined)
-        return source === 'here' ? fromHere(after, signal) : there.orchestrationTargetLines(checkout, after, signal);
-      const mine = await fromHere(undefined, signal);
-      source = mine.orchestrated ? 'here' : 'there';
-      return mine.orchestrated ? mine : there.orchestrationTargetLines(checkout, undefined, signal);
+      const halves: Half[] = ['here', 'there'];
+      const current = combinedVersion(last.here, last.there);
+      if (after === undefined) {
+        // A first read: both halves now, with no cursor.
+        const answers = await Promise.all(
+          halves.map((half) => read(half, checkout, undefined, signal ?? new AbortController().signal)),
+        );
+        for (const answer of answers) if ('value' in answer) last[answer.half] = answer.value;
+        if (answers.every((answer) => 'error' in answer)) throw (answers[0] as { error: unknown }).error;
+        return mergeTargetLines(last.here, last.there);
+      }
+      // A cursor from before this client's state (or a stale one) is answered with what is known now.
+      if (after !== current) return mergeTargetLines(last.here, last.there);
+      const inner = new AbortController();
+      const stop = () => {
+        inner.abort();
+      };
+      signal?.addEventListener('abort', stop, { once: true });
+      try {
+        // A half never read waits with no cursor, which answers at once; a read half waits on its own version.
+        const pending = new Map<Half, Promise<Settled>>(
+          halves.map((half) => [half, read(half, checkout, last[half]?.version, inner.signal)]),
+        );
+        let failure: unknown;
+        while (pending.size) {
+          const settled = await Promise.race(pending.values());
+          pending.delete(settled.half);
+          if ('value' in settled) {
+            last[settled.half] = settled.value;
+            return mergeTargetLines(last.here, last.there);
+          }
+          if (signal?.aborted) throw settled.error;
+          failure = settled.error;
+        }
+        throw failure;
+      } finally {
+        signal?.removeEventListener('abort', stop);
+        inner.abort();
+      }
     },
   };
 }

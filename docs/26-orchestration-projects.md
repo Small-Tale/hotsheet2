@@ -5053,10 +5053,21 @@ every destination once. With no remote target bound it sends nothing.
 `OrchestrationRuntime::push_target_lines(state, owner, tx)` is the pass.
 
 The client already reads the target project's own `target-lines`, so a viewer of the
-target, local or through a remote tab on a machine that does not orchestrate it, sees
-the pushed lines with no client change beyond the remote tab's choice of server above:
-it asks this machine's server first and the remote project's server when nothing here
-orchestrates it.
+target sees the pushed lines.
+
+### Both halves in a remote tab (HS2-SHBSQF)
+
+With a local project open, a remote project's tab reads both halves: this machine's
+answer for the remote checkout (above) and the remote project's own `target-lines`, which
+holds what other owner machines pushed. `mergeTargetLines` keeps this machine's line for
+every ticket it plans (so this machine's own pushed copy never shows twice) and fills the
+other tickets from the remote server. The two cursors travel as one combined version
+`<here>~<there>` (`-` for a half not read yet). A long poll waits on both halves at once,
+one open request each, answers as soon as either half answers and cancels the other; the
+next wait reuses the other half's cursor. A half that fails keeps its last answer, or is
+asked again with no cursor on the next wait, while the other half still waits; only when
+both fail does the read fail, so the client's bounded backoff applies. No timer issues a
+request. With no local project open the tab reads the remote server alone.
 
 ### Headless surface
 
