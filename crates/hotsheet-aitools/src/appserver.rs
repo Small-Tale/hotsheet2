@@ -223,6 +223,10 @@ impl TurnHandle for AppServerTurnHandle {
 }
 
 #[cfg(all(test, unix))]
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+#[cfg(all(test, unix))]
 mod catalog_probe_tests {
     //! HS2-BJ7A59: the codex app-server started for a model listing is a probe child. A fake
     //! `codex` that answers `--version` but wedges as `app-server` (never replying, ignoring
@@ -260,6 +264,9 @@ mod catalog_probe_tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
         )
         .unwrap();
+        // HS2-QDJPR4: the fresh script's first exec can wait seconds in macOS's host-wide
+        // first-launch assessment, past the 5 s probe deadline; take that wait untimed.
+        super::first_launch::launched(&program, &["--version"]);
         (program.display().to_string(), pid_file)
     }
 

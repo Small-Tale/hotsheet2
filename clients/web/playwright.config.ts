@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { availableParallelism, getPriority, loadavg, setPriority, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { defineConfig } from '@playwright/test';
 
+import { releaseBridgeHome } from './scripts/playwright-bridge-home.mjs';
 import { playwrightServerPort } from './scripts/playwright-port.mjs';
 import { runnerWebkitGuard } from './scripts/playwright-webkit-guard.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
@@ -40,9 +41,10 @@ const bridgeLegacyHome = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-legacy-
 // These are separate from Playwright's rotated output and safe alongside Kerf doctor scans.
 for (const directory of ['claude', 'claude-501'])
   mkdirSync(join('target', 'visual-captures', directory), { recursive: true });
+// Stop the bootstrap server the bridge starts under its home before the home is removed; removing the
+// directory alone left that detached server running after every run (HS2-B0WP94).
 process.once('exit', () => {
-  for (const directory of [viteCacheDir, bridgeHome, bridgeLegacyHome])
-    rmSync(directory, { recursive: true, force: true });
+  releaseBridgeHome({ home: bridgeHome, directories: [viteCacheDir, bridgeHome, bridgeLegacyHome] });
 });
 
 export default defineConfig({

@@ -19,6 +19,19 @@ const heartbeatMs = Number(process.env.HOTSHEET_MAIN_WINDOW_HEARTBEAT_MS) || 20_
 const fullSha = /^[0-9a-f]{40}$/i;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
+// HS2-QP2AM2: a Git process that could not start or did not finish within its timeout says nothing
+// about the reservation itself. On macOS a host-wide stall in first-launch assessment (syspolicyd)
+// has made every exec, even `git rev-parse`, take over a minute.
+export class TransientGitError extends Error {}
+
+function transientMessage(args, error, signal) {
+  const cause = error?.code === 'ETIMEDOUT' ? 'did not finish within 10 s' : (error?.message ?? `stopped by ${signal}`);
+  return (
+    `git ${args[0]} ${cause}; the host may be stalling process launches ` +
+    '(on macOS, check syspolicyd CPU; see HS2-QP2AM2)'
+  );
+}
+
 function git(repo, args, input) {
   const result = spawnSync('git', args, {
     cwd: repo,
@@ -28,8 +41,8 @@ function git(repo, args, input) {
     timeout: 10_000,
     maxBuffer: 1024 * 1024,
   });
-  if (result.error || result.status !== 0)
-    throw new Error(`git ${args[0]} failed: ${result.error?.message ?? result.stderr.trim()}`);
+  if (result.error || result.signal) throw new TransientGitError(transientMessage(args, result.error, result.signal));
+  if (result.status !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr.trim()}`);
   return result.stdout.trim();
 }
 
@@ -83,8 +96,12 @@ export function readWindow(repo, query = gitResult) {
   // reservation. A second read still has to resolve the exact ref and token below.
   if (resolved.error || resolved.signal || (resolved.status !== 0 && (resolved.status !== 1 || resolved.stderr)))
     resolved = query(repo, args);
-  if (resolved.error || resolved.signal || (resolved.status !== 0 && resolved.status !== 1))
-    throw new Error(`Cannot read main integration ref: ${resolved.error?.message ?? resolved.stderr?.trim() ?? `exit ${resolved.status}`}`);
+  if (resolved.error || resolved.signal)
+    throw new TransientGitError(
+      `Cannot read main integration ref: ${transientMessage(args, resolved.error, resolved.signal)}`,
+    );
+  if (resolved.status !== 0 && resolved.status !== 1)
+    throw new Error(`Cannot read main integration ref: ${resolved.stderr?.trim() ?? `exit ${resolved.status}`}`);
   if (resolved.status === 1) {
     if (resolved.stderr) throw new Error(`Cannot read main integration ref: ${resolved.stderr.trim()}`);
     if (resolved.stdout) throw new Error('Cannot read main integration ref: unexpected lookup output');
@@ -151,6 +168,12 @@ function deleteWindow(repo, window) {
   const result = gitResult(repo, ['-c', 'core.filesRefLockTimeout=1000', 'update-ref', '-d', ref, window.oid]);
   if (result.status !== 0 && readWindow(repo)?.oid === window.oid)
     throw new Error('Cannot release main integration ref');
+}
+
+/** Whether a heartbeat failure can wait for the next tick: a transient Git launch failure while the
+ * last successful renewal still outlasts one more heartbeat interval (HS2-QP2AM2). */
+export function heartbeatTolerates(error, expiresAt, now, interval = heartbeatMs) {
+  return error instanceof TransientGitError && expiresAt - now > interval;
 }
 
 function alive(pid) {
@@ -616,6 +639,12 @@ export async function pushMain(repo, args) {
       window = renew(repo, token);
       authority(repo, window.value);
     } catch (error) {
+      // HS2-QP2AM2: a stalled Git launch skips this renewal while the last one still covers the next
+      // tick; only a lease that could lapse before then, or a lost reservation, stops the push.
+      if (heartbeatTolerates(error, window.value.expiresAt, Date.now())) {
+        console.warn(`Main integration heartbeat skipped one renewal: ${error.message}`);
+        return;
+      }
       heartbeatError = error;
       control.abort(`the heartbeat failed: ${error.message}`);
     }

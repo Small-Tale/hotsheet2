@@ -937,7 +937,11 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   authority check fails, the wrapper stops the gate and reports the named reason (missing
   ref, replaced owner, expired lease, gone process, or changed phase) instead of only the
   gate's exit (HS2-RXYJ6G). A transient Git read is retried once, while a persistent
-  read error reports Git's diagnostic and stops the gate (HS2-822EVF). Running
+  read error reports Git's diagnostic and stops the gate (HS2-822EVF). A Git process
+  that cannot start or does not finish within 10 s is a host stall, not a reservation
+  failure: the heartbeat skips that renewal with a warning while the last renewal still
+  outlasts one more interval, and the error names the stall (on macOS, syspolicyd
+  assessing new executables) when it finally stops the push (HS2-QP2AM2). Running
   `scripts/check.sh` first and then the wrapper reuses its exact receipt and keeps the
   reservation short. An explicit `scripts/push.sh --standalone --skip-tests` skips local
   tests and receipt verification when the maintainer explicitly accepts CI-based verification. It
@@ -1546,6 +1550,13 @@ The Vite child also gets its own temporary `HOTSHEET_HOME` and `HOTSHEET_LEGACY_
 when the run exits (HS2-9NB1KA). The dev bridge therefore never reads the developer's real remote
 registry, machine secrets, bootstrap server or HS1 data. A fixture server that needs a home names
 its own.
+
+The bridge starts a detached bootstrap `hotsheet-server` for `<home>/server-bootstrap.hs2` the first
+time a spec opens a project through it. Removing the home does not stop that server, so the exit
+handler first runs `hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force` through
+`scripts/playwright-bridge-home.mjs`, then removes the directories (HS2-B0WP94). A failed stop is
+reported as a warning, never thrown. A runner killed by `SIGKILL` skips exit handlers, so that one
+path can still leave the server running.
 
 A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
 `Process from config.webServer was not able to start`. Choose another port and rerun the whole

@@ -272,9 +272,23 @@ it.concurrent(
       otherBuildRoot,
       legacySnapshot,
       browser;
+    // HS2-NJBE9K: this test normally takes about 51 s in CI but once ran into its 120 s limit with no
+    // sign of where. Each phase is recorded, and a timeout prints the phase it stopped in.
+    const started = Date.now(),
+      phases = [];
+    const phase = (name) => phases.push(`${name}@${String(Date.now() - started)}ms`);
+    signal.addEventListener(
+      'abort',
+      () =>
+        console.error(
+          `HS2-NJBE9K local-host test stopped in phase ${phases.at(-1) ?? 'setup'} after ${String(Date.now() - started)} ms; phases: ${phases.join(', ')}; host log tail: ${log.slice(-1500)}`,
+        ),
+      { once: true },
+    );
     // Everything that can fail runs inside the try, so the host and its machine server are always
     // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
     try {
+      phase('copy binaries');
       // HS2-6VQ5RV: a private checkout whose setup templates the test edits after the host starts.
       const checkout = resolve(home, 'checkout');
       await cp(resolve(repoRoot, 'plugins'), resolve(checkout, 'plugins'), { recursive: true });
@@ -295,6 +309,7 @@ it.concurrent(
       const revision = JSON.parse(
         (await run(workingTreeBinaries.HOTSHEET_SERVER_BIN, ['--revision-status'])).stdout,
       ).build_revision;
+      phase('start host');
       child = spawn(process.execPath, [resolve(buildRoot, 'dist-host/local-host.js'), '--port', String(port)], {
         cwd: webRoot,
         env: {
@@ -319,6 +334,7 @@ it.concurrent(
       // Working builds can replace or delete their outputs while this host stays on its launch snapshot.
       await rm(resolve(buildRoot, 'dist'), { recursive: true });
       for (const candidate of Object.values(candidates)) await rm(candidate);
+      phase('load production client');
       const page = await browser.newPage(),
         requests = [],
         pageErrors = [];
@@ -342,6 +358,7 @@ it.concurrent(
       expect(checkouts.status).toBe(200);
       expect(Array.isArray(await checkouts.json())).toBe(true);
 
+      phase('open project');
       // HS2-ARJ9J1: a project's store is hosted while a tab has it open, unhosted when the last
       // tab closes it, and hosted again by the next request through that project.
       const project = resolve(home, 'app'),
@@ -412,6 +429,7 @@ it.concurrent(
       }
       expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
       expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
+      phase('host and unhost project');
       const hostsProject = async () =>
         (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
       expect((await fetch(`${api}/ws/poll?timeout_ms=0&since=0&client=e2e-tab`)).status).toBe(200);
@@ -426,6 +444,7 @@ it.concurrent(
       expect((await fetch(`${api}/checkouts/${encodeURIComponent(id)}/tickets`)).status).toBe(200);
       expect(await hostsProject()).toBe(true);
 
+      phase('reopen after template edit');
       // HS2-6VQ5RV: setup templates change in the checkout after the host started (a source edit
       // without a relaunch). Refreshes and other devices must not see a setup banner.
       const pluginDirectory = (await readdir(resolve(checkout, 'plugins'), { withFileTypes: true })).find((entry) =>
@@ -442,6 +461,7 @@ it.concurrent(
       expect((await reopened.json()).setupWarning).toBeUndefined();
       const setupBanner = '[data-component="project-setup-warning-banner"]';
 
+      phase('second client wide and phone');
       // A second browser client can render the project through the still-running production host.
       // Capture the connected state at the viewport of the reported failure and on a phone.
       await page.setViewportSize({ width: 1969, height: 1240 });
@@ -476,6 +496,7 @@ it.concurrent(
       });
       await phone.close();
 
+      phase('project and ticket links');
       // A fresh browser has no remembered tabs; the server registry must supply the URL's project.
       const created = await run(
         workingTreeBinaries.HOTSHEET_CLI_BIN,
@@ -504,6 +525,7 @@ it.concurrent(
       await linked.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-ticket-link.png') });
       await fresh.close();
 
+      phase('second pinned host');
       // HS2-46BKH7: a second pinned host on the same machine selected a build the shared machine
       // server does not run (another host replaced it). While that server is busy, the host must still
       // open the project through it and explain the deferred restart, instead of failing every open.
@@ -545,6 +567,7 @@ it.concurrent(
       expect(mismatchedBody.serverBuildNotice).not.toMatch(/server:rebuild/);
       expect(mismatchedBody.compatibility.kind).toBe('compatible');
       // A refresh and another device both open through the running server and see the notice.
+      phase('server build notice pages');
       const noticeBanner = '[data-component="server-build-notice-banner"]';
       const mismatchedWide = await browser.newPage({ viewport: { width: 1280, height: 800 } });
       await mismatchedWide.goto(`${otherOrigin}/?project=${encodeURIComponent(project)}`);
@@ -568,6 +591,7 @@ it.concurrent(
       });
       await mismatchedPhone.close();
     } finally {
+      phase('cleanup');
       await browser?.close();
       for (const host of [child, other]) {
         if (!host) continue;

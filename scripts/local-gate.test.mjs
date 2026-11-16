@@ -9,6 +9,7 @@ import {
   browserStages,
   importCiTimings,
   inspectTimings,
+  instrumentedCommand,
   parseToolVersion,
   performanceStages,
   prepare,
@@ -1828,4 +1829,30 @@ test('HS2-XTQHPK every gate stage inherits the OS keychain kill switch', () => {
   assert.equal(process.env.HOTSHEET_NATIVE_SECRETS, 'deny');
   const source = readFileSync(new URL('./local-gate.mjs', import.meta.url), 'utf8');
   assert.match(source, /^process\.env\.HOTSHEET_NATIVE_SECRETS = 'deny';$/m);
+});
+
+test('HS2-RS0SYH runs every nextest stage without fail-fast so its report lists every case', () => {
+  const nextest = { kind: 'nextest' };
+  const full = 'cargo nextest run --all-features --status-level leak';
+  assert.equal(instrumentedCommand(full, nextest), `${full} --no-fail-fast`);
+  // A narrowed rerun keeps its filter and also runs every requested case.
+  const narrowed = `${full} -E '(binary_id(=a) & test(=b))'`;
+  assert.equal(instrumentedCommand(narrowed, nextest), `${narrowed} --no-fail-fast`);
+  // Already present: unchanged, never doubled.
+  assert.equal(instrumentedCommand(`${full} --no-fail-fast`, nextest), `${full} --no-fail-fast`);
+  // Options go before a test-binary passthrough.
+  assert.equal(
+    instrumentedCommand('cargo nextest run -p x -- --ignored', nextest),
+    'cargo nextest run -p x --no-fail-fast -- --ignored',
+  );
+  // Other runners keep their reporter instrumentation; an unreported stage is untouched.
+  assert.equal(
+    instrumentedCommand('npx playwright test a.spec.ts', { kind: 'playwright' }),
+    'npx playwright test a.spec.ts --reporter=line,json',
+  );
+  assert.equal(
+    instrumentedCommand('npm run test:unit', { kind: 'vitest', path: '/r/v.json' }),
+    "npm run test:unit -- --reporter=default --reporter=json --outputFile.json='/r/v.json'",
+  );
+  assert.equal(instrumentedCommand('cargo fmt --all --check', null), 'cargo fmt --all --check');
 });

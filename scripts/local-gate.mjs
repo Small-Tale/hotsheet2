@@ -109,17 +109,36 @@ function reportFor(stage, repo) {
   return null;
 }
 
-function instrumentedRunner(stage, repo, report) {
-  const env = withoutGitRepositoryEnv(process.env);
-  let command = stage.command;
+/**
+ * The command a gate stage actually runs, with the reporter arguments its rerun record needs.
+ *
+ * nextest always runs with `--no-fail-fast` (HS2-RS0SYH): its JUnit report lists only the cases that
+ * ran, so a fail-fast cancellation left most of the stage out of the report, and a later targeted
+ * rerun of the failed cases recorded a receipt for cases that never ran. CI already runs this way.
+ */
+export function instrumentedCommand(command, report) {
   // A narrowed Vitest rerun already passes its own arguments after `--` (HS2-5340N1).
   if (report?.kind === 'vitest')
-    command += `${/\s--\s/.test(` ${command} `) ? '' : ' --'} --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
-  if (report?.kind === 'playwright') {
-    command += ' --reporter=line,json';
-    env.PLAYWRIGHT_JSON_OUTPUT_NAME = report.path;
+    return `${command}${/\s--\s/.test(` ${command} `) ? '' : ' --'} --reporter=default --reporter=json --outputFile.json=${quote(report.path)}`;
+  if (report?.kind === 'playwright') return `${command} --reporter=line,json`;
+  if (report?.kind === 'nextest' && !/\s--no-fail-fast(?=\s|$)/.test(command)) {
+    // Options must precede a trailing `-- <test args>` passthrough.
+    const passthrough = command.search(/\s--(?=\s|$)/);
+    return passthrough < 0
+      ? `${command} --no-fail-fast`
+      : `${command.slice(0, passthrough)} --no-fail-fast${command.slice(passthrough)}`;
   }
-  return spawnSync('zsh', ['-ic', command], { cwd: join(repo, stage.cwd), stdio: 'inherit', env });
+  return command;
+}
+
+function instrumentedRunner(stage, repo, report) {
+  const env = withoutGitRepositoryEnv(process.env);
+  if (report?.kind === 'playwright') env.PLAYWRIGHT_JSON_OUTPUT_NAME = report.path;
+  return spawnSync('zsh', ['-ic', instrumentedCommand(stage.command, report)], {
+    cwd: join(repo, stage.cwd),
+    stdio: 'inherit',
+    env,
+  });
 }
 
 function observedFiles(report, started) {

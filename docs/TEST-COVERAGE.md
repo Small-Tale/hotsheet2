@@ -980,7 +980,9 @@ SIGTERM or SIGINT sent to the push, and an external SIGKILL sent to the gate's p
 group: each signalled gate names its source, followed by the other running gates and the
 load (HS2-RY0ZMX). HS2-822EVF adds linked-store default and explicit-override cases, a transient Git
 ref-read retry, persistent-error diagnostics, and a held-gate push that survives
-one injected ref-read failure while still rejecting lost reservations. These are
+one injected ref-read failure while still rejecting lost reservations. HS2-QP2AM2 adds
+timed-out and killed Git launches classified as `TransientGitError` and the heartbeat's
+skip-while-the-lease-lasts rule, which never tolerates a lost reservation. These are
 synthetic local Git tests, including a selection-keyed full receipt in the push hook;
 real multi-machine throughput remains measured by the integration
 baseline and CI. `docs/12-code-organization-and-testing.md` records the local
@@ -1256,6 +1258,9 @@ narrowed pass with recorded flakes, receipt verification, and whole-stage reruns
 after an unprovable failure or changed inputs. The Playwright and Vitest selector
 shapes were also checked against the real runners; nextest is not installed
 locally, so its filter is covered by unit tests and CI only.
+HS2-RS0SYH: `scripts/local-gate.test.mjs` pins `instrumentedCommand`, which adds
+`--no-fail-fast` to every full and narrowed nextest stage (never twice, before a `--`
+passthrough) while keeping the Playwright and Vitest reporter arguments.
 
 HS2-RRNZYN adds synthetic plan-persistence, changed-diff rejection, mandatory
 floor, configured-strategy resolution, complete deferral disclosure, and
@@ -2966,6 +2971,13 @@ discard flow remains covered by its existing real-router test.
 - Unit: `clients/web/scripts/owned-server.test.mjs # HS2-F6F8MA` covers argument parsing, EOF/error/signal stop, single stop, grace force-kill, no signal after reap, exit-code propagation, group sweep only when leading, the opt-in stdin binding, and (`# HS2-DXVH3Q`) a group signal dispatched after the server close it caused still sweeping the group. `clients/web/src/playwright-config.test.ts # HS2-F6F8MA` pins the launcher command.
 - End to end: `clients/web/scripts/owned-server.e2e.test.mjs # HS2-F6F8MA` launches real processes the way Playwright does and proves runner `SIGKILL`/`SIGTERM` release the owned port and every owned descendant (same-group straggler, detached stdin-bound descendant), foreign same-command processes survive, `SIGTERM`-ignoring servers are force-killed, and a real Vite tree including esbuild exits; fixtures are identified by pid and start time.
 - Manual: none; reproduced before and after the fix with an interrupted `npx playwright test` stage (ticket HS2-F6F8MA notes).
+
+### Playwright runs stop the bridge home's bootstrap server (HS2-B0WP94)
+
+- Behavior: when a Playwright runner exits, `clients/web/playwright.config.ts` stops the detached bootstrap `hotsheet-server` the dev bridge started under the run's temporary `HOTSHEET_HOME` (`hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force`) before removing the run's directories; a run that opened no project runs nothing, and a failed stop warns and still removes every directory.
+- Unit: `clients/web/scripts/playwright-bridge-home.test.mjs # HS2-B0WP94` covers CLI resolution (override, repo root, debug build, Windows suffix), stop-before-remove ordering with the run home in the environment, the no-store case, and failed, unlaunchable, and silent-failure stops.
+- End to end: none automated; a runner-level leak check needs a nested Playwright run.
+- Manual: `npx playwright test tests/follow-up-link.spec.ts` left one orphaned `server-bootstrap.hs2` server before the fix and none in two runs after it (ticket HS2-B0WP94 notes).
 
 ### Generic MCP HTTP redirect confinement (HS2-0BTSX8)
 
