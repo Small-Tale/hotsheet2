@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer } from './real-ticket-server';
+import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
  * HS2-J89JC7: the Orchestration view through the real shell against a real server. The project is
@@ -114,7 +114,7 @@ async function openProject(page: Page, server: Server, name: string) {
   await page.route(`**${apiPath}/**`, async (route) => {
     const incoming = new URL(route.request().url());
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,
@@ -163,7 +163,7 @@ test('HS2-J89JC7 a project that is not an orchestration project has no Orchestra
     await expect(page.locator('[data-segment-value="workers"]').first()).toBeVisible();
     await expect(page.locator('[data-segment-value="orchestration"]')).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -194,7 +194,7 @@ test('HS2-J89JC7 an orchestration project with no projects added shows the first
     await empty.getByRole('button', { name: 'Choose Projects…' }).click();
     await expect(page.locator('[data-segment-value="settings"][aria-pressed="true"]').first()).toBeVisible();
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -294,7 +294,7 @@ test('HS2-J89JC7 the timeline reads newest to oldest, opens on current work, and
     await group.locator('[data-action="toggle-ticket-group"]').first().click();
     await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toHaveCount(0);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -425,7 +425,7 @@ test('HS2-DBQSWB Show Request opens that exact orchestrator request in Pending a
     await expect(page.locator('[data-component="permission-request-card"][data-targeted="true"]')).toBeInViewport();
     await capture(page, 'pending-1440-after-narrow', 'hs2-dbqswb');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -541,7 +541,7 @@ test('HS2-T4V1TX arrow keys move between cards within and across columns and sel
     await page.keyboard.press('ArrowLeft');
     await expectAt(plan.second.slug);
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -612,7 +612,7 @@ test('HS2-S3FKJ7 a target project’s List and Columns show the orchestration li
     await page.emulateMedia({ colorScheme: 'dark' });
     await capture(page, 'list-1440-dark', 'hs2-s3fkj7');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -634,7 +634,7 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
       const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
         incoming = new URL(route.request().url());
       try {
-        const response = await route.fetch({
+        const response = await proxyFetch(route, {
           url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
           headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
           timeout: 60_000,
@@ -696,7 +696,7 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
     const timeline = await send(server, 'GET', `/checkouts/${server.checkoutId}/orchestration/timeline`);
     expect(JSON.stringify(timeline)).not.toContain('"location":"remote"');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 

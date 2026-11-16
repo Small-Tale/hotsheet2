@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
+import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 
 /**
  * HS2-W27N1D: Project Type and Settings → Orchestration through the real shell, against a real
@@ -42,7 +42,7 @@ async function openProjects(page: Page) {
     const incoming = new URL(route.request().url()),
       path = incoming.pathname.replace(/^\/__hotsheet\/project-api\/[^/]+/, '');
     try {
-      const response = await route.fetch({
+      const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
         timeout: 60_000,
@@ -182,7 +182,7 @@ test('HS2-W27N1D Project Type adds the Orchestration category, which adds, detai
     const after = await server.request<{ project_type: string; active_projects: number }>(`${base}/project-type`);
     expect(after).toMatchObject({ project_type: 'software', active_projects: 1 });
     await expect(page.locator('[data-component="project-general-settings"]')).toContainText('1 project stays');
-    await server.stop();
+    await server.stop(page);
     stopped = true;
   } finally {
     if (!stopped) await server.stop();
@@ -290,7 +290,7 @@ test('HS2-W27N1D captures Project Type, Orchestration, the Add Project menu and 
       await capture(`orchestration-settings-1440-after-390-${scheme}`);
     }
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -390,7 +390,7 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
       });
     }
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
@@ -590,7 +590,7 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
     await limits.scrollIntoViewIfNeeded();
     await capture('limits-1440-dark');
   } finally {
-    await server.stop();
+    await server.stop(page);
   }
 });
 
