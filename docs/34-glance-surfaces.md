@@ -253,9 +253,12 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
 - **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
   state; a 30-second local display clock ages values only while Stats is shown and never requests.
   "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
-  from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile is
-  still omitted: the live state carries `ci` since HS2-M8HHEA ([32](32-notifier-plugins.md) §32.8.5), and
-  rendering it is HS2-E16ZEK. The Tokens 12h column draws
+  from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile
+  (HS2-E16ZEK) renders the newest run any store in scope reported in its live `ci` (HS2-M8HHEA,
+  [32](32-notifier-plugins.md) §32.8.5): a status word and glyph (Passed, Failed, Running, Queued,
+  Cancelled), the branch and short sha, the age of `finished_at_ms` (or how long it has run or waited)
+  from the local display clock, and a View run link when `run_url` is set. Only a failure tints it. With
+  no reported run it says No CI reported. It makes no request. The Tokens 12h column draws
   a `GlanceSparkline` of the snapshot's 12 hourly token buckets (HS2-TRZGT3), aligned to the display
   clock, with the current tokens/min beside it.
 - **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since

@@ -26396,6 +26396,23 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
     ),
     closed,
   ];
+  // Main CI (HS2-E16ZEK): a linked store reports a failed run; the closed project's newer passing run
+  // is outside every scope this page shows.
+  const ciNow = Date.now();
+  const ciRun = (status: 'failure' | 'success', sha: string, minutesAgo: number) => ({
+    status,
+    checkout: project.id,
+    branch: 'main',
+    sha,
+    run_url: `https://ci.example.test/runs/${sha}`,
+    workflow: 'CI',
+    started_at_ms: ciNow - (minutesAgo + 8) * 60_000,
+    finished_at_ms: ciNow - minutesAgo * 60_000,
+    reported_at_ms: ciNow - minutesAgo * 60_000,
+  });
+  const active = states.find((state) => state.state === 'active')!;
+  Object.assign(active, { ci: ciRun('failure', '9f8e7d6c5b4a', 12) });
+  Object.assign(closed, { ci: ciRun('success', '0123456789ab', 2) });
   const today = new Date().toISOString().slice(0, 10);
   await page.route('**/analytics', (route) =>
     route.fulfill({
@@ -26446,6 +26463,17 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
   await expect(rightNow.locator('[data-tile="updated"]')).toContainText('14');
   await expect(rightNow.locator('[data-tile="needs-you"]')).toHaveAttribute('data-attention', 'true');
   await expect(rightNow.locator('[data-tile="workers"]')).toContainText('3 / 4');
+  const ciTile = rightNow.locator('[data-tile="ci"]');
+  await expect(ciTile).toHaveAttribute('data-ci-status', 'failure');
+  await expect(ciTile).toHaveAttribute('data-attention', 'true');
+  await expect(ciTile).toContainText('Failed');
+  await expect(ciTile).toContainText(/main CI · 9f8e7d6 · 1[23]m ago/u);
+  await expect(ciTile.locator('[data-lucide="circle-x"]')).toBeVisible();
+  await expect(ciTile.getByRole('link', { name: 'View run' })).toHaveAttribute(
+    'href',
+    'https://ci.example.test/runs/9f8e7d6c5b4a',
+  );
+  await expect(ciTile).not.toContainText('0123456');
   await expect(rightNow.locator('[data-tile="completed"]')).toContainText(/9\s*Completed since/u);
   await expect(rightNow.locator('[data-tile="tokens"] svg.glance-gauge')).toHaveAccessibleName(/^Token rate: /u);
   const rows = rightNow.locator('[data-component="stats-projects-table"] tbody tr');

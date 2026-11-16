@@ -5,9 +5,22 @@ import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleSlash,
+  CircleX,
+  Clock,
+  ExternalLink,
+  type IconNode,
+  LoaderCircle,
+} from 'lucide';
 
-import type { RightNowRow, RightNowTiles } from '../stats-right-now';
+import type { LiveCiStatus } from '../api';
+import { formatDuration, type RightNowCi, type RightNowRow, type RightNowTiles } from '../stats-right-now';
 import { GlanceGauge } from './glance-gauge';
 import { formatGlanceValue } from './glance-gauge-geometry';
 import { GlanceSparkline } from './glance-sparkline';
@@ -27,6 +40,29 @@ export interface StatsRightNowProps {
 }
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/** The `main` CI tile's word and glyph per reported status (HS2-E16ZEK). */
+const CI_PRESENTATION: Record<LiveCiStatus, { word: string; icon: IconNode; name: string }> = {
+  success: { word: 'Passed', icon: CircleCheck, name: 'circle-check' },
+  failure: { word: 'Failed', icon: CircleX, name: 'circle-x' },
+  in_progress: { word: 'Running', icon: LoaderCircle, name: 'loader-circle' },
+  queued: { word: 'Queued', icon: Clock, name: 'clock' },
+  cancelled: { word: 'Cancelled', icon: CircleSlash, name: 'circle-slash' },
+  unavailable: { word: 'No CI reported', icon: CircleDashed, name: 'circle-dashed' },
+};
+
+/** "main CI · 1a2b3c4 · 12m ago", or "running 4m" while it has not finished. */
+function ciDetail(ci: RightNowCi): string {
+  const parts = [`${ci.branch} CI`];
+  if (ci.shortSha) parts.push(ci.shortSha);
+  if (ci.ageMs !== undefined)
+    parts.push(
+      ci.status === 'in_progress' || ci.status === 'queued'
+        ? `${ci.status === 'queued' ? 'waiting' : 'running'} ${formatDuration(ci.ageMs)}`
+        : `${formatDuration(ci.ageMs)} ago`,
+    );
+  return parts.join(' · ');
+}
 
 /** "4 PM" on the hour, else "4:30 PM". */
 function clockTime(ms: number): string {
@@ -128,6 +164,47 @@ export function StatsRightNow({ scope, stores, tiles, rows, completed, asOfMs }:
                   <Text variant="span" size="compact" tone="quiet" flush>
                     Workers live
                   </Text>
+                </List>
+              </ContentItem>
+              <ContentItem
+                appearance={tiles.ci.status === 'failure' ? 'danger' : 'surface'}
+                frame="framed"
+                rootAttributes={{
+                  'data-tile': 'ci',
+                  'data-ci-status': tiles.ci.status,
+                  'data-attention': String(tiles.ci.status === 'failure'),
+                }}
+              >
+                <List gap="2xs">
+                  <Row gap="xs" vAlign="middle">
+                    <LucideIcon
+                      icon={CI_PRESENTATION[tiles.ci.status].icon}
+                      name={CI_PRESENTATION[tiles.ci.status].name}
+                    />
+                    <Text
+                      variant="span"
+                      size={tiles.ci.status === 'unavailable' ? 'medium' : 'xlarge'}
+                      weight="strong"
+                      tone={tiles.ci.status === 'unavailable' ? 'quiet' : 'default'}
+                      flush
+                    >
+                      {CI_PRESENTATION[tiles.ci.status].word}
+                    </Text>
+                  </Row>
+                  <Text variant="span" size="compact" tone="quiet" flush>
+                    {tiles.ci.status === 'unavailable' ? 'main CI · no watcher has reported a run' : ciDetail(tiles.ci)}
+                  </Text>
+                  {tiles.ci.runUrl === undefined ? undefined : (
+                    <a
+                      class="stats-right-now__run-link"
+                      href={tiles.ci.runUrl}
+                      target="_blank"
+                      rel="noopener"
+                      data-ci-run-link=""
+                    >
+                      View run <LucideIcon size={14} icon={ExternalLink} name="external-link" />
+                    </a>
+                  )}
                 </List>
               </ContentItem>
             </Grid>
