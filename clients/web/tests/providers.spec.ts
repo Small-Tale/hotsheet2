@@ -15611,15 +15611,25 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await composer.getByRole('button', { name: 'Create ticket' }).click();
   const created = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]'),
     backlog = sidebar.locator('[data-ticket-drop-status="backlog"]');
+  // Creating a Not Started ticket from Backlog switches to All (HS2-F6937Q); drag only once that settles.
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="all"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await expect(created).toHaveAttribute('data-selected', 'true');
   await created.evaluate((node) => {
-    const transfer = new DataTransfer();
-    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
-    document
-      .querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!
-      .dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
   });
-  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  // A real drag re-fires dragover while it hovers. The sidebar renders that follow the create morph away
+  // the highlight that one synthetic dragover set, so keep hovering until it shows (HS2-1DQ190).
+  await expect(async () => {
+    await backlog.evaluate((node) => {
+      node.dispatchEvent(
+        new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+      );
+    });
+    await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true', { timeout: 250 });
+  }).toPass();
   await backlog.dispatchEvent('drop');
   await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
   await backlog.click();
