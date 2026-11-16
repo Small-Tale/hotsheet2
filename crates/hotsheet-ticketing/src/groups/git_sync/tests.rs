@@ -894,3 +894,24 @@ fn hs2_nm6e27_retry_policy_transitions() {
     assert!(!result.unwrap());
     assert_eq!(attempts, 2);
 }
+
+/// A push that lost the remote's ref lock to a concurrent push is a race worth retrying;
+/// a rejection, an offline remote, or a hook refusal is not (HS2-NM6E27).
+#[test]
+fn hs2_nm6e27_only_a_lost_ref_race_is_retried() {
+    for raced in [
+        "remote: error: cannot lock ref 'refs/heads/main': is at 1f04c46 but expected 541bde8",
+        "error: failed to update ref 'refs/remotes/origin/main'",
+        "remote: error: incorrect old value provided",
+    ] {
+        assert!(lost_ref_race(raced), "{raced}");
+    }
+    for other in [
+        "! refs/heads/main:refs/heads/main [rejected] (non-fast-forward)",
+        "fatal: unable to access 'https://example.invalid/': Could not resolve host",
+        "remote: pre-receive hook declined",
+        "",
+    ] {
+        assert!(!lost_ref_race(other), "{other}");
+    }
+}

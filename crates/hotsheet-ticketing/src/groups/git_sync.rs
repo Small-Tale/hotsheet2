@@ -453,6 +453,17 @@ const LOCK_RETRY_MAX_DELAY: Duration = Duration::from_millis(400);
 /// is running a short command; it is reported at once and never removed.
 const STALE_LOCK_AGE: Duration = Duration::from_secs(60);
 
+/// How many times a push that lost a ref race to a concurrent push is retried.
+const PUSH_RACE_RETRIES: usize = 6;
+
+/// Whether a failed push lost a ref update race to a concurrent push: the remote (or the
+/// local remote-tracking ref) moved between the push reading it and locking it.
+fn lost_ref_race(printed: &str) -> bool {
+    printed.contains("cannot lock ref")
+        || printed.contains("incorrect old value provided")
+        || printed.contains("failed to update ref")
+}
+
 /// Run `attempt` until it succeeds or fails for a reason other than a live Git lock.
 ///
 /// A failure that names no lock file (a hook refusal, a missing identity, ...) returns at
@@ -846,10 +857,32 @@ impl Checkout {
             );
         }
         let refspec = format!("{}:{}", upstream.branch, upstream.remote_ref);
-        let Some(output) = run(
-            &self.root,
-            &["push", "--quiet", "--porcelain", &upstream.remote, &refspec],
-        ) else {
+        let args = ["push", "--quiet", "--porcelain", &upstream.remote, &refspec];
+        // Another publish or sync pass in this checkout may push the same commits at the
+        // same moment; the slower push then loses the remote's ref lock. A retry reads the
+        // remote again and either pushes or finds the commits published (HS2-NM6E27).
+        let mut delay = LOCK_RETRY_DELAY;
+        let mut output = None;
+        for retry in 0..=PUSH_RACE_RETRIES {
+            if retry > 0 {
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(LOCK_RETRY_MAX_DELAY);
+            }
+            let Some(attempt) = run(&self.root, &args) else {
+                return RegistrySyncStatus::new(Failed, "could not run git push");
+            };
+            let raced = !attempt.status.success()
+                && lost_ref_race(&format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&attempt.stdout),
+                    String::from_utf8_lossy(&attempt.stderr)
+                ));
+            output = Some(attempt);
+            if !raced {
+                break;
+            }
+        }
+        let Some(output) = output else {
             return RegistrySyncStatus::new(Failed, "could not run git push");
         };
         if output.status.success() {
