@@ -2931,7 +2931,7 @@
       "id": "ticket-group",
       "name": "TicketGroup",
       "kind": "component",
-      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column.",
+      "purpose": "One collapsible ticket group on a lowered panel, in a list or a board column, whose header overflow button opens the group actions.",
       "useWhen": [
         "Hot Sheet needs one collapsible ticket group on a lowered panel, in a list or a board column."
       ],

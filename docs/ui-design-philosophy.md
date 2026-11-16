@@ -77,13 +77,10 @@ does not fork Kerf's guidance.
   `core:window:allow-set-theme` for this; a browser or a debug desktop build
   without that capability skips the call.
 
-- Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) carry two interim
-  decisions that wait on Kerf. A group's Rename and Ungroup actions open from a
-  context menu on the group header, because `ListHeader` cannot pair its toggle
-  with a trailing action (`KF-X2MRCT`); replace it with a visible overflow button
-  when that ships. The group title follows `SummaryRow`'s compaction width in an
-  app container query to stay aligned with the ticket type icons (`KF-J8GMA2`);
-  remove the query when Kerf offers a public alignment (HS2-8CDFKR, HS2-WZ3JGZ).
+- Ticket groups ([35-ticket-groups.md](35-ticket-groups.md)) follow Kerf's Lists
+  and selection defaults with no deviation: the group header's commands open from
+  a `ListHeader` `overflowAction` button and from its context menu, and the title
+  aligns with the ticket rows through `leadingEdge="summary-row"` (HS2-HKXSB1).
 
 ## Hot Sheet ticket lessons
 

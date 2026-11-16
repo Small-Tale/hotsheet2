@@ -84,8 +84,8 @@ in one write and one commit per store. A rerun finds nothing and changes nothing
 ## 35.3 Rendering (HS2-WZ3JGZ, HS2-HV8S4Y)
 
 One shared `TicketGroup` component renders a group in both views: a Kerf
-`SunkenPanel` holding a `ListHeader` disclosure (size `m`, wrapping, with a count)
-and the group's tickets. Groups are keyed by id (HS2-9KZSD4), so two groups with one name
+`SunkenPanel` holding a `ListHeader` disclosure (size `m`, wrapping, with a count
+and a trailing overflow button) and the group's tickets. Groups are keyed by id (HS2-9KZSD4), so two groups with one name
 render separately. The title is the registry name, which keeps the user's casing, a legacy
 group's own name, or the `Group <id>` placeholder. The client reads names from `GET
 /checkouts/{reference}/groups` when the project loads, after each group operation, and
@@ -101,9 +101,10 @@ once more when loaded tickets name an id it has no name for; it never polls.
   group's first ticket in that column sorts, with a per-column count. One group can
   therefore appear in several columns at once.
 - **Title alignment.** The group title starts on the left edge of the ticket type
-  icons below it, in both views. The app sets only the public
-  `--kui-layout-inline-margin` token on its own wrapper; a browser test measures the
-  alignment.
+  icons below it, in both views and at every width. The header uses Kerf's
+  `ListHeader` `leadingEdge="summary-row"`, which compacts with the ticket rows at
+  their own width; the app sets no inset token and has no container query for it
+  (HS2-HKXSB1). A browser test measures the alignment from 1440px down to 384px.
 - **Collapse.** Collapsing a group hides its tickets and keeps its header and count
   in place. The choice is a per-viewer preference for one project, view, and group,
   stored in the browser under `hotsheet.ticket-groups.collapsed` and keyed by group
@@ -174,8 +175,14 @@ once more when loaded tickets name an id it has no name for; it never polls.
 
 ## 35.5 Managing a group (HS2-8CDFKR)
 
-Right-clicking a group header, or pressing the keyboard's context-menu key on it,
-opens a menu with **Select All in Group**, **Rename Group…**, and **Ungroup**.
+Each group header has a trailing **Group Actions** overflow button (Lucide
+`ellipsis`, named "_name_ Group Actions") that opens the group menu under itself
+(HS2-HKXSB1). It is its own keyboard stop after the header's toggle. The header's
+label and arrow collapse or expand the group; the overflow button never does, so it
+also opens the menu on a collapsed group without expanding it. Closing a menu it
+opened returns focus to the button unless a command moved focus elsewhere. Right-clicking a
+group header, or pressing the keyboard's context-menu key on it, opens the same
+menu. The menu offers **Select All in Group**, **Rename Group…**, and **Ungroup**.
 
 **Select All in Group** (HS2-EYEGDQ, Lucide `check-check`) selects the tickets that
 this one container shows, in drawn order: the whole group in the list view, or only the
@@ -189,10 +196,10 @@ placeholder group. A group flagged as a duplicate also offers **Merge Duplicate 
 actions go through the server so they also reach members that the current view has not
 loaded. Migration has no graphical entry point; it is headless (§35.2).
 
-A visible overflow button on the header is preferred, but Kerf's `ListHeader`
-cannot yet pair its toggle with a separate trailing action. That gap is filed
-upstream as `KF-X2MRCT`; the context menu is the interim entry point and is removed
-in favor of the overflow button when a Kerf release ships it.
+The overflow button is Kerf's `ListHeader` `overflowAction` (shipped as
+`KF-X2MRCT`), following Kerf's Lists and selection convention: a collapsible
+section's own commands open from one trailing overflow button, and the row's
+context menu exposes the same commands.
 
 ## 35.6 Search (HS2-44W3TP)
 

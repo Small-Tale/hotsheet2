@@ -1407,11 +1407,12 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 - `TicketGroup` — **demo built**: one collapsible ticket group for the list and for each board
   column (HS2-WZ3JGZ, HS2-HV8S4Y). A Kerf `SunkenPanel` holds a `ListHeader` disclosure (size
   `m`, wrapping, with a count) and the group's tickets; the panel's `outlined` state marks a
-  drag target. The app-owned wrapper sets only `--kui-layout-inline-margin` so the title starts
-  on the ticket type icons' left edge, following the 24rem width at which `SummaryRow` compacts
-  (`KF-J8GMA2` asks Kerf for a public alignment). The `ticket-group` demo has name, collapsed,
-  and drop-target settings with Reset, and a right-click on its header opens the production
-  `TicketGroupContextMenu` (Rename Group…, Ungroup). Behavior: [35-ticket-groups.md](35-ticket-groups.md).
+  drag target. The header uses `leadingEdge="summary-row"` so the title starts on the ticket type
+  icons' left edge at every width, and its `overflowAction` button ("_name_ Group Actions") opens the
+  production `TicketGroupContextMenu` without toggling the group (HS2-HKXSB1). The `ticket-group`
+  demo has name, collapsed, duplicate-name, and drop-target settings with Reset; the overflow
+  button or a right-click on its header opens the menu (Select All in Group, Rename Group…,
+  Ungroup, and Merge Duplicate Groups for a duplicate name). Behavior: [35-ticket-groups.md](35-ticket-groups.md).
 - `TicketGroupDialog` — **demo built**: the New Group and Rename Group dialog (HS2-TX17CM,
   HS2-8CDFKR) on Kerf `DialogSurface` with a required Group Name `TextField`, live inline
   duplicate-name validation, and busy and failed-write states. The `ticket-group-dialog` demo's

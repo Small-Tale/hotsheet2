@@ -220,7 +220,8 @@ test('HS2-WZ3JGZ renders list groups as segments, aligned and collapsible', asyn
 
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
-      for (const width of [1440, 900, 390, 1440]) {
+      // Kerf's summary-row leading edge keeps the title on the icons through 384px (HS2-HKXSB1).
+      for (const width of [1440, 900, 768, 390, 384, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await settle(page);
         await expect(boardGroup).toBeVisible();
@@ -449,6 +450,9 @@ async function drag(page: Page, source: Locator, target: Locator, over?: () => P
   await page.mouse.move(to.x + to.width / 2, to.y + Math.min(to.height / 2, 24), { steps: 12 });
   // A real pointer keeps reporting dragover while it rests on the target.
   await page.mouse.move(to.x + to.width / 2 + 2, to.y + Math.min(to.height / 2, 24) + 1, { steps: 2 });
+  // One more resting move, so the element finally under the pointer receives a dragover even when
+  // the last step crossed onto it, such as a group header toggle's padding (HS2-HKXSB1).
+  await page.mouse.move(to.x + to.width / 2 + 3, to.y + Math.min(to.height / 2, 24) + 1);
   await over?.();
   await page.mouse.up();
 }
@@ -667,6 +671,87 @@ test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column fr
     await notStarted.locator('[data-component="list-header"]').click({ button: 'right' });
     await menu.getByRole('menuitem', { name: 'Select All in Group' }).click();
     await expect.poll(() => selectedIn(columns)).toEqual(await slugsIn(notStarted));
+  }, page);
+});
+
+test('HS2-HKXSB1 opens the group menu from the header overflow button without toggling, in the list and columns', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await withServer(async (server) => {
+    await open(page, server);
+    const menu = page.locator('[data-ticket-group-menu="true"]'),
+      selectedIn = (scope: Locator) =>
+        scope
+          .locator('[data-row-selected="true"]')
+          .evaluateAll((rows) =>
+            rows.map((row) => row.querySelector<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug),
+          );
+    /** Exercise one group container's overflow button, keyboard route, and context menu. */
+    const exercise = async (container: Locator, view: Locator, label: string) => {
+      const toggle = container.locator('[data-action="toggle-ticket-group"]'),
+        overflow = container.getByRole('button', { name: `${BOARD} Group Actions` }),
+        members = await slugsIn(container);
+      await expect(overflow).toHaveAttribute('data-action', 'open-ticket-group-menu');
+      await expect(overflow).toHaveAttribute('aria-haspopup', 'menu');
+      // One trailing button, outside the disclosure toggle and after it.
+      expect(await overflow.evaluate((node) => node.closest('[data-action="toggle-ticket-group"]'))).toBeNull();
+      const [toggleBox, overflowBox] = [(await toggle.boundingBox())!, (await overflow.boundingBox())!];
+      expect(overflowBox.x, `${label} overflow trails the toggle`).toBeGreaterThanOrEqual(
+        toggleBox.x + toggleBox.width - 1,
+      );
+
+      // A pointer click opens the group menu and leaves the group expanded.
+      await overflow.click();
+      await expect(menu.getByRole('menuitem', { name: 'Rename Group…' })).toBeVisible();
+      await expect(menu.getByRole('menuitem', { name: 'Select All in Group' })).toBeInViewport();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(container.locator('[data-ticket-slug]')).toHaveCount(members.length);
+      await capture(page, `group-overflow-menu-${label}-light-1440`);
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+      // The keyboard reaches the button as its own stop after the toggle, and opens the same menu.
+      await toggle.focus();
+      await page.keyboard.press('Tab');
+      await expect(overflow).toBeFocused();
+      await page.keyboard.press('Enter');
+      const selectAll = menu.getByRole('menuitem', { name: 'Select All in Group' });
+      await expect(selectAll).toBeVisible();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      // Escape closes it and gives focus back to the button, which opens it again.
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect(overflow).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(selectAll).toBeVisible();
+      // Its commands act on the container it was opened from.
+      await selectAll.click();
+      await expect(menu).toHaveCount(0);
+      await expect.poll(() => selectedIn(view)).toEqual(members);
+
+      // The context menu remains a route to the same commands.
+      await container.locator('[data-component="list-header"]').click({ button: 'right' });
+      await expect(menu.getByRole('menuitem', { name: 'Ungroup' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+
+      // A collapsed group keeps its overflow button, and opening it does not expand the group.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await overflow.click();
+      await expect(menu.getByRole('menuitem', { name: 'Rename Group…' })).toBeVisible();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await page.keyboard.press('Escape');
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    };
+
+    await exercise(group(list(page), BOARD), list(page), 'list');
+    await page.getByLabel('Columns View').click();
+    await expect(group(board(page), BOARD, 'started').locator('[data-ticket-slug]')).toHaveCount(2);
+    await exercise(group(board(page), BOARD, 'started'), board(page), 'column');
   }, page);
 });
 

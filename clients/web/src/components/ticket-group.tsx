@@ -1,8 +1,10 @@
 import './ticket-group.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
+import { Ellipsis } from 'lucide';
 
 import { TICKET_GROUP_ACTIONS } from '../interaction-attrs/ticket-groups';
 import { ticketGroupDomId, ticketGroupKey } from '../ticket-groups';
@@ -28,6 +30,9 @@ export interface TicketGroupProps {
 /**
  * One ticket group in a list or a board column (HS2-WZ3JGZ, HS2-HV8S4Y): a lowered Kerf panel
  * holding a disclosure header and the group's tickets. The same group renders once per column.
+ * The header's label and arrow toggle the group; its trailing overflow button opens the group
+ * header menu and never toggles, and its label starts on the ticket rows' leading-content edge
+ * (HS2-HKXSB1).
  */
 export function TicketGroup({
   group,
@@ -55,27 +60,30 @@ export function TicketGroup({
       role="group"
       aria-label={`${name} group`}
     >
-      <div class="ticket-group__frame">
-        <SunkenPanel outlined={dropTarget}>
-          <ListHeader
-            label={name}
-            size="m"
-            wrap
-            toggle
-            action={TICKET_GROUP_ACTIONS.toggleTicketGroup.value}
-            expanded={!collapsed}
-            count={count}
-            countLabel={`${count} ticket${count === 1 ? '' : 's'}`}
-            controls={region}
-            triggerAttributes={{ 'data-ticket-group': group }}
-          />
-          {!collapsed && (
-            <div id={region} class="ticket-group__tickets">
-              {children}
-            </div>
-          )}
-        </SunkenPanel>
-      </div>
+      <SunkenPanel outlined={dropTarget}>
+        <ListHeader
+          label={name}
+          size="m"
+          wrap
+          leadingEdge="summary-row"
+          toggle
+          action={TICKET_GROUP_ACTIONS.toggleTicketGroup.value}
+          expanded={!collapsed}
+          count={count}
+          countLabel={`${count} ticket${count === 1 ? '' : 's'}`}
+          controls={region}
+          triggerAttributes={{ 'data-ticket-group': group }}
+          overflowAction={TICKET_GROUP_ACTIONS.openTicketGroupMenu.value}
+          overflowLabel={`${name} Group Actions`}
+          overflowIcon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
+          overflowTriggerAttributes={{ 'data-ticket-group': group, 'aria-haspopup': 'menu' }}
+        />
+        {!collapsed && (
+          <div id={region} class="ticket-group__tickets">
+            {children}
+          </div>
+        )}
+      </SunkenPanel>
     </div>
   );
 }

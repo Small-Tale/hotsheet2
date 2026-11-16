@@ -35,7 +35,14 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
     dismissDialog: vi.fn(),
   };
   vi.stubGlobal('window', { innerWidth: 1200, innerHeight: 800 });
-  wireTicketGroups({} as HTMLElement, bindings);
+  const listeners: ((event: Event) => void)[] = [],
+    buttons: Element[] = [],
+    root = {
+      addEventListener: (_type: string, listener: (event: Event) => void) => listeners.push(listener),
+      removeEventListener: vi.fn(),
+      querySelectorAll: () => buttons,
+    };
+  const dispose = wireTicketGroups(root as unknown as HTMLElement, bindings);
   const groupElement = { dataset: { ticketGroup: 'Board', ticketGroupScope: 'started' } };
   const inside = (extra: Record<string, unknown> = {}) =>
     ({ dataset: {}, closest: () => groupElement, ...extra }) as unknown as Element;
@@ -62,6 +69,94 @@ describe('wireTicketGroups (HS2-WZ3JGZ, HS2-TX17CM, HS2-8CDFKR)', () => {
     contextmenu(outside, { dataset: {}, closest: () => null } as unknown as Element);
     expect(prevented(outside)).not.toHaveBeenCalled();
     expect(bindings.openMenu).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the group menu under the header overflow button without toggling (HS2-HKXSB1)', () => {
+    const overflow = handler('click', '[data-action="open-ticket-group-menu"]'),
+      before = bindings.openMenu.mock.calls.length,
+      toggles = bindings.toggle.mock.calls.length,
+      click = fake(),
+      button = (rect: Record<string, number>) =>
+        ({
+          dataset: { ticketGroup: 'Board' },
+          closest: () => groupElement,
+          getBoundingClientRect: () => rect,
+        }) as unknown as Element;
+    overflow(click, button({ right: 900, bottom: 120 }));
+    expect((click as unknown as { stopPropagation: ReturnType<typeof vi.fn> }).stopPropagation).toHaveBeenCalled();
+    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 668, 120, 'started');
+    // A button near the leading edge or the bottom keeps the menu on screen.
+    overflow(fake(), button({ right: 100, bottom: 790 }));
+    expect(bindings.openMenu).toHaveBeenLastCalledWith('Board', 8, 608, 'started');
+    overflow(fake(), { dataset: {}, closest: () => null } as unknown as Element);
+    expect(bindings.openMenu.mock.calls.length - before).toBe(2);
+    expect(bindings.toggle.mock.calls.length).toBe(toggles);
+  });
+
+  it('returns focus to the overflow button that opened the menu when it closes (HS2-HKXSB1)', () => {
+    const body = { id: 'body' },
+      doc = { body, activeElement: body as unknown },
+      focus = vi.fn(),
+      button = {
+        dataset: { ticketGroup: 'Board' },
+        closest: () => groupElement,
+        getBoundingClientRect: () => ({ right: 900, bottom: 120 }),
+        focus,
+      } as unknown as Element,
+      other = { dataset: { ticketGroup: 'Search' }, closest: () => null, focus: vi.fn() } as unknown as Element;
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('requestAnimationFrame', (run: () => void) => {
+      run();
+    });
+    buttons.splice(0, buttons.length, other, button);
+    const menu = {
+        matches: (selector: string) => selector === '[data-ticket-group-menu="true"]',
+        contains: () => false,
+      },
+      panel = {
+        matches: () => true,
+        parentElement: { ...menu, matches: (s: string) => s === '.kui-popup-menu' || menu.matches(s) },
+      },
+      closed = (target: unknown = panel) => ({ type: 'toggle', newState: 'closed', target }) as unknown as Event,
+      overflow = handler('click', '[data-action="open-ticket-group-menu"]'),
+      close = (event: Event) => {
+        for (const listener of listeners) listener(event);
+      };
+    // Settle the opening an earlier test left; then a group menu closing with no overflow opening,
+    // or another popup closing, does nothing.
+    close(closed());
+    focus.mockClear();
+    close(closed());
+    close(closed({ matches: () => false, parentElement: null }));
+    expect(focus).not.toHaveBeenCalled();
+    overflow(fake(), button);
+    close(closed());
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect((other as unknown as { focus: ReturnType<typeof vi.fn> }).focus).not.toHaveBeenCalled();
+    // Only once per opening.
+    close(closed());
+    expect(focus).toHaveBeenCalledTimes(1);
+    // A command that moved focus elsewhere, such as the rename dialog, keeps it.
+    overflow(fake(), button);
+    doc.activeElement = { id: 'dialog-field' };
+    close(closed());
+    expect(focus).toHaveBeenCalledTimes(1);
+    // A menu opened from the context menu leaves focus where the browser puts it.
+    doc.activeElement = body;
+    overflow(fake(), button);
+    handler('contextmenu', '[data-component="list-header"]')(
+      fake({ clientX: 5, clientY: 5 }),
+      inside({ getBoundingClientRect: () => ({ left: 0, bottom: 0 }) }),
+    );
+    close(closed());
+    expect(focus).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+    vi.stubGlobal('window', { innerWidth: 1200, innerHeight: 800 });
+  });
+
+  it('removes its focus listener when disposed', () => {
+    dispose();
+    expect(root.removeEventListener).toHaveBeenCalledWith('toggle', expect.any(Function), true);
   });
 
   it('routes the menu’s rename and ungroup items with their group', () => {
