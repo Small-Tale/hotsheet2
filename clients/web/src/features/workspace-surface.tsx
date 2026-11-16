@@ -16,6 +16,7 @@ import { type Project } from '../interactions/types';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { BOARD_COLUMN_PAGE_SIZE } from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
+import { columnTicketDropKey, isTicketDropTarget } from '../ticket-drop-target';
 import { type TicketScope, type TicketView } from '../ticket-views';
 import type { WorkerCoverageSource, WorkerSourceError, WorkerTicketDetails, WorkerView } from '../worker-view-model';
 import type { TicketGroupsController } from './ticket-groups';
@@ -243,6 +244,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
           tickets: group.tickets.slice(0, Math.min(renderedTicketLimit.value, perColumn ? visible : Infinity)).map(row),
           continuation,
           ...ticketGroups.collectionProps(group.id),
+          dropTarget: isTicketDropTarget(columnTicketDropKey(group.id)),
         };
       });
       // Phones page through one snapped column at a time instead of shrinking the grid (HS2-ZYJMDP).

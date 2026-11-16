@@ -66,7 +66,10 @@ or Web Awesome editable control, or open dialog always retains native Cmd/Ctrl+C
 Dragging an unselected ticket moves only it, while
 dragging a selected ticket moves the selection; Queue, Backlog, Archive, and (when shown)
 Trash sidebar destinations apply the corresponding status — Trash soft-deletes — and
-visibly highlight during dragover. A newly created ticket is inserted into both the active
+visibly highlight during dragover. A sidebar view, board column, or new-ticket target
+renders that highlight from the drag's current target, so a render mid-drag, such as the
+sidebar after a view switch, keeps it; it clears when the drag leaves the target, drops, or
+ends (HS2-G8EK08). A newly created ticket is inserted into both the active
 collection and its project cache before it is selected, so that first selected presentation
 can be dragged immediately without a deselect/reselect workaround (HS2-6E9RRS).
 Right-clicking either a list or board TicketRow preserves an existing multi-selection

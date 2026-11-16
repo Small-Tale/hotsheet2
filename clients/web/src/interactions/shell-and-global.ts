@@ -39,6 +39,7 @@ import { terminalClearKeyTarget } from '../terminal-clear';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
+import { clearTicketDropTarget, markTicketDropTarget } from '../ticket-drop-target';
 import { ticketGroupDropTarget } from '../ticket-group-state';
 import { ticketGroupKey, ticketGroupValue } from '../ticket-groups';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
@@ -421,35 +422,25 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   }
   window.addEventListener('pointerup', finishAppRegionResize, { signal: lifetime.signal });
   window.addEventListener('pointercancel', finishAppRegionResize, { signal: lifetime.signal });
-  // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
-  // (project tabs, the composer) keep the app attribute only.
-  // A project tab renders its state from `projectTabDropTarget` through Kerf's `dropTarget` prop: the
-  // shell's next render morphs away attributes set on the tab's node mid-drag (HS2-6KNWYT).
+  // Every ticket drop target renders its highlight from state, so the shell's next render cannot morph
+  // it away mid-drag: project tabs from `projectTabDropTarget` through Kerf's `dropTarget` prop
+  // (HS2-6KNWYT), and sidebar views, board columns, and the new-ticket targets from `ticketDropTarget`,
+  // keyed by their `data-ticket-drop-key` (HS2-G8EK08).
   function markDragTarget(target: HTMLElement) {
-    const tabProject = data(target).ticketDropProject;
-    if (tabProject) {
-      markProjectTabDropTarget(tabProject, 'ticket');
-      return;
-    }
-    target.dataset.draggingTicket = 'true';
-    if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
+    const { ticketDropProject: tabProject, ticketDropKey: key } = data(target);
+    if (tabProject) markProjectTabDropTarget(tabProject, 'ticket');
+    else if (key) markTicketDropTarget(key);
   }
   function clearDragTarget(target: HTMLElement) {
-    const tabProject = data(target).ticketDropProject;
-    if (tabProject) {
-      clearProjectTabDropTarget(tabProject, 'ticket');
-      return;
-    }
-    delete target.dataset.draggingTicket;
-    if (target.dataset.state === 'drag-target') delete target.dataset.state;
+    const { ticketDropProject: tabProject, ticketDropKey: key } = data(target);
+    if (tabProject) clearProjectTabDropTarget(tabProject, 'ticket');
+    else if (key) clearTicketDropTarget(key);
   }
   function clearTicketDrag() {
     dependencies.draggedTickets = undefined;
     ticketGroupDropTarget.value = undefined;
     clearProjectTabDropTarget(undefined, 'ticket');
-    document.querySelectorAll<HTMLElement>('[data-dragging-ticket="true"]').forEach((target) => {
-      clearDragTarget(target);
-    });
+    clearTicketDropTarget();
   }
   lifetime.add(
     delegate(document.body, 'dragstart', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {

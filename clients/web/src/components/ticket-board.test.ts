@@ -155,6 +155,15 @@ describe('TicketBoard', () => {
     expect(notStarted).toContain('ticket-page-more');
   });
 
+  it('renders the column drop highlight from its prop (HS2-G8EK08)', () => {
+    const idle = String(TicketBoardColumn({ id: 'started', title: 'Started', tickets: [] }));
+    expect(idle).toContain('data-ticket-drop-key="column:started"');
+    expect(idle).not.toContain('data-dragging-ticket');
+    expect(String(TicketBoardColumn({ id: 'started', title: 'Started', tickets: [], dropTarget: true }))).toContain(
+      'data-dragging-ticket="true"',
+    );
+  });
+
   it('maps the Not Started column id to the wire status used by ticket drops', () => {
     expect(String(TicketBoardColumn({ id: 'not-started', title: 'Not Started', tickets: [] }))).toContain(
       'data-ticket-drop-status="not_started"',

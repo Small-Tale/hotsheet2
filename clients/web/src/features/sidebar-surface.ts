@@ -27,6 +27,7 @@ import {
 } from '../project-drive';
 import { hostCallouts, projectLiveSummary } from '../project-live-summary';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
+import { isTicketDropTarget, viewTicketDropKey } from '../ticket-drop-target';
 import { customTicketViewId, type TicketScope, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
 
@@ -260,6 +261,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         repositoryError: Boolean(repositoryError.value),
         views,
         selectedViewId: statsSelected ? '' : searchScope(),
+        dropTargetViewId: views.find((view) => isTicketDropTarget(viewTicketDropKey(view.id)))?.id,
         statsSelected,
         commandGroupLabel: 'Project commands',
         commands: commandDefinitions.value.map((command) => {

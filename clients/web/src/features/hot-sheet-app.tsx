@@ -77,6 +77,7 @@ import { type ProjectTicketSources, type TicketSourceChoice, writableTicketSourc
 import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
+import { isTicketDropTarget, NEW_TICKET_COMPOSER_DROP_KEY } from '../ticket-drop-target';
 import { ticketGroupDialog } from '../ticket-group-state';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
@@ -621,6 +622,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           busy={composerScreening.value}
           recoveryBlocked={composerRecovery.blocked}
           submitting={composerSubmitting.value}
+          dropTarget={isTicketDropTarget(NEW_TICKET_COMPOSER_DROP_KEY)}
         />
         {target.slug && (
           <NotWorkingSurface

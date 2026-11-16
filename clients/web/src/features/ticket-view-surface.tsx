@@ -7,6 +7,7 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type TicketPriority } from '../components/ticket-row';
 import { type TicketViewActionSpec } from '../components/workspace-header';
 import { canBulkUpdate, ticketGroupDisabledReason, ticketGroupMenuModel } from '../ticket-bulk-operations';
+import { isTicketDropTarget, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { ticketGroupKey, type TicketGroupOption, ticketGroupValue } from '../ticket-groups';
 import {
   ALL_TICKETS_SCOPE,
@@ -81,7 +82,13 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
     return view === 'trash'
       ? { kind: 'empty-trash' }
       : canCreate
-        ? { kind: 'new-ticket', attachmentsEnabled: canStageNewTicketAttachments(), label, size }
+        ? {
+            kind: 'new-ticket',
+            attachmentsEnabled: canStageNewTicketAttachments(),
+            label,
+            size,
+            dropTarget: isTicketDropTarget(NEW_TICKET_LAUNCHER_DROP_KEY),
+          }
         : undefined;
   }
   const withAutomaticBusy = (model: ReturnType<typeof ticketGroupMenuModel>) =>

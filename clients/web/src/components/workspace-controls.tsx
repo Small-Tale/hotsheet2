@@ -160,7 +160,14 @@ export function WorkspaceIdentity({
  * data so each placement renders it as literal zone JSX that Kerf's composition rule can check
  * (HS2-PNCDAE). */
 export type TicketViewActionSpec =
-  | { kind: 'new-ticket'; attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' }
+  | {
+      kind: 'new-ticket';
+      attachmentsEnabled?: boolean;
+      label?: string;
+      size?: 'default' | 'compact';
+      /** A dragged ticket is over the launcher (HS2-G8EK08). */
+      dropTarget?: boolean;
+    }
   | { kind: 'empty-trash' }
   /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
   | { kind: 'add-data-source' }
@@ -192,7 +199,12 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
       return <EmptyTrashAction />;
     case 'new-ticket':
       return (
-        <QuickTicketLauncher attachmentsEnabled={action.attachmentsEnabled} label={action.label} size={action.size} />
+        <QuickTicketLauncher
+          attachmentsEnabled={action.attachmentsEnabled}
+          label={action.label}
+          size={action.size}
+          dropTarget={action.dropTarget}
+        />
       );
     case 'add-data-source':
       return (

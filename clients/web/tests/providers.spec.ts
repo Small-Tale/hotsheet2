@@ -15667,16 +15667,14 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await created.evaluate((node) => {
     node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
   });
-  // A real drag re-fires dragover while it hovers. The sidebar renders that follow the create morph away
-  // the highlight that one synthetic dragover set, so keep hovering until it shows (HS2-1DQ190).
-  await expect(async () => {
-    await backlog.evaluate((node) => {
-      node.dispatchEvent(
-        new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
-      );
-    });
-    await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true', { timeout: 250 });
-  }).toPass();
+  // One dragover is enough: the highlight renders from state, so the sidebar renders that follow the
+  // create keep it (HS2-G8EK08; HS2-1DQ190 had to keep re-hovering while it was a node attribute).
+  await backlog.evaluate((node) => {
+    node.dispatchEvent(
+      new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+    );
+  });
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
   await backlog.dispatchEvent('drop');
   await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
   await backlog.click();
@@ -33651,6 +33649,62 @@ test('drags single and selected tickets across columns, views, and the duplicate
   await expect.poll(() => mutations.filter((value) => value.endsWith('/tickets')).length).toBe(createsBefore + 2);
   await expect(page.locator('.app-toast')).toContainText('2 tickets copied to demo.');
   await page.screenshot({ path: 'target/visual-captures/hs2-w2743r-ticket-drag-targets.png', fullPage: true });
+});
+
+test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const patches = await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const sidebar = page.locator('[data-component="view-navigation"]'),
+    backlog = sidebar.locator('[data-ticket-drop-status="backlog"]'),
+    archive = sidebar.locator('[data-ticket-drop-status="archive"]'),
+    ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    hover = (target: Locator) =>
+      target.evaluate((node) => {
+        node.dispatchEvent(
+          new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }),
+        );
+      });
+  await ticket.click();
+  await ticket.evaluate((node) => {
+    node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
+  });
+  await hover(backlog);
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).toHaveAttribute('data-state', 'drag-target');
+  // Switching the view re-renders every sidebar row; the highlight comes from state, so it survives
+  // without another dragover (the old node attribute was morphed away until the next one).
+  await sidebar.locator('[data-action="select-view"][data-item-id="archive"]').click();
+  await expect(sidebar.locator('[data-action="select-view"][data-item-id="archive"]')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).toHaveAttribute('data-state', 'drag-target');
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-g8ek08-sidebar-drop-after-render-1280.png' });
+  // Moving to another view moves the highlight; leaving the sidebar clears it.
+  await hover(archive);
+  await expect(archive).toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).not.toHaveAttribute('data-dragging-ticket', 'true');
+  await expect(backlog).not.toHaveAttribute('data-state', 'drag-target');
+  await archive.evaluate((node) => {
+    node.dispatchEvent(new DragEvent('dragleave', { bubbles: true, clientX: 0, clientY: 0 }));
+  });
+  await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
+  // Back in All, where the dragged ticket is listed, hovering again and dropping clears it as well.
+  await sidebar.locator('[data-action="select-view"][data-item-id="all"]').click();
+  await expect(ticket).toBeVisible();
+  await hover(backlog);
+  await expect(backlog).toHaveAttribute('data-dragging-ticket', 'true');
+  await backlog.dispatchEvent('drop');
+  await expect.poll(() => patches.filter((patch) => patch.status === 'backlog').length).toBe(1);
+  await expect(sidebar.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+  await expect(sidebar.locator('[data-state="drag-target"]')).toHaveCount(0);
 });
 
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {

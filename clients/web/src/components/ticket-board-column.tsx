@@ -5,6 +5,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { columnTicketDropKey } from '../ticket-drop-target';
 import { ticketGroupSegments } from '../ticket-groups';
 import { TicketGroup } from './ticket-group';
 import { TicketPageMore } from './ticket-page-more';
@@ -22,6 +23,8 @@ export interface TicketBoardColumnProps {
   collapsedGroups?: readonly string[];
   /** Key of the group in this column that a dragged ticket is over (HS2-PRXD39). */
   dropGroup?: string;
+  /** Whether a dragged ticket is over this column itself (HS2-G8EK08), rather than over one of its groups. */
+  dropTarget?: boolean;
 }
 
 export function TicketBoardColumn({
@@ -34,6 +37,7 @@ export function TicketBoardColumn({
   continuation,
   collapsedGroups = [],
   dropGroup,
+  dropTarget = false,
 }: TicketBoardColumnProps) {
   const dropStatus = id === 'not-started' ? 'not_started' : id;
   return (
@@ -43,6 +47,8 @@ export function TicketBoardColumn({
       data-component="ticket-board-column"
       data-column-id={id}
       data-ticket-drop-status={dropStatus}
+      data-ticket-drop-key={columnTicketDropKey(id)}
+      data-dragging-ticket={dropTarget ? 'true' : undefined}
       aria-label={`${title} Column`}
     >
       <header>
