@@ -203,7 +203,8 @@ export interface HotSheetShellDependencies {
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   /** The project strip's tabs overflow, so its New ticket launcher shows the compact "Ticket…" label
-   * (HS2-RNR35H); `projectTabActionFit` decides it from Kerf's fit report. */
+   * (HS2-RNR35H) and Settings → Commands its compact "Group…"/"Command…" pills (HS2-MQPY61);
+   * `projectTabActionFit` decides it from Kerf's fit report. */
   projectTabActionCompact: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
   guidanceSearchModel: SearchFieldModel;
@@ -645,7 +646,10 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             ? undefined
             : projectTabActionCompact.value && headingAction?.kind === 'new-ticket'
               ? ticketViewActionSpec(selectedView.value, canCreate, 'Ticket…', 'compact')
-              : headingAction
+              : // Settings → Commands compacts its two add pills the same way before the tabs shrink (HS2-MQPY61).
+                projectTabActionCompact.value && headingAction?.kind === 'command-settings'
+                ? { ...headingAction, size: 'compact' }
+                : headingAction
         }
         banner={
           <>

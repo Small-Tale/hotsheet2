@@ -557,7 +557,9 @@ same explanation (HS2-CGXGWY).
   project with its attention badge at 1024px with the inspector open), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
+  boundary (HS2-RNR35H). Settings → Commands' `Add group…` and `Add command…` pills shorten to their
+  compact `Group…` and `Command…` form under the same rule, so at medium widths such as 1100px with
+  both rails open the project tab keeps its label (HS2-MQPY61). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
   Kerf's public `wireTabBars` `onFitChange` report, never from TabBar's private parts or the app's own
   measurement (HS2-A2CSNB, HS2-YATB6S). The Workspace Grid and Cross-project Stats strips keep it
   beside the last project tab too, never on the far edge (HS2-YFKQT1). Workspace Grid and Cross-project

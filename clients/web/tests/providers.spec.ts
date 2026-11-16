@@ -32332,6 +32332,52 @@ test('HS2-RNR35H keeps the project tab and New ticket label in the narrow board 
   await page.screenshot({ path: 'target/visual-captures/hs2-rnr35h-board-800.png' });
 });
 
+test('HS2-MQPY61 compacts the Commands add pills before the project tab clips at medium width', async ({ page }) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  const strip = page.locator('[data-component="project-tab-bar"]'),
+    tabs = strip.locator('.kui-tab-bar__tabs'),
+    tab = strip.locator('[data-tab-kind="project"]'),
+    group = strip.locator('[data-action="add-command-group"]'),
+    command = strip.locator('[data-action="add-command-setting"]');
+  const fits = () =>
+    tabs.evaluate((element) => {
+      const project = element.querySelector('[data-tab-kind="project"]')!.getBoundingClientRect(),
+        bar = element.getBoundingClientRect();
+      return {
+        overflow: element.scrollWidth - element.clientWidth,
+        tabInside: project.left >= bar.left - 0.5 && project.right <= bar.right + 0.5,
+      };
+    });
+  await expect(group).toHaveText('Add group…');
+  await expect(command).toHaveText('Add command…');
+  await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
+  for (const pass of ['first', 'second']) {
+    // Medium width with both rails open: the pills give up their long labels, the tab keeps its label.
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await expect(group).toHaveText('Group…');
+    await expect(command).toHaveText('Command…');
+    await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
+    await expect(tab).toBeVisible();
+    await expect(group).toHaveAttribute('data-size', 'compact');
+    if (pass === 'first') {
+      await strip.screenshot({ path: 'target/visual-captures/hs2-mqpy61-commands-strip-1100.png' });
+      await page.screenshot({ path: 'target/visual-captures/hs2-mqpy61-commands-1100.png' });
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await expect(group).toHaveText('Add group…');
+    await expect(command).toHaveText('Add command…');
+    await expect.poll(fits).toEqual({ overflow: 0, tabInside: true });
+  }
+  await page.screenshot({ path: 'target/visual-captures/hs2-mqpy61-commands-1600.png' });
+});
+
 test('drops ticket selection across ticket views but preserves it across view modes', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
