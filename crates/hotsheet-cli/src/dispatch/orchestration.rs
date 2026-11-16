@@ -119,10 +119,17 @@ enum OrchestrationCmd {
     /// tickets an orchestration project on this machine plans (state, where it runs,
     /// goal ticket), one per ticket. Answers from this machine's records and contacts
     /// no target. With --after <version> and --wait-seconds, waits for the next change.
+    ///
+    /// HS2-3D8D6V: with --registration-id, --project is a checkout on that remote
+    /// server, and the lines are those an orchestration project on this machine plans
+    /// through a reviewed remote binding; the remote server is not contacted.
     TargetLines {
-        /// Registered target checkout id.
+        /// Registered target checkout id, or with --registration-id the remote checkout id.
         #[arg(long)]
         project: Option<String>,
+        /// The reviewed remote registration that serves --project.
+        #[arg(long)]
+        registration_id: Option<String>,
         /// The version of the lines already seen.
         #[arg(long)]
         after: Option<String>,
@@ -1382,11 +1389,17 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         }
         OrchestrationCmd::TargetLines {
             project,
+            registration_id,
             after,
             wait_seconds,
         } => {
             let checkout_id = required(project)?;
-            let mut path = format!("/checkouts/{checkout_id}/orchestration/target-lines");
+            let mut path = match &registration_id {
+                Some(registration) => format!(
+                    "/remotes/{registration}/checkouts/{checkout_id}/orchestration/target-lines"
+                ),
+                None => format!("/checkouts/{checkout_id}/orchestration/target-lines"),
+            };
             if let Some(after) = after {
                 let wait_ms = wait_seconds.min(20) * 1000;
                 path = format!("{path}?after={after}&wait_ms={wait_ms}");
@@ -1412,9 +1425,18 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             );
         }
         let registry = CheckoutRegistry::new(home.join("checkouts.json"));
-        let owner = registry.describe(&owner_id).map_err(|_| anyhow::anyhow!("registered project is unavailable; use its checkout id or list --target-id/unbind for orphan cleanup"))?;
         let config = source.join("providers.json");
-        if owner.sources.iter().any(|source| source.provider != "git") && !config.is_file() {
+        // HS2-3D8D6V: a remote checkout is not registered here; its read uses no
+        // provider configuration either.
+        let remote = path.starts_with("/remotes/");
+        let owner = if remote {
+            None
+        } else {
+            Some(registry.describe(&owner_id).map_err(|_| anyhow::anyhow!("registered project is unavailable; use its checkout id or list --target-id/unbind for orphan cleanup"))?)
+        };
+        if owner.is_some_and(|owner| owner.sources.iter().any(|source| source.provider != "git"))
+            && !config.is_file()
+        {
             bail!(
                 "provider configuration is unavailable; pass -C <configured-host-source> containing the project's existing providers.json; no source was created"
             );

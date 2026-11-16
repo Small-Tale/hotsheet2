@@ -150,7 +150,7 @@ import {
   createOrchestrationSettingsSurface,
   type OrchestrationSettingsSurface,
 } from '../features/orchestration-settings-surface';
-import { createOrchestrationTargetLines } from '../features/orchestration-target-lines';
+import { createOrchestrationTargetLines, targetLinesClientFor } from '../features/orchestration-target-lines';
 import {
   createOrchestrationViewController,
   createServerPlanner,
@@ -3476,14 +3476,15 @@ export async function startHotSheetWebClient() {
     }),
   });
   // HS2-S3FKJ7: a target project's List and Columns show the orchestration line of the tickets an
-  // orchestration project on this machine plans.
+  // orchestration project on this machine plans, also when the project is a remote tab (HS2-3D8D6V).
   const orchestrationTargetLines = createOrchestrationTargetLines({
     shown: computed(() =>
       shellMode.value === 'project' && (viewMode.value === 'list' || viewMode.value === 'board')
         ? project()
         : undefined,
     ),
-    client: (current) => new Api(current.apiPath),
+    // HS2-3D8D6V: a remote project's tab asks this machine's server, through an open local project.
+    client: (current) => targetLinesClientFor(current, projects.peek(), (apiPath) => new Api(apiPath)),
   });
   /**
    * HS2-DBQSWB: open one orchestrator permission request where every request is answered, the

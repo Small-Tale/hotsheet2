@@ -2102,6 +2102,12 @@ pub fn app(state: AppState) -> Router {
             axum::routing::put(routes::remotes::review).delete(routes::remotes::revoke),
         )
         .route("/remotes/{id}/checkouts", get(routes::remotes::discover))
+        // HS2-3D8D6V: the orchestration lines of a remote checkout bound here, a long
+        // poll by version (machine-local: every `/remotes` route is loopback-only).
+        .route(
+            "/remotes/{id}/checkouts/{checkout}/orchestration/target-lines",
+            get(routes::orchestration::read),
+        )
         .route(
             "/remote-checkouts/{checkout}/resolution",
             get(routes::orchestration::read),

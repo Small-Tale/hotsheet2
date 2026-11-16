@@ -4983,21 +4983,39 @@ project's settings and returning to its tab). Leaving the ticket views stops the
 the lines last read stay in memory, so returning to the project paints them with its
 cached tickets until the next read replaces them.
 
-A target opened from a remote server, or bound remotely by an orchestration project on
-another machine, has no line yet (HS2-3D8D6V).
+### A target on a remote server (HS2-3D8D6V)
+
+When an orchestration project binds a target on a reviewed remote server
+(`Remote { registration_id, checkout_id }`), the desktop that runs the orchestration
+project answers that remote checkout's lines itself:
+`OrchestrationRuntime::orchestration_remote_target_lines(registration_id, checkout_id,
+after, wait_ms, tx)` matches the remote bindings (`BindingRegistry::bound_remote`) instead
+of the local ones and otherwise is the same read: the same fold, version and long poll.
+It reads this machine's records only and never contacts the remote server; an unknown
+registration or checkout answers `orchestrated: false`. The same checkout id on another
+registration is a different checkout.
+
+The client routes a remote project's tab (`remote:<registration>:<checkout>`) to this
+machine's server, through any open local project's API path, so the line shows in that
+tab's List and Columns while the plan stays on this machine. With no local project open
+the tab asks the remote project's own server. A viewer on another machine sees the line
+only through the owner's push (HS2-KB2Y51).
 
 ### Headless surface
 
 ```sh
 hotsheet-cli ... orchestration target-lines --project <target> [--after <version> --wait-seconds 20]
+hotsheet-cli ... orchestration target-lines --registration-id <remote> --project <remote checkout> [--after ...]
 ```
 
-| Route                                              | Methods and purpose                                                   |
-| -------------------------------------------------- | --------------------------------------------------------------------- |
-| `/checkouts/{checkout}/orchestration/target-lines` | GET the lines; `after` and `wait_ms` wait for a change; machine-local |
+| Route                                                           | Methods and purpose                                                                    |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `/checkouts/{checkout}/orchestration/target-lines`              | GET the lines; `after` and `wait_ms` wait for a change; machine-local                  |
+| `/remotes/{id}/checkouts/{checkout}/orchestration/target-lines` | GET a remote checkout's lines from this machine's bindings (HS2-3D8D6V); machine-local |
 
 MCP `hotsheet_targets` adds `target_lines` (with `version` and `wait_ms`), called with
-the target project as `checkout`.
+the target project as `checkout`; with `registration_id`, `checkout` names a checkout on
+that remote server (HS2-3D8D6V).
 
 - **A locked vault** (HS2-4K43DK). While the AI permission vault is locked or still
   loading, the full list answers 503 and Settings shows "Remembered Answers Locked".

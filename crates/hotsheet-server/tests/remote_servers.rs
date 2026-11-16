@@ -533,6 +533,8 @@ mod readiness;
 mod reconcile_restart;
 #[path = "remote_servers/recovery.rs"]
 mod recovery;
+#[path = "remote_servers/remote_lines.rs"]
+mod remote_lines;
 #[path = "remote_servers/runs.rs"]
 mod runs;
 // HS2-GDJXGZ: real PTYs run the fake agent, which is a Unix test double.

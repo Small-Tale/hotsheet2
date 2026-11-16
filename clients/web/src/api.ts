@@ -2210,6 +2210,19 @@ export class Api {
     );
   };
   /**
+   * HS2-3D8D6V: the same lines for a checkout on the remote server registered here as `registration`, answered
+   * by this machine's server from the orchestration projects that bind it remotely. Never asks the remote server.
+   */
+  orchestrationRemoteTargetLines = (registration: string, checkout: string, after?: string, signal?: AbortSignal) => {
+    const query = after ? `?${new URLSearchParams({ after, wait_ms: '20000' })}` : '';
+    return this.parsed(
+      parseOrchestrationTargetLines,
+      `/remotes/${encodeURIComponent(registration)}/checkouts/${encodeURIComponent(checkout)}/orchestration/target-lines${query}`,
+      { signal },
+      false,
+    );
+  };
+  /**
    * HS2-HCW7MD: start the orchestration project's planning AI session (Propose Plan) in the tool the person
    * chose, or answer with the live one. The same `operation_id` never launches twice.
    */

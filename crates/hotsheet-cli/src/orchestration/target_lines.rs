@@ -6,6 +6,11 @@
 //! target ticket through the pure fold `target_lines`. Like the timeline it passes no
 //! gate, contacts no target and writes nothing. With a version and `wait_ms` it is a
 //! long poll on the records the timelines read, never a timer.
+//!
+//! HS2-3D8D6V: the same read answers for a checkout on a remote server this machine
+//! binds (`Remote { registration_id, checkout_id }`), so the desktop that runs the
+//! orchestration project shows the line in that remote project's tab. The plan stays
+//! here; nothing is asked of the remote server.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -16,23 +21,48 @@ use hotsheet_ticketing::orchestration::{
 };
 
 use super::scheduler::WAKE_DIRECTORY;
+use super::tickets::identifier;
 use super::timeline::MAX_TIMELINE_WAIT_MS;
 use super::*;
 
 /// At most this many orchestration projects are read for one checkout.
 pub const MAX_TARGET_LINE_OWNERS: usize = 16;
 
+/// Which checkout the lines are for: one on this machine, or one on a remote server
+/// this machine binds (HS2-3D8D6V).
+#[derive(Clone, Copy)]
+enum LinesOf<'a> {
+    Here(&'a str),
+    Remote {
+        registration_id: &'a str,
+        checkout_id: &'a str,
+    },
+}
+
+impl LinesOf<'_> {
+    fn bound(self, home: &std::path::Path) -> Result<Vec<TargetRef>, OrchestrationError> {
+        let bindings = BindingRegistry::new(home);
+        match self {
+            Self::Here(checkout_id) => bindings.bound_here(checkout_id),
+            Self::Remote {
+                registration_id,
+                checkout_id,
+            } => bindings.bound_remote(registration_id, checkout_id),
+        }
+    }
+}
+
 impl OrchestrationRuntime {
     /// The lines as the records are now, and the ticket stores whose change could
     /// clear a pending decision.
     fn target_lines_now(
         &self,
-        checkout_id: &str,
+        of: LinesOf<'_>,
         tx: &mut Transaction<'_>,
     ) -> Result<(TargetLines, Vec<String>, Vec<PathBuf>), OrchestrationError> {
         // Owners in the bindings file's order, each with its targets bound here.
         let mut owners: Vec<(String, Vec<String>)> = Vec::new();
-        for target in BindingRegistry::new(&self.home).bound_here(checkout_id)? {
+        for target in of.bound(&self.home)? {
             if let Some(at) = owners
                 .iter()
                 .position(|(owner, _)| *owner == target.owner_checkout_id)
@@ -85,18 +115,55 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<TargetLines, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
+        self.target_lines_wait(LinesOf::Here(&checkout.id), after, wait_ms, tx)
+    }
+
+    /// HS2-3D8D6V: the same read for checkout `checkout_id` on the remote server
+    /// registered here as `registration_id`: the line of each of its tickets that an
+    /// orchestration project on this machine plans through a reviewed remote binding.
+    /// Answers from this machine's records alone and never contacts the remote server;
+    /// an unknown registration or checkout reads as not orchestrated.
+    pub fn orchestration_remote_target_lines(
+        &self,
+        registration_id: &str,
+        checkout_id: &str,
+        after: Option<&str>,
+        wait_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetLines, OrchestrationError> {
+        identifier(registration_id, "bounded registration id required")?;
+        identifier(checkout_id, "bounded checkout id required")?;
+        self.target_lines_wait(
+            LinesOf::Remote {
+                registration_id,
+                checkout_id,
+            },
+            after,
+            wait_ms,
+            tx,
+        )
+    }
+
+    fn target_lines_wait(
+        &self,
+        of: LinesOf<'_>,
+        after: Option<&str>,
+        wait_ms: u64,
+        tx: &mut Transaction<'_>,
+    ) -> Result<TargetLines, OrchestrationError> {
         if wait_ms == 0 || after.is_none() {
-            return Ok(self.target_lines_now(&checkout.id, tx)?.0);
+            return Ok(self.target_lines_now(of, tx)?.0);
         }
         // Watch before reading, so a change in between is not missed. The journals
-        // keep one file per owner in shared directories, so one watch covers them all.
-        let any = &checkout.id;
+        // keep one file per owner in shared directories, so one watch covers them all;
+        // the directory name does not depend on the id given.
+        let any = "target-lines";
         let runs = RunEventJournal::new(&self.home, any)?;
         let decisions = DecisionJournal::new(&self.home, any)?;
         let wake = self.home.join(WAKE_DIRECTORY);
         // A checkout no project orchestrates still waits to the deadline, so a reader
         // that keeps asking never spins.
-        let (first, _, stores) = self.target_lines_now(&checkout.id, tx)?;
+        let (first, _, stores) = self.target_lines_now(of, tx)?;
         if after != Some(first.version.as_str()) {
             return Ok(first);
         }
@@ -109,7 +176,7 @@ impl OrchestrationRuntime {
         // HS2-F8174X: the stores to watch are known only after the first read, so the
         // watcher starts after it. Read once more now that it runs, so a change made in
         // between is not missed (as HS2-ANQXQ4 does for the timeline).
-        let (current, ..) = self.target_lines_now(&checkout.id, tx)?;
+        let (current, ..) = self.target_lines_now(of, tx)?;
         if current.version != first.version {
             return Ok(current);
         }
@@ -118,15 +185,13 @@ impl OrchestrationRuntime {
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if remaining.is_zero() {
-                return self
-                    .target_lines_now(&checkout.id, tx)
-                    .map(|(lines, ..)| lines);
+                return self.target_lines_now(of, tx).map(|(lines, ..)| lines);
             }
             // HS2-F8174X: read again at the waiter's one-second safety re-check too, so a
             // change no watched directory reported ends the wait within a second rather
             // than at the deadline (HS2-1C77XH). Each read is local files only.
             let _ = waiter.wait(remaining);
-            let (lines, ..) = self.target_lines_now(&checkout.id, tx)?;
+            let (lines, ..) = self.target_lines_now(of, tx)?;
             if lines.version != first.version {
                 return Ok(lines);
             }

@@ -4240,6 +4240,68 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /remotes/{id}/checkouts/{checkout}/orchestration/target-lines:
+    description:
+      Machine-local orchestration lines of a checkout on a reviewed remote server (HS2-3D8D6V). The timeline item of
+      each of its tickets that an orchestration project on this machine plans through a reviewed remote binding, one
+      per ticket, answered from this machine's records. Never contacts the remote server and writes nothing. An unknown
+      registration or checkout reads as not orchestrated. With `after` equal to the current version and `wait_ms`,
+      waits for the next change.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readOrchestrationRemoteTargetLines
+      parameters:
+        - name: after
+          in: query
+          description: The lines version already seen.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+            pattern: ^[A-Za-z0-9._-]+$
+        - name: wait_ms
+          in: query
+          description: With `after`, wait this long (at most 20000) for the version to change.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: The lines, ordered by ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationTargetLines'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The reviewed remote registration that serves the checkout.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+      - name: checkout
+        in: path
+        required: true
+        description: The checkout on that remote server.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.

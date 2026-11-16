@@ -143,6 +143,33 @@ impl BindingRegistry {
             .collect())
     }
 
+    /// HS2-3D8D6V: the targets whose reviewed binding on this machine names checkout
+    /// `checkout_id` on the remote server registered as `registration_id`, in the file's
+    /// order. Local destinations, and the same checkout id on another registration,
+    /// never match.
+    pub fn bound_remote(
+        &self,
+        registration_id: &str,
+        checkout_id: &str,
+    ) -> Result<Vec<TargetRef>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .bindings
+            .into_iter()
+            .filter(|binding| {
+                matches!(
+                    &binding.destination,
+                    Some(TargetDestination::Remote {
+                        registration_id: registration,
+                        checkout_id: bound,
+                        ..
+                    }) if registration == registration_id && bound == checkout_id
+                )
+            })
+            .map(|binding| binding.target)
+            .collect())
+    }
+
     pub fn get(&self, target: &TargetRef) -> Result<BindingView, OrchestrationError> {
         target.validate()?;
         Ok(self

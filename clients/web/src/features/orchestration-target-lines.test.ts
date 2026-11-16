@@ -5,7 +5,7 @@ import type { Project } from '../interactions/types';
 import type { OrchestrationTargetLines } from '../orchestration-timeline';
 import { findTimelineItem } from '../orchestration-timeline-board';
 import { demoTimeline } from '../ux-demo/orchestration-fixtures';
-import { createOrchestrationTargetLines } from './orchestration-target-lines';
+import { createOrchestrationTargetLines, targetLinesClientFor } from './orchestration-target-lines';
 
 const project = (id: string) => ({ id, name: id, apiPath: `/api/${id}` }) as Project;
 const waiting = findTimelineItem(demoTimeline('running'), 'step-6')!.item;
@@ -127,6 +127,57 @@ describe('a target project’s orchestration lines (HS2-S3FKJ7)', () => {
     scheduled[1].run();
     await settle();
     expect(fake.asked).toEqual([{ checkout: 'web', after: undefined }]);
+    controller.dispose();
+  });
+});
+
+describe('the lines of a remote project’s tab (HS2-3D8D6V)', () => {
+  const binding = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  const remote = { id: `remote:${binding}:api-0123456789ab`, name: 'peer · API', apiPath: '/api/remote' } as Project;
+  const recorder = () => {
+    const asked: string[] = [];
+    const api = (apiPath: string) => ({
+      orchestrationTargetLines: (checkout: string, after?: string) => {
+        asked.push(`${apiPath} local ${checkout} ${after ?? ''}`);
+        return Promise.resolve(lines('v1'));
+      },
+      orchestrationRemoteTargetLines: (registration: string, checkout: string, after?: string) => {
+        asked.push(`${apiPath} remote ${registration} ${checkout} ${after ?? ''}`);
+        // A wait on the current version stays open, like the real long poll.
+        return after ? new Promise<OrchestrationTargetLines>(() => undefined) : Promise.resolve(lines('v1'));
+      },
+    });
+    return { asked, api };
+  };
+
+  it('asks this machine’s server through an open local project, never the remote one', async () => {
+    const { asked, api } = recorder();
+    const client = targetLinesClientFor(remote, [remote, project('owner'), project('other')], api);
+    await client.orchestrationTargetLines(remote.id);
+    void client.orchestrationTargetLines(remote.id, 'v1');
+    expect(asked).toEqual([
+      `/api/owner remote ${binding} api-0123456789ab `,
+      `/api/owner remote ${binding} api-0123456789ab v1`,
+    ]);
+  });
+
+  it('keeps a local project on its own server, and a remote tab with no local project on the remote one', async () => {
+    const { asked, api } = recorder();
+    await targetLinesClientFor(project('api'), [project('api')], api).orchestrationTargetLines('api');
+    await targetLinesClientFor(remote, [remote], api).orchestrationTargetLines(remote.id);
+    expect(asked).toEqual(['/api/api local api ', `/api/remote local ${remote.id} `]);
+  });
+
+  it('shows the line this machine answers on the remote tab’s ticket', async () => {
+    const { api } = recorder();
+    const shown = signal<Project | undefined>(remote);
+    const controller = createOrchestrationTargetLines({
+      shown,
+      client: (current) => targetLinesClientFor(current, [remote, project('owner')], api),
+      afterPaint: now,
+    });
+    await settle();
+    expect(controller.lineFor(remote.id, ticket)?.goal).toBe(waiting.goal_slug);
     controller.dispose();
   });
 });

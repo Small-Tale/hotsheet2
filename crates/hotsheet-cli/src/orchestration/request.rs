@@ -55,6 +55,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "timeline"]
             // HS2-S3FKJ7: the orchestration lines of a target checkout's tickets.
             | ["checkouts", _, "orchestration", "target-lines"]
+            // HS2-3D8D6V: the same lines for a checkout on a remote server bound here.
+            | ["remotes", _, "checkouts", _, "orchestration", "target-lines"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -147,6 +149,8 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "timeline"]
             // HS2-S3FKJ7: computed from this machine's bindings and timelines.
             | ["checkouts", _, "orchestration", "target-lines"]
+            // HS2-3D8D6V: and so are the lines of a remote checkout bound here.
+            | ["remotes", _, "checkouts", _, "orchestration", "target-lines"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -1050,6 +1054,30 @@ impl OrchestrationRuntime {
                     identifier(after, "bounded target lines version required")?;
                 }
                 value(self.orchestration_target_lines(
+                    checkout,
+                    after.as_deref(),
+                    query_number(path, "wait_ms", 0)?,
+                    tx,
+                )?)
+            }
+            // HS2-3D8D6V: a remote checkout's lines, from this machine's records alone.
+            (
+                "GET",
+                [
+                    "remotes",
+                    registration,
+                    "checkouts",
+                    checkout,
+                    "orchestration",
+                    "target-lines",
+                ],
+            ) => {
+                let after = query_text(path, "after")?;
+                if let Some(after) = &after {
+                    identifier(after, "bounded target lines version required")?;
+                }
+                value(self.orchestration_remote_target_lines(
+                    registration,
                     checkout,
                     after.as_deref(),
                     query_number(path, "wait_ms", 0)?,

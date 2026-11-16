@@ -11,6 +11,7 @@ import type { TicketRowOrchestration } from '../components/ticket-row';
 import type { Project } from '../interactions/types';
 import type { OrchestrationTargetLines } from '../orchestration-timeline';
 import { targetLineKey, targetLineMap } from '../orchestration-timeline-board';
+import { parseRemoteProjectId } from '../remote-projects/identity';
 import { startVersionedLongPoll } from '../versioned-long-poll';
 
 export interface OrchestrationTargetLinesClient {
@@ -19,6 +20,37 @@ export interface OrchestrationTargetLinesClient {
     after?: string,
     signal?: AbortSignal,
   ) => Promise<OrchestrationTargetLines>;
+}
+
+/** The two reads an API client offers for target lines (HS2-3D8D6V). */
+export interface TargetLinesApi extends OrchestrationTargetLinesClient {
+  orchestrationRemoteTargetLines: (
+    registration: string,
+    checkout: string,
+    after?: string,
+    signal?: AbortSignal,
+  ) => Promise<OrchestrationTargetLines>;
+}
+
+/**
+ * HS2-3D8D6V: where a shown project's lines come from. A local project asks its own server. A remote project's
+ * tab asks this machine's server, through any open local project, for the lines its orchestration projects plan
+ * through a remote binding; the plan never leaves this machine. With no local project open there is no path to
+ * this machine's server, so the remote project's own server answers.
+ */
+export function targetLinesClientFor(
+  project: Project,
+  open: readonly Project[],
+  api: (apiPath: string) => TargetLinesApi,
+): OrchestrationTargetLinesClient {
+  const remote = parseRemoteProjectId(project.id);
+  const local = remote ? open.find((candidate) => !parseRemoteProjectId(candidate.id)) : undefined;
+  if (!remote || !local) return api(project.apiPath);
+  const here = api(local.apiPath);
+  return {
+    orchestrationTargetLines: (_checkout, after, signal) =>
+      here.orchestrationRemoteTargetLines(remote.bindingId, remote.checkoutId, after, signal),
+  };
 }
 
 export interface OrchestrationTargetLinesDependencies {
