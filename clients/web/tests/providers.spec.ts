@@ -10424,6 +10424,11 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     wideLine = `WIDE-PTY-${'0123456789'.repeat(11)}`,
     connections: Array<{ claims: Array<{ focus?: boolean; interacting?: boolean }>; sizes: unknown[] }> = [],
     upstreams: WebSocket[] = [];
+  // HS2-6TK3SB: `page.unrouteAll` removes HTTP routes but not WebSocket routes, so after teardown
+  // the drawer terminal's reconnect still reaches this handler. Once teardown starts it refuses the
+  // attach instead of dialing the stopping server, and a refused upstream closes its route rather
+  // than throwing an unhandled `ECONNREFUSED`.
+  let tearingDown = false;
   const attachUrl = (id: string) =>
     `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(id)}/attach?secret=${server.secret}`;
   try {
@@ -10461,6 +10466,10 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         }
       });
     await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => {
+      if (tearingDown) {
+        void route.close().catch(() => undefined);
+        return;
+      }
       const id = decodeURIComponent(new URL(route.url()).pathname.split('/').at(-2)!),
         upstream = new WebSocket(attachUrl(id)),
         pending: Array<string | Buffer> = [],
@@ -10486,6 +10495,9 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         route.send(text);
       });
       upstream.on('close', () => {
+        void route.close().catch(() => undefined);
+      });
+      upstream.on('error', () => {
         void route.close().catch(() => undefined);
       });
       route.onClose(() => {
@@ -10548,10 +10560,11 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     await page.screenshot({ path: test.info().outputPath('hs2-7y1bq2-close-preview-390.png'), fullPage: true });
     await dialog.getByRole('button', { name: 'Cancel' }).click();
   } finally {
+    tearingDown = true;
     for (const upstream of upstreams) upstream.close();
-    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first.
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await server.stop();
+    // HS2-B3Z8DS: the routed change socket closes with the server; stop polling it first
+    // (HS2-QY232J: `stop(page)` unroutes the HTTP proxies before the server goes down).
+    await server.stop(page);
   }
 });
 
