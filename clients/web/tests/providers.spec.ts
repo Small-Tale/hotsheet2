@@ -11854,26 +11854,73 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const shell = page.locator('.app-shell');
+  await expect(shell).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  // HS2-6X8AQP: the transitioning flag lasts one 220 ms visibility motion, which a loaded runner can
+  // miss between polls. Record each value the flag takes, with the DOM rendered beside it, from before
+  // each action, and assert the recorded sequence instead of polling the transient state.
+  interface TransitionRecord {
+    value: string | null;
+    collapsed: string | null;
+    drawer: number;
+    restore: number;
+  }
+  const recordTransitions = () =>
+      shell.evaluate((element) => {
+        const host = window as unknown as {
+          hs2DrawerTransitions?: TransitionRecord[];
+          hs2DrawerObserver?: MutationObserver;
+        };
+        host.hs2DrawerObserver?.disconnect();
+        const records: TransitionRecord[] = [];
+        let last = element.getAttribute('data-terminal-drawer-transitioning');
+        host.hs2DrawerTransitions = records;
+        host.hs2DrawerObserver = new MutationObserver(() => {
+          const value = element.getAttribute('data-terminal-drawer-transitioning');
+          if (value === last) return;
+          last = value;
+          records.push({
+            value,
+            collapsed: document.querySelector('#app-bottom-drawer')?.getAttribute('data-collapsed') ?? null,
+            drawer: document.querySelectorAll('[data-component="terminal-drawer"]').length,
+            restore: document.querySelectorAll('button[aria-label="Show Terminal Drawer"]').length,
+          });
+        });
+        host.hs2DrawerObserver.observe(element, {
+          attributes: true,
+          attributeFilter: ['data-terminal-drawer-transitioning'],
+        });
+      }),
+    transitions = () =>
+      page.evaluate(
+        () => (window as unknown as { hs2DrawerTransitions?: TransitionRecord[] }).hs2DrawerTransitions ?? [],
+      ),
+    transitionValues = async () => (await transitions()).map((record) => record.value);
+  await recordTransitions();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     content = region.locator('.kui-workbench__panel-content');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
   await expect(region).toHaveCSS('transition-duration', '0s');
   expect(await content.evaluate((element) => getComputedStyle(element).transitionDuration)).toContain('0.2s');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+  await expect.poll(transitionValues).toEqual(['true', 'false']);
+  await recordTransitions();
   await handle.focus();
   await page.keyboard.press('ArrowUp');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await expect(region).toHaveCSS('transition-duration', '0s');
+  // A resize is not a visibility motion, so it never raises the flag.
+  expect(await transitionValues()).toEqual([]);
   await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
-  await expect(region).toHaveAttribute('data-collapsed', 'true');
-  await expect(drawer).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-x8fg23-drawer-hiding.png', fullPage: true });
+  await expect.poll(transitionValues).toEqual(['true', 'false']);
+  // While hiding, the region is already collapsed, the drawer stays mounted for the motion and the
+  // restore control is withheld; the drawer unmounts once the motion ends.
+  const [hiding, hidden] = await transitions();
+  expect(hiding).toEqual({ value: 'true', collapsed: 'true', drawer: 1, restore: 0 });
+  expect(hidden).toMatchObject({ value: 'false', collapsed: 'true' });
+  await expect(region).toHaveAttribute('data-collapsed', 'true');
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 });
