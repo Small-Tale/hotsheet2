@@ -746,9 +746,12 @@ mod tests {
             let _ = sent.send(());
         })
         .unwrap();
+        // HS2-QCF0ZN: the first wake follows the native stream's start, which took longer than 10 s
+        // under full-gate load; this test is about the wakes after it, so the bound only stops a
+        // watch that never starts.
         let wait = || {
             received
-                .recv_timeout(std::time::Duration::from_secs(10))
+                .recv_timeout(std::time::Duration::from_secs(30))
                 .expect("a wake arrives");
         };
         wait();
