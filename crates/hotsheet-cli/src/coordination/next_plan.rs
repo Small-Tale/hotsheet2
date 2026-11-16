@@ -376,6 +376,7 @@ impl Coordinator {
                 scope: entry.scope,
                 transitions: Vec::new(),
                 retirement_note: None,
+                worktree: None,
             },
             check,
             record,

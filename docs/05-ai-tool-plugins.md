@@ -2842,6 +2842,15 @@ note was written reuses that note. `retirement_note` is an additive field at the
 schema, so older executables still open the pool. The findings `mark --phase done`
 check also accepts an archived or otherwise closed ticket, not only a completed one.
 
+A worker records the worktree it works an assignment in with `coordination worker
+--phase accepted|handoff --worktree <path>` (HS2-TRP2MJ): an existing directory,
+stored by its resolved path as the assignment's optional `worktree`, recorded after
+the phase transition and only by the assignment's own session while it is
+unfinished. The same path again changes nothing. Like `retirement_note` it is an
+additive field at the same schema. An orchestrator counts only that worktree's
+uncommitted work against the worker's session ([26](26-orchestration-projects.md)
+§26.16).
+
 #### Integration strategies (HS2-NEY1QH)
 
 The integrator runs under one named integration strategy per session generation.

@@ -8063,6 +8063,7 @@ async fn hs2_2sjpch_provisional_assignments_reach_rest_workers() {
                 scope: Vec::new(),
                 transitions: Vec::new(),
                 retirement_note: None,
+                worktree: None,
             },
         )
         .unwrap();

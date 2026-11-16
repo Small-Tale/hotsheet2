@@ -517,12 +517,13 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
     assert!(not_safe.contains("session_not_safe"), "{not_safe}");
     assert_eq!(tab(&drawer(&peer_router).await, &a_terminal)["alive"], true);
     assert_eq!(session(&scheduler, &["show", a_id])["state"], "running");
-    // Uncommitted work in the checkout is a second reason.
+    // HS2-TRP2MJ: a person's uncommitted edit in the main checkout is not this
+    // worker's work, so it adds no reason over the wire either.
     let draft = Path::new(&peer_checkouts[0].root).join("draft.txt");
     std::fs::write(&draft, "synthetic").unwrap();
     assert_eq!(
         session(&scheduler, &["safe-point", a_id])["safe_point"]["blockers"],
-        json!(["held_claim", "uncommitted_changes"])
+        json!(["held_claim"])
     );
     std::fs::remove_file(&draft).unwrap();
     let released = api(peer_router.clone(), "DELETE", &claims, claim, true).await;

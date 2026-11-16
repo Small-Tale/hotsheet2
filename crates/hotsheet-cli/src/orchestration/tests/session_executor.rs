@@ -762,33 +762,11 @@ fn hs2_95swq4_an_idle_session_is_wound_down_only_at_a_safe_point() {
     );
     assert_eq!(f.listed(&mut tx)[0].idle_since_ms, Some(START + 2 * MINUTE));
 
-    // Idle long enough, with uncommitted work in the checkout: it waits.
+    // Idle long enough. HS2-TRP2MJ: a person's uncommitted edits in the main checkout
+    // are not this worker's work, so they do not hold it: it is at a safe point and is
+    // wound down, once. (Its own worktree's work holding it is in tests/sessions.rs.)
     f.at(&clock, START + 4 * MINUTE);
     std::fs::write(Path::new(&f.m.target.root).join("draft.txt"), "synthetic").unwrap();
-    let tick = f.tick(&mut tx);
-    assert!(tick.outcomes.is_empty());
-    assert_eq!(
-        placement(&tick, &sid),
-        (PlacementAction::Keep, "awaiting_safe_point")
-    );
-    assert_eq!(
-        OwnedSessions.wind_down(&f.m.runtime, &f.stop_request(&sid), &mut tx),
-        WindDownOutcome::NotAtSafePoint
-    );
-    assert_eq!(f.host.stops.load(Ordering::SeqCst), 0);
-
-    // Committed: it is at a safe point and is wound down, once.
-    f.git(&["add", "-A"]);
-    f.git(&[
-        "-c",
-        "user.name=Synthetic",
-        "-c",
-        "user.email=synthetic@example.test",
-        "commit",
-        "-q",
-        "-m",
-        "Synthetic work",
-    ]);
     let before = f.wake_token();
     let tick = f.tick(&mut tx);
     assert_eq!(outcomes(&tick), [("wind_down_requested", None)]);

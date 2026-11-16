@@ -36,6 +36,7 @@ mod remote_lines;
 mod runs;
 mod scheduler;
 mod session_executor;
+mod session_worktrees;
 mod sessions;
 mod shared_plan;
 #[cfg(unix)]

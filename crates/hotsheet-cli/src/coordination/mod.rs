@@ -843,6 +843,46 @@ impl Coordinator {
         )
     }
 
+    /// HS2-TRP2MJ: record the worktree the worker does an assignment's work in, so an
+    /// orchestrator's safe-point check counts only that worktree's uncommitted work for
+    /// it. Only the assignment's own session records it, while the assignment is
+    /// unfinished; the same path again changes nothing.
+    pub fn worker_worktree(
+        &self,
+        worker: &str,
+        generation: &str,
+        id: &str,
+        path: String,
+    ) -> Result<()> {
+        ensure!(
+            Path::new(&path).is_absolute()
+                && path.len() <= 4096
+                && !path.chars().any(char::is_control),
+            "worktree must be a bounded absolute path"
+        );
+        if self
+            .state()?
+            .assignments
+            .get(id)
+            .is_some_and(|a| a.worker == worker && a.worktree.as_deref() == Some(path.as_str()))
+        {
+            return Ok(());
+        }
+        self.change(|state| {
+            let a = state
+                .assignments
+                .get_mut(id)
+                .ok_or_else(|| anyhow::anyhow!("unknown assignment"))?;
+            ensure!(
+                a.worker == worker && a.generation == generation,
+                "assignment belongs to another session"
+            );
+            ensure!(a.phase.pending(), "the assignment is done");
+            a.worktree = Some(path);
+            Ok(())
+        })
+    }
+
     fn worker_handoff_transition(
         &self,
         worker: &str,

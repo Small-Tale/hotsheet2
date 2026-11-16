@@ -49,6 +49,7 @@ pub(super) fn assignment(id: &str, worker: &str, native: &str) -> Assignment {
         scope: Vec::new(),
         transitions: Vec::new(),
         retirement_note: None,
+        worktree: None,
     }
 }
 

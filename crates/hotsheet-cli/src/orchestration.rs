@@ -32,6 +32,7 @@ mod scheduler_apply;
 mod scheduler_dispositions;
 mod session_control;
 mod session_executor;
+mod session_worktrees;
 mod sessions;
 mod step_process;
 mod summary;

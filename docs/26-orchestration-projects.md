@@ -2655,9 +2655,8 @@ secret for permission routing, and `HOTSHEET_PROJECT` naming the checkout.
 
 Setup writes the instruction file and skills into the checkout as project files;
 the machine-local MCP and hook files are excluded from Git. The first setup in a
-checkout therefore leaves uncommitted files, and until someone commits them the
-safe point lists `uncommitted_changes` for every session there (HS2-TRP2MJ narrows
-that check). A terminal a person opens from the drawer in another checkout is still
+checkout therefore leaves uncommitted files in the main checkout. They hold only an
+integrator there, never a worker (HS2-TRP2MJ). A terminal a person opens from the drawer in another checkout is still
 set up against the serving store (HS2-MBDKWQ).
 
 **Label.** The host names the terminal tab `<orchestration project>: run <last eight
@@ -2729,20 +2728,34 @@ five facts, and anything it cannot establish counts against the session:
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `mid_turn`                            | The tool is in the middle of a turn                                                                                                       |
 | `held_claim`                          | A live ticket claim in one of the checkout's git stores is held under the session's worker id                                             |
-| `uncommitted_changes`                 | A worktree of the checkout has uncommitted changes, untracked files included                                                              |
+| `uncommitted_changes`                 | A worktree the session owns has uncommitted changes, untracked files included (HS2-TRP2MJ, below)                                         |
 | `pending_handoff`                     | An assignment of the session in the target's coordination pool is not `done`; a dispatcher or integrator answers for every unfinished one |
 | `session_unknown`                     | The terminal host could not be asked                                                                                                      |
 | `claims_unknown`                      | A ticket store could not be read                                                                                                          |
-| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read                                     |
+| `worktree_unknown`, `handoff_unknown` | The checkout is not a git work tree, git could not answer, or the pool's state file could not be read (for a worker, both)                |
 
 The answer lists every blocker at once in that order, with the counts it found. A
 session whose process is already gone has nothing left to interrupt and is safe. The
 decision is a pure function (`decide_safe_point`) of the facts.
 
-`uncommitted_changes` looks at every worktree of the checkout, because a terminal
-cannot yet be tied to the worktrees its session created. One session's unfinished
-work, or a person's edits, holds every orchestrator session of that checkout until it
-is committed. Narrowing this to a session's own worktrees is HS2-TRP2MJ.
+**Whose worktrees (HS2-TRP2MJ).** `uncommitted_changes` counts only the worktrees a
+session owns, so one session's unfinished work no longer holds the others:
+
+- A **worker** owns the worktrees its unfinished pool assignments name. A worker
+  records one with `coordination worker --phase accepted|handoff --worktree <path>`
+  (an existing directory, stored by its resolved path as the assignment's optional
+  `worktree`; the same path again changes nothing; only the assignment's own session
+  records it, while the assignment is unfinished), and the worker skill says to pass
+  it. An assignment recorded before the field falls back to inference: a linked
+  worktree whose branch contains its slug (any case), or whose HEAD is its handoff
+  commit. A worker never owns the main checkout unless an assignment names it, so a
+  person's edits there and the tool setup files a launch writes there do not hold it.
+- An **integrator** owns the main checkout.
+- A **dispatcher** and a **planner** own nothing.
+
+Untracked files count inside an owned worktree. A worker whose pool cannot be read
+does not know its worktrees and reads `worktree_unknown`; a checkout with no pool gives
+a worker nothing to own.
 
 A stop is decided by `decide_stop` from who owns the session, who asks, whether they
 force it, and the safe point:

@@ -174,6 +174,7 @@ fn hs2_fg7zmf_preserved_foreign_records_cannot_replay_accept_handoff_recover_ver
             scope: Vec::new(),
             transitions: Vec::new(),
             retirement_note: None,
+            worktree: None,
         },
     );
     let path = f.project.join(".git/hotsheet-coordination/state.json");

@@ -684,6 +684,11 @@ enum CoordinationCmd {
         /// Exact durable `## Findings handoff` note id for a no-code handoff.
         #[arg(long, conflicts_with = "commit")]
         findings_note: Option<String>,
+        /// HS2-TRP2MJ: the worktree this assignment's work is done in (an existing
+        /// directory), recorded on the assignment so an orchestrator counts only its
+        /// uncommitted work for this worker. Pass it with `accepted` and `handoff`.
+        #[arg(long)]
+        worktree: Option<PathBuf>,
     },
     /// Record serialized integration, pending CI, completion, or explicit blocked recovery.
     Mark {
@@ -1274,6 +1279,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                     scope,
                     transitions: Vec::new(),
                     retirement_note: None,
+                    worktree: None,
                 },
                 check,
                 record,
@@ -1290,7 +1296,18 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             phase,
             commit,
             findings_note,
+            worktree,
         } => {
+            // HS2-TRP2MJ: an existing directory, recorded by its resolved path.
+            let worktree = worktree
+                .map(|path| {
+                    std::fs::canonicalize(&path)
+                        .ok()
+                        .filter(|resolved| resolved.is_dir())
+                        .and_then(|resolved| resolved.to_str().map(str::to_owned))
+                        .ok_or_else(|| anyhow::anyhow!("worktree must be an existing directory"))
+                })
+                .transpose()?;
             if matches!(phase, Phase::Accepted | Phase::Handoff | Phase::Blocked) {
                 anyhow::ensure!(
                     ctx.path
@@ -1364,6 +1381,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 coordinator.worker_findings_transition(&w.id, &w.session, &assignment, note_id)?;
             } else {
                 coordinator.worker_transition(&w.id, &w.session, &assignment, phase, commit)?;
+            }
+            // After the transition, so a refused transition records nothing.
+            if let Some(path) = worktree {
+                coordinator.worker_worktree(&w.id, &w.session, &assignment, path)?;
             }
         }
         CoordinationCmd::Recover {

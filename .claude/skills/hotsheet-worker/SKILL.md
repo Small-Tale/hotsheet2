@@ -111,6 +111,11 @@ setup`, then `status`.
    using the returned assignment id, worker id, and session token. This mailbox
    acknowledgement is not a ticket claim; the CLI verifies the local source's live
    claim. Unsupported provider verification fails explicitly (HS2-3ETJ26).
+   Pass `--worktree <path>` with the ticket worktree you work in (HS2-TRP2MJ); if you
+   create it after accepting, repeat `--phase accepted --worktree <path>` once it
+   exists, and pass it again with a manual `--phase handoff`. An orchestrator then
+   counts only that worktree's uncommitted work as yours when it decides whether your
+   session may be wound down.
 5. When `coordination preflight --help` is supported, prepare the machine-local
    evidence file described in `docs/30-handoff-readiness.md`. Run `coordination
    preflight --id <worker> --session <generation> --assignment <id>

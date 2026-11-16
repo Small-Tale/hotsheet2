@@ -7979,6 +7979,7 @@ mod tests {
                     scope: Vec::new(),
                     transitions: Vec::new(),
                     retirement_note: None,
+                    worktree: None,
                 },
             )
             .unwrap();

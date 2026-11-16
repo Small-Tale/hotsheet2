@@ -237,6 +237,11 @@ pub struct Assignment {
     /// so older executables of the same schema still read the pool.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retirement_note: Option<String>,
+    /// HS2-TRP2MJ: the absolute path of the worktree the worker does this assignment's
+    /// work in, as it reported with `coordination worker --worktree`. Additive: absent
+    /// from every older record, and an orchestrator then infers the worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<String>,
 }
 
 /// Tentative ordered intent. An operation id identifies one proposed placement,

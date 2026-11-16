@@ -749,25 +749,25 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// How many worktrees of the checkout have uncommitted changes, untracked files
-/// included. `None` when the checkout is not a git work tree or git could not say.
-fn dirty_worktrees(root: &Path) -> Option<u32> {
+/// How many of the worktrees a session owns have uncommitted changes, untracked
+/// files included (HS2-TRP2MJ, `session_worktrees`). `None` when the checkout is not
+/// a git work tree, git could not say, or a worker's pool could not be read.
+fn dirty_worktrees(root: &Path, role: SessionRole, worker: &str) -> Option<u32> {
     let listing = git(root, &["worktree", "list", "--porcelain"])?;
+    let worktrees = super::session_worktrees::parse_worktrees(&listing);
+    let state = match role {
+        SessionRole::Worker => coordination_state(root).ok()?,
+        _ => None,
+    };
+    let assignments: Vec<&crate::coordination::Assignment> = state
+        .as_ref()
+        .map(|state| state.assignments.values().collect())
+        .unwrap_or_default();
     let mut dirty = 0;
-    for block in listing.split("\n\n") {
-        let mut path = None;
-        let mut skip = false;
-        for line in block.lines() {
-            if let Some(found) = line.strip_prefix("worktree ") {
-                path = Some(found);
-            }
-            // A bare entry has no files; a prunable one has no directory any more.
-            skip |= line == "bare" || line.starts_with("prunable");
-        }
-        let Some(path) = path.filter(|_| !skip) else {
-            continue;
-        };
-        if !git(Path::new(path), &["status", "--porcelain"])?
+    for worktree in
+        super::session_worktrees::owned_worktrees(&worktrees, role, worker, &assignments)
+    {
+        if !git(&worktree.path, &["status", "--porcelain"])?
             .trim()
             .is_empty()
         {
@@ -959,7 +959,11 @@ impl OrchestrationRuntime {
                     alive,
                     busy,
                     held_claims: self.session_claims(checkout, &worker_id, tx),
-                    dirty_worktrees: dirty_worktrees(Path::new(&checkout.root)),
+                    dirty_worktrees: dirty_worktrees(
+                        Path::new(&checkout.root),
+                        session.role,
+                        &worker_id,
+                    ),
                     pending_handoffs: Self::pending_handoffs(checkout, &session, &worker_id),
                     // HS2-RG91SK: the host's own time of the last finished turn.
                     idle_since_ms: state

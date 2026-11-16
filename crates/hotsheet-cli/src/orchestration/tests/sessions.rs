@@ -441,6 +441,7 @@ pub(super) fn assignment(
         scope: Vec::new(),
         transitions: Vec::new(),
         retirement_note: None,
+        worktree: None,
     }
 }
 fn pool_session(expires_at: i64) -> crate::coordination::Session {
@@ -991,13 +992,39 @@ fn hs2_gdjxgz_wind_down_happens_only_at_a_safe_point_the_host_confirms() {
         )
     );
 
-    // Uncommitted changes and an unfinished assignment, all at once with the claim.
+    // HS2-TRP2MJ: a person's edits in the main checkout are not this worker's work.
     std::fs::write(Path::new(&f.m.target.root).join("draft.txt"), "synthetic").unwrap();
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::HeldClaim]);
+    // Uncommitted changes in the worktree its assignment names and the unfinished
+    // assignment, all at once with the claim.
+    f.git(&[
+        "-c",
+        "user.name=Synthetic",
+        "-c",
+        "user.email=synthetic@example.test",
+        "commit",
+        "--allow-empty",
+        "-q",
+        "-m",
+        "Synthetic base",
+    ]);
+    let own = Path::new(&f.m.target.root)
+        .parent()
+        .unwrap()
+        .join("target-worktree");
+    f.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "synthetic-work",
+        own.to_str().unwrap(),
+    ]);
+    std::fs::write(own.join("draft.txt"), "synthetic").unwrap();
     f.pool(|state| {
-        state.assignments.insert(
-            "assignment-1".into(),
-            assignment(&hosted.worker_id, crate::coordination::Phase::Accepted),
-        );
+        let mut mine = assignment(&hosted.worker_id, crate::coordination::Phase::Accepted);
+        mine.worktree = Some(own.display().to_string());
+        state.assignments.insert("assignment-1".into(), mine);
         // Another worker's assignment is not this session's.
         let mut other = assignment("someone-else", crate::coordination::Phase::Handoff);
         other.id = "assignment-2".into();
@@ -1016,16 +1043,6 @@ fn hs2_gdjxgz_wind_down_happens_only_at_a_safe_point_the_host_confirms() {
     refused(&f, &mut tx);
     // Cleared one at a time, in another order than they appeared.
     f.host.set_busy(&hosted.session_id, false);
-    f.pool(|state| {
-        state.assignments.insert(
-            "assignment-1".into(),
-            assignment(&hosted.worker_id, crate::coordination::Phase::Done),
-        );
-    });
-    assert_eq!(
-        f.safe_point(&sid, &mut tx),
-        [B::HeldClaim, B::UncommittedChanges]
-    );
     ops::release(
         &f.m.target_store,
         &mine.id,
@@ -1034,14 +1051,28 @@ fn hs2_gdjxgz_wind_down_happens_only_at_a_safe_point_the_host_confirms() {
         false,
     )
     .unwrap();
-    assert_eq!(f.safe_point(&sid, &mut tx), [B::UncommittedChanges]);
+    assert_eq!(
+        f.safe_point(&sid, &mut tx),
+        [B::UncommittedChanges, B::PendingHandoff]
+    );
     refused(&f, &mut tx);
+    std::fs::remove_file(own.join("draft.txt")).unwrap();
+    assert_eq!(f.safe_point(&sid, &mut tx), [B::PendingHandoff]);
+    f.pool(|state| {
+        let mut finished = assignment(&hosted.worker_id, crate::coordination::Phase::Done);
+        finished.worktree = Some(own.display().to_string());
+        state.assignments.insert("assignment-1".into(), finished);
+    });
     std::fs::remove_file(Path::new(&f.m.target.root).join("draft.txt")).unwrap();
-    // A damaged pool file is unknown again.
+    // A damaged pool file is unknown again: its handoffs, and which worktrees are the
+    // worker's (HS2-TRP2MJ).
     let pool = Path::new(&f.m.target.root).join(".git/hotsheet-coordination/state.json");
     let good = std::fs::read(&pool).unwrap();
     std::fs::write(&pool, b"{").unwrap();
-    assert_eq!(f.safe_point(&sid, &mut tx), [B::HandoffUnknown]);
+    assert_eq!(
+        f.safe_point(&sid, &mut tx),
+        [B::WorktreeUnknown, B::HandoffUnknown]
+    );
     std::fs::write(&pool, good).unwrap();
     assert_eq!(f.safe_point(&sid, &mut tx), []);
 
@@ -2557,4 +2588,113 @@ fn hs2_pfhrs9_a_start_for_an_account_carries_it_to_the_host() {
         .unwrap();
     let terminal = plain.session.hosted.clone().unwrap().session_id;
     assert_eq!(hosts.account_of(&terminal).unwrap(), None);
+}
+
+/// HS2-TRP2MJ: each hosted session's `uncommitted_changes` counts only the worktrees it
+/// owns: a worker the ones its unfinished assignments name (or, recorded before the
+/// field, the one inferred from its branch), an integrator the main checkout, a
+/// dispatcher nothing. Real git worktrees; synthetic content.
+#[test]
+fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
+    use SafePointBlocker as B;
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    f.git(&["init", "-q"]);
+    f.git(&[
+        "-c",
+        "user.name=Synthetic",
+        "-c",
+        "user.email=synthetic@example.test",
+        "commit",
+        "--allow-empty",
+        "-q",
+        "-m",
+        "Synthetic base",
+    ]);
+    // Room for two workers and both role sessions on the target.
+    let mut roomy = policy();
+    roomy.targets[0].max_sessions = 4;
+    f.set_policy(roomy, &mut tx);
+    let a = f.started("op-a", 1, "codex", &mut tx);
+    let b = f.started("op-b", 1, "codex", &mut tx);
+    let integrator = f
+        .start("op-i", 1, "codex", json!({"role": "integrator"}), &mut tx)
+        .unwrap();
+    let dispatcher = f
+        .start("op-d", 1, "codex", json!({"role": "dispatcher"}), &mut tx)
+        .unwrap();
+    let worker_of = |view: &SessionView| view.session.hosted.clone().unwrap().worker_id;
+    let (worker_a, worker_b) = (worker_of(&a), worker_of(&b));
+    let parent = Path::new(&f.m.target.root).parent().unwrap().to_owned();
+    let (tree_a, tree_b) = (parent.join("wt-a"), parent.join("wt-b"));
+    f.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "tgt-1-fix",
+        tree_a.to_str().unwrap(),
+    ]);
+    f.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "other-work",
+        tree_b.to_str().unwrap(),
+    ]);
+    // A's assignment predates the field (inferred from its branch); B's names its tree.
+    let write_pool = |slug_a: &str, tree_of_a: Option<&Path>| {
+        f.pool(|state| {
+            let mut first = assignment(&worker_a, crate::coordination::Phase::Accepted);
+            first.slug = slug_a.into();
+            first.worktree = tree_of_a.map(|path| path.display().to_string());
+            let mut second = assignment(&worker_b, crate::coordination::Phase::Accepted);
+            second.id = "assignment-2".into();
+            second.slug = "TGT-2".into();
+            second.worktree = Some(tree_b.display().to_string());
+            state.assignments.insert(first.id.clone(), first);
+            state.assignments.insert(second.id.clone(), second);
+        });
+    };
+    write_pool("TGT-1", None);
+    let ids = [
+        a.session.session_id.clone(),
+        b.session.session_id.clone(),
+        integrator.session.session_id.clone(),
+        dispatcher.session.session_id.clone(),
+    ];
+    let points = |tx: &mut Transaction<'_>| -> Vec<bool> {
+        ids.iter()
+            .map(|id| f.safe_point(id, tx).contains(&B::UncommittedChanges))
+            .collect()
+    };
+    // Clean everywhere: nobody is held by uncommitted work.
+    assert_eq!(points(&mut tx), [false, false, false, false]);
+    // B is busy in its own tree: only B is held, not A, the integrator or the dispatcher.
+    std::fs::write(tree_b.join("draft.txt"), "synthetic").unwrap();
+    assert_eq!(points(&mut tx), [false, true, false, false]);
+    // A person edits the main checkout: only the integrator sees it.
+    std::fs::write(Path::new(&f.m.target.root).join("person.txt"), "synthetic").unwrap();
+    assert_eq!(points(&mut tx), [false, true, true, false]);
+    // A's untracked file in the tree its branch names: the fallback holds A.
+    std::fs::write(tree_a.join("new.txt"), "synthetic").unwrap();
+    assert_eq!(points(&mut tx), [true, true, true, false]);
+    // Neither field nor a matching branch: A owns no tree.
+    write_pool("TGT-404", None);
+    assert_eq!(points(&mut tx), [false, true, true, false]);
+    // The field set, even to another tree: it wins over inference.
+    write_pool("TGT-1", Some(&tree_b));
+    assert_eq!(points(&mut tx), [true, true, true, false]);
+    // Repeated reads answer the same.
+    assert_eq!(points(&mut tx), [true, true, true, false]);
+    // B's work committed in its tree, the person's file gone: only A's pointer to B's
+    // (now clean) tree remains, and nothing holds anyone.
+    std::fs::remove_file(tree_b.join("draft.txt")).unwrap();
+    std::fs::remove_file(Path::new(&f.m.target.root).join("person.txt")).unwrap();
+    assert_eq!(points(&mut tx), [false, false, false, false]);
 }
