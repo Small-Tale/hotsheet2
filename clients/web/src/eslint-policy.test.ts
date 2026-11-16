@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { ESLint } from 'eslint';
+import ts from 'typescript';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import packageJson from '../package.json';
@@ -87,6 +88,53 @@ describe('web ESLint policy', () => {
       });
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('HS2-N8FTCK opens routeWebSocket upstreams only through the error-listening, stop-aware helper', () => {
+    // `unrouteAll` leaves WebSocket routes installed, so after `stop()` a reconnecting page still
+    // reaches the handler. A raw upstream socket opened there dials the stopped server, and without
+    // an `error` listener its ECONNREFUSED is unhandled (HS2-6TK3SB). `openUpstreamSocket` listens
+    // for `error` and refuses a stopped server; a raw `new …WebSocket(` inside a handler is rejected.
+    const tests = join(import.meta.dirname, '../tests');
+    const offenders: string[] = [];
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          scan(path);
+          continue;
+        }
+        if (!/\.[cm]?[jt]sx?$/.test(entry.name)) continue;
+        const text = readFileSync(path, 'utf8');
+        if (!text.includes('routeWebSocket(')) continue;
+        const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+        const name = relative(tests, path).split(sep).join('/');
+        const visit = (node: ts.Node, handler: boolean) => {
+          if (
+            handler &&
+            ts.isNewExpression(node) &&
+            /WebSocket$/.test(node.expression.getText(file)) &&
+            !/WebSocketServer$/.test(node.expression.getText(file))
+          )
+            offenders.push(`${name}:${String(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1)}`);
+          const routed =
+            ts.isCallExpression(node) &&
+            ts.isPropertyAccessExpression(node.expression) &&
+            node.expression.name.text === 'routeWebSocket';
+          ts.forEachChild(node, (child) => {
+            visit(child, handler || routed);
+          });
+        };
+        visit(file, false);
+      }
+    };
+    scan(tests);
+    expect(offenders).toEqual([]);
+    const fixture = readFileSync(join(tests, 'real-ticket-server.ts'), 'utf8');
+    const helper = fixture.slice(fixture.indexOf('export function openUpstreamSocket('));
+    expect(helper).toMatch(/if \(stoppedHosts\.has\(host\)\) \{\n\s+closeRoute\(\);\n\s+return undefined;/);
+    expect(helper).toContain("upstream.on('error', closeRoute);");
+    expect(fixture).toMatch(/if \(host\) \{\n\s+stoppedHosts\.add\(host\);/);
   });
 
   it('HS2-QY232J waits for the terminal drawer to finish opening before using New Drawer Item', () => {

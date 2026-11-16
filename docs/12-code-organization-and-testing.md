@@ -1658,6 +1658,15 @@ socket's close does not fail the test. `realTicketServer().stop(page)` does that
 the server. The first `HS2-QY232J` case in `src/eslint-policy.test.ts` rejects a bare
 `await server.stop()` in a proxying spec unless the routes are already removed or the
 page's context or browser is already closed.
+Playwright cannot remove a `routeWebSocket` route (`unrouteAll` clears only HTTP routes), so
+a page that reconnects after `stop()` still reaches the test's WebSocket handler. A handler
+that proxies to a real server opens its upstream with `openUpstreamSocket(route, target)`
+from `tests/real-ticket-server.ts` (HS2-N8FTCK). The helper always listens for `error`, so a
+refused dial closes the route instead of throwing an unhandled `ECONNREFUSED` (HS2-6TK3SB);
+`stop()` closes that server's open upstreams, and the helper then refuses new ones without
+dialing. The `HS2-N8FTCK` policy case parses `tests/` and rejects a raw `new …WebSocket(`
+inside a `routeWebSocket` handler; `tests/real-ticket-server.spec.ts` covers the stop and
+refusal.
 Every proxied request goes through `proxyFetch(route, options)`, never a raw `route.fetch`
 (HS2-6E87E4). Playwright reuses keep-alive sockets, and the server closes an idle
 connection after 30 s, so a request that picks up a closing socket fails with
