@@ -1892,6 +1892,12 @@ export function isActorAwareRequest(method: string, path: string): boolean {
  * authorship and applies human (never AI-only) rules. A body that already names its actor,
  * including an explicit `null` for unknown authorship, is left unchanged.
  */
+/** The `request_id` member of a refusal body, when it has one. */
+function requestIdOf(failure: unknown): string | undefined {
+  const id = (failure as { request_id?: unknown } | null | undefined)?.request_id;
+  return typeof id === 'string' ? id : undefined;
+}
+
 export function withHumanActor(path: string, init: RequestInit): RequestInit {
   const method = (init.method ?? 'GET').toUpperCase();
   if (typeof init.body !== 'string' || !isActorAwareRequest(method, path)) return init;
@@ -1920,6 +1926,8 @@ export class ApiHttpError extends Error {
     readonly status: number,
     /** The failure body's stable `code`, for callers that branch on the kind of failure (HS2-9S8CV1). */
     readonly code?: string,
+    /** HS2-9XJEZC: the orchestrator permission request a `permission_required` refusal waits on. */
+    readonly requestId?: string,
   ) {
     super(message);
   }
@@ -1994,7 +2002,12 @@ export class Api {
       if (observed) headersAt = performance.now();
       if (!response.ok) {
         const failure = await responseJson(response);
-        throw new ApiHttpError(errorMessageOf(failure) ?? `${response.status}`, response.status, errorCodeOf(failure));
+        throw new ApiHttpError(
+          errorMessageOf(failure) ?? `${response.status}`,
+          response.status,
+          errorCodeOf(failure),
+          requestIdOf(failure),
+        );
       }
       onResponse?.(response);
       // The change cursor this read was served at bounds what the stream must replay (HS2-SQKJYG).
@@ -2293,12 +2306,54 @@ export class Api {
       {},
       false,
     );
+  /**
+   * HS2-9XJEZC: one run's events after a cursor, as a genuine long poll: with a cursor the server answers
+   * as soon as an event of that run is recorded, or at the 20-second deadline with the same cursor.
+   */
+  orchestrationRunEventsAfter = (checkout: string, run: string, after: string | undefined, signal?: AbortSignal) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/run-events?${new URLSearchParams({
+        run,
+        after: after ?? '0',
+        limit: '200',
+        wait_ms: after === undefined ? '0' : '20000',
+      })}`,
+      { signal },
+      false,
+    );
   /** One run's events (HS2-7QHWHJ), oldest first. */
   orchestrationRunEvents = (checkout: string, run: string) =>
     this.parsed(
       parseOrchestrationRecord,
       `/checkouts/${encodeURIComponent(checkout)}/orchestration/run-events?${new URLSearchParams({ run, after: '0', limit: '200' })}`,
       {},
+      false,
+    );
+  /**
+   * HS2-9XJEZC: ask the orchestration project's orchestrator to run one validation step (HS2-WN0MXZ). The
+   * same operation id is the same request: after a person answers its permission request, sending it
+   * again runs the step once. A step the orchestrator may not run without a person refuses 403
+   * `permission_required` with the request id.
+   */
+  orchestrationValidationRun = (
+    checkout: string,
+    request: {
+      ticket: { connection_id: string; native_id: string };
+      step_id: string;
+      operation_id: string;
+      run_id?: string;
+      /** How long the server waits for the attempt to finish, at most 8000 ms. */
+      wait_ms?: number;
+    },
+  ) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/validations/run`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ wait_ms: 0, ...request, actor: { role: 'system', id: `orchestrator.${checkout}` } }),
+      },
       false,
     );
   /** The validation steps of one orchestration ticket with their latest evidence (HS2-WN0MXZ). */
@@ -2415,7 +2470,12 @@ export class Api {
     });
     if (!response.ok) {
       const failure = await responseJson(response);
-      throw new ApiHttpError(errorMessageOf(failure) ?? `${response.status}`, response.status, errorCodeOf(failure));
+      throw new ApiHttpError(
+        errorMessageOf(failure) ?? `${response.status}`,
+        response.status,
+        errorCodeOf(failure),
+        requestIdOf(failure),
+      );
     }
     return response.blob();
   };

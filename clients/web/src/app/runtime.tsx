@@ -3453,6 +3453,11 @@ export async function startHotSheetWebClient() {
     showToast,
     openTicket: openTicketLinkMatch,
     showPermissionRequest,
+    // The inbox is not a signal; its revision is what changes when a request arrives or is answered.
+    pendingOrchestratorRequests: () => {
+      void permissionRevision.value;
+      return new Set(pendingPermissions().flatMap((item) => (item.orchestrator ? [item.orchestrator.request_id] : [])));
+    },
     // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
     // Unknown until Settings read the type, so the view's own declaration read decides meanwhile.
     orchestrationProject: (id) => orchestrationSurfaceRef.current?.knownOrchestrationProject(id),
@@ -6483,6 +6488,7 @@ export async function startHotSheetWebClient() {
         void orchestrationView.showRequest(requestId);
       },
       openGoal: () => void orchestrationView.openGoal(),
+      runValidation: () => void orchestrationView.runValidation(),
     },
     runAutomaticTicketGroup: (slugs) => {
       void automaticTicketGrouping.run(slugs);

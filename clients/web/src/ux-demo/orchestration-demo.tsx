@@ -155,7 +155,26 @@ export function OrchestrationInspectorDemo() {
             loading: false,
             ci: 'pending',
             gates: [{ kind: 'ci', state: 'pending', provider: 'github-actions', commit: '3f9c2a1d00' }],
-            validations: [{ step_id: 'contract-check', state: 'running' }],
+            validations: [
+              {
+                step_id: 'contract-check',
+                check: 'profile',
+                state: 'passed',
+                at_ms: timeline.now_ms - 120_000,
+                exit_code: 0,
+                evidence: '4f2a91c',
+              },
+              {
+                step_id: 'smoke',
+                check: 'command',
+                state: 'failed',
+                reason: 'exit_code_mismatch',
+                at_ms: timeline.now_ms - 60_000,
+                exit_code: 1,
+                evidence: '9c03be1',
+              },
+              { step_id: 'e2e-login', check: 'profile', state: 'skipped', reason: 'prerequisite_not_passed' },
+            ],
             runRead: true,
             reconciliation: {
               at_ms: timeline.now_ms - 120_000,
@@ -232,6 +251,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       runControl: () => undefined,
       showRequest: () => undefined,
       openGoal: () => undefined,
+      runValidation: () => undefined,
     }),
   );
   return () => {

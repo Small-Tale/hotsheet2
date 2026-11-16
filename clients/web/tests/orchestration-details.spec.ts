@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  capture,
   openOrchestration,
   orchestrateSelf,
   planTwoSteps,
   realTicketServer,
   scheduler,
   send,
+  TARGET,
   visualPass,
 } from './orchestration-real-fixtures';
 
@@ -86,6 +88,60 @@ test('HS2-XM692S the Run section shows the last reconciliation beside the run co
     await visualPass(page, 'hs2-xm692s', 'run-checked', {
       show: section,
       check: () => expect(section).toContainText(/, since /),
+      atPhone: () => view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-9XJEZC Run Validation asks through the permission prompt and shows each step’s evidence', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    // A command step the orchestration project chose: it asks a person before each run (§26.7).
+    await send(server, 'POST', `${base}/validations/define`, {
+      ticket: { native_id: plan.goal.id },
+      step: { step_id: 'smoke', target_id: TARGET, check: { kind: 'command', program: 'true', args: [] } },
+      actor: scheduler,
+    });
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Validation"]');
+    await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
+    await expect(section).toContainText('smoke (command)');
+    await expect(section).toContainText('Not confirmed');
+    await expect(section).toContainText('Output is never shown here.');
+
+    await section.getByRole('button', { name: 'Run Validation' }).click();
+    // The ordinary permission prompt asks, headed by the orchestrator.
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toContainText('Orchestrator', { timeout: 30_000 });
+    await expect(section).toContainText('Waits for permission');
+    await expect(section.getByRole('button', { name: 'Show Request' })).toBeVisible();
+    await capture(page, 'hs2-9xjezc', 'validation-asks-1440');
+    // A command is outside any remembered rule, so the card offers Allow (once) and Deny only.
+    await popup.getByRole('button', { name: 'Allow', exact: true }).click();
+
+    // The answer changes the timeline; the same operation is sent again and the step runs once.
+    await expect(section).toContainText(/Passed · .* · exit 0/, { timeout: 60_000 });
+    await expect(section.getByRole('button', { name: 'Run Validation' })).toBeDisabled();
+    await expect(section.getByRole('button', { name: 'Show Request' })).toHaveCount(0);
+    const evidence = (await send(server, 'POST', `${base}/validations/list`, {
+      ticket: { native_id: plan.goal.id },
+    })) as unknown as Array<{ history?: unknown[] }>;
+    expect(evidence[0].history).toHaveLength(1);
+
+    await visualPass(page, 'hs2-9xjezc', 'validation-passed', {
+      show: section,
+      check: () => expect(section).toContainText('Passed'),
       atPhone: () => view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click(),
     });
   } finally {

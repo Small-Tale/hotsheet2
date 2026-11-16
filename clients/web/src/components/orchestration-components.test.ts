@@ -187,6 +187,39 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(run({})).not.toContain('>Checked<');
   });
 
+  it('HS2-9XJEZC shows each validation step’s evidence and one Run Validation, and a wait for permission', () => {
+    const steps = [
+      { step_id: 'contract-check', check: 'profile', state: 'passed', at_ms: 0, exit_code: 0, evidence: '4f2a91c' },
+      { step_id: 'smoke', check: 'command', state: 'failed', reason: 'exit_code_mismatch', exit_code: 1 },
+    ];
+    const section = (details: object, extra = {}) => {
+      const markup = inspector('step-3', { details: { loading: false, validations: steps, ...details }, ...extra });
+      return markup.slice(markup.indexOf('data-orchestration-section="Validation"'));
+    };
+    const shown = section({});
+    expect(shown).toContain('evidence 4f2a91c');
+    expect(shown).toContain('smoke (command)');
+    expect(shown).toContain('Failed · exit code mismatch · exit 1');
+    expect(shown).toContain('data-action="run-orchestration-validation"');
+    expect(shown).not.toMatch(/data-action="run-orchestration-validation"[^>]*disabled/);
+    expect(shown).not.toContain('data-action="show-orchestration-request"');
+    const waiting = section({ pendingValidations: [{ step_id: 'smoke', operation_id: 'op', request_id: 'req-1' }] });
+    expect(waiting).toContain('Waits for permission');
+    expect(waiting).toContain('data-request-id="req-1"');
+    // Busy, or nothing left to run, disables it.
+    expect(section({}, { busy: true })).toMatch(
+      /data-action="run-orchestration-validation"[^>]*disabled|disabled[^>]*data-action="run-orchestration-validation"/,
+    );
+    const done = String(
+      OrchestrationInspector({
+        item: item('step-3'),
+        timeline: demoTimeline('running'),
+        details: { loading: false, validations: [steps[0]] },
+      }),
+    );
+    expect(done).toContain('Every step passed or is running');
+  });
+
   it('is a right-rail panel with an empty selection', () => {
     expect(String(OrchestrationInspector({}))).toContain('Select a card');
     const panel = orchestrationInspectorPanel({ item: item('step-3'), timeline: demoTimeline('running') });
@@ -213,6 +246,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       runControl: (control: string, state?: string) => calls.push(`run ${control} ${state ?? ''}`),
       showRequest: (id: string) => calls.push(`request ${id}`),
       openGoal: () => calls.push('goal'),
+      runValidation: () => calls.push('validate'),
     };
     wireOrchestrationTimeline({} as HTMLElement, bindings);
     const view = { dataset: { orchestrationView: 'true' } };
@@ -238,6 +272,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'orchestration-run-control', target({ control: 'correct', runState: 'failed' }));
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
     run('click', 'open-orchestration-goal', target({}));
+    run('click', 'run-orchestration-validation', target({}));
     expect(calls).toEqual([
       'select step-3',
       'select step-5',
@@ -249,6 +284,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'run correct failed',
       'request request-6',
       'goal',
+      'validate',
     ]);
   });
 });
@@ -309,6 +345,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       runControl: noop,
       showRequest: noop,
       openGoal: noop,
+      runValidation: noop,
     });
     const focused: string[] = [];
     const column = { scrollIntoView: noop };

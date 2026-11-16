@@ -17,6 +17,7 @@ import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } fro
 import { parseRunReconciliation } from '../orchestration-run-checks';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
+import { parseValidationStep, type PendingValidation, stepsToRun } from '../orchestration-validation-steps';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
 import type { TicketLinkMatch } from '../ticket-link-resolution';
 import { startVersionedLongPoll } from '../versioned-long-poll';
@@ -140,6 +141,12 @@ export interface OrchestrationViewDependencies {
    * to this view's own read of the target declaration that Project Type creates.
    */
   readonly orchestrationProject?: (projectId: string) => boolean | undefined;
+  /**
+   * HS2-9XJEZC: the orchestrator permission requests (by request id) this browser shows as pending, read
+   * reactively. A Run Validation request whose permission request was pending and no longer is has been
+   * answered, so it is sent again under its operation id.
+   */
+  readonly pendingOrchestratorRequests?: () => ReadonlySet<string>;
 }
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -168,19 +175,8 @@ export function parseOrchestrationDetails(
         provider: text(gate.provider),
         commit: text(gate.commit),
       })),
-    validations: (validations ?? [])
-      .filter((evidence) => {
-        const step = evidence.step as Record<string, unknown> | undefined;
-        return step?.target_id === undefined || step.target_id === targetId;
-      })
-      .map((evidence) => {
-        const step = (evidence.step ?? {}) as Record<string, unknown>;
-        return {
-          step_id: text(step.step_id) ?? 'step',
-          state: text(evidence.state) ?? 'unverified',
-          reason: text(evidence.reason),
-        };
-      }),
+    // HS2-9XJEZC: a step's name and target are in its `definition`.
+    validations: (validations ?? []).flatMap((evidence) => parseValidationStep(evidence, targetId) ?? []),
     events: eventList
       .map((entry) => (entry.record ?? entry) as Record<string, unknown>)
       .map((record) => ({
@@ -239,6 +235,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   const selectedStep = signal<string | undefined>(undefined);
   const details = signal<OrchestrationInspectorDetails | undefined>(undefined);
   const busy = signal(false);
+  /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
+  const pendingValidations = signal<Readonly<Record<string, PendingValidation>>>({});
   /** HS2-HCW7MD: where planning stands (`idle`, `planning`, `ended`), read when the timeline changes. */
   const planning = signal<string | undefined>(undefined);
   const disposers: Array<() => void> = [];
@@ -451,6 +449,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     ]);
     if (request !== detailsRequest) return;
     const value = <T>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : undefined);
+    const pending = Object.values(pendingValidations.value).filter((entry) =>
+      entry.operation_id.startsWith(`validate-${item.step_id}-`),
+    );
     const failed = [gates, events, record].some((result) => result.status === 'rejected');
     details.value = {
       ...parseOrchestrationDetails(
@@ -461,7 +462,155 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         value(record),
       ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
+      pendingValidations: pending,
     };
+  }
+
+  /**
+   * HS2-9XJEZC: while a card with a run is selected, one cursor long poll of that run's events reads the
+   * card's details again on each new event: a validation result, a gate, a reconciliation or provisional
+   * change that leaves the timeline as it was. It ends when the selection, project or view changes.
+   */
+  let eventsKey = '',
+    eventsStop: (() => void) | undefined;
+  disposers.push(
+    effect(() => {
+      const current = dependencies.project(),
+        open = dependencies.viewMode.value === 'orchestration',
+        runId = findTimelineItem(timeline.value, selectedStep.value)?.item.run?.run_id;
+      const key = current && open && runId ? `${current.id}:${current.apiPath}:${runId}` : '';
+      if (key === eventsKey) return;
+      eventsStop?.();
+      eventsStop = undefined;
+      eventsKey = key;
+      if (!key || !current || !runId) return;
+      let first = true;
+      eventsStop = startVersionedLongPoll({
+        read: async (after, signal) => {
+          const page = await clientFor(current).orchestrationRunEventsAfter(current.id, runId, after, signal);
+          return { version: typeof page.cursor === 'number' ? String(page.cursor) : (after ?? '0') };
+        },
+        onValue: () => {
+          // The first answer is the cursor the details were read at; later ones are new events.
+          if (first) first = false;
+          else void refreshDetails();
+        },
+        onError: () => undefined,
+      });
+    }),
+  );
+
+  // HS2-9XJEZC: a request seen pending that is no longer pending was answered; send its operation again.
+  const seenPending = new Set<string>();
+  disposers.push(
+    effect(() => {
+      const shown = dependencies.pendingOrchestratorRequests?.();
+      const waiting = Object.values(pendingValidations.value);
+      if (!shown || waiting.length === 0) return;
+      const answered = waiting.filter((entry) => {
+        if (shown.has(entry.request_id)) {
+          seenPending.add(entry.request_id);
+          return false;
+        }
+        return seenPending.has(entry.request_id);
+      });
+      if (answered.length === 0) return;
+      for (const entry of answered) seenPending.delete(entry.request_id);
+      void sendValidations(answered, false);
+    }),
+  );
+
+  /**
+   * HS2-9XJEZC: ask the orchestrator to run each step, through the same gate as its own loop: a
+   * remembered rule lets a profile step run, and anything else (a command step always) files the
+   * ordinary permission request and waits for a person. A refusal with a request id is kept and sent
+   * again under the same operation id once that request is answered; a denial is final. A started step
+   * is followed under its operation id (each call waits up to 8 seconds on the server) until its result
+   * is final, which is how the orchestrator collects a result (§26.12).
+   */
+  async function sendValidations(requests: readonly PendingValidation[], announce: boolean) {
+    const current = dependencies.project(),
+      item = selected();
+    if (!current || !item) return;
+    const client = clientFor(current),
+      run = generation;
+    const call = (entry: PendingValidation, waitMs: number) =>
+      client.orchestrationValidationRun(current.id, {
+        ticket: item.goal,
+        step_id: entry.step_id,
+        operation_id: entry.operation_id,
+        run_id: item.run?.run_id,
+        wait_ms: waitMs,
+      });
+    const unsettled = (answer: Record<string, unknown>) => {
+      const result = answer.result as { state?: unknown } | undefined;
+      return result?.state === 'running' || (typeof answer.attempts_left === 'number' && answer.attempts_left > 0);
+    };
+    const follow = async (entry: PendingValidation) => {
+      // At most an hour of eight-second waits: the longest a step may run (§26.12), and a bound.
+      for (let wait = 0; wait < 450 && run === generation; wait += 1) {
+        try {
+          const answer = await call(entry, 8_000);
+          void refreshDetails();
+          if (!unsettled(answer)) return;
+        } catch {
+          return;
+        }
+      }
+    };
+    const next = new Map(Object.entries(pendingValidations.value));
+    let asked = 0,
+      denied = 0,
+      failed = '';
+    for (const entry of requests) {
+      const key = entry.operation_id;
+      try {
+        const answer = await call(entry, 0);
+        next.delete(key);
+        if (unsettled(answer)) void follow(entry);
+      } catch (reason) {
+        const refusal = reason as { code?: string; requestId?: string };
+        if (refusal.code === 'permission_required' && refusal.requestId) {
+          if (!next.has(key)) asked += 1;
+          next.set(key, { ...entry, request_id: refusal.requestId });
+        } else {
+          next.delete(key);
+          if (refusal.code === 'permission_denied') denied += 1;
+          else failed ||= message(reason);
+        }
+      }
+    }
+    const settled = Object.fromEntries(next);
+    const changed = JSON.stringify(settled) !== JSON.stringify(pendingValidations.value);
+    pendingValidations.value = settled;
+    if (announce && asked > 0)
+      dependencies.showToast(
+        asked === 1 ? 'A validation step waits for permission.' : `${asked} validation steps wait for permission.`,
+      );
+    if (denied > 0) dependencies.showToast('A person denied running a validation step.');
+    if (failed) dependencies.showToast(`Validation could not start: ${failed}`);
+    if (changed || announce) void refreshDetails();
+  }
+
+  async function runValidation() {
+    const item = selected(),
+      steps = details.value?.validations ?? [];
+    if (!item || busy.value) return;
+    const waiting = new Set(Object.values(pendingValidations.value).map((entry) => entry.step_id));
+    const requests = stepsToRun(steps)
+      .filter((step) => !waiting.has(step.step_id))
+      .map((step) => ({
+        step_id: step.step_id,
+        operation_id: `validate-${item.step_id}-${step.step_id}-${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        request_id: '',
+      }));
+    if (requests.length === 0) return;
+    busy.value = true;
+    try {
+      await sendValidations(requests, true);
+    } finally {
+      busy.value = false;
+    }
   }
 
   function select(stepId: string) {
@@ -625,6 +774,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     start: () => setAutomatic(true),
     pause: () => setAutomatic(false),
     runControl,
+    runValidation,
     propose,
     showRequest,
     openGoal,
@@ -634,6 +784,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     placeTimeline,
     dispose() {
       streamStop?.();
+      eventsStop?.();
       labelReader?.reset();
       if (typeof cancelAnimationFrame === 'function') placement.cancel();
       observed?.observer.disconnect();

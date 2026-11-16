@@ -14,6 +14,8 @@ export const ORCHESTRATION_ACTIONS = {
   orchestrationRunControl: action('orchestration-run-control'),
   showOrchestrationRequest: action('show-orchestration-request'),
   openOrchestrationGoal: action('open-orchestration-goal'),
+  /** HS2-9XJEZC: run every validation step of the selected card that has not passed. */
+  runOrchestrationValidation: action('run-orchestration-validation'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */

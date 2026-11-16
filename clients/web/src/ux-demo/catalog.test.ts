@@ -452,6 +452,8 @@ describe('UX demo catalog', () => {
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
       'orchestration-inspector-section':
         'Titled section shell of the cataloged OrchestrationInspector, rendered by every one of its sections (demoed).',
+      'orchestration-validation-section':
+        'Validation section of the cataloged OrchestrationInspector, rendered for a card with validation steps (HS2-9XJEZC, demoed).',
       'orchestration-plan-section':
         'Plan section of the cataloged OrchestrationInspector, rendered for every selected card (HS2-15G5T4, demoed).',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',

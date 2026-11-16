@@ -33,8 +33,10 @@ import {
   stateBadge,
   toolLabel,
 } from '../orchestration-timeline-board';
+import type { PendingValidation, ValidationStepView } from '../orchestration-validation-steps';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 import { OrchestrationPlanSection } from './orchestration-plan-section';
+import { OrchestrationValidationSection } from './orchestration-validation-section';
 import { inspectorToggle, type SidebarPanelParts } from './sidebar-panel';
 
 /** What the inspector read about the selected item's run: its gates, validation steps, and events. */
@@ -43,7 +45,10 @@ export interface OrchestrationInspectorDetails {
   error?: string;
   ci?: string;
   gates?: ReadonlyArray<{ kind: string; state: string; provider?: string; commit?: string }>;
-  validations?: ReadonlyArray<{ step_id: string; state: string; reason?: string }>;
+  /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
+  validations?: readonly ValidationStepView[];
+  /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
+  pendingValidations?: readonly PendingValidation[];
   events?: ReadonlyArray<{ at_ms: number; kind: string; state?: string; reason?: string; source?: string }>;
   /** HS2-XM692S: the run record was read; its last reconciliation, absent when none is stored. */
   runRead?: boolean;
@@ -330,7 +335,15 @@ function stateDetail(item: TimelineItem) {
   }
 }
 
-function Evidence({ details, clock }: { details: OrchestrationInspectorDetails; clock: ClockFormat }) {
+function Evidence({
+  details,
+  clock,
+  busy,
+}: {
+  details: OrchestrationInspectorDetails;
+  clock: ClockFormat;
+  busy: boolean;
+}) {
   if (details.loading && !details.gates && !details.events)
     return <Note text="Reading gates, validation and events…" />;
   return (
@@ -351,13 +364,12 @@ function Evidence({ details, clock }: { details: OrchestrationInspectorDetails; 
         )}
       </OrchestrationInspectorSection>
       {details.validations && details.validations.length > 0 && (
-        <OrchestrationInspectorSection label="Validation">
-          <ValueTable label="Validation" density="compact" stackBelow="narrow">
-            {details.validations.map((step) => (
-              <ValueTableRow label={step.step_id} value={sentence(step.state)} />
-            ))}
-          </ValueTable>
-        </OrchestrationInspectorSection>
+        <OrchestrationValidationSection
+          steps={details.validations}
+          pending={details.pendingValidations}
+          busy={busy}
+          clock={clock}
+        />
       )}
       <OrchestrationInspectorSection label="Events">
         {details.events && details.events.length > 0 ? (
@@ -419,7 +431,7 @@ export function OrchestrationInspector({
       {stateDetail(item)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.run && <RunSection item={item} busy={busy} clock={clock} details={details} />}
-      {item.run && details && <Evidence details={details} clock={clock} />}
+      {item.run && details && <Evidence details={details} clock={clock} busy={busy} />}
     </List>
   );
 }

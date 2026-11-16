@@ -27,6 +27,8 @@ export interface OrchestrationTimelineBindings {
   readonly runControl: (control: string, state?: string) => void;
   readonly showRequest: (requestId: string) => void;
   readonly openGoal: () => void;
+  /** HS2-9XJEZC: Run Validation on the selected card. */
+  readonly runValidation: () => void;
 }
 
 const inView = (target: Element) => Boolean(target.closest(ORCHESTRATION_TARGETS.view.selector));
@@ -162,6 +164,11 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.openOrchestrationGoal.selector, () => {
       bindings.openGoal();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.runOrchestrationValidation.selector, () => {
+      bindings.runValidation();
     }),
   );
   return () => {

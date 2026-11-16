@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -5304,3 +5304,31 @@ reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with it
 gates, events and validations whenever the timeline's version changes; a new outcome
 is a `reconciled` run event, so it shows without polling. Words live in
 `clients/web/src/orchestration-run-checks.ts`.
+
+### Validation and Run Validation (HS2-9XJEZC)
+
+The **Validation** section lists each validation step of the card (§26.12) with its
+latest result, the time, the exit code and the first characters of its standard
+output's digest ("Passed · 14:58 · exit 0 · evidence 4f2a91c"); a command step is
+marked "(command)". Output is never shown. **Run Validation** (answer A: one action)
+asks for every step that has not passed and is not running, each under a new
+operation id. It acts as the orchestration project's orchestrator
+(`system`, `orchestrator.<owner>`), so it passes the gate of §26.7 like the
+orchestrator's own loop: a remembered `validation_run` rule lets a profile step run,
+and a command step, which no rule covers, files the ordinary permission request
+(the permission popup and Notifications). A person's own act would never ask, and
+the design asks through the permission prompt. A refused step reads "Waits for
+permission" with **Show Request**. Once that request, seen pending among the
+browser's permission requests, is no longer pending (a person answered it), the
+inspector sends the same operation again, which runs the step once, or drops it on a
+denial. The permission list's own live updates drive this; nothing polls. A started
+step is followed under its operation id, each request waiting up to 8 seconds on the
+server, until its result is final: that is how the orchestrator collects a result
+(§26.12), and a retried attempt continues the same way.
+
+While a card with a run is selected, the inspector also keeps one cursor long poll of
+that run's events (`GET .../run-events?run=&after=&wait_ms=20000`) and reads the card's
+details again on each new event, because a validation result, a gate change or a
+reconciliation can leave the timeline itself unchanged. It ends when the selection,
+the project or the view changes. The request ids live in the view's
+memory: after a reload, Run Validation asks again under a new operation.
