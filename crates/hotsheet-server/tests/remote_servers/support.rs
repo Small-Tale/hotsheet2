@@ -194,7 +194,7 @@ fn isolated_command(binary: &Path, home: &Path) -> std::process::Command {
 
 /// HS2-SBQ3T8: the stderr of an owned CLI invocation that must fail.
 pub(super) fn cli_failure(home: &Path, prefix: &[&str], arguments: &[&str]) -> String {
-    let binary = PathBuf::from(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let binary = workspace_bin::path("hotsheet-server")
         .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
     let output = isolated_command(&binary, home)
         .arg("--test-fixture-credentials")
