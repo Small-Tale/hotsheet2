@@ -1298,7 +1298,11 @@ authority time is sampled inside that transaction after the lock is acquired.
 Because the store refuses to renew an expired lease, a renewal result it has
 already delivered is read before the previous deadline applies, so a confirmed
 renewal is never reported as missed; a renewal not delivered by that deadline
-still fails, and the renewed lease must still be live (HS2-DG53Y3). A
+still fails, and the renewed lease must still be live (HS2-DG53Y3). While the
+command runs, the guard likewise samples its clock before it reads a delivered
+renewal, so a stall of the guard itself cannot void a confirmed renewal. Each
+renewal starts a third of the lease before the deadline, at least 1 s and at
+most 60 s early; the default 1800 s lease renews 60 s early (HS2-J4BAQS). A
 failed renewal, expired deadline, changed attempt or owner, or failed command
 returns an error. The guard stops its owned process tree, including descendants
 that inherited standard streams, before a blocking final check or on authority

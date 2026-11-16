@@ -93,6 +93,7 @@ fn cmd_claim_run(
         .context(
             "live claim has no exact attempt event; inspect and reacquire before continuing",
         )?;
+    let margin = renewal_margin(lease_seconds)?;
     // Preflight can wait for the lock: no requested command has started yet.
     let mut held = renew_attempt(&store, &ticket.id, worker, &attempt, lease_seconds)
         .context("claim guard preflight renewal failed")?;
@@ -104,40 +105,21 @@ fn cmd_claim_run(
         std::fs::write(marker, b"spawn returned")
             .context("could not mark guarded parent spawn return")?;
     }
-    let margin = Duration::seconds((lease_seconds / 3).clamp(1, 60) as i64);
     let mut pending: Option<Receiver<Result<Ticket, ops::OpError>>> = None;
     loop {
-        if let Some(receiver) = pending.as_ref() {
-            match receiver.try_recv() {
-                Ok(result) => {
-                    pending = None;
-                    held = match result {
-                        Ok(renewed) => renewed,
-                        Err(error) => {
-                            child
-                                .stop()
-                                .context("could not stop guarded process tree")?;
-                            return Err(error).context("claim guard renewal failed; tree stopped");
-                        }
-                    };
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    child
-                        .stop()
-                        .context("could not stop guarded process tree")?;
-                    bail!("claim guard renewal worker ended without a result; tree stopped");
-                }
-            }
-        }
+        // HS2-J4BAQS: sample the clock before reading a delivered renewal, so a
+        // renewal the store confirmed while this thread stalled is never judged
+        // against the deadline it already replaced.
         let now = OffsetDateTime::now_utc();
-        let expiry = lease_deadline(&held)?;
-        if now >= expiry {
-            child
-                .stop()
-                .context("could not stop guarded process tree")?;
-            bail!("claim lease deadline passed before renewal completed; tree stopped");
-        }
+        let expiry = match lease_after_delivery(&mut pending, &mut held, now) {
+            Ok(expiry) => expiry,
+            Err(error) => {
+                child
+                    .stop()
+                    .context("could not stop guarded process tree")?;
+                return Err(error);
+            }
+        };
         match child.try_wait() {
             Ok(Some(status)) => {
                 // A shell can exit while a grandchild still retains stdio and writes.
@@ -179,6 +161,68 @@ fn cmd_claim_run(
         let until = (wake_at - now).whole_milliseconds().max(1) as u64;
         thread::sleep(StdDuration::from_millis(until.min(250)));
     }
+}
+
+/// How long before a lease deadline the guard starts its renewal (HS2-MFYYJ9).
+///
+/// A third of the lease, between 1 s and 60 s: the default 1800 s lease renews
+/// 60 s early, which leaves a store write and its Git step ample time. Debug
+/// builds accept `HOTSHEET_TEST_CLAIM_RUN_RENEWAL_MARGIN_SECONDS` so a short
+/// synthetic lease can renew often while keeping a wide margin (HS2-J4BAQS).
+fn renewal_margin(lease_seconds: u64) -> Result<Duration> {
+    #[cfg(debug_assertions)]
+    if let Ok(value) = std::env::var("HOTSHEET_TEST_CLAIM_RUN_RENEWAL_MARGIN_SECONDS") {
+        return test_renewal_margin(lease_seconds, &value);
+    }
+    Ok(default_renewal_margin(lease_seconds))
+}
+
+#[cfg(debug_assertions)]
+fn test_renewal_margin(lease_seconds: u64, value: &str) -> Result<Duration> {
+    let seconds: u64 = value
+        .parse()
+        .context("test renewal margin must be whole seconds")?;
+    ensure!(
+        (1..lease_seconds).contains(&seconds),
+        "test renewal margin must be at least 1 s and shorter than the lease"
+    );
+    Ok(Duration::seconds(seconds as i64))
+}
+
+fn default_renewal_margin(lease_seconds: u64) -> Duration {
+    Duration::seconds((lease_seconds / 3).clamp(1, 60) as i64)
+}
+
+/// Absorb a renewal already delivered, then check the held lease at `now`.
+///
+/// Returns the deadline of the lease the guard now holds. `now` is sampled
+/// before the delivery is read (HS2-J4BAQS): the store samples its own clock
+/// under the ticket lock and refuses an expired lease, so a delivered `Ok`
+/// proves the authority never lapsed even when this thread observed the old
+/// deadline late.
+fn lease_after_delivery(
+    pending: &mut Option<Receiver<Result<Ticket, ops::OpError>>>,
+    held: &mut Ticket,
+    now: OffsetDateTime,
+) -> Result<OffsetDateTime> {
+    if let Some(receiver) = pending.as_ref() {
+        match receiver.try_recv() {
+            Ok(result) => {
+                *pending = None;
+                *held = result.context("claim guard renewal failed; tree stopped")?;
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                bail!("claim guard renewal worker ended without a result; tree stopped")
+            }
+        }
+    }
+    let expiry = lease_deadline(held)?;
+    ensure!(
+        now < expiry,
+        "claim lease deadline passed before renewal completed; tree stopped"
+    );
+    Ok(expiry)
 }
 
 fn lease_deadline(ticket: &Ticket) -> Result<OffsetDateTime> {
@@ -546,5 +590,125 @@ mod tests {
         await_renewal_with_clock(&receiver, old_deadline(), || early)
             .expect_err("a worker that ends during the wait is not authority");
         worker.join().expect("worker");
+    }
+
+    // HS2-J4BAQS: the running guard's lease check, the delivery-then-deadline
+    // order of `lease_after_delivery`, and the renewal schedule.
+
+    fn waiting() -> (mpsc::Sender<Delivery>, Option<Receiver<Delivery>>) {
+        let (sender, receiver) = mpsc::channel::<Delivery>();
+        (sender, Some(receiver))
+    }
+
+    #[test]
+    fn running_guard_accepts_a_renewal_delivered_after_it_sampled_a_late_clock() {
+        let (sender, mut pending) = waiting();
+        let mut held = renewed(old_deadline());
+        let new_deadline = old_deadline() + Duration::seconds(30);
+        sender.send(Ok(renewed(new_deadline))).expect("deliver");
+        // The guard thread stalled past the old deadline while the store
+        // confirmed the renewal under its own clock.
+        let late = old_deadline() + Duration::seconds(5);
+        let expiry = lease_after_delivery(&mut pending, &mut held, late)
+            .expect("a delivered renewal keeps the guard running");
+        assert_eq!(expiry, new_deadline);
+        assert!(pending.is_none(), "the delivery is consumed");
+        assert_eq!(lease_deadline(&held).expect("deadline"), new_deadline);
+        // Repeated polls without a pending renewal keep the new lease.
+        let again = lease_after_delivery(&mut pending, &mut held, late).expect("still live");
+        assert_eq!(again, new_deadline);
+    }
+
+    #[test]
+    fn running_guard_stops_at_the_deadline_without_a_delivery() {
+        let (_sender, mut pending) = waiting();
+        let mut held = renewed(old_deadline());
+        let before = old_deadline() - Duration::seconds(1);
+        assert_eq!(
+            lease_after_delivery(&mut pending, &mut held, before).expect("live"),
+            old_deadline()
+        );
+        assert!(pending.is_some(), "a renewal still in flight stays pending");
+        let error = lease_after_delivery(&mut pending, &mut held, old_deadline())
+            .expect_err("the deadline passed with no renewal");
+        assert!(
+            format!("{error:#}").contains("lease deadline passed before renewal completed"),
+            "{error:#}"
+        );
+        // With nothing pending at all the deadline still applies.
+        let error = lease_after_delivery(&mut None, &mut held, old_deadline())
+            .expect_err("no renewal scheduled");
+        assert!(
+            format!("{error:#}").contains("deadline passed"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn running_guard_stops_on_refusal_vanished_worker_or_expired_renewal() {
+        let mut held = renewed(old_deadline());
+        let early = old_deadline() - Duration::seconds(60);
+        let (sender, mut pending) = waiting();
+        sender
+            .send(Err(ops::OpError::NotClaimed("HS2-GUARD".into())))
+            .expect("deliver");
+        let error = lease_after_delivery(&mut pending, &mut held, early)
+            .expect_err("a refusal stops the tree");
+        assert!(
+            format!("{error:#}").contains("claim guard renewal failed"),
+            "{error:#}"
+        );
+
+        let (sender, mut pending) = waiting();
+        drop(sender);
+        let error = lease_after_delivery(&mut pending, &mut held, early)
+            .expect_err("a vanished worker stops the tree");
+        assert!(
+            format!("{error:#}").contains("ended without a result"),
+            "{error:#}"
+        );
+
+        // A delivered lease that has itself ended proves nothing at `now`.
+        let (sender, mut pending) = waiting();
+        sender
+            .send(Ok(renewed(old_deadline() + Duration::seconds(3))))
+            .expect("deliver");
+        let later = old_deadline() + Duration::seconds(4);
+        lease_after_delivery(&mut pending, &mut held, later)
+            .expect_err("an expired renewed lease stops the tree");
+    }
+
+    #[test]
+    fn default_renewal_margin_is_a_third_of_the_lease_between_one_and_sixty_seconds() {
+        for (lease, margin) in [
+            (2, 1),
+            (3, 1),
+            (6, 2),
+            (30, 10),
+            (180, 60),
+            (1800, 60),
+            (3600, 60),
+        ] {
+            assert_eq!(
+                default_renewal_margin(lease),
+                Duration::seconds(margin),
+                "lease {lease}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_renewal_margin_must_be_whole_seconds_inside_the_lease() {
+        assert_eq!(
+            test_renewal_margin(12, "11").expect("valid"),
+            Duration::seconds(11)
+        );
+        assert_eq!(
+            test_renewal_margin(2, "1").expect("valid"),
+            Duration::seconds(1)
+        );
+        for invalid in ["0", "12", "13", "1.5", "", "-1"] {
+            test_renewal_margin(12, invalid).expect_err(invalid);
+        }
     }
 }

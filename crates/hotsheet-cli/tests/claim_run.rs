@@ -22,6 +22,32 @@ fn cli_binary() -> &'static str {
 /// The upper bound of a wait on state that should arrive, never a timing window under test.
 const SAFETY_BOUND: Duration = Duration::from_secs(60);
 
+/// A guard's lease and, when set, its debug-only renewal margin (HS2-J4BAQS).
+#[derive(Clone, Copy)]
+struct Lease {
+    seconds: &'static str,
+    margin: Option<&'static str>,
+}
+
+/// HS2-J4BAQS: renew every second with a 59 s margin. A 6 s lease renewed 2 s early, and a
+/// renewal stalled past that margin under the full local gate's Rust load, so the guard
+/// correctly stopped the tree; an 11 s margin then still failed once in 32 loops under a
+/// concurrent workspace suite. The margin matches `SAFETY_BOUND`, the longest stall any of
+/// these tests tolerates. Renewing every second keeps a passing test as short as before;
+/// only a guard that has already failed waits longer. Tests that expect the guard to keep
+/// its authority use this.
+const RENEWING: Lease = Lease {
+    seconds: "60",
+    margin: Some("59"),
+};
+
+/// The production schedule on a 6 s lease: the first renewal starts 4 s after preflight.
+/// Tests that hold the ticket lock and expect the guard to fail at its deadline use this.
+const DEADLINE_6S: Lease = Lease {
+    seconds: "6",
+    margin: None,
+};
+
 struct Fixture {
     root: tempfile::TempDir,
     store: FsStore,
@@ -78,26 +104,20 @@ impl Fixture {
         self.store.read_ticket(&self.ticket.id).unwrap()
     }
 
-    fn guard(&self, worker: &str, lease_seconds: &str, mode: &str, delay_ms: &str) -> Child {
-        self.guard_command(worker, lease_seconds, mode, delay_ms)
+    fn guard(&self, worker: &str, lease: Lease, mode: &str, delay_ms: &str) -> Child {
+        self.guard_command(worker, lease, mode, delay_ms)
             .spawn()
             .unwrap()
     }
 
-    fn guard_command(
-        &self,
-        worker: &str,
-        lease_seconds: &str,
-        mode: &str,
-        delay_ms: &str,
-    ) -> Command {
+    fn guard_command(&self, worker: &str, lease: Lease, mode: &str, delay_ms: &str) -> Command {
         let mut command = self.command(&[
             "claim-run",
             &self.ticket.slug,
             "--worker",
             worker,
             "--lease-seconds",
-            lease_seconds,
+            lease.seconds,
             "--",
         ]);
         command
@@ -127,6 +147,9 @@ impl Fixture {
             )
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if let Some(margin) = lease.margin {
+            command.env("HOTSHEET_TEST_CLAIM_RUN_RENEWAL_MARGIN_SECONDS", margin);
+        }
         command
     }
 
@@ -306,15 +329,15 @@ fn claim_run_grandchild() {
 }
 
 /// HS2-EGMJ8G: the child runs until the store shows two scheduled renewals after the
-/// preflight one, instead of for a fixed 4.5 s against a 3 s lease. The 6-second lease
-/// renews 2 s before each deadline; the old 1 s margin failed (correctly, closed) when a CI
-/// host stall held the renewal past it.
+/// preflight one, instead of for a fixed 4.5 s against a 3 s lease. HS2-J4BAQS: the 1 s
+/// margin of a 3 s lease, then the 2 s margin of a 6 s lease, each failed (correctly,
+/// closed) when load held a renewal past it; `RENEWING` renews every second 59 s early.
 #[test]
 fn hs2_mfyyj9_delayed_child_renews_the_same_claim_attempt_and_reconnects() {
     let f = Fixture::new();
     f.claim("worker");
     let attempt = f.ticket().claim_history.last().unwrap().id;
-    let mut child = f.guard("worker", "6", "release-wait", "0");
+    let mut child = f.guard("worker", RENEWING, "release-wait", "0");
     let deadline = Instant::now() + SAFETY_BOUND;
     while renew_count(&f.ticket()) < 3 {
         if let Some(status) = child.try_wait().unwrap() {
@@ -351,7 +374,7 @@ fn hs2_mfyyj9_delayed_child_renews_the_same_claim_attempt_and_reconnects() {
     fs::remove_file(f.root.path().join("started")).unwrap();
     fs::remove_file(f.root.path().join("completed")).unwrap();
     let reconnect = f
-        .guard("worker", "6", "marker", "50")
+        .guard("worker", RENEWING, "marker", "50")
         .wait_with_output()
         .unwrap();
     assert!(
@@ -378,7 +401,7 @@ fn hs2_mfyyj9_expired_renewal_refuses_and_requires_a_new_exact_claim() {
     assert!(String::from_utf8_lossy(&renew.stderr).contains("lease expired"));
     assert_eq!(f.ticket().claim_history, before);
     let denied = f
-        .guard("worker", "2", "marker", "50")
+        .guard("worker", RENEWING, "marker", "50")
         .wait_with_output()
         .unwrap();
     assert!(!denied.status.success());
@@ -386,7 +409,7 @@ fn hs2_mfyyj9_expired_renewal_refuses_and_requires_a_new_exact_claim() {
     f.claim("worker");
     assert_eq!(f.ticket().claim_count, 2);
     let resumed = f
-        .guard("worker", "2", "marker", "50")
+        .guard("worker", RENEWING, "marker", "50")
         .wait_with_output()
         .unwrap();
     assert!(
@@ -402,7 +425,7 @@ fn hs2_mfyyj9_takeover_stops_a_delayed_child_before_its_commit() {
     let project = f.root.path().join("project");
     let head = f.init_project();
     f.claim("worker");
-    let child = f.guard("worker", "2", "commit", "4000");
+    let child = f.guard("worker", RENEWING, "commit", "8000");
     f.wait_started();
     ops::release(
         &f.store,
@@ -427,7 +450,7 @@ fn hs2_mfyyj9_reset_attempt_and_failed_child_never_report_authority() {
     let f = Fixture::new();
     f.claim("worker");
     let old = f.ticket().claim_history[0].id;
-    let child = f.guard("worker", "2", "marker", "4000");
+    let child = f.guard("worker", RENEWING, "marker", "8000");
     f.wait_started();
     ops::release(
         &f.store,
@@ -454,7 +477,7 @@ fn hs2_mfyyj9_reset_attempt_and_failed_child_never_report_authority() {
 
     fs::remove_file(f.root.path().join("started")).unwrap();
     let failed = f
-        .guard("worker", "2", "fail", "50")
+        .guard("worker", RENEWING, "fail", "50")
         .wait_with_output()
         .unwrap();
     assert!(!failed.status.success());
@@ -467,7 +490,7 @@ fn hs2_mfyyj9_exited_parent_cannot_leave_stdio_holding_grandchild_commit() {
     let head = f.init_project();
     f.claim("worker");
     let output = f
-        .guard("worker", "3", "grandchild-exit", "0")
+        .guard("worker", RENEWING, "grandchild-exit", "0")
         .wait_with_output()
         .unwrap();
     assert!(
@@ -491,7 +514,7 @@ fn hs2_mfyyj9_windows_late_helper_open_preserves_start_gate_and_stops_descendant
     let head = f.init_project();
     f.claim("worker");
     let output = f
-        .guard_command("worker", "3", "grandchild-exit", "0")
+        .guard_command("worker", RENEWING, "grandchild-exit", "0")
         .env(
             "HOTSHEET_TEST_CLAIM_RUN_PARENT_READY_PATH",
             f.root.path().join("parent-ready"),
@@ -519,7 +542,7 @@ fn hs2_mfyyj9_takeover_stops_a_grandchild_commit_with_inherited_stdio() {
     let f = Fixture::new();
     let head = f.init_project();
     f.claim("worker");
-    let child = f.guard("worker", "2", "grandchild-wait", "4000");
+    let child = f.guard("worker", RENEWING, "grandchild-wait", "4000");
     f.wait_file("grandchild-started");
     ops::release(
         &f.store,
@@ -550,7 +573,7 @@ fn hs2_mfyyj9_held_lock_cannot_revive_expired_attempt_or_allow_grandchild_commit
     let f = Fixture::new();
     let head = f.init_project();
     f.claim("worker");
-    let child = f.guard("worker", "6", "grandchild-hold", "0");
+    let child = f.guard("worker", DEADLINE_6S, "grandchild-hold", "0");
     f.wait_file("grandchild-started");
     let (release_lock, holder) = f.hold_ticket_lock_until_released();
     // HS2-FDZGFD: snapshot only once the lock is held, so a renewal that commits before the
@@ -585,7 +608,7 @@ fn hs2_mfyyj9_held_lock_cannot_revive_expired_attempt_or_allow_grandchild_commit
 fn hs2_mfyyj9_held_lock_during_final_check_cannot_report_late_success() {
     let f = Fixture::new();
     f.claim("worker");
-    let child = f.guard("worker", "6", "release-wait", "0");
+    let child = f.guard("worker", DEADLINE_6S, "release-wait", "0");
     f.wait_started();
     let (release_lock, holder) = f.hold_ticket_lock_until_released();
     fs::write(f.root.path().join("release"), "release").unwrap();
