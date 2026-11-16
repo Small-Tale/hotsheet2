@@ -19481,6 +19481,31 @@ components:
                     items:
                       $ref: '#/components/schemas/OrchestrationResourceNeed'
                 additionalProperties: false
+            role_sessions:
+              description:
+                Targets whose dispatcher or integrator the scheduler starts by itself (HS2-TK9ADC), when the target
+                needs one and its pool shows none live. Empty or absent leaves role sessions to a person.
+              type: array
+              maxItems: 256
+              items:
+                type: object
+                required:
+                  - target_id
+                  - roles
+                properties:
+                  target_id:
+                    type: string
+                    pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+                  roles:
+                    type: array
+                    minItems: 1
+                    maxItems: 2
+                    uniqueItems: true
+                    items:
+                      enum:
+                        - dispatcher
+                        - integrator
+                additionalProperties: false
           additionalProperties: false
       additionalProperties: false
     OrchestrationPolicyView:
@@ -21097,6 +21122,25 @@ components:
             wait for the next change (HS2-P5GTSW). Absent from an older host, which offers no wait.
           type: string
           maxLength: 64
+        pool:
+          description:
+            The hosted project's coordination pool, for the orchestrator's role sessions (HS2-TK9ADC). Absent when it
+            could not be read or from an older host.
+          type: object
+          required:
+            - dispatcher_live
+            - integrator_live
+            - handoffs_pending
+          properties:
+            dispatcher_live:
+              type: boolean
+            integrator_live:
+              type: boolean
+            handoffs_pending:
+              description: Assignments handed off and not yet done.
+              type: integer
+              minimum: 0
+          additionalProperties: false
     HostedTargetAdmissionRequest:
       type: object
       required:
@@ -23030,6 +23074,7 @@ components:
             - never_joined
             - role_prompt_failed
             - run_cancelled
+            - role_needed
         detail:
           description: A stable code behind the reason, such as the policy rule a session breaks.
           type: string
@@ -23051,6 +23096,12 @@ components:
         provisional:
           description: Present and true when the work this session is for rests on a pending gate (HS2-JSF985).
           type: boolean
+        role:
+          description: The role of the session started or kept when it is not a worker (HS2-TK9ADC).
+          enum:
+            - dispatcher
+            - integrator
+            - planner
       additionalProperties: false
     SchedulerUnplaced:
       description: Ready work that gets no session in this pass, with why (HS2-ECWG50).

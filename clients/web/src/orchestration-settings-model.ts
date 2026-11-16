@@ -10,6 +10,7 @@ import type {
   OrchestrationPolicyBody,
   OrchestrationPolicyView,
   OrchestrationResolution,
+  OrchestrationRoleSession,
   OrchestrationSession,
   OrchestrationTargetPolicy,
 } from './api';
@@ -203,6 +204,19 @@ const STATE_LABELS = {
 
 export function sessionTitle(session: OrchestrationSession, toolLabel: (tool: string) => string): string {
   return session.label ?? `${toolLabel(session.tool)} ${ROLE_LABELS[session.role]}`;
+}
+
+/**
+ * A session row's second line: its role first when it is a dispatcher or integrator (HS2-TK9ADC), then
+ * its tool, model and start.
+ */
+export function sessionDescription(
+  session: OrchestrationSession,
+  toolLabel: (tool: string) => string,
+  since: string,
+): string {
+  const role = session.role === 'worker' ? '' : `${ROLE_LABELS[session.role]} · `;
+  return `${role}${toolLabel(session.tool)}${session.model ? ` · ${session.model}` : ''} · since ${since}`;
 }
 
 export function sessionStatus(session: OrchestrationSession): ConnectionStatus {
@@ -489,7 +503,12 @@ export interface TargetLimitsDraft {
   models: Record<string, string>;
   /** HS2-YSY7AR: the resources every piece of work here must hold, `<namespace>/<resource>`, comma-separated. */
   resources: string;
+  /** HS2-TK9ADC: the role sessions the scheduler starts here by itself. */
+  roleSessions: OrchestrationRoleSession[];
 }
+
+/** HS2-TK9ADC: the role sessions in the order the form and the policy list them. */
+export const ROLE_SESSIONS: readonly OrchestrationRoleSession[] = ['dispatcher', 'integrator'];
 
 const targetOf = (body: OrchestrationPolicyBody | null | undefined, targetId: string) =>
   body?.targets?.find((entry) => entry.target_id === targetId);
@@ -518,6 +537,9 @@ export function targetLimitsDraftFrom(view: OrchestrationPolicyView | undefined,
     resources: (body?.placement?.resources?.find((item) => item.target_id === targetId)?.resources ?? [])
       .map((need) => `${need.namespace}/${need.resource}`)
       .join(', '),
+    roleSessions: ROLE_SESSIONS.filter((role) =>
+      body?.placement?.role_sessions?.find((item) => item.target_id === targetId)?.roles.includes(role),
+    ),
   };
 }
 
@@ -588,6 +610,12 @@ export function changeTargetLimits(
         : draft.tools.filter((tool) => tool !== value),
       models,
     };
+  }
+  if (field === 'limits.role_sessions' && typeof value === 'string' && checked !== undefined) {
+    const role = ROLE_SESSIONS.find((known) => known === value);
+    if (!role) return draft;
+    const chosen = checked ? [...draft.roleSessions, role] : draft.roleSessions.filter((item) => item !== role);
+    return { ...draft, roleSessions: ROLE_SESSIONS.filter((known) => chosen.includes(known)) };
   }
   if (typeof value !== 'string') return draft;
   if (field === 'limits.max_sessions') return { ...draft, max_sessions: value };
@@ -672,6 +700,17 @@ export function policyWithTargetLimits(
     body.placement = { ...body.placement };
     if (next.length) body.placement.resources = next;
     else delete body.placement.resources;
+  }
+  // HS2-TK9ADC: this project's role sessions, replaced in place; other projects' stay.
+  const opted = body.placement?.role_sessions ?? [],
+    roleEntry = draft.roleSessions.length ? [{ target_id: draft.targetId, roles: [...draft.roleSessions] }] : [],
+    roleAt = opted.findIndex((item) => item.target_id === draft.targetId),
+    roles =
+      roleAt < 0 ? [...opted, ...roleEntry] : [...opted.slice(0, roleAt), ...roleEntry, ...opted.slice(roleAt + 1)];
+  if (roles.length || body.placement?.role_sessions) {
+    body.placement = { ...body.placement };
+    if (roles.length) body.placement.role_sessions = roles;
+    else delete body.placement.role_sessions;
   }
   return { policy: body };
 }

@@ -529,6 +529,8 @@ mod projects;
 mod provisional;
 #[path = "remote_servers/readiness.rs"]
 mod readiness;
+#[path = "remote_servers/role_sessions.rs"]
+mod role_sessions;
 // HS2-75Q254: a real PTY session of the fake agent, a Unix test double.
 #[cfg(unix)]
 #[path = "remote_servers/reconcile_restart.rs"]

@@ -63,6 +63,9 @@
 > (§26.27, HS2-W27N1D); a Software project places and dispatches nothing (HS2-J3ZF27), and Start Orchestration
 > needs no placement actor (HS2-XYAHB4); per-project limits and tool accounts are edited in
 > Settings (HS2-7WF6JD), and changes a CLI process writes are announced live (HS2-SHHGC6).
+> A target may opt in to role sessions: the scheduler starts its dispatcher for ready
+> work and its integrator for handed-off work, and keeps each while the target needs it
+> (§26.30, HS2-TK9ADC).
 
 ## 26.1 Boundary and existing foundations
 
@@ -2606,10 +2609,10 @@ person took over still runs, so it still counts until it stops.
    (`session_run_held`, §26.24). None of these asks a person anything; only the run
    check asks the target, about the run's other live sessions.
 2. The start passes the gate (§26.7) as `sessions_manage` for the tool and model, with
-   the load counted from the records and the operation id. A `dispatcher` or
-   `integrator` start asks under `role_session_start` when the policy lists it, a
-   worker under `session_start`. A start that is being repeated does not count against
-   its own caps.
+   the load counted from the records and the operation id. Every start, a
+   `dispatcher` or `integrator` as much as a worker, asks under `session_start` for its
+   tool unless a remembered rule answers (HS2-XHQ1EH, HS2-TK9ADC). A start that is
+   being repeated does not count against its own caps.
 3. The session is recorded as `requested`, and the target's machine is asked with the
    policy's machine limits for that target.
 4. The host reserves a terminal id for the operation id in
@@ -3088,7 +3091,7 @@ nothing is listed, and an applied start or wind-down ends as the typed, logged
 outcome `executor_unavailable`. An executor that cannot list its sessions marks the
 pass `failed`, and nothing is started on a guess. The executor the server, the CLI
 and MCP run with is `OwnedSessions` (§26.19). Role sessions (a target's dispatcher or
-integrator) are HS2-TK9ADC.
+integrator) are placed as §26.30 describes (HS2-TK9ADC).
 
 ### Decision log and memory
 
@@ -4194,8 +4197,9 @@ log carry the new code and outcome.
 A placed step's run is queued in dispatcher mode (§26.19): the target's dispatcher,
 or a legacy integrator, assigns its ticket. A target whose coordination pool has
 neither live never assigns it. The loop now notices that, says so, and after a
-bounded wait lets the session claim the ticket itself. Starting a dispatcher or
-integrator session for the target is HS2-TK9ADC and is not done here.
+bounded wait lets the session claim the ticket itself. A target whose policy lists
+role sessions gets its dispatcher or integrator started by the scheduler (§26.30,
+HS2-TK9ADC); this wait stays for every other target.
 
 **Which runs.** A run waits on its target's pool when a running worker session the
 orchestrator owns is linked to it, and the run is in dispatcher mode, `queued`, not
@@ -5154,3 +5158,93 @@ orchestration project as `checkout` (HS2-KB2Y51).
 /permissions/rules?source=orchestrator` lists them alone, and Settings shows them
   below the locked notice, which says they still apply. Always Allow on an
   orchestrator card and revoking an orchestrator rule work in both states.
+
+## 26.30 Role sessions a target needs (HS2-TK9ADC)
+
+The scheduler of §26.17 places worker sessions for ready work. A target that opts in
+also gets its **dispatcher** and **integrator** started by the scheduler, so its own
+coordination pool assigns and integrates what the orchestrator places there. The
+maintainer chose both roles, opt-in (HS2-TK9ADC, option B). Without the opt-in nothing
+changes: a run waits for a dispatcher and, after `placement.dispatcher_wait_minutes`,
+its session claims the ticket itself (§26.24, HS2-T16SK0), and role sessions stay a
+person's `session start --role` (§26.16).
+
+### Policy
+
+`placement.role_sessions` lists, per target the policy names, the roles the scheduler
+starts by itself:
+
+```json
+{ "placement": { "role_sessions": [{ "target_id": "<target>", "roles": ["dispatcher", "integrator"] }] } }
+```
+
+Empty (the default, and never written) turns it off. A target is listed once, its
+roles at least once each and only `dispatcher` or `integrator`
+(`duplicate_role_sessions_target`, `role_sessions_without_target`,
+`invalid_role_sessions`). A role session uses the same tool selection as a worker:
+the target's allowed tools, by the tool capacity selection of §26.11 with no preferred
+tool, and the first model the target lists for that tool. That is an assumption the
+maintainer may overrule; no setting chooses a role's tool.
+
+### The pool facts
+
+The target's machine reports its coordination pool with its capacity snapshot (§26.10)
+as `pool`: whether a dispatcher and an integrator hold a live lease, and how many
+assignments are handed off and not yet done (phase `handoff`, `verifying`,
+`integrating`, `suspended_integration` or `ci`). It enters the capacity version only
+when present, so a snapshot of an older host keeps its version, and a handoff changes
+the version a capacity follower waits on. A target that lists role sessions is read on
+every pass, with or without work there. A pool that could not be read (`pool` absent:
+no git checkout, an unreadable pool, an older host) starts nothing.
+
+### Placing
+
+Before any worker, for each listed role of a target whose policy entry is enabled:
+
+| Role       | Started when                                                        | Room needed                                                       |
+| ---------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| dispatcher | the target has placeable work and the pool shows no live dispatcher | itself and one worker, unless a worker of the target already runs |
+| integrator | the pool shows handoffs pending and no live integrator              | itself                                                            |
+
+Neither starts while a session of that role already runs on the target (one the pool
+has not seen join yet included), while the target waits out a refusal backoff or a
+cooldown, or when the machine's admission refuses. A role session counts against the
+target's, the machine's, the tool's and the account's caps like any session; the room
+rule keeps a dispatcher from taking a target's last slot with no worker to assign to.
+The placement is a `start` with reason `role_needed`, detail and `role` naming the
+role, and no steps. It is applied under operation id `sched-role-<role>-<target>`
+(stable, so a repeated start is the same session), dispatches no run, passes the gate
+as a session start (`session_start` for its tool, §26.28), and launches in its role
+through the hosting machine's drawer like any orchestrator session (§26.16).
+
+### Keeping and winding down
+
+A dispatcher, integrator or planner session is never given worker work and never
+picked by a lowered cap (a person's `--role` session included, which before this was
+read as free capacity). Each pass keeps a role session with reason `role_needed` while
+its target still needs it: a worker of the target has a run (both roles), the target
+has placeable work (dispatcher), or handoffs are pending (integrator). Once nothing
+needs it, the usual idle rules apply: kept through `wind_down.idle_minutes` and the
+target's cooldown, then wound down at its safe point. The host's safe point for a role
+session counts every unfinished assignment of the pool (§26.16), so a role session is
+never stopped while a handoff it serves remains.
+
+A typical target walks: no work, nothing runs; work arrives, the dispatcher starts
+before the worker; the worker runs, both kept; the work is handed off, the integrator
+starts and the idle dispatcher waits out its grace; the handoff is integrated and
+nothing is pending, so both wind down at their safe points; new work starts the
+dispatcher again.
+
+### Surfaces
+
+- Settings → Orchestration → a project's Limits: **Coordination Sessions** with
+  Dispatcher and Integrator checkboxes, applied with Apply Limits like the project's
+  other limits (§26.27). A project's session rows name a role session's role before
+  its tool.
+- `hotsheet-cli orchestration policy role-sessions --project <owner> --target <id>
+[--role dispatcher] [--role integrator]` reads the stored policy, replaces that
+  target's entry (no `--role` removes it) and sets it at the revision read, through the
+  same policy route the form uses. A person runs it; an AI actor is refused. A repeat
+  changes nothing.
+- The scheduler's plan, explanation and decision log carry `role` on a role session's
+  placement, and the decision's detail names the role.

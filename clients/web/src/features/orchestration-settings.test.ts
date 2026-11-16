@@ -546,3 +546,29 @@ describe("Show in Drawer for a remote project's session (HS2-6E32N4)", () => {
     expect(t.settings.sessionTab(DEMO_OWNER, session(t, worker))).toBe(apiTab);
   });
 });
+
+describe("a project's coordination sessions (HS2-TK9ADC)", () => {
+  it('applies the roles with the limits, and a further edit takes them off again', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.docs);
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual([]);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'integrator', true);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'dispatcher', true);
+    expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher', 'integrator']);
+    await t.settings.applyLimits(DEMO_OWNER);
+    const [, , body] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[0];
+    expect(body.placement?.role_sessions).toEqual([
+      { target_id: DEMO_TARGETS.docs, roles: ['dispatcher', 'integrator'] },
+    ]);
+    // The detail reads back what was stored.
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.limits?.roleSessions).toEqual(['dispatcher', 'integrator']);
+    });
+    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'dispatcher', false);
+    t.settings.changeLimits(DEMO_OWNER, 'limits.role_sessions', 'integrator', false);
+    await t.settings.applyLimits(DEMO_OWNER);
+    const [, , cleared] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[1];
+    expect(cleared.placement?.role_sessions).toBeUndefined();
+  });
+});

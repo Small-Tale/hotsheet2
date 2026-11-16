@@ -136,7 +136,11 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> DecisionOutcome {
         let step_id = placement.steps.first().cloned();
-        let operation_id = format!("sched-start-{}", step_id.as_deref().unwrap_or("none"));
+        // HS2-TK9ADC: a role session's start is stable per target and role.
+        let operation_id = match placement.role {
+            Some(role) => format!("sched-role-{}-{}", role.code(), placement.target_id),
+            None => format!("sched-start-{}", step_id.as_deref().unwrap_or("none")),
+        };
         let mut outcome = DecisionOutcome {
             action: PlacementAction::Start,
             target_id: placement.target_id.clone(),
@@ -176,7 +180,8 @@ impl OrchestrationRuntime {
                 // HS2-JSF985: the policy's speculation switch applies to this start,
                 // and building ahead asks under `provisional_dispatch` (HS2-XHQ1EH).
                 provisional: placement.provisional,
-                role_session: false,
+                // HS2-TK9ADC: a role start asks `session_start` like any start.
+                role_session: placement.role.is_some(),
             },
             tx,
         );
@@ -220,6 +225,7 @@ impl OrchestrationRuntime {
             limits: gathered.policy.machine_limits(&placement.target_id),
             probe: placement.probe,
             resources: gathered.resources_of(&placement.steps),
+            role: placement.role,
         };
         let answer = self.session_executor.start(self, &request, tx);
         let succeeded = match answer {

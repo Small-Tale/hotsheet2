@@ -19,6 +19,7 @@ import {
   policyWithTargetLimits,
   projectRows,
   removePolicyAccount,
+  sessionDescription,
   sessionStatus,
   tabProjectIdOf,
   targetLimitsDraftFrom,
@@ -343,6 +344,7 @@ describe("one project's limits (HS2-7WF6JD)", () => {
       buildAhead: 'on',
       models: { claude: '' },
       resources: '',
+      roleSessions: [],
     });
     expect(targetLimitsDraftFrom(stored, 'T9')).toMatchObject({
       listed: false,
@@ -551,5 +553,100 @@ describe("a project's models and required resources (HS2-YSY7AR)", () => {
     expect(policyWithTargetLimits(stored, draft)).toEqual({
       error: '"vm" is not <namespace>/<resource>, such as vm/macos-vm: a lowercase namespace and a resource name.',
     });
+  });
+});
+
+describe("a project's coordination sessions (HS2-TK9ADC)", () => {
+  const stored: OrchestrationPolicyView = {
+    enabled: true,
+    revision: 'p1',
+    policy: {
+      machine: { max_sessions: 4 },
+      tools: [{ tool: 'codex', max_sessions: 3 }],
+      targets: [
+        { target_id: 'T1', tools: [{ tool: 'codex' }], max_sessions: 3 },
+        { target_id: 'T2', tools: [{ tool: 'codex' }], max_sessions: 1 },
+      ],
+      placement: {
+        automatic: true,
+        role_sessions: [
+          { target_id: 'T2', roles: ['integrator'] },
+          { target_id: 'T1', roles: ['integrator', 'dispatcher'] },
+        ],
+      },
+    },
+  };
+  const build = (draft: ReturnType<typeof targetLimitsDraftFrom>, view = stored) => {
+    const built = policyWithTargetLimits(view, draft);
+    if (!('policy' in built)) throw new Error(built.error);
+    return built.policy;
+  };
+  const toggle = (draft: ReturnType<typeof targetLimitsDraftFrom>, role: string, checked: boolean) =>
+    changeTargetLimits(draft, 'limits.role_sessions', role, checked);
+
+  it('reads the roles in the form order and stores them unchanged when untouched', () => {
+    const draft = targetLimitsDraftFrom(stored, 'T1');
+    expect(draft.roleSessions).toEqual(['dispatcher', 'integrator']);
+    expect(targetLimitsDraftFrom(stored, 'T3').roleSessions).toEqual([]);
+    expect(build(draft).placement?.role_sessions).toEqual([
+      { target_id: 'T2', roles: ['integrator'] },
+      { target_id: 'T1', roles: ['dispatcher', 'integrator'] },
+    ]);
+  });
+
+  it('turns roles off and on again in any order, in place, keeping other projects and members', () => {
+    let draft = targetLimitsDraftFrom(stored, 'T1');
+    // Repeated and out of order: off twice, on again, an unknown role ignored.
+    draft = toggle(toggle(draft, 'dispatcher', false), 'dispatcher', false);
+    expect(draft.roleSessions).toEqual(['integrator']);
+    draft = toggle(draft, 'worker', true);
+    expect(draft.roleSessions).toEqual(['integrator']);
+    draft = toggle(toggle(draft, 'dispatcher', true), 'dispatcher', true);
+    expect(draft.roleSessions).toEqual(['dispatcher', 'integrator']);
+    // Emptied: this project's entry goes; the other project's stays where it was.
+    draft = toggle(toggle(draft, 'integrator', false), 'dispatcher', false);
+    let policy = build(draft);
+    expect(policy.placement).toEqual({ automatic: true, role_sessions: [{ target_id: 'T2', roles: ['integrator'] }] });
+    // Refilled: appended after the others.
+    policy = build(toggle(draft, 'dispatcher', true), { ...stored, policy: policy });
+    expect(policy.placement?.role_sessions).toEqual([
+      { target_id: 'T2', roles: ['integrator'] },
+      { target_id: 'T1', roles: ['dispatcher'] },
+    ]);
+    // The last entry removed leaves no member at all; a policy without any gets none.
+    const only: OrchestrationPolicyView = {
+      enabled: true,
+      revision: 'p',
+      policy: {
+        tools: [{ tool: 'codex', max_sessions: 1 }],
+        placement: { role_sessions: [{ target_id: 'T1', roles: ['dispatcher'] }] },
+      },
+    };
+    expect(build(toggle(targetLimitsDraftFrom(only, 'T1'), 'dispatcher', false), only).placement).toEqual({});
+    const bare: OrchestrationPolicyView = {
+      enabled: true,
+      revision: 'p',
+      policy: { tools: [{ tool: 'codex', max_sessions: 1 }] },
+    };
+    expect(build(targetLimitsDraftFrom(bare, 'T1'), bare).placement).toBeUndefined();
+  });
+
+  it('names a role session in its row, and a worker by its tool', () => {
+    const base = {
+      session_id: 'S',
+      target_id: 'T1',
+      tool: 'codex',
+      state: 'running' as const,
+      owner: 'orchestrator' as const,
+      paused: false,
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+    const label = (tool: string) => tool.toUpperCase();
+    expect(sessionDescription({ ...base, role: 'dispatcher' }, label, 'now')).toBe('Dispatcher · CODEX · since now');
+    expect(sessionDescription({ ...base, role: 'integrator', model: 'm' }, label, 'now')).toBe(
+      'Integrator · CODEX · m · since now',
+    );
+    expect(sessionDescription({ ...base, role: 'worker' }, label, 'now')).toBe('CODEX · since now');
   });
 });

@@ -59,7 +59,7 @@ pub use capacity::{
     AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
     CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
     DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
-    MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, SessionFootprint,
+    MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState, SessionFootprint,
     TargetSpeculation, ToolAvailability, capacity_version, decide_admission, effective_limits,
     estimated_footprint,
 };
@@ -97,8 +97,8 @@ pub use policy::{
     AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS, MAX_POLICY_SESSIONS,
     MAX_POLICY_TOOLS, MAX_SPECULATION_DEPTH, MachineLimits, ORCHESTRATOR_ACTOR_PREFIX,
     PlacementPolicy, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
-    PolicyVerdict, PolicyView, SessionLoad, SetPolicy, Speculation, TargetPolicy, ToolPolicy,
-    ToolScope, WindDown,
+    PolicyVerdict, PolicyView, RoleSessionKind, SessionLoad, SetPolicy, Speculation, TargetPolicy,
+    TargetRoleSessions, ToolPolicy, ToolScope, WindDown,
 };
 pub use project_type::{
     PROJECT_TYPE_SETTING, PROJECTS_RETAINED, ProjectType, ProjectTypeView, SetProjectType,
@@ -413,6 +413,8 @@ mod reconcile_tests;
 mod resource_tests;
 #[cfg(test)]
 mod role_delivery_tests;
+#[cfg(test)]
+mod role_session_tests;
 #[cfg(test)]
 mod run_event_tests;
 #[cfg(test)]

@@ -594,6 +594,92 @@ test('HS2-7WF6JD HS2-YSY7AR edits a project limits, models, resources and a tool
   }
 });
 
+test('HS2-TK9ADC turns a project coordination sessions on and off through the real policy route', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, , docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const target = (
+      await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+        destination: { kind: 'local', checkout_id: docs.id },
+        label: 'Docs',
+        actor: { role: 'human' },
+      })
+    ).target_id;
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 4 },
+        tools: [{ tool: 'codex', max_sessions: 3 }],
+        targets: [{ target_id: target, tools: [{ tool: 'codex' }], max_sessions: 3 }],
+      },
+      actor: { role: 'human' },
+    });
+    type Stored = { policy: { placement?: { role_sessions?: { target_id: string; roles: string[] }[] } } };
+    const roles = async () => (await server.request<Stored>(`${base}/policy`)).policy.placement?.role_sessions;
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    await settings
+      .locator('[data-orchestration-project]')
+      .filter({ hasText: 'Docs' })
+      .getByRole('button', { name: /Docs/ })
+      .first()
+      .click();
+    const limits = page.locator('[data-component="orchestration-project-limits"]');
+    const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
+      integrator = limits.getByRole('checkbox', { name: 'Integrator' });
+    await expect(dispatcher).not.toBeChecked();
+    await expect(integrator).not.toBeChecked();
+    await dispatcher.check();
+    await integrator.check();
+    const directory = join('target', 'visual-captures', 'hs2-tk9adc');
+    await mkdir(directory, { recursive: true });
+    const capture = async (name: string) => {
+      await integrator.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(directory, `hs2-tk9adc-${name}-${browserName}.png`), animations: 'disabled' });
+    };
+    await capture('limits-draft-1440');
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect.poll(roles).toEqual([{ target_id: target, roles: ['dispatcher', 'integrator'] }]);
+    await expect(dispatcher).toBeChecked();
+    await expect(integrator).toBeChecked();
+    for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      await expect(integrator).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`limits-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('limits-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    // A further edit: the dispatcher off, then the integrator too; the entry goes.
+    await dispatcher.uncheck();
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect.poll(roles).toEqual([{ target_id: target, roles: ['integrator'] }]);
+    await integrator.uncheck();
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect.poll(roles).toBeUndefined();
+    await expect(integrator).not.toBeChecked();
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

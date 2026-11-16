@@ -259,6 +259,7 @@ impl Placed {
             limits: MachineLimits::default(),
             probe: false,
             resources: Vec::new(),
+            role: None,
         }
     }
     fn stop_request(&self, session_id: &str) -> WindDownSession {
@@ -2899,4 +2900,55 @@ fn hs2_7yskxe_a_started_session_is_told_its_resources_and_claims_them_itself() {
         ),
         Err(OrchestrationError::Conflict)
     ));
+}
+
+/// HS2-TK9ADC: a role start through the real executor dispatches no run, launches
+/// the session in its role, lists it with that role so it is never given work, and
+/// is the same start when asked again.
+#[test]
+fn hs2_tk9adc_a_role_start_launches_its_role_without_a_run_and_is_listed_as_it() {
+    clocked!(clock, tx);
+    let _ = &clock;
+    let f = Placed::new(&BOTH, &mut tx);
+    let mut patient = policy();
+    patient.placement.join_minutes = 60;
+    f.set_policy(patient, &mut tx);
+    let operation = format!("sched-role-dispatcher-{}", id(1));
+    let request = PlacementStart {
+        operation_id: operation.clone(),
+        steps: Vec::new(),
+        role: Some(SessionRole::Dispatcher),
+        ..f.start_request("unused", no_load())
+    };
+    let first = OwnedSessions.start(&f.m.runtime, &request, &mut tx);
+    let StartOutcome::Started { run_id, .. } = &first else {
+        panic!("{first:?}");
+    };
+    assert_eq!(run_id, &None);
+    assert!(f.m.runtime.run_list(&f.owner(), false).unwrap().is_empty());
+    let record = f.record(&operation);
+    assert_eq!(
+        (record.role, record.run_id.clone()),
+        (SessionRole::Dispatcher, None)
+    );
+    assert_eq!(f.host.launches()[0].role, SessionRole::Dispatcher);
+    let listed = f.listed(&mut tx);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].role, Some(SessionRole::Dispatcher));
+    // Asked again: the same start, one launch.
+    assert_eq!(OwnedSessions.start(&f.m.runtime, &request, &mut tx), first);
+    assert_eq!(f.host.launches().len(), 1);
+    // A worker's start lists as a worker.
+    let step = f.ready("Work", &mut tx);
+    let worker = OwnedSessions.start(&f.m.runtime, &f.start_request(&step, no_load()), &mut tx);
+    assert!(matches!(worker, StartOutcome::Started { .. }), "{worker:?}");
+    let roles: Vec<_> = f
+        .listed(&mut tx)
+        .into_iter()
+        .map(|session| session.role)
+        .collect();
+    assert!(
+        roles.contains(&None) && roles.contains(&Some(SessionRole::Dispatcher)),
+        "{roles:?}"
+    );
 }

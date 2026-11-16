@@ -142,6 +142,25 @@ pub struct CapacitySnapshot {
     /// stream.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// HS2-TK9ADC: the hosted project's coordination pool, as the scheduler's role
+    /// sessions need it. Absent when it could not be read, or from an older peer: the
+    /// scheduler then starts no role session there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool: Option<PoolState>,
+}
+
+/// HS2-TK9ADC: what a target's coordination pool says about its single-holder roles
+/// and the work handed off to its integrator.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PoolState {
+    /// A dispatcher holds a live lease in the pool.
+    pub dispatcher_live: bool,
+    /// An integrator holds a live lease in the pool.
+    pub integrator_live: bool,
+    /// Assignments handed off and not yet done: in handoff, verifying, integrating,
+    /// suspended integration or CI.
+    pub handoffs_pending: u32,
 }
 
 /// HS2-P5GTSW: free memory is compared in steps of this many MiB.
@@ -227,6 +246,16 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
         "o{:?};p{:?}",
         snapshot.claims_offline, snapshot.speculation
     );
+    // HS2-TK9ADC: only when reported, so a snapshot without it keeps its version.
+    if let Some(pool) = snapshot.pool {
+        let _ = write!(
+            text,
+            ";r{}/{}/{}",
+            u8::from(pool.dispatcher_live),
+            u8::from(pool.integrator_live),
+            pool.handoffs_pending
+        );
+    }
     fnv(&text)
 }
 
@@ -272,7 +301,15 @@ impl CapacitySnapshot {
             claims_offline: None,
             speculation: None,
             version: None,
+            pool: None,
         }
+    }
+
+    /// HS2-TK9ADC: say what the hosted project's coordination pool shows.
+    #[must_use]
+    pub fn with_pool(mut self, pool: Option<PoolState>) -> Self {
+        self.pool = pool;
+        self
     }
 
     /// HS2-P5GTSW: stamp the snapshot with its [`capacity_version`], after every

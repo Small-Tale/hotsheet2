@@ -240,6 +240,44 @@ pub struct PlacementPolicy {
         skip_serializing_if = "is_default_join"
     )]
     pub join_minutes: u32,
+    /// HS2-TK9ADC: the targets whose dispatcher or integrator the scheduler starts by
+    /// itself, when the target needs one and its pool shows none live. Empty (the
+    /// default): role sessions stay a person's choice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub role_sessions: Vec<TargetRoleSessions>,
+}
+
+/// HS2-TK9ADC: a role the scheduler may start a session in by itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleSessionKind {
+    /// Assigns the target's ready tickets to its workers.
+    Dispatcher,
+    /// Integrates the work the target's workers hand off.
+    Integrator,
+}
+
+impl RoleSessionKind {
+    pub const ALL: [Self; 2] = [Self::Dispatcher, Self::Integrator];
+
+    pub fn role(self) -> SessionRole {
+        match self {
+            Self::Dispatcher => SessionRole::Dispatcher,
+            Self::Integrator => SessionRole::Integrator,
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        self.role().code()
+    }
+}
+
+/// HS2-TK9ADC: the role sessions the scheduler starts by itself on one target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetRoleSessions {
+    pub target_id: String,
+    pub roles: Vec<RoleSessionKind>,
 }
 
 /// HS2-XYAHB4: the actor id prefix of an orchestration project's own orchestrator.
@@ -291,6 +329,7 @@ impl Default for PlacementPolicy {
             resources: Vec::new(),
             dispatcher_wait_minutes: default_dispatcher_wait_minutes(),
             join_minutes: default_join_minutes(),
+            role_sessions: Vec::new(),
         }
     }
 }
@@ -448,6 +487,15 @@ impl PolicyBody {
             .iter()
             .find(|entry| entry.target_id == target_id)
             .map_or(&[], |entry| entry.resources.as_slice())
+    }
+
+    /// HS2-TK9ADC: the roles the scheduler starts sessions in by itself on a target.
+    pub fn role_sessions(&self, target_id: &str) -> &[RoleSessionKind] {
+        self.placement
+            .role_sessions
+            .iter()
+            .find(|entry| entry.target_id == target_id)
+            .map_or(&[], |entry| entry.roles.as_slice())
     }
 
     pub fn machine_limits(&self, target_id: &str) -> MachineLimits {
@@ -678,6 +726,36 @@ impl PolicyBody {
                 report(
                     "resources_without_target",
                     "resources are required of a target the policy lists",
+                    id,
+                );
+            }
+        }
+        // HS2-TK9ADC
+        let mut opted = BTreeSet::new();
+        for entry in &placement.role_sessions {
+            let id = Some(entry.target_id.as_str());
+            if valid_token(&entry.target_id).is_err() {
+                report("invalid_target", "target needs a canonical ULID", id);
+            }
+            if !opted.insert(entry.target_id.as_str()) {
+                report(
+                    "duplicate_role_sessions_target",
+                    "a target's role sessions are listed once",
+                    id,
+                );
+            }
+            if !targets.contains(entry.target_id.as_str()) {
+                report(
+                    "role_sessions_without_target",
+                    "role sessions are started on a target the policy lists",
+                    id,
+                );
+            }
+            let roles: BTreeSet<_> = entry.roles.iter().collect();
+            if entry.roles.is_empty() || roles.len() != entry.roles.len() {
+                report(
+                    "invalid_role_sessions",
+                    "list each of dispatcher and integrator at most once, and at least one",
                     id,
                 );
             }

@@ -25,7 +25,8 @@ use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
     OrchestrationError, PolicyBody, PolicyDenial, ResourceContention, ResourceState,
-    SelectionRequest, SessionCount, SignalSupport, UnreadableClaims, decide_admission, select,
+    RoleSessionKind, SelectionRequest, SessionCount, SessionRole, SignalSupport, UnreadableClaims,
+    decide_admission, select,
 };
 
 /// One priority band, in points. Every other term is expressed against it.
@@ -180,6 +181,10 @@ pub struct ScheduledSession {
     /// A wind-down was already asked for.
     #[serde(default)]
     pub winding_down: bool,
+    /// HS2-TK9ADC: the session's role when it is not a worker. A role session is
+    /// never given worker work; it is kept while its target needs it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<SessionRole>,
 }
 
 impl ScheduledSession {
@@ -460,6 +465,9 @@ pub enum PlacementReason {
     RolePromptFailed,
     /// HS2-HV9ED3. Wind down: a person cancelled the run it works.
     RunCancelled,
+    /// HS2-TK9ADC. Start: the target needs a dispatcher or integrator and its pool
+    /// shows none live. Keep: a role session its target still needs.
+    RoleNeeded,
 }
 
 impl PlacementReason {
@@ -483,6 +491,7 @@ impl PlacementReason {
             Self::NeverJoined => "never_joined",
             Self::RolePromptFailed => "role_prompt_failed",
             Self::RunCancelled => "run_cancelled",
+            Self::RoleNeeded => "role_needed",
         }
     }
 }
@@ -548,6 +557,9 @@ pub struct Placement {
     /// HS2-JSF985: the work this session is for rests on a pending gate.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub provisional: bool,
+    /// HS2-TK9ADC: the role of the session started or kept, when it is not a worker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<SessionRole>,
 }
 
 /// Why ready work gets no session in this pass. The wire spelling equals `code()`.
@@ -754,6 +766,11 @@ pub fn lift_capacity_refusal(memory: &[PlacementMemory], target_id: &str) -> Vec
         .collect()
 }
 
+/// HS2-TK9ADC: a worker session, as opposed to a dispatcher, integrator or planner.
+fn is_worker(session: &ScheduledSession) -> bool {
+    session.role.is_none_or(|role| role == SessionRole::Worker)
+}
+
 /// The policy rule a running session breaks, if any.
 fn session_denial(policy: &PolicyBody, session: &ScheduledSession) -> Option<PolicyDenial> {
     let Some(target) = policy.target(&session.target_id) else {
@@ -778,6 +795,8 @@ fn session_denial(policy: &PolicyBody, session: &ScheduledSession) -> Option<Pol
 
 enum Fate {
     Free,
+    /// HS2-TK9ADC: a role session, decided once the pass knows what its target needs.
+    Role,
     Decided(
         PlacementAction,
         PlacementReason,
@@ -829,6 +848,9 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 } else {
                     Fate::Decided(A::Keep, R::AwaitingSafePoint, detail, None)
                 };
+            }
+            if !is_worker(session) {
+                return Fate::Role;
             }
             match session.activity {
                 SessionActivity::Busy if session.run_id.is_some() => {
@@ -937,6 +959,184 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     let mut contention = ContentionLog::default();
     let mut starts = Vec::new();
     let mut unplaced = Vec::new();
+
+    // ---- HS2-TK9ADC: role sessions a target needs, before any worker ----
+    // Work a session could be placed for, as the work loop below decides it.
+    let placeable = |item: &WorkItem| match item.level {
+        WorkLevel::Confirmed => true,
+        WorkLevel::Provisional => {
+            policy.speculation_allowed(&item.target_id)
+                && item.speculation.as_ref().is_some_and(|rule| rule.allowed)
+        }
+    };
+    let pool_of = |target_id: &str| {
+        input
+            .targets
+            .iter()
+            .find(|state| state.target_id == target_id)
+            .and_then(|state| state.capacity.as_ref())
+            .and_then(|snapshot| snapshot.pool)
+    };
+    for entry in &policy.placement.role_sessions {
+        let target_id = entry.target_id.as_str();
+        let Some(target) = policy.target(target_id).filter(|target| target.enabled) else {
+            continue;
+        };
+        // Unknown is not empty: nothing starts on a guess.
+        let Some(pool) = pool_of(target_id) else {
+            continue;
+        };
+        let workers_running = sessions
+            .iter()
+            .any(|session| session.target_id == target_id && is_worker(session));
+        let ready = input
+            .work
+            .iter()
+            .any(|item| item.target_id == target_id && placeable(item));
+        for kind in RoleSessionKind::ALL {
+            if !entry.roles.contains(&kind) {
+                continue;
+            }
+            let role = kind.role();
+            let (live, wanted, room_for) = match kind {
+                // Room for the dispatcher and a worker, unless a worker already runs:
+                // a dispatcher alone in the target's last slot assigns to nobody.
+                RoleSessionKind::Dispatcher => (
+                    pool.dispatcher_live,
+                    ready,
+                    if workers_running { 1 } else { 2 },
+                ),
+                RoleSessionKind::Integrator => (pool.integrator_live, pool.handoffs_pending > 0, 1),
+            };
+            let held = sessions
+                .iter()
+                .any(|session| session.target_id == target_id && session.role == Some(role));
+            if live || !wanted || held {
+                continue;
+            }
+            let target_sessions = on_target.get(target_id).copied().unwrap_or(0)
+                + planned_target.get(target_id).copied().unwrap_or(0);
+            if target_sessions + room_for > target.max_sessions {
+                continue;
+            }
+            let remembered = memory(target_id);
+            if let Some(until) = remembered
+                .and_then(PlacementMemory::refused_until_ms)
+                .filter(|until| *until > now)
+            {
+                let evented = input.capacity_streams.iter().any(|id| id == target_id)
+                    && remembered
+                        .and_then(|entry| entry.refusal_reason.as_deref())
+                        .is_some_and(is_capacity_refusal);
+                if !evented {
+                    earliest(&mut retry_at, until, now);
+                }
+                continue;
+            }
+            if let Some(until) = remembered
+                .and_then(|entry| entry.last_wound_down_at_ms)
+                .map(|at| at.saturating_add(cooldown_ms))
+                .filter(|until| *until > now)
+            {
+                earliest(&mut retry_at, until, now);
+                continue;
+            }
+            let Some(snapshot) = input
+                .targets
+                .iter()
+                .find(|state| state.target_id == target_id)
+                .and_then(|state| state.capacity.as_ref())
+            else {
+                continue;
+            };
+            let selection = select(
+                &SelectionRequest {
+                    policy,
+                    target_id,
+                    tool: None,
+                    model: None,
+                    entries: input.tool_entries,
+                    load: &load,
+                    now_ms: now,
+                },
+                support,
+            );
+            if selection.denied.is_some() {
+                continue;
+            }
+            let limits = policy.machine_limits(target_id);
+            let on_machine = planned_machine
+                .get(snapshot.server_id.as_str())
+                .copied()
+                .unwrap_or(0);
+            let placed = selection.candidates.iter().find_map(|candidate| {
+                if candidate.status.state == CapacityState::Degraded
+                    && running(&load, &candidate.tool, candidate.account.as_deref()) > 0
+                {
+                    return None;
+                }
+                let model = target
+                    .tools
+                    .iter()
+                    .find(|scope| scope.tool == candidate.tool)
+                    .and_then(|scope| scope.models.first().cloned());
+                let admission = decide_admission(
+                    snapshot,
+                    &AdmissionConfig::default(),
+                    &AdmissionRequest {
+                        tool: candidate.tool.clone(),
+                        model: model.clone(),
+                        sessions: on_machine + 1,
+                        limits: Some(limits),
+                    },
+                );
+                (admission.outcome == AdmissionOutcome::Accepted)
+                    .then_some((candidate, model, admission))
+            });
+            let Some((candidate, model, admission)) = placed else {
+                continue;
+            };
+            let account = candidate.account.as_deref();
+            starts.push(Placement {
+                action: A::Start,
+                target_id: target_id.to_owned(),
+                tool: candidate.tool.clone(),
+                account: candidate.account.clone(),
+                model,
+                session_id: None,
+                reason: R::RoleNeeded,
+                detail: Some(role.code().to_owned()),
+                provisional: false,
+                steps: Vec::new(),
+                score: None,
+                probe: !candidate.verified,
+                retry_at_ms: None,
+                inputs: PlacementInputs {
+                    target_sessions: target_sessions + 1,
+                    target_cap: Some(target.max_sessions),
+                    machine_sessions: snapshot.sessions.as_ref().map(|running| {
+                        u32::try_from(running.len())
+                            .unwrap_or(u32::MAX)
+                            .saturating_add(on_machine + 1)
+                    }),
+                    machine_cap: Some(admission.limits.max_sessions),
+                    free_ram_mb: snapshot.memory.free_mb,
+                    footprint_mb: Some(admission.footprint_mb),
+                    tool_state: Some(candidate.status.state.code().into()),
+                    tool_free: Some(candidate.free_sessions),
+                    tool_sessions: Some(running(&load, &candidate.tool, None)),
+                    account_sessions: account
+                        .map(|account| running(&load, &candidate.tool, Some(account))),
+                },
+                role: Some(role),
+            });
+            count(&mut load, &candidate.tool, account);
+            *planned_target.entry(target_id).or_default() += 1;
+            *planned_machine
+                .entry(snapshot.server_id.as_str())
+                .or_default() += 1;
+        }
+    }
 
     for (parts, item) in ranked.iter().map(|(parts, item)| (parts, *item)) {
         let mut skip = |reason: Blocker, detail: Option<String>, retry: Option<u64>| {
@@ -1329,6 +1529,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 account_sessions: account
                     .map(|account| running(&load, &candidate.tool, Some(account))),
             },
+            role: None,
         });
         count(&mut load, &candidate.tool, account);
         *planned_target.entry(item.target_id.as_str()).or_default() += 1;
@@ -1388,6 +1589,57 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         };
     }
 
+    // ---- HS2-TK9ADC: role sessions, kept while their target needs them ----
+    for index in 0..sessions.len() {
+        if !matches!(fates[index], Fate::Role) {
+            continue;
+        }
+        let session = sessions[index];
+        let target_id = session.target_id.as_str();
+        // A worker on the target still has a run: whoever serves it stays.
+        let dependent = sessions.iter().any(|other| {
+            other.target_id == target_id && is_worker(other) && other.run_id.is_some()
+        });
+        let needed = match session.role {
+            Some(SessionRole::Dispatcher) => {
+                dependent
+                    || input
+                        .work
+                        .iter()
+                        .any(|item| item.target_id == target_id && placeable(item))
+            }
+            Some(SessionRole::Integrator) => {
+                dependent || pool_of(target_id).is_some_and(|pool| pool.handoffs_pending > 0)
+            }
+            // A planner is a person's, through planning; the scheduler never stops it.
+            _ => true,
+        };
+        let detail = session.role.map(|role| role.code().to_owned());
+        fates[index] = if needed {
+            Fate::Decided(A::Keep, R::RoleNeeded, detail, None)
+        } else if session.activity != SessionActivity::Idle {
+            Fate::Decided(A::Keep, R::Busy, detail, None)
+        } else {
+            let idle_until = session.idle_since_ms.unwrap_or(now).saturating_add(idle_ms);
+            let cool_until = memory(target_id)
+                .and_then(|entry| entry.last_started_at_ms)
+                .map(|at| at.saturating_add(cooldown_ms))
+                .filter(|until| *until > now);
+            if idle_until > now {
+                earliest(&mut retry_at, idle_until, now);
+                Fate::Decided(A::Keep, R::IdleGrace, detail, Some(idle_until))
+            } else if let Some(until) = cool_until {
+                earliest(&mut retry_at, until, now);
+                Fate::Decided(A::Keep, R::Cooldown, detail, Some(until))
+            } else if !session.safe_point {
+                // The host's safe point counts every unfinished assignment of the pool.
+                Fate::Decided(A::Keep, R::AwaitingSafePoint, detail, None)
+            } else {
+                Fate::Decided(A::WindDown, R::Idle, detail, None)
+            }
+        };
+    }
+
     let mut placements = starts;
     let mut rest: Vec<Placement> = sessions
         .iter()
@@ -1402,8 +1654,9 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 Fate::Decided(action, reason, detail, retry) => {
                     (action, reason, detail, Vec::new(), None, retry)
                 }
-                // Every free session was decided above.
+                // Every free and role session was decided above.
                 Fate::Free => (A::Keep, R::Busy, None, Vec::new(), None, None),
+                Fate::Role => (A::Keep, R::RoleNeeded, None, Vec::new(), None, None),
             };
             Placement {
                 action,
@@ -1429,6 +1682,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                         .map(|target| target.max_sessions),
                     ..PlacementInputs::default()
                 },
+                role: session.role.filter(|role| *role != SessionRole::Worker),
             }
         })
         .collect();

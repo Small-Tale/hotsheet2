@@ -141,7 +141,7 @@ export function wireOrchestrationSettings(
     delegate(root, 'change', LIMITS_FIELD, (_event, target) => {
       const control = target as HTMLInputElement;
       withProject((projectId) => {
-        if (control.name === 'limits.tools')
+        if (control.name === 'limits.tools' || control.name === 'limits.role_sessions')
           settings.changeLimits(projectId, control.name, control.value, control.checked);
         else
           settings.changeLimits(projectId, control.name, control.type === 'checkbox' ? control.checked : control.value);

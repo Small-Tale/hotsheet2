@@ -6,7 +6,8 @@
 use std::sync::Mutex;
 
 use hotsheet_ticketing::orchestration::{
-    MachineLimits, ResourceNeed, ScheduledSession, SessionActivity, SessionLoad, Transaction,
+    MachineLimits, ResourceNeed, ScheduledSession, SessionActivity, SessionLoad, SessionRole,
+    Transaction,
 };
 use serde::Serialize;
 
@@ -47,6 +48,8 @@ pub struct PlacementStart {
     /// itself with the claim service's primitives (`docs/36-resource-claims.md`).
     /// Neither the scheduler nor the executor claims, renews or releases for it.
     pub resources: Vec<ResourceNeed>,
+    /// HS2-TK9ADC: the role the session starts in; `None` for a worker.
+    pub role: Option<SessionRole>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -269,6 +272,7 @@ impl SessionExecutor for RecordingSessions {
             safe_point: false,
             human_takeover: false,
             winding_down: false,
+            role: request.role,
         });
         StartOutcome::Started {
             session_id,

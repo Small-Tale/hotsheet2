@@ -816,6 +816,17 @@ enum PolicyCmd {
         #[arg(long)]
         file: Option<String>,
     },
+    /// HS2-TK9ADC: which role sessions the scheduler starts by itself on one target
+    /// (`placement.role_sessions`). Reads the stored policy, replaces that target's
+    /// entry and sets it at the revision read, as the Limits form does. Without
+    /// `--role` the target gets none. A person runs this; an AI actor is refused.
+    RoleSessions {
+        #[arg(long)]
+        target: String,
+        /// `dispatcher` or `integrator`; repeat for both.
+        #[arg(long = "role", value_parser = ["dispatcher", "integrator"])]
+        roles: Vec<String>,
+    },
 }
 #[derive(Args)]
 struct PermissionArgs {
@@ -1070,6 +1081,47 @@ fn tool_capacity_route(
         ),
     })
 }
+/// HS2-TK9ADC: `policy` with one target's `placement.role_sessions` entry replaced
+/// by `edit` (`{target_id, roles}`), in place, or removed when it lists no role. Every
+/// other member round-trips unchanged.
+fn with_role_sessions(mut policy: Value, edit: &Value) -> Value {
+    let target = edit["target_id"].clone();
+    let entry = (edit["roles"]
+        .as_array()
+        .is_some_and(|roles| !roles.is_empty()))
+    .then(|| json!({"target_id": target, "roles": edit["roles"]}));
+    if !policy.is_object() {
+        policy = json!({});
+    }
+    let placement = &mut policy["placement"];
+    if !placement.is_object() {
+        *placement = json!({});
+    }
+    let mut list: Vec<Value> = placement["role_sessions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    match (
+        list.iter().position(|item| item["target_id"] == target),
+        entry,
+    ) {
+        (Some(at), Some(entry)) => list[at] = entry,
+        (Some(at), None) => {
+            list.remove(at);
+        }
+        (None, Some(entry)) => list.push(entry),
+        (None, None) => {}
+    }
+    if let Some(object) = placement.as_object_mut() {
+        if list.is_empty() {
+            object.remove("role_sessions");
+        } else {
+            object.insert("role_sessions".into(), Value::Array(list));
+        }
+    }
+    policy
+}
+
 /// A policy body from a file, or stdin for `-`.
 fn policy_file(path: &str) -> Result<Value> {
     let text = if path == "-" {
@@ -1349,6 +1401,12 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 PolicyCmd::DryRun { file } => {
                     ("POST", format!("{prefix}/dry-run"), proposal(file)?)
                 }
+                PolicyCmd::RoleSessions { target, roles } => (
+                    "PUT",
+                    prefix,
+                    // Turned into the edited policy below, at the revision read.
+                    json!({"role_sessions_edit": {"target_id": target, "roles": roles}}),
+                ),
             };
             (owner_id, request)
         }
@@ -1464,6 +1522,16 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 } else {
                     runtime
                 };
+                // HS2-TK9ADC: one target's role sessions, edited into the stored policy.
+                if let Some(edit) = body
+                    .as_object_mut()
+                    .and_then(|object| object.remove("role_sessions_edit"))
+                {
+                    let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
+                    // The actor this command attached stays with the request.
+                    body["policy"] = with_role_sessions(stored["policy"].take(), &edit);
+                    body["expected_revision"] = stored["revision"].take();
+                }
                 // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
                 // repeated setup run is a no-op and a concurrent edit still conflicts.
                 if body.get("read_revision").is_some() {

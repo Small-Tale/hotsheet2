@@ -25,7 +25,7 @@
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     DispatchMode, OrchestratedSession, Run, RunState, SafePoint, ScheduledSession, SessionActivity,
-    SessionError, SessionIdleStore, SessionOwner, SessionState,
+    SessionError, SessionIdleStore, SessionOwner, SessionRole, SessionState,
 };
 
 use super::sessions::PlacedGate;
@@ -247,6 +247,8 @@ impl OrchestrationRuntime {
                 // A stop is immediate at a safe point and refused away from one, so no
                 // session is ever between the two.
                 winding_down: false,
+                // HS2-TK9ADC: a dispatcher, integrator or planner is never given work.
+                role: (session.role != SessionRole::Worker).then_some(session.role),
             });
         }
         // HS2-RG91SK: the host says since when a session has been idle (its last
@@ -396,7 +398,7 @@ impl OrchestrationRuntime {
                 model: request.model.clone(),
                 effort: None,
                 account: request.account.clone(),
-                role: None,
+                role: request.role,
                 run_id: start_run,
                 replaces,
                 // HS2-7YSKXE: the session acquires what its work needs itself.

@@ -417,7 +417,10 @@ impl Fixture {
         .unwrap();
     }
 }
-fn assignment(worker: &str, phase: crate::coordination::Phase) -> crate::coordination::Assignment {
+pub(super) fn assignment(
+    worker: &str,
+    phase: crate::coordination::Phase,
+) -> crate::coordination::Assignment {
     crate::coordination::Assignment {
         id: "assignment-1".into(),
         worker: worker.into(),

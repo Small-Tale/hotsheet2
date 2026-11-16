@@ -55,7 +55,7 @@ fn target_policy(n: u128, max_sessions: u32, tools: &[&str]) -> TargetPolicy {
 }
 
 /// Two tools, `alpha` preferred, and the given targets, each allowed both tools.
-fn policy(targets: &[(u128, u32)]) -> PolicyBody {
+pub(super) fn policy(targets: &[(u128, u32)]) -> PolicyBody {
     PolicyBody {
         machine: MachineLimits {
             max_sessions: 4,
@@ -140,6 +140,7 @@ pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> Capacity
         claims_offline: None,
         speculation: None,
         version: None,
+        pool: None,
     }
 }
 pub(super) fn state(n: u128, capacity: CapacitySnapshot) -> TargetState {
@@ -201,6 +202,7 @@ pub(super) fn session(name: &str, on: u128, activity: SessionActivity) -> Schedu
         safe_point: activity == SessionActivity::Idle,
         human_takeover: false,
         winding_down: false,
+        role: None,
     }
 }
 

@@ -795,6 +795,39 @@ fn coordination_state(root: &Path) -> Result<Option<crate::coordination::State>,
     }
 }
 
+/// HS2-TK9ADC: what the checkout's coordination pool says of its single-holder roles
+/// and of the work handed off and not yet done. `None` when it could not be read; an
+/// absent pool is an empty one.
+pub(super) fn hosted_pool(
+    root: &Path,
+    now_ms: u64,
+) -> Option<hotsheet_ticketing::orchestration::PoolState> {
+    use crate::coordination::Phase;
+    let now = i64::try_from(now_ms / 1000).unwrap_or(i64::MAX);
+    let Some(state) = coordination_state(root).ok()? else {
+        return Some(hotsheet_ticketing::orchestration::PoolState::default());
+    };
+    let handed_off = state
+        .assignments
+        .values()
+        .filter(|assignment| {
+            matches!(
+                assignment.phase,
+                Phase::Handoff
+                    | Phase::Verifying
+                    | Phase::Integrating
+                    | Phase::SuspendedIntegration
+                    | Phase::Ci
+            )
+        })
+        .count();
+    Some(hotsheet_ticketing::orchestration::PoolState {
+        dispatcher_live: state.dispatcher.is_some_and(|lease| lease.expires_at > now),
+        integrator_live: state.integrator.is_some_and(|lease| lease.expires_at > now),
+        handoffs_pending: u32::try_from(handed_off).unwrap_or(u32::MAX),
+    })
+}
+
 impl OrchestrationRuntime {
     /// Replace the process that owns AI terminals (the session-hosting server, tests).
     #[must_use]

@@ -239,6 +239,11 @@ impl OrchestrationRuntime {
         // when the project opts in, so the answer of every project that does not is
         // what it always was; an orchestrator reads its absence as not allowed.
         .with_speculation(checkout_speculation(&checkout.root))
+        // HS2-TK9ADC: the project's pool, for the orchestrator's role sessions.
+        .with_pool(super::sessions::hosted_pool(
+            Path::new(&checkout.root),
+            hotsheet_ticketing::Clock::now_ms(&super::request::Clock),
+        ))
         // HS2-AWB7BX: the owner's own admission limits are part of the room.
         .with_admission_version(
             &AdmissionStore::new(&self.home)

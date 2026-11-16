@@ -514,10 +514,19 @@ impl OrchestrationRuntime {
             item.level == WorkLevel::Confirmed
                 || (speculates && policy.speculation_allowed(&item.target_id))
         };
+        // HS2-TK9ADC: a target that lists role sessions is read every pass, so its pool
+        // (a handoff waiting for an integrator) is known without work there.
         let wanted: BTreeSet<&str> = work
             .iter()
             .filter(|item| places(item))
             .map(|item| item.target_id.as_str())
+            .chain(
+                policy
+                    .placement
+                    .role_sessions
+                    .iter()
+                    .map(|entry| entry.target_id.as_str()),
+            )
             .filter(|target_id| {
                 policy
                     .target(target_id)

@@ -1,5 +1,6 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 
+import type { OrchestrationSession } from '../api';
 import { OrchestrationProjectDetail } from '../components/orchestration-project-detail';
 import type { TargetLimitsDraft } from '../orchestration-settings-model';
 import type { DemoModule } from './demo-module';
@@ -26,6 +27,7 @@ const listedLimits: TargetLimitsDraft = {
   buildAhead: 'off',
   models: { codex: 'gpt-5-codex', claude: '' },
   resources: 'vm/macos-vm',
+  roleSessions: ['dispatcher'],
 };
 const unlistedLimits: TargetLimitsDraft = {
   targetId: DEMO_TARGETS.docs,
@@ -38,8 +40,21 @@ const unlistedLimits: TargetLimitsDraft = {
   buildAhead: 'default',
   models: {},
   resources: '',
+  roleSessions: [],
 };
 const policyTools = ['codex', 'claude'];
+/** HS2-TK9ADC: the dispatcher the orchestrator started for the project's ready work. */
+const sessions: OrchestrationSession[] = [
+  ...demoSessions,
+  {
+    ...demoSessions[0],
+    session_id: '01JSYNTHSESSION00000000003',
+    role: 'dispatcher',
+    tool: 'codex',
+    label: 'Launch: dispatcher',
+    hosted: undefined,
+  },
+];
 
 const admissions = [
   { outcome: 'accepted' as const, tool: 'claude', requested: 1, admitted: 1, reason: null },
@@ -64,11 +79,11 @@ export function OrchestrationProjectDetailDemo() {
             capacity: demoCapacity,
             admissions,
             toolCapacity: demoToolCapacity,
-            sessions: demoSessions,
+            sessions,
             loading: false,
             limits: listedLimits,
           }}
-          sessions={demoSessions.map((session, index) => ({ session, showable: index === 0, busy: false }))}
+          sessions={sessions.map((session, index) => ({ session, showable: index === 0, busy: false }))}
           claimNamespaces={['vm']}
           policyTools={policyTools}
           toolLabel={demoToolLabel}

@@ -1215,6 +1215,8 @@ export interface OrchestrationTargetPolicy {
   speculation?: boolean;
   [key: string]: unknown;
 }
+/** HS2-TK9ADC: a role the scheduler may start a session in by itself. */
+export type OrchestrationRoleSession = 'dispatcher' | 'integrator';
 export interface OrchestrationPolicyBody {
   machine?: { max_sessions?: number; min_free_ram_mb?: number; max_cpu_percent?: number; min_free_disk_mb?: number };
   tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
@@ -1225,6 +1227,8 @@ export interface OrchestrationPolicyBody {
     automatic?: boolean;
     actor?: string;
     resources?: { target_id: string; resources: { namespace: string; resource: string }[] }[];
+    /** HS2-TK9ADC: targets whose dispatcher or integrator the scheduler starts by itself. */
+    role_sessions?: { target_id: string; roles: OrchestrationRoleSession[] }[];
     [key: string]: unknown;
   };
   [key: string]: unknown;

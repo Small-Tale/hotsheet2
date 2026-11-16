@@ -23,6 +23,7 @@ import {
   type ConnectionStatus,
   connectionStatus,
   formatMegabytes,
+  sessionDescription,
   sessionStatus,
   sessionTitle,
 } from '../orchestration-settings-model';
@@ -227,7 +228,7 @@ export function OrchestrationProjectDetail({
                 return (
                   <ListActionRow
                     label={sessionTitle(session, toolLabel)}
-                    description={`${toolLabel(session.tool)}${session.model ? ` · ${session.model}` : ''} · since ${formatTime(session.created_at_ms)}`}
+                    description={sessionDescription(session, toolLabel, formatTime(session.created_at_ms))}
                     status={badge(status)}
                     icon={<LucideIcon icon={Bot} name="bot" />}
                     action={ACTIONS.openSessionActions.value}
@@ -347,6 +348,17 @@ function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
               disabled={disabled}
             />
           ))}
+        <CheckboxGroup
+          name="limits.role_sessions"
+          label="Coordination Sessions"
+          hint="The orchestrator starts these here when needed: a dispatcher for ready work, an integrator for handed-off work. Each counts toward Sessions Here."
+          choices={[
+            { value: 'dispatcher', label: 'Dispatcher' },
+            { value: 'integrator', label: 'Integrator' },
+          ]}
+          value={limits?.roleSessions ?? []}
+          disabled={disabled}
+        />
         <TextField
           name="limits.max_sessions"
           label="Sessions Here"

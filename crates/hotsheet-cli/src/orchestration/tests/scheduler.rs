@@ -271,6 +271,7 @@ fn owned(name: &str, owner: &str, activity: SessionActivity) -> ScheduledSession
         safe_point: activity == SessionActivity::Idle,
         human_takeover: false,
         winding_down: false,
+        role: None,
     }
 }
 
@@ -2201,5 +2202,137 @@ fn hs2_th53nn_a_planned_tool_and_model_reach_the_placed_start() {
     assert_eq!(
         (request.tool.as_str(), request.model.as_deref()),
         ("claude", Some("synthetic-model"))
+    );
+}
+
+/// HS2-TK9ADC: write the target checkout's coordination pool, as its sessions would.
+fn target_pool(m: &Machine, change: impl FnOnce(&mut crate::coordination::State)) {
+    let root = Path::new(&m.target.root);
+    if !root.join(".git").exists() {
+        let status = hotsheet_ticketing::git::command_in(root)
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    let mut state = crate::coordination::State::new("project".into(), "source".into());
+    change(&mut state);
+    let directory = root.join(".git").join("hotsheet-coordination");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("state.json"),
+        serde_json::to_vec(&state).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_executor() {
+    use hotsheet_ticketing::orchestration::{RoleSessionKind, SessionRole, TargetRoleSessions};
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    s.ready("First", &mut tx);
+    target_pool(&s.m, |_| {});
+    let mut body = policy(true);
+    body.targets[0].max_sessions = 3;
+    set_policy(&s.m, body.clone(), &mut tx);
+    // Not opted in: the worker only.
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let starts = |s: &Setup| {
+        s.sessions
+            .calls()
+            .into_iter()
+            .filter_map(|call| match call {
+                SessionCall::Start(request) => Some(request),
+                SessionCall::WindDown(_) => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(starts(&s)[0].role, None);
+
+    // Opted in: the target's pool shows no dispatcher and the step is still ready, so
+    // a dispatcher starts, as its own operation and with no step.
+    body.placement.role_sessions = vec![TargetRoleSessions {
+        target_id: id(1),
+        roles: vec![RoleSessionKind::Dispatcher, RoleSessionKind::Integrator],
+    }];
+    set_policy(&s.m, body, &mut tx);
+    let capacity = s.m.runtime.hosted_capacity(&s.m.target.id, &[]).unwrap();
+    assert_eq!(capacity.pool, Some(Default::default()));
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let dispatcher = format!("sched-role-dispatcher-{}", id(1));
+    assert_eq!(tick.outcomes[0].operation_id, dispatcher);
+    let request = starts(&s).pop().unwrap();
+    assert_eq!(
+        (
+            request.role,
+            request.steps.clone(),
+            request.operation_id.clone()
+        ),
+        (
+            Some(SessionRole::Dispatcher),
+            Vec::new(),
+            dispatcher.clone()
+        )
+    );
+    assert_eq!(request.load.target_sessions, 1);
+    assert_eq!(
+        s.audited("scheduler_start").last().unwrap().2.as_deref(),
+        Some(dispatcher.as_str())
+    );
+    // Repeated passes start no second dispatcher; the dispatcher is kept, never refilled.
+    for _ in 0..2 {
+        let again = s.tick(&mut tx);
+        assert!(again.outcomes.is_empty(), "{:?}", outcomes(&again));
+        let kept = again
+            .view
+            .schedule
+            .placements
+            .iter()
+            .find(|placement| placement.role == Some(SessionRole::Dispatcher))
+            .unwrap();
+        assert_eq!((kept.reason.code(), kept.steps.len()), ("role_needed", 0));
+    }
+    assert_eq!(starts(&s).len(), 2);
+
+    // A worker handed its work off: the pool shows it, and an integrator starts.
+    target_pool(&s.m, |state| {
+        let handed = super::sessions::assignment("someone", crate::coordination::Phase::Handoff);
+        state.assignments.insert(handed.id.clone(), handed);
+    });
+    let pool =
+        s.m.runtime
+            .hosted_capacity(&s.m.target.id, &[])
+            .unwrap()
+            .pool
+            .unwrap();
+    assert_eq!(pool.handoffs_pending, 1);
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(
+        tick.outcomes[0].operation_id,
+        format!("sched-role-integrator-{}", id(1))
+    );
+    assert_eq!(
+        starts(&s).pop().unwrap().role,
+        Some(SessionRole::Integrator)
+    );
+    // The target is at its cap of three; nothing more starts.
+    assert!(s.tick(&mut tx).outcomes.is_empty());
+    assert_eq!(starts(&s).len(), 3);
+    // The decision log names the role of each role start.
+    let logged: Vec<_> = s
+        .log()
+        .into_iter()
+        .filter(|record| {
+            record.kind == DecisionKind::Start && record.reason.as_deref() == Some("role_needed")
+        })
+        .map(|record| record.detail)
+        .collect();
+    assert_eq!(
+        logged,
+        [Some("dispatcher".to_owned()), Some("integrator".to_owned())]
     );
 }
