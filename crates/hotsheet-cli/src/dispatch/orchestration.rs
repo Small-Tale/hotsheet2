@@ -137,6 +137,15 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 0, requires = "after")]
         wait_seconds: u64,
     },
+    /// HS2-KB2Y51: send this machine's orchestration lines to the remote servers
+    /// that host the project's targets once now, so viewers of those targets see
+    /// them. The running server does this by itself on every change; this is the
+    /// headless re-assert. Sends display facts only, and only to reviewed bindings.
+    TargetLinesPush {
+        /// Registered orchestration project checkout id.
+        #[arg(long)]
+        project: Option<String>,
+    },
 }
 #[derive(Args)]
 struct GateArgs {
@@ -1405,6 +1414,11 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 path = format!("{path}?after={after}&wait_ms={wait_ms}");
             }
             (checkout_id, ("GET", path, Value::Null))
+        }
+        OrchestrationCmd::TargetLinesPush { project } => {
+            let owner_id = required(project)?;
+            let path = format!("/checkouts/{owner_id}/orchestration/target-lines/push");
+            (owner_id, ("POST", path, json!({})))
         }
     };
     // HS2-SBQ3T8: authority decisions record who acted; the runtime strips this again

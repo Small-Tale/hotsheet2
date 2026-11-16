@@ -49,6 +49,10 @@ describe('orchestration target lines response contract (HS2-S3FKJ7)', () => {
     const counted = valid();
     (counted.lines[0] as Record<string, unknown>).also_planned = 2;
     expect(parseOrchestrationTargetLines(counted).lines[0].also_planned).toBe(2);
+    // HS2-KB2Y51: a line another machine pushed names that machine.
+    const pushed = valid();
+    (pushed.lines[0] as Record<string, unknown>).observed_from = '01ARZ3NDEKTSV4RRFFQ69G5FA0';
+    expect(parseOrchestrationTargetLines(pushed).lines[0].observed_from).toBe('01ARZ3NDEKTSV4RRFFQ69G5FA0');
   });
 
   it('refuses a drifted response', () => {
@@ -61,6 +65,7 @@ describe('orchestration target lines response contract (HS2-S3FKJ7)', () => {
     expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).proposed = 'no'))).toThrow();
     expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).owner_label = null))).toThrow();
     expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).also_planned = -1))).toThrow();
+    expect(drifted((value) => ((value.lines[0] as Record<string, unknown>).observed_from = 7))).toThrow();
     expect(drifted((value) => (value.lines[0].item.state = 'sleeping'))).toThrow();
     expect(() => parseOrchestrationTargetLines({ version: 'v', orchestrated: true })).toThrow();
   });

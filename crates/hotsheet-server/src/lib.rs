@@ -2251,6 +2251,17 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/target-lines",
             get(routes::orchestration::read),
         )
+        // HS2-KB2Y51: one push pass of this machine's lines to remote targets
+        // (machine-local), and the hosted, display-only observations another machine
+        // pushes for a checkout served here (ordinary authenticated project data).
+        .route(
+            "/checkouts/{owner}/orchestration/target-lines/push",
+            post(routes::orchestration::write),
+        )
+        .route(
+            "/checkouts/{owner}/target-line-observations",
+            axum::routing::put(routes::orchestration::write),
+        )
         // HS2-AHG7HW: observed AI tool capacity (machine-local).
         .route(
             "/checkouts/{owner}/orchestration/tool-capacity",

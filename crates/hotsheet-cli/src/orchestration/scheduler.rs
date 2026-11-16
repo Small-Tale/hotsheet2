@@ -40,7 +40,7 @@ use super::*;
 /// The longest one follow step waits for an event.
 pub const MAX_SCHEDULER_WAIT_MS: u64 = 25_000;
 const MAX_DECISION_PAGE: usize = 200;
-pub(super) const WAKE_DIRECTORY: &str = "orchestration-scheduler-wake";
+pub const WAKE_DIRECTORY: &str = "orchestration-scheduler-wake";
 
 // ---- Requests and views ----
 

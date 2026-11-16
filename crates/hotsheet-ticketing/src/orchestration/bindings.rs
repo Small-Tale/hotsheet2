@@ -170,6 +170,24 @@ impl BindingRegistry {
             .collect())
     }
 
+    /// HS2-KB2Y51: every reviewed binding on this machine whose destination is a
+    /// remote server, with that destination, in the file's order.
+    pub fn remote_destinations(
+        &self,
+    ) -> Result<Vec<(TargetRef, TargetDestination)>, OrchestrationError> {
+        Ok(self
+            .read_file()?
+            .bindings
+            .into_iter()
+            .filter_map(|binding| match binding.destination {
+                Some(destination @ TargetDestination::Remote { .. }) => {
+                    Some((binding.target, destination))
+                }
+                _ => None,
+            })
+            .collect())
+    }
+
     pub fn get(&self, target: &TargetRef) -> Result<BindingView, OrchestrationError> {
         target.validate()?;
         Ok(self

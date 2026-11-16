@@ -16,8 +16,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use hotsheet_ticketing::orchestration::{
-    BindingRegistry, DecisionJournal, RunEventJournal, TargetLineSource, TargetLines, Timeline,
-    target_lines,
+    BindingRegistry, DecisionJournal, LineObservations, ObservedOwner, RunEventJournal,
+    TargetLineSource, TargetLines, Timeline, target_lines_observed,
 };
 
 use super::scheduler::WAKE_DIRECTORY;
@@ -31,7 +31,7 @@ pub const MAX_TARGET_LINE_OWNERS: usize = 16;
 /// Which checkout the lines are for: one on this machine, or one on a remote server
 /// this machine binds (HS2-3D8D6V).
 #[derive(Clone, Copy)]
-enum LinesOf<'a> {
+pub(super) enum LinesOf<'a> {
     Here(&'a str),
     Remote {
         registration_id: &'a str,
@@ -55,7 +55,7 @@ impl LinesOf<'_> {
 impl OrchestrationRuntime {
     /// The lines as the records are now, and the ticket stores whose change could
     /// clear a pending decision.
-    fn target_lines_now(
+    pub(super) fn target_lines_now(
         &self,
         of: LinesOf<'_>,
         tx: &mut Transaction<'_>,
@@ -98,7 +98,23 @@ impl OrchestrationRuntime {
                 timeline: view,
             })
             .collect();
-        let lines = target_lines(&sources);
+        // HS2-KB2Y51: a checkout hosted here also shows the lines other machines
+        // pushed for it, merged after this machine's own; a remote checkout's lines
+        // are this machine's alone.
+        let pushed = match of {
+            LinesOf::Here(checkout_id) => {
+                LineObservations::new(&self.home).live(checkout_id, tx.clock.now_ms())
+            }
+            LinesOf::Remote { .. } => Vec::new(),
+        };
+        let observed: Vec<ObservedOwner<'_>> = pushed
+            .iter()
+            .map(|entry| ObservedOwner {
+                owner_server_id: &entry.owner_server_id,
+                lines: &entry.lines,
+            })
+            .collect();
+        let lines = target_lines_observed(&sources, &observed);
         let owners = read.into_iter().map(|(owner, ..)| owner).collect();
         Ok((lines, owners, stores))
     }
@@ -167,7 +183,14 @@ impl OrchestrationRuntime {
         if after != Some(first.version.as_str()) {
             return Ok(first);
         }
-        let mut dirs = vec![runs.directory(), decisions.directory(), wake.as_path()];
+        // HS2-KB2Y51: a push from another machine ends the wait too.
+        let pushed = LineObservations::new(&self.home).directory();
+        let mut dirs = vec![
+            runs.directory(),
+            decisions.directory(),
+            wake.as_path(),
+            pushed.as_path(),
+        ];
         let unique: BTreeMap<&PathBuf, ()> = stores.iter().map(|store| (store, ())).collect();
         dirs.extend(unique.keys().map(|store| store.as_path()));
         let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {

@@ -12,6 +12,8 @@ mod hosted_deployments;
 mod hosted_gates;
 mod job_monitor;
 mod joining;
+// HS2-KB2Y51: pushing this machine's lines to the servers that host its targets.
+mod line_push;
 mod observer;
 mod permissions;
 mod planning;
@@ -60,6 +62,11 @@ pub use hosted_deployments::{
 pub use hosted_gates::{HostedGate, HostedGateWatch, MAX_HOSTED_GATE_WAIT_MS};
 pub use job_monitor::{DetachedJobMonitor, JOB_MONITOR_AUTOSTART_ENV, JobMonitor};
 pub use joining::REPLACEMENTS_EXHAUSTED;
+pub use line_push::{
+    LINE_OBSERVATION_LEAF, LINE_PUSH_FIRST_BACKOFF_MS, LINE_PUSH_MAX_BACKOFF_MS,
+    LINE_PUSH_MIN_GAP_MS, LINE_PUSH_TTL_MS, LinePushOutcome, LinePushReport, LinePushState,
+    MAX_LINE_PUSH_DESTINATIONS,
+};
 pub use permissions::{
     AnswerPermission, NoPrompt, PERMISSION_SIGNAL_DIRECTORY, PermissionList, PermissionPrompt,
     PermissionSignalWaiter, PromptRequest, RememberPermission, Remembered, RetiredRemoved,
@@ -88,6 +95,8 @@ pub use runs::{
     DEFAULT_LEASE_MINUTES, DispatchRun, HostedClaim, MAX_EVENT_WAIT_MS, MAX_LEASE_MINUTES,
     RunStatus, RunView,
 };
+/// HS2-KB2Y51: a follower that wakes with the scheduler watches this directory.
+pub use scheduler::WAKE_DIRECTORY as SCHEDULER_WAKE_DIRECTORY;
 pub use scheduler::{
     DecisionOutcome, DecisionsRequest, ExplainRequest, Explanation, MAX_SCHEDULER_WAIT_MS,
     PlanRequest, RequiredResource, ScheduleView, SchedulerFollowState, SchedulerStep, TickRequest,

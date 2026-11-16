@@ -133,6 +133,8 @@ export interface OrchestrationTargetLine {
   proposed: boolean;
   /** Other plan steps that also work this ticket. */
   also_planned?: number;
+  /** HS2-KB2Y51: the server id of the machine that pushed this line, when another machine's plan works it. */
+  observed_from?: string;
   item: TimelineItem;
 }
 
@@ -263,6 +265,7 @@ export function parseOrchestrationTargetLines(value: unknown): OrchestrationTarg
     text(entry.owner_label);
     if (typeof entry.proposed !== 'boolean') fail();
     optional(entry.also_planned, count);
+    optional(entry.observed_from, text);
     item(entry.item);
     return entry;
   });

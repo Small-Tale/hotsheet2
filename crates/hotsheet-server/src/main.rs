@@ -557,6 +557,9 @@ async fn main() -> Result<()> {
     state.spawn_permission_follower();
     // Tell clients when a hosted orchestrator session changes hands (HS2-DX1PQB).
     state.spawn_hosted_session_follower();
+    // Show this machine's orchestration lines to viewers of its remote targets
+    // (HS2-KB2Y51). Idle when no remote target is bound.
+    state.spawn_target_line_push();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
     // a quiescent restart) stops accepting and tells long waits to finish; open connections

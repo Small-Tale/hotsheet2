@@ -4302,6 +4302,90 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/target-lines/push:
+    description:
+      Machine-local push pass (HS2-KB2Y51). Sends this machine's orchestration lines once now to the remote servers
+      that host the orchestration project's targets, as display-only, expiring observations. The server already does
+      this on every change; this is the headless re-assert.
+    x-hotsheet-machine-local: true
+    post:
+      operationId: pushOrchestrationTargetLines
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: What the pass did for each remote destination.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationLinePushReport'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        description: The orchestration project.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/target-line-observations:
+    description:
+      Hosted, display-only orchestration lines another machine pushes for a checkout served here (HS2-KB2Y51). Kept
+      machine-local and expiring, never in git or a ticket store; merged into this checkout's target-lines read.
+      Requires a caller that may write project data (a read-write paired device or certificate). Each push replaces
+      the pushing machine's lines; empty lines withdraw them.
+    put:
+      operationId: putTargetLineObservations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestrationObservedLines'
+      responses:
+        '200':
+          description: Stored, withdrawn, or stale (an older or repeated sequence; nothing changed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationObservationOutcome'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        description: The checkout served here.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -25106,6 +25190,11 @@ components:
         also_planned:
           type: integer
           minimum: 0
+        observed_from:
+          description:
+            HS2-KB2Y51. The server id of the machine that pushed this line, when another machine's orchestration
+            project plans the ticket. Display-only.
+          type: string
         item:
           $ref: '#/components/schemas/OrchestrationTimelineItem'
     OrchestrationDecision:
@@ -25400,6 +25489,91 @@ components:
           description: Whether something observes the provider on the hosting machine.
           type: boolean
       additionalProperties: false
+    OrchestrationObservedLines:
+      description:
+        HS2-KB2Y51. One machine's lines for a checkout. At most 256 lines and 256 KiB; ttl_ms is clamped to 30 seconds
+        to 15 minutes (default 10 minutes); at most 30 pushes per machine per minute and 8 machines per checkout.
+      type: object
+      additionalProperties: false
+      required:
+        - owner_server_id
+        - sequence
+      properties:
+        owner_server_id:
+          description: The pushing machine's server id (a ULID).
+          type: string
+        sequence:
+          description: Increases with every push from that machine; an older or repeated one is ignored.
+          type: integer
+          minimum: 0
+        ttl_ms:
+          type: integer
+          minimum: 0
+        lines:
+          type: array
+          maxItems: 256
+          items:
+            $ref: '#/components/schemas/OrchestrationTargetLine'
+    OrchestrationObservationOutcome:
+      description: HS2-KB2Y51. What one push did.
+      type: object
+      required:
+        - outcome
+        - accepted
+        - dropped
+      properties:
+        outcome:
+          type: string
+          enum:
+            - stored
+            - withdrawn
+            - stale
+        accepted:
+          type: integer
+          minimum: 0
+        dropped:
+          description: Lines whose ticket is not in one of the checkout's own sources.
+          type: integer
+          minimum: 0
+        expires_at_ms:
+          type: integer
+          minimum: 0
+    OrchestrationLinePushReport:
+      description: HS2-KB2Y51. One push pass.
+      type: object
+      required:
+        - destinations
+      properties:
+        destinations:
+          type: array
+          items:
+            type: object
+            required:
+              - registration_id
+              - checkout_id
+              - lines
+              - outcome
+            properties:
+              registration_id:
+                type: string
+              checkout_id:
+                type: string
+              lines:
+                type: integer
+                minimum: 0
+              outcome:
+                type: string
+                enum:
+                  - pushed
+                  - withdrawn
+                  - unchanged
+                  - waiting
+                  - failed
+              code:
+                type: string
+        next_due_ms:
+          type: integer
+          minimum: 0
     RemoteIdentity:
       type: object
       required:

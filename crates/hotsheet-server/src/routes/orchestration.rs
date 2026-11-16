@@ -746,6 +746,58 @@ impl AppState {
     }
 }
 
+impl AppState {
+    /// HS2-KB2Y51: push this machine's orchestration lines to the remote servers that
+    /// host its targets. Each wake recomputes the lines from local records (a run
+    /// event, a scheduler wake, or the one-second safety re-check) and sends only a
+    /// change, a half-lifetime renewal or a backed-off retry; with no remote target
+    /// bound it reads one small file per wake and sends nothing.
+    pub fn spawn_target_line_push(&self) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let state = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("orchestration-line-push".into())
+            .spawn(move || {
+                let Ok(shared) = runtime(&state, handle) else {
+                    return;
+                };
+                let home = state.machine_home();
+                let journals = (
+                    hotsheet_ticketing::orchestration::RunEventJournal::new(home, "line-push"),
+                    hotsheet_ticketing::orchestration::DecisionJournal::new(home, "line-push"),
+                );
+                let wake = home.join(hotsheet_cli::orchestration::SCHEDULER_WAKE_DIRECTORY);
+                let waiter = match &journals {
+                    (Ok(runs), Ok(decisions)) => hotsheet_jobs::ChangeWaiter::watching(&[
+                        runs.directory(),
+                        decisions.directory(),
+                        wake.as_path(),
+                    ])
+                    .ok(),
+                    _ => None,
+                };
+                let mut pushed = hotsheet_cli::orchestration::LinePushState::default();
+                let mut remembered = false;
+                while !state.is_stopping() {
+                    // Destinations pushed before stay in the pass until withdrawn.
+                    if remembered || shared.has_remote_targets() {
+                        remembered = shared
+                            .push_target_lines_now(&mut pushed)
+                            .is_ok_and(|report| !report.destinations.is_empty());
+                    }
+                    match &waiter {
+                        Some(waiter) => {
+                            let _ = waiter.wait(std::time::Duration::from_secs(1));
+                        }
+                        None => std::thread::sleep(std::time::Duration::from_secs(1)),
+                    }
+                }
+            });
+    }
+}
+
 /// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted
 /// here; every client refetches its terminals so the drawer shows the new owner.
 fn announce_terminal_orchestrator(state: &AppState, terminal_id: &str) {

@@ -4999,23 +4999,84 @@ The client routes a remote project's tab (`remote:<registration>:<checkout>`) to
 machine's server, through any open local project's API path, so the line shows in that
 tab's List and Columns while the plan stays on this machine. With no local project open
 the tab asks the remote project's own server. A viewer on another machine sees the line
-only through the owner's push (HS2-KB2Y51).
+through the owner's push, below.
+
+### Pushing lines to a remote target's viewers (HS2-KB2Y51)
+
+So that anyone who views a remote target sees its orchestration lines, the machine that
+runs the orchestration project pushes them to the target's server, which keeps them as
+transient, display-only observations. They are never plan records: nothing is written
+to git or a ticket store on either side, and the owner's run, session, permission and
+decision identifiers never leave the owner's machine.
+
+**Payload.** `PUT /checkouts/{checkout}/target-line-observations` on the target's server,
+sent over the reviewed remote binding (the transport `target-tickets` uses):
+`owner_server_id` (the pushing machine's server id), `sequence` (increasing with each
+push from that machine), `ttl_ms`, and `lines`: the part-A lines for that checkout,
+trimmed to display facts (`display_line`: state, goal slug and title, ticket label,
+tool and placement, prerequisites). Each push replaces that machine's lines; an empty
+push withdraws them. The receiver drops lines whose connection is not one of the
+checkout's own sources and reads the rest as running on its own machine
+(`location: local`).
+
+**Lifetime and expiry.** `ttl_ms` is clamped to 30 seconds through 15 minutes (default
+10 minutes). The owner renews at half the lifetime while it has lines; lines an owner
+stops renewing expire, and expired entries are pruned on every read and write.
+
+**Two owners.** Each owner machine is its own entry (at most 8 per checkout), merged
+after the receiving machine's own lines by the same fold (`target_lines_observed`); a
+line names its machine in `observed_from`, and the same owner checkout id on two
+machines is two steps. A repeated or older `sequence` is answered `stale` and changes
+nothing, so an out-of-order push cannot roll lines back.
+
+**Revocation.** Unbinding the target on the owner withdraws its lines on the next pass.
+A revoked pairing or an unreachable server is not told; its lines expire.
+
+**Who may post.** Any caller allowed to write project data on the target: a read-write
+paired device or certificate, the grant the owner already uses to create target
+tickets. A read-only device is refused by the existing write fence. Bounds: 256 lines and
+256 KiB per push, 4 KiB per line, 30 pushes per owner machine and minute (429
+`rate_limited`), 8 owner machines per checkout (409).
+
+**Storage.** One private file per checkout under
+`HOTSHEET_HOME/orchestration-line-observations/` (`LineObservations`). The target-lines
+read merges the live entries, and its long poll also watches that directory, so a push
+ends a waiting read at once; an expiry is seen at the one-second safety re-check.
+
+**When the owner pushes.** The server's follower (`AppState::spawn_target_line_push`)
+recomputes each remote destination's lines on a run event, a scheduler wake or the
+one-second safety re-check, all from local files, and sends only a changed version, a
+half-lifetime renewal, or a retry after a failure with a backoff of 2 seconds doubling
+to 5 minutes, which is the re-assert after a reconnect. Pushes to one destination are at
+least 2 seconds apart, so a burst of changes coalesces. A restarted server re-asserts
+every destination once. With no remote target bound it sends nothing.
+`OrchestrationRuntime::push_target_lines(state, owner, tx)` is the pass.
+
+The client already reads the target project's own `target-lines`, so a viewer of the
+target, local or through a remote tab on a machine that does not orchestrate it, sees
+the pushed lines with no client change beyond the remote tab's choice of server above:
+it asks this machine's server first and the remote project's server when nothing here
+orchestrates it.
 
 ### Headless surface
 
 ```sh
 hotsheet-cli ... orchestration target-lines --project <target> [--after <version> --wait-seconds 20]
 hotsheet-cli ... orchestration target-lines --registration-id <remote> --project <remote checkout> [--after ...]
+hotsheet-cli ... orchestration target-lines-push --project <orchestration project>
 ```
 
-| Route                                                           | Methods and purpose                                                                    |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `/checkouts/{checkout}/orchestration/target-lines`              | GET the lines; `after` and `wait_ms` wait for a change; machine-local                  |
-| `/remotes/{id}/checkouts/{checkout}/orchestration/target-lines` | GET a remote checkout's lines from this machine's bindings (HS2-3D8D6V); machine-local |
+| Route                                                           | Methods and purpose                                                                                  |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `/checkouts/{checkout}/orchestration/target-lines`              | GET the lines; `after` and `wait_ms` wait for a change; machine-local                                |
+| `/remotes/{id}/checkouts/{checkout}/orchestration/target-lines` | GET a remote checkout's lines from this machine's bindings (HS2-3D8D6V); machine-local               |
+| `/checkouts/{owner}/orchestration/target-lines/push`            | POST one push pass to the project's remote targets (HS2-KB2Y51); machine-local                       |
+| `/checkouts/{checkout}/target-line-observations`                | PUT another machine's display-only lines for a checkout served here (HS2-KB2Y51); read-write callers |
 
 MCP `hotsheet_targets` adds `target_lines` (with `version` and `wait_ms`), called with
 the target project as `checkout`; with `registration_id`, `checkout` names a checkout on
-that remote server (HS2-3D8D6V).
+that remote server (HS2-3D8D6V). `target_lines_push` runs one push pass with the
+orchestration project as `checkout` (HS2-KB2Y51).
 
 - **A locked vault** (HS2-4K43DK). While the AI permission vault is locked or still
   loading, the full list answers 503 and Settings shows "Remembered Answers Locked".

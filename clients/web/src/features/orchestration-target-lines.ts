@@ -34,9 +34,10 @@ export interface TargetLinesApi extends OrchestrationTargetLinesClient {
 
 /**
  * HS2-3D8D6V: where a shown project's lines come from. A local project asks its own server. A remote project's
- * tab asks this machine's server, through any open local project, for the lines its orchestration projects plan
- * through a remote binding; the plan never leaves this machine. With no local project open there is no path to
- * this machine's server, so the remote project's own server answers.
+ * tab first asks this machine's server, through any open local project, for the lines its orchestration projects
+ * plan through a remote binding; the plan never leaves this machine. HS2-KB2Y51: when nothing here orchestrates
+ * the remote project, the tab reads the remote project's own server instead, which shows the lines other machines
+ * pushed to it, and keeps long polling there. Each first read (no `after`) decides again.
  */
 export function targetLinesClientFor(
   project: Project,
@@ -46,10 +47,19 @@ export function targetLinesClientFor(
   const remote = parseRemoteProjectId(project.id);
   const local = remote ? open.find((candidate) => !parseRemoteProjectId(candidate.id)) : undefined;
   if (!remote || !local) return api(project.apiPath);
-  const here = api(local.apiPath);
+  const here = api(local.apiPath),
+    there = api(project.apiPath);
+  let source: 'here' | 'there' = 'here';
+  const fromHere = (after?: string, signal?: AbortSignal) =>
+    here.orchestrationRemoteTargetLines(remote.bindingId, remote.checkoutId, after, signal);
   return {
-    orchestrationTargetLines: (_checkout, after, signal) =>
-      here.orchestrationRemoteTargetLines(remote.bindingId, remote.checkoutId, after, signal),
+    orchestrationTargetLines: async (checkout, after, signal) => {
+      if (after !== undefined)
+        return source === 'here' ? fromHere(after, signal) : there.orchestrationTargetLines(checkout, after, signal);
+      const mine = await fromHere(undefined, signal);
+      source = mine.orchestrated ? 'here' : 'there';
+      return mine.orchestrated ? mine : there.orchestrationTargetLines(checkout, undefined, signal);
+    },
   };
 }
 

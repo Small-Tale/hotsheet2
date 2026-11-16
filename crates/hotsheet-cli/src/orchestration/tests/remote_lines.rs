@@ -5,6 +5,11 @@ use hotsheet_ticketing::orchestration::{
     BindingRegistry, ItemState, TargetLocation, TargetRef, UnbindTarget,
 };
 
+use crate::orchestration::{
+    LINE_PUSH_FIRST_BACKOFF_MS, LINE_PUSH_MIN_GAP_MS, LINE_PUSH_TTL_MS, LinePushReport,
+    LinePushState,
+};
+
 use serde_json::json;
 
 use super::hosted_gates::{Remote, remote};
@@ -168,5 +173,219 @@ fn hs2_3d8d6v_unbinding_the_remote_target_ends_its_line_and_a_waiting_read() {
     assert_eq!(
         read(&r, &id(20), &checkout, None, 0).unwrap().version,
         unbound.version
+    );
+}
+
+/// A clock a test moves.
+struct At(u64);
+impl hotsheet_ticketing::Clock for At {
+    fn now_ms(&self) -> u64 {
+        self.0
+    }
+}
+
+fn pass(r: &Remote, state: &mut LinePushState, now_ms: u64) -> LinePushReport {
+    let mut rng = Rng(950);
+    let clock = At(now_ms);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    r.runtime.push_target_lines(state, None, &mut tx).unwrap()
+}
+
+fn outcomes(report: &LinePushReport) -> Vec<(&str, u32)> {
+    report
+        .destinations
+        .iter()
+        .map(|outcome| (outcome.outcome.as_str(), outcome.lines))
+        .collect()
+}
+
+fn hosted_lines(r: &Remote) -> hotsheet_ticketing::orchestration::TargetLines {
+    let mut rng = Rng(960);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    r.peer
+        .hosted
+        .runtime
+        .orchestration_target_lines(&r.peer.hosted.target.id, None, 0, &mut tx)
+        .unwrap()
+}
+
+fn pushes(r: &Remote) -> usize {
+    r.calls("/target-line-observations").len()
+}
+
+/// HS2-KB2Y51: a pass pushes changed lines, skips unchanged ones, renews at half the
+/// lifetime, backs off after a failure and re-asserts once the peer answers again,
+/// and withdraws a destination that is no longer bound.
+#[test]
+fn hs2_kb2y51_a_push_pass_sends_only_changes_renewals_and_retries() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    let before = hosted_lines(&r);
+    let mut state = LinePushState::default();
+    // Bound but nothing planned: an empty push, which the target keeps as nothing.
+    assert_eq!(outcomes(&pass(&r, &mut state, 10_000)), [("pushed", 0)]);
+    assert_eq!(hosted_lines(&r).version, before.version);
+    plan(&r, &mut tx);
+    // Absent -> pushed: the line shows on the target, as a display fact.
+    let report = pass(&r, &mut state, 20_000);
+    assert_eq!(outcomes(&report), [("pushed", 1)]);
+    assert_eq!(report.next_due_ms, Some(20_000 + LINE_PUSH_TTL_MS / 2));
+    let shown = hosted_lines(&r);
+    assert!(shown.orchestrated);
+    let line = shown
+        .lines
+        .iter()
+        .find(|line| line.observed_from.is_some())
+        .unwrap();
+    assert_eq!(line.observed_from.as_deref(), Some(id(10).as_str()));
+    assert_eq!(line.owner_checkout_id, r.owner);
+    assert_eq!(line.item.location, TargetLocation::Local);
+    assert!(line.item.run.is_none() && line.item.session_id.is_none());
+    // Unchanged -> nothing sent, repeatedly.
+    let sent = pushes(&r);
+    for now in [20_001, 25_000, 30_000] {
+        assert_eq!(outcomes(&pass(&r, &mut state, now)), [("unchanged", 1)]);
+    }
+    assert_eq!(pushes(&r), sent);
+    // Half the lifetime later the same lines are renewed.
+    let renew = 20_000 + LINE_PUSH_TTL_MS / 2;
+    assert_eq!(outcomes(&pass(&r, &mut state, renew)), [("pushed", 1)]);
+    assert_eq!(pushes(&r), sent + 1);
+    // The peer fails: the renewal is retried with a doubling backoff, never sooner.
+    let fail_at = renew + LINE_PUSH_TTL_MS / 2;
+    *r.peer.status_override.lock().unwrap() = Some(503);
+    let failed = pass(&r, &mut state, fail_at);
+    assert_eq!(failed.destinations[0].outcome, "failed");
+    assert_eq!(failed.destinations[0].code.as_deref(), Some("status_503"));
+    assert_eq!(
+        failed.next_due_ms,
+        Some(fail_at + LINE_PUSH_FIRST_BACKOFF_MS)
+    );
+    assert_eq!(
+        outcomes(&pass(&r, &mut state, fail_at + 1)),
+        [("waiting", 1)]
+    );
+    let second = pass(&r, &mut state, fail_at + LINE_PUSH_FIRST_BACKOFF_MS);
+    assert_eq!(second.destinations[0].outcome, "failed");
+    assert_eq!(
+        second.next_due_ms,
+        Some(fail_at + 3 * LINE_PUSH_FIRST_BACKOFF_MS)
+    );
+    // Reconnected: the next due pass re-asserts the lines.
+    *r.peer.status_override.lock().unwrap() = None;
+    assert_eq!(
+        outcomes(&pass(
+            &r,
+            &mut state,
+            fail_at + 3 * LINE_PUSH_FIRST_BACKOFF_MS
+        )),
+        [("pushed", 1)]
+    );
+    // A fresh state (a restarted server) re-asserts once, then is quiet again.
+    let mut restarted = LinePushState::default();
+    let later = fail_at + 10 * LINE_PUSH_FIRST_BACKOFF_MS;
+    assert_eq!(outcomes(&pass(&r, &mut restarted, later)), [("pushed", 1)]);
+    assert_eq!(
+        outcomes(&pass(&r, &mut restarted, later + 1)),
+        [("unchanged", 1)]
+    );
+    // Unbound -> withdrawn: the target shows no pushed line any more.
+    let target = TargetRef {
+        owner_checkout_id: r.owner.clone(),
+        target_id: id(1),
+    };
+    let view = BindingRegistry::new(&r.runtime.home).get(&target).unwrap();
+    OrchestrationRuntime::unbind_at(
+        &r.runtime.home,
+        UnbindTarget {
+            target,
+            expected_binding_revision: view.revision,
+            previous_destination: view.destination,
+        },
+        &mut tx,
+    )
+    .unwrap();
+    let withdrawn = pass(&r, &mut restarted, later + 5_000);
+    assert_eq!(outcomes(&withdrawn), [("withdrawn", 0)]);
+    assert!(
+        hosted_lines(&r)
+            .lines
+            .iter()
+            .all(|line| line.observed_from.is_none())
+    );
+    // Nothing is left to do or tell.
+    let idle = pass(&r, &mut restarted, later + 10_000);
+    assert!(idle.destinations.is_empty() && idle.next_due_ms.is_none());
+}
+
+/// HS2-KB2Y51: changes closer together than the minimum gap coalesce into one push.
+#[test]
+fn hs2_kb2y51_quick_changes_coalesce_and_the_hosted_put_is_bounded() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let r = remote(&mut tx);
+    let mut state = LinePushState::default();
+    assert_eq!(outcomes(&pass(&r, &mut state, 50_000)), [("pushed", 0)]);
+    plan(&r, &mut tx);
+    let quick = pass(&r, &mut state, 50_500);
+    assert_eq!(outcomes(&quick), [("waiting", 1)]);
+    assert_eq!(quick.next_due_ms, Some(50_000 + LINE_PUSH_MIN_GAP_MS));
+    assert_eq!(
+        outcomes(&pass(&r, &mut state, 50_000 + LINE_PUSH_MIN_GAP_MS)),
+        [("pushed", 1)]
+    );
+    // The hosted half refuses what is not a bounded push for a checkout hosted there.
+    let hosted = &r.peer.hosted.runtime;
+    for (path, body) in [
+        (
+            format!(
+                "/checkouts/{}/target-line-observations",
+                r.peer.hosted.target.id
+            ),
+            json!({"owner_server_id": "not-a-ulid", "sequence": 1, "lines": []}),
+        ),
+        (
+            format!(
+                "/checkouts/{}/target-line-observations",
+                r.peer.hosted.target.id
+            ),
+            json!({"owner_server_id": id(30), "sequence": 1, "lines": [], "extra": 1}),
+        ),
+        (
+            "/checkouts/unknown-0123456789ab/target-line-observations".to_owned(),
+            json!({"owner_server_id": id(30), "sequence": 1, "lines": []}),
+        ),
+    ] {
+        assert!(
+            hosted.request_now("PUT", &path, &body).is_err(),
+            "{path} {body}"
+        );
+    }
+    // A push for this machine's own checkout from a local caller works the same way.
+    assert_eq!(
+        hosted
+            .request_now(
+                "PUT",
+                &format!(
+                    "/checkouts/{}/target-line-observations",
+                    r.peer.hosted.target.id
+                ),
+                &json!({"owner_server_id": id(30), "sequence": 1, "lines": []}),
+            )
+            .unwrap()["outcome"],
+        "withdrawn"
     );
 }

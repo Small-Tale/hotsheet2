@@ -6,6 +6,7 @@
 use super::orchestration::api;
 use super::*;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
+use hotsheet_ticketing::remote_servers::RemoteCredentials;
 use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
 use std::path::PathBuf;
 
@@ -23,6 +24,8 @@ pub(super) struct Bound {
     pub(super) peer: Running,
     pub(super) step: String,
     pub(super) work: hotsheet_model::Ticket,
+    /// The credentials the CLI stored, for an in-process runtime's secret store.
+    pub(super) credentials: RemoteCredentials,
 }
 
 fn create(store: &FsStore, prefix: &str, title: &str) -> hotsheet_model::Ticket {
@@ -164,7 +167,33 @@ pub(super) async fn bound() -> Bound {
         peer,
         step,
         work,
+        credentials: credentials(&device),
     }
+}
+
+/// The controller's server with an in-process runtime holding the stored credentials
+/// in memory, as the CLI holds them in its isolated keychain.
+fn controller(b: &Bound) -> hotsheet_server::AppState {
+    let registry: Value =
+        serde_json::from_slice(&std::fs::read(b.home.join("remotes.json")).unwrap()).unwrap();
+    let reference = registry["servers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|server| server["id"] == ID)
+        .unwrap()["credential_ref"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let memory = Arc::new(Memory::default());
+    memory
+        .0
+        .lock()
+        .unwrap()
+        .insert(reference, serde_json::to_string(&b.credentials).unwrap());
+    state(&b.source, &b.home).with_orchestration_runtime(super::orchestration::shared_runtime(
+        &b.source, &b.home, &memory,
+    ))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -276,4 +305,115 @@ async fn hs2_3d8d6v_the_controller_answers_a_remote_checkouts_lines_over_http_cl
         1
     );
     let _ = (&b.root, &b.peer_home, &b.peer);
+}
+
+/// HS2-KB2Y51: the controller pushes the line to the real mTLS peer, where any viewer
+/// of the target reads it; the server's follower then sends a change by itself and
+/// the peer's waiting read ends with it. Read-only and unauthenticated callers cannot
+/// post observations.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_kb2y51_the_owner_pushes_lines_that_the_targets_viewers_read() {
+    let b = bound().await;
+    let peer = app(state(&b.peer_source, &b.peer_home));
+    let lines = format!(
+        "/checkouts/{}/orchestration/target-lines",
+        b.peer_checkout.id
+    );
+    let (_, before) = api(peer.clone(), "GET", &lines, Value::Null, true).await;
+    assert_eq!(before["orchestrated"], false);
+
+    // The headless re-assert: one pass through the owned CLI.
+    let plain = ["-C", b.source.to_str().unwrap(), "orchestration"];
+    let pushed = cli_named(
+        &b.home,
+        &plain,
+        &["target-lines-push", "--project", &b.owner.id],
+    );
+    assert_eq!(pushed["destinations"][0]["outcome"], "pushed", "{pushed}");
+    assert_eq!(pushed["destinations"][0]["lines"], 1);
+    assert_eq!(pushed["destinations"][0]["checkout_id"], b.peer_checkout.id);
+
+    let (status, shown) = api(peer.clone(), "GET", &lines, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(shown["orchestrated"], true);
+    let line = &shown["lines"][0];
+    assert_eq!(line["item"]["step_id"], b.step);
+    assert_eq!(line["item"]["target"]["native_id"], b.work.id.to_string());
+    assert_eq!(line["item"]["state"], "ready");
+    // The work runs on the peer, so the peer reads it as its own machine.
+    assert_eq!(line["item"]["location"], "local");
+    assert_eq!(line["owner_checkout_id"], b.owner.id);
+    assert_eq!(line["observed_from"], identity(&b.home).server_id);
+    // Kept as a machine-local observation: the peer's ticket store is unchanged.
+    assert_eq!(
+        FsStore::open(&b.peer_source)
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        b.peer_home
+            .join("orchestration-line-observations")
+            .join(format!("{}.json", b.peer_checkout.id))
+            .is_file()
+    );
+    // An unauthenticated caller cannot post one.
+    let observations = format!("/checkouts/{}/target-line-observations", b.peer_checkout.id);
+    assert_eq!(
+        api(
+            peer.clone(),
+            "PUT",
+            &observations,
+            json!({"owner_server_id":"01ARZ3NDEKTSV4RRFFQ69G5FN0","sequence":1,"lines":[]}),
+            false
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // The controller's follower sends a change on its own: removing the step
+    // withdraws the line, and the peer's waiting read ends with it.
+    let controller = controller(&b);
+    controller.spawn_target_line_push();
+    let version = shown["version"].as_str().unwrap().to_owned();
+    let waiting = {
+        let (peer, lines) = (peer.clone(), lines.clone());
+        tokio::spawn(async move {
+            api(
+                peer,
+                "GET",
+                &format!("{lines}?after={version}&wait_ms=15000"),
+                Value::Null,
+                true,
+            )
+            .await
+        })
+    };
+    let worker = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "worker-1",
+        "-C",
+        b.source.to_str().unwrap(),
+        "orchestration",
+    ];
+    cli_named(
+        &b.home,
+        &worker,
+        &["readiness", "remove", &b.step, "--project", &b.owner.id],
+    );
+    let (status, changed) = tokio::time::timeout(std::time::Duration::from_secs(14), waiting)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_ne!(changed["version"], shown["version"]);
+    assert_eq!(changed["lines"], json!([]), "{changed}");
+    assert_eq!(changed["orchestrated"], false);
+    controller.begin_stopping();
+    let _ = (&b.root, &b.peer);
 }

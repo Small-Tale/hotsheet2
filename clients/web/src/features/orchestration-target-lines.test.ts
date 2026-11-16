@@ -161,6 +161,33 @@ describe('the lines of a remote project’s tab (HS2-3D8D6V)', () => {
     ]);
   });
 
+  it('reads what other machines pushed from the remote server when nothing here orchestrates it (HS2-KB2Y51)', async () => {
+    const asked: string[] = [];
+    const api = (apiPath: string) => ({
+      orchestrationTargetLines: (checkout: string, after?: string) => {
+        asked.push(`${apiPath} local ${checkout} ${after ?? ''}`);
+        return Promise.resolve(lines('pushed'));
+      },
+      orchestrationRemoteTargetLines: (registration: string, checkout: string, after?: string) => {
+        asked.push(`${apiPath} remote ${registration} ${checkout} ${after ?? ''}`);
+        return Promise.resolve(lines('none', false));
+      },
+    });
+    const client = targetLinesClientFor(remote, [remote, project('owner')], api);
+    const first = await client.orchestrationTargetLines(remote.id);
+    expect(first.version).toBe('pushed');
+    // The long poll stays on the remote server; a new first read asks here again.
+    await client.orchestrationTargetLines(remote.id, 'pushed');
+    await client.orchestrationTargetLines(remote.id);
+    expect(asked).toEqual([
+      `/api/owner remote ${binding} api-0123456789ab `,
+      `/api/remote local ${remote.id} `,
+      `/api/remote local ${remote.id} pushed`,
+      `/api/owner remote ${binding} api-0123456789ab `,
+      `/api/remote local ${remote.id} `,
+    ]);
+  });
+
   it('keeps a local project on its own server, and a remote tab with no local project on the remote one', async () => {
     const { asked, api } = recorder();
     await targetLinesClientFor(project('api'), [project('api')], api).orchestrationTargetLines('api');

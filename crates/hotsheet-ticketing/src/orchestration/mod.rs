@@ -32,6 +32,8 @@ mod summary;
 mod summary_use;
 mod summary_wait;
 mod target_lines;
+// HS2-KB2Y51: lines another machine pushed for a checkout hosted here.
+mod line_observations;
 mod timeline;
 mod tool_capacity;
 mod validation;
@@ -71,6 +73,12 @@ pub use hosted_validations::{
 };
 pub use joining::{
     DEFAULT_JOIN_MINUTES, JoinDecision, JoinInput, JoinState, MAX_JOIN_REPLACEMENTS, decide_join,
+};
+pub use line_observations::{
+    DEFAULT_OBSERVATION_TTL_MS, LINE_OBSERVATION_DIRECTORY, LineObservations,
+    MAX_OBSERVATION_BYTES, MAX_OBSERVATION_OWNERS, MAX_OBSERVATION_TTL_MS, MAX_OBSERVED_LINES,
+    MAX_PUSHES_PER_MINUTE, MIN_OBSERVATION_TTL_MS, ObservationEntry, ObservationFile,
+    ObservationOutcome, ObservedLines, ObservedOwner, display_line,
 };
 pub use manifest::ManifestStore;
 pub use permissions::{
@@ -166,7 +174,9 @@ pub use summary_wait::{
     ExternalWait, ExternalWaitInput, ProvisionalTally, ProvisionalWork, SystemWait,
     summarize_external_wait,
 };
-pub use target_lines::{TargetLine, TargetLineSource, TargetLines, target_lines};
+pub use target_lines::{
+    TargetLine, TargetLineSource, TargetLines, target_lines, target_lines_observed,
+};
 pub use timeline::{
     DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
     PlacementHint, TargetLocation, TicketLabel, Timeline, TimelineInput, TimelineItem,
@@ -378,6 +388,8 @@ mod gate_tests;
 mod hosted_validation_tests;
 #[cfg(test)]
 mod joining_tests;
+#[cfg(test)]
+mod line_observations_tests;
 #[cfg(test)]
 mod permission_tests;
 #[cfg(test)]

@@ -1918,7 +1918,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |
 | Terminal launch relay (macOS) | `terminal-relay` (HS2-HYF56Y) | [05](05-ai-tool-plugins.md) |
-| Orchestration projects | `orchestration` (targets, runs, readiness, sessions, scheduler, timeline; `target-lines` for a local checkout, or with `--registration-id` for a checkout on a remote server bound here, HS2-3D8D6V) | [26](26-orchestration-projects.md) |
+| Orchestration projects | `orchestration` (targets, runs, readiness, sessions, scheduler, timeline; `target-lines` for a local checkout, or with `--registration-id` for a checkout on a remote server bound here, HS2-3D8D6V; `target-lines-push` to re-assert the lines pushed to remote targets, HS2-KB2Y51) | [26](26-orchestration-projects.md) |
 | Jobs | `job list`, `job show`, `job watch start`, `job watch stop`, `job watch status` (HS2-5TC1GQ), `job watch ci`, `job watch gate` (HS2-3R9V0R) | [33](33-jobs.md) §33.8, §33.9 |
 
 ## 4.5 How the three stay consistent

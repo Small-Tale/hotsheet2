@@ -57,6 +57,9 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "target-lines"]
             // HS2-3D8D6V: the same lines for a checkout on a remote server bound here.
             | ["remotes", _, "checkouts", _, "orchestration", "target-lines"]
+            // HS2-KB2Y51: one push pass (orchestrating) and the hosted observations.
+            | ["checkouts", _, "orchestration", "target-lines", "push"]
+            | ["checkouts", _, "target-line-observations"]
             | ["checkouts", _, "target-claims"]
             | ["checkouts", _, "target-events"]
             // HS2-AHG7HW: tool capacity states, signals and selection.
@@ -151,6 +154,10 @@ pub fn is_machine_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "target-lines"]
             // HS2-3D8D6V: and so are the lines of a remote checkout bound here.
             | ["remotes", _, "checkouts", _, "orchestration", "target-lines"]
+            // HS2-KB2Y51: a push pass uses this machine's bindings and credentials.
+            // The hosted `target-line-observations` route stays ordinary
+            // authenticated data so the owner's machine can reach it.
+            | ["checkouts", _, "orchestration", "target-lines", "push"]
             // HS2-AHG7HW: observed tool capacity is this machine's.
             | ["checkouts", _, "orchestration", "tool-capacity"]
             | [
@@ -1059,6 +1066,14 @@ impl OrchestrationRuntime {
                     query_number(path, "wait_ms", 0)?,
                     tx,
                 )?)
+            }
+            // HS2-KB2Y51: one push pass of this machine's lines to remote targets.
+            ("POST", ["checkouts", owner, "orchestration", "target-lines", "push"]) => value(
+                self.push_target_lines(&mut super::LinePushState::default(), Some(owner), tx)?,
+            ),
+            // HS2-KB2Y51: the hosted half; another machine's display-only lines.
+            ("PUT", ["checkouts", checkout, "target-line-observations"]) => {
+                value(self.target_line_observations_put(checkout, decode(body)?, tx)?)
             }
             // HS2-3D8D6V: a remote checkout's lines, from this machine's records alone.
             (

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::line_observations::ObservedOwner;
 use super::timeline::{ItemState, Timeline, TimelineItem, TimelinePhase};
 
 /// One orchestration project's timeline and which of its targets the checkout is.
@@ -34,6 +35,10 @@ pub struct TargetLine {
     /// Other plan steps that also work this ticket, in this or another project.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub also_planned: u32,
+    /// HS2-KB2Y51: the server id of the machine that pushed this line, when it came
+    /// from another machine's orchestration project rather than this machine's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_from: Option<String>,
     pub item: TimelineItem,
 }
 
@@ -83,8 +88,48 @@ fn version(lines: &[TargetLine], orchestrated: bool) -> String {
 /// `also_planned`. Sources are read in the order given; repeating a source or an
 /// item changes nothing.
 pub fn target_lines(sources: &[TargetLineSource<'_>]) -> TargetLines {
-    let mut chosen: BTreeMap<(String, String), (usize, TargetLine)> = BTreeMap::new();
-    let mut seen: BTreeMap<(String, String), Vec<(String, String)>> = BTreeMap::new();
+    target_lines_observed(sources, &[])
+}
+
+/// A target ticket by connection and native id.
+type TicketKey = (String, String);
+/// A plan step by pushing machine (empty for this one), owner checkout and step id.
+type StepKey = (String, String, String);
+
+/// HS2-KB2Y51: [`target_lines`] with the lines other machines pushed for this
+/// checkout merged in after this machine's own sources, by the same rank. A pushed
+/// step is told apart by the pushing machine, so the same owner checkout id on two
+/// machines never folds into one step. The checkout counts as orchestrated when any
+/// owner machine has lines for it.
+pub fn target_lines_observed(
+    sources: &[TargetLineSource<'_>],
+    observed: &[ObservedOwner<'_>],
+) -> TargetLines {
+    let mut chosen: BTreeMap<TicketKey, (usize, TargetLine)> = BTreeMap::new();
+    let mut seen: BTreeMap<TicketKey, Vec<StepKey>> = BTreeMap::new();
+    let mut consider = |order: usize, machine: &str, line: TargetLine| {
+        let key = (
+            line.item.target.connection_id.clone(),
+            line.item.target.native_id.clone(),
+        );
+        let step = (
+            machine.to_owned(),
+            line.owner_checkout_id.clone(),
+            line.item.step_id.clone(),
+        );
+        let steps = seen.entry(key.clone()).or_default();
+        if steps.contains(&step) {
+            return;
+        }
+        steps.push(step);
+        let better = chosen.get(&key).is_none_or(|(at, current)| {
+            (rank(line.item.state), order, &line.item.step_id)
+                < (rank(current.item.state), *at, &current.item.step_id)
+        });
+        if better {
+            chosen.insert(key, (order, line));
+        }
+    };
     for (order, source) in sources.iter().enumerate() {
         let proposed = source.timeline.phase == TimelinePhase::Proposed;
         for wave in &source.timeline.waves {
@@ -92,31 +137,27 @@ pub fn target_lines(sources: &[TargetLineSource<'_>]) -> TargetLines {
                 if !source.target_ids.contains(&item.target.target_id) {
                     continue;
                 }
-                let key = (
-                    item.target.connection_id.clone(),
-                    item.target.native_id.clone(),
+                consider(
+                    order,
+                    "",
+                    TargetLine {
+                        owner_checkout_id: source.owner_checkout_id.to_owned(),
+                        owner_label: source.owner_label.to_owned(),
+                        proposed,
+                        also_planned: 0,
+                        observed_from: None,
+                        item: item.clone(),
+                    },
                 );
-                let step = (source.owner_checkout_id.to_owned(), item.step_id.clone());
-                let steps = seen.entry(key.clone()).or_default();
-                if steps.contains(&step) {
-                    continue;
-                }
-                steps.push(step);
-                let line = TargetLine {
-                    owner_checkout_id: source.owner_checkout_id.to_owned(),
-                    owner_label: source.owner_label.to_owned(),
-                    proposed,
-                    also_planned: 0,
-                    item: item.clone(),
-                };
-                let better = chosen.get(&key).is_none_or(|(at, current)| {
-                    (rank(line.item.state), order, &line.item.step_id)
-                        < (rank(current.item.state), *at, &current.item.step_id)
-                });
-                if better {
-                    chosen.insert(key, (order, line));
-                }
             }
+        }
+    }
+    for (offset, owner) in observed.iter().enumerate() {
+        for line in owner.lines {
+            let mut line = line.clone();
+            line.also_planned = 0;
+            line.observed_from = Some(owner.owner_server_id.to_owned());
+            consider(sources.len() + offset, owner.owner_server_id, line);
         }
     }
     let lines: Vec<TargetLine> = chosen
@@ -127,7 +168,8 @@ pub fn target_lines(sources: &[TargetLineSource<'_>]) -> TargetLines {
             line
         })
         .collect();
-    let orchestrated = sources.iter().any(|source| !source.target_ids.is_empty());
+    let orchestrated = sources.iter().any(|source| !source.target_ids.is_empty())
+        || observed.iter().any(|owner| !owner.lines.is_empty());
     TargetLines {
         version: version(&lines, orchestrated),
         orchestrated,
