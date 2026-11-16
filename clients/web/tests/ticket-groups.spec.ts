@@ -450,9 +450,6 @@ async function drag(page: Page, source: Locator, target: Locator, over?: () => P
   await page.mouse.move(to.x + to.width / 2, to.y + Math.min(to.height / 2, 24), { steps: 12 });
   // A real pointer keeps reporting dragover while it rests on the target.
   await page.mouse.move(to.x + to.width / 2 + 2, to.y + Math.min(to.height / 2, 24) + 1, { steps: 2 });
-  // One more resting move, so the element finally under the pointer receives a dragover even when
-  // the last step crossed onto it, such as a group header toggle's padding (HS2-HKXSB1).
-  await page.mouse.move(to.x + to.width / 2 + 3, to.y + Math.min(to.height / 2, 24) + 1);
   await over?.();
   await page.mouse.up();
 }
@@ -551,6 +548,109 @@ test('HS2-PRXD39 drags tickets into and out of groups', async ({ page }) => {
     await drag(page, rowOf(columns, onboarding.slug), columns.locator('[data-column-id="completed"] > header'));
     await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['completed', null]);
     await expect(group(columns, SEARCH, 'completed')).toHaveCount(0);
+  }, page);
+});
+
+test('HS2-1BBXER keeps a column’s drop highlight while the pointer crosses its children', async ({ page }) => {
+  test.setTimeout(120_000);
+  await withServer(async (server, tickets) => {
+    await open(page, server);
+    await page.getByLabel('Columns View').click();
+    const columns = board(page),
+      onboarding = tickets['Onboarding checklist copy review'],
+      persist = tickets['Persist column widths per view'],
+      startedColumn = columns.locator('[data-column-id="started"]'),
+      completedColumn = columns.locator('[data-column-id="completed"]'),
+      header = group(columns, BOARD, 'started').locator('[data-component="list-header"]'),
+      toggle = header.locator('[data-action="toggle-ticket-group"]'),
+      center = async (target: Locator) => {
+        const box = (await target.boundingBox())!;
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+    await settle(page);
+    // Every point is resolved before the drag, so the pointer moves only between them.
+    const label = await center(toggle.getByText(BOARD, { exact: true })),
+      toggleBox = (await toggle.boundingBox())!,
+      columnHeader = await center(startedColumn.locator(':scope > header')),
+      stops: readonly (readonly [string, { x: number; y: number }])[] = [
+        ['group label', label],
+        // The toggle's own padding, left of its label: the move HS2-HKXSB1 found clearing the column.
+        ['toggle padding', { x: toggleBox.x + 2, y: toggleBox.y + toggleBox.height / 2 }],
+        ['group label again', label],
+        ['overflow button', await center(header.getByRole('button', { name: `${BOARD} Group Actions` }))],
+        ['grouped row', await center(rowOf(startedColumn, persist.slug))],
+        ['group label from a row', label],
+        ['column header', columnHeader],
+      ],
+      outside = await center(completedColumn.locator(':scope > header'));
+    // Count every time the started column loses its highlight.
+    await startedColumn.evaluate((column) => {
+      const record = window as unknown as { columnHighlightCleared: number };
+      record.columnHighlightCleared = 0;
+      new MutationObserver(() => {
+        if ((column as HTMLElement).dataset.draggingTicket !== 'true') record.columnHighlightCleared += 1;
+      }).observe(column, { attributes: true, attributeFilter: ['data-dragging-ticket'] });
+    });
+    const cleared = () =>
+      page.evaluate(() => (window as unknown as { columnHighlightCleared: number }).columnHighlightCleared);
+
+    const from = await center(rowOf(columns, onboarding.slug));
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 12, from.y + 12, { steps: 4 });
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 12 });
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    // One step per stop: each move crosses straight onto the next child with no resting dragover after it.
+    for (const [name, point] of stops) {
+      await page.mouse.move(point.x, point.y);
+      await expect(startedColumn, name).toHaveAttribute('data-dragging-ticket', 'true');
+      expect(await cleared(), name).toBe(0);
+    }
+    await capture(page, 'drag-across-column-children-light-1440');
+
+    // Leaving the column clears it, and the column now under the pointer takes the highlight.
+    await page.mouse.move(outside.x, outside.y, { steps: 6 });
+    await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await expect(completedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+
+    // Back across the started column's children, a drop there clears every highlight.
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 6 });
+    await page.mouse.move(label.x, label.y);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await expect(completedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.up();
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', null]);
+    await expect(columns.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
+
+    // Within its own column, entering a group hands the highlight to the group at once, and back
+    // out on the column header the column takes it again.
+    await settle(page);
+    const search = group(columns, SEARCH, 'started'),
+      searchLabel = await center(
+        search.locator('[data-action="toggle-ticket-group"]').getByText(SEARCH, { exact: true }),
+      ),
+      own = await center(rowOf(startedColumn, onboarding.slug));
+    await page.mouse.move(own.x, own.y);
+    await page.mouse.down();
+    await page.mouse.move(own.x + 12, own.y + 12, { steps: 4 });
+    await page.mouse.move(columnHeader.x, columnHeader.y, { steps: 12 });
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(searchLabel.x, searchLabel.y);
+    await expect(search).toHaveAttribute('data-drop-target', 'true');
+    await expect(startedColumn).not.toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(columnHeader.x, columnHeader.y);
+    await expect(search).not.toHaveAttribute('data-drop-target', 'true');
+    // The column marks itself on dragover, which a real pointer repeats while it rests.
+    await page.mouse.move(columnHeader.x + 2, columnHeader.y + 1);
+    await expect(startedColumn).toHaveAttribute('data-dragging-ticket', 'true');
+    await page.mouse.move(searchLabel.x, searchLabel.y);
+    await expect(search).toHaveAttribute('data-drop-target', 'true');
+    await page.mouse.up();
+    await expect.poll(() => statusAndGroupOf(server, onboarding.id)).toEqual(['started', SEARCH]);
+    await expect(search).not.toHaveAttribute('data-drop-target', 'true');
+    await expect(columns.locator('[data-dragging-ticket="true"]')).toHaveCount(0);
   }, page);
 });
 

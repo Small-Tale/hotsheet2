@@ -162,7 +162,10 @@ once more when loaded tickets name an id it has no name for; it never polls.
   the column view, a group takes the drop only when every dragged ticket is already
   in that group's column (HS2-K2QA1J). A drag from another column is a status change:
   the whole column is the target even over one of its groups, and the drop changes
-  only the status and keeps each ticket's group.
+  only the status and keeps each ticket's group. A column's or group's drop
+  highlight stays while the pointer moves between its children, such as from a
+  group header's label onto its toggle or overflow button, and clears only when
+  the pointer leaves it or the tickets drop (HS2-1BBXER).
 - **Leaving a group by dragging.** In the list view, dropping a grouped ticket on
   the list outside every group removes its group. In the column view, dropping it
   in its own column outside every group removes its group; dropping it in another

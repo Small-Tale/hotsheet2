@@ -21,6 +21,7 @@ import {
   reanchorReplacedContextPopupMenus,
   revealContextPopupMenu,
 } from '../context-menu-position';
+import { dragLeftElement } from '../drag-leave';
 import type { TicketGroupsController } from '../features/ticket-groups';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
@@ -493,8 +494,11 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       document.body,
       'dragleave',
       '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-      (_event, target) => {
-        clearDragTarget(target as HTMLElement);
+      (event, target) => {
+        // Moving between a column's children, such as from a group header's label onto its
+        // toggle's padding, fires dragleave on the child left behind; only leaving the column
+        // itself clears its highlight (HS2-1BBXER).
+        if (dragLeftElement(event as DragEvent, target)) clearDragTarget(target as HTMLElement);
       },
     ),
   );
@@ -535,6 +539,10 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       return;
     }
     event.preventDefault();
+    // Only the group shows as the target, from the enter on, rather than after the column's next
+    // dragover (HS2-1BBXER): a move between the column's children no longer clears the column.
+    const column = target.closest<HTMLElement>('[data-ticket-drop-status]');
+    if (column) clearDragTarget(column);
     const { ticketGroup = '', ticketGroupScope = '' } = data(target),
       key = ticketGroupKey(ticketGroup),
       current = ticketGroupDropTarget.value;
@@ -547,12 +555,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(delegate(document.body, 'dragover', '[data-ticket-drop-group]', overTicketGroup));
   lifetime.add(
     delegate(document.body, 'dragleave', '[data-ticket-drop-group]', (event, target) => {
-      // Moving between a group's children also fires dragleave, and browsers often report no
-      // related target for it, so only a pointer outside the group's box leaves the group.
-      const { clientX, clientY } = event as DragEvent,
-        box = target.getBoundingClientRect();
-      if (clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) return;
-      ticketGroupDropTarget.value = undefined;
+      // Moving between a group's children also fires dragleave; only leaving the group clears it.
+      if (dragLeftElement(event as DragEvent, target)) ticketGroupDropTarget.value = undefined;
     }),
   );
   // A list has no status targets, so its groups take the drop directly; a group inside a board
