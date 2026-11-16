@@ -2,6 +2,9 @@
 //! Every invocation is a separate process sharing one `HOTSHEET_HOME`, the way a holder,
 //! a waiter and a task inside a VM would. Synthetic names only.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
@@ -23,7 +26,7 @@ fn env() -> Env {
 }
 
 fn command(home: &Path, args: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"));
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .arg("resource")
         .args(args)

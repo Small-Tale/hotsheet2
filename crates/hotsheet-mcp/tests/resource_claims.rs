@@ -2,6 +2,9 @@
 //! `hotsheet_resource_claim` from the machine home. Two sessions share one
 //! `HOTSHEET_HOME`, like a holder and a waiter in separate terminals. Synthetic names only.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -24,7 +27,7 @@ struct Session {
 
 impl Session {
     fn start(root: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+        let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
             .arg("--path")
             .arg(root.join("demo.hs2"))
             .current_dir(root)

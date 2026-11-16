@@ -3,7 +3,11 @@
 //! source, so nothing touches the network or the developer's own Job store.
 //!
 //! The fixture source exists only in debug builds of the CLI.
+
 #![cfg(all(unix, debug_assertions))]
+
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -44,7 +48,7 @@ impl Fixture {
     }
 
     fn cli(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"))
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .args(args)
             .env("HOTSHEET_HOME", self.home.path())
             .env("HOTSHEET_JOB_WATCH_FIXTURES", self.operations.path())

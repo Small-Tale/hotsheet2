@@ -5770,7 +5770,7 @@ fn server_binary_reports_its_revision_without_opening_a_store() {
 #[test]
 fn server_binary_reports_its_build_revision_alone() {
     let run = |flag: &str| -> serde_json::Value {
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        let output = std::process::Command::new(workspace_bin::path("hotsheet-server"))
             .arg(flag)
             .output()
             .unwrap();

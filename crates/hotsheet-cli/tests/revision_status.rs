@@ -34,8 +34,7 @@ fn cli_and_migrator_report_the_same_current_source_revision_without_a_store() {
 fn cli_and_migrator_report_their_build_revision_alone() {
     for name in ["hotsheet-cli", "hotsheet-migrate"] {
         let run = |flag: &str| -> Value {
-            let output = Command::cargo_bin(name)
-                .unwrap()
+            let output = Command::new(workspace_bin::path(name))
                 .arg(flag)
                 .current_dir(std::env::temp_dir())
                 .output()

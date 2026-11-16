@@ -2,6 +2,9 @@
 //! a signed-in `glab` for the API root's host, and says which in `job watch status`,
 //! never the token itself. A synthetic `glab` script stands in for the real CLI.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
@@ -10,7 +13,7 @@ use serde_json::Value;
 const TOKEN: &str = "synthetic-glab-token";
 
 fn status(home: &std::path::Path, path: &str, environment: Option<&str>) -> (Value, String) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"));
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .args(["job", "watch", "status"])
         .env("HOTSHEET_HOME", home)

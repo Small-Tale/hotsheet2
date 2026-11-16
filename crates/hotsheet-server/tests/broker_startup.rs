@@ -294,7 +294,7 @@ fn the_detached_broker_inherits_no_descriptor_from_the_server() {
     let socket = hotsheet_terminals::broker_socket::socket_path(&home, &project).unwrap();
     let _socket_files = SocketFiles(socket);
     let binary = fixture.path().join("hotsheet-server");
-    fs::copy(env!("CARGO_BIN_EXE_hotsheet-server"), &binary).unwrap();
+    fs::copy(workspace_bin::path("hotsheet-server"), &binary).unwrap();
     let (read, write) = leaked_pipe();
     let mut server = TestServer::start(&binary, &home, &store, fixture.path().join("server.log"));
     drop(write);

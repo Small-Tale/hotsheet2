@@ -3,6 +3,9 @@
 //! the token is synthetic. The fixture answers with the REST shapes, ETags and status
 //! codes of the provider's endpoints.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -179,7 +182,7 @@ impl Fixture {
     }
 
     fn cli(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"))
+        Command::new(workspace_bin::path("hotsheet-cli"))
             .args(args)
             .env("HOTSHEET_HOME", self.home.path())
             .env("HOTSHEET_GITHUB_API_URL", &self.provider.url)
