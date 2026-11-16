@@ -14,6 +14,7 @@ import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
+import { parseRunReconciliation } from '../orchestration-run-checks';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
@@ -143,17 +144,21 @@ export interface OrchestrationViewDependencies {
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
-function parseDetails(
+/** The selected run's records as the inspector shows them; an unread record leaves its part absent. */
+export function parseOrchestrationDetails(
   gates: Record<string, unknown> | undefined,
   events: Record<string, unknown> | undefined,
   validations: ReadonlyArray<Record<string, unknown>> | undefined,
   targetId: string,
+  run?: Record<string, unknown>,
 ): OrchestrationInspectorDetails {
   const text = (value: unknown) => (typeof value === 'string' ? value : undefined);
   const gateList = Array.isArray(gates?.gates) ? (gates.gates as Array<Record<string, unknown>>) : [];
   const eventList = Array.isArray(events?.entries) ? (events.entries as Array<Record<string, unknown>>) : [];
   return {
     loading: false,
+    runRead: run !== undefined,
+    reconciliation: parseRunReconciliation(run),
     ci: text(gates?.ci),
     gates: gateList
       .filter((gate) => gate.superseded_by === undefined)
@@ -438,16 +443,23 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
     details.value = { ...(details.value ?? {}), loading: true };
     const client = clientFor(current);
-    const [gates, events, validations] = await Promise.allSettled([
+    const [gates, events, validations, record] = await Promise.allSettled([
       client.orchestrationRunGates(current.id, run.run_id),
       client.orchestrationRunEvents(current.id, run.run_id),
       client.orchestrationValidations(current.id, item.goal),
+      client.orchestrationRun(current.id, run.run_id),
     ]);
     if (request !== detailsRequest) return;
     const value = <T>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : undefined);
-    const failed = [gates, events].some((result) => result.status === 'rejected');
+    const failed = [gates, events, record].some((result) => result.status === 'rejected');
     details.value = {
-      ...parseDetails(value(gates), value(events), value(validations), item.target.target_id),
+      ...parseOrchestrationDetails(
+        value(gates),
+        value(events),
+        value(validations),
+        item.target.target_id,
+        value(record),
+      ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
     };
   }

@@ -156,6 +156,12 @@ export function OrchestrationInspectorDemo() {
             ci: 'pending',
             gates: [{ kind: 'ci', state: 'pending', provider: 'github-actions', commit: '3f9c2a1d00' }],
             validations: [{ step_id: 'contract-check', state: 'running' }],
+            runRead: true,
+            reconciliation: {
+              at_ms: timeline.now_ms - 120_000,
+              disposition: 'continue',
+              findings: [{ source: 'ci_run', verification: 'unverifiable', reason: 'provider_unreachable' }],
+            },
             events: [
               { at_ms: timeline.now_ms - 60_000, kind: 'gate', state: 'pending', source: 'target' },
               { at_ms: timeline.now_ms - 300_000, kind: 'session', reason: 'started', source: 'orchestrator' },

@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
@@ -141,7 +141,7 @@ export async function visualPass(
   page: Page,
   ticket: string,
   state: string,
-  options: { check: () => Promise<void>; atPhone?: () => Promise<void> },
+  options: { check: () => Promise<void>; atPhone?: () => Promise<void>; show?: Locator },
 ) {
   for (const [width, height] of [
     [1440, 900],
@@ -151,16 +151,19 @@ export async function visualPass(
     await page.setViewportSize({ width, height });
     if (width === 390) await options.atPhone?.();
     await options.check();
+    await options.show?.scrollIntoViewIfNeeded();
     await capture(page, ticket, `${state}-${width}`);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.locator('[data-orchestration-view="true"]')).toHaveAttribute('data-layout', 'grid');
   await options.check();
+  await options.show?.scrollIntoViewIfNeeded();
   await capture(page, ticket, `${state}-1440-after-narrow`);
   await page.emulateMedia({ colorScheme: 'dark' });
   await capture(page, ticket, `${state}-1440-dark`);
   await page.setViewportSize({ width: 390, height: 844 });
   await options.atPhone?.();
+  await options.show?.scrollIntoViewIfNeeded();
   await capture(page, ticket, `${state}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 1440, height: 900 });

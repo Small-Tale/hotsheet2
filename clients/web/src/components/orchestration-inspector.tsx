@@ -22,6 +22,7 @@ import {
 } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
+import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
@@ -44,6 +45,9 @@ export interface OrchestrationInspectorDetails {
   gates?: ReadonlyArray<{ kind: string; state: string; provider?: string; commit?: string }>;
   validations?: ReadonlyArray<{ step_id: string; state: string; reason?: string }>;
   events?: ReadonlyArray<{ at_ms: number; kind: string; state?: string; reason?: string; source?: string }>;
+  /** HS2-XM692S: the run record was read; its last reconciliation, absent when none is stored. */
+  runRead?: boolean;
+  reconciliation?: RunReconciliation;
 }
 
 export interface OrchestrationInspectorProps {
@@ -189,7 +193,17 @@ function WhereItRuns({
   );
 }
 
-function RunSection({ item, busy, clock }: { item: TimelineItem; busy: boolean; clock: ClockFormat }) {
+function RunSection({
+  item,
+  busy,
+  clock,
+  details,
+}: {
+  item: TimelineItem;
+  busy: boolean;
+  clock: ClockFormat;
+  details?: OrchestrationInspectorDetails;
+}) {
   const run = item.run!;
   return (
     <OrchestrationInspectorSection label="Run">
@@ -217,6 +231,11 @@ function RunSection({ item, busy, clock }: { item: TimelineItem; busy: boolean; 
         {run.cancel_requested ? (
           <ValueTableRow label="Cancel" value="Asked; the project has not confirmed it yet" />
         ) : undefined}
+        {details?.runRead
+          ? reconciliationRows(details.reconciliation, clock).map((row) => (
+              <ValueTableRow label={row.label} value={row.value} />
+            ))
+          : undefined}
       </ValueTable>
       {(item.state === 'running' || item.state === 'provisional') && <RunControls item={item} busy={busy} />}
     </OrchestrationInspectorSection>
@@ -399,7 +418,7 @@ export function OrchestrationInspector({
       <WhereItRuns item={item} timeline={timeline} clock={clock} />
       {stateDetail(item)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
-      {item.run && <RunSection item={item} busy={busy} clock={clock} />}
+      {item.run && <RunSection item={item} busy={busy} clock={clock} details={details} />}
       {item.run && details && <Evidence details={details} clock={clock} />}
     </List>
   );

@@ -162,6 +162,31 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(cyclic).toContain('Its prerequisites lead back to this step');
   });
 
+  it('HS2-XM692S adds the last reconciliation to the Run section beside the shipped controls', () => {
+    const run = (details: object) => {
+      const markup = inspector('step-3', { details: { loading: false, ...details } });
+      return markup.slice(markup.indexOf('data-orchestration-section="Run"'));
+    };
+    const checked = run({
+      runRead: true,
+      reconciliation: {
+        at_ms: demoTimeline('running').now_ms,
+        disposition: 'hold_unverified',
+        findings: [
+          { source: 'ci_run', verification: 'unverifiable', reason: 'provider_unreachable' },
+          { source: 'target_claim', verification: 'mismatched', reason: 'different_live_work' },
+        ],
+      },
+    });
+    expect(checked).toContain('Held: something it depends on could not be verified, since 14:00');
+    expect(checked).toContain('CI (provider unreachable)');
+    expect(checked).toContain('Claim (different live work)');
+    for (const control of ['pause', 'handoff', 'cancel']) expect(checked).toContain(`data-control="${control}"`);
+    expect(run({ runRead: true })).toContain('Not checked since its last change');
+    // Until the run record is read, no Checked row claims anything.
+    expect(run({})).not.toContain('>Checked<');
+  });
+
   it('is a right-rail panel with an empty selection', () => {
     expect(String(OrchestrationInspector({}))).toContain('Select a card');
     const panel = orchestrationInspectorPanel({ item: item('step-3'), timeline: demoTimeline('running') });

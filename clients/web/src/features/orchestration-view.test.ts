@@ -8,6 +8,7 @@ import {
   coalescedPlacement,
   createServerPlanner,
   orchestrationPersonId,
+  parseOrchestrationDetails,
   startOrchestrationTimelineStream,
 } from './orchestration-view';
 
@@ -180,5 +181,21 @@ describe('placing the timeline after a resize (HS2-PJ3SE6)', () => {
     placement.cancel();
     clock.flush();
     expect(calls).toEqual([true, true]);
+  });
+});
+
+describe('the selected run’s details (HS2-XM692S)', () => {
+  it('carries the run record’s reconciliation, and marks an unread record', () => {
+    const read = parseOrchestrationDetails(undefined, undefined, undefined, 'api', {
+      run_id: 'run-3',
+      reconciliation: { at_ms: 9, disposition: 'continue', findings: [] },
+    });
+    expect(read.runRead).toBe(true);
+    expect(read.reconciliation).toEqual({ at_ms: 9, disposition: 'continue', findings: [] });
+    const none = parseOrchestrationDetails(undefined, undefined, undefined, 'api', { run_id: 'run-3' });
+    expect(none.runRead).toBe(true);
+    expect(none.reconciliation).toBeUndefined();
+    const unread = parseOrchestrationDetails(undefined, undefined, undefined, 'api');
+    expect(unread.runRead).toBe(false);
   });
 });

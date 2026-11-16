@@ -2285,6 +2285,14 @@ export class Api {
       {},
       false,
     );
+  /** One run record (HS2-EBHDSB) with its last reconciliation (HS2-WBREDM), from this machine's records. */
+  orchestrationRun = (checkout: string, run: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/runs/${encodeURIComponent(run)}`,
+      {},
+      false,
+    );
   /** One run's events (HS2-7QHWHJ), oldest first. */
   orchestrationRunEvents = (checkout: string, run: string) =>
     this.parsed(

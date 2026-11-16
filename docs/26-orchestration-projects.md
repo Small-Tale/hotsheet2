@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -5290,3 +5290,17 @@ item's `level`, `reasons` and `waits_on` (`clients/web/src/orchestration-plan.ts
 so it adds no request. A card whose Prerequisites section already lists what it waits
 on leaves those out of Why. A person's override of the dispatch guard (§26.15) is the
 person's own dispatch; the inspector offers no override control.
+
+### Run checks (HS2-XM692S)
+
+The shipped **Run** section adds the run's last reconciliation (§26.14) beside its
+controls (Pause or Resume, Hand Off…, Correct… and Cancel Run…, a person's acts as
+before): **Checked** names the disposition in words and since when it has held ("The
+run's worker holds its ticket, since 14:02"), **Not verified** lists each source that
+was `unverifiable` with its reason (`source_not_wired` holds nothing back and is left
+out), and **Differs** each `mismatched` one. A run whose state changed since keeps no
+outcome (HS2-68DWAM) and reads "Not checked since its last change". The inspector
+reads the run record (`GET /checkouts/{owner}/orchestration/runs/{run}`) with its
+gates, events and validations whenever the timeline's version changes; a new outcome
+is a `reconciled` run event, so it shows without polling. Words live in
+`clients/web/src/orchestration-run-checks.ts`.
