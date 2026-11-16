@@ -937,7 +937,11 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   authority check fails, the wrapper stops the gate and reports the named reason (missing
   ref, replaced owner, expired lease, gone process, or changed phase) instead of only the
   gate's exit (HS2-RXYJ6G). A transient Git read is retried once, while a persistent
-  read error reports Git's diagnostic and stops the gate (HS2-822EVF). Running
+  read error reports Git's diagnostic and stops the gate (HS2-822EVF). A Git process
+  that cannot start or does not finish within 10 s is a host stall, not a reservation
+  failure: the heartbeat skips that renewal with a warning while the last renewal still
+  outlasts one more interval, and the error names the stall (on macOS, syspolicyd
+  assessing new executables) when it finally stops the push (HS2-QP2AM2). Running
   `scripts/check.sh` first and then the wrapper reuses its exact receipt and keeps the
   reservation short. An explicit `scripts/push.sh --standalone --skip-tests` skips local
   tests and receipt verification when the maintainer explicitly accepts CI-based verification. It

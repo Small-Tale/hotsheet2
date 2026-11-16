@@ -20,8 +20,10 @@ import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.m
 import {
   acceptedHooksPath,
   gateDiagnostics,
+  heartbeatTolerates,
   readWindow,
   selectedSourceStore,
+  TransientGitError,
   verifyMainPush,
 } from './main-integration-window.mjs';
 
@@ -1319,4 +1321,42 @@ test('HS2-GT57BQ promotion is refused once main moved and no longer fast-forward
   } finally {
     f.dispose();
   }
+});
+
+test('HS2-QP2AM2 a stalled Git launch is transient and the heartbeat skips it while the lease lasts', () => {
+  // A launch that times out or is killed twice is a transient error that names the likely host stall.
+  for (const stalled of [
+    { error: Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' }), status: null },
+    { signal: 'SIGKILL', status: null },
+  ]) {
+    let reads = 0;
+    assert.throws(
+      () =>
+        readWindow('/nonexistent-synthetic-repo', () => {
+          reads++;
+          return { stdout: '', stderr: '', ...stalled };
+        }),
+      (error) =>
+        error instanceof TransientGitError &&
+        /Cannot read main integration ref: git rev-parse/.test(error.message) &&
+        /syspolicyd/.test(error.message),
+    );
+    assert.equal(reads, 2, 'one retry before reporting');
+  }
+  // A Git failure that ran to completion is not transient.
+  assert.throws(
+    () => readWindow('/nonexistent-synthetic-repo', () => ({ status: 128, stderr: 'fatal: synthetic' })),
+    (error) => !(error instanceof TransientGitError),
+  );
+
+  const now = 1_000_000;
+  const transient = new TransientGitError('git rev-parse did not finish within 10 s');
+  // The last renewal outlasts another tick: skip this one.
+  assert.equal(heartbeatTolerates(transient, now + 100_000, now, 20_000), true);
+  // It could lapse before the next tick, or already has: stop.
+  assert.equal(heartbeatTolerates(transient, now + 20_000, now, 20_000), false);
+  assert.equal(heartbeatTolerates(transient, now - 1, now, 20_000), false);
+  // A lost reservation or any other failure always stops the push.
+  const lost = new Error('Main integration reservation was lost or expired: another owner replaced the reservation');
+  assert.equal(heartbeatTolerates(lost, now + 100_000, now, 20_000), false);
 });

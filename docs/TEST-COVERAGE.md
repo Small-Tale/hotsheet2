@@ -910,7 +910,9 @@ SIGTERM or SIGINT sent to the push, and an external SIGKILL sent to the gate's p
 group: each signalled gate names its source, followed by the other running gates and the
 load (HS2-RY0ZMX). HS2-822EVF adds linked-store default and explicit-override cases, a transient Git
 ref-read retry, persistent-error diagnostics, and a held-gate push that survives
-one injected ref-read failure while still rejecting lost reservations. These are
+one injected ref-read failure while still rejecting lost reservations. HS2-QP2AM2 adds
+timed-out and killed Git launches classified as `TransientGitError` and the heartbeat's
+skip-while-the-lease-lasts rule, which never tolerates a lost reservation. These are
 synthetic local Git tests, including a selection-keyed full receipt in the push hook;
 real multi-machine throughput remains measured by the integration
 baseline and CI. `docs/12-code-organization-and-testing.md` records the local
