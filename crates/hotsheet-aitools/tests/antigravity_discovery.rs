@@ -1,5 +1,23 @@
 //! Real-process regression: an IDE launcher may also occupy `agy` on PATH.
 
+#[path = "../../test-support/first_launch.rs"]
+mod first_launch;
+
+/// Copy the native fixture to `to` and launch the copy once to completion (HS2-F5A9XA).
+///
+/// Discovery probes `agy --version` under the production probe deadline (5 s, HS2-BH3M53).
+/// macOS assesses every newly copied executable on its first launch, and under a loaded
+/// workspace run that wait alone once exceeded the deadline: the probe failed and discovery
+/// kept the cached catalog. Waiting for the first launch here, without any deadline, leaves
+/// the probe timing only the fixture itself (HS2-04D6DW). The launch appends `--version` to
+/// the fixture marker, which no assertion counts.
+fn install_native(native: &std::path::Path, to: &std::path::Path) {
+    std::fs::copy(native, to).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(to, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    first_launch::launched(to, &["--version"]);
+}
+
 #[cfg(unix)]
 #[test]
 fn native_cli_is_probed_and_ide_launcher_is_never_executed() {
@@ -81,8 +99,7 @@ fn main() {
     }
 
     fs::remove_file(&agy).unwrap();
-    fs::copy(&native, &agy).unwrap();
-    fs::set_permissions(&agy, fs::Permissions::from_mode(0o755)).unwrap();
+    install_native(&native, &agy);
     unsafe { std::env::set_var("AGY_FIXTURE_MODE", "unsupported") };
     assert_eq!(discover(&mut cache, false).models.len(), 7);
     unsafe { std::env::set_var("AGY_FIXTURE_MODE", "live") };
@@ -141,8 +158,7 @@ fn main() {
     // that exact native binary even when an IDE launcher wins the PATH lookup.
     let custom = temp.path().join("custom/bin");
     fs::create_dir_all(&custom).unwrap();
-    fs::copy(&native, custom.join("agy")).unwrap();
-    fs::set_permissions(custom.join("agy"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_native(&native, &custom.join("agy"));
     unsafe {
         std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &custom);
         std::env::set_var("AGY_FIXTURE_VERSION", "3");
@@ -152,8 +168,7 @@ fn main() {
 
     let other_custom = temp.path().join("other/bin");
     fs::create_dir_all(&other_custom).unwrap();
-    fs::copy(&native, other_custom.join("agy")).unwrap();
-    fs::set_permissions(other_custom.join("agy"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_native(&native, &other_custom.join("agy"));
     unsafe {
         std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &other_custom);
         std::env::set_var("AGY_FIXTURE_MODE", "live");
@@ -277,7 +292,7 @@ fn main() {
     let second = temp.path().join("second/bin");
     for dir in [&first, &second] {
         fs::create_dir_all(dir).unwrap();
-        fs::copy(&native, dir.join("agy.exe")).unwrap();
+        install_native(&native, &dir.join("agy.exe"));
     }
     unsafe { std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &first) };
     assert_eq!(discover(&mut cache).models[0].id, "gemini-live-high");
