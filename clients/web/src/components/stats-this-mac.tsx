@@ -61,7 +61,12 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
         {state.error === undefined ? (
           <EmptyState busy={state.loading} title="Loading Server Host Health" />
         ) : (
-          <StateBanner title="Server host health is unavailable." detail={state.error} tone="warning" />
+          <StateBanner
+            title="Server host health is unavailable."
+            detail={state.error}
+            tone="warning"
+            copyLayout="stacked"
+          />
         )}
       </section>
     );
@@ -89,13 +94,16 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
             title="Host health may be out of date."
             detail={state.error}
             tone="warning"
+            copyLayout="stacked"
             rootAttributes={{ 'data-key': 'host-health-stale' }}
           />
         )}
-        {/* A newly detected disk asks once whether it counts (HS2-NHK8V8); the choice is machine-wide. */}
+        {/* A newly detected disk asks once whether it counts (HS2-NHK8V8); the choice is machine-wide.
+            Stacked copy wraps the detail, so a phone still shows the whole question (HS2-4JRM43). */}
         {pendingDisks(snapshot).map((disk) => (
           <StateBanner
             tone="info"
+            copyLayout="stacked"
             title={`New Disk Detected: ${disk.label}`}
             detail={`${disk.total_bytes === null ? 'A disk' : formatBytes(disk.total_bytes)}${disk.mount === null ? '' : ` at ${disk.mount}`}. Should host health watch its free space?`}
             rootAttributes={{ 'data-key': `pending-disk:${disk.id}`, 'data-pending-disk': disk.id }}
@@ -129,6 +137,7 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
             tone="warning"
             title="The disk choice was not saved."
             detail={diskMessage}
+            copyLayout="stacked"
             rootAttributes={{ 'data-key': 'host-disk-message' }}
           />
         ) : null}

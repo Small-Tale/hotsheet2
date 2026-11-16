@@ -339,6 +339,7 @@ export function GuidanceSettings(props: GuidanceSettingsProps) {
                           title={`${source.id} Tag Moved`}
                           detail="This tag now points to a different commit. Verify the source manually before choosing a new pin."
                           tone="warning"
+                          copyLayout="stacked"
                           urgency="status"
                         />
                       )}

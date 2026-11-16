@@ -222,6 +222,7 @@ function CompactionPreview({ state, checkout }: { state: CompactionPreviewState;
               tone="success"
               title="Compaction pushed to origin."
               detail={`${state.execution.result.candidates_removed} attachments removed; ${formatBytes(state.execution.result.git_bytes_before)} to ${formatBytes(state.execution.result.git_bytes_after)} of Git data.`}
+              copyLayout="stacked"
             />
             <Text variant="p" flush>
               Backup: <code>{state.execution.result.backup}</code>

@@ -26566,6 +26566,36 @@ test('Stats This Mac asks once about a newly detected disk and shows each monito
       await thisMac.screenshot({ path: `target/visual-captures/hs2-nhk8v8-this-mac-disks-${scheme}-${label}.png` });
     }
   }
+  // The detail wraps rather than truncating, so a phone still shows the whole question (HS2-4JRM43).
+  const question = '931 GB at /Volumes/Scratch. Should host health watch its free space?';
+  const detail = prompt.locator('.kui-state-banner__detail');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [label, width] of [
+      ['wide', 1280],
+      ['medium', 768],
+      ['narrow', 390],
+      ['wide-again', 1280],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(detail).toHaveText(question);
+      const clip = await detail.evaluate((node) => {
+        const banner = node.closest('.kui-state-banner')?.getBoundingClientRect(),
+          box = node.getBoundingClientRect(),
+          inner = node.firstElementChild ?? node;
+        return {
+          hidden: inner.scrollWidth - inner.clientWidth,
+          right: (banner?.right ?? 0) - box.right,
+          left: box.left - (banner?.left ?? 0),
+        };
+      });
+      expect(clip.hidden).toBeLessThanOrEqual(1);
+      expect(clip.right).toBeGreaterThanOrEqual(0);
+      expect(clip.left).toBeGreaterThanOrEqual(0);
+      expect(await thisMac.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await prompt.screenshot({ path: `target/visual-captures/hs2-4jrm43-new-disk-prompt-${scheme}-${label}.png` });
+    }
+  }
   await page.emulateMedia({ colorScheme: 'light' });
 
   // A failed save keeps the prompt and says why; a retry saves, clears both, and adds the disk's card.

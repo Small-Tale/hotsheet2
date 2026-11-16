@@ -73,6 +73,7 @@ export function StatsDashboard({ projects, crossProject = false, now = new Date(
             title={`${project.name} Analytics Unavailable`}
             detail={project.state.status === 'error' ? project.state.message : ''}
             tone="danger"
+            copyLayout="stacked"
           />
         ))}
         {summary.unavailableSources > 0 && (
@@ -80,6 +81,7 @@ export function StatsDashboard({ projects, crossProject = false, now = new Date(
             title="Some Ticket Sources Are Unavailable for Analytics"
             detail={`${summary.unavailableSources} linked provider ${summary.unavailableSources === 1 ? 'source is' : 'sources are'} excluded from these totals.`}
             tone="warning"
+            copyLayout="stacked"
           />
         )}
         {summary.stores === 0 && !loading && errors.length === 0 ? (

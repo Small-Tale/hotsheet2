@@ -441,6 +441,7 @@ export function ticketInspectorPanel({
           <StateBanner
             title="Start an AI Session"
             detail="Your note was saved. Start a session in this project to continue work on the ticket."
+            copyLayout="stacked"
             tone="warning"
             action={
               <Button type="button" emphasis="secondary" action="start-feedback-session">

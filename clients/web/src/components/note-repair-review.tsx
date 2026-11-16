@@ -57,6 +57,7 @@ export function NoteRepairReview({
             tone="warning"
             title="Ticket Changed"
             detail="Close this review and start a fresh repair from the current note."
+            copyLayout="stacked"
           />
         )}
         {proposal && (
