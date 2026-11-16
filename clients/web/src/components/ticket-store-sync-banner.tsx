@@ -118,6 +118,41 @@ function unpublishedSentence(count: number): string {
 }
 
 /**
+ * The project's ticket stores holding ticket changes an interrupted rebase or merge recovery saved but
+ * never wrote back (HS2-RDPT34, HS2-1HRYD9). Those edits exist only in a Hot Sheet backup ref until
+ * `hotsheet-cli sync --restore-saved-writes` restores them, whatever the store's publication state.
+ */
+export function strandedTicketStores(report: TicketStoreSyncReport | undefined): FailingStore[] {
+  return (report?.stores ?? []).filter(({ health }) => (health.stranded_saved_writes ?? []).length > 0);
+}
+
+/** How many changes a store holds stranded, across its backup refs. */
+export function strandedChangeCount(health: TicketStoreSyncHealth): number {
+  return (health.stranded_saved_writes ?? []).reduce((total, saved) => total + saved.paths.length, 0);
+}
+
+/** The title and detail of the stranded-changes strip, or `undefined` when no store holds any. */
+export function strandedBannerCopy(stranded: FailingStore[]): { title: string; detail: string } | undefined {
+  const first = stranded.at(0);
+  if (!first) return;
+  const count = strandedChangeCount(first.health),
+    others = stranded.length - 1,
+    changes = `${count.toLocaleString('en-US')} ticket ${count === 1 ? 'change' : 'changes'}`;
+  return {
+    title: `${changes} in ${first.label} ${count === 1 ? 'was' : 'were'} never restored`,
+    detail: [
+      'A rebase or merge recovery set them aside and stopped before writing them back; they are kept only in a Hot Sheet backup.',
+      first.health.next_action,
+      others > 0
+        ? `${others} more ${others === 1 ? 'store holds' : 'stores hold'} changes to restore; run hotsheet-cli sync --status in each.`
+        : undefined,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(' '),
+  };
+}
+
+/**
  * A persistent project-level strip while any of the project's Git ticket stores is not publishing
  * (HS2-ADHFKZ). The server owns the state, reason, and next step; this names the store, says why in
  * one sentence, says that local tickets are saved but not remotely available, and repeats the
@@ -133,7 +168,22 @@ export function TicketStoreSyncBanner({
 }) {
   const failing = failingTicketStores(report, nowMs);
   const first = failing.at(0);
-  if (!first) return;
+  // A failing store's next step already names any restore (the server appends it), so the stranded
+  // strip shows only while every store publishes (HS2-1HRYD9).
+  if (!first) {
+    const stranded = strandedBannerCopy(strandedTicketStores(report));
+    return (
+      stranded && (
+        <ShellBanner
+          component="ticket-store-sync-banner"
+          tone="warning"
+          title={stranded.title}
+          detail={stranded.detail}
+          icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
+        />
+      )
+    );
+  }
   const others = failing.length - 1;
   const title =
     others === 0

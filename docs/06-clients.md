@@ -5218,7 +5218,12 @@ transition history (HS2-XKXE7V).
   HS2-6ACT5Y) for three or more passes. A `blocked` store's sentence is the server's
   reason, which names the lock file and its age. A
   `conflict` or `rebase_in_progress` that Hot Sheet is still repairing (an AI ask
-  `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). The banner:
+  `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). While every
+  store publishes but one holds `stranded_saved_writes` (ticket changes an interrupted recovery set
+  aside and never wrote back, HS2-RDPT34), the same strip says how many ticket changes in that store
+  were never restored, that they are kept only in a Hot Sheet backup, and repeats the server's next
+  step naming `hotsheet-cli sync --restore-saved-writes <ref>`; a failing store's next step already
+  names that restore (HS2-1HRYD9). The banner for a failing store:
   - names the store, or the number of failing stores;
   - says why in one sentence, naming an oversized unpublished file and its size;
   - says that tickets are saved on this computer and how many local changes are

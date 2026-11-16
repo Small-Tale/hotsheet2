@@ -1197,7 +1197,8 @@ shows a persistent `TicketStoreSyncBanner` while any store is `rejected`, `confl
 `rebase_in_progress`, `history_recovery_required`, or `offline` or `blocked` for three
 or more passes. A `blocked` banner repeats the reason naming the lock file. The banner
 names the store, the cause, how many local changes are unpublished,
-and the next step. It is for a person, so while Hot Sheet is still repairing a `conflict`
+and the next step. While every store publishes, the same strip names ticket changes an
+interrupted recovery never restored and the restore command (HS2-1HRYD9). It is for a person, so while Hot Sheet is still repairing a `conflict`
 or `rebase_in_progress` itself (its AI ask is `started` or `session_asked`, §2.12.4) it
 stays hidden for up to 30 minutes from the ask. It appears once that repair ended,
 failed, or could not be asked, or ran past that time (HS2-D4TK0W; maintainer: _"only

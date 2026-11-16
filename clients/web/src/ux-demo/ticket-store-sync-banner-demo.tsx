@@ -65,6 +65,23 @@ const OFFLINE: TicketStoreSyncHealth = {
   next_action: 'Check the network and Git credentials; sync retries automatically, or run `hotsheet-cli sync`.',
 };
 
+const STRANDED: TicketStoreSyncHealth = {
+  ...BASE,
+  state: 'synced',
+  unpublished_commits: 0,
+  consecutive_failures: 0,
+  reason:
+    '2 changes saved during an interrupted rebase or merge recovery were never written back; they are kept only in a Hot Sheet backup ref.',
+  next_action:
+    'Run `hotsheet-cli sync --restore-saved-writes refs/hotsheet/sync-backup/1794863200000000000-saved-writes` to write them back and commit them on the branch.',
+  stranded_saved_writes: [
+    {
+      backup_ref: 'refs/hotsheet/sync-backup/1794863200000000000-saved-writes',
+      paths: ['tickets/AB/01M7EXAMPLEAAAAAAAAAAAAAAAB.md', 'tickets/CD/01M7EXAMPLEBBBBBBBBBBBBBBCD.md'],
+    },
+  ],
+};
+
 /** The project shell strip shown while a ticket store is not publishing (HS2-ADHFKZ). */
 export function TicketStoreSyncBannerDemo() {
   return (
@@ -96,6 +113,13 @@ export function TicketStoreSyncBannerDemo() {
         viewport={{ width: 'full' }}
       >
         {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', REPAIR_ASKED]) })}
+      </CatalogExample>
+      <CatalogExample
+        label="Changes Never Restored"
+        note="A recovery stopped after setting ticket changes aside; the store publishes, but the changes wait in a backup (HS2-1HRYD9)."
+        viewport={{ width: 'full' }}
+      >
+        {TicketStoreSyncBanner({ report: demoReport(['hotsheet2.hs2', STRANDED]) })}
       </CatalogExample>
       <CatalogExample
         label="Several Stores"

@@ -934,6 +934,68 @@ test('suggests every development strategy override tag for the open project only
   expect(strategyReads.filter((checkout) => checkout !== 'other-checkout')).toHaveLength(1);
 });
 
+test('shows ticket changes an interrupted recovery never restored above a publishing project (HS2-1HRYD9)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const backupRef = 'refs/hotsheet/sync-backup/1794863200000000000-saved-writes';
+  await page.route('**/checkouts/*/repository/sync', (route) =>
+    route.fulfill({
+      json: {
+        checkout_id: project.id,
+        stores: [
+          {
+            connection_id: 'git-local',
+            label: 'demo.hs2',
+            locator: '/work/demo.hs2',
+            health: {
+              state: 'synced',
+              syncing: false,
+              unpublished_commits: 0,
+              incoming_commits: 0,
+              consecutive_failures: 0,
+              reason:
+                '2 changes saved during an interrupted rebase or merge recovery were never written back; they are kept only in a Hot Sheet backup ref.',
+              next_action: `Run \`hotsheet-cli sync --restore-saved-writes ${backupRef}\` to write them back and commit them on the branch.`,
+              merge_driver: 'registered',
+              stranded_saved_writes: [{ backup_ref: backupRef, paths: ['tickets/AB/one.md', 'tickets/CD/two.md'] }],
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  // Wide, phone, then wide again: the strip stays readable and inside the viewport.
+  for (const [pass, width] of [1280, 390, 1280].entries()) {
+    await page.setViewportSize({ width, height: 844 });
+    // The rails slide as overlays at phone width; capture the settled layout, not the slide.
+    await page.evaluate(() =>
+      Promise.allSettled(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished),
+      ),
+    );
+    const banner = page.locator('[data-component="ticket-store-sync-banner"]');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('2 ticket changes in demo.hs2 were never restored');
+    await expect(banner).toContainText(`hotsheet-cli sync --restore-saved-writes ${backupRef}`);
+    await expect(banner).not.toContainText('not publishing');
+    const fits = await banner.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return box.left >= 0 && box.right <= innerWidth + 0.5 && node.scrollWidth <= node.clientWidth + 1;
+    });
+    expect(fits).toBe(true);
+    await page.screenshot({ path: `target/visual-captures/hs2-1hryd9-stranded-banner-${pass}-${width}.png` });
+  }
+});
+
 test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0ECV)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>
