@@ -251,6 +251,31 @@ Three other local environment effects look like regressions but are not:
   `assertFixtureCli` already call before their 5 s capability probe. A copy is a new
   executable to macOS, so launch each copy once after copying it. Do not raise the window
   instead.
+- Every Cargo command replaces each uplifted binary in the profile directory
+  (`target/debug/hotsheet-cli` and its siblings), even when nothing needs rebuilding. It
+  removes the file and clones it again from `deps/`. A command that selects other packages
+  also resolves other features, so it rebuilds and replaces the binary. Five no-op
+  `cargo nextest run --workspace --no-run` commands left `target/debug/hotsheet-cli` missing
+  on 77 of about one million `stat` calls. As a result, a test that spawns the uplifted path
+  while another Cargo command shares the target directory fails with
+  `No such file or directory` (HS2-4TCTEW). Rust integration tests therefore spawn workspace
+  binaries only through `crates/test-support/workspace_bin.rs`
+  (`#[path = "../../test-support/workspace_bin.rs"] mod workspace_bin;`, then
+  `workspace_bin::path("hotsheet-cli")`). For each build, it copies every profile executable
+  into `target/<profile>/test-bin-snapshots/<build identity>/` and publishes the directory
+  with one rename. On APFS each copy is a clone that shares blocks, so it costs no extra disk
+  space. Exactly one process builds each snapshot, under the `test-bin-snapshots/.lock` file
+  lock. The others wait on that lock and reuse the published directory, so a filesystem
+  without reflinks (Linux CI) pays for one copy per build, not one per test process. The
+  snapshot holds every profile executable, not a fixed list, so a binary that another binary
+  starts as its sibling is never missing. The siblings stay together, and a replaced uplift
+  cannot remove them. The snapshot
+  must hold private copies, not hard links. On macOS, unlinking another name of an inode
+  while a process makes its first exec of that inode can SIGKILL the process: a hard-linked
+  snapshot lost 6 of 180 parallel first execs in an isolated repro, and 9 of 40
+  `checkout_remove` runs. Snapshots unused for two hours are pruned. The policy test `hotsheet-cli::workspace_bin_policy` rejects `Command::cargo_bin`
+  and `env!("CARGO_BIN_EXE_…")` anywhere else. Compose the two helpers as
+  `first_launch::launched(workspace_bin::path(name), args)`.
 
 ### 12.6.2 Isolated Clippy artifacts
 

@@ -12,11 +12,13 @@ use std::time::{Duration, Instant};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 /// The broker binary, launched once without arguments (a usage exit) before any bind window
 /// starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
-fn broker_binary() -> &'static str {
-    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-terminal-broker"), &[])
+fn broker_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-terminal-broker"), &[])
 }
 
 struct BrokerChild(Child);

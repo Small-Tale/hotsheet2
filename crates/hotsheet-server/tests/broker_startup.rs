@@ -16,6 +16,8 @@ use serde_json::{Value, json};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 struct TestServer {
     child: Child,
@@ -167,7 +169,7 @@ fn long_home_starts_real_server_and_detached_broker_and_preserves_terminals_on_r
     // Copy only the server: exercise the shipped self-hosted broker fallback instead
     // of accidentally launching an older sibling binary from a shared target cache.
     let binary = fixture.path().join("hotsheet-server");
-    fs::copy(env!("CARGO_BIN_EXE_hotsheet-server"), &binary).unwrap();
+    fs::copy(workspace_bin::path("hotsheet-server"), &binary).unwrap();
     // A fresh copy is a new executable to macOS: launch it once before `ready()` times it.
     first_launch::launched(&binary, &["--version"]);
     let mut first = TestServer::start(&binary, &home, &store, fixture.path().join("first.log"));
@@ -272,7 +274,7 @@ fn hs2_h0wfjg_a_pinned_server_keeps_a_dev_broker_with_terminals_and_replaces_it_
     let copy = |dir: &str| {
         let binary = fixture.path().join(dir).join("hotsheet-server");
         fs::create_dir(binary.parent().unwrap()).unwrap();
-        fs::copy(env!("CARGO_BIN_EXE_hotsheet-server"), &binary).unwrap();
+        fs::copy(workspace_bin::path("hotsheet-server"), &binary).unwrap();
         // A fresh copy is a new executable to macOS: launch it once before `ready()` times it.
         first_launch::launched(binary.canonicalize().unwrap(), &["--version"])
     };

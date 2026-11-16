@@ -1,3 +1,5 @@
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 use assert_cmd::Command;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -49,8 +51,7 @@ fn headless_probe_distinguishes_bridge_from_terminal_hook_and_mcp() {
             reply(&mut stream, body);
         }
     });
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = Command::new(workspace_bin::path("hotsheet-cli"))
         .env_remove("HOTSHEET_PROJECT")
         .env("HOTSHEET_SERVER", url)
         .env("HOTSHEET_SECRET", "route-secret")
@@ -73,8 +74,7 @@ fn headless_probe_distinguishes_bridge_from_terminal_hook_and_mcp() {
 
 #[test]
 fn no_hook_route_reports_unconfigured_without_claiming_connection() {
-    let output = Command::cargo_bin("hotsheet-cli")
-        .unwrap()
+    let output = Command::new(workspace_bin::path("hotsheet-cli"))
         .env_remove("HOTSHEET_PROJECT")
         .env_remove("HOTSHEET_SERVER")
         .env_remove("HOTSHEET_SECRET")

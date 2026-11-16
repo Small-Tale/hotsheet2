@@ -614,6 +614,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts
   crates/
     test-support/first_launch.rs # not a crate: integration tests include it by #[path]; launches a fresh or copied binary once before any timed window (macOS first-launch assessment, HS2-04D6DW); Node twin is clients/web/scripts/first-launch.mjs
+    test-support/workspace_bin.rs # not a crate: the only way integration tests locate workspace binaries; per-build snapshot of private copies (APFS clones) of the profile's executables, built by exactly one process under test-bin-snapshots/.lock so a concurrent Cargo command's uplift cannot remove them mid-test (HS2-4TCTEW; pinned by hotsheet-cli/tests/workspace_bin_policy.rs)
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github_credential.rs #   shared account token resolution and HS2-6H8ZY6 owner-bound selected-source read context; read_tests.rs guards selected-source reads
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)

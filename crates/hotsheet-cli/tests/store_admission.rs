@@ -3,6 +3,9 @@
 //! not the machine bootstrap anchor. A refusal exits non-zero with the ownership
 //! diagnostic; the printed recovery admits the store on the next selection.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
@@ -25,7 +28,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn cli(home: &Path, cwd: &Path) -> Command {
-    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
     command
         .current_dir(cwd)
         .env("HOTSHEET_HOME", home)

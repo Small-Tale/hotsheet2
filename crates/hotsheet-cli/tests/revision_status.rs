@@ -1,3 +1,5 @@
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 use assert_cmd::Command;
 use serde_json::Value;
 
@@ -6,8 +8,7 @@ fn cli_and_migrator_report_the_same_current_source_revision_without_a_store() {
     let statuses: Vec<Value> = ["hotsheet-cli", "hotsheet-migrate"]
         .into_iter()
         .map(|name| {
-            let output = Command::cargo_bin(name)
-                .unwrap()
+            let output = Command::new(workspace_bin::path(name))
                 .arg("--revision-status")
                 .current_dir(std::env::temp_dir())
                 .output()

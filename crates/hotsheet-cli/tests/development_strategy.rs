@@ -1,11 +1,14 @@
 //! Headless project policy commands (HS2-BF79YX).
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::process::Command;
 
 use hotsheet_ticketing::Settings;
 
 fn run(project: &std::path::Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_hotsheet-cli"))
+    Command::new(workspace_bin::path("hotsheet-cli"))
         .arg("coordination")
         .arg("--project")
         .arg(project)

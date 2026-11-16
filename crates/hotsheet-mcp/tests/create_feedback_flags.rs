@@ -2,6 +2,9 @@
 //! prose that merely mentions the feedback marker. Only a line that begins with the marker is a
 //! details request; a later edit to prose clears it, with no stored flag to reset.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
@@ -18,7 +21,7 @@ fn hs2_ff9zms_create_flags_follow_only_a_line_start_details_marker() {
     let store = root.path().join("demo.hs2");
     git_fixture::init(&store, &StoreMetadata::new("HS"));
     std::fs::create_dir_all(&home).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
         .arg("--path")
         .arg(&store)
         .current_dir(root.path())

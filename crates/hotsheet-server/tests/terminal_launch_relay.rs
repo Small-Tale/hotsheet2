@@ -23,11 +23,13 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 /// The server binary, launched once to completion before any window that times its child
 /// starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
-fn server_binary() -> &'static str {
-    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-server"), &["--version"])
+fn server_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-server"), &["--version"])
 }
 
 /// Kills its process group on drop, so a failed assertion leaves nothing running.

@@ -1,5 +1,8 @@
 //! HS2-0BTSX8: real synthetic HTTP and stdio boundaries, never a live server or credential.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -370,7 +373,7 @@ fn hs2_0btsx8_stdio_proxy_rejects_a_workers_poll_redirect() {
     let foreign = Server::start(vec![]);
     let selected = Server::start(vec![Response::redirect(303, Some(foreign.url()))]);
     let home = tempfile::tempdir().unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
         .args(["--server", &selected.url(), "--secret", SYNTHETIC_SECRET])
         .current_dir(home.path())
         .env("HOTSHEET_HOME", home.path())

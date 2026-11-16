@@ -14,11 +14,13 @@ use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, git_connection_id, o
 
 #[path = "../../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 /// The `hotsheet-cli` binary, launched once to completion before any window that times its
 /// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
-fn cli_binary() -> &'static str {
-    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-cli"), &["--version"])
+fn cli_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-cli"), &["--version"])
 }
 
 pub(super) struct Fixture {

@@ -2,6 +2,9 @@
 //! `hotsheet_get` for its own Git connection with the full ticket, and refuses a foreign
 //! connection with an explicit 409 instead of `unsupported GET`.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
@@ -14,7 +17,7 @@ fn hs2_g78tz9_serverless_process_reads_a_local_connection_ticket() {
     let store = root.path().join("ticket-store");
     FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+    let mut child = Command::new(workspace_bin::path("hotsheet-mcp"))
         .arg("--path")
         .arg(&store)
         .current_dir(root.path())

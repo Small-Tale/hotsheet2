@@ -4,6 +4,9 @@
 
 #![cfg(unix)]
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -78,7 +81,7 @@ fn env() -> Env {
 }
 
 fn hs(env: &Env) -> Command {
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     cmd.arg("--test-fixture-credentials")
         .env("HOTSHEET_HOME", &env.home)
         .env_remove("HOTSHEET_ACTOR_ROLE")
@@ -811,7 +814,7 @@ fn hs2_8vaxxa_cli_writes_notify_without_a_server_and_defer_to_a_live_one() {
     hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let tickets = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.arg("--test-fixture-credentials")
             .env("HOTSHEET_HOME", &env.home)
             .env_remove("HOTSHEET_ACTOR_ROLE")
@@ -950,7 +953,7 @@ fn hs2_g8nxnc_saved_view_rules_forward_only_tickets_in_the_view() {
     )
     .unwrap();
     let tickets = || {
-        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
         cmd.arg("--test-fixture-credentials")
             .env("HOTSHEET_HOME", &env.home)
             .env_remove("HOTSHEET_ACTOR_ROLE")

@@ -9,14 +9,19 @@ use hotsheet_terminals::{Activity, TermSpec, Terminal, contains_spinner};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 /// The `hs-fake-agent` binary, launched once to completion before a test times anything
 /// (HS2-W00050, HS2-04D6DW). macOS assesses a newly linked executable on its first launch
 /// through one queue for the whole host; under load that queue exceeded the 5 s windows
 /// below, so the agent printed nothing and never exited in time although its PTY plumbing
 /// was fine.
-fn fake_agent() -> &'static str {
-    first_launch::launched(env!("CARGO_BIN_EXE_hs-fake-agent"), &["--exit", "0"])
+fn fake_agent() -> String {
+    first_launch::launched(workspace_bin::path("hs-fake-agent"), &["--exit", "0"])
+        .into_os_string()
+        .into_string()
+        .expect("UTF-8 target directory")
 }
 
 fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {

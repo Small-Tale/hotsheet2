@@ -2,6 +2,9 @@
 //! an isolated machine registry, idempotently, and defers to a running server when one is
 //! registered so a project open in a window is refused.
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::Path;
@@ -12,7 +15,7 @@ use predicates::str::contains;
 use serde_json::Value;
 
 fn hs(home: &Path, store: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     cmd.env("HOTSHEET_HOME", home)
         .env_remove("HOTSHEET_STORE")
         .env_remove("HOTSHEET_ACTOR_ROLE")

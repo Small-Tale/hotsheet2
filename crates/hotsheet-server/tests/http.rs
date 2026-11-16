@@ -1,5 +1,8 @@
 //! HTTP E2E for the server, driven through the router in-process (no real socket).
 
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
@@ -5734,7 +5737,7 @@ async fn compatibility_reports_a_server_built_from_older_local_source() {
 
 #[test]
 fn server_binary_reports_its_revision_without_opening_a_store() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+    let output = std::process::Command::new(workspace_bin::path("hotsheet-server"))
         .arg("--revision-status")
         .arg("-C")
         .arg("/this-store-does-not-exist")

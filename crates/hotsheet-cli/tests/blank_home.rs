@@ -6,12 +6,14 @@
 //! no run can reach the developer's real home. `HOTSHEET_NATIVE_SECRETS=deny` comes from
 //! `.cargo/config.toml` and is repeated here so a direct run keeps it too.
 
-use assert_cmd::cargo::CommandCargoExt;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
+
 use std::path::Path;
 use std::process::Command;
 
 fn cli(cwd: &Path, user_home: &Path, hotsheet_home: &str, store: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+    let mut cmd = Command::new(workspace_bin::path("hotsheet-cli"));
     cmd.current_dir(cwd)
         .env("HOME", user_home)
         .env("HOTSHEET_HOME", hotsheet_home)

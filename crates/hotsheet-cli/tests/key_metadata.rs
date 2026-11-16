@@ -5,12 +5,14 @@ use std::{path::Path, time::Duration};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 fn command(root: &Path, home: &Path) -> Command {
     // Launched once first so the macOS first-launch assessment never counts against the
     // 20 s run timeout below (HS2-04D6DW).
     let mut command = Command::new(first_launch::launched(
-        env!("CARGO_BIN_EXE_hotsheet-cli"),
+        workspace_bin::path("hotsheet-cli"),
         &["--version"],
     ));
     let system_root = std::env::var_os("SystemRoot");

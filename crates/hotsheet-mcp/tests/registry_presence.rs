@@ -14,11 +14,13 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 
 #[path = "../../test-support/first_launch.rs"]
 mod first_launch;
+#[path = "../../test-support/workspace_bin.rs"]
+mod workspace_bin;
 
 /// The `hotsheet-mcp` binary, launched once to completion before any window that times its
 /// child starts, so the macOS first-launch assessment is not timed (HS2-04D6DW).
-fn mcp_binary() -> &'static str {
-    first_launch::launched(env!("CARGO_BIN_EXE_hotsheet-mcp"), &["--version"])
+fn mcp_binary() -> std::path::PathBuf {
+    first_launch::launched(workspace_bin::path("hotsheet-mcp"), &["--version"])
 }
 
 /// Accept connections and report each request's `(method path, secret header, body)`.
