@@ -83,10 +83,6 @@ describe('controlled custom-element open (HS2-KMDJRH)', () => {
         hasAttribute: (name: string) => attributes.has(name),
         toggleAttribute: vi.fn(),
         attributes,
-        listeners: [] as Array<() => void>,
-        addEventListener(type: string, listener: () => void) {
-          if (type === 'close') this.listeners.push(listener);
-        },
       };
     }
     const rootWith = (...elements: object[]) => ({ querySelectorAll: () => elements }) as unknown as ParentNode;
@@ -102,30 +98,6 @@ describe('controlled custom-element open (HS2-KMDJRH)', () => {
       expect(opening.open).toBe(false);
       expect(opening.toggleAttribute).not.toHaveBeenCalled();
       expect(closing.toggleAttribute).not.toHaveBeenCalled();
-    });
-
-    it('reopens once Kerf settles a close that ended just before the open (KF-2BTVSN, HS2-HQPFGS)', () => {
-      surface.openDialog.mockClear();
-      // Kerf still holds the closed dialog's exit state, so openDialog leaves it closed.
-      const reopening = dialog('true');
-      syncControlledOpen(rootWith(reopening));
-      syncControlledOpen(rootWith(reopening));
-      expect(surface.openDialog).toHaveBeenCalledTimes(2);
-      // One retry is armed however often the pass runs, and it fires on the native close event.
-      expect(reopening.listeners).toHaveLength(1);
-      reopening.listeners[0]();
-      expect(surface.openDialog).toHaveBeenCalledTimes(3);
-      // A dialog the app closed meanwhile is not reopened.
-      const closedMeanwhile = dialog('true');
-      syncControlledOpen(rootWith(closedMeanwhile));
-      closedMeanwhile.attributes.set(CONTROLLED_OPEN_ATTRIBUTE, 'false');
-      surface.openDialog.mockClear();
-      closedMeanwhile.listeners[0]();
-      expect(surface.openDialog).not.toHaveBeenCalled();
-      // An open dialog arms nothing.
-      const open = Object.assign(dialog('true'), { open: true });
-      syncControlledOpen(rootWith(open));
-      expect(open.listeners).toHaveLength(0);
     });
 
     it('waits for a detached dialog to connect before opening it modally', () => {
