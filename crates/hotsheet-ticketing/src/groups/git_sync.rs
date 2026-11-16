@@ -27,6 +27,15 @@
 //! sync loop retries the commit and push and refreshes the overlay ([`sync_checkout`]).
 //! [`on_status_change`] tells a process when a recorded state changes, so the server can
 //! announce it to open clients (HS2-1CWD0H).
+//!
+//! Concurrency (HS2-NM6E27): every commit step, from the background committer, the sync
+//! loop, or a CLI or MCP write, holds the per-repository Git transaction lock the ticket
+//! store's autocommit and sync also take. Hot Sheet's own reads (repository status, the
+//! checkout watcher, code review) run without Git's optional locks
+//! ([`crate::git::command`]), so a `git status` never holds `index.lock` against a commit.
+//! A lock another program holds (the user's Git, an editor) is retried with bounded backoff
+//! while it is young; a stale lock, a lock still held when the retries run out, and every
+//! hook refusal are reported at once.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -34,7 +43,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use hotsheet_model::is_group_id;
 use serde::{Deserialize, Serialize};
@@ -417,6 +426,82 @@ impl Background {
     }
 }
 
+// ---- Git lock contention (HS2-NM6E27) --------------------------------------------------
+
+/// A failed commit attempt: its status, and the Git lock files it could not create.
+#[derive(Debug)]
+struct CommitFailure {
+    status: RegistrySyncStatus,
+    locks: Vec<PathBuf>,
+}
+
+impl From<RegistrySyncStatus> for CommitFailure {
+    fn from(status: RegistrySyncStatus) -> Self {
+        Self {
+            status,
+            locks: Vec::new(),
+        }
+    }
+}
+
+/// How many times a commit that met another program's Git lock is retried.
+const LOCK_RETRIES: usize = 12;
+/// The first wait before a retry; each later wait doubles, up to [`LOCK_RETRY_MAX_DELAY`].
+const LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
+const LOCK_RETRY_MAX_DELAY: Duration = Duration::from_millis(400);
+/// A lock file older than this belongs to a crashed or killed Git process, not to one that
+/// is running a short command; it is reported at once and never removed.
+const STALE_LOCK_AGE: Duration = Duration::from_secs(60);
+
+/// Run `attempt` until it succeeds or fails for a reason other than a live Git lock.
+///
+/// A failure that names no lock file (a hook refusal, a missing identity, ...) returns at
+/// once. A failure on lock files is retried with bounded, doubling backoff while every
+/// lock is gone or younger than [`STALE_LOCK_AGE`]; a stale lock returns at once with its
+/// age, and a lock still held after [`LOCK_RETRIES`] returns the last failure. The next
+/// write or sync pass tries again either way.
+fn retry_live_lock(
+    mut attempt: impl FnMut() -> Result<bool, CommitFailure>,
+    mut wait: impl FnMut(Duration),
+    mut now: impl FnMut() -> SystemTime,
+) -> Result<bool, RegistrySyncStatus> {
+    let mut delay = LOCK_RETRY_DELAY;
+    let mut retries = LOCK_RETRIES;
+    loop {
+        let failure = match attempt() {
+            Ok(committed) => return Ok(committed),
+            Err(failure) => failure,
+        };
+        if failure.locks.is_empty() {
+            return Err(failure.status);
+        }
+        let at = now();
+        let stale = failure.locks.iter().find_map(|lock| {
+            let modified = fs::metadata(lock).and_then(|meta| meta.modified()).ok()?;
+            let age = at.duration_since(modified).unwrap_or_default();
+            (age >= STALE_LOCK_AGE).then_some((lock, age))
+        });
+        if let Some((lock, age)) = stale {
+            let mut status = failure.status;
+            let minutes = age.as_secs() / 60;
+            status.detail = format!(
+                "{} ({} is {minutes} minute{} old: a Git process that crashed or was killed \
+                 left it behind; remove it once no Git command is running)",
+                status.detail,
+                lock.display(),
+                if minutes == 1 { "" } else { "s" },
+            );
+            return Err(status);
+        }
+        if retries == 0 {
+            return Err(failure.status);
+        }
+        retries -= 1;
+        wait(delay);
+        delay = (delay * 2).min(LOCK_RETRY_MAX_DELAY);
+    }
+}
+
 // ---- Git -------------------------------------------------------------------------------
 
 /// The upstream of the checked-out branch.
@@ -593,18 +678,38 @@ impl Checkout {
     }
 
     /// Commit the pending registry changes, leaving everything else as it was. Returns
-    /// whether a commit was made.
+    /// whether a commit was made. A Git lock another program holds briefly is waited out
+    /// (HS2-NM6E27); a hook refusal or any other failure is returned at once.
     fn commit(&self, message: &str) -> Result<bool, RegistrySyncStatus> {
-        let failed = |output: &Output| {
-            RegistrySyncStatus::new(
+        retry_live_lock(
+            || self.commit_once(message),
+            std::thread::sleep,
+            SystemTime::now,
+        )
+    }
+
+    /// One commit attempt, under the per-repository Git transaction lock.
+    fn commit_once(&self, message: &str) -> Result<bool, CommitFailure> {
+        let failed = |output: &Output| CommitFailure {
+            status: RegistrySyncStatus::new(
                 RegistrySyncState::Failed,
                 format!("could not commit the group registry: {}", tail(output)),
-            )
+            ),
+            locks: crate::sync_locks::locks_in_output(&String::from_utf8_lossy(&output.stderr)),
+        };
+        let cannot_run = || {
+            CommitFailure::from(RegistrySyncStatus::new(
+                RegistrySyncState::Failed,
+                "could not run git",
+            ))
         };
         // The same per-repository Git transaction lock the ticket store uses, so a
         // designated store inside this repository never races this commit.
         let _lock = crate::store::lock_git_transaction(&self.root).map_err(|error| {
-            RegistrySyncStatus::new(RegistrySyncState::Failed, error.to_string())
+            CommitFailure::from(RegistrySyncStatus::new(
+                RegistrySyncState::Failed,
+                error.to_string(),
+            ))
         })?;
         let paths = self.changed_paths();
         if paths.is_empty() {
@@ -612,9 +717,7 @@ impl Checkout {
         }
         let mut add = vec!["add", "-A", "--"];
         add.extend(paths.iter().map(String::as_str));
-        let output = run(&self.root, &add).ok_or_else(|| {
-            RegistrySyncStatus::new(RegistrySyncState::Failed, "could not run git")
-        })?;
+        let output = run(&self.root, &add).ok_or_else(cannot_run)?;
         if !output.status.success() {
             return Err(failed(&output));
         }
@@ -637,9 +740,7 @@ impl Checkout {
         };
         commit.extend(["commit", "-q", "--only", "-m", message, "--"]);
         commit.extend(paths.iter().map(String::as_str));
-        let output = run(&self.root, &commit).ok_or_else(|| {
-            RegistrySyncStatus::new(RegistrySyncState::Failed, "could not run git")
-        })?;
+        let output = run(&self.root, &commit).ok_or_else(cannot_run)?;
         if !output.status.success() {
             return Err(failed(&output));
         }

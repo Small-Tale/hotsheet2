@@ -1049,6 +1049,14 @@ outside that constructor. Web test helpers that spawn Hot Sheet binaries or git
 (`clients/web/tests/real-ticket-server.ts`, `clients/web/scripts/scale-stress.mjs`)
 strip the same list through `clients/web/scripts/repository-env.mjs`.
 
+The constructor also sets `GIT_OPTIONAL_LOCKS=0` (HS2-NM6E27). A plain `git status` or
+`git diff` otherwise takes `index.lock` for a moment to refresh the index's stat cache.
+A commit that runs in the same repository during that moment, such as the group registry
+publisher or a ticket-store autocommit, then fails with `Unable to create
+'.../index.lock': File exists`. Hot Sheet's reads never need that refresh. Its writes
+still take Git's mandatory locks, and Hot Sheet's own commits in one repository serialize
+on the shared Git transaction lock.
+
 The repository's own Node scripts and test fixtures do the same (HS2-KKDZF4). A linked
 worktree's `pre-push` hook runs `scripts/check.sh` with an absolute `GIT_DIR`, and
 `pre-commit` adds `GIT_INDEX_FILE`. A fixture's `git -C <tmp> commit` started with them

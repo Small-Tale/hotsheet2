@@ -248,6 +248,17 @@ ticket store publishes tickets, without disturbing anything else in that checkou
   uncommitted and committed by the next write or sync pass. A checkout that is not a Git
   work tree, or that ignores `.hotsheet2/groups/`, is not committed at all; neither is any
   checkout while `HOTSHEET_NO_AUTOCOMMIT` is set.
+- **Concurrent Git work (HS2-NM6E27).** Each registry commit holds the same
+  per-repository Git transaction lock as the ticket store's autocommit and sync, so the
+  background committer, a sync pass, a CLI or MCP write, and a ticket store inside the
+  same repository never commit at once. Hot Sheet's own reads of a checkout (repository
+  status, the checkout watcher, code review) run with `GIT_OPTIONAL_LOCKS=0` and never
+  take `index.lock`. When another program holds a Git lock (the user's own `git`, an
+  editor), the commit is retried with bounded backoff (about 3.5 s) while the lock is
+  younger than 60 s. A hook refusal is reported at once with the hook's own message. A
+  lock that is still held after the retries is also reported at once, and so is a stale
+  lock, which is reported with its age. Hot Sheet never removes a lock. The next write
+  or sync pass tries again.
 - **Pull.** On the ticket store's sync cadence (every 30 s while the server runs), the
   server fetches the upstream branch of each checkout linked to a hosted store. Entries
   the upstream added or renamed, and that this checkout has not changed since the two
