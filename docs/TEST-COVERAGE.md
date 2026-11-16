@@ -2872,6 +2872,7 @@ discard flow remains covered by its existing real-router test.
 - Unit: `clients/web/scripts/playwright-bridge-home.test.mjs # HS2-B0WP94` covers CLI resolution (override, repo root, debug build, Windows suffix), stop-before-remove ordering with the run home in the environment, the no-store case, and failed, unlaunchable, and silent-failure stops.
 - End to end: none automated; a runner-level leak check needs a nested Playwright run.
 - Manual: `npx playwright test tests/follow-up-link.spec.ts` left one orphaned `server-bootstrap.hs2` server before the fix and none in two runs after it (ticket HS2-B0WP94 notes).
+- SIGKILLed runners (HS2-P69XHN): each run records its owner in `<home>/playwright-owner.json`, and the next runner releases homes whose owner is gone. Unit: `clients/web/scripts/playwright-bridge-home-sweep.test.mjs # HS2-P69XHN` covers the owner record, liveness (`EPERM` alive, `ESRCH` gone), skipping live, unrecorded, malformed and pid-less homes, confining removal to run directories under the root, an unlistable root, and a real SIGKILLed owner process whose home and Vite directory are released while a live owner's are kept. Manual: a planted home with a dead owner pid was removed by `npx playwright test --list` (ticket HS2-P69XHN notes).
 
 ### Generic MCP HTTP redirect confinement (HS2-0BTSX8)
 

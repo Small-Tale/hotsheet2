@@ -1555,8 +1555,11 @@ The bridge starts a detached bootstrap `hotsheet-server` for `<home>/server-boot
 time a spec opens a project through it. Removing the home does not stop that server, so the exit
 handler first runs `hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force` through
 `scripts/playwright-bridge-home.mjs`, then removes the directories (HS2-B0WP94). A failed stop is
-reported as a warning, never thrown. A runner killed by `SIGKILL` skips exit handlers, so that one
-path can still leave the server running.
+reported as a warning, never thrown. A runner killed by `SIGKILL` skips exit handlers, so each run
+also writes `<home>/playwright-owner.json` naming its pid and run directories, and the next runner
+(never a worker) releases every `hotsheet-playwright-home-*` whose recorded owner no longer exists
+through the same stop-then-remove path (HS2-P69XHN). A home without a record, or whose owner is
+alive, is left alone, and only run-prefixed directories directly under the temporary root are removed.
 
 A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
 `Process from config.webServer was not able to start`. Choose another port and rerun the whole
