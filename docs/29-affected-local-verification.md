@@ -397,6 +397,13 @@ case the narrowed run did not execute leaves no record, so the next attempt reru
 the whole stage. A changed stage key (tree, command, or inputs) also invalidates the
 record. The gate never retries within one run; retries stay a CI-only policy.
 
+The record is only as complete as the report. nextest's JUnit report lists only the
+cases that ran, so a fail-fast cancellation used to leave most of the Rust stage out
+of it, and a passing rerun of the few failed cases then recorded a receipt for cases
+that never ran. The gate therefore always runs nextest stages, full and narrowed,
+with `--no-fail-fast`, as CI does (HS2-RS0SYH). Playwright and Vitest stages set no
+failure limit.
+
 Receipts live under the Git common directory's `hotsheet-local-gate` directory.
 The existing per-worktree `hotsheet-root-gate/<tree>` compatibility marker is written
 only after successful verification. Push and its hook call the same executor;

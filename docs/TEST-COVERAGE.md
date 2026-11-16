@@ -1186,6 +1186,9 @@ narrowed pass with recorded flakes, receipt verification, and whole-stage reruns
 after an unprovable failure or changed inputs. The Playwright and Vitest selector
 shapes were also checked against the real runners; nextest is not installed
 locally, so its filter is covered by unit tests and CI only.
+HS2-RS0SYH: `scripts/local-gate.test.mjs` pins `instrumentedCommand`, which adds
+`--no-fail-fast` to every full and narrowed nextest stage (never twice, before a `--`
+passthrough) while keeping the Playwright and Vitest reporter arguments.
 
 HS2-RRNZYN adds synthetic plan-persistence, changed-diff rejection, mandatory
 floor, configured-strategy resolution, complete deferral disclosure, and
