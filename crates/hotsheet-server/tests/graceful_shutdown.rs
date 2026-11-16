@@ -50,20 +50,46 @@ impl SlowTool {
         }
     }
 
-    /// Each hanging invocation appends its pid to `<tool>.calls` before it hangs.
+    /// Each hanging invocation appends its pid to `<tool>.calls` before it hangs. Every
+    /// script first exits at once for [`FIRST_LAUNCH_ARG`], which no probe passes.
     fn script(self) -> &'static str {
         match self {
-            Self::Opencode => "#!/bin/sh\necho $$ >> \"$0.calls\"\nexec sleep 30\n",
+            Self::Opencode => {
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 echo $$ >> \"$0.calls\"\nexec sleep 30\n"
+            }
             Self::OpencodeBeforeMarker => {
-                "#!/bin/sh\nread token < \"$0.gate\"\necho $$ >> \"$0.calls\"\nexec sleep 30\n"
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 read token < \"$0.gate\"\necho $$ >> \"$0.calls\"\nexec sleep 30\n"
             }
             Self::CodexAppServer => {
-                "#!/bin/sh\ncase \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
+                "#!/bin/sh\n[ \"$1\" = --hs2-first-launch ] && exit 0\n\
+                 case \"$1\" in\n--version) echo codex-test 1.0 ;;\n\
                  app-server) echo $$ >> \"$0.calls\"; exec sleep 30 ;;\nesac\n"
             }
         }
     }
+
+    /// Write this tool's script into `tools` and launch it once to completion, without a
+    /// deadline, before the server starts (HS2-BNVW5V). macOS assesses a newly written
+    /// executable on its first exec, shell scripts included, through one queue for the
+    /// whole host (HS2-04D6DW). Measured during a workspace run: a fresh script's first exec
+    /// took about 0.08 s against 0.01 s for later ones, and the same queue once held a fresh
+    /// binary's first launch for 27 s. The startup warmup's first probe was that first
+    /// exec, so the queue rather than the warmup could use up the setup window in
+    /// [`Server::slow_tool_pids`]. With the script launched here, the window times only the
+    /// server: about 0.1 s from `ready()` to the probe marker under the same load.
+    fn install(self, tools: &std::path::Path) -> PathBuf {
+        let tool = tools.join(self.name());
+        fs::write(&tool, self.script()).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+        first_launch::launched(tool, &[FIRST_LAUNCH_ARG])
+    }
 }
+
+/// The argument every [`SlowTool`] script answers by exiting at once, with no marker and no
+/// hang, so the fixture can take its first launch off the clock (HS2-BNVW5V).
+const FIRST_LAUNCH_ARG: &str = "--hs2-first-launch";
 
 struct Server {
     child: Child,
@@ -122,10 +148,7 @@ impl Server {
         let path = if let Some((_, slow_tool)) = slow_discovery {
             let tools = fixture.path().join("tools");
             fs::create_dir(&tools).unwrap();
-            let tool = tools.join(slow_tool.name());
-            fs::write(&tool, slow_tool.script()).unwrap();
-            fs::set_permissions(&tool, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-                .unwrap();
+            let tool = slow_tool.install(&tools);
             if matches!(slow_tool, SlowTool::OpencodeBeforeMarker) {
                 use std::os::unix::ffi::OsStrExt;
                 let gate =
@@ -195,9 +218,11 @@ impl Server {
 
     /// Wait until discovery has probed the hanging tool; return every probe's pid so far.
     fn slow_tool_pids(&self) -> Vec<i32> {
-        // Catalog warmup is scheduled after the server registers itself. Under a busy
-        // parallel suite, that background task can start well after `ready()` returns;
-        // this wait is setup, not the probe/queue latency assertion below.
+        // Catalog warmup is scheduled after the server registers itself. This wait is
+        // setup, not the probe/queue latency assertion below. The tool's first launch is
+        // already done (`SlowTool::install`), so it times only the server's warmup, which
+        // reaches the marker in about 0.1 s after `ready()` under a workspace run
+        // (HS2-BNVW5V).
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let pids: Vec<i32> = fs::read_to_string(self.slow_tool_calls())
