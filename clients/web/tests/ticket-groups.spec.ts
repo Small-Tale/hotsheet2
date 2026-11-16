@@ -355,11 +355,16 @@ test('HS2-TX17CM adds tickets to a new or existing group and removes them', asyn
     await rowOf(view, keyboard.slug).click({ button: 'right' });
     await openGroupSubmenu();
     // New Group… and Automatic (HS2-4C32A0) come first, then the existing groups.
-    const choices = await menu
-      .locator('[data-context-group]')
-      .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.contextGroup));
-    // Each existing group is offered by its id, labeled with its name (HS2-9KZSD4).
-    expect(choices).toEqual(['', ' automatic', await groupIdOf(server, BOARD), await groupIdOf(server, SEARCH)]);
+    // Each existing group is offered by its id, labeled with its name (HS2-9KZSD4). Polled: the existing
+    // groups can render after the submenu itself under load (HS2-ZNEJ9K).
+    const expectedChoices = ['', ' automatic', await groupIdOf(server, BOARD), await groupIdOf(server, SEARCH)];
+    await expect
+      .poll(() =>
+        menu
+          .locator('[data-context-group]')
+          .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.contextGroup)),
+      )
+      .toEqual(expectedChoices);
     await expect(menu.locator('[data-context-group]').filter({ hasText: BOARD })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Remove from Group' })).toHaveCount(0);
     await capture(page, 'context-add-to-group-light-1440');
@@ -702,13 +707,17 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
     await expect(polished).toHaveAttribute('data-ticket-group', boardId);
     await expect(polished.getByRole('button', { name: 'Board polish, 3 tickets' })).toBeVisible();
     await expect(group(view, BOARD)).toHaveCount(0);
-    expect(await groupCounts(server)).toEqual([
-      ['Board polish', 3],
-      [SEARCH, 2],
-    ]);
-    expect(await groupIdOf(server, 'Board polish')).toBe(boardId);
+    // Server reads are polled: the header can show the new name before the registry write is read back
+    // under load (HS2-ZNEJ9K).
+    await expect
+      .poll(() => groupCounts(server))
+      .toEqual([
+        ['Board polish', 3],
+        [SEARCH, 2],
+      ]);
+    await expect.poll(() => groupIdOf(server, 'Board polish')).toBe(boardId);
     const boardTicket = Object.values(tickets).find((ticket) => ticket.group === boardId)!;
-    expect((await server.request<FullTicket>(`/tickets/${boardTicket.id}`)).group).toBe(boardId);
+    await expect.poll(async () => (await server.request<FullTicket>(`/tickets/${boardTicket.id}`)).group).toBe(boardId);
 
     // The keyboard context-menu request opens the same menu.
     await group(view, SEARCH).locator('[data-action="toggle-ticket-group"]').focus();
@@ -721,7 +730,7 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
     await menu.getByRole('menuitem', { name: 'Ungroup' }).click();
     await expect(group(view, SEARCH)).toHaveCount(0);
     await expect(group(view, 'Board polish')).toBeVisible();
-    expect(await groupCounts(server)).toEqual([['Board polish', 3]]);
+    await expect.poll(() => groupCounts(server)).toEqual([['Board polish', 3]]);
     await expect(view.locator('[data-ticket-slug]')).toHaveCount(SEEDS.length);
   }, page);
 });
