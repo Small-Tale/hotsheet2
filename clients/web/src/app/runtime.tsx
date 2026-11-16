@@ -218,7 +218,7 @@ import { afterBrowserPaint } from '../project-activation';
 import { type DrawerAIChat } from '../project-drive';
 import { projectLiveSummary, workersLive } from '../project-live-summary';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
-import { wireProjectTabActionFit } from '../project-tab-action-fit';
+import { projectTabActionFit } from '../project-tab-action-fit';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
@@ -3424,7 +3424,7 @@ export async function startHotSheetWebClient() {
     coarsePointer.value = event.matches;
   });
   const viewportMobile = signal(isMobileViewport(window.innerWidth)),
-    // Measured by wireProjectTabActionFit: the project tabs overflow the strip (HS2-RNR35H).
+    // Decided by projectTabActionFit from Kerf's fit report: the project tabs overflow the strip (HS2-RNR35H).
     projectTabActionCompact = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
@@ -6164,8 +6164,12 @@ export async function startHotSheetWebClient() {
   const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
-  const projectTabActionFit = wireProjectTabActionFit(appRoot, (compact) => {
+  const projectTabFit = projectTabActionFit((compact) => {
     projectTabActionCompact.value = compact;
+  });
+  // The desktop project strip unmounts on mobile; the next one starts from the full label (HS2-YATB6S).
+  const disposeProjectTabFitReset = effect(() => {
+    if (viewportMobile.value) projectTabFit.reset();
   });
   // The drawer rail's search count yields its room at narrow widths (HS2-HPDX81).
   const disposeTerminalSearchCountFit = wireTerminalSearchCountFit(appRoot, (compact) => {
@@ -6401,7 +6405,7 @@ export async function startHotSheetWebClient() {
     terminalRailScreen,
     selectProjectTab,
     retryProjectRestore,
-    onTabBarFit: projectTabActionFit.onFit,
+    onTabBarFit: projectTabFit.onFit,
     terminalDrawerBounds,
     terminalDashboardSize,
     terminalGridFullscreen,
@@ -7186,7 +7190,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
-      projectTabActionFit.dispose();
+      disposeProjectTabFitReset();
       disposeTerminalSearchCountFit();
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);

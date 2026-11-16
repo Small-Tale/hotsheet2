@@ -203,7 +203,7 @@ export interface HotSheetShellDependencies {
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   /** The project strip's tabs overflow, so its New ticket launcher shows the compact "Ticket…" label
-   * (HS2-RNR35H); `wireProjectTabActionFit` measures it. */
+   * (HS2-RNR35H); `projectTabActionFit` decides it from Kerf's fit report. */
   projectTabActionCompact: Signal<boolean>;
   workspaceSearchModel: SearchFieldModel;
   guidanceSearchModel: SearchFieldModel;
