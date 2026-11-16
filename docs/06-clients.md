@@ -3844,7 +3844,9 @@ follows query edits and re-counts when output arrives while the search is open. 
 survives a drawer or window resize (HS2-SWY5DQ). When the terminal reflows, xterm drops or strands the
 selection that the search addon steps from, and the addon refreshes its match list only after a delay.
 The viewport therefore remembers the active match's index. After a resize it re-highlights and
-re-selects that match through the addon's public API, keeping the scroll position. It does this
+re-selects that match through the addon's public API. If the match was on screen before the resize
+and the reflow left it off screen, the viewport centers it; otherwise it keeps the scroll position the
+reflow left, so a reader who scrolled away from the match stays where they were (HS2-X96PS0). It does this
 before the next Enter or Shift-Enter step, and again whenever the addon's own re-search reports a
 different match, until a re-search confirms it. If a redraw at the new width changes how many matches
 exist, the same index stays active while it still exists. Emptying the field

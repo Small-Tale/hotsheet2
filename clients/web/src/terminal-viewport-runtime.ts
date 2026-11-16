@@ -1634,15 +1634,34 @@ function initializeTerminalViewport(
       activeIndex = -1,
       resultCount = 0,
       anchorAfterResize = false,
+      // Whether the active match was on screen, kept current outside resizes, and its value when a resize
+      // began: a resize reveals the active match only if the reader was looking at it (HS2-X96PS0).
+      activeMatchVisible = false,
+      revealAfterResize = false,
       searching = false,
       holdResults: ((results: TerminalSearchResults) => void) | undefined;
     const searchOptions = (incremental: boolean) => ({
       incremental,
       decorations: resolveTerminalSearchDecorations(element),
     });
+    const selectionOnScreen = () => {
+      const range = terminal.getSelectionPosition(),
+        top = terminal.buffer.active.viewportY;
+      return range !== undefined && range.start.y >= top && range.end.y < top + terminal.rows;
+    };
+    const trackActiveMatch = () => {
+      if (!anchorAfterResize) activeMatchVisible = searchQuery !== '' && activeIndex >= 0 && selectionOnScreen();
+    };
+    // Bring the re-anchored active match back on screen, centered, unless it already is.
+    const revealActiveMatch = () => {
+      const range = terminal.getSelectionPosition();
+      if (!range || selectionOnScreen()) return;
+      terminal.scrollToLine(Math.max(0, range.start.y - Math.floor(terminal.rows / 2)));
+    };
     const publishResults = (results: TerminalSearchResults) => {
       activeIndex = results.resultIndex;
       resultCount = results.resultCount;
+      trackActiveMatch();
       element.dispatchEvent(new CustomEvent(TERMINAL_SEARCH_RESULTS_EVENT, { bubbles: true, detail: results }));
     };
     // Calls the viewport makes itself, so their reports are told apart from the addon's own re-searches.
@@ -1658,7 +1677,7 @@ function initializeTerminalViewport(
     // select the first match from an empty selection, and step once per index. Reports while stepping are
     // held back so the count never shows the matches passed on the way, and the scroll position the reflow
     // left is kept, as the addon's own re-search keeps it.
-    const reanchorSearch = () => {
+    const reanchorSearch = (reveal = false) => {
       const addon = searchAddon,
         target = activeIndex;
       if (!addon || !searchQuery || target < 0 || target >= resultCount) return;
@@ -1675,7 +1694,8 @@ function initializeTerminalViewport(
         while (index <= target && addon.findNext(searchQuery, options)) index += 1;
       } finally {
         holdResults = undefined;
-        terminal.scrollToLine(viewportY);
+        if (reveal) revealActiveMatch();
+        else terminal.scrollToLine(viewportY);
         if (held) publishResults(held);
       }
     };
@@ -1724,20 +1744,26 @@ function initializeTerminalViewport(
               queueMicrotask(() => {
                 if (!anchorAfterResize) return;
                 anchorAfterResize = false;
-                reanchorSearch();
+                reanchorSearch(revealAfterResize);
               });
               return;
             }
             anchorAfterResize = false;
+            if (revealAfterResize) revealActiveMatch();
           }
           publishResults(results);
         });
         const resizeListener = terminal.onResize(() => {
-          if (searchQuery && activeIndex >= 0) anchorAfterResize = true;
+          if (!searchQuery || activeIndex < 0) return;
+          // A drag resizes repeatedly; the first resize of the run captures what the reader saw.
+          if (!anchorAfterResize) revealAfterResize = activeMatchVisible;
+          anchorAfterResize = true;
         });
+        const scrollListener = terminal.onScroll(trackActiveMatch);
         own(() => {
           resultsListener.dispose();
           resizeListener.dispose();
+          scrollListener.dispose();
         });
       }
       const addon = searchAddon,

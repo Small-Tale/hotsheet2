@@ -305,7 +305,7 @@ interface SearchReport {
   resultCount: number;
 }
 
-test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes and Enter steps on from it', async ({
+test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes, stays on screen (HS2-X96PS0), and Enter steps on from it', async ({
   page,
 }) => {
   const { drawer } = await openDrawerTerminal(page);
@@ -352,6 +352,9 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
     await active(index);
     await expect(editor).toBeFocused();
     expect(await total()).toBeGreaterThanOrEqual(2);
+    // The active match was on screen before the resize, so it is brought back on screen after it; xterm
+    // draws the selection only for visible rows (HS2-X96PS0).
+    await expect(drawer.locator('.xterm-selection > div').first()).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`hs2-swy5dq-active-${index}-${width}.png`) });
   };
 
