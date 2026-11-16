@@ -48,4 +48,25 @@ describe('HS2-5E8Y9R repair review', () => {
     expect(markup).toContain('Summary edits are unavailable');
     expect(markup).toMatch(/data-action="apply-note-repair"[^>]*disabled/u);
   });
+
+  it('HS2-3TNEJF keys each Cannot Apply banner by its reason so Kerf diffs the list by identity', () => {
+    const markup = String(
+      NoteRepairReview({
+        ...base,
+        preview: {
+          proposal: { note_id: base.noteId, summary: 'New summary' },
+          patch: {},
+          changed: false,
+          unavailable: ['This source cannot edit notes.', 'Editing an existing note summary is not supported yet.'],
+        },
+      }),
+    );
+    const keys = [...markup.matchAll(/<[^>]*\bkui-state-banner\b[^>]*>/gu)].map(
+      ([tag]) => /\bdata-key="([^"]*)"/u.exec(tag)?.[1],
+    );
+    expect(keys).toEqual([
+      'cannot-apply:This source cannot edit notes.',
+      'cannot-apply:Editing an existing note summary is not supported yet.',
+    ]);
+  });
 });

@@ -56,6 +56,41 @@ function jsxAttribute(element: JsxElementLike, name: string): ts.JsxAttribute | 
   );
 }
 
+/**
+ * Whether a JSX element is what a `.map()` or `.flatMap()` callback returns: the arrow body or a
+ * `return` operand, through parentheses, `cond ? a : b`, and `cond && a` (HS2-3TNEJF).
+ */
+function isMapCallbackResult(element: ts.Node): boolean {
+  let node = element;
+  for (;;) {
+    const parent = node.parent;
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      (ts.isConditionalExpression(parent) && parent.condition !== node) ||
+      (ts.isBinaryExpression(parent) &&
+        parent.right === node &&
+        [
+          ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken,
+          ts.SyntaxKind.QuestionQuestionToken,
+        ].includes(parent.operatorToken.kind))
+    ) {
+      node = parent;
+      continue;
+    }
+    let callback: ts.Node | undefined;
+    if (ts.isArrowFunction(parent) && parent.body === node) callback = parent;
+    else if (ts.isReturnStatement(parent)) callback = ts.findAncestor(parent, ts.isFunctionLike);
+    if (callback === undefined || !ts.isCallExpression(callback.parent)) return false;
+    const call = callback.parent;
+    return (
+      call.arguments[0] === callback &&
+      ts.isPropertyAccessExpression(call.expression) &&
+      ['map', 'flatMap'].includes(call.expression.name.text)
+    );
+  }
+}
+
 /** The text of a `"literal"`, `{'literal'}`, or substitution-free template initializer; otherwise undefined. */
 function constantString(initializer: ts.JsxAttributeValue): string | undefined {
   const value = ts.isJsxExpression(initializer) ? initializer.expression : initializer;
@@ -204,6 +239,44 @@ describe('Kerf application UI profile', () => {
         .map((name) => `${file}:${line} ${name}`),
     );
     expect(bare).toEqual([]);
+  });
+
+  it('HS2-3TNEJF keys every StateBanner that a .map() callback returns through rootAttributes data-key', () => {
+    // Kerf diffs list items by id, then data-key; an unkeyed mapped banner is matched by position when an
+    // item is added or removed. Only the callback's returned root needs the key: a banner nested inside
+    // another element of the item is keyed by that element.
+    const unkeyed = stateBannerElements().flatMap(({ file, line, element }) => {
+      if (!isMapCallbackResult(ts.isJsxOpeningElement(element) ? element.parent : element)) return [];
+      const attributes = jsxAttribute(element, 'rootAttributes')?.initializer;
+      const object = attributes !== undefined && ts.isJsxExpression(attributes) ? attributes.expression : undefined;
+      const keyed =
+        object !== undefined &&
+        ts.isObjectLiteralExpression(object) &&
+        object.properties.some(
+          (property) =>
+            ts.isPropertyAssignment(property) && ts.isStringLiteral(property.name) && property.name.text === 'data-key',
+        );
+      return keyed ? [] : [`${file}:${line}`];
+    });
+    expect(unkeyed).toEqual([]);
+  });
+
+  it('HS2-3TNEJF recognizes only the returned root of a .map() or .flatMap() callback', () => {
+    const banners = (source: string) => {
+      const tree = ts.createSourceFile('probe.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const results: boolean[] = [];
+      const visit = (node: ts.Node): void => {
+        if (ts.isJsxSelfClosingElement(node)) results.push(isMapCallbackResult(node));
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+      return results;
+    };
+    expect(banners('xs.map((x) => <StateBanner />)')).toEqual([true]);
+    expect(banners('xs.flatMap((x) => (x ? <StateBanner /> : []))')).toEqual([true]);
+    expect(banners('xs.map(function (x) { return <StateBanner />; })')).toEqual([true]);
+    expect(banners('xs.map((x) => <div data-key={x}><StateBanner /></div>)')).toEqual([false]);
+    expect(banners('const f = () => <StateBanner />; xs.filter((x) => <StateBanner />)')).toEqual([false, false]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

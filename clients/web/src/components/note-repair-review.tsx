@@ -88,7 +88,14 @@ export function NoteRepairReview({
             {proposal.response_to !== undefined && <p>Response link: {proposal.response_to ?? 'clear'}</p>}
             {proposal.explanation && <p>{proposal.explanation}</p>}
             {preview.unavailable.map((reason) => (
-              <StateBanner tone="warning" title="Cannot Apply" detail={reason} copyLayout="stacked" />
+              // Each reason is a distinct sentence, so its text keys the banner for Kerf's diff (HS2-3TNEJF).
+              <StateBanner
+                rootAttributes={{ 'data-key': `cannot-apply:${reason}` }}
+                tone="warning"
+                title="Cannot Apply"
+                detail={reason}
+                copyLayout="stacked"
+              />
             ))}
           </div>
         )}

@@ -135,7 +135,7 @@ export function ProjectLiveSection({ summary, callouts = [], expanded = false }:
                 icon={
                   <LucideIcon icon={CALLOUT_ICONS[callout.signal].icon} name={CALLOUT_ICONS[callout.signal].name} />
                 }
-                rootAttributes={{ 'data-host-callout': callout.signal }}
+                rootAttributes={{ 'data-key': `host-callout:${callout.signal}`, 'data-host-callout': callout.signal }}
               />
             ))}
           </List>
