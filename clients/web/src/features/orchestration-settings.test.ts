@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiHttpError } from '../api';
+import { ApiHttpError, type OrchestrationSession } from '../api';
 import type { ConfirmationOptions } from '../confirmation';
+import { remoteProjectId } from '../remote-projects/identity';
+import { remoteTerminalList } from '../remote-projects/terminals';
+import { terminalProjectOwner } from '../terminal-project-scope';
 import {
   createDemoOrchestrationApi,
   DEMO_OPEN_PROJECTS,
   DEMO_OWNER,
+  DEMO_REMOTE,
   DEMO_TARGETS,
 } from '../ux-demo/orchestration-settings-fixtures';
 import { createOrchestrationSettings, type OrchestrationApi } from './orchestration-settings';
@@ -402,5 +406,143 @@ describe("a project's models and required resources (HS2-YSY7AR)", () => {
       models: { codex: 'gpt-5-codex', claude: '' },
       resources: 'sim/iphone-16',
     });
+  });
+});
+
+describe("Show in Drawer for a remote project's session (HS2-6E32N4)", () => {
+  // The peer's own shapes, as its `/terminals` and `/checkouts/{id}` answer (the real-server half is
+  // `remote_servers/sessions.rs` `show_in_drawer_route`). Two checkouts on one host, and a stray.
+  const apiTab = remoteProjectId(DEMO_REMOTE, 'api-0000000000ab'),
+    mobileTab = remoteProjectId(DEMO_REMOTE, 'mobile-0000000000ab'),
+    scopes = [
+      { id: apiTab, root: '/srv/peer/api' },
+      { id: mobileTab, root: '/srv/peer/mobile' },
+    ],
+    peerTerminals = [
+      { id: 'peer-terminal-api', kind: 'ai', launch_cwd: '/srv/peer/api', cwd: '/srv/peer/api/src' },
+      { id: 'peer-terminal-mobile', kind: 'ai', launch_cwd: '/srv/peer/mobile', cwd: '/srv/peer/mobile' },
+      { id: 'peer-terminal-stray', kind: 'shell', launch_cwd: '/srv/peer/api-old', cwd: '/srv/peer/api-old' },
+    ];
+  const remoteSession = (id: string, terminal: string): OrchestrationSession => ({
+    session_id: id,
+    target_id: DEMO_TARGETS.api,
+    role: 'worker',
+    tool: 'claude',
+    state: 'running',
+    owner: 'orchestrator',
+    paused: false,
+    hosted: { server_id: '01JSYNTHPEER0000000000001', session_id: terminal, worker_id: `claude-${terminal}` },
+    created_at_ms: 1,
+    updated_at_ms: 1,
+  });
+
+  function remoteSetup() {
+    const fake = createDemoOrchestrationApi();
+    const api: OrchestrationApi = {
+      ...fake.api,
+      orchestrationSessions: () =>
+        Promise.resolve([
+          remoteSession('01JSYNTHSESSION00000000101', 'peer-terminal-api'),
+          // Recorded against this target, but its terminal runs in the sibling checkout.
+          remoteSession('01JSYNTHSESSION00000000102', 'peer-terminal-mobile'),
+          remoteSession('01JSYNTHSESSION00000000103', 'peer-terminal-stray'),
+        ]),
+    };
+    let open: { id: string; name: string }[] = [...DEMO_OPEN_PROJECTS];
+    // What the drawer holds: each open tab's slice of the peer list as the bridge presents it,
+    // owned and keyed as the terminal dashboard does (`${projectId}:${terminal.id}`).
+    let drawer = new Set<string>();
+    const load = (list: unknown[]) => {
+      drawer = new Set(
+        open.flatMap((project) =>
+          (remoteTerminalList(list, project.id, scopes) as { id: string; launch_cwd?: string }[])
+            .filter(
+              (info) =>
+                terminalProjectOwner(
+                  open.map((item) => ({ id: item.id, root: item.id })),
+                  info.launch_cwd,
+                ) === project.id,
+            )
+            .map((info) => `${project.id}:${info.id}`),
+        ),
+      );
+    };
+    const shown: string[] = [];
+    const settings = createOrchestrationSettings({
+      api: () => api,
+      openProjects: () => open,
+      confirm: () => Promise.resolve(true),
+      openProjectPicker: vi.fn(),
+      openFlowBusy: () => false,
+      activateProject: vi.fn(),
+      showTerminal: (project, terminal) => {
+        if (!drawer.has(`${project}:${terminal}`)) return false;
+        shown.push(`${project}:${terminal}`);
+        return true;
+      },
+      hasTerminal: (project, terminal) => drawer.has(`${project}:${terminal}`),
+      knownTools: () => ['claude', 'codex'],
+      showInspector: vi.fn(),
+      defer: (run) => {
+        run();
+      },
+    });
+    return {
+      settings,
+      shown,
+      load,
+      close: (id: string) => {
+        open = open.filter((project) => project.id !== id);
+      },
+      reopen: (project: { id: string; name: string }) => {
+        open = [...open, project];
+      },
+    };
+  }
+  const session = (t: ReturnType<typeof remoteSetup>, id: string) =>
+    t.settings.detailOf(DEMO_OWNER)!.sessions!.find((item) => item.session_id === id)!;
+
+  it('shows the session in the drawer of its remote tab, and only there', async () => {
+    const t = remoteSetup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openDetail(DEMO_OWNER, DEMO_TARGETS.api);
+    await vi.waitFor(() => {
+      expect(t.settings.detailOf(DEMO_OWNER)?.sessions).toHaveLength(3);
+    });
+    const [worker, sibling, stray] = [
+      '01JSYNTHSESSION00000000101',
+      '01JSYNTHSESSION00000000102',
+      '01JSYNTHSESSION00000000103',
+    ];
+    // Empty: the remote tab's terminal list has not arrived, so nothing is showable yet.
+    t.load([]);
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, worker))).toBeUndefined();
+    t.settings.showSession(DEMO_OWNER, worker);
+    expect(t.shown).toEqual([]);
+    // Refilled from the peer: the bridge gives the API tab its own terminal only.
+    t.load(peerTerminals);
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, worker))).toBe(apiTab);
+    t.settings.showSession(DEMO_OWNER, worker);
+    expect(t.shown).toEqual([`${apiTab}:peer-terminal-api`]);
+    // A terminal of the sibling checkout belongs to the Mobile tab, and a stray one to no tab, so
+    // neither is shown through the API project's row.
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, sibling))).toBeUndefined();
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, stray))).toBeUndefined();
+    t.settings.showSession(DEMO_OWNER, sibling);
+    t.settings.showSession(DEMO_OWNER, stray);
+    expect(t.shown).toHaveLength(1);
+    // Repeated: the same terminal again.
+    t.settings.showSession(DEMO_OWNER, worker);
+    expect(t.shown).toEqual([`${apiTab}:peer-terminal-api`, `${apiTab}:peer-terminal-api`]);
+    // The tab closed: its drawer is gone, so the action is not offered.
+    t.close(apiTab);
+    t.load(peerTerminals);
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, worker))).toBeUndefined();
+    t.settings.showSession(DEMO_OWNER, worker);
+    expect(t.shown).toHaveLength(2);
+    // Reopened and its list read again: offered once more.
+    t.reopen({ id: apiTab, name: 'API' });
+    t.load(peerTerminals);
+    expect(t.settings.sessionTab(DEMO_OWNER, session(t, worker))).toBe(apiTab);
   });
 });

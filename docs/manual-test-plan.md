@@ -1271,6 +1271,26 @@ that has never been opened in a client.
    show the Up Next queue. Confirm it answers from the project's own store.
 5. Stop the session with `--force` as a person. Remove the temporary directories.
 
+## Show in Drawer for a remote orchestrated project (HS2-6E32N4)
+
+Automated tests cover the peer's answers over real TLS and the client's routing with
+those shapes; they do not drive the desktop bridge against a second machine. Use two
+machines paired as remote servers, a real AI tool on the peer, and an Orchestration
+project on the first machine.
+
+1. In the desktop app, open two projects of the peer in remote tabs, then add one of
+   them to the Orchestration project (+ Add Project).
+2. Start a session on it (`hotsheet-cli orchestration session start --project <owner>
+--target <id> --operation-id manual-drawer --tool claude`). Wait for the tool to
+   connect.
+3. In Settings → Orchestration, open the project's detail. Confirm **Show in Drawer**
+   is enabled and opens the session's terminal in that remote tab's drawer, not in the
+   other remote tab or the Orchestration project's tab, and that the terminal echoes
+   typed input.
+4. Close the remote tab. Confirm Show in Drawer is disabled with its reason; reopen the
+   tab and confirm it is enabled again.
+5. Stop the session as a person.
+
 ## Role prompt and joining with a real tool (HS2-2DPGDY)
 
 Automated tests deliver the role prompt to the fake agent's OpenCode-style API and

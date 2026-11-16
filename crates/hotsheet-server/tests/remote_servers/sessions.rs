@@ -128,6 +128,54 @@ fn tab<'a>(terminals: &'a [Value], id: &Value) -> &'a Value {
         .unwrap_or_else(|| panic!("terminal {id} is not in the drawer list"))
 }
 
+/// HS2-6E32N4: the facts Show in Drawer composes for a session on a remote project. The
+/// client names the project's tab `remote:<registration_id>:<checkout_id>` from the bound
+/// destination; its bridge gives that tab the peer terminals whose launch directory lies
+/// in the root the peer reports for that checkout (the most specific open one), and the
+/// drawer keys the terminal by its peer id, which is the session's `hosted.session_id`.
+/// The client half is `orchestration-settings.test.ts` (HS2-6E32N4).
+async fn show_in_drawer_route(
+    peer: &axum::Router,
+    destination: &Value,
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+    all: &[hotsheet_ticketing::checkouts::Checkout],
+    terminal: &Value,
+) {
+    assert_eq!(destination["kind"], "remote", "{destination}");
+    // The registration this machine paired the peer under, which is the tab's binding id.
+    assert_eq!(destination["registration_id"], ID, "{destination}");
+    assert_eq!(
+        destination["checkout_id"],
+        checkout.id.as_str(),
+        "{destination}"
+    );
+    let mut roots = Vec::new();
+    for each in all {
+        let (status, view) = api(
+            peer.clone(),
+            "GET",
+            &format!("/checkouts/{}", each.id),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{view}");
+        roots.push((each.id.clone(), view["root"].as_str().unwrap().to_owned()));
+    }
+    let listed = drawer(peer).await;
+    let launch = tab(&listed, terminal)["launch_cwd"]
+        .as_str()
+        .unwrap_or_else(|| panic!("terminal {terminal} reports no launch directory"))
+        .to_owned();
+    let inside = |root: &str| launch == root || launch.starts_with(&format!("{root}/"));
+    let owners: Vec<_> = roots
+        .iter()
+        .filter(|(_, root)| inside(root))
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(owners, [checkout.id.as_str()], "{launch} in {roots:?}");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_through_the_cli() {
     assert!(hotsheet_aitools::test_permission_vault_available());
@@ -213,6 +261,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
         "orchestration",
     ];
     let mut revision: Option<String> = None;
+    let mut destinations = Vec::new();
     for (target, checkout, tool) in [
         (TARGET_A, &peer_checkouts[0], IDLE_TOOL),
         (TARGET_B, &peer_checkouts[1], BUSY_TOOL),
@@ -242,6 +291,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
                 &inspected["destination"].to_string(),
             ],
         );
+        destinations.push(inspected["destination"].clone());
         // HS2-XHQ1EH: a person remembers session starts of the target's tool.
         cli_named(
             &home,
@@ -354,6 +404,21 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
     let listed = drawer(&peer_router).await;
     assert_eq!(listed.len(), 2);
     assert_eq!(tab(&listed, &b_terminal)["tool"], BUSY_TOOL);
+    // HS2-6E32N4: Show in Drawer reaches each session through its own remote tab.
+    for ((destination, checkout), terminal) in destinations
+        .iter()
+        .zip(&peer_checkouts)
+        .zip([&a_terminal, &b_terminal])
+    {
+        show_in_drawer_route(
+            &peer_router,
+            destination,
+            checkout,
+            &peer_checkouts,
+            terminal,
+        )
+        .await;
+    }
     let wrong_tool = refused(
         &scheduler,
         &[

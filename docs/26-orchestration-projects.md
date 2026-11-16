@@ -4806,8 +4806,10 @@ the type changes to Software while it shows.
   sessions use on that project; with none the detail says _No AI tool is allowed here
   yet_ rather than showing the policy's refusal. A part that is refused says why by the
   refusal's code (the policy's limits, an unreachable project, a pending permission
-  request), never "not allowed yet". Show in Drawer for a remote project's session is unverified
-  (HS2-6E32N4).
+  request), never "not allowed yet". Show in Drawer works the same for a remote project: its tab is
+  `remote:<registration_id>:<checkout_id>` from the bound destination, the desktop bridge
+  gives that tab the peer's terminals launched in its checkout (HS2-JJKVJJ), and the
+  session's `hosted.session_id` is the peer's terminal id (HS2-6E32N4).
 - **Policy, limits only.** Place sessions automatically, machine defaults, per-tool session
   caps and weights (an empty Sessions field leaves the tool out), each tool's
   **accounts** with their sessions and daily budget (HS2-7WF6JD: + Add Account and a
