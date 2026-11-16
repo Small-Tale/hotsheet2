@@ -93,7 +93,9 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('safely backed up');
     // Kerf stacks the copy and places the actions below it (beta.60 props) instead of app grid rules.
     expect(markup).toContain('data-copy-layout="stacked" data-action-placement="below"');
-    expect(markup).toMatch(/class="kui-state-banner__action"><div class="kui-row"/);
+    // The action zone lays the two controls out itself, with no Row wrapper (KF-8TF7Y8, HS2-W77711).
+    expect(markup).toMatch(/class="kui-state-banner__action"><button/);
+    expect(markup).not.toContain('kui-row');
     expect(markup).toContain('data-action="remove-hs1-data"');
     expect(markup).toContain('data-action="dismiss-hs1-cleanup"');
   });

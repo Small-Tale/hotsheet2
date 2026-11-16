@@ -100,9 +100,8 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
             detail={`${disk.total_bytes === null ? 'A disk' : formatBytes(disk.total_bytes)}${disk.mount === null ? '' : ` at ${disk.mount}`}. Should host health watch its free space?`}
             rootAttributes={{ 'data-key': `pending-disk:${disk.id}`, 'data-pending-disk': disk.id }}
             action={
-              // One action child, as the doctor requires (KUI-L203); the two choices sit in a wrapping Row
-              // like the feedback-session banner.
-              <Row wrap gap="xs">
+              // The action zone lays the two choices out itself (KF-8TF7Y8, HS2-W77711).
+              <>
                 <Button
                   type="button"
                   size="compact"
@@ -121,7 +120,7 @@ export function StatsThisMac({ state, liveCpu, diskMessage }: StatsThisMacProps)
                 >
                   Ignore
                 </Button>
-              </Row>
+              </>
             }
           />
         ))}

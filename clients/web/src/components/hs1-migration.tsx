@@ -162,14 +162,14 @@ export function Hs1CleanupBanner() {
       actionPlacement="below"
       icon={<LucideIcon icon={Trash2} name="trash-2" />}
       action={
-        <Row gap="xs">
+        <>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.attrs}>
             Dismiss
           </button>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
             Delete Old Files…
           </button>
-        </Row>
+        </>
       }
     />
   );
@@ -185,14 +185,14 @@ export function Hs1RegistrationRepairBanner() {
       actionPlacement="below"
       icon={<LucideIcon icon={Database} name="database" />}
       action={
-        <Row gap="xs">
+        <>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.attrs}>
             Dismiss
           </button>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
             Repair Old App Registration…
           </button>
-        </Row>
+        </>
       }
     />
   );
@@ -242,7 +242,7 @@ export function Hs1JobBanner({
           copyLayout="stacked"
           icon={<LucideIcon icon={ArchiveRestore} name="archive-restore" />}
           action={
-            <Row gap="xs">
+            <>
               <button
                 type="button"
                 {...PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.attrs}
@@ -260,7 +260,7 @@ export function Hs1JobBanner({
                   {job.kind === 'backup' ? 'Change backup…' : 'Connect backup…'}
                 </button>
               )}
-            </Row>
+            </>
           }
         />
         <List gap="xs" textInsets="rl">

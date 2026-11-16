@@ -1276,7 +1276,9 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
       // The banner itself keeps Kerf's inset StateBanner spacing like every application banner (HS2-YCB15Z).
     ).toEqual({ padding: '8px', gap: '8px', copyGap: '4px 8px', buttonPadding: ['11.2px', '11.2px'] });
   }
-  await expect(cleanup.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
+  // Both controls sit directly in Kerf's action zone, without a Row wrapper (HS2-W77711).
+  await expect(cleanup.locator('.kui-state-banner__action > button')).toHaveCount(2);
+  await expect(cleanup.locator('.kui-state-banner__action .kui-row')).toHaveCount(0);
   await page
     .getByRole('region', { name: 'Hs1MigrationBanner Examples' })
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-wide.png' });

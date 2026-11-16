@@ -110,6 +110,28 @@ describe('Kerf application UI profile', () => {
     expect(usages).toEqual([]);
   });
 
+  it('HS2-W77711 passes StateBanner action controls directly, never wrapped in a Row (KF-8TF7Y8)', () => {
+    const root = new URL('./', import.meta.url);
+    const files = (directory: URL): URL[] =>
+      readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+        return entry.isDirectory()
+          ? files(path)
+          : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
+            ? [path]
+            : [];
+      });
+    // The banner's action zone lays several controls out itself; a Row there duplicates that layout.
+    const wrapped = files(root)
+      .filter((file) => /<(?:StateBanner|ShellBanner)\b/.test(readFileSync(file, 'utf8')))
+      .flatMap((file) =>
+        [...readFileSync(file, 'utf8').matchAll(/\baction=\{\s*(?:\/\/[^\n]*\n\s*)*(?:[^<{}]*\?\s*\(\s*)?<Row\b/g)].map(
+          () => file.pathname.split('/src/')[1],
+        ),
+      );
+    expect(wrapped).toEqual([]);
+  });
+
   it('runs every static doctor stage while keeping browser execution opt-in', () => {
     const config = JSON.parse(
       readFileSync(new URL('../.kerf-ui-doctor.json', import.meta.url), 'utf8'),

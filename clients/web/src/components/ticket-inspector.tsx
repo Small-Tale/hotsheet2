@@ -419,7 +419,7 @@ export function ticketInspectorPanel({
             tone="warning"
             actionPlacement="below"
             action={
-              <Row wrap gap="xs">
+              <>
                 {feedbackDelivery.sessions.map((session) => (
                   <Button
                     type="button"
@@ -431,7 +431,7 @@ export function ticketInspectorPanel({
                     {`${session.tool} ${session.id.slice(-6)}`}
                   </Button>
                 ))}
-              </Row>
+              </>
             }
           />
         </div>

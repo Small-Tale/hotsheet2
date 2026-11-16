@@ -1,5 +1,4 @@
 import { Button } from '@kerfjs/ui/button';
-import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 
 import { advisoryRenewExpiry } from '../advisory-claim-resource';
@@ -87,7 +86,7 @@ export function AdvisoryClaimNotice({ status, loading, busy, error, worker, oper
         actionPlacement="below"
         action={
           !loading ? (
-            <Row wrap gap="xs">
+            <>
               {canClaim && (
                 <Button type="button" emphasis="secondary" action="advisory-claim">
                   Claim Advisory
@@ -106,7 +105,7 @@ export function AdvisoryClaimNotice({ status, loading, busy, error, worker, oper
               <Button type="button" emphasis="secondary" action="advisory-refresh" disabled={busy}>
                 Refresh
               </Button>
-            </Row>
+            </>
           ) : undefined
         }
       />
