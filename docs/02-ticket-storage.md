@@ -1264,6 +1264,19 @@ The rules that prevent and repair this:
   (content or deletion), and commits them on the branch with path-scoped
   `commit --only`. The rebase's own staged pick and conflicted files are discarded, as
   an abort should. A failed restore names the backup ref; nothing is pushed.
+- **Recover writes a recovery stranded (HS2-RDPT34).** If the process dies, or a restore
+  step fails, after the writes were set aside and before they were written back, they
+  exist only in their `-saved-writes` ref. Sync health checks every such ref in any state:
+  a saved path is stranded when its saved content (or deletion) is on neither `HEAD` nor
+  the working tree and no branch commit dated strictly after the backup (Git's one-second
+  resolution) touched it. A completed recovery or a later edit of the same ticket
+  therefore never reports. Stranded writes appear as `stranded_saved_writes`
+  (`{backup_ref, paths}`), a reason line, and a next action naming
+  `hotsheet-cli sync --restore-saved-writes <ref>`. That restore takes both sync locks,
+  refuses while a rebase or merge is unfinished, refuses rather than overwrite a
+  working-tree change at a stranded path, writes the stranded paths back, and commits
+  them with path-scoped `commit --only`. Running it again finds nothing and changes
+  nothing; it never pushes.
 - **Continue what needs no judgment.** A cycle that finds a `rebase-merge` replay with
   no unmerged path and no `stopped-sha` (the shape a rescheduled pick leaves) records
   `refs/hotsheet/sync-backup/<timestamp>` at `HEAD`, commits stray working-tree changes,

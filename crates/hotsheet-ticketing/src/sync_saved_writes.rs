@@ -261,3 +261,201 @@ fn remove(path: &Path) -> Result<(), StalledIntegrationError> {
         Err(source) => Err(error("set aside", source.to_string())),
     }
 }
+
+/// A saved-writes backup whose writes reached neither the branch nor the working tree
+/// (HS2-RDPT34): the recovery set them aside and then stopped (the process died, or the
+/// restore failed) before writing them back.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StrandedSavedWrites {
+    /// The `refs/hotsheet/sync-backup/<stamp>-saved-writes` ref holding them.
+    pub backup_ref: String,
+    /// The stranded paths, repository-relative.
+    pub paths: Vec<String>,
+}
+
+/// Every saved-writes backup with stranded paths. A saved path is stranded when its saved
+/// content (or absence) is on neither the branch's `HEAD` nor the working tree, and no
+/// branch commit made after the backup (in a later second, Git's commit-time resolution)
+/// touched it. A completed recovery puts the writes on the branch, and a later edit of the
+/// same ticket supersedes them, so neither is reported.
+/// Read-only: a few local `git` calls per saved-writes ref, none when there are none.
+#[must_use]
+pub fn stranded(store_path: &Path) -> Vec<StrandedSavedWrites> {
+    let Some(top) = git_stdout(store_path, &["rev-parse", "--show-toplevel"])
+        .map(|top| PathBuf::from(top.trim_end_matches(['\n', '\r'])))
+    else {
+        return Vec::new();
+    };
+    git_stdout(
+        &top,
+        &[
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/hotsheet/sync-backup/",
+        ],
+    )
+    .unwrap_or_default()
+    .lines()
+    .filter(|name| name.ends_with("-saved-writes"))
+    .filter_map(|backup_ref| {
+        let paths = stranded_paths(&top, backup_ref);
+        (!paths.is_empty()).then(|| StrandedSavedWrites {
+            backup_ref: backup_ref.to_string(),
+            paths,
+        })
+    })
+    .collect()
+}
+
+/// The object id `rev` names, or `None` when it names nothing (an absent path).
+fn object(top: &Path, rev: &str) -> Option<String> {
+    git_stdout(top, &["rev-parse", "--verify", "--quiet", rev])
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+}
+
+fn stranded_paths(top: &Path, backup_ref: &str) -> Vec<String> {
+    let split = |text: String| -> Vec<String> {
+        text.split('\0')
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect()
+    };
+    // The backup commit's parent is the HEAD the writes were saved on, so its diff names
+    // exactly the saved paths.
+    let saved = split(
+        git_stdout(
+            top,
+            &[
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                "-z",
+                &format!("{backup_ref}^"),
+                backup_ref,
+            ],
+        )
+        .unwrap_or_default(),
+    );
+    if saved.is_empty() {
+        return saved;
+    }
+    let Some(saved_at) = git_stdout(top, &["log", "-1", "--format=%ct", backup_ref])
+        .and_then(|time| time.trim().parse::<i64>().ok())
+    else {
+        return Vec::new();
+    };
+    // Walk every branch commit touching a saved path and keep those dated strictly later.
+    // No `--since`: Git stops walking at the first older commit, which a skewed or
+    // out-of-order commit date would turn into a missed later edit.
+    let mut args = vec![
+        "-c",
+        "core.quotePath=false",
+        "--literal-pathspecs",
+        "log",
+        "--format=%x01%ct",
+        "--name-only",
+        "HEAD",
+        "--",
+    ];
+    args.extend(saved.iter().map(String::as_str));
+    let mut touched: Vec<String> = Vec::new();
+    let mut later = false;
+    for line in git_stdout(top, &args).unwrap_or_default().lines() {
+        if let Some(time) = line.strip_prefix('\u{1}') {
+            // Strictly later: a commit in the backup's own second may predate it.
+            later = time.trim().parse::<i64>().is_ok_and(|time| time > saved_at);
+        } else if later && !line.is_empty() && !touched.iter().any(|path| path == line) {
+            touched.push(line.to_string());
+        }
+    }
+    saved
+        .into_iter()
+        .filter(|path| !touched.contains(path))
+        .filter(|path| {
+            let kept = object(top, &format!("{backup_ref}:{path}"));
+            kept != object(top, &format!("HEAD:{path}")) && kept != working_object(top, path)
+        })
+        .collect()
+}
+
+/// The object id the working-tree file at `path` would have, or `None` when it is absent.
+fn working_object(top: &Path, path: &str) -> Option<String> {
+    top.join(path)
+        .is_file()
+        .then(|| git_stdout(top, &["hash-object", "--", path]))
+        .flatten()
+        .map(|id| id.trim().to_string())
+}
+
+/// What [`restore_stranded`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RestoredSavedWrites {
+    /// Stranded paths written back.
+    pub restored: usize,
+    /// Whether they were committed on the branch.
+    pub committed: bool,
+}
+
+/// Write the stranded paths of `backup_ref` back and commit them on the branch. Paths the
+/// branch or the working tree already carry, or that a later commit touched, are left
+/// alone, so running it again changes nothing. The caller holds the sync locks and has
+/// checked that no rebase or merge is unfinished.
+pub(crate) fn restore_stranded(
+    store_path: &Path,
+    backup_ref: &str,
+) -> Result<RestoredSavedWrites, StalledIntegrationError> {
+    if !backup_ref.starts_with("refs/hotsheet/sync-backup/")
+        || !backup_ref.ends_with("-saved-writes")
+    {
+        return Err(error(
+            "restore saved writes",
+            format!("{backup_ref} is not a saved-writes backup"),
+        ));
+    }
+    let top = git_stdout(store_path, &["rev-parse", "--show-toplevel"])
+        .map(|top| PathBuf::from(top.trim_end_matches(['\n', '\r'])))
+        .ok_or_else(|| error("rev-parse", "the store has no Git working tree"))?;
+    let backup_commit = object(&top, &format!("{backup_ref}^{{commit}}")).ok_or_else(|| {
+        error(
+            "restore saved writes",
+            format!("{backup_ref} does not exist"),
+        )
+    })?;
+    let paths = stranded_paths(&top, backup_ref);
+    // Never overwrite a working-tree change (edit, new file, or deletion) the branch lacks.
+    let dirty: Vec<&str> = paths
+        .iter()
+        .filter(|path| working_object(&top, path) != object(&top, &format!("HEAD:{path}")))
+        .map(String::as_str)
+        .collect();
+    if !dirty.is_empty() {
+        return Err(error(
+            "restore saved writes",
+            format!(
+                "uncommitted changes to {} would be overwritten; commit or discard them first",
+                dirty.join(", ")
+            ),
+        ));
+    }
+    if paths.is_empty() {
+        return Ok(RestoredSavedWrites {
+            restored: 0,
+            committed: false,
+        });
+    }
+    let saved = SavedWrites {
+        top,
+        commit: backup_commit,
+        backup_ref: backup_ref.to_string(),
+        tracked: paths,
+        untracked: Vec::new(),
+    };
+    restore(&saved)?;
+    let committed = commit(&saved)?;
+    Ok(RestoredSavedWrites {
+        restored: saved.len(),
+        committed,
+    })
+}

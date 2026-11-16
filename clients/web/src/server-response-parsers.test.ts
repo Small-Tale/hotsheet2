@@ -673,6 +673,15 @@ describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, merge_driver: 'maybe' }))).toThrow();
   });
 
+  it('reads HS2-RDPT34 stranded saved writes and rejects a malformed entry', () => {
+    const stranded = [{ backup_ref: 'refs/hotsheet/sync-backup/1-saved-writes', paths: ['tickets/AB/one.md'] }];
+    const health = parseTicketStoreSyncReport(wire({ ...minimal, stranded_saved_writes: stranded })).stores[0]?.health;
+    expect(health.stranded_saved_writes).toEqual(stranded);
+    expect(() =>
+      parseTicketStoreSyncReport(wire({ ...minimal, stranded_saved_writes: [{ backup_ref: 'x', paths: 'a' }] })),
+    ).toThrow(ServerResponseShapeError);
+  });
+
   it('rejects an unknown state, a null skipped field, and a malformed oversized entry', () => {
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, state: 'broken' }))).toThrow(ServerResponseShapeError);
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, reason: null }))).toThrow(ServerResponseShapeError);

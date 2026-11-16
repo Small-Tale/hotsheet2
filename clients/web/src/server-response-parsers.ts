@@ -1165,6 +1165,9 @@ const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
     merge_driver: (field) => field === 'registered' || field === 'repaired' || field === 'missing',
     merge_driver_repaired_at: isString,
     ai_help: ticketStoreAiHelp.check,
+    stranded_saved_writes: listOf(
+      shape('stranded saved writes', { backup_ref: isString, paths: listOf(isString) }).check,
+    ),
   },
 );
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ). */

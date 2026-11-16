@@ -11182,6 +11182,140 @@ fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile()
     hs(&peer).args(["show", &during]).assert().success();
 }
 
+/// HS2-RDPT34 end to end with real CLI processes: a recovery that set a ticket write aside
+/// and died before writing it back leaves it only in its `-saved-writes` backup ref.
+/// `sync --status` names it and the restore command, `sync --restore-saved-writes` writes
+/// it back and commits it once, a second run changes nothing, and `sync` publishes it.
+#[test]
+fn hs2_rdpt34_restore_saved_writes_recovers_a_write_an_interrupted_recovery_stranded() {
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "--bare", "--quiet"]);
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(
+        a,
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    let slug = new_ticket(a, "saved during a stall");
+    hs(a).arg("sync").assert().success();
+    let file = git(
+        a,
+        &[
+            "grep",
+            "-l",
+            &format!("slug: {slug}"),
+            "HEAD",
+            "--",
+            "tickets",
+        ],
+    );
+    let file = file.trim_start_matches("HEAD:").to_string();
+
+    // The shape an interrupted recovery leaves: the saved write in a backup commit on the
+    // HEAD it was saved on, under a `-saved-writes` ref; the branch's version in the tree.
+    let original = std::fs::read_to_string(a.join(&file)).unwrap();
+    let saved = original.replace("saved during a stall", "retitled during the stall");
+    assert_ne!(saved, original);
+    std::fs::write(a.join(&file), &saved).unwrap();
+    git(a, &["add", "--", &file]);
+    let tree = git(a, &["write-tree"]);
+    let commit = git(
+        a,
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            "HEAD",
+            "-m",
+            "Hot Sheet: changes saved while a rebase or merge was unfinished",
+        ],
+    );
+    let backup_ref = "refs/hotsheet/sync-backup/1700000000000000000-saved-writes";
+    git(a, &["update-ref", backup_ref, &commit]);
+    git(a, &["reset", "--quiet", "--hard", "HEAD"]);
+    assert_eq!(std::fs::read_to_string(a.join(&file)).unwrap(), original);
+
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(
+        status["stranded_saved_writes"],
+        serde_json::json!([{ "backup_ref": backup_ref, "paths": [file] }])
+    );
+    assert!(
+        status["next_action"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("--restore-saved-writes {backup_ref}")),
+        "{status}"
+    );
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "1 change saved during an interrupted",
+        ));
+
+    let before = git(a, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--restore-saved-writes", backup_ref])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Restored 1 change saved under"));
+    assert_eq!(git(a, &["rev-parse", "HEAD^"]), before);
+    hs(a)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled during the stall"));
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert!(status.get("stranded_saved_writes").is_none(), "{status}");
+
+    // Idempotent, and the conflicting flags are refused.
+    let after = git(a, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--restore-saved-writes", backup_ref])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing to restore"));
+    assert_eq!(git(a, &["rev-parse", "HEAD"]), after);
+    hs(a)
+        .args(["sync", "--status", "--restore-saved-writes", backup_ref])
+        .assert()
+        .failure();
+    hs(a).arg("sync").assert().success();
+    assert_eq!(git(a, &["rev-parse", "@{u}"]), after);
+}
+
 /// HS2-JGH11Q end to end with real CLI processes: a person pauses a rebase in the store;
 /// ticket edits made meanwhile are saved but not committed onto the detached `HEAD`, the
 /// status says so, `sync --abort-stalled-rebase` keeps and commits them on the branch,

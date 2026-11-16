@@ -685,6 +685,16 @@ enum Cmd {
         /// check by itself before every pass.
         #[arg(long, conflicts_with_all = ["status", "abort_stalled_rebase", "adopt"])]
         recover_stale_locks: bool,
+        /// Write back and commit the changes an interrupted `--abort-stalled-rebase` saved
+        /// under REF (`refs/hotsheet/sync-backup/<stamp>-saved-writes`) but never restored
+        /// (HS2-RDPT34). `--status` names the ref. Only stranded paths are written; running it
+        /// again changes nothing. Never pushes.
+        #[arg(
+            long,
+            value_name = "REF",
+            conflicts_with_all = ["status", "abort_stalled_rebase", "adopt", "recover_stale_locks"]
+        )]
+        restore_saved_writes: Option<String>,
         /// Internal (HS2-SPVT6W): run the repair session a headless `sync` started for
         /// STALL in this process and record how it ended. Started by `sync` itself.
         #[arg(
@@ -692,7 +702,13 @@ enum Cmd {
             value_name = "STALL",
             hide = true,
             requires_all = ["repair_prompt", "repair_project"],
-            conflicts_with_all = ["status", "abort_stalled_rebase", "adopt", "recover_stale_locks"]
+            conflicts_with_all = [
+                "status",
+                "abort_stalled_rebase",
+                "adopt",
+                "recover_stale_locks",
+                "restore_saved_writes"
+            ]
         )]
         run_repair: Option<String>,
         /// With `--run-repair`: the repair prompt.

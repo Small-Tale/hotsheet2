@@ -670,6 +670,28 @@ pub fn abort_stalled_integration(
     })
 }
 
+/// Write back and commit the stranded writes of one saved-writes backup (HS2-RDPT34): a
+/// recovery that set them aside and then stopped before restoring them left them only in
+/// that ref. Idempotent: paths the branch or working tree already carry, or that a later
+/// commit touched, are left alone. Refuses while a rebase or merge is unfinished, since
+/// the commit would land on it. Never pushes.
+pub fn restore_saved_writes(
+    store_path: &Path,
+    backup_ref: &str,
+) -> Result<crate::sync_saved_writes::RestoredSavedWrites, StalledIntegrationError> {
+    let _history = lock_history_sync(store_path)?;
+    let _git = lock_git_transaction(store_path)?;
+    if integration_in_progress(store_path).is_some() {
+        return Err(StalledIntegrationError::Git {
+            step: "restore saved writes",
+            detail: "a rebase or merge is unfinished in the store; finish it or run \
+                     `hotsheet-cli sync --abort-stalled-rebase` first"
+                .to_string(),
+        });
+    }
+    crate::sync_saved_writes::restore_stranded(store_path, backup_ref)
+}
+
 /// Record `refs/hotsheet/sync-backup/<timestamp>` at the current `HEAD`, so no commit is
 /// unreachable after a recovery step. Returns `(HEAD, ref name)`.
 pub(crate) fn record_backup_ref(
