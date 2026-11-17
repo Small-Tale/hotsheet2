@@ -431,6 +431,37 @@ reported readiness. The measurements and the trace are in
   another checkout is asked for, and a second thread that waits through the same
   `KeptWaiter` at the same moment uses a waiter of its own. Windows has no
   directory identity to compare, so nothing is kept there.
+- **Never waiting on the platform (HS2-F6F42W).** On a loaded Mac the file-event
+  service delivered events in 3 to 14 ms but took up to 7 s to start a stream, 4
+  to 19 s to restart one (adding or moving a path) and up to 46 s to stop one; the
+  `notify` 8 backend's stop also calls `FSEventsPurgeEventsForDeviceUpToEventId`, a
+  device-wide call that serializes every stop on the machine. So the waits and
+  followers start through `hotsheet_jobs::watch::BackgroundWatcher`, which starts,
+  changes and stops the stream on its own thread and returns at once. It reports
+  `WatchStatus::Live` once a start or change has taken effect, and the owner reads
+  again then, because the stream did not report what changed before. A refused
+  start or change is retried with a bounded backoff (100 ms doubling to 5 s),
+  reporting `WatchStatus::Refused` at each attempt so the owner keeps reading;
+  nothing gives up silently. Until the stream is live, `BackgroundWatcher::recheck`
+  asks the owner to read again every second (local files only), as `ChangeWaiter`'s
+  safety re-check does, since no event reports a change meanwhile. Every owner reads once before the stream exists:
+  - `ChangeWaiter::starting` (HS2-WD475E) and `ChangeWaiter::watching`, which
+    still returns only once the stream is live or refused once, share it; going
+    live ends the next wait, and dropping a waiter never waits for the stop;
+  - `coordination wait` and the worker view watch read at once and treat going
+    live (or a refusal) as a rescan event (`watch::rescan_event`);
+  - the Codex rollout follower moves its subscription without waiting, and a
+    dropped follower releases its callback at once;
+  - the Claude transcript follower (HS2-PTK0CK) keeps its single recursive macOS
+    stream and leaves retries to the shared watcher;
+  - the orchestration-settings watcher queues new directories on the shared
+    watcher, which replaced its own restart thread;
+  - a target-store watch records every ticket file modified since it was asked
+    for once its stream is live.
+    The server's repository watcher already starts on a thread of its own behind its
+    Git-status bridge and keeps that design. Avoiding the device-wide purge on stop
+    would mean patching or forking `notify`, which was not done; the measurements
+    and the options are recorded on HS2-F6F42W.
 - **Not covered.** The server's ticket watcher and the Claude and Codex usage
   followers still call the library per path (HS2-654VBY). The workspace
   carries two versions of the library until it can move as one (HS2-7JKZET).

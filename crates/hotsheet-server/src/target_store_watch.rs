@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
+use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, EventKind, RecursiveMode, WatchStatus};
 use hotsheet_model::Ulid;
 use tokio::sync::broadcast;
 
@@ -37,7 +37,7 @@ pub(crate) struct UnhostedStore {
 }
 
 struct Watch {
-    _watcher: PathWatcher,
+    _watcher: BackgroundWatcher,
     asked: Instant,
 }
 
@@ -48,9 +48,10 @@ pub(crate) struct TargetStoreWatches {
 }
 
 impl TargetStoreWatches {
-    /// Keep a watch on each of `stores` (and only while feeds keep asking): a store first
-    /// named here is watched before this returns, so a change after the caller's cursor
-    /// is recorded. Watches unasked for [`IDLE`] are dropped.
+    /// Keep a watch on each of `stores` (and only while feeds keep asking). HS2-F6F42W: a
+    /// store first named here is watched from a background thread; every ticket written
+    /// since this call is recorded once the stream is live, so a change after the caller's
+    /// cursor is never lost. Watches unasked for [`IDLE`] are dropped.
     pub(crate) fn follow(
         &self,
         stores: Vec<UnhostedStore>,
@@ -102,11 +103,17 @@ impl TargetStoreWatches {
 }
 
 /// Start the watch on `store`'s tickets directory, recording each changed ticket file.
+///
+/// HS2-F6F42W: the shared background watcher starts the stream on its own thread, so the
+/// feed request that asked for it never waits on the platform (seconds on a loaded Mac),
+/// and dropping an idle watch never waits for its stream to stop. A ticket written before
+/// the stream was live is not reported by it, so going live (and each refused start while
+/// it is retried) records every ticket file modified since the watch was asked for.
 fn watch_tickets(
     store: &UnhostedStore,
     event_log: &Arc<Mutex<EventLog>>,
     events: &broadcast::Sender<ChangeEvent>,
-) -> Option<PathWatcher> {
+) -> Option<BackgroundWatcher> {
     // A store without a tickets directory has nothing to follow yet.
     let tickets = std::fs::canonicalize(store.root.join("tickets")).ok()?;
     let (log, sender, connection) = (
@@ -114,12 +121,8 @@ fn watch_tickets(
         events.clone(),
         store.connection_id.clone(),
     );
-    let handler = move |delivery: Delivery| {
-        let Ok(event) = delivery else { return };
-        if matches!(event.kind, EventKind::Access(_)) {
-            return;
-        }
-        for id in changed_tickets(event.paths) {
+    let emit = Arc::new(move |ids: Vec<String>| {
+        for id in ids {
             emit_change(
                 &log,
                 &sender,
@@ -137,10 +140,56 @@ fn watch_tickets(
                 },
             );
         }
+    });
+    let on_event = emit.clone();
+    let handler = move |delivery: Delivery| {
+        let Ok(event) = delivery else { return };
+        if matches!(event.kind, EventKind::Access(_)) {
+            return;
+        }
+        on_event(changed_tickets(event.paths));
     };
-    PathWatcher::start(&[(&tickets, RecursiveMode::Recursive)], handler)
-        .inspect_err(|error| tracing::warn!(%error, "watching an unhosted target store failed"))
-        .ok()
+    let asked = std::time::SystemTime::now();
+    let walked = tickets.clone();
+    let status = move |_: WatchStatus| emit(changed_tickets(modified_since(&walked, asked)));
+    Some(BackgroundWatcher::start(
+        &[(&tickets, RecursiveMode::Recursive)],
+        handler,
+        status,
+    ))
+}
+
+/// The ticket files under `tickets` (its shard directories included) modified at or after
+/// `since`, give or take the file system's timestamp granularity.
+fn modified_since(tickets: &Path, since: std::time::SystemTime) -> Vec<PathBuf> {
+    let floor = since
+        .checked_sub(std::time::Duration::from_secs(2))
+        .unwrap_or(since);
+    let recent = |path: &Path| {
+        std::fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .is_ok_and(|modified| modified >= floor)
+    };
+    let mut found = Vec::new();
+    let Ok(entries) = std::fs::read_dir(tickets) else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Ok(inner) = std::fs::read_dir(&path) {
+                found.extend(
+                    inner
+                        .flatten()
+                        .map(|entry| entry.path())
+                        .filter(|path| path.is_file() && recent(path)),
+                );
+            }
+        } else if recent(&path) {
+            found.push(path);
+        }
+    }
+    found
 }
 
 /// The ticket ids (file-name ULIDs) a set of event paths touches. A directory path stands

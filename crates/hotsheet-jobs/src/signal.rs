@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use crate::error::JobError;
 use crate::store::JobStore;
-use crate::watch::{Event, EventKind, PathWatcher, RecursiveMode};
+use crate::watch::{BackgroundWatcher, Event, EventKind, RecursiveMode, WatchStatus};
 
 /// A missed file event must not strand a waiter, so every wait re-checks at least this
 /// often. The re-check is a local file read, never a network request.
@@ -22,13 +22,20 @@ struct Changed {
     woke: Condvar,
 }
 
+impl Changed {
+    fn wake(&self) {
+        *self.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
+        self.woke.notify_all();
+    }
+}
+
 /// Wakes when anything under its directories changes.
 pub struct ChangeWaiter {
     changed: Arc<Changed>,
-    // Dropping the watcher stops the events, so it lives as long as the waiter. Empty
-    // while a background start ([`ChangeWaiter::starting`]) is still under way, or when
-    // the platform watcher could not start; waits then end at the safety re-check.
-    watcher: Arc<Mutex<Option<PathWatcher>>>,
+    // Dropping the watcher stops the events, so it lives as long as the waiter. HS2-F6F42W:
+    // it is the shared [`BackgroundWatcher`], so its stream starts, is retried after a
+    // refusal, and stops on its own thread; until it runs, waits end at the safety re-check.
+    watcher: BackgroundWatcher,
 }
 
 impl std::fmt::Debug for ChangeWaiter {
@@ -47,57 +54,59 @@ impl ChangeWaiter {
     /// HS2-ECWG50: one waiter over several directories, for a waiter whose wake can
     /// come from more than one journal. A change in any of them ends the wait. All of
     /// them are registered before the platform watcher starts once (HS2-N1QDZW).
+    ///
+    /// Returns once the platform watcher is live, or has been refused once (it is then
+    /// retried in the background, and waits end at the safety re-check meanwhile), so a
+    /// change made after this returns is reported. A caller that reads after each wait
+    /// need not wait for the start at all: see [`ChangeWaiter::starting`].
     pub fn watching(dirs: &[&Path]) -> io::Result<Self> {
+        let (first, reported) = std::sync::mpsc::channel();
+        let waiter = Self::with_first_status(dirs, Some(first))?;
+        let _ = reported.recv();
+        Ok(waiter)
+    }
+
+    /// HS2-WD475E: [`ChangeWaiter::watching`] that returns at once. On a loaded machine a
+    /// start took one to five seconds, and longer while many started together; a reader
+    /// that waited for it first noticed nothing, not even a change its own re-check would
+    /// find. Until the watcher runs, and while the platform refuses it, every wait still
+    /// ends at the safety re-check, so a caller that reads again after each wait finds a
+    /// change made meanwhile within that interval. HS2-F6F42W: going live ends the next
+    /// wait too, so the caller reads once more as soon as events can be trusted, and
+    /// dropping the waiter never waits for its stream to stop.
+    pub fn starting(dirs: &[&Path]) -> io::Result<Self> {
+        Self::with_first_status(dirs, None)
+    }
+
+    fn with_first_status(
+        dirs: &[&Path],
+        first: Option<std::sync::mpsc::Sender<()>>,
+    ) -> io::Result<Self> {
         for dir in dirs {
             fs::create_dir_all(dir)?;
         }
         let changed = Arc::new(Changed::default());
-        let signal = Arc::clone(&changed);
+        let (signal, status) = (Arc::clone(&changed), Arc::clone(&changed));
         let paths: Vec<(&Path, RecursiveMode)> = dirs
             .iter()
             .map(|dir| (*dir, RecursiveMode::Recursive))
             .collect();
-        let watcher = start_watcher(&paths, signal);
-        Ok(Self {
-            changed,
-            watcher: Arc::new(Mutex::new(watcher)),
-        })
-    }
-
-    /// HS2-WD475E: [`ChangeWaiter::watching`] that returns at once and starts the
-    /// platform watcher on a background thread. On a loaded machine a start took one to
-    /// five seconds, and longer while many started together; a reader that waited for
-    /// it first noticed nothing, not even a change its own re-check would find. Until
-    /// the watcher runs, and if it never starts, every wait still ends at the safety
-    /// re-check, so a caller that reads again after each wait finds a change made
-    /// meanwhile within that interval. Dropping the waiter before the start finishes
-    /// drops the watcher as soon as it has started.
-    pub fn starting(dirs: &[&Path]) -> io::Result<Self> {
-        for dir in dirs {
-            fs::create_dir_all(dir)?;
-        }
-        let changed = Arc::new(Changed::default());
-        let slot: Arc<Mutex<Option<PathWatcher>>> = Arc::new(Mutex::new(None));
-        let (signal, weak) = (Arc::clone(&changed), Arc::downgrade(&slot));
-        let owned: Vec<PathBuf> = dirs.iter().map(|dir| dir.to_path_buf()).collect();
-        let spawned = std::thread::Builder::new()
-            .name("hotsheet-change-waiter-start".into())
-            .spawn(move || {
-                let paths: Vec<(&Path, RecursiveMode)> = owned
-                    .iter()
-                    .map(|dir| (dir.as_path(), RecursiveMode::Recursive))
-                    .collect();
-                let started = start_watcher(&paths, signal);
-                if let Some(slot) = weak.upgrade() {
-                    *slot.lock().unwrap_or_else(PoisonError::into_inner) = started;
+        let mut first = first;
+        let watcher = BackgroundWatcher::start(
+            &paths,
+            move |event| {
+                if event.is_ok_and(|event| is_change(&event)) {
+                    signal.wake();
                 }
-            });
-        // Without a thread the waiter still waits, re-checking as an unwatched one does.
-        let _ = spawned;
-        Ok(Self {
-            changed,
-            watcher: slot,
-        })
+            },
+            move |_: WatchStatus| {
+                status.wake();
+                if let Some(first) = first.take() {
+                    let _ = first.send(());
+                }
+            },
+        );
+        Ok(Self { changed, watcher })
     }
 
     /// Block until something changed or `timeout` passed, whichever is first, and never
@@ -121,24 +130,13 @@ impl ChangeWaiter {
     /// How many times the platform watcher was started for this waiter; zero when it
     /// could not start at all, or a background start has not finished yet.
     pub fn platform_starts(&self) -> usize {
-        self.watcher
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .as_ref()
-            .map_or(0, PathWatcher::starts)
+        self.watcher.starts()
     }
-}
 
-/// The platform watcher over `paths`, raising `signal` on each change; `None` when it
-/// could not start.
-fn start_watcher(paths: &[(&Path, RecursiveMode)], signal: Arc<Changed>) -> Option<PathWatcher> {
-    PathWatcher::start(paths, move |event| {
-        if event.is_ok_and(|event| is_change(&event)) {
-            *signal.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
-            signal.woke.notify_all();
-        }
-    })
-    .ok()
+    /// HS2-F6F42W: whether the platform watcher is live yet.
+    pub fn is_live(&self) -> bool {
+        self.watcher.is_live()
+    }
 }
 
 /// A content change, as opposed to a file merely being opened or closed. Lock files are
@@ -288,7 +286,7 @@ mod tests {
     fn unwatched() -> ChangeWaiter {
         ChangeWaiter {
             changed: Arc::new(Changed::default()),
-            watcher: Arc::new(Mutex::new(None)),
+            watcher: BackgroundWatcher::start(&[], |_| {}, |_| {}),
         }
     }
 

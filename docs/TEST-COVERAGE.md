@@ -18,6 +18,17 @@ and worker view suites cover the migrated callers through the built CLI. Only
 macOS was measured; see
 [file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md).
 
+HS2-F6F42W: `hotsheet-jobs/src/watch.rs # hs2_f6f42w_*` covers the shared
+`BackgroundWatcher`: a start the platform holds up holds up neither its owner nor
+its drop, a refused start reported and retried with a backoff that never
+shortens until it goes live and reports events, and a path added to a live
+watcher going live in the background with both paths reporting. `tests/waiter.rs`
+waits for liveness explicitly and pins that the orchestration-settings watcher
+starts through the shared watcher. The callers (coordination wait, worker view,
+Codex rollout and Claude transcript followers, the orchestration-settings and
+target-store watches) keep their own suites, proved under load for the named
+flakes (`hs2_76vmyg`, `hs2_anqxq4`, `hs2_cyhawb`, `hs2_jw6n67`).
+
 HS2-3R9V0R: `hotsheet-jobs/src/github.rs` unit tests cover the gate decision for
 every run status and conclusion, covering by a newer run, runs from before the
 commit, a diverged branch, a spent lookup budget, the re-watch floor and a

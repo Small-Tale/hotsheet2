@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use hotsheet_jobs::watch::{Delivery, PathWatcher, RecursiveMode};
+use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, RecursiveMode, rescan_event};
 use hotsheet_model::StartedPhase;
 use hotsheet_ticketing::TicketRef;
 use serde::{Deserialize, Serialize};
@@ -495,8 +495,11 @@ impl Coordinator {
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
         // Every path is registered before the platform watcher starts once
-        // (HS2-N1QDZW).
-        let mut watcher = PathWatcher::start(
+        // (HS2-N1QDZW). HS2-F6F42W: it starts on its own thread, so the first read below
+        // happens at once; going live, or a refused start while it is retried, is a
+        // rescan that reads again.
+        let status = sender.clone();
+        let watcher = BackgroundWatcher::start(
             &[
                 (self.directory.as_path(), RecursiveMode::NonRecursive),
                 (self.source.as_path(), RecursiveMode::Recursive),
@@ -510,7 +513,10 @@ impl Coordinator {
             move |event: Delivery| {
                 let _ = sender.send(event);
             },
-        )?;
+            move |_| {
+                let _ = status.send(Ok(rescan_event()));
+            },
+        );
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let mut snapshot = self.snapshot(now)?;
         if WorkerView::worker_state_cursor(&snapshot) != after || max_wait.is_zero() {
@@ -548,6 +554,10 @@ impl Coordinator {
             } else {
                 wait
             };
+            // HS2-F6F42W: until the stream is live nothing reports a change, so read again
+            // at the re-check interval (local files only).
+            let pending = watcher.recheck().filter(|pending| *pending < slice);
+            let slice = pending.unwrap_or(slice);
             let relevant = match receiver.recv_timeout(slice) {
                 Ok(Ok(event)) => {
                     let tickets = self.source.join("tickets");
@@ -565,6 +575,7 @@ impl Coordinator {
                                 || path.starts_with(&tickets)
                         })
                 }
+                Err(mpsc::RecvTimeoutError::Timeout) if pending.is_some() => true,
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     let expired = slice == wait;
                     if !expired {
@@ -579,7 +590,7 @@ impl Coordinator {
             };
             if relevant {
                 if !settings_directory_watched && settings_directory.is_dir() {
-                    watcher.add(&settings_directory, RecursiveMode::NonRecursive)?;
+                    watcher.add(&settings_directory, RecursiveMode::NonRecursive);
                     settings_directory_watched = true;
                 }
                 observe(WatchStep::Rescanned);

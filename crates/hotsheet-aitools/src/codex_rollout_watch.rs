@@ -414,7 +414,7 @@ pub fn watch_rollout(
     live_after: OffsetDateTime,
     mut on_signals: impl FnMut(Vec<RolloutSignal>) + Send + 'static,
 ) -> io::Result<RolloutWatch> {
-    use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
+    use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, EventKind, RecursiveMode};
     if !codex_home.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -430,6 +430,13 @@ pub fn watch_rollout(
         }
     };
     let mut handler = Some(handler);
+    // HS2-F6F42W: the stream going live (or a refused start, while it is retried) is a read
+    // of its own, since changes made before it were not reported.
+    let status_wake = wake.clone();
+    let status = move |_| {
+        let _ = status_wake.send(Wake::Changed);
+    };
+    let mut status = Some(status);
     // FSEvents reports resolved paths (`/private/var/...`); a symlinked home would otherwise
     // have its notifications filtered out as foreign.
     let home = std::fs::canonicalize(codex_home)?;
@@ -442,7 +449,10 @@ pub fn watch_rollout(
     // subscription and the first read is still delivered. HS2-654VBY: the watcher starts
     // with its first target, and moving to the next one is one change (one event-stream
     // restart on macOS) rather than an unwatch and a watch.
-    let mut subscribe = move |watcher: &mut Option<PathWatcher>, current: &mut Option<Target>| {
+    // HS2-F6F42W: starting and moving the stream happen on the shared watcher's own thread,
+    // so neither waits here (a restart took up to 19 s on a loaded Mac).
+    let mut subscribe = move |watcher: &mut Option<BackgroundWatcher>,
+                              current: &mut Option<Target>| {
         let (next, path, mode) =
             match hotsheet_ticketing::metrics::codex_work::find_rollout(&home, &session)? {
                 Some(path) => (
@@ -456,23 +466,19 @@ pub fn watch_rollout(
                 None => (Target::Home, home.clone(), RecursiveMode::NonRecursive),
             };
         if current.as_ref() != Some(&next) {
-            match (watcher.as_mut(), handler.take()) {
-                (Some(watcher), _) => {
+            match (watcher.as_mut(), handler.take(), status.take()) {
+                (Some(watcher), _, _) => {
                     let previous = current.as_ref().map(|previous| match previous {
                         Target::Home => home.as_path(),
                         Target::Sessions => sessions.as_path(),
                         Target::Rollout(path) => path.as_path(),
                     });
-                    watcher
-                        .change(previous.as_slice(), &[(&path, mode)])
-                        .map_err(io::Error::other)?;
+                    watcher.change(previous.as_slice(), &[(&path, mode)]);
                 }
-                (None, Some(handler)) => {
-                    *watcher = Some(
-                        PathWatcher::start(&[(&path, mode)], handler).map_err(io::Error::other)?,
-                    );
+                (None, Some(handler), Some(status)) => {
+                    *watcher = Some(BackgroundWatcher::start(&[(&path, mode)], handler, status));
                 }
-                (None, None) => return Err(io::Error::other("watcher could not start")),
+                _ => return Err(io::Error::other("watcher could not start")),
             }
             *current = Some(next);
             return io::Result::Ok(true);
@@ -488,7 +494,7 @@ pub fn watch_rollout(
     // Starting a native stream (FSEventStreamStart) can take seconds under load, so even the
     // first subscription happens on the watcher's own thread, off the hook's request path.
     std::thread::spawn(move || {
-        let mut watcher: Option<PathWatcher> = None;
+        let mut watcher: Option<BackgroundWatcher> = None;
         let mut current = None;
         let mut settle_at: Option<Instant> = None;
         #[cfg(target_os = "macos")]
@@ -537,6 +543,12 @@ pub fn watch_rollout(
                     Ok(_) => {}
                     Err(_) => return,
                 }
+            }
+            // HS2-F6F42W: until the stream is live nothing reports a change, so read again at
+            // the re-check interval (local files only).
+            if let Some(pending) = watcher.as_ref().and_then(BackgroundWatcher::recheck) {
+                let due = Instant::now() + pending;
+                settle_at = Some(settle_at.map_or(due, |at| at.min(due)));
             }
             let next = match settle_at {
                 Some(deadline) => {

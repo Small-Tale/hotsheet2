@@ -15,7 +15,7 @@
 //! a loaded machine). The re-check reads local files only and never makes a request.
 use crate::AppState;
 use hotsheet_cli::orchestration::OrchestrationRuntime;
-use hotsheet_jobs::watch::{Delivery, PathWatcher, RecursiveMode};
+use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, RecursiveMode, rescan_event};
 use hotsheet_sync::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -102,9 +102,12 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
         forget(&key);
         return;
     };
-    // The watch is in place before the reader gets its answer, and the settings are
-    // read after it, so no change between the two is missed.
+    // HS2-F6F42W: the shared background watcher starts the stream on its own thread, so
+    // the reader's answer never waits for it. The settings are read now, compared at each
+    // safety re-check, and compared again when the stream goes live (or while a refused
+    // start is retried), so no change between the two is missed.
     let (tx, rx) = std::sync::mpsc::channel();
+    let status = tx.clone();
     // HS2-654VBY: every directory is registered before the watcher starts once.
     let mut watched = Vec::new();
     let initial = targets(&paths, &watched);
@@ -112,12 +115,15 @@ pub(super) fn ensure_settings_watcher(state: &AppState, owner: &str) {
         .iter()
         .map(|target| (target.as_path(), RecursiveMode::NonRecursive))
         .collect();
-    let Ok(watcher) = PathWatcher::start(&initial, move |event| {
-        let _ = tx.send(event);
-    }) else {
-        forget(&key);
-        return;
-    };
+    let watcher = BackgroundWatcher::start(
+        &initial,
+        move |event| {
+            let _ = tx.send(event);
+        },
+        move |_| {
+            let _ = status.send(Ok(rescan_event()));
+        },
+    );
     watched.extend(initial.iter().map(|(target, _)| target.to_path_buf()));
     note_seen(state, &runtime, owner);
     let (state, owner) = (state.clone(), owner.to_owned());
@@ -252,7 +258,7 @@ fn targets(paths: &[PathBuf], watched: &[PathBuf]) -> Vec<PathBuf> {
 /// Watch the directories that appeared since the last look, in one change. A directory
 /// already watched is not registered again: on macOS each registration restarted the
 /// event stream (HS2-654VBY).
-fn add_watches(watcher: &mut PathWatcher, watched: &mut Vec<PathBuf>, paths: &[PathBuf]) {
+fn add_watches(watcher: &BackgroundWatcher, watched: &mut Vec<PathBuf>, paths: &[PathBuf]) {
     let added = targets(paths, watched);
     if added.is_empty() {
         return;
@@ -261,9 +267,10 @@ fn add_watches(watcher: &mut PathWatcher, watched: &mut Vec<PathBuf>, paths: &[P
         .iter()
         .map(|target| (target.as_path(), RecursiveMode::NonRecursive))
         .collect();
-    if watcher.change(&[], &pairs).is_ok() {
-        watched.extend(added);
-    }
+    // HS2-F6F42W: queued; the restart (and a retry, if refused) happens on the watcher's
+    // own thread, and going live wakes the follower to compare again.
+    watcher.change(&[], &pairs);
+    watched.extend(added);
 }
 
 /// Announce each change of the owner's settings fingerprint the watched files show.
@@ -273,18 +280,9 @@ fn follow(
     owner: &str,
     key: &str,
     paths: &[PathBuf],
-    watching: (PathWatcher, Vec<PathBuf>),
+    (watcher, mut watched): (BackgroundWatcher, Vec<PathBuf>),
     rx: &std::sync::mpsc::Receiver<Delivery>,
 ) {
-    let (rescan, asks) = std::sync::mpsc::channel();
-    let owned = paths.to_vec();
-    if std::thread::Builder::new()
-        .name(format!("hotsheet-orchestration-settings-watch-{owner}"))
-        .spawn(move || keep_watching(watching, owned, asks))
-        .is_err()
-    {
-        return;
-    }
     while !state.is_stopping() {
         let evented = match rx.recv_timeout(SAFETY_RECHECK) {
             Ok(_) => true,
@@ -308,28 +306,14 @@ fn follow(
         // stream, which took up to twenty seconds on a loaded machine; done here, it held
         // back the announcement of the change that created `.hotsheet2` and of every
         // change made while it restarted. Those are found at the next safety re-check.
+        // HS2-F6F42W: the shared background watcher owns that thread.
         let since = begun(key);
         if let Ok(fingerprint) = runtime.orchestration_fingerprint(owner)
             && record_unless_changing(key, since, fingerprint)
         {
             super::orchestration::note_orchestration_change(state, owner);
         }
-        let _ = rescan.send(());
-    }
-}
-
-/// HS2-WD475E: keep the platform watcher on a thread of its own that adds each
-/// directory that appeared when asked, so a slow event-stream restart never holds back
-/// the follower's comparisons. It ends, dropping the watcher, when the follower ends.
-fn keep_watching(
-    (mut watcher, mut watched): (PathWatcher, Vec<PathBuf>),
-    paths: Vec<PathBuf>,
-    asks: std::sync::mpsc::Receiver<()>,
-) {
-    while asks.recv().is_ok() {
-        // Several asks while a restart ran are one look.
-        while asks.try_recv().is_ok() {}
-        add_watches(&mut watcher, &mut watched, &paths);
+        add_watches(&watcher, &mut watched, paths);
     }
 }
 

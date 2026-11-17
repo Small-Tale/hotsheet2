@@ -84,6 +84,256 @@ impl PathWatcher {
     }
 }
 
+/// HS2-F6F42W: an event that tells a consumer to read again because some changes may not
+/// have been reported, as a platform's own rescan notice does. [`BackgroundWatcher`] sends
+/// one when its stream goes live and while the platform refuses to start one.
+pub fn rescan_event() -> Event {
+    Event::new(EventKind::Any).set_flag(backend::event::Flag::Rescan)
+}
+
+/// The first wait before a refused stream start is tried again (HS2-F6F42W).
+pub const START_RETRY_FIRST: std::time::Duration = std::time::Duration::from_millis(100);
+/// The longest wait between attempts while the platform refuses to start a stream.
+pub const START_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How often an owner reads on its own while its stream is not live yet (HS2-F6F42W).
+pub const PENDING_RECHECK: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// What a [`BackgroundWatcher`] reports to its owner, besides the events themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchStatus {
+    /// The stream is live over every path asked for so far. Changes made before this were
+    /// not reported: read once now.
+    Live,
+    /// The platform refused to start (or extend) the stream; it is tried again after a
+    /// bounded backoff. Read now, since no event will say when something changed.
+    Refused,
+}
+
+enum Command {
+    Change {
+        removed: Vec<std::path::PathBuf>,
+        added: Vec<(std::path::PathBuf, RecursiveMode)>,
+    },
+}
+
+/// HS2-F6F42W: a [`PathWatcher`] whose owner never waits on the platform. On a loaded Mac
+/// the file-event service delivered events within milliseconds but took up to 7 s to start
+/// a stream, up to 19 s to restart one (adding or moving a path restarts it) and up to 46 s
+/// to stop one. Here the stream is started, changed and stopped on its own thread, so:
+/// - [`BackgroundWatcher::start`], [`BackgroundWatcher::add`], [`BackgroundWatcher::change`]
+///   and dropping the watcher return at once; the owner reads what is already there itself;
+/// - once a start or change has taken effect, `status` reports [`WatchStatus::Live`], and
+///   the owner reads again to cover the changes the stream could not report yet;
+/// - a refused start or change is retried with a bounded backoff ([`START_RETRY_FIRST`]
+///   doubling to [`START_RETRY_MAX`]), reporting [`WatchStatus::Refused`] at each attempt,
+///   until the watcher is dropped. Nothing gives up silently.
+pub struct BackgroundWatcher {
+    commands: Option<std::sync::mpsc::Sender<Command>>,
+    starts: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    live: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl std::fmt::Debug for BackgroundWatcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackgroundWatcher")
+            .field("starts", &self.starts())
+            .field("live", &self.is_live())
+            .finish_non_exhaustive()
+    }
+}
+
+/// How a background watcher starts its stream: the platform, or a test's stand-in.
+pub type StartStream = Box<
+    dyn FnMut(
+            &[(&Path, RecursiveMode)],
+            Box<dyn FnMut(Delivery) + Send>,
+        ) -> Result<PathWatcher, Error>
+        + Send,
+>;
+
+impl BackgroundWatcher {
+    /// Watch `paths` from a background thread, delivering their events to `handler` and
+    /// the stream's state to `status`. Returns at once.
+    pub fn start<F, S>(paths: &[(&Path, RecursiveMode)], handler: F, status: S) -> Self
+    where
+        F: FnMut(Delivery) + Send + 'static,
+        S: FnMut(WatchStatus) + Send + 'static,
+    {
+        Self::start_with(paths, handler, status, Box::new(PathWatcher::start))
+    }
+
+    /// [`BackgroundWatcher::start`] with the stream started by `start_stream`.
+    pub fn start_with<F, S>(
+        paths: &[(&Path, RecursiveMode)],
+        handler: F,
+        mut status: S,
+        mut start_stream: StartStream,
+    ) -> Self
+    where
+        F: FnMut(Delivery) + Send + 'static,
+        S: FnMut(WatchStatus) + Send + 'static,
+    {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::mpsc::RecvTimeoutError;
+        use std::sync::{Arc, Mutex, PoisonError};
+        let mut wanted: Vec<(std::path::PathBuf, RecursiveMode)> = paths
+            .iter()
+            .map(|(path, mode)| (path.to_path_buf(), *mode))
+            .collect();
+        let (commands, received) = std::sync::mpsc::channel::<Command>();
+        let starts = Arc::new(AtomicUsize::new(0));
+        let live = Arc::new(AtomicBool::new(false));
+        let (thread_starts, thread_live) = (starts.clone(), live.clone());
+        // One handler for every stream this thread starts, including restarts after a refusal.
+        let handler = Arc::new(Mutex::new(handler));
+        let forward = move || -> Box<dyn FnMut(Delivery) + Send> {
+            let handler = handler.clone();
+            Box::new(move |delivery| {
+                (handler.lock().unwrap_or_else(PoisonError::into_inner))(delivery);
+            })
+        };
+        std::thread::Builder::new()
+            .name("hotsheet-path-watcher".into())
+            .spawn(move || {
+                let mut watcher: Option<PathWatcher> = None;
+                let mut pending: Vec<Command> = Vec::new();
+                let mut retry = START_RETRY_FIRST;
+                loop {
+                    // Apply what was asked for: a first start, or the changes queued since.
+                    let applied = match watcher.as_mut() {
+                        None => {
+                            for Command::Change { removed, added } in pending.drain(..) {
+                                wanted.retain(|(path, _)| !removed.contains(path));
+                                wanted.extend(added);
+                            }
+                            let refs: Vec<(&Path, RecursiveMode)> = wanted
+                                .iter()
+                                .map(|(path, mode)| (path.as_path(), *mode))
+                                .collect();
+                            if refs.is_empty() {
+                                true
+                            } else {
+                                match start_stream(&refs, forward()) {
+                                    Ok(started) => {
+                                        thread_starts.fetch_add(started.starts(), Ordering::SeqCst);
+                                        watcher = Some(started);
+                                        true
+                                    }
+                                    Err(_) => false,
+                                }
+                            }
+                        }
+                        Some(current) => {
+                            let mut ok = true;
+                            for command in pending.drain(..) {
+                                let Command::Change { removed, added } = command;
+                                let removed_refs: Vec<&Path> =
+                                    removed.iter().map(std::path::PathBuf::as_path).collect();
+                                let added_refs: Vec<(&Path, RecursiveMode)> = added
+                                    .iter()
+                                    .map(|(path, mode)| (path.as_path(), *mode))
+                                    .collect();
+                                wanted.retain(|(path, _)| !removed.contains(path));
+                                wanted.extend(added.iter().cloned());
+                                if current.change(&removed_refs, &added_refs).is_ok() {
+                                    thread_starts.fetch_add(1, Ordering::SeqCst);
+                                } else {
+                                    ok = false;
+                                }
+                            }
+                            if !ok {
+                                // Start over with every path asked for, after the backoff.
+                                drop(watcher.take());
+                            }
+                            ok
+                        }
+                    };
+                    thread_live.store(applied && watcher.is_some(), Ordering::SeqCst);
+                    if applied {
+                        retry = START_RETRY_FIRST;
+                        if watcher.is_some() {
+                            status(WatchStatus::Live);
+                        }
+                        // Wait for the next change asked for, or the drop.
+                        match received.recv() {
+                            Ok(command) => pending.push(command),
+                            Err(_) => break,
+                        }
+                    } else {
+                        status(WatchStatus::Refused);
+                        match received.recv_timeout(retry) {
+                            Ok(command) => pending.push(command),
+                            Err(RecvTimeoutError::Timeout) => {}
+                            Err(RecvTimeoutError::Disconnected) => break,
+                        }
+                        retry = (retry * 2).min(START_RETRY_MAX);
+                    }
+                    // Every change queued meanwhile is applied in one go.
+                    while let Ok(command) = received.try_recv() {
+                        pending.push(command);
+                    }
+                }
+                // Stopping a stream can take tens of seconds; it happens here, never on the
+                // owner's thread.
+                drop(watcher);
+            })
+            .ok();
+        Self {
+            commands: Some(commands),
+            starts,
+            live,
+        }
+    }
+
+    /// Watch one more path. Returns at once; [`WatchStatus::Live`] follows once it is in.
+    pub fn add(&self, path: &Path, mode: RecursiveMode) {
+        self.change(&[], &[(path, mode)]);
+    }
+
+    /// Stop watching `removed` and start watching `added`, in one change. Returns at once.
+    pub fn change(&self, removed: &[&Path], added: &[(&Path, RecursiveMode)]) {
+        if removed.is_empty() && added.is_empty() {
+            return;
+        }
+        if let Some(commands) = &self.commands {
+            self.live.store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = commands.send(Command::Change {
+                removed: removed.iter().map(|path| path.to_path_buf()).collect(),
+                added: added
+                    .iter()
+                    .map(|(path, mode)| (path.to_path_buf(), *mode))
+                    .collect(),
+            });
+        }
+    }
+
+    /// How many times this watcher registered paths with the platform so far.
+    pub fn starts(&self) -> usize {
+        self.starts.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Whether the stream is live over every path asked for so far.
+    pub fn is_live(&self) -> bool {
+        self.live.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// How long the owner may wait before reading again on its own: [`PENDING_RECHECK`]
+    /// while the stream is not live yet (its start or a change can take many seconds, and
+    /// nothing reports what changes meanwhile), and `None` once events can be trusted.
+    /// The re-check reads local files only, as `ChangeWaiter`'s safety re-check does.
+    pub fn recheck(&self) -> Option<std::time::Duration> {
+        (!self.is_live()).then_some(PENDING_RECHECK)
+    }
+}
+
+impl Drop for BackgroundWatcher {
+    fn drop(&mut self) {
+        // Closing the channel ends the thread, which stops the stream itself.
+        drop(self.commands.take());
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn register(
     watcher: &mut backend::RecommendedWatcher,
@@ -372,5 +622,156 @@ mod tests {
                 Err(mpsc::RecvTimeoutError::Disconnected)
             ));
         }
+    }
+
+    /// How long these tests let the platform take to start or restart one stream: its own
+    /// service, measured at up to 7 s to start and 19 s to restart on a loaded Mac, never a
+    /// wake of ours (HS2-F6F42W).
+    const PLATFORM: Duration = Duration::from_secs(120);
+
+    /// HS2-F6F42W: a stream start the platform holds up holds up neither the owner nor its
+    /// drop; `Live` follows once the start returns.
+    #[test]
+    fn hs2_f6f42w_a_blocked_start_holds_up_neither_the_owner_nor_its_drop() {
+        let root = tempfile::tempdir().unwrap();
+        let (entered, entering) = mpsc::channel();
+        let (release, released) = mpsc::channel::<()>();
+        let released = std::sync::Mutex::new(released);
+        let (status_tx, status) = mpsc::channel();
+        let started = Instant::now();
+        let watcher = BackgroundWatcher::start_with(
+            &[(root.path(), RecursiveMode::Recursive)],
+            |_| {},
+            move |state| {
+                let _ = status_tx.send(state);
+            },
+            Box::new(move |paths, handler| {
+                let _ = entered.send(());
+                let _ = released.lock().unwrap().recv();
+                PathWatcher::start(paths, handler)
+            }),
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "start returned at once"
+        );
+        entering.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(!watcher.is_live());
+        assert_eq!(watcher.starts(), 0);
+        release.send(()).unwrap();
+        assert_eq!(status.recv_timeout(PLATFORM).unwrap(), WatchStatus::Live);
+        assert!(watcher.is_live());
+        assert_eq!(watcher.starts(), 1);
+        // A second watcher whose start never returns is dropped at once.
+        let (_never, held) = mpsc::channel::<()>();
+        let held = std::sync::Mutex::new(held);
+        let stuck = BackgroundWatcher::start_with(
+            &[(root.path(), RecursiveMode::Recursive)],
+            |_| {},
+            |_| {},
+            Box::new(move |paths, handler| {
+                let _ = held.lock().unwrap().recv();
+                PathWatcher::start(paths, handler)
+            }),
+        );
+        let dropping = Instant::now();
+        drop(stuck);
+        assert!(
+            dropping.elapsed() < Duration::from_secs(2),
+            "the drop returned at once"
+        );
+    }
+
+    /// HS2-F6F42W: a refused start is reported and retried with a backoff that never
+    /// shortens; a later success is live and delivers events; a drop ends the retries.
+    #[test]
+    fn hs2_f6f42w_a_refused_start_is_retried_with_backoff_until_it_starts() {
+        let root = tempfile::tempdir().unwrap();
+        let root = real(root.path());
+        let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = attempts.clone();
+        let (status_tx, status) = mpsc::channel();
+        let (sender, receiver) = mpsc::channel();
+        let watcher = BackgroundWatcher::start_with(
+            &[(root.as_path(), RecursiveMode::Recursive)],
+            move |delivery| {
+                let _ = sender.send(delivery);
+            },
+            move |state| {
+                let _ = status_tx.send((state, Instant::now()));
+            },
+            Box::new(move |paths, handler| {
+                if counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3 {
+                    return Err(Error::generic("refused"));
+                }
+                PathWatcher::start(paths, handler)
+            }),
+        );
+        let reports: Vec<(WatchStatus, Instant)> = (0..4)
+            .map(|_| status.recv_timeout(PLATFORM).unwrap())
+            .collect();
+        let states: Vec<WatchStatus> = reports.iter().map(|(state, _)| *state).collect();
+        assert_eq!(
+            states,
+            [
+                WatchStatus::Refused,
+                WatchStatus::Refused,
+                WatchStatus::Refused,
+                WatchStatus::Live
+            ]
+        );
+        for (pair, floor) in reports.windows(2).zip([100_u64, 200]) {
+            assert!(pair[1].1 - pair[0].1 >= Duration::from_millis(floor));
+        }
+        assert!(watcher.is_live());
+        let file = root.join("after");
+        fs::write(&file, b"x").unwrap();
+        assert!(sees(&receiver, &file), "the retried stream reports");
+        // Never started: refusals keep coming, then stop with the drop.
+        let refused = BackgroundWatcher::start_with(
+            &[(root.as_path(), RecursiveMode::Recursive)],
+            |_| {},
+            |_| {},
+            Box::new(|_, _| Err(Error::generic("refused"))),
+        );
+        drop(refused);
+    }
+
+    /// HS2-F6F42W: a path added to a live watcher is live without the owner waiting, and
+    /// both old and new paths report; an empty change is nothing.
+    #[test]
+    fn hs2_f6f42w_an_added_path_goes_live_in_the_background() {
+        let root = tempfile::tempdir().unwrap();
+        let root = real(root.path());
+        let (first, later) = (root.join("first"), root.join("later"));
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&later).unwrap();
+        let (status_tx, status) = mpsc::channel();
+        let (sender, receiver) = mpsc::channel();
+        let watcher = BackgroundWatcher::start(
+            &[(first.as_path(), RecursiveMode::Recursive)],
+            move |delivery| {
+                let _ = sender.send(delivery);
+            },
+            move |state| {
+                let _ = status_tx.send(state);
+            },
+        );
+        assert_eq!(status.recv_timeout(PLATFORM).unwrap(), WatchStatus::Live);
+        watcher.change(&[], &[]);
+        let asked = Instant::now();
+        watcher.add(&later, RecursiveMode::Recursive);
+        assert!(
+            asked.elapsed() < Duration::from_secs(1),
+            "add returned at once"
+        );
+        assert_eq!(status.recv_timeout(PLATFORM).unwrap(), WatchStatus::Live);
+        assert_eq!(watcher.starts(), 2);
+        for directory in [&later, &first] {
+            let file = directory.join("file");
+            fs::write(&file, b"x").unwrap();
+            assert!(sees(&receiver, &file), "no event for {}", file.display());
+        }
+        assert!(rescan_event().need_rescan());
     }
 }

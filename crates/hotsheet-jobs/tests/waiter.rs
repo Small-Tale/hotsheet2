@@ -15,6 +15,19 @@ fn settle(waiter: &ChangeWaiter) {
     while waiter.wait(Duration::from_millis(300)) {}
 }
 
+/// HS2-F6F42W: a waiter returns before its platform stream exists; wait until it is live.
+/// Starting a stream is the platform's own latency (seconds on a loaded Mac).
+fn live(waiter: &ChangeWaiter) {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !waiter.is_live() {
+        assert!(
+            Instant::now() < deadline,
+            "the platform never started the stream"
+        );
+        let _ = waiter.wait(Duration::from_millis(200));
+    }
+}
+
 /// A store with room for every write these tests make.
 fn roomy() -> Fixture {
     fixture_with(StoreConfig {
@@ -57,13 +70,12 @@ fn hs2_n1qdzw_a_waiter_over_several_directories_starts_once_and_wakes_on_each() 
         .collect();
     let paths: Vec<&Path> = directories.iter().map(PathBuf::as_path).collect();
     let waiter = ChangeWaiter::watching(&paths).unwrap();
+    live(&waiter);
     assert_eq!(waiter.platform_starts(), 1, "four directories, one start");
-    assert_eq!(
-        ChangeWaiter::new(&directories[0])
-            .unwrap()
-            .platform_starts(),
-        1
-    );
+    let single = ChangeWaiter::new(&directories[0]).unwrap();
+    live(&single);
+    assert_eq!(single.platform_starts(), 1);
+    drop(single);
     settle(&waiter);
     assert!(!waiter.wait(Duration::from_millis(300)), "nothing changed");
 
@@ -95,6 +107,7 @@ fn hs2_n1qdzw_a_dropped_waiter_can_be_started_again_on_the_same_directory() {
     let root = tempfile::tempdir().unwrap();
     for round in 0..4 {
         let waiter = ChangeWaiter::new(root.path()).unwrap();
+        live(&waiter);
         assert_eq!(waiter.platform_starts(), 1);
         settle(&waiter);
         std::fs::write(root.path().join(format!("round-{round}")), b"x").unwrap();
@@ -295,7 +308,10 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
         crates.join("hotsheet-server/src/routes/orchestration_settings_watch.rs"),
     )
     .unwrap();
-    assert!(settings.contains("PathWatcher::start(") && !settings.contains(".watch("));
+    // HS2-F6F42W: through the shared background watcher, which starts a `PathWatcher`.
+    assert!(settings.contains("BackgroundWatcher::start(") && !settings.contains(".watch("));
+    let shared_watch = std::fs::read_to_string(&sanctioned).unwrap();
+    assert!(shared_watch.contains("pub struct BackgroundWatcher"));
     // The shared watcher batches on macOS and leaves the other platforms as they were.
     let shared = std::fs::read_to_string(sanctioned).unwrap();
     assert_eq!(shared.matches(".paths_mut()").count(), 2);

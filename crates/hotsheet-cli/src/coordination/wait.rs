@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
+use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, EventKind, RecursiveMode, rescan_event};
 use hotsheet_ticketing::FileLock;
 use sha2::{Digest, Sha256};
 
@@ -48,10 +48,20 @@ impl Coordinator {
         }
         // Subscribe before reading/registering: a producer may arrive at any startup
         // point, and durable state closes the watch/reconnect race. Every path is
-        // registered before the platform watcher starts once (HS2-N1QDZW).
-        let _watcher = PathWatcher::start(&watched, move |event: Delivery| {
-            let _ = sender.send(event);
-        })?;
+        // registered before the platform watcher starts once (HS2-N1QDZW). HS2-F6F42W:
+        // the stream starts on its own thread (seconds on a loaded Mac), so the first read
+        // below happens at once; the stream going live, or a refused start while it is
+        // retried, is a rescan that reads again.
+        let status = sender.clone();
+        let watcher = BackgroundWatcher::start(
+            &watched,
+            move |event: Delivery| {
+                let _ = sender.send(event);
+            },
+            move |_| {
+                let _ = status.send(Ok(rescan_event()));
+            },
+        );
         let mut renew_at = now() + request.lease_seconds / 2;
         // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
         // waits on genuine state events without registering, and says why.
@@ -135,10 +145,21 @@ impl Coordinator {
                 .min();
             let mut ticket_changed = false;
             let mut relevant_event = false;
-            let received = match deadline {
-                Some(deadline) => receiver.recv_timeout(Duration::from_secs(u64::try_from(
+            // HS2-F6F42W: until the stream is live nothing reports a change, so read again
+            // at the re-check interval (local files only).
+            let pending = watcher.recheck();
+            let timeout = match deadline {
+                Some(deadline) => Some(Duration::from_secs(u64::try_from(
                     (deadline - current).max(0),
                 )?)),
+                None => None,
+            };
+            let timeout = match (timeout, pending) {
+                (Some(timeout), Some(pending)) => Some(timeout.min(pending)),
+                (timeout, pending) => timeout.or(pending),
+            };
+            let received = match timeout {
+                Some(timeout) => receiver.recv_timeout(timeout),
                 None => receiver
                     .recv()
                     .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
@@ -170,7 +191,12 @@ impl Coordinator {
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     bail!("coordination watch disconnected; reconnect")
                 }
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if pending.is_some() {
+                        relevant_event = true;
+                        ticket_changed = true;
+                    }
+                }
             }
             let current = now();
             if registered && current >= renew_at {
