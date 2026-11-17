@@ -34042,6 +34042,38 @@ test('clears every ticket drop highlight when a drag ends without dragend reachi
   await expect(highlighted).toHaveCount(0);
 });
 
+test('aligns the Up Next star with the row icons on the left content edge (HS2-ZRPHZ2)', async ({ page }) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  for (const mode of ['List View', 'Columns View'] as const) {
+    await page.getByLabel(mode).click();
+    const row = page.locator('[data-ticket-slug="HS2-DEMO01"]').first();
+    await expect(row.locator('.ticket-list-row__up-next')).toBeVisible();
+    // The drawn glyphs, not their padded boxes: the leftmost edge of each icon's shapes.
+    const lefts = await row.evaluate((node) => {
+      const glyphLeft = (selector: string) => {
+        const icon = node.querySelector(selector);
+        if (!icon) return null;
+        const shapes = [...icon.querySelectorAll('path, polygon, circle, rect, line, polyline')];
+        return Math.min(...shapes.map((shape) => shape.getBoundingClientRect().left));
+      };
+      return {
+        category: glyphLeft('.ticket-list-row__category-icon, .ticket-list-row__category svg'),
+        star: glyphLeft('.ticket-list-row__up-next'),
+      };
+    });
+    expect(lefts.category).not.toBeNull();
+    expect(Math.abs(lefts.star! - lefts.category!), `${mode} star vs category glyph`).toBeLessThanOrEqual(1.5);
+    await row.screenshot({
+      path: `target/visual-captures/hs2-zrphz2-star-${mode === 'List View' ? 'list' : 'column'}-1280.png`,
+    });
+  }
+});
+
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

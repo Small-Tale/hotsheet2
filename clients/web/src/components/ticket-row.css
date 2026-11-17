@@ -125,6 +125,12 @@
   outline: none;
   place-items: center;
 }
+/* The centered star sits inside a 24px hit target, which put its glyph about 3px right of the
+   category and creator glyphs on the row's left content edge. Pull the target into the row's
+   leading space so the drawn star lines up with them (HS2-ZRPHZ2). */
+.ticket-list-row__up-next:first-child {
+  margin-inline-start: remify(-3px);
+}
 .ticket-list-row__up-next:hover,
 .ticket-list-row__up-next:focus-visible {
   color: var(--hs-ticket-state-up-next);
