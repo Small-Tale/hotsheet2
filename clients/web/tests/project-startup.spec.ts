@@ -746,3 +746,70 @@ test('restores inactive AI chats without activating their project and loads aggr
     page.locator('.grid-sidebar-group[data-project-id="alpha"]').getByRole('button', { name: /1 in progress/ }),
   ).toBeVisible();
 });
+
+// HS2-MV0BA4: the Remote project form's focused field shows its whole focus ring. The ring (the
+// field box plus Kerf's 4px focus-ring reach) must stay inside every clipping ancestor at wide and
+// phone widths; an app-owned scroller around the form used to cut it off at both inline edges.
+test('keeps the focused remote server form field ring unclipped (HS2-MV0BA4)', async ({ page }) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await page.route('**/__hotsheet/remotes**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/__hotsheet/remotes') return route.fulfill({ json: [] });
+    if (path === '/__hotsheet/remotes/selected-projects') return route.fulfill({ json: [] });
+    return route.fulfill({ status: 404, json: { error: 'Unknown synthetic remote route' } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: /^alpha/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.locator('[data-project-source-choice]').getByRole('button', { name: 'Remote Project' }).click();
+  const dialog = page.locator('[data-desktop-remote-dialog]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  const address = dialog.getByRole('textbox', { name: 'Server Address' });
+  if (!(await address.isVisible())) await dialog.getByRole('button', { name: 'Add Server' }).click();
+  const name = dialog.getByRole('textbox', { name: "This Device's Name" });
+  await expect(name).toBeVisible();
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    for (const field of [address, name]) {
+      await field.focus();
+      const clipped = await field.evaluate((input) => {
+        const reach = 4;
+        // The ring is drawn around the field box: the first ancestor wider than the bare input.
+        const inputWidth = input.getBoundingClientRect().width;
+        let ring = input as HTMLElement;
+        for (let node = input.parentElement; node && node !== document.body; node = node.parentElement) {
+          ring = node;
+          if (node.getBoundingClientRect().width > inputWidth + 1) break;
+        }
+        const box = ring.getBoundingClientRect();
+        const outer = {
+          left: box.left - reach,
+          right: box.right + reach,
+          top: box.top - reach,
+          bottom: box.bottom + reach,
+        };
+        const cuts: string[] = [];
+        for (let node = ring.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+          const clip = node.getBoundingClientRect();
+          if (outer.left < clip.left - 0.5 || outer.right > clip.right + 0.5)
+            cuts.push(
+              `${node.className || node.tagName}: inline ${outer.left}-${outer.right} vs ${clip.left}-${clip.right}`,
+            );
+        }
+        return cuts;
+      });
+      expect(clipped, `focus ring at ${width}px`).toEqual([]);
+    }
+    await page.screenshot({
+      path: `target/visual-captures/hs2-mv0ba4-remote-form-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+});

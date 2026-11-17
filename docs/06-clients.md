@@ -233,7 +233,9 @@ machine registry, not browser storage. Tabs include the server label and use
 composite ids so identical checkout ids on different hosts remain independent.
 The desktop bridge routes REST and change WebSockets to each tab's reviewed
 server; removing or reviewing one binding closes only its sessions. The phone
-browser continues to list projects from its single connected host.
+browser continues to list projects from its single connected host. The dialog's
+form scrolls in Kerf's native dialog body, so a focused field keeps its whole focus
+ring at every width (HS2-MV0BA4).
 **Remote terminals (HS2-PPHJMZ, HS2-JJKVJJ).** A remote tab's terminal drawer
 attaches to that server's PTYs: the bridge upgrades `/terminals/{id}/attach` on the
 reviewed server with that server's private session, Origin and CSRF proof (and its
