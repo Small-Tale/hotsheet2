@@ -1008,7 +1008,11 @@ engine** so the user effectively never runs git by hand:
   pass's deadline unchanged, and a kick that arrives when that pass is due joins it.
   A kicked pass that finds its remote unreachable backs the loop off like a regular
   pass. While backed off, kicks wait for the deadline pass. No kick adds a timer or a
-  poll. If no host accepts the kick, the CLI prints on stderr that the commits may be
+  poll. An accepted kick also announces the store's current sync health at once as a
+  `ticket_store_sync` event, so open clients re-read it even while the loop is backed
+  off. `hotsheet-cli sync` kicks the host for the store it just synced itself, so after
+  a person fixes a refused push and runs it, the "not publishing" strip clears
+  promptly instead of at the next deadline pass (HS2-PQ7K4T). If no host accepts the kick, the CLI prints on stderr that the commits may be
   local only and names `hotsheet-cli -C <store> sync`. The serverless MCP backend
   (`hotsheet-mcp --path`) does the same after each tool call that committed to a store
   (HS2-4BG2QN). It reports a missing or refusing host as an extra text item in the tool

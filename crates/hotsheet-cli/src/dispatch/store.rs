@@ -749,6 +749,13 @@ pub(crate) fn cmd_sync(
             _ => {}
         }
     }
+    // HS2-PQ7K4T: tell a running host this store's sync changed, so its open clients re-read
+    // the store's health now (a refused push may have backed the host's own loop off). Best
+    // effort: with no host, nothing changes.
+    if report != SyncReport::NoRemote {
+        let _ =
+            hotsheet_cli::sync_kick::request_host_sync(&hotsheet_plugins::hotsheet_home(), path);
+    }
     match report {
         SyncReport::NoRemote => println!("Local-only store — no remote to sync."),
         SyncReport::UpToDate => println!("Already up to date."),

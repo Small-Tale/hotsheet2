@@ -399,3 +399,58 @@ fn hs2_d9zgae_the_regular_pass_syncs_registered_stores_that_are_not_hosted() {
             .all(|(_, report)| *report == SyncReport::NoRemote)
     );
 }
+
+/// HS2-PQ7K4T: an accepted kick announces the kicked store's current sync health at once, so an
+/// open client re-reads it even while the loop is not going to run a pass (here, an hour away;
+/// in production, a loop backed off by a refused push). A refused kick announces nothing.
+#[tokio::test]
+async fn hs2_pq7k4t_an_accepted_kick_announces_the_store_health_at_once() {
+    let fixture = Fixture::new();
+    let checkout =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(fixture.home.join("checkouts.json"))
+            .list()
+            .unwrap()
+            .remove(0);
+    let router = app(fixture.state.clone());
+    let _sync = spawn_sync_loop(fixture.state.clone(), Duration::from_secs(3600));
+    let mut events = fixture.state.subscribe();
+
+    // Refused kicks (unregistered store, wrong secret) say nothing.
+    let unregistered = fixture.dir.path().join("unregistered.hs2");
+    FsStore::init_git(&unregistered, &StoreMetadata::new("UN")).unwrap();
+    for (store, secret) in [
+        (&unregistered, Some(SECRET)),
+        (&fixture.project, Some("wrong")),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(kick_request(store, secret))
+            .await
+            .unwrap();
+        assert!(!response.status().is_success(), "{store:?}");
+    }
+    assert!(
+        events.try_recv().is_err(),
+        "a refused kick announced something"
+    );
+
+    let response = router
+        .clone()
+        .oneshot(kick_request(&fixture.project, Some(SECRET)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let expected = hotsheet_ticketing::sync_health::health(&fixture.project).state;
+    let event = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.kind == "ticket_store_sync" {
+                return event;
+            }
+        }
+    })
+    .await
+    .expect("an accepted kick announced the store's sync health");
+    assert_eq!(event.id, checkout.id);
+    assert_eq!(event.slug, expected.as_str());
+}

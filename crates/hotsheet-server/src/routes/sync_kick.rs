@@ -5,6 +5,11 @@
 //! already syncs (a hosted store or a Git store linked to a registered checkout) and answers
 //! at once; the sync itself runs on the background sync loop, coalesced with other kicks
 //! and with its regular pass.
+//!
+//! An accepted kick also announces the store's current sync health right away (HS2-PQ7K4T).
+//! `hotsheet-cli sync` kicks after it syncs a store itself, and a loop backed off by a refused
+//! push ignores kicks until its deadline, so without this an open client kept showing the
+//! "not publishing" strip for minutes after the store published.
 
 use std::path::PathBuf;
 
@@ -47,18 +52,25 @@ pub(crate) async fn post_sync_kick(
         ));
     }
     match state.request_store_sync(&request.store) {
-        StoreSyncRequest::Accepted => Ok((
-            StatusCode::ACCEPTED,
-            Json(SyncKickAccepted {
-                accepted: true,
-                store: request
-                    .store
-                    .canonicalize()
-                    .unwrap_or(request.store)
-                    .display()
-                    .to_string(),
-            }),
-        )),
+        StoreSyncRequest::Accepted => {
+            // The health read runs git; keep it off the async workers (HS2-PQ7K4T).
+            let (announcer, store) = (state.clone(), request.store.clone());
+            drop(tokio::task::spawn_blocking(move || {
+                announce_current_health(&announcer, &store);
+            }));
+            Ok((
+                StatusCode::ACCEPTED,
+                Json(SyncKickAccepted {
+                    accepted: true,
+                    store: request
+                        .store
+                        .canonicalize()
+                        .unwrap_or(request.store)
+                        .display()
+                        .to_string(),
+                }),
+            ))
+        }
         StoreSyncRequest::NotRegistered => Err(ApiError::new(
             StatusCode::NOT_FOUND,
             "this host does not sync that store: link it to a registered checkout",
@@ -70,4 +82,18 @@ pub(crate) async fn post_sync_kick(
         )
         .with_code(SYNC_NOT_RUNNING_CODE)),
     }
+}
+
+/// Tell open clients the kicked store's current sync health (HS2-PQ7K4T): one
+/// `ticket_store_sync` event per checkout linking it, from a few local reads. A client
+/// re-reads the store's health on that event, so a sync the CLI ran itself is shown at once.
+fn announce_current_health(state: &AppState, store: &std::path::Path) {
+    let root = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let id = state
+        .hosted_store_roots()
+        .into_iter()
+        .find(|(_, hosted)| crate::watcher::same_path(std::path::Path::new(hosted), &root))
+        .map_or_else(|| root.display().to_string(), |(id, _)| id);
+    let health = hotsheet_ticketing::sync_health::health(&root);
+    state.announce_ticket_store_sync(&id, &root, health.state);
 }
