@@ -3457,7 +3457,18 @@ export async function startHotSheetWebClient() {
     // The inbox is not a signal; its revision is what changes when a request arrives or is answered.
     pendingOrchestratorRequests: () => {
       void permissionRevision.value;
-      return new Set(pendingPermissions().flatMap((item) => (item.orchestrator ? [item.orchestrator.request_id] : [])));
+      // HS2-NY0MRJ: with each request's operation and project, so Run Validation recovers after a reload.
+      return pendingPermissions().flatMap((item) =>
+        item.orchestrator
+          ? [
+              {
+                request_id: item.orchestrator.request_id,
+                operation_id: item.orchestrator.operation_id,
+                owner_checkout_id: item.orchestrator.owner_checkout_id,
+              },
+            ]
+          : [],
+      );
     },
     // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
     // Unknown until Settings read the type, so the view's own declaration read decides meanwhile.

@@ -23,7 +23,15 @@ import { parseRunReconciliation } from '../orchestration-run-checks';
 import { parseDecisionPage, parseExplanation, type SchedulerDecisionPage } from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
-import { parseValidationStep, type PendingValidation, stepsToRun } from '../orchestration-validation-steps';
+import {
+  parseValidationOperation,
+  parseValidationStep,
+  type PendingOrchestratorAsk,
+  type PendingValidation,
+  recoveredValidations,
+  stepsToRun,
+  validationOperation,
+} from '../orchestration-validation-steps';
 import { collapsedTicketGroupKeys, toggleTicketGroupCollapsed } from '../ticket-group-state';
 import type { TicketLinkMatch } from '../ticket-link-resolution';
 import { startVersionedLongPoll } from '../versioned-long-poll';
@@ -152,7 +160,7 @@ export interface OrchestrationViewDependencies {
    * reactively. A Run Validation request whose permission request was pending and no longer is has been
    * answered, so it is sent again under its operation id.
    */
-  readonly pendingOrchestratorRequests?: () => ReadonlySet<string>;
+  readonly pendingOrchestratorRequests?: () => readonly PendingOrchestratorAsk[];
 }
 
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
@@ -565,9 +573,23 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   const seenPending = new Set<string>();
   disposers.push(
     effect(() => {
-      const shown = dependencies.pendingOrchestratorRequests?.();
-      const waiting = Object.values(pendingValidations.value);
-      if (!shown || waiting.length === 0) return;
+      const asks = dependencies.pendingOrchestratorRequests?.();
+      const current = dependencies.project();
+      if (!asks || !current) return;
+      const shown = new Set(asks.map((ask) => ask.request_id));
+      // HS2-NY0MRJ: requests this browser no longer remembers (after a reload) are recovered from the
+      // pending permission list, so their rows wait for permission and the answer still runs them once.
+      const known = pendingValidations.peek();
+      const recovered = recoveredValidations(asks, current.id).filter((entry) => !(entry.operation_id in known));
+      if (recovered.length > 0) {
+        pendingValidations.value = {
+          ...known,
+          ...Object.fromEntries(recovered.map((entry) => [entry.operation_id, entry])),
+        };
+        void refreshDetails();
+      }
+      const waiting = Object.values(pendingValidations.peek());
+      if (waiting.length === 0) return;
       const answered = waiting.filter((entry) => {
         if (shown.has(entry.request_id)) {
           seenPending.add(entry.request_id);
@@ -591,13 +613,19 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
    * pressed Run Validation as `requested_by`, recorded in the audit only (HS2-ZYM6ZT).
    */
   async function sendValidations(requests: readonly PendingValidation[], announce: boolean) {
-    const current = dependencies.project(),
-      item = selected();
-    if (!current || !item) return;
+    const current = dependencies.project();
+    if (!current) return;
     const client = clientFor(current),
       run = generation;
-    const call = (entry: PendingValidation, waitMs: number) =>
-      client.orchestrationValidationRun(current.id, {
+    // HS2-NY0MRJ: each request is for the card its operation names, which need not be the selected one.
+    const itemOf = (entry: PendingValidation) => {
+      const planStep = parseValidationOperation(entry.operation_id)?.planStep;
+      return (planStep ? findTimelineItem(timeline.value, planStep)?.item : undefined) ?? selected();
+    };
+    const call = (entry: PendingValidation, waitMs: number) => {
+      const item = itemOf(entry);
+      if (!item) return Promise.reject(new Error('The card of this validation is no longer planned.'));
+      return client.orchestrationValidationRun(current.id, {
         ticket: item.goal,
         step_id: entry.step_id,
         operation_id: entry.operation_id,
@@ -606,6 +634,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         // HS2-ZYM6ZT: the audit names this person beside the orchestrator that acts.
         requested_by: dependencies.personId(),
       });
+    };
     const unsettled = (answer: Record<string, unknown>) => {
       const result = answer.result as { state?: unknown } | undefined;
       return result?.state === 'running' || (typeof answer.attempts_left === 'number' && answer.attempts_left > 0);
@@ -660,12 +689,21 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     const item = selected(),
       steps = details.value?.validations ?? [];
     if (!item || busy.value) return;
-    const waiting = new Set(Object.values(pendingValidations.value).map((entry) => entry.step_id));
+    const prefix = `validate-${item.step_id}-`;
+    const waiting = new Set(
+      Object.values(pendingValidations.value)
+        .filter((entry) => entry.operation_id.startsWith(prefix))
+        .map((entry) => entry.step_id),
+    );
     const requests = stepsToRun(steps)
       .filter((step) => !waiting.has(step.step_id))
       .map((step) => ({
         step_id: step.step_id,
-        operation_id: `validate-${item.step_id}-${step.step_id}-${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
+        operation_id: validationOperation(
+          item.step_id,
+          step.step_id,
+          crypto.randomUUID().replaceAll('-', '').slice(0, 12),
+        ),
         request_id: '',
       }));
     if (requests.length === 0) return;

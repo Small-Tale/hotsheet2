@@ -85,3 +85,36 @@ export function validationStepValue(
 export function stepsToRun(steps: readonly ValidationStepView[]): ValidationStepView[] {
   return steps.filter((step) => step.state !== 'passed' && step.state !== 'running');
 }
+
+/**
+ * HS2-NY0MRJ: a Run Validation operation id names the card and the step it runs: `validate-`, the plan
+ * step id, the validation step id and a nonce, joined by hyphens. The plan step id is a ULID (no hyphen) and the nonce twelve hex
+ * digits, so a validation step id with hyphens still reads back whole.
+ */
+export function validationOperation(planStep: string, stepId: string, nonce: string): string {
+  return `validate-${planStep}-${stepId}-${nonce}`;
+}
+
+export function parseValidationOperation(operation: string): { planStep: string; stepId: string } | undefined {
+  const match = /^validate-([^-]+)-(.+)-([0-9a-f]{12})$/.exec(operation);
+  return match ? { planStep: match[1], stepId: match[2] } : undefined;
+}
+
+/** One orchestrator permission request the browser shows as pending, as much as recovery needs. */
+export interface PendingOrchestratorAsk {
+  request_id: string;
+  operation_id: string;
+  owner_checkout_id: string;
+}
+
+/**
+ * HS2-NY0MRJ: the Run Validation requests of one project that still wait on a person, recovered from the
+ * pending permission requests the app reads from the server, so a reload keeps them.
+ */
+export function recoveredValidations(asks: readonly PendingOrchestratorAsk[], project: string): PendingValidation[] {
+  return asks.flatMap((ask) => {
+    if (ask.owner_checkout_id !== project) return [];
+    const parsed = parseValidationOperation(ask.operation_id);
+    return parsed ? [{ step_id: parsed.stepId, operation_id: ask.operation_id, request_id: ask.request_id }] : [];
+  });
+}

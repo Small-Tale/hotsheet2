@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  parseValidationOperation,
   parseValidationStep,
+  recoveredValidations,
   stepsToRun,
+  validationOperation,
   validationStepLabel,
   validationStepValue,
   type ValidationStepView,
@@ -89,5 +92,35 @@ describe('validation steps in the card inspector (HS2-9XJEZC)', () => {
     expect(stepsToRun(steps).map((step) => step.step_id)).toEqual(['s1', 's3', 's4', 's5']);
     expect(stepsToRun([{ step_id: 'a', state: 'passed' }])).toEqual([]);
     expect(stepsToRun([])).toEqual([]);
+  });
+});
+
+describe('a waiting Run Validation recovered after a reload (HS2-NY0MRJ)', () => {
+  it('reads the card and step back from the operation id, hyphens included', () => {
+    const op = validationOperation('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'e2e-login', 'a1b2c3d4e5f6');
+    expect(op).toBe('validate-01ARZ3NDEKTSV4RRFFQ69G5FAV-e2e-login-a1b2c3d4e5f6');
+    expect(parseValidationOperation(op)).toEqual({ planStep: '01ARZ3NDEKTSV4RRFFQ69G5FAV', stepId: 'e2e-login' });
+    expect(parseValidationOperation('sched-run-01ARZ3NDEKTSV4RRFFQ69G5FAV')).toBeUndefined();
+    expect(parseValidationOperation('validate-01ARZ-smoke-short')).toBeUndefined();
+  });
+
+  it('recovers only this project’s Run Validation requests', () => {
+    const ask = (operation_id: string, owner_checkout_id = 'launch') => ({
+      request_id: `r-${operation_id}`,
+      operation_id,
+      owner_checkout_id,
+    });
+    const op = validationOperation('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'smoke', 'a1b2c3d4e5f6');
+    expect(
+      recoveredValidations(
+        [
+          ask(op),
+          ask('sched-run-x'),
+          ask(validationOperation('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'lint', '000000000000'), 'other'),
+        ],
+        'launch',
+      ),
+    ).toEqual([{ step_id: 'smoke', operation_id: op, request_id: `r-${op}` }]);
+    expect(recoveredValidations([], 'launch')).toEqual([]);
   });
 });

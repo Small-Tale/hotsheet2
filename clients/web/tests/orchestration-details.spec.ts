@@ -584,3 +584,60 @@ test('HS2-F1BKQ0 a plan conflict and a damaged checked-in plan say what is wrong
     await server.stop(page);
   }
 });
+
+test('HS2-NY0MRJ a Run Validation that waits for permission is kept across a reload and runs once', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await send(server, 'POST', `${base}/validations/define`, {
+      ticket: { native_id: plan.goal.id },
+      step: { step_id: 'smoke-check', target_id: TARGET, check: { kind: 'command', program: 'true', args: [] } },
+      actor: scheduler,
+    });
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Validation"]');
+    await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
+    await section.getByRole('button', { name: 'Run Validation' }).click();
+    await expect(section).toContainText('Waits for permission', { timeout: 30_000 });
+
+    // Reload: the waiting request is read back from the server's pending permission requests.
+    await page.reload();
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
+    await expect(section).toContainText('smoke-check (command)');
+    await expect(section).toContainText('Waits for permission', { timeout: 30_000 });
+    await expect(section.getByRole('button', { name: 'Show Request' })).toBeVisible();
+    await section.scrollIntoViewIfNeeded();
+    await capture(page, 'hs2-ny0mrj', 'recovered-after-reload-1440');
+    // Run Validation does not ask again for the step that already waits.
+    const permissions = () =>
+      send(server, 'GET', '/permissions') as unknown as Promise<Array<{ orchestrator?: { operation_id: string } }>>;
+    expect((await permissions()).filter((item) => item.orchestrator)).toHaveLength(1);
+    await section.getByRole('button', { name: 'Run Validation' }).click();
+    expect((await permissions()).filter((item) => item.orchestrator)).toHaveLength(1);
+
+    // The answer runs the original operation, once.
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toContainText('Orchestrator', { timeout: 30_000 });
+    await popup.getByRole('button', { name: 'Allow', exact: true }).click();
+    await expect(section).toContainText(/Passed · .* · exit 0/, { timeout: 60_000 });
+    const evidence = (await send(server, 'POST', `${base}/validations/list`, {
+      ticket: { native_id: plan.goal.id },
+    })) as unknown as Array<{ history?: unknown[] }>;
+    expect(evidence[0].history).toHaveLength(1);
+    await capture(page, 'hs2-ny0mrj', 'passed-after-reload-1440');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'hs2-ny0mrj', 'passed-after-reload-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+  } finally {
+    await server.stop(page);
+  }
+});

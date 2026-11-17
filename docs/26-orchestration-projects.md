@@ -5358,8 +5358,16 @@ While a card with a run is selected, the inspector also keeps one cursor long po
 that run's events (`GET .../run-events?run=&after=&wait_ms=20000`) and reads the card's
 details again on each new event, because a validation result, a gate change or a
 reconciliation can leave the timeline itself unchanged. It ends when the selection,
-the project or the view changes. The request ids live in the view's
-memory: after a reload, Run Validation asks again under a new operation.
+the project or the view changes.
+
+**Across a reload (HS2-NY0MRJ).** A Run Validation operation id names its card and
+step (`validate-`, the plan step id, the validation step id and a twelve-digit nonce).
+The browser's pending permission list, which the app reads from the server and keeps
+live, carries each orchestrator request's operation id and project, so after a reload
+the view recovers this project's waiting Run Validation requests from it: the row
+still waits for permission with Show Request, Run Validation does not ask again for
+that step, and the person's answer runs the original operation once. A request
+answered while no view was open is no longer pending; Run Validation then asks anew.
 
 ### Built Ahead (HS2-0D60T8)
 
