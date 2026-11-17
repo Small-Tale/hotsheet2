@@ -35,6 +35,8 @@ export interface OrchestrationTimelineBindings {
   readonly showDecisions: () => void;
   readonly loadEarlierDecisions: () => void;
   readonly closeDecisions: () => void;
+  /** HS2-F1BKQ0: Keep the Checked-In Plan… on a plan conflict this machine's copies cause. */
+  readonly keepCheckedInPlan: () => void;
 }
 
 const inView = (target: Element) => Boolean(target.closest(ORCHESTRATION_TARGETS.view.selector));
@@ -191,6 +193,11 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
   lifetime.add(
     delegate(root, 'click', ORCHESTRATION_ACTIONS.loadEarlierOrchestrationDecisions.selector, () => {
       bindings.loadEarlierDecisions();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.keepCheckedInOrchestrationPlan.selector, () => {
+      bindings.keepCheckedInPlan();
     }),
   );
   lifetime.add(

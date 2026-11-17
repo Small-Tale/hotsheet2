@@ -2358,6 +2358,24 @@ export class Api {
       },
       false,
     );
+  /** HS2-F1BKQ0: the plan's state where every plan read fails; reads only. */
+  orchestrationPlanHealth = (checkout: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/readiness/health`,
+      { method: 'POST', body: '{}' },
+      false,
+    );
+  /** HS2-F1BKQ0: move this machine's pre-sharing plan definitions in; `discardLocal` is a person's choice. */
+  orchestrationPlanMigrate = (checkout: string, discardLocal: boolean, actorId: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/readiness/migrate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ discard_local: discardLocal, actor: { role: 'human', id: actorId } }),
+      },
+    );
   /** HS2-0D60T8: one plan step's readiness with its provisional work (HS2-42TARA, HS2-JSF985); reads only. */
   orchestrationReadiness = (checkout: string, step: string) =>
     this.parsed(

@@ -750,6 +750,44 @@ pub struct PlanMigration {
     pub revision: Option<String>,
 }
 
+/// HS2-F1BKQ0: whether the owner's plan can be read, and if not why, without failing.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanHealth {
+    /// `ok`, `conflict` or `damaged`.
+    pub state: String,
+    /// For `damaged`: which file, `checked_in` or `local`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// For `damaged`: `corrupt` or `unsupported_version`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// For `conflict`: every step id involved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<String>,
+    /// Of those, the ones this machine kept before the plan was checked in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local: Vec<String>,
+    /// A person's `readiness migrate` with `discard_local` would resolve it.
+    #[serde(default)]
+    pub discard_resolves: bool,
+}
+
+impl PlanHealth {
+    fn damaged(file: &str, error: &OrchestrationError) -> Option<Self> {
+        let reason = match error {
+            OrchestrationError::Corrupt => "corrupt",
+            OrchestrationError::UnsupportedVersion { .. } => "unsupported_version",
+            _ => return None,
+        };
+        Some(Self {
+            state: "damaged".into(),
+            file: Some(file.into()),
+            reason: Some(reason.into()),
+            ..Self::default()
+        })
+    }
+}
+
 /// Where an owner's checkout is on this machine.
 type RootOf =
     std::sync::Arc<dyn Fn(&str) -> Result<std::path::PathBuf, OrchestrationError> + Send + Sync>;
@@ -912,6 +950,44 @@ impl PlanRegistry {
             .definitions(owner_checkout_id)?
             .into_iter()
             .find(|step| step.target == *target))
+    }
+
+    /// HS2-F1BKQ0: the plan's state as a value, where every plan read would fail with
+    /// `plan_conflict` or a damaged-data error. Reads only; identifiers only.
+    pub fn health(&self, owner_checkout_id: &str) -> Result<PlanHealth, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        let checked_in = match self.shared(owner_checkout_id)?.read() {
+            Ok(document) => document.map(|document| document.steps).unwrap_or_default(),
+            Err(error) => return PlanHealth::damaged("checked_in", &error).ok_or(error),
+        };
+        let file = match self.read_file() {
+            Ok(file) => file,
+            Err(error) => return PlanHealth::damaged("local", &error).ok_or(error),
+        };
+        let local = legacy(&file, owner_checkout_id);
+        let Err(conflicts) = merge_steps(&checked_in, &local) else {
+            return Ok(PlanHealth {
+                state: "ok".into(),
+                ..PlanHealth::default()
+            });
+        };
+        let kept: Vec<SharedStep> = local
+            .iter()
+            .filter(|step| !conflicts.contains(&step.step_id))
+            .cloned()
+            .collect();
+        let mine: Vec<String> = conflicts
+            .iter()
+            .filter(|id| local.iter().any(|step| step.step_id == **id))
+            .cloned()
+            .collect();
+        Ok(PlanHealth {
+            state: "conflict".into(),
+            discard_resolves: !mine.is_empty() && merge_steps(&checked_in, &kept).is_ok(),
+            conflicts,
+            local: mine,
+            ..PlanHealth::default()
+        })
     }
 
     /// HS2-YDY5HJ: move the definitions this machine kept before the plan was checked

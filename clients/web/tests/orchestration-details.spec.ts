@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-
 import { expect, type Page, test } from '@playwright/test';
 
 import { fakeGithubActions } from './fake-github-actions';
@@ -513,6 +514,72 @@ test('HS2-XJEH08 the overview shows progress and cost, with an unknown cost neve
       check: () => expect(progress).toContainText('1 of 2'),
       atPhone: () => openInspector(page),
     });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-F1BKQ0 a plan conflict and a damaged checked-in plan say what is wrong and how to resolve it', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const sharedPath = resolve(server.root, '.hotsheet2/orchestration-plan.json');
+    const localPath = resolve(server.home, 'orchestration-plan.json');
+    const shared = JSON.parse(await readFile(sharedPath, 'utf8')) as { steps: Array<Record<string, unknown>> };
+    // This machine kept the first step from before the plan was checked in, with another preferred tool.
+    const first = shared.steps.find((step) => (step.target as { native_id: string }).native_id === plan.first.id)!;
+    const local = JSON.parse(await readFile(localPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(
+      localPath,
+      JSON.stringify({
+        ...local,
+        steps: [{ step: { ...first, owner_checkout_id: server.checkoutId, tool: 'codex' } }],
+      }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const problem = view.locator('[data-orchestration-plan-problem]');
+    await expect(problem).toHaveAttribute('data-orchestration-plan-problem', 'conflict');
+    await expect(problem).toContainText('This Machine’s Plan Differs From the Checked-In Plan');
+    await expect(problem).toContainText(`step ${String(first.step_id).slice(-6)}`);
+    await expect(view).not.toContainText('The Orchestration Timeline Could Not Be Read');
+    await visualPass(page, 'hs2-f1bkq0', 'conflict', {
+      show: problem,
+      check: () => expect(problem).toBeVisible(),
+    });
+
+    // The person keeps the checked-in plan through the app's confirmation; the timeline reads again.
+    await problem.getByRole('button', { name: 'Keep the Checked-In Plan…' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Keep the checked-in plan?');
+    await capture(page, 'hs2-f1bkq0', 'confirm-1440');
+    await dialog.getByRole('button', { name: 'Keep the Checked-In Plan', exact: true }).click();
+    await expect(problem).toHaveCount(0, { timeout: 30_000 });
+    await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toBeVisible();
+    const kept = JSON.parse(await readFile(localPath, 'utf8')) as { steps?: unknown[] };
+    expect(kept.steps ?? []).toEqual([]);
+
+    // A Git merge leaves markers in the checked-in plan: the view says which file and what to do.
+    const good = await readFile(sharedPath, 'utf8');
+    await writeFile(sharedPath, `<<<<<<< ours\n${good}=======\n${good}>>>>>>> theirs\n`);
+    // Any change wakes the view's long poll; a ticket edit is one.
+    await server.request(`/tickets/${plan.second.id}`, 'PATCH', { title: 'Add the synthetic login page again' });
+    await expect(problem).toHaveAttribute('data-orchestration-plan-problem', 'damaged', { timeout: 40_000 });
+    await expect(problem).toContainText('The Checked-In Plan Cannot Be Read');
+    await expect(problem.getByRole('button')).toHaveCount(0);
+    await capture(page, 'hs2-f1bkq0', 'damaged-1440');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture(page, 'hs2-f1bkq0', 'damaged-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    // Resolving the merge brings the plan back without a reload.
+    await writeFile(sharedPath, good);
+    await expect(problem).toHaveCount(0, { timeout: 60_000 });
+    await expect(view.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toBeVisible();
   } finally {
     await server.stop(page);
   }

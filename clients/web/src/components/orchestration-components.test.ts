@@ -40,6 +40,44 @@ describe('OrchestrationTimelineView (HS2-J89JC7)', () => {
     expect(markup).toContain('data-ticket-group="api"');
   });
 
+  it('HS2-F1BKQ0 replaces the failure with what is wrong with the plan, and offers the person’s fix', () => {
+    const conflict = String(
+      OrchestrationTimelineView({
+        error: 'plan_conflict',
+        planHealth: { state: 'conflict', conflicts: ['S1'], local: ['S1'], discard_resolves: true },
+        stepName: () => 'API-12',
+      }),
+    );
+    expect(conflict).toContain('data-orchestration-plan-problem="conflict"');
+    expect(conflict).toContain('This Machine’s Plan Differs From the Checked-In Plan');
+    expect(conflict).toContain('data-action="keep-checked-in-orchestration-plan"');
+    expect(conflict).not.toContain('The Orchestration Timeline Could Not Be Read');
+    expect(conflict).not.toContain('No Orchestration Timeline');
+    const damaged = String(
+      OrchestrationTimelineView({
+        error: 'corrupt',
+        planHealth: {
+          state: 'damaged',
+          file: 'checked_in',
+          reason: 'corrupt',
+          conflicts: [],
+          local: [],
+          discard_resolves: false,
+        },
+      }),
+    );
+    expect(damaged).toContain('The Checked-In Plan Cannot Be Read');
+    expect(damaged).not.toContain('keep-checked-in-orchestration-plan');
+    // A healthy plan leaves the ordinary failure.
+    const other = String(
+      OrchestrationTimelineView({
+        error: 'Offline.',
+        planHealth: { state: 'ok', conflicts: [], local: [], discard_resolves: false },
+      }),
+    );
+    expect(other).toContain('The Orchestration Timeline Could Not Be Read');
+  });
+
   it('distinguishes loading, no projects, no plan and a failed read', () => {
     expect(String(OrchestrationTimelineView({ loading: true }))).toContain('Loading the Orchestration Timeline');
     const none = String(OrchestrationTimelineView({ timeline: demoTimeline('no_projects') }));
@@ -413,6 +451,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       showDecisions: () => calls.push('decisions'),
       loadEarlierDecisions: () => calls.push('earlier'),
       closeDecisions: () => calls.push('close'),
+      keepCheckedInPlan: () => calls.push('keep plan'),
     };
     wireOrchestrationTimeline({} as HTMLElement, bindings);
     const view = { dataset: { orchestrationView: 'true' } };
@@ -443,6 +482,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'reopen-orchestration-work', target({}));
     run('click', 'show-orchestration-decisions', target({}));
     run('click', 'load-earlier-orchestration-decisions', target({}));
+    run('click', 'keep-checked-in-orchestration-plan', target({}));
     const dialog = target({});
     registrations
       .find((item) => item.event === 'kui-request-close')!
@@ -465,6 +505,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'reopen fix_changed_contract',
       'decisions',
       'earlier',
+      'keep plan',
       'close',
     ]);
   });
@@ -531,6 +572,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       showDecisions: noop,
       loadEarlierDecisions: noop,
       closeDecisions: noop,
+      keepCheckedInPlan: noop,
     });
     const focused: string[] = [];
     const column = { scrollIntoView: noop };

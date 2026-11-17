@@ -460,6 +460,8 @@ describe('UX demo catalog', () => {
         'Overview the cataloged OrchestrationInspector shows with no card selected (HS2-2XJSJK, demoed as Nothing Selected).',
       'orchestration-decisions-dialog':
         'Show All Decisions… dialog opened from the cataloged OrchestrationInspector overview (HS2-77SRHC, demoed in place).',
+      'orchestration-plan-problem':
+        'Plan conflict or damaged plan banner of the cataloged OrchestrationTimelineView (HS2-F1BKQ0, demoed as Plan Conflict).',
       'orchestration-validation-section':
         'Validation section of the cataloged OrchestrationInspector, rendered for a card with validation steps (HS2-9XJEZC, demoed).',
       'orchestration-plan-section':

@@ -2586,7 +2586,7 @@ paths:
         in beside the manifest in `.hotsheet2/orchestration-plan.json` and merged by step id; ticket reads, levels,
         runs and gates stay on this machine (HS2-YDY5HJ). A `define` with a stale `expected_revision`, or a
         machine-local definition that differs from the checked-in one, is 409 `plan_conflict`; `migrate` moves the
-        definitions this machine kept before the plan was checked in, and `discard_local` drops conflicting ones. `speculation` lists the work
+        definitions this machine kept before the plan was checked in, and `discard_local` drops conflicting ones. `health` answers the plan's state where every plan read fails, with the step ids of a conflict or the damaged file (HS2-F1BKQ0). `speculation` lists the work
         that was started ahead of a pending gate, with each gate and its result, and `reopen` records that the fix of
         a failed prerequisite invalidated a step's provisional work (HS2-JSF985); a step without such work is 409
         `readiness_not_provisional`."
@@ -2601,7 +2601,7 @@ paths:
           description:
             The step's readiness (`define`, `show`), the plan (`plan`, `refresh`), the work that could start now
             (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`), the reopened
-            work (`reopen`) or what moved into the checked-in plan (`migrate`).
+            work (`reopen`), what moved into the checked-in plan (`migrate`) or the plan's state (`health`).
           content:
             application/json:
               schema:
@@ -2613,6 +2613,7 @@ paths:
                   - $ref: '#/components/schemas/ProvisionalStatus'
                   - $ref: '#/components/schemas/ProvisionalWork'
                   - $ref: '#/components/schemas/PlanMigration'
+                  - $ref: '#/components/schemas/PlanHealth'
                   - type: array
                     items:
                       $ref: '#/components/schemas/ReadyItem'
@@ -25779,6 +25780,46 @@ components:
             type: string
         revision:
           type: string
+    PlanHealth:
+      description:
+        HS2-F1BKQ0. The plan's state, where every plan read answers 409 `plan_conflict` or a damaged-data error.
+        Identifiers only, never file content.
+      type: object
+      required:
+        - state
+        - discard_resolves
+      properties:
+        state:
+          type: string
+          enum:
+            - ok
+            - conflict
+            - damaged
+        file:
+          description: For `damaged`, which file.
+          type: string
+          enum:
+            - checked_in
+            - local
+        reason:
+          type: string
+          enum:
+            - corrupt
+            - unsupported_version
+        conflicts:
+          description: For `conflict`, every step id involved.
+          type: array
+          items:
+            type: string
+        local:
+          description: The conflicting step ids this machine kept before the plan was checked in.
+          type: array
+          items:
+            type: string
+        discard_resolves:
+          description: A person's `migrate` with `discard_local` would resolve the conflict.
+          type: boolean
+      additionalProperties: false
     RemoteIdentity:
       type: object
       required:

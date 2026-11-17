@@ -8,8 +8,10 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Sparkles, Workflow } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS, ORCHESTRATION_TARGETS } from '../interaction-attrs/orchestration';
+import type { PlanHealth, StepName } from '../orchestration-plan-health';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { type ClockFormat, clockTime, timelineColumns } from '../orchestration-timeline-board';
+import { OrchestrationPlanProblem } from './orchestration-plan-problem';
 import { TicketBoard, type TicketBoardLayout } from './ticket-board';
 
 /** Whether the planner behind Propose Plan (HS2-HCW7MD) can be asked, and why not. */
@@ -23,6 +25,11 @@ export interface OrchestrationTimelineViewProps {
   loading?: boolean;
   /** The last read failed; the previous timeline, if any, stays on screen under this banner. */
   error?: string;
+  /** HS2-F1BKQ0: the plan cannot be read; its state replaces the generic failure. */
+  planHealth?: PlanHealth;
+  /** Names a step id by its slug when the last timeline read showed it. */
+  stepName?: StepName;
+  busy?: boolean;
   layout?: TicketBoardLayout;
   selectedStep?: string;
   collapsedGroups?: readonly string[];
@@ -40,23 +47,31 @@ export function OrchestrationTimelineView({
   timeline,
   loading = false,
   error,
+  planHealth,
+  stepName = (id: string) => `step ${id.slice(-6)}`,
+  busy = false,
   layout = 'grid',
   selectedStep,
   collapsedGroups = [],
   propose = { available: false },
   clock = clockTime,
 }: OrchestrationTimelineViewProps) {
-  const failure = error && (
-    <List controlInsets="trl">
-      <StateBanner
-        copyLayout="stacked"
-        tone="danger"
-        title="The Orchestration Timeline Could Not Be Read"
-        detail={`${error} It refreshes when the server answers again.`}
-      />
-    </List>
-  );
+  const failure =
+    planHealth && planHealth.state !== 'ok' ? (
+      <OrchestrationPlanProblem health={planHealth} name={stepName} busy={busy} />
+    ) : error ? (
+      <List controlInsets="trl">
+        <StateBanner
+          copyLayout="stacked"
+          tone="danger"
+          title="The Orchestration Timeline Could Not Be Read"
+          detail={`${error} It refreshes when the server answers again.`}
+        />
+      </List>
+    ) : undefined;
   const content = (() => {
+    // The plan problem above says it all; no empty state contradicts it.
+    if (!timeline && planHealth && planHealth.state !== 'ok') return undefined;
     if (!timeline)
       return (
         <List fill hAlign="center" vAlign="middle">

@@ -103,6 +103,22 @@ export function OrchestrationTimelineViewDemo() {
       <CatalogExample label="Card Orchestration Line, Narrow" viewport={{ width: 'compact' }}>
         <TicketRow {...card('step-7')} presentation="column" />
       </CatalogExample>
+      {/* HS2-F1BKQ0: this machine kept a step differently from the checked-in plan. */}
+      <CatalogExample
+        label="Plan Conflict"
+        viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}
+      >
+        <OrchestrationTimelineView
+          error="plan_conflict"
+          planHealth={{
+            state: 'conflict',
+            conflicts: ['step-3'],
+            local: ['step-3'],
+            discard_resolves: true,
+          }}
+          stepName={() => 'API-12'}
+        />
+      </CatalogExample>
       <CatalogExample label="Loading" viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}>
         <OrchestrationTimelineView loading />
       </CatalogExample>
@@ -311,6 +327,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       showDecisions: () => undefined,
       loadEarlierDecisions: () => undefined,
       closeDecisions: () => undefined,
+      keepCheckedInPlan: () => undefined,
     }),
   );
   return () => {

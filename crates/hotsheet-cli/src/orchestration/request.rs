@@ -823,6 +823,8 @@ impl OrchestrationRuntime {
                         value(self.readiness(owner, &step.step_id, tx)?)
                     }
                     "plan" => value(self.readiness_plan(owner, tx)?),
+                    // HS2-F1BKQ0: the plan's state where every read would fail.
+                    "health" => value(self.readiness_health(owner)?),
                     "ready" => value(self.ready_work(owner, tx)?),
                     "refresh" => {
                         value(self.readiness_refresh(owner, &decode(body)?, actor.as_ref(), tx)?)

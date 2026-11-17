@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.31, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X),
+> inspector's Plan section (§26.31, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X), a plan conflict or damaged plan named with its steps and the person's resolution (HS2-F1BKQ0),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -2404,7 +2404,14 @@ When a local definition conflicts with a checked-in one it is refused and nothin
 moves; a person may pass `--discard-local` (`discard_local`) to drop exactly the
 conflicting local definitions, which an AI caller may not.
 
+`readiness health` (HS2-F1BKQ0) answers the plan's state without failing: `ok`,
+`conflict` with the step ids involved, those this machine kept and whether a person's
+`discard_local` would resolve it, or `damaged` with the file (`checked_in` or `local`)
+and the reason. Identifiers only; it writes nothing. The Orchestration view shows it
+(§26.31).
+
 ```sh
+hotsheet-cli ... orchestration readiness health --project <owner>
 hotsheet-cli ... orchestration readiness migrate --project <owner> [--discard-local]
 hotsheet-cli ... orchestration readiness define ... --expected-revision <n>
 ```
@@ -5452,3 +5459,21 @@ base) and "Reopened · the fix invalidated it" (warning). Confirmed work carries
 line. On the Workers view the pool's own state wins over an orchestration project's
 line for the same ticket. The view's existing long poll brings changes; nothing new
 is read (`clients/web/src/worker-provisional.ts`).
+
+### A plan the view cannot read (HS2-F1BKQ0)
+
+When this machine's pre-sharing definitions conflict with the checked-in plan, or a
+plan file is damaged (§26.15 "Where the plan lives"), every plan read fails and so
+does the timeline. The view then reads `readiness health` and shows, in place of
+"could not be read", a Kerf `StateBanner` that names the steps involved (by slug when
+the last timeline showed them):
+
+- a conflict that dropping this machine's copies resolves offers **Keep the Checked-In
+  Plan…**, which confirms through the app's confirmation and runs `readiness migrate`
+  with `discard_local` as the browser's person; the view reads the plan again at once;
+- a conflict inside the checked-in plan, or one a discard would not resolve, and a
+  damaged checked-in file (for example merge markers) say to resolve it in Git;
+- damaged local records, or files a newer version wrote, say so.
+
+Other failures keep the generic banner. The view's long poll keeps retrying with its
+bounded backoff, so a plan fixed in Git comes back without a reload.

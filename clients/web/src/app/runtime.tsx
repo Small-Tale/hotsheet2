@@ -5943,6 +5943,9 @@ export async function startHotSheetWebClient() {
       timeline: orchestrationView.timeline.value,
       loading: orchestrationView.loading.value,
       error: orchestrationView.error.value,
+      planHealth: orchestrationView.planHealth.value,
+      stepName: orchestrationView.stepName,
+      busy: orchestrationView.busy.value,
       layout: viewportMobile.value ? 'paged' : 'grid',
       selectedStep: orchestrationView.selectedStep.value,
       collapsedGroups: orchestrationView.collapsedGroups(),
@@ -6508,6 +6511,7 @@ export async function startHotSheetWebClient() {
       closeDecisions: () => {
         orchestrationView.closeDecisions();
       },
+      keepCheckedInPlan: () => void orchestrationView.keepCheckedInPlan(),
     },
     runAutomaticTicketGroup: (slugs) => {
       void automaticTicketGrouping.run(slugs);

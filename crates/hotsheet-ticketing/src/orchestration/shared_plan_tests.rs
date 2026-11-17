@@ -645,3 +645,98 @@ fn hs2_ydy5hj_a_racing_publish_never_prunes_a_new_steps_reads() {
         );
     }
 }
+
+/// HS2-F1BKQ0: the plan's state as a value where every read fails: ok, a local conflict a
+/// person's discard resolves, a conflict it does not, damaged checked-in data and damaged
+/// local data. It reads only, so the files are unchanged.
+#[test]
+fn hs2_f1bkq0_health_names_the_conflict_or_the_damaged_file_and_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let mut a = Machine::new(OWNER_A, root.path(), 100);
+    // Empty, then a plan: ok both times.
+    assert_eq!(a.plan.health(OWNER_A).unwrap().state, "ok");
+    a.define(&ticket("first"), Vec::new(), None).unwrap();
+    assert_eq!(
+        a.plan.health(OWNER_A).unwrap(),
+        PlanHealth {
+            state: "ok".into(),
+            ..PlanHealth::default()
+        }
+    );
+    let first = a.steps()[0].0.clone();
+
+    // B kept a different step 8 for the ticket A's step works, and an unrelated step 9.
+    let b = Machine::new(OWNER_A, root.path(), 200);
+    std::fs::write(
+        b.home.join("orchestration-plan.json"),
+        serde_json::to_vec(&serde_json::json!({"schema_version": 1, "tickets": [],
+            "steps": [{"step": shared(8, "first", 1).step(OWNER_A)},
+                      {"step": shared(9, "ninth", 1).step(OWNER_A)}]}))
+        .unwrap(),
+    )
+    .unwrap();
+    let before = (
+        std::fs::read(root.path().join(SHARED_PLAN_PATH)).unwrap(),
+        std::fs::read(b.home.join("orchestration-plan.json")).unwrap(),
+    );
+    assert!(conflict(b.plan.records(OWNER_A)));
+    let health = b.plan.health(OWNER_A).unwrap();
+    assert_eq!(health.state, "conflict");
+    assert_eq!(health.conflicts, {
+        let mut ids = vec![first.clone(), id(8)];
+        ids.sort();
+        ids
+    });
+    assert_eq!(health.local, [id(8)]);
+    assert!(health.discard_resolves);
+    // Reading twice changes nothing and answers the same.
+    assert_eq!(b.plan.health(OWNER_A).unwrap(), health);
+    assert_eq!(
+        std::fs::read(root.path().join(SHARED_PLAN_PATH)).unwrap(),
+        before.0
+    );
+    assert_eq!(
+        std::fs::read(b.home.join("orchestration-plan.json")).unwrap(),
+        before.1
+    );
+
+    // Damaged checked-in data: merge markers, then a newer version.
+    let path = root.path().join(SHARED_PLAN_PATH);
+    let good = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        format!("<<<<<<< ours\n{good}=======\n{good}>>>>>>> theirs\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        b.plan.health(OWNER_A).unwrap(),
+        PlanHealth {
+            state: "damaged".into(),
+            file: Some("checked_in".into()),
+            reason: Some("corrupt".into()),
+            ..PlanHealth::default()
+        }
+    );
+    std::fs::write(
+        &path,
+        good.replace("\"schema_version\": 1", "\"schema_version\": 2"),
+    )
+    .unwrap();
+    assert_eq!(
+        b.plan.health(OWNER_A).unwrap().reason.as_deref(),
+        Some("unsupported_version")
+    );
+    std::fs::write(&path, &good).unwrap();
+    // Damaged local data.
+    std::fs::write(b.home.join("orchestration-plan.json"), b"{ not json").unwrap();
+    let local = b.plan.health(OWNER_A).unwrap();
+    assert_eq!(
+        (local.state.as_str(), local.file.as_deref()),
+        ("damaged", Some("local"))
+    );
+    // A person's discard resolves the first case, and the plan reads ok again.
+    std::fs::write(b.home.join("orchestration-plan.json"), &before.1).unwrap();
+    let mut b = b;
+    b.migrate(true).unwrap();
+    assert_eq!(b.plan.health(OWNER_A).unwrap().state, "ok");
+}

@@ -110,9 +110,9 @@ pub use provisional::{
 };
 pub use readiness::{
     GateFacts, GateRequirement, LevelChange, MAX_PLAN_STEPS, MAX_STEP_PLAN_PREREQUISITES,
-    NewPlanStep, PlanFacts, PlanMigration, PlanRecord, PlanRegistry, PlanStep, Prerequisite,
-    PublishedLevel, ReadinessError, ReadinessLevel, ReadinessReason, StepReadiness, TicketFacts,
-    TicketKey, TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
+    NewPlanStep, PlanFacts, PlanHealth, PlanMigration, PlanRecord, PlanRegistry, PlanStep,
+    Prerequisite, PublishedLevel, ReadinessError, ReadinessLevel, ReadinessReason, StepReadiness,
+    TicketFacts, TicketKey, TicketRecord, TicketSeen, TicketUpdate, evaluate_plan, ticket_key,
 };
 pub use reconcile::{
     Alignment, Assessment, Disposition, DispositionAction, ExternalSource, ExternalWork,

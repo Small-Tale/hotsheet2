@@ -97,6 +97,10 @@ enum ReadinessCmd {
         #[arg(long)]
         discard_local: bool,
     },
+    /// HS2-F1BKQ0: the plan's state where every plan read fails: ok, a conflict with the
+    /// step ids involved and whether a person's --discard-local would resolve it, or
+    /// which file (checked_in or local) is damaged. Reads only.
+    Health,
     /// HS2-JSF985: which work was started ahead of a pending gate, on which gate,
     /// and what became of it: provisional, confirmed, at_risk or reopened, with the
     /// prerequisites to repair first and the gates to re-evaluate. Contacts nothing.
@@ -200,6 +204,7 @@ pub(super) fn route(
             json!({"discard_local": discard_local}),
         ),
         ReadinessCmd::Speculation => ("POST", format!("{base}/speculation"), json!({})),
+        ReadinessCmd::Health => ("POST", format!("{base}/health"), json!({})),
         ReadinessCmd::Reopen { step_id, reason } => (
             "POST",
             format!("{base}/reopen"),

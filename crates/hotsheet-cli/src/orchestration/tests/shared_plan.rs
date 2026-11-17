@@ -179,3 +179,70 @@ fn hs2_ydy5hj_a_plan_kept_on_this_machine_is_migrated_once_and_a_discard_is_a_pe
     )
     .unwrap();
 }
+
+/// HS2-F1BKQ0: where every plan read answers `plan_conflict`, `health` names the
+/// conflicting steps through the shared router, and after a person's discard the plan
+/// reads again.
+#[test]
+fn hs2_f1bkq0_health_reads_a_conflict_the_plan_refuses_and_clears_after_a_discard() {
+    let m = machine(10, false, unsupported);
+    let owner = m.owner.id.clone();
+    let step = |number: u128, native: &str, tool: Option<&str>| {
+        json!({"step": {"step_id": id(number), "owner_checkout_id": owner,
+            "ticket": {"connection_id": m.owner_connection(), "native_id": id(900)},
+            "target": {"target_id": id(1), "connection_id": m.target_connection(), "native_id": native},
+            "tool": tool, "revision": 1, "created_at_ms": 5, "updated_at_ms": 5}})
+    };
+    let local = |steps: Vec<serde_json::Value>| {
+        std::fs::write(
+            m.home.join("orchestration-plan.json"),
+            serde_json::to_vec(&json!({"schema_version": 1, "steps": steps, "tickets": []}))
+                .unwrap(),
+        )
+        .unwrap();
+    };
+    assert_eq!(
+        request(&m.runtime, &owner, "health", json!({})).unwrap()["state"],
+        "ok"
+    );
+    local(vec![step(1, "a", None)]);
+    let ai = json!({"role": "ai", "id": "worker-1"});
+    request(&m.runtime, &owner, "migrate", json!({"actor": ai})).unwrap();
+    // This machine kept step 1 differently: every read refuses; health names it.
+    local(vec![step(1, "a", Some("codex"))]);
+    let refused = request(&m.runtime, &owner, "plan", json!({})).unwrap_err();
+    assert_eq!(refused.code(), "plan_conflict");
+    let health = request(&m.runtime, &owner, "health", json!({})).unwrap();
+    assert_eq!(
+        (
+            &health["state"],
+            &health["conflicts"],
+            &health["local"],
+            &health["discard_resolves"]
+        ),
+        (
+            &json!("conflict"),
+            &json!([id(1)]),
+            &json!([id(1)]),
+            &json!(true)
+        )
+    );
+    request(
+        &m.runtime,
+        &owner,
+        "migrate",
+        json!({"discard_local": true, "actor": {"role": "human", "id": "maintainer"}}),
+    )
+    .unwrap();
+    assert_eq!(
+        request(&m.runtime, &owner, "health", json!({})).unwrap()["state"],
+        "ok"
+    );
+    assert_eq!(
+        request(&m.runtime, &owner, "plan", json!({})).unwrap()["steps"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

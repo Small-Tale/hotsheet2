@@ -15,6 +15,7 @@ import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
 import { parseBuiltAhead } from '../orchestration-built-ahead';
+import { parsePlanHealth, PLAN_FAILURE_CODES, type PlanHealth } from '../orchestration-plan-health';
 import { parseProgressSummary, type ProgressSummaryView } from '../orchestration-progress';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
@@ -243,6 +244,12 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   const selectedStep = signal<string | undefined>(undefined);
   const details = signal<OrchestrationInspectorDetails | undefined>(undefined);
   const busy = signal(false);
+  /** HS2-F1BKQ0: the plan's state while the timeline read fails because the plan cannot be read. */
+  const planHealth = signal<PlanHealth | undefined>(undefined);
+  /** Bumped to read the timeline again at once, after a person resolved what stopped it. */
+  const restarts = signal(0);
+  /** Step ids to slugs from the last timeline read, kept while the plan cannot be read. */
+  let lastSlugs = new Map<string, string>();
   /** HS2-2XJSJK: with no card selected, what the overview read (HS2-77SRHC: the newest decisions). */
   const overview = signal<
     | {
@@ -308,7 +315,10 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   disposers.push(
     effect(() => {
       const current = dependencies.project(),
-        key = current && dependencies.viewMode.value === 'orchestration' ? `${current.id}:${current.apiPath}` : '';
+        key =
+          current && dependencies.viewMode.value === 'orchestration'
+            ? `${current.id}:${current.apiPath}:${restarts.value}`
+            : '';
       if (key === streamKey) return;
       streamStop?.();
       streamStop = undefined;
@@ -324,6 +334,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         details.value = undefined;
         overview.value = undefined;
         decisionsDialog.value = undefined;
+        planHealth.value = undefined;
         loading.value = Boolean(key);
         planning.value = undefined;
       });
@@ -342,6 +353,12 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         onTimeline: (view) => {
           if (run !== generation) return;
           batch(() => {
+            planHealth.value = undefined;
+            lastSlugs = new Map(
+              view.waves.flatMap((wave) =>
+                wave.items.flatMap((item) => (item.slug ? [[item.step_id, item.slug]] : [])),
+              ),
+            );
             learn(current.id, view);
             timeline.value = view;
             loading.value = false;
@@ -360,6 +377,16 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
             loading.value = false;
             error.value = message(reason);
           });
+          // HS2-F1BKQ0: a plan that cannot be read says why, with the steps involved.
+          const code = (reason as { code?: string } | undefined)?.code;
+          if (code && PLAN_FAILURE_CODES.has(code))
+            void clientFor(current)
+              .orchestrationPlanHealth(current.id)
+              .then((value) => {
+                if (run === generation) planHealth.value = parsePlanHealth(value);
+              })
+              .catch(() => undefined);
+          else planHealth.value = undefined;
         },
       });
     }),
@@ -832,6 +859,38 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     void refreshDetails();
   }
 
+  /**
+   * HS2-F1BKQ0: a person keeps the checked-in plan, dropping exactly this machine's conflicting
+   * pre-sharing definitions (`readiness migrate` with `discard_local`, a person's act), then the view
+   * reads the plan again at once.
+   */
+  async function keepCheckedInPlan() {
+    const current = dependencies.project(),
+      health = planHealth.value;
+    if (!current || !health?.discard_resolves || busy.value) return;
+    const confirmed = await dependencies.confirm({
+      title: 'Keep the checked-in plan?',
+      message: `This machine’s copies of ${health.local.map(stepName).join(', ')} are dropped for the checked-in steps. This cannot be undone here.`,
+      confirmLabel: 'Keep the Checked-In Plan',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    busy.value = true;
+    try {
+      await clientFor(current).orchestrationPlanMigrate(current.id, true, dependencies.personId());
+      dependencies.showToast('This machine now uses the checked-in plan.');
+      restarts.value += 1;
+    } catch (reason) {
+      dependencies.showToast(`The plan could not be changed: ${message(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  function stepName(stepId: string): string {
+    return lastSlugs.get(stepId) ?? `step ${stepId.slice(-6)}`;
+  }
+
   async function propose() {
     const current = dependencies.project();
     if (!current || busy.value || !planner.availability(current).available) return;
@@ -899,6 +958,9 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     runControl,
     runValidation,
     reopen,
+    planHealth,
+    keepCheckedInPlan,
+    stepName,
     overview,
     decisionsDialog,
     showDecisions,

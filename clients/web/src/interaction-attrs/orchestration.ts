@@ -21,6 +21,8 @@ export const ORCHESTRATION_ACTIONS = {
   /** HS2-77SRHC: the overview's Show All Decisions…, and the dialog's Load Earlier. */
   showOrchestrationDecisions: action('show-orchestration-decisions'),
   loadEarlierOrchestrationDecisions: action('load-earlier-orchestration-decisions'),
+  /** HS2-F1BKQ0: a person drops this machine's conflicting pre-sharing plan definitions. */
+  keepCheckedInOrchestrationPlan: action('keep-checked-in-orchestration-plan'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */

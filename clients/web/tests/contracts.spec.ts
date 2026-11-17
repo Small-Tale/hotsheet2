@@ -1938,6 +1938,11 @@ test('HS2-2FG91X real resource requirement and contention responses match the Op
     expect(ready.status).toBe(200);
     matches(readinessRoute, 'post', '200', ready.body);
     expect(ready.body).toMatchObject([{ step_id: step.step_id, resources: step.resources }]);
+    // HS2-F1BKQ0: the plan's state, which reads where every plan read would fail.
+    const health = await send('POST', `${base}/readiness/health`, { actor });
+    expect(health.status).toBe(200);
+    matches(readinessRoute, 'post', '200', health.body);
+    expect(health.body).toEqual({ state: 'ok', discard_resolves: false });
     const invalid = await send('POST', `${base}/readiness/define`, {
       ticket: { native_id: orchestration.id },
       target_id: target,

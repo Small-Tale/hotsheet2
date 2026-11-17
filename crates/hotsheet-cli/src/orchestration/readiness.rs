@@ -279,6 +279,17 @@ impl OrchestrationRuntime {
     /// checked in into `.hotsheet2/orchestration-plan.json`, merged by step id. It is
     /// idempotent; a conflict is refused with `plan_conflict` unless a person asks to
     /// discard the conflicting local definitions. Levels and reads stay here.
+    /// HS2-F1BKQ0: the plan's state as a value, where every plan read answers
+    /// `plan_conflict` or a damaged-data error: the step ids involved and whether a
+    /// person's `discard_local` would resolve it, or which file is damaged. Reads only.
+    pub fn readiness_health(
+        &self,
+        owner_id: &str,
+    ) -> Result<hotsheet_ticketing::orchestration::PlanHealth, OrchestrationError> {
+        self.owner(owner_id)?;
+        self.plan().health(owner_id)
+    }
+
     pub fn readiness_migrate(
         &self,
         owner_id: &str,
