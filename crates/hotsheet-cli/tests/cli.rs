@@ -10469,6 +10469,29 @@ fn hs2_t0v269_sync_recovers_stale_git_locks_headlessly() {
 
     // A ticket saved before the locks, which the recovered sync publishes.
     let slug = new_ticket(a.path(), "saved before the locks");
+    // HS2-G9A2K2: saving launches its own detached `git push`, which outlives `new`. While
+    // it runs it is a real Git process in this store (it also holds the remote-tracking
+    // ref's lock), and the recovery rightly refuses to move anything. On a loaded machine
+    // it was still running at the next step, so wait for it to exit first.
+    let unique = a.path().file_name().unwrap().to_str().unwrap().to_owned();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        let listed = std::process::Command::new("ps")
+            .args(["-axo", "command="])
+            .output()
+            .unwrap();
+        let pushing = String::from_utf8_lossy(&listed.stdout)
+            .lines()
+            .any(|line| line.contains(&unique) && line.contains(" push --quiet"));
+        if !pushing {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the ticket's own push never finished"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     // An abandoned index lock and a young HEAD lock.
     let index = a.path().join(".git/index.lock");
     plant(&index, 3600);
