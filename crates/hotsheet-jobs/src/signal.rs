@@ -204,8 +204,10 @@ impl JobStore {
         timeout: Duration,
     ) -> Result<u64, JobError> {
         let dir = self.checkout_dir(checkout_id)?;
-        // Watch before reading, so a change in between is not missed.
-        let waiter = ChangeWaiter::new(&dir)?;
+        // HS2-6RQVFY: the wait reads before and after each wait, so the stream starts in
+        // the background: a change made while it starts is found at the next re-check or
+        // when it goes live, rather than after a start that took seconds under load.
+        let waiter = ChangeWaiter::starting(&[dir.as_path()])?;
         self.wait_on(&waiter, checkout_id, since, timeout)
     }
 
@@ -236,7 +238,8 @@ impl JobStore {
         let held = match slot.take() {
             Some(held) => held,
             None => {
-                let waiter = ChangeWaiter::new(&dir)?;
+                // HS2-6RQVFY: started in the background, as in `wait_for_change`.
+                let waiter = ChangeWaiter::starting(&[dir.as_path()])?;
                 kept.started.fetch_add(1, Ordering::Relaxed);
                 Kept {
                     dir,

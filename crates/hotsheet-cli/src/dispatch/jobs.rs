@@ -517,7 +517,9 @@ fn monitor(home: &Path, args: MonitorArgs) -> Result<()> {
     );
     let mut monitor = Monitor::new(store, info.owner, args.monitor_config());
     register_sources(&mut monitor, home);
-    let waiter = ChangeWaiter::new(slot.dir())?;
+    // HS2-6RQVFY: the monitor reads its store each step, so its stream starts in the
+    // background rather than holding the first step for a start that took seconds.
+    let waiter = ChangeWaiter::starting(&[slot.dir()])?;
     monitor.run(&mut ProcessControl { claim, waiter })?;
     Ok(())
 }

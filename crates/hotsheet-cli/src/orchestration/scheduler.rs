@@ -1501,12 +1501,14 @@ impl OrchestrationRuntime {
             return step;
         };
         let wake_directory = self.home.join(WAKE_DIRECTORY);
-        // Watch before reading, so a change in between is not missed. A step that
-        // may not wait watches nothing: starting a platform watcher costs far more
-        // than the reads below (HS2-2FG91X).
+        // A step that may not wait watches nothing: starting a platform watcher costs far
+        // more than the reads below (HS2-2FG91X). HS2-6RQVFY: the watcher starts in the
+        // background; the reads below run after each wait, which ends at the safety
+        // re-check until the stream is live, so a change made while it starts is found
+        // within a second instead of after a start that took seconds under load.
         let waiter = (wait_ms > 0)
             .then(|| {
-                hotsheet_jobs::ChangeWaiter::watching(&[journal.directory(), &wake_directory]).ok()
+                hotsheet_jobs::ChangeWaiter::starting(&[journal.directory(), &wake_directory]).ok()
             })
             .flatten();
         let deadline =

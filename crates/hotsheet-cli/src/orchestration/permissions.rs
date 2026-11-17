@@ -170,7 +170,9 @@ impl SignalWaiter {
     /// change written while the watcher was still starting is reported by the first
     /// wait instead of being taken as already seen.
     pub fn since(directory: &std::path::Path, seen: Option<String>) -> std::io::Result<Self> {
-        let waiter = hotsheet_jobs::ChangeWaiter::new(directory)?;
+        // HS2-6RQVFY: `wait` reads the token before and after each wait, so the stream
+        // starts in the background instead of holding the caller for its start.
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory])?;
         Ok(Self {
             directory: directory.to_path_buf(),
             seen,

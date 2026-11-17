@@ -770,7 +770,9 @@ impl AppState {
                 );
                 let wake = home.join(hotsheet_cli::orchestration::SCHEDULER_WAKE_DIRECTORY);
                 let waiter = match &journals {
-                    (Ok(runs), Ok(decisions)) => hotsheet_jobs::ChangeWaiter::watching(&[
+                    // HS2-6RQVFY: each pass reads first, so the stream starts in the
+                    // background and the first pass is not held for its start.
+                    (Ok(runs), Ok(decisions)) => hotsheet_jobs::ChangeWaiter::starting(&[
                         runs.directory(),
                         decisions.directory(),
                         wake.as_path(),
