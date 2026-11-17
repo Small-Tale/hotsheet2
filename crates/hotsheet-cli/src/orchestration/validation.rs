@@ -1015,6 +1015,11 @@ pub struct RunValidation {
     /// How long to wait for the attempt to finish, at most 8000.
     #[serde(default)]
     pub wait_ms: Option<u64>,
+    /// HS2-ZYM6ZT: the person whose request the caller carries out (a browser's Run
+    /// Validation acts as the orchestrator so that a command step still asks). It is
+    /// recorded in the audit beside the actor and never changes the decision.
+    #[serde(default)]
+    pub requested_by: Option<String>,
 }
 
 /// HS2-YYNW9F: read the test profiles a declared target offers.
@@ -1089,6 +1094,7 @@ impl OrchestrationRuntime {
                 outcome: AuditOutcome::Changed,
                 reason: None,
                 permission_id: None,
+                requested_by: None,
             },
         )
     }
@@ -1340,9 +1346,12 @@ impl OrchestrationRuntime {
             let authorized = self.authorize(
                 &target,
                 actor,
-                ActionRequest::new(TargetAction::ValidationRun)
-                    .operation(request.operation_id.clone())
-                    .continuing(),
+                ActionRequest {
+                    requested_by: request.requested_by.clone(),
+                    ..ActionRequest::new(TargetAction::ValidationRun)
+                        .operation(request.operation_id.clone())
+                        .continuing()
+                },
                 tx,
             )?;
             let (result, _) = registry.begin(
@@ -1376,6 +1385,7 @@ impl OrchestrationRuntime {
         let mut gate =
             ActionRequest::new(TargetAction::ValidationRun).operation(request.operation_id.clone());
         gate.continuing = previous.is_some();
+        gate.requested_by = request.requested_by.clone();
         gate.ask_each_time = !definition.check.in_granted_scope();
         let authorized = self.authorize(&target, actor, gate, tx)?;
         let (result, _) = registry.begin(

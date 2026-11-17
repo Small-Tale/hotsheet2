@@ -13,6 +13,7 @@ fn record(at_ms: u64, action: &str, outcome: AuditOutcome) -> AuditRecord {
         outcome,
         reason: None,
         permission_id: None,
+        requested_by: None,
     }
 }
 fn journal(home: &std::path::Path) -> AuditJournal {
@@ -395,4 +396,34 @@ fn hs2_77srhc_newest_pages_report_a_gap_where_retention_removed_older_entries() 
     assert_eq!(all.entries.len(), retained);
     // The page that reaches the oldest retained entry says older ones were removed.
     assert!(!all.more && all.gap);
+}
+
+/// HS2-ZYM6ZT: the person a request was carried out for is an identifier beside the
+/// actor; it is kept as written, absent when not given, and free text is refused.
+#[test]
+fn hs2_zym6zt_requested_by_is_an_identifier_kept_beside_the_actor() {
+    let home = tempfile::tempdir().unwrap();
+    let log = journal(home.path());
+    let mut asked = record(1, "validation_run", AuditOutcome::Allowed);
+    asked.actor_role = Some("system".into());
+    asked.actor_id = Some("orchestrator.owner-0123456789ab".into());
+    asked.requested_by = Some("person-abc123".into());
+    log.append(asked.clone()).unwrap();
+    log.append(record(2, "validation_run", AuditOutcome::Allowed))
+        .unwrap();
+    let page = log.read(0, 10).unwrap();
+    assert_eq!(page.entries[0].record, asked);
+    assert_eq!(page.entries[1].record.requested_by, None);
+    // Written only when present; an older entry without it still reads.
+    let line = serde_json::to_string(&page.entries[1].record).unwrap();
+    assert!(!line.contains("requested_by"));
+    for bad in ["a person", "", "../x"] {
+        let mut bad_record = asked.clone();
+        bad_record.requested_by = Some(bad.into());
+        assert!(matches!(
+            log.append(bad_record),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    assert_eq!(log.read(0, 10).unwrap().entries.len(), 2);
 }

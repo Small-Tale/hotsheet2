@@ -381,6 +381,7 @@ impl OrchestrationRuntime {
                         outcome: AuditOutcome::Revoked,
                         reason: Some(reason.into()),
                         permission_id: None,
+                        requested_by: None,
                     },
                 )?;
             }
@@ -450,6 +451,7 @@ impl OrchestrationRuntime {
                     outcome,
                     reason: Some(request.key.action.code().into()),
                     permission_id: Some(request.request_id.clone()),
+                    requested_by: None,
                 },
             )?;
             if let Some(rule) = &answered.rule {
@@ -465,6 +467,7 @@ impl OrchestrationRuntime {
                         outcome: AuditOutcome::Changed,
                         reason: Some(rule.key.action.code().into()),
                         permission_id: Some(rule.rule_id.clone()),
+                        requested_by: None,
                     },
                 )?;
             }
@@ -516,6 +519,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Changed,
                     reason: Some(rule.key.action.code().into()),
                     permission_id: Some(rule.rule_id.clone()),
+                    requested_by: None,
                 },
             )?;
             for other in &also_allowed {
@@ -561,6 +565,7 @@ impl OrchestrationRuntime {
                 outcome: AuditOutcome::Revoked,
                 reason: Some(rule.key.action.code().into()),
                 permission_id: Some(rule.rule_id.clone()),
+                requested_by: None,
             },
         )?;
         self.permission_signal();

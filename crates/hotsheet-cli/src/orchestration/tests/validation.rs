@@ -2406,3 +2406,120 @@ fn hs2_5zt4gy_repeated_validation_waits_are_audited_once() {
     assert_eq!(recorded[3], continuing);
     assert_eq!(recorded[4], (AuditOutcome::Succeeded, None));
 }
+
+/// HS2-ZYM6ZT: a browser's Run Validation acts as the orchestrator, so a command step
+/// still asks; the person who pressed it is recorded as `requested_by` on every audit
+/// entry of that request, and changes nothing about the decision.
+#[test]
+fn hs2_zym6zt_the_audit_names_the_person_a_validation_run_was_requested_by() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(&m, 1, &[TargetAction::ValidationRun], &mut tx);
+    let ticket = m.orchestration_ticket("Coordinate");
+    m.runtime
+        .validation_define(
+            &m.owner.id,
+            define(
+                &ticket,
+                json!({"step_id": "custom", "timeout_seconds": 20,
+                    "check": {"kind": "command", "program": "/bin/sh", "args": ["-c", "exit 0"]}}),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let orchestrator =
+        MutationActor::parse("system", Some(format!("orchestrator.{}", m.owner.id))).unwrap();
+    let request = |operation: &str, person: Option<&str>| -> RunValidation {
+        let mut body = json!({"ticket": ticket_ref(&ticket), "step_id": "custom",
+            "operation_id": operation, "wait_ms": MAX_VALIDATION_WAIT_MS});
+        if let Some(person) = person {
+            body["requested_by"] = person.into();
+        }
+        serde_json::from_value(body).unwrap()
+    };
+    let entries = |m: &Machine| m.runtime.audit(&m.owner.id, 0, 500).unwrap().entries;
+    let before = entries(&m).len();
+    // A malformed person is refused before anything is asked or recorded.
+    for bad in ["a b", "", "x/y"] {
+        assert!(matches!(
+            m.runtime.validation_run(
+                &m.owner.id,
+                request("op-bad", Some(bad)),
+                Some(&orchestrator),
+                &mut tx
+            ),
+            Err(OrchestrationError::Invalid(_))
+        ));
+    }
+    assert_eq!(entries(&m).len(), before);
+    // The orchestrator still asks for a command step: the person is not the actor.
+    let asked = permission_request(m.runtime.validation_run(
+        &m.owner.id,
+        request("op-1", Some("person-abc123")),
+        Some(&orchestrator),
+        &mut tx,
+    ));
+    answer(
+        &m.runtime,
+        &m.owner.id,
+        &asked,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    let mut view = None;
+    for _ in 0..10 {
+        let answer = m
+            .runtime
+            .validation_run(
+                &m.owner.id,
+                request("op-1", Some("person-abc123")),
+                Some(&orchestrator),
+                &mut tx,
+            )
+            .unwrap();
+        if answer.result.state != ValidationState::Running {
+            view = Some(answer);
+            break;
+        }
+    }
+    assert_eq!(view.unwrap().result.state, ValidationState::Passed);
+    let runs: Vec<_> = entries(&m)
+        .into_iter()
+        .skip(before)
+        .filter(|entry| entry.record.action == "validation_run")
+        .collect();
+    let outcomes: Vec<AuditOutcome> = runs.iter().map(|entry| entry.record.outcome).collect();
+    for expected in [
+        AuditOutcome::Denied,
+        AuditOutcome::Allowed,
+        AuditOutcome::Succeeded,
+    ] {
+        assert!(outcomes.contains(&expected), "{expected:?} in {outcomes:?}");
+    }
+    for entry in &runs {
+        assert_eq!(
+            entry.record.actor_id.as_deref(),
+            Some(format!("orchestrator.{}", m.owner.id).as_str())
+        );
+        assert_eq!(entry.record.requested_by.as_deref(), Some("person-abc123"));
+    }
+    // A request for nobody in particular records none, and is decided the same way.
+    let seen = entries(&m).len();
+    permission_request(m.runtime.validation_run(
+        &m.owner.id,
+        request("op-2", None),
+        Some(&orchestrator),
+        &mut tx,
+    ));
+    assert!(
+        entries(&m)
+            .into_iter()
+            .skip(seen)
+            .all(|entry| entry.record.requested_by.is_none())
+    );
+}

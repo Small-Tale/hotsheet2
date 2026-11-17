@@ -243,6 +243,7 @@ impl OrchestrationRuntime {
                 outcome,
                 reason: reason.map(Into::into),
                 permission_id: None,
+                requested_by: None,
             },
         )
     }

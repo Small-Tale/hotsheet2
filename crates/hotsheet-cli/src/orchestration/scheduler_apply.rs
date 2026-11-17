@@ -91,6 +91,7 @@ impl OrchestrationRuntime {
                 },
                 reason: Some(outcome.outcome.clone()),
                 permission_id: None,
+                requested_by: None,
             },
         );
     }

@@ -162,6 +162,19 @@ test('HS2-9XJEZC Run Validation asks through the permission prompt and shows eac
       ticket: { native_id: plan.goal.id },
     })) as unknown as Array<{ history?: unknown[] }>;
     expect(evidence[0].history).toHaveLength(1);
+    // HS2-ZYM6ZT: the audit names the orchestrator as the actor and this browser's person as requested_by.
+    const person = await page.evaluate(() => localStorage.getItem('hotsheet.orchestrationPersonId'));
+    expect(person).toMatch(/^person-[0-9a-f]+$/);
+    const audit = (await send(server, 'GET', `${base}/audit?limit=500`)) as unknown as {
+      entries: Array<{ action: string; actor_id?: string; requested_by?: string; outcome: string }>;
+    };
+    const runs = audit.entries.filter((entry) => entry.action === 'validation_run');
+    expect(runs.length).toBeGreaterThan(0);
+    for (const entry of runs) {
+      expect(entry.actor_id).toBe(`orchestrator.${server.checkoutId}`);
+      expect(entry.requested_by).toBe(person);
+    }
+    expect(runs.map((entry) => entry.outcome)).toEqual(expect.arrayContaining(['allowed', 'succeeded']));
 
     await visualPass(page, 'hs2-9xjezc', 'validation-passed', {
       show: section,

@@ -41,6 +41,8 @@ pub struct Authorized {
     /// The Allow Once request this action uses once it happens, or the remembered
     /// rule that allowed it.
     pub permission_id: Option<String>,
+    /// HS2-ZYM6ZT: the person the actor acted for, recorded with every audit entry.
+    pub requested_by: Option<String>,
 }
 
 /// One target action as the gate sees it.
@@ -68,6 +70,10 @@ pub struct ActionRequest {
     /// releasing its claim or queue mark). It never asks and the policy never denies
     /// it; it needs an identified actor and is audited.
     pub reducing: bool,
+    /// HS2-ZYM6ZT: the person whose request the actor carries out, recorded in the
+    /// audit beside the actor. Attribution only: the gate decides for the actor, so a
+    /// request carried out for a person still asks where the actor would.
+    pub requested_by: Option<String>,
 }
 
 impl ActionRequest {
@@ -83,6 +89,7 @@ impl ActionRequest {
             ask_each_time: false,
             irreversible: false,
             reducing: false,
+            requested_by: None,
         }
     }
 
@@ -315,6 +322,11 @@ impl OrchestrationRuntime {
             ));
         };
         target.validate()?;
+        // HS2-ZYM6ZT: attribution only; it is checked here and never decides anything.
+        let requested_by = action.requested_by.clone();
+        if let Some(person) = &requested_by {
+            super::tickets::identifier(person, "bounded requested_by required")?;
+        }
         let request = action.access(actor_id.clone());
         if let Some(session) = &request.session {
             session.validate()?;
@@ -357,6 +369,7 @@ impl OrchestrationRuntime {
                     .request_id
                     .clone()
                     .or_else(|| decision.rule_id.clone()),
+                requested_by: requested_by.clone(),
             },
         )?;
         match (decision.allowed, resolution) {
@@ -367,6 +380,7 @@ impl OrchestrationRuntime {
                 operation_id: request.operation_id,
                 basis: basis_code(decision.basis.as_deref()),
                 permission_id: decision.request_id.or(decision.rule_id),
+                requested_by,
             }),
             _ => Err(match (decision.reason, decision.request_id) {
                 (Some(DenialReason::PermissionRequired), Some(request_id)) => {
@@ -486,6 +500,7 @@ impl OrchestrationRuntime {
                 },
                 reason: reason.map(Into::into),
                 permission_id: authorized.permission_id.clone(),
+                requested_by: authorized.requested_by.clone(),
             },
         )
     }

@@ -93,6 +93,11 @@ enum ValidationCmd {
         /// Start (or look once) and return at once instead of waiting.
         #[arg(long)]
         no_wait: bool,
+        /// HS2-ZYM6ZT: the person whose request this carries out, recorded in the
+        /// audit beside the acting identity. Attribution only: the gate still decides
+        /// for --actor-id.
+        #[arg(long)]
+        requested_by: Option<String>,
     },
     /// Stop a step's running attempt (HS2-17ABM2). It only lowers activity, so it
     /// never asks a person. The attempt ends `cancelled`, unless the step ended by
@@ -230,10 +235,14 @@ pub(super) fn route(
             operation_id,
             run,
             no_wait,
+            requested_by,
         } => {
             let mut body = of(&step);
             body["operation_id"] = operation_id.into();
             body["run_id"] = run.into();
+            if let Some(person) = requested_by {
+                body["requested_by"] = person.into();
+            }
             body[WAIT] = (!no_wait).into();
             ("POST", format!("{base}/run"), body)
         }

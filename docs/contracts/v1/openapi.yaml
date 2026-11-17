@@ -19248,6 +19248,12 @@ components:
                   retired grant id here.
                 type: string
                 pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              requested_by:
+                description:
+                  HS2-ZYM6ZT. The person whose request the actor carried out, such as the browser's person behind a Run
+                  Validation the orchestrator performs. Attribution only.
+                type: string
+                maxLength: 160
             additionalProperties: false
         cursor:
           description: Pass as `after` to continue.
@@ -21446,6 +21452,15 @@ components:
             - 'null'
           minimum: 0
           maximum: 8000
+        requested_by:
+          description:
+            '`run` only (HS2-ZYM6ZT). The person whose request the caller carries out, recorded in the audit beside the
+            actor. Attribution only: the gate decides for the actor.'
+          type:
+            - string
+            - 'null'
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
       additionalProperties: false
     ValidationStreamRef:
       description: An immutable reference to one output stream; never its content.

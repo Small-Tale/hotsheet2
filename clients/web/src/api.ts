@@ -2345,6 +2345,8 @@ export class Api {
       run_id?: string;
       /** How long the server waits for the attempt to finish, at most 8000 ms. */
       wait_ms?: number;
+      /** HS2-ZYM6ZT: the person who asked, recorded in the audit beside the orchestrator. */
+      requested_by?: string;
     },
   ) =>
     this.parsed(

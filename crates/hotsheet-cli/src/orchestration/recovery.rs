@@ -114,6 +114,7 @@ impl OrchestrationRuntime {
                 outcome: AuditOutcome::Succeeded,
                 reason,
                 permission_id: None,
+                requested_by: None,
             },
         )
     }

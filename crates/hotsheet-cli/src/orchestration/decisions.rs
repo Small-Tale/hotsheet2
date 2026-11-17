@@ -172,6 +172,7 @@ impl OrchestrationRuntime {
                 outcome: AuditOutcome::Changed,
                 reason: Some(asked.kind.clone()),
                 permission_id: Some(asked.decision_id.clone()),
+                requested_by: None,
             },
         )
     }

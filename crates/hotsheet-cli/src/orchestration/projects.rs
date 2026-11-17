@@ -198,6 +198,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Changed,
                     reason: Some(request.project_type.code().into()),
                     permission_id: None,
+                    requested_by: None,
                 },
             )?;
         }
@@ -334,6 +335,7 @@ impl OrchestrationRuntime {
                 outcome: AuditOutcome::Succeeded,
                 reason: None,
                 permission_id: None,
+                requested_by: None,
             },
         )?;
         Ok(ProjectView {
@@ -402,6 +404,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Succeeded,
                     reason: None,
                     permission_id: None,
+                    requested_by: None,
                 },
             )?;
         }

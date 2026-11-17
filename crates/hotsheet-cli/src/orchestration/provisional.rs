@@ -341,6 +341,7 @@ impl OrchestrationRuntime {
                 outcome: entry.outcome,
                 reason: Some(entry.reason.into()),
                 permission_id: None,
+                requested_by: None,
             },
         )
     }

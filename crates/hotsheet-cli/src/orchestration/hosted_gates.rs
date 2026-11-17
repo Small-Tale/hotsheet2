@@ -260,6 +260,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Denied,
                     reason: Some(refused.code().into()),
                     permission_id: None,
+                    requested_by: None,
                 },
             );
             return Err(OrchestrationError::Gate(refused));

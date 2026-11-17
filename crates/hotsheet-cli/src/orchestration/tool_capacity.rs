@@ -301,6 +301,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Changed,
                     reason: Some(status.state.code().into()),
                     permission_id: None,
+                    requested_by: None,
                 },
             )?;
         }

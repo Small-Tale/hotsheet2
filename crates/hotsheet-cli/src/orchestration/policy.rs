@@ -130,6 +130,7 @@ impl OrchestrationRuntime {
                     outcome: AuditOutcome::Changed,
                     reason: None,
                     permission_id: None,
+                    requested_by: None,
                 },
             )?;
         }

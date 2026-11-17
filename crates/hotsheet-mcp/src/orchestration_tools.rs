@@ -38,6 +38,7 @@ pub(crate) fn definition() -> Value {
         "artifact":{"type":"object","description":"deployment_request: optional {name, digest} of the built artifact, digest as lowercase SHA-256"},
         "reason":{"type":"string","description":"run_pause (optional), run_correct (required), readiness_reopen (required): a stable reason code, never free text"},
         "step_revision":{"type":"integer","minimum":0,"description":"readiness_define: the revision of the step working this ticket you read (0 when none is planned); a step changed since, here or on another machine, is refused with plan_conflict (HS2-YDY5HJ)"},
+        "requested_by":{"type":"string","maxLength":160,"description":"validation_run: the person whose request you carry out (an actor id), recorded in the audit beside your actor_id; attribution only, the gate still decides for you (HS2-ZYM6ZT)"},
         "discard_local":{"type":"boolean","description":"readiness_migrate: drop local plan definitions that conflict with the checked-in plan; only a person may ask, so an AI call is refused"},
         "to_worker":{"type":"string","description":"run_handoff: the worker that takes the run over; omit to hand it to a person"},
         "state":{"type":"string","enum":["requested","queued","dispatched","intervened","completed","failed","cancelled"],"description":"run_correct: the state the run is really in"},
@@ -735,7 +736,15 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
         // Each operation's body is strict, so only its own arguments are forwarded.
         let keys: &[&str] = match operation {
             "define" | "list" => &["ticket"],
-            "run" => &["ticket", "step_id", "operation_id", "run_id", "wait_ms"],
+            // HS2-ZYM6ZT: requested_by names the person the call carries out.
+            "run" => &[
+                "ticket",
+                "step_id",
+                "operation_id",
+                "run_id",
+                "wait_ms",
+                "requested_by",
+            ],
             "cancel" => &["ticket", "step_id", "operation_id", "wait_ms"],
             _ => &["ticket", "step_id"],
         };
@@ -1639,6 +1648,31 @@ mod tests {
     }
     /// HS2-TH53NN: a definition forwards the preferred tool and model; a plan read does
     /// not.
+    #[test]
+    fn hs2_zym6zt_validation_run_forwards_who_requested_it() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        let ticket = json!({"native_id":"ORC-1"});
+        call(
+            &backend,
+            owner,
+            json!({"action":"validation_run","ticket":ticket,"step_id":"smoke",
+                "operation_id":"op-1","requested_by":"person-abc123"}),
+        );
+        let sent = backend.0.lock_or_recover();
+        assert_eq!(
+            sent[0].1,
+            format!("/checkouts/{owner}/orchestration/validations/run")
+        );
+        assert_eq!(sent[0].2["requested_by"], "person-abc123");
+        assert!(
+            definition()["inputSchema"]["properties"]["requested_by"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("attribution only")
+        );
+    }
+
     #[test]
     fn hs2_ydy5hj_readiness_define_forwards_the_step_revision_and_migrate_its_choice() {
         let backend = Recorded(Mutex::new(Vec::new()));

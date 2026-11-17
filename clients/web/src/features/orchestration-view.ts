@@ -560,7 +560,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
    * ordinary permission request and waits for a person. A refusal with a request id is kept and sent
    * again under the same operation id once that request is answered; a denial is final. A started step
    * is followed under its operation id (each call waits up to 8 seconds on the server) until its result
-   * is final, which is how the orchestrator collects a result (§26.12).
+   * is final, which is how the orchestrator collects a result (§26.12). Each call names the person who
+   * pressed Run Validation as `requested_by`, recorded in the audit only (HS2-ZYM6ZT).
    */
   async function sendValidations(requests: readonly PendingValidation[], announce: boolean) {
     const current = dependencies.project(),
@@ -575,6 +576,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         operation_id: entry.operation_id,
         run_id: item.run?.run_id,
         wait_ms: waitMs,
+        // HS2-ZYM6ZT: the audit names this person beside the orchestrator that acts.
+        requested_by: dependencies.personId(),
       });
     const unsettled = (answer: Record<string, unknown>) => {
       const result = answer.result as { state?: unknown } | undefined;

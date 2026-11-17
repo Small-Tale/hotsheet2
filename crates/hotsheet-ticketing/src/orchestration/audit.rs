@@ -62,6 +62,11 @@ pub struct AuditRecord {
     /// entries carried a retired grant id under `grant_id`, read here unchanged.
     #[serde(default, alias = "grant_id", skip_serializing_if = "Option::is_none")]
     pub permission_id: Option<String>,
+    /// HS2-ZYM6ZT: the person whose request the actor carried out, when it acted for
+    /// one (a browser's Run Validation acts as the orchestrator so that the gate still
+    /// asks). Attribution only: the decision is about the actor. An identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_by: Option<String>,
 }
 
 /// HS2-SV4SMY: how long an identical observation read is recorded only once.
@@ -412,9 +417,14 @@ impl<R: JournalRecord> Journal<R> {
 
 fn validate(record: &AuditRecord) -> Result<(), OrchestrationError> {
     valid_identifier(&record.action)?;
-    for value in [&record.actor_role, &record.actor_id, &record.reason]
-        .into_iter()
-        .flatten()
+    for value in [
+        &record.actor_role,
+        &record.actor_id,
+        &record.reason,
+        &record.requested_by,
+    ]
+    .into_iter()
+    .flatten()
     {
         valid_identifier(value)?;
     }

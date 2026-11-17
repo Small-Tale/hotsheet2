@@ -546,12 +546,21 @@ the action itself confirms the destination again.
 journal with one JSON object per line: `seq`, `at_ms`, `actor_role`, `actor_id`,
 `target_id`, `action`, `operation_id`, `outcome` (`allowed`, `denied`, `succeeded`,
 `failed`, `approved`, `rejected`, `revoked`, `changed`, and `granted` in old
-entries), a `reason` code, and `permission_id` (the request or rule; old entries
-read their `grant_id` here). Every field is an identifier or a stable code; free text,
+entries), a `reason` code, `permission_id` (the request or rule; old entries
+read their `grant_id` here), and `requested_by` when the actor carried out a person's
+request (HS2-ZYM6ZT). Every field is an identifier or a stable code; free text,
 ticket content, credentials and origins are rejected at the journal boundary. Every
 `authorize` answer, every answered request (`permission_answer`), remembered and
 forgotten rule (`permission_remember`, `permission_forget`), and the reported result
 of an authorized action are recorded under the same operation id.
+
+**Who asked (HS2-ZYM6ZT).** An action can be carried out by one identity for another:
+a browser's Run Validation acts as the orchestrator so that a command step still asks
+(§26.31). Its request names the person in `requested_by` (`validation run
+--requested-by`, MCP `requested_by`), and every entry of that request (the decision,
+the outcome) records it beside `actor_id`. It is attribution only: the gate decides
+for the actor, so naming a person never turns the request into the person's own act,
+and a malformed value is refused before anything is asked or recorded.
 
 **Repeated observation reads (HS2-SV4SMY).** An observation (`gates_observe`) outside
 any operation that was allowed or succeeded is written only when it says something the
@@ -5325,7 +5334,9 @@ inspector sends the same operation again, which runs the step once, or drops it 
 denial. The permission list's own live updates drive this; nothing polls. A started
 step is followed under its operation id, each request waiting up to 8 seconds on the
 server, until its result is final: that is how the orchestrator collects a result
-(§26.12), and a retried attempt continues the same way.
+(§26.12), and a retried attempt continues the same way. Every request names the browser's person
+(the id the view keeps for this browser) as `requested_by`, so the audit records who
+pressed Run Validation beside the orchestrator that acted (HS2-ZYM6ZT).
 
 While a card with a run is selected, the inspector also keeps one cursor long poll of
 that run's events (`GET .../run-events?run=&after=&wait_ms=20000`) and reads the card's

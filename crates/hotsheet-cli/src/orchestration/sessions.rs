@@ -1855,6 +1855,7 @@ impl OrchestrationRuntime {
                 },
                 reason: outcome.as_ref().err().map(|error| error.code().into()),
                 permission_id: None,
+                requested_by: None,
             },
         )
     }
