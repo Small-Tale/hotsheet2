@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X),
+> inspector's Plan section (§26.31, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -1691,7 +1691,7 @@ ticket source.
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_define`,
 `validation_list`, `validation_evidence`, `validation_run`, `validation_remove`,
-`validation_cancel` and `validation_profiles`. The Orchestration view shows them in the card inspector (§26.30, HS2-9XJEZC).
+`validation_cancel` and `validation_profiles`. The Orchestration view shows them in the card inspector (§26.31, HS2-9XJEZC).
 
 ## 26.13 CI and deployment gates (HS2-5JBYPV)
 
@@ -2309,7 +2309,7 @@ hotsheet-cli --actor-role human ... orchestration run correct <run-id> --project
 
 MCP `hotsheet_targets` adds `run_reconcile` (all runs without `run_id`), `run_pause`,
 `run_resume`, `run_handoff` and `run_correct`. Acting on a disposition is the
-scheduler's (HS2-AH8CRS), and the card inspector's Run section shows the outcome (§26.30, HS2-XM692S).
+scheduler's (HS2-AH8CRS), and the card inspector's Run section shows the outcome (§26.31, HS2-XM692S).
 
 ## 26.15 Prerequisites and readiness (HS2-42TARA)
 
@@ -2555,7 +2555,7 @@ cancelling reduces activity and asks no one (HS2-YFPZFP, §26.24).
 Milestones and wider cross-project planning stay with their own tickets: the
 milestone model (HS2-8T71YW, HS2-A820C1, HS2-PX50E8, HS2-6E0H3X), cross-project
 planning (HS2-HX5MH3) and aggregate views (HS2-42B2FD). A milestone as a prerequisite
-kind is HS2-2CR7H3, and the card inspector's Plan section shows a step's place in the plan (§26.30, HS2-15G5T4).
+kind is HS2-2CR7H3, and the card inspector's Plan section shows a step's place in the plan (§26.31, HS2-15G5T4).
 
 ## 26.16 Orchestrator-owned sessions (HS2-GDJXGZ)
 
@@ -3210,7 +3210,7 @@ machine reads as `capacity_unknown`.
 MCP `hotsheet_targets` adds `scheduler_plan`, `scheduler_explain`,
 `scheduler_decisions` and `scheduler_tick` (with `dry_run`). `scheduler decisions`
 also reads the newest first (`newest`, `before`); the Orchestration view shows the
-explanation and the log in its inspector (§26.30, HS2-77SRHC).
+explanation and the log in its inspector (§26.31, HS2-77SRHC).
 
 ## 26.18 Provisional readiness inside one project (HS2-2SJPCH)
 
@@ -3619,7 +3619,7 @@ and each deferred step's record carries the reason, the resource and the expiry.
 
 `scheduler explain` adds `resources`: every resource the work requires with its
 state, its machine, the expiry or the step that was given it, and `declared_by`
-(`step` or `target`). The Orchestration view shows both in its inspector (§26.30,
+(`step` or `target`). The Orchestration view shows both in its inspector (§26.31,
 HS2-5GRXFN).
 
 A step's run is dispatched before its session starts (§26.19), so the step is in
@@ -3820,7 +3820,7 @@ Journal measures are `decisions_trimmed` when retention removed decisions.
 ### In the Orchestration view
 
 The overview of the Orchestration view's inspector shows the totals and each
-project's figures (§26.30, HS2-XJEH08). Per-run measures, utilization and external
+project's figures (§26.31, HS2-XJEH08). Per-run measures, utilization and external
 waits are read headlessly.
 
 ### Headless surface
@@ -4040,7 +4040,7 @@ target and rewrites nothing; the `provisional` event of a result is what wakes i
 - `scheduler explain` adds `speculation`, `provisional` and `provisional_dependents`,
   so it names which work is provisional on which gate from either side.
 
-The card inspector's Built Ahead section shows it (§26.30, HS2-0D60T8).
+The card inspector's Built Ahead section shows it (§26.31, HS2-0D60T8).
 
 ### What is not reused from the single-project code
 
@@ -5269,7 +5269,7 @@ The whole sequence runs end to end across two servers in
 before its worker and seen to join, an integrator started for the handoff, and all
 three sessions wound down when nothing is left.
 
-## 26.30 Orchestration details in the inspector (HS2-2XJSJK)
+## 26.31 Orchestration details in the inspector (HS2-2XJSJK)
 
 The maintainer signed off one home for the orchestration details that eight follow-ups
 asked to show (design HS2-2XJSJK, Design v1, answer A to every question): no new

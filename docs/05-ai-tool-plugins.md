@@ -3409,7 +3409,7 @@ refusal are exactly what they were, and neither field is serialized.
 **Not built here.** Automatic `claim-next` does not consult this rule: since
 HS2-E3C530 it ignores dependency edges altogether, and whether it should use them
 under the opt-in is HS2-XYF4YT. The Workers view shows each record on its ticket's card,
-through the shared orchestration line ([26](26-orchestration-projects.md) §26.30,
+through the shared orchestration line ([26](26-orchestration-projects.md) §26.31,
 HS2-N8H97X). The shared playbook wording for
 `final_testing` is proposed in HS2-5BNWVN. The cross-target form is
 HS2-JSF985 ([26](26-orchestration-projects.md) §26.22): there this setting is the
