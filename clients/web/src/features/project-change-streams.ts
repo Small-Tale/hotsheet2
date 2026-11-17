@@ -538,7 +538,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               void loadTicketStoreSync(current);
             // The group registry's publication state changed, for example the server's
             // background commit or a sync pass failed or recovered: reread the group list and
-            // its registry status so the banner follows without polling (HS2-1CWD0H).
+            // its registry status so the banner follows without polling (HS2-1CWD0H). A rename,
+            // a CLI write, or a pulled group changes its entries the same way (HS2-70JS8B).
             if (reloadTicketGroups && containsGroupRegistrySyncChange(response, current.id))
               void reloadTicketGroups(current);
           }),

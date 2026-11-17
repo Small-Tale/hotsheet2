@@ -408,6 +408,24 @@ impl AppState {
         }
     }
 
+    /// Tell clients that the group registry of the code checkout at `checkout_root` changed
+    /// through this server (HS2-70JS8B): a group created, renamed, merged, ungrouped, or
+    /// migrated. One replayable `group_registry_changed` event per checkout registered at that
+    /// root, so every open client rereads the group list; a rename changes no ticket and fired
+    /// nothing before. Edits from other processes and pulls reach clients through the checkout's
+    /// repository watcher. Carries no names or paths.
+    pub fn announce_group_registry_changed(&self, checkout_root: &FsPath) {
+        let Ok(checkouts) = self.checkout_registry.list() else {
+            return;
+        };
+        for checkout in checkouts
+            .into_iter()
+            .filter(|checkout| same_path(FsPath::new(&checkout.root), checkout_root))
+        {
+            self.emit(crate::watcher::group_registry_change_event(&checkout.id));
+        }
+    }
+
     /// Announce every group registry publication state change in this process
     /// ([`Self::announce_group_registry_sync`]) until the returned guard drops (HS2-1CWD0H).
     /// The server holds it for its run; the changes come from the background committer about

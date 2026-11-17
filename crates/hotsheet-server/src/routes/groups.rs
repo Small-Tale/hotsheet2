@@ -252,6 +252,13 @@ fn publish(state: &AppState, scope: &Scope, writes: &[groups::GroupWrite]) {
     }
 }
 
+/// After a successful registry write, tell every open client of the checkout (HS2-70JS8B).
+fn announce_registry(state: &AppState, scope: &Scope) {
+    if let Some(registry) = &scope.registry {
+        state.announce_group_registry_changed(registry.checkout_root());
+    }
+}
+
 fn change_response(outcome: GroupOutcome) -> Json<GroupChangeResponse> {
     Json(GroupChangeResponse {
         id: outcome.id.unwrap_or_default(),
@@ -291,6 +298,7 @@ fn do_rename(
     )
     .map_err(group_error)?;
     publish(state, scope, &outcome.writes);
+    announce_registry(state, scope);
     Ok(change_response(outcome))
 }
 
@@ -308,6 +316,7 @@ fn do_ungroup(
     )
     .map_err(group_error)?;
     publish(state, scope, &outcome.writes);
+    announce_registry(state, scope);
     Ok(Json(UngroupResponse {
         updated: outcome.updated,
     }))
@@ -328,6 +337,7 @@ fn do_merge(
     )
     .map_err(group_error)?;
     publish(state, scope, &outcome.writes);
+    announce_registry(state, scope);
     Ok(change_response(outcome))
 }
 
@@ -344,6 +354,7 @@ fn do_migrate(
     let migration = groups::migrate_groups(&scope.stores(), &directory(&scope.entries)?, registry)
         .map_err(group_error)?;
     publish(state, scope, &migration.writes);
+    announce_registry(state, scope);
     Ok(Json(MigrateGroupsResponse {
         created: migration.created,
         reused: migration.reused,
@@ -464,7 +475,12 @@ pub(crate) async fn create_checkout_group(
     Path(reference): Path<String>,
     Json(req): Json<CreateGroupReq>,
 ) -> Result<Json<CreateGroupResponse>, ApiError> {
-    do_create(&checkout_scope(&state, &reference)?, req)
+    let scope = checkout_scope(&state, &reference)?;
+    let created = do_create(&scope, req)?;
+    if created.0.created {
+        announce_registry(&state, &scope);
+    }
+    Ok(created)
 }
 
 pub(crate) async fn rename_checkout_group(

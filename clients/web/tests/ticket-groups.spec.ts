@@ -735,6 +735,31 @@ test('HS2-8CDFKR renames and ungroups a group from its header menu', async ({ pa
   }, page);
 });
 
+test('HS2-70JS8B shows a group renamed by another client without a reload', async ({ page }) => {
+  test.setTimeout(120_000);
+  await withServer(async (server) => {
+    await open(page, server);
+    const view = list(page),
+      boardId = (await groupIdOf(server, BOARD))!;
+    await expect(group(view, BOARD)).toBeVisible();
+    let groupReads = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/groups')) groupReads += 1;
+    });
+    // Another client (here the API directly) renames the group; this page made no request.
+    await server.request(`/checkouts/${server.checkoutId}/groups/rename`, 'POST', {
+      group: boardId,
+      to: 'Board polish',
+    });
+    // The registry change arrives on the change stream (long poll here) and the list rereads groups.
+    await expect(group(view, 'Board polish')).toBeVisible({ timeout: 30_000 });
+    await expect(group(view, 'Board polish')).toHaveAttribute('data-ticket-group', boardId);
+    await expect(group(view, BOARD)).toHaveCount(0);
+    expect(groupReads).toBeGreaterThan(0);
+    await capture(page, 'hs2-70js8b-renamed-elsewhere-light-1440');
+  }, page);
+});
+
 test('HS2-EYEGDQ selects all of a group’s tickets in the list or one column from its header menu', async ({ page }) => {
   test.setTimeout(180_000);
   await withServer(async (server) => {

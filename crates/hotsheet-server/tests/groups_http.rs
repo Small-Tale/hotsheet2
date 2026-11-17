@@ -1139,3 +1139,99 @@ async fn hs2_1cwd0h_registry_publication_changes_are_announced_on_the_change_str
     let (events, _) = registry_sync_events(&project.router, cursor).await;
     assert_eq!(events, []);
 }
+
+/// The `group_registry_changed` events replayed by the long poll after `cursor`, as checkout
+/// ids, and the new cursor.
+async fn registry_changed_events(router: &axum::Router, cursor: u64) -> (Vec<String>, u64) {
+    let polled = ok(
+        router,
+        "GET",
+        &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+        None,
+    )
+    .await;
+    let events = polled["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "group_registry_changed")
+        .map(|event| {
+            assert_eq!(event["slug"], "", "{event}");
+            event["id"].as_str().unwrap().to_owned()
+        })
+        .collect();
+    (events, polled["cursor"].as_u64().unwrap())
+}
+
+/// HS2-70JS8B: a registry edit through the server changes no ticket, so it is announced as a
+/// replayable `group_registry_changed` event for the checkout: creating a group (once, not
+/// again for the same name), renaming it, merging, and ungrouping. A failed edit announces
+/// nothing. The checkout has no Git repository, so these come from the routes, not a watcher.
+#[tokio::test]
+async fn hs2_70js8b_registry_edits_are_announced_to_every_client() {
+    let project = project();
+    let router = &project.router;
+    let base = format!("/checkouts/{}", project.checkout);
+    let (_, cursor) = registry_changed_events(router, 0).await;
+
+    let sprint = ok(
+        router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Sprint" })),
+    )
+    .await;
+    let (events, cursor) = registry_changed_events(router, cursor).await;
+    assert_eq!(events, std::slice::from_ref(&project.checkout));
+    // The same name again reuses the entry and writes nothing.
+    ok(
+        router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Sprint" })),
+    )
+    .await;
+    let (events, cursor) = registry_changed_events(router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+    // A group is renamed or ungrouped through its member tickets.
+    create(
+        router,
+        &format!("{base}/tickets?source={}", project.git[0]),
+        "member",
+        Some(sprint["id"].as_str().unwrap()),
+    )
+    .await;
+    let (_, cursor) = registry_changed_events(router, cursor).await;
+
+    ok(
+        router,
+        "POST",
+        &format!("{base}/groups/rename"),
+        Some(json!({ "group": sprint["id"], "to": "Sprint 2" })),
+    )
+    .await;
+    let (events, cursor) = registry_changed_events(router, cursor).await;
+    assert_eq!(events, std::slice::from_ref(&project.checkout));
+
+    // A refused rename (to an empty name) announces nothing.
+    let (status, _) = send(
+        router,
+        "POST",
+        &format!("{base}/groups/rename"),
+        Some(json!({ "group": sprint["id"], "to": "" })),
+    )
+    .await;
+    assert!(status.is_client_error(), "{status}");
+    let (events, cursor) = registry_changed_events(router, cursor).await;
+    assert!(events.is_empty(), "{events:?}");
+
+    ok(
+        router,
+        "POST",
+        &format!("{base}/groups/ungroup"),
+        Some(json!({ "group": sprint["id"] })),
+    )
+    .await;
+    let (events, _) = registry_changed_events(router, cursor).await;
+    assert_eq!(events, std::slice::from_ref(&project.checkout));
+}

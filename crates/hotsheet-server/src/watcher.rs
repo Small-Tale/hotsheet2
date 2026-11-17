@@ -11,7 +11,7 @@ use hotsheet_model::{Ulid, parse_file};
 use hotsheet_sync::LockExt;
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::broadcast;
 
 // ---- filesystem watcher (HS2-6) --------------------------------------------------
@@ -302,6 +302,86 @@ pub(crate) fn repository_change_event(checkout_id: &str) -> ChangeEvent {
     }
 }
 
+/// Tell clients that a checkout's ticket group registry changed on disk (HS2-70JS8B): an entry
+/// written by this server, by the CLI, or by a pull (`.hotsheet2/groups/`), or the machine-local
+/// overlay of groups another clone added (`.hotsheet2/groups-remote.json`). A rename changes no
+/// ticket, so without this other open clients kept the old name. Carries no names or paths.
+pub(crate) fn group_registry_change_event(checkout_id: &str) -> ChangeEvent {
+    ChangeEvent {
+        live: None,
+        cursor: None,
+        store: checkout_id.to_string(),
+        kind: "group_registry_changed".to_string(),
+        id: checkout_id.to_string(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    }
+}
+
+/// The group registry's on-disk state: each entry's and the overlay's name, length, and
+/// modification time. Cheap (one directory listing), so it is compared only after events.
+pub(crate) fn group_registry_fingerprint(root: &FsPath) -> Vec<(String, u64, Option<SystemTime>)> {
+    let stat = |path: &FsPath| {
+        std::fs::metadata(path)
+            .ok()
+            .map(|meta| (meta.len(), meta.modified().ok()))
+    };
+    let mut entries: Vec<(String, u64, Option<SystemTime>)> =
+        std::fs::read_dir(root.join(hotsheet_ticketing::groups::GROUP_REGISTRY_DIR))
+            .map(|dir| {
+                dir.filter_map(Result::ok)
+                    .filter_map(|entry| {
+                        let (len, modified) = stat(&entry.path())?;
+                        Some((
+                            entry.file_name().to_string_lossy().into_owned(),
+                            len,
+                            modified,
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    entries.sort();
+    if let Some((len, modified)) =
+        stat(&root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE))
+    {
+        entries.push(("\0overlay".to_string(), len, modified));
+    }
+    entries
+}
+
+/// Whether a filesystem event touches the group registry or its remote overlay. Checked before the
+/// Git-status filter, which skips the ignored overlay.
+fn touches_group_registry(root: &FsPath, result: &notify::Result<notify::Event>) -> bool {
+    let Ok(event) = result else {
+        return false;
+    };
+    let registry = path_spellings(&root.join(hotsheet_ticketing::groups::GROUP_REGISTRY_DIR));
+    let overlay =
+        path_spellings(&root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE));
+    event.paths.iter().any(|path| {
+        registry.iter().any(|dir| path.starts_with(dir)) || overlay.iter().any(|file| path == file)
+    })
+}
+
+/// Announce a registry change when its fingerprint moved since `previous`.
+fn announce_group_registry_change(
+    root: &FsPath,
+    previous: &mut Vec<(String, u64, Option<SystemTime>)>,
+    checkout_id: &str,
+    events: &broadcast::Sender<ChangeEvent>,
+    event_log: &Arc<Mutex<EventLog>>,
+) {
+    let next = group_registry_fingerprint(root);
+    if next != *previous {
+        *previous = next;
+        emit_change(event_log, events, group_registry_change_event(checkout_id));
+    }
+}
+
 /// Monitor a checkout for working-tree, index, commit, and upstream changes. Setup always
 /// happens off the request path. Native filesystem events trigger a Git status fingerprint,
 /// and only a changed fingerprint is announced, so ignored build output never reaches
@@ -565,6 +645,7 @@ fn run_native_repository_monitor(
     use notify::{RecursiveMode, Watcher};
 
     let mut previous = git_repository_fingerprint(&root);
+    let mut registry = group_registry_fingerprint(&root);
     let mut filter = RepositoryEventFilter::load(&root);
     let (tx, rx) = std::sync::mpsc::channel();
     // Starting a native stream can take many seconds on a busy Mac (HS2-XAHR91), so it starts
@@ -613,6 +694,14 @@ fn run_native_repository_monitor(
                 if stop.try_recv().is_ok() {
                     return;
                 }
+                // The bridge also compares the group registry, which native events report later.
+                announce_group_registry_change(
+                    &root,
+                    &mut registry,
+                    &checkout_id,
+                    &events,
+                    &event_log,
+                );
                 announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
@@ -622,13 +711,17 @@ fn run_native_repository_monitor(
     let mut gate = RepositoryRefreshGate::new();
     // Compare once the stream is live, covering the moments since the bridge's last read.
     gate.note_event(Instant::now());
+    let mut registry_touched = true;
     loop {
         if stop.try_recv().is_ok() {
             return;
         }
         match rx.recv_timeout(gate.wait(Instant::now())) {
             Ok(result) => {
-                if filter.is_relevant(&result) {
+                if touches_group_registry(&root, &result) {
+                    registry_touched = true;
+                    gate.note_event(Instant::now());
+                } else if filter.is_relevant(&result) {
                     gate.note_event(Instant::now());
                 }
                 continue;
@@ -641,6 +734,9 @@ fn run_native_repository_monitor(
             continue;
         }
         gate.fingerprinted(now);
+        if std::mem::take(&mut registry_touched) {
+            announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
+        }
         let changed =
             announce_repository_change(&root, &mut previous, &checkout_id, &events, &event_log);
         if changed == Some(false) {
@@ -678,6 +774,7 @@ fn run_git_repository_monitor(
     // Git applies ignore rules before enumerating untracked paths, so target/, node_modules/,
     // and similar ignored trees do not participate in either startup or steady-state work.
     let mut previous = git_repository_fingerprint(&root);
+    let mut registry = group_registry_fingerprint(&root);
     let mut unchanged_rounds = 0_u8;
     loop {
         let interval = if unchanged_rounds < 12 {
@@ -688,6 +785,8 @@ fn run_git_repository_monitor(
         if stop.recv_timeout(interval).is_ok() {
             return;
         }
+        // Without native events, the registry listing is compared on the same cadence (HS2-70JS8B).
+        announce_group_registry_change(&root, &mut registry, &checkout_id, &events, &event_log);
         let Some(next) = git_repository_fingerprint(&root) else {
             continue;
         };
@@ -1308,6 +1407,88 @@ mod watcher_tests {
         expect_change(&mut receiver, "a commit").await;
         expect_quiet(&mut receiver, "an idle checkout").await;
         drop(handle);
+    }
+
+    /// HS2-70JS8B: a group registry entry write (a rename by another process) and a write to the
+    /// ignored remote-group overlay each announce `group_registry_changed` for the checkout, from
+    /// the native and the Git-status monitor alike; an idle registry stays silent.
+    #[tokio::test]
+    async fn repository_monitors_announce_group_registry_changes() {
+        for (name, monitor) in [
+            (
+                "native",
+                run_native_repository_monitor as super::RepositoryMonitor,
+            ),
+            (
+                "git",
+                run_git_repository_monitor as super::RepositoryMonitor,
+            ),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            git(root, &["init", "--quiet"]);
+            // The overlay is machine-local and ignored, as in a real checkout.
+            std::fs::write(root.join(".gitignore"), ".hotsheet2/groups-remote.json\n").unwrap();
+            let registry = root.join(hotsheet_ticketing::groups::GROUP_REGISTRY_DIR);
+            std::fs::create_dir_all(&registry).unwrap();
+            std::fs::write(
+                registry.join("01GROUPAAAAAAAAAAAAAAAAAAA.json"),
+                r#"{"name":"Before"}"#,
+            )
+            .unwrap();
+            let (events, _) = tokio::sync::broadcast::channel(32);
+            let mut receiver = events.subscribe();
+            let handle = spawn_repository_monitor(
+                root.to_path_buf(),
+                format!("checkout-{name}"),
+                events,
+                Arc::new(Mutex::new(EventLog::default())),
+                monitor,
+            )
+            .unwrap();
+            tokio::time::sleep(Duration::from_millis(1_000)).await;
+            while receiver.try_recv().is_ok() {}
+            let registry_event =
+                async |receiver: &mut tokio::sync::broadcast::Receiver<super::ChangeEvent>,
+                       what: &str| {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+                    loop {
+                        let event = tokio::time::timeout_at(deadline, receiver.recv())
+                            .await
+                            .unwrap_or_else(|_| panic!("{name}: {what} was not announced"))
+                            .unwrap();
+                        if event.kind == "group_registry_changed" {
+                            assert_eq!(event.id, format!("checkout-{name}"));
+                            assert!(event.slug.is_empty() && event.message.is_none());
+                            return;
+                        }
+                    }
+                };
+
+            std::fs::write(
+                registry.join("01GROUPAAAAAAAAAAAAAAAAAAA.json"),
+                r#"{"name":"Renamed"}"#,
+            )
+            .unwrap();
+            registry_event(&mut receiver, "a registry rename").await;
+            std::fs::write(
+                root.join(hotsheet_ticketing::groups::git_sync::GROUP_REMOTE_OVERLAY_FILE),
+                r#"{"entries":[]}"#,
+            )
+            .unwrap();
+            registry_event(&mut receiver, "an overlay write").await;
+            let quiet: Vec<_> = {
+                tokio::time::sleep(Duration::from_millis(2_000)).await;
+                std::iter::from_fn(|| receiver.try_recv().ok())
+                    .filter(|event| event.kind == "group_registry_changed")
+                    .collect()
+            };
+            assert!(
+                quiet.is_empty(),
+                "{name}: an idle registry was announced: {quiet:?}"
+            );
+            drop(handle);
+        }
     }
 
     #[test]

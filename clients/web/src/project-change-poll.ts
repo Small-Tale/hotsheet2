@@ -60,9 +60,13 @@ export const containsRepositorySizeChange = (response: PollResponse, checkoutId:
 export const containsTicketStoreSyncChange = (response: PollResponse, checkoutId: string): boolean =>
   response.events.some((event) => event.kind === 'ticket_store_sync' && event.id === checkoutId);
 
-/** The publication state of this checkout's group registry changed (HS2-1CWD0H). */
+/** The publication state of this checkout's group registry changed (HS2-1CWD0H), or its entries did
+ * (a rename or a pulled group, HS2-70JS8B): either way the group list is reread. */
 export const containsGroupRegistrySyncChange = (response: PollResponse, checkoutId: string): boolean =>
-  response.events.some((event) => event.kind === 'group_registry_sync' && event.id === checkoutId);
+  response.events.some(
+    (event) =>
+      (event.kind === 'group_registry_sync' || event.kind === 'group_registry_changed') && event.id === checkoutId,
+  );
 
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
