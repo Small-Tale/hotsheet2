@@ -2357,8 +2357,12 @@ whatever target that ticket lives, so a cycle across projects is found. A
 prerequisite on a ticket no step works is a plain condition. Defining a step reads
 every ticket it names through the gate as `tickets_read` and stores the provider's
 canonical ids, so a slug is only a label; a ticket that cannot be read is not
-planned. The step and those reads are stored in one write, so no evaluation sees a new
-step before its tickets are observed and publishes it as `stale` (HS2-E7HR4R). A step
+planned. No evaluation sees a new step before its tickets are observed, so none
+publishes it as `stale` (HS2-E7HR4R). Since the step is checked in and its reads are
+machine-local (HS2-YDY5HJ), that takes write order: evaluations read the checked-in plan
+and then this machine's file without locks, so the reads are written first and the step
+second, and readings the new definition no longer names are pruned after it
+(HS2-G052RV). A step
 cannot require its own ticket. An owner plans at most 256 steps.
 
 ### Where the plan lives (HS2-YDY5HJ)

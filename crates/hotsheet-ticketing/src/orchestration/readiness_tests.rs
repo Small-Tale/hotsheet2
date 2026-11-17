@@ -1604,3 +1604,69 @@ fn hs2_th53nn_a_plan_step_keeps_its_preferred_tool_and_model() {
     let wire = serde_json::to_value(define(Some("codex"), None).unwrap().0).unwrap();
     assert!(wire.get("model").is_none());
 }
+
+/// HS2-G052RV: since HS2-YDY5HJ a step lives in the checked-in plan and its reads in the
+/// machine-local file, two files. A lock-free reader (any evaluation that publishes
+/// levels) reads the checked-in plan and then the machine file, so the reads must be
+/// written first: a reader that sees the new step then always finds its tickets
+/// observed, never `not_observed`, which published a spurious `stale` under load.
+#[test]
+fn hs2_g052rv_a_concurrent_reader_never_sees_a_step_before_its_reads() {
+    let mut fixture = Fixture::new();
+    let reader = fixture.registry.clone();
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop = done.clone();
+    let watcher = std::thread::spawn(move || {
+        let (mut reads, mut missing) = (0_u32, Vec::new());
+        while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+            let steps = reader.records(OWNER).unwrap_or_default();
+            let tickets = reader.tickets(OWNER).unwrap_or_default();
+            reads += 1;
+            for record in steps {
+                let observed = tickets.iter().any(|ticket| {
+                    ticket.target == record.step.target && ticket.facts.observed.is_some()
+                });
+                if !observed {
+                    missing.push(record.step.target.native_id.clone());
+                }
+            }
+        }
+        (reads, missing)
+    });
+    for n in 0..120 {
+        let target = ticket(1, &format!("t{n}"));
+        let (clock, rng) = (&fixture.clock, &mut fixture.rng);
+        fixture
+            .registry
+            .define_observed(
+                OWNER,
+                NewPlanStep {
+                    model: None,
+                    ticket: orchestration_ticket(),
+                    target: target.clone(),
+                    prerequisites: Vec::new(),
+                    resources: Vec::new(),
+                    tool: None,
+                },
+                None,
+                vec![(
+                    target,
+                    TicketUpdate {
+                        observed: Some(seen("not_started", 10)),
+                        unreachable: Some(None),
+                    },
+                )],
+                None,
+                &mut Transaction { clock, rng },
+            )
+            .unwrap();
+    }
+    done.store(true, std::sync::atomic::Ordering::SeqCst);
+    let (reads, missing) = watcher.join().unwrap();
+    assert!(reads > 0);
+    assert_eq!(
+        missing,
+        Vec::<String>::new(),
+        "a step was visible before its reads"
+    );
+}

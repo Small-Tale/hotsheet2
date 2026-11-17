@@ -1165,22 +1165,26 @@ impl PlanRegistry {
                 (step, true)
             }
         };
-        if changed {
-            shared.write_locked(current.as_ref(), steps.clone(), tx)?;
-        }
         let definitions: Vec<PlanStep> = steps
             .iter()
             .map(|step| step.step(owner_checkout_id))
             .collect();
+        // HS2-G052RV: an evaluation reads the checked-in plan and then this machine's
+        // file, without the locks. The reads are therefore written first, so whoever sees
+        // the new step also finds its tickets observed. Readings the new definition no
+        // longer needs are pruned only once the definition is checked in.
         let mut seen = false;
-        if changed {
-            seen |= prune(&mut file, owner_checkout_id, &definitions);
-        }
         for (target, update) in observed {
             seen |= apply_observation(&mut file, owner_checkout_id, &definitions, &target, update);
         }
         if seen {
             self.write_file(&file)?;
+        }
+        if changed {
+            shared.write_locked(current.as_ref(), steps, tx)?;
+            if prune(&mut file, owner_checkout_id, &definitions) {
+                self.write_file(&file)?;
+            }
         }
         Ok((step, changed))
     }
