@@ -423,7 +423,8 @@ fn base_tools_list() -> Value {
                 "checkout": str_prop("registered checkout id or alias"),
                 "connection_id": str_prop("optional linked Git source id; required when no unambiguous default exists"),
                 "after": str_prop("optional worker snapshot cursor for event-backed long polling"),
-                "wait_ms": { "type": "integer", "description": "maximum long-poll wait, 0 to 30000 milliseconds" }
+                "wait_ms": { "type": "integer", "description": "maximum long-poll wait, 0 to 30000 milliseconds" },
+                "include_past": { "type": "boolean", "description": "also list past workers: expired sessions that hold no assignment, claim, plan entry, or live connection. By default only their count is reported as past_workers." }
             }, "required": ["checkout"] }
         },
         {
@@ -1084,6 +1085,15 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                     .as_u64()
                     .ok_or_else(|| "wait_ms must be a non-negative integer".to_owned())?;
                 query.push(("wait_ms".to_owned(), wait_ms.to_string()));
+            }
+            // HS2-7R945V: the headless `--include-past` and the route's `include_past=true`.
+            if let Some(value) = args.get("include_past") {
+                if value
+                    .as_bool()
+                    .ok_or_else(|| "include_past must be a boolean".to_owned())?
+                {
+                    query.push(("include_past".to_owned(), "true".to_owned()));
+                }
             }
             backend
                 .get(
@@ -2657,14 +2667,20 @@ mod core_backend {
                     None => coordinator.snapshot(now),
                 }
                 .map_err(|error| bad_request(error.to_string()))?;
-                return Ok(to_value(
-                    &hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot(
-                        &snapshot,
-                        OffsetDateTime::now_utc().unix_timestamp(),
-                        &std::collections::BTreeMap::new(),
-                        false,
-                    ),
-                ));
+                let include_past = query
+                    .iter()
+                    .any(|(key, value)| key == "include_past" && value == "true");
+                let project = if include_past {
+                    hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot_including_past
+                } else {
+                    hotsheet_cli::coordination::worker_view::WorkerView::from_snapshot
+                };
+                return Ok(to_value(&project(
+                    &snapshot,
+                    OffsetDateTime::now_utc().unix_timestamp(),
+                    &std::collections::BTreeMap::new(),
+                    false,
+                )));
             }
             // Repository size (HS2-R0131R): the server endpoint's and `checkout repo-size
             // --json`'s report, computed locally from git object counts.
@@ -7756,6 +7772,104 @@ mod tests {
             "{:?}",
             fake.calls.borrow()
         );
+    }
+
+    /// HS2-7R945V: `include_past` lists past workers (expired sessions that hold nothing) that the
+    /// default view only counts, serverless and over HTTP.
+    #[test]
+    fn hs2_7r945v_worker_tool_lists_past_workers_on_request() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("code");
+        let source = root.path().join("tickets");
+        std::fs::create_dir(&project).unwrap();
+        assert!(
+            hotsheet_ticketing::git::launch("git")
+                .args(["init", "-q"])
+                .arg(&project)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let store = FsStore::init_git(&source, &StoreMetadata::new("HS")).unwrap();
+        let registry_path = root.path().join("home/checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+        registry
+            .register(&project, Some("workers"), None, vec![source.clone()])
+            .unwrap();
+        let coordinator = hotsheet_cli::coordination::Coordinator::open_with_registry_home(
+            &project,
+            &source,
+            registry_path.parent().unwrap().to_path_buf(),
+        )
+        .unwrap();
+        // A worker whose availability lease ended an hour ago and that holds nothing.
+        coordinator
+            .register(
+                hotsheet_cli::coordination::Role::Worker,
+                "worker-past",
+                "generation-a",
+                time::OffsetDateTime::now_utc().unix_timestamp() - 3600,
+                60,
+                hotsheet_cli::coordination::ReturnRoute::HumanRelay,
+            )
+            .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        let ids = |view: &Value| {
+            view["workers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|worker| worker["id"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let default = call(&backend, "hotsheet_workers", json!({"checkout":"workers"}));
+        assert!(
+            !ids(&default).contains(&"worker-past".to_owned()),
+            "{default}"
+        );
+        assert_eq!(default["past_workers"], 1, "{default}");
+        let off = call(
+            &backend,
+            "hotsheet_workers",
+            json!({"checkout":"workers", "include_past": false}),
+        );
+        assert_eq!(ids(&off), ids(&default));
+        let past = call(
+            &backend,
+            "hotsheet_workers",
+            json!({"checkout":"workers", "include_past": true}),
+        );
+        assert!(ids(&past).contains(&"worker-past".to_owned()), "{past}");
+        let invalid = call(
+            &backend,
+            "hotsheet_workers",
+            json!({"checkout":"workers", "include_past": "yes"}),
+        );
+        assert!(
+            invalid["error"]
+                .as_str()
+                .unwrap()
+                .contains("include_past must be a boolean"),
+            "{invalid}"
+        );
+        // Over HTTP the flag becomes the route's query parameter, and only when true.
+        let fake = FakeBackend::default();
+        call(
+            &fake,
+            "hotsheet_workers",
+            json!({"checkout":"web", "include_past": true}),
+        );
+        call(
+            &fake,
+            "hotsheet_workers",
+            json!({"checkout":"web", "include_past": false}),
+        );
+        let calls = fake.calls.borrow();
+        assert!(
+            calls[0].contains(r#"("include_past", "true")"#),
+            "{calls:?}"
+        );
+        assert!(!calls[1].contains("include_past"), "{calls:?}");
     }
 
     #[test]

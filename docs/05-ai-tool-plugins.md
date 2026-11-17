@@ -2891,8 +2891,9 @@ cursor includes them, so closing a ticket wakes waiting readers. The pool keeps 
 record unchanged for audit until `retire-finished` runs. A registered session whose
 lease has expired and that holds no non-terminal assignment, live claim, plan entry or
 observed live connection is a past worker. The default view omits past workers and
-reports their count as `past_workers`; `coordination workers --include-past` and the
-route's `include_past=true` list them too. An assignment on another source keeps its
+reports their count as `past_workers`; `coordination workers --include-past`, the
+route's `include_past=true`, and MCP `hotsheet_workers` with `include_past: true`
+(HS2-7R945V) list them too. An assignment on another source keeps its
 phase, because its ticket status is not read here.
 
 `retire-finished` is the one supported step that retires these records, so an
