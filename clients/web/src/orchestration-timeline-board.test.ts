@@ -20,6 +20,7 @@ import {
   waveTitle,
 } from './orchestration-timeline-board';
 import { DEMO_NOW, demoClock, demoTimeline } from './ux-demo/orchestration-fixtures';
+import { provisionalLine } from './worker-provisional';
 
 const item = (step: string, phase: Parameters<typeof demoTimeline>[0] = 'running') =>
   findTimelineItem(demoTimeline(phase), step)!.item;
@@ -199,5 +200,69 @@ describe('a target ticket’s orchestration line in its own project (HS2-S3FKJ7)
     expect(map.get(targetLineKey(first.target.connection_id, first.target.native_id))?.goalTitle).toMatch(/in A$/);
     expect(map.get(targetLineKey('other', first.target.native_id))).toBeUndefined();
     expect(targetLineMap([]).size).toBe(0);
+  });
+});
+
+describe('provisional work words its ledger state as a worker’s card does (HS2-H5H9QP)', () => {
+  const provisional = item('step-5');
+  const gate = (
+    result: string,
+    slug: string | null = 'API-12',
+  ): { target_id: string; connection_id: string; native_id: string; slug?: string; result: string } => ({
+    target_id: 'api',
+    connection_id: 'api-source',
+    native_id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    ...(slug === null ? {} : { slug }),
+    result,
+  });
+
+  const words = (state: string, gates: ReturnType<typeof gate>[]) => {
+    const line = orchestrationLine({ ...provisional, provisional: { state, gates } }, false);
+    return [line.state, line.stateTone];
+  };
+  const worker = (state: string, gates: ReturnType<typeof gate>[]) => {
+    const line = provisionalLine(
+      {
+        qualified: 'x',
+        slug: 'x',
+        state,
+        gates: gates.map((entry) => ({ slug: entry.slug ?? entry.native_id.slice(-6), result: entry.result })),
+      },
+      gates.filter((entry) => entry.result === 'red').map((entry) => entry.slug ?? entry.native_id.slice(-6)),
+    );
+    return [line?.state, line?.stateTone];
+  };
+
+  it('uses the Workers view’s line for provisional, at-risk and reopened work', () => {
+    expect(words('provisional', [gate('pending')])).toEqual(['Provisional on API-12 · CI running', 'info']);
+    expect(words('at_risk', [gate('red')])).toEqual(['At risk · repair API-12 first', 'warning']);
+    expect(words('reopened', [gate('red')])).toEqual(['Reopened · the fix invalidated it', 'warning']);
+    // The same function, so the same words, as the Workers view.
+    for (const [state, gates] of [
+      ['provisional', [gate('pending'), gate('unknown', 'WEB-3')]],
+      ['at_risk', [gate('red'), gate('pending', 'WEB-3')]],
+      ['reopened', [gate('green')]],
+    ] as const)
+      expect(words(state, [...gates])).toEqual(worker(state, [...gates]));
+    // Only red prerequisites are named for repair; an unlabelled one goes by its short id.
+    expect(words('at_risk', [gate('red', null), gate('pending', 'WEB-3')])[0]).toBe('At risk · repair 9G5FAV first');
+  });
+
+  it('keeps the plan’s words for confirmed work and an item without a record', () => {
+    expect(words('confirmed', [gate('green')])).toEqual([
+      stateWords(provisional, false)?.label,
+      stateWords(provisional, false)?.tone,
+    ]);
+    expect(orchestrationLine(provisional, false).state).toBe('Provisional on WEB-33');
+  });
+
+  it('reaches the timeline card and a target ticket’s line in its own project', () => {
+    const atRisk: TimelineItem = { ...provisional, provisional: { state: 'at_risk', gates: [gate('red')] } };
+    expect(timelineCard(atRisk, demoTimeline('running'), undefined).orchestration?.state).toBe(
+      'At risk · repair API-12 first',
+    );
+    expect(
+      targetLineOrchestration({ owner_checkout_id: 'a', owner_label: 'A', proposed: false, item: atRisk }).stateTone,
+    ).toBe('warning');
   });
 });

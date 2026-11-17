@@ -182,6 +182,30 @@ pub struct TimelineStep {
     pub readiness: StepReadiness,
     /// Work runs on it ahead of a pending gate (§26.22).
     pub provisional_work: bool,
+    /// HS2-H5H9QP: the ledger record of that work, as its card shows it.
+    pub provisional: Option<TimelineProvisional>,
+}
+
+/// HS2-H5H9QP: work started ahead of a pending gate, as a card's orchestration line
+/// words it: the ledger state and each gate's prerequisite and result (§26.22).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimelineProvisional {
+    /// `provisional`, `confirmed`, `at_risk` or `reopened`.
+    pub state: String,
+    pub gates: Vec<TimelineProvisionalGate>,
+}
+
+/// One gate provisional work rests on: the prerequisite ticket and the gate's result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimelineProvisionalGate {
+    pub target_id: String,
+    pub connection_id: String,
+    pub native_id: String,
+    /// Filled from the plan's ticket labels when the timeline is built.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    /// `pending`, `green`, `red`, `superseded`, `cancelled` or `unknown`.
+    pub result: String,
 }
 
 /// Why Start Orchestration can or cannot be pressed.
@@ -312,6 +336,9 @@ pub struct TimelineItem {
     /// When work on it is expected to start; absent once started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimated_start_ms: Option<u64>,
+    /// HS2-H5H9QP: the ledger record of work started on it ahead of a pending gate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provisional: Option<TimelineProvisional>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -651,6 +678,22 @@ fn item(
             .then(|| run.and_then(finished_at))
             .flatten(),
         estimated_start_ms: None,
+        // Only work that is still running carries its record; finished work needs no remark.
+        provisional: step
+            .provisional
+            .clone()
+            .filter(|_| state == ItemState::Provisional)
+            .map(|mut provisional| {
+                for gate in &mut provisional.gates {
+                    let key = (
+                        gate.target_id.clone(),
+                        gate.connection_id.clone(),
+                        gate.native_id.clone(),
+                    );
+                    gate.slug = input.tickets.get(&key).and_then(|label| label.slug.clone());
+                }
+                provisional
+            }),
     }
 }
 

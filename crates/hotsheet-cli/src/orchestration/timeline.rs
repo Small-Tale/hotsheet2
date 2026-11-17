@@ -256,6 +256,8 @@ impl OrchestrationRuntime {
             .map(|view| TimelineStep {
                 provisional_work: view.readiness.level == ReadinessLevel::InProgress
                     && view.provisional.is_some(),
+                // HS2-H5H9QP: the card words the ledger record as the Workers view does.
+                provisional: view.provisional.as_ref().map(timeline_provisional),
                 readiness: view.readiness,
             })
             .collect();
@@ -404,5 +406,33 @@ impl OrchestrationRuntime {
                 return Ok(view);
             }
         }
+    }
+}
+
+/// HS2-H5H9QP: the ledger record of provisional work as a timeline card shows it.
+fn timeline_provisional(
+    work: &super::provisional::ProvisionalWork,
+) -> hotsheet_ticketing::orchestration::TimelineProvisional {
+    let name = |value: serde_json::Result<serde_json::Value>| {
+        value
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_default()
+    };
+    hotsheet_ticketing::orchestration::TimelineProvisional {
+        state: name(serde_json::to_value(work.state)),
+        gates: work
+            .gates
+            .iter()
+            .map(
+                |gate| hotsheet_ticketing::orchestration::TimelineProvisionalGate {
+                    target_id: gate.target_id.clone(),
+                    connection_id: gate.connection_id.clone(),
+                    native_id: gate.native_id.clone(),
+                    slug: None,
+                    result: gate.result.name().to_owned(),
+                },
+            )
+            .collect(),
     }
 }

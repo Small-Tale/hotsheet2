@@ -16,6 +16,7 @@ import type {
   TimelineWave,
 } from './orchestration-timeline';
 import { priorityFromWire } from './priority-wire';
+import { provisionalLine } from './worker-provisional';
 
 /** Formats a time of day, such as "15:00". Injected so tests are independent of the locale. */
 export type ClockFormat = (ms: number) => string;
@@ -73,6 +74,27 @@ export function stateWords(item: TimelineItem, proposed: boolean): { label: stri
     default:
       return item.state satisfies never;
   }
+}
+
+/**
+ * HS2-H5H9QP: work started ahead of a pending gate words its ledger state exactly as a worker's card does
+ * (HS2-N8H97X), through the same `provisionalLine`: provisional with each gate's CI result, at risk naming
+ * the failed prerequisites to repair first, or reopened. Confirmed work, or no record, says nothing here.
+ */
+function ledgerWords(item: TimelineItem): { label: string; tone: SemanticTone } | undefined {
+  const record = item.provisional;
+  if (!record) return undefined;
+  const gates = record.gates.map((gate) => ({ slug: gate.slug ?? gate.native_id.slice(-6), result: gate.result })),
+    line = provisionalLine(
+      {
+        qualified: `${item.target.connection_id}:${item.target.native_id}`,
+        slug: itemSlug(item),
+        state: record.state,
+        gates,
+      },
+      gates.filter((gate) => gate.result === 'red').map((gate) => gate.slug),
+    );
+  return line?.state && line.stateTone ? { label: line.state, tone: line.stateTone } : undefined;
 }
 
 /** The badge an inspector shows for an item's state. */
@@ -148,7 +170,7 @@ function cardStatus(item: TimelineItem): TicketStatus {
  * {@link targetLineOrchestration}, a target project's List and Columns (HS2-S3FKJ7).
  */
 export function orchestrationLine(item: TimelineItem, proposed: boolean): TicketRowOrchestration {
-  const words = stateWords(item, proposed),
+  const words = ledgerWords(item) ?? stateWords(item, proposed),
     tool = toolLabel(item.tool);
   return {
     state: words?.label,

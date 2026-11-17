@@ -183,8 +183,8 @@ pub use target_lines::{
 pub use timeline::{
     DEFAULT_WAVE_MINUTES, DecisionWait, EstimateBasis, ItemState, KickOff, PermissionWait,
     PlacementHint, TargetLocation, TicketLabel, Timeline, TimelineInput, TimelineItem,
-    TimelinePhase, TimelinePolicy, TimelineRun, TimelineStep, TimelineTarget, WaitsOn, Wave,
-    WaveKind, timeline,
+    TimelinePhase, TimelinePolicy, TimelineProvisional, TimelineProvisionalGate, TimelineRun,
+    TimelineStep, TimelineTarget, WaitsOn, Wave, WaveKind, timeline,
 };
 pub use tool_capacity::{
     ActiveLimit, Applied, BACKOFF_BASE_MS, BACKOFF_CAP_MS, BACKOFF_FACTOR, Candidate,

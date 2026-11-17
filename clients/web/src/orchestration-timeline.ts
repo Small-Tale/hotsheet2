@@ -98,6 +98,15 @@ export interface TimelineItem {
   started_at_ms?: number;
   finished_at_ms?: number;
   estimated_start_ms?: number;
+  /** HS2-H5H9QP: the ledger record of work started ahead of a pending gate (§26.22). */
+  provisional?: TimelineProvisional;
+}
+
+/** HS2-H5H9QP: provisional work on an item: its ledger state and the gates it rests on. */
+export interface TimelineProvisional {
+  /** `provisional`, `confirmed`, `at_risk` or `reopened`. */
+  state: string;
+  gates: Array<{ target_id: string; connection_id: string; native_id: string; slug?: string; result: string }>;
 }
 
 export interface TimelineWave {
@@ -212,6 +221,18 @@ function item(value: unknown): TimelineItem {
     return entry;
   });
   for (const key of ['started_at_ms', 'finished_at_ms', 'estimated_start_ms'] as const) optional(row[key], count);
+  optional(row.provisional, (provisional) => {
+    const entry = record(provisional);
+    text(entry.state);
+    list(entry.gates, (gate) => {
+      const found = record(gate);
+      text(found.native_id);
+      text(found.result);
+      optional(found.slug, text);
+      return found;
+    });
+    return entry;
+  });
   text(row.step_id);
   text(goal.native_id);
   text(target.target_id);

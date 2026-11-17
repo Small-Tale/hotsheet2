@@ -275,6 +275,10 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
     await openOrchestration(page, server);
     const view = page.locator('[data-orchestration-view="true"]');
     const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Built Ahead"]');
+    // HS2-H5H9QP: the timeline card's orchestration line words the ledger record as a worker's card does.
+    const cardLine = view.locator(`[data-ticket-slug="${built.slug}"] [data-orchestration-part="state"]`);
+    await expect(cardLine).toHaveText(`Provisional on ${prerequisite.slug} · CI running`, { timeout: 30_000 });
+    await expect(cardLine).toHaveAttribute('data-tone', 'info');
     await view.locator(`[data-ticket-slug="${built.slug}"]`).click();
     await expect(section).toContainText(`${prerequisite.slug} · CI running on 3f9c2a1`);
     await expect(section).not.toContainText('At Risk');
@@ -285,11 +289,13 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
     await expect(section).toContainText('At Risk', { timeout: 60_000 });
     await expect(section).toContainText(`Repair ${prerequisite.slug} first`);
     await expect(section).toContainText(`${prerequisite.slug} · CI failed on 3f9c2a1`);
+    await expect(cardLine).toHaveText(`At risk · repair ${prerequisite.slug} first`, { timeout: 30_000 });
+    await expect(cardLine).toHaveAttribute('data-tone', 'warning');
     const order = await page
       .locator('[data-orchestration-inspector] [data-orchestration-section]')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-orchestration-section')));
     expect(order.slice(0, 4)).toEqual(['Where It Runs', 'Plan', 'Built Ahead', 'Run']);
-    await visualPass(page, 'hs2-8kv14y', 'at-risk', {
+    await visualPass(page, 'hs2-h5h9qp', 'at-risk', {
       show: section,
       check: () => expect(section).toContainText('At Risk'),
       atPhone: () => view.locator(`[data-ticket-slug="${built.slug}"]`).click(),
@@ -305,6 +311,16 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
     await expect(section).toContainText('Reopened (fix changed contract)');
     await expect(section.getByRole('button', { name: 'Reopen…' })).toHaveCount(0);
     await expect(section).not.toContainText('At Risk');
+    await expect(cardLine).toHaveText('Reopened · the fix invalidated it', { timeout: 30_000 });
+    await expect(cardLine).toHaveAttribute('data-tone', 'warning');
+    // The card itself on a phone, with the inspector sheet closed.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.keyboard.press('Escape');
+    await cardLine.scrollIntoViewIfNeeded();
+    await expect(cardLine).toBeInViewport();
+    await capture(page, 'hs2-h5h9qp', 'timeline-card-reopened-390');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await capture(page, 'hs2-h5h9qp', 'timeline-card-reopened-1440');
     const listed = await send(server, 'POST', `${base}/readiness/speculation`, { actor: scheduler });
     expect(listed.work).toEqual([
       expect.objectContaining({ state: 'reopened', reopen_reason: 'fix_changed_contract' }),

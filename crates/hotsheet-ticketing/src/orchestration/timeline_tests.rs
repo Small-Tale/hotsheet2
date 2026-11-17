@@ -75,6 +75,7 @@ fn step(n: u128, level: ReadinessLevel, after: &[u128]) -> TimelineStep {
             cycle: Vec::new(),
         },
         provisional_work: false,
+        provisional: None,
     }
 }
 
@@ -759,4 +760,87 @@ fn hs2_j89jc7_waits_on_is_deduplicated_and_empty_once_running() {
     fixture.runs = vec![run(1, 4, RunState::Dispatched, NOW, None)];
     let view = fixture.view();
     assert!(view.waves[1].items[0].waits_on.is_empty());
+}
+
+#[test]
+fn hs2_h5h9qp_a_provisional_item_carries_its_ledger_record_with_gate_slugs() {
+    use crate::orchestration::{TimelineProvisional, TimelineProvisionalGate};
+    let record = |state: &str, result: &str| TimelineProvisional {
+        state: state.into(),
+        gates: vec![TimelineProvisionalGate {
+            target_id: target(2).target_id,
+            connection_id: target(2).connection_id,
+            native_id: target(2).native_id,
+            slug: None,
+            result: result.into(),
+        }],
+    };
+    let item_of = |planned: TimelineStep, label: bool| {
+        let mut fixture = Fixture::new(vec![planned]);
+        fixture.runs.push(run(1, 4, RunState::Dispatched, 10, None));
+        if label {
+            fixture.tickets.insert(
+                ticket_key(&target(2)),
+                TicketLabel {
+                    slug: Some("API-2".into()),
+                    ..TicketLabel::default()
+                },
+            );
+        }
+        let view = fixture.view();
+        let item = view
+            .waves
+            .iter()
+            .flat_map(|wave| wave.items.clone())
+            .next()
+            .unwrap();
+        (item, view.version)
+    };
+    // Running ahead of a pending gate, then at risk, then reopened: the record travels with
+    // its prerequisite's slug, and every change moves the timeline's version.
+    let mut versions = Vec::new();
+    for (state, result) in [
+        ("provisional", "pending"),
+        ("at_risk", "red"),
+        ("reopened", "red"),
+    ] {
+        let mut planned = step(4, L::InProgress, &[]);
+        planned.provisional_work = true;
+        planned.provisional = Some(record(state, result));
+        let (item, version) = item_of(planned, true);
+        assert_eq!(item.state, ItemState::Provisional, "{state}");
+        let carried = item.provisional.expect(state);
+        assert_eq!(carried.state, state);
+        assert_eq!(carried.gates[0].slug.as_deref(), Some("API-2"));
+        assert_eq!(carried.gates[0].result, result);
+        let wire = serde_json::to_value(&carried).unwrap();
+        assert_eq!(wire["gates"][0]["slug"], "API-2");
+        versions.push(version);
+    }
+    versions.dedup();
+    assert_eq!(versions.len(), 3, "each ledger change is a new version");
+    // An unknown prerequisite keeps no slug and serializes none.
+    let mut planned = step(4, L::InProgress, &[]);
+    planned.provisional_work = true;
+    planned.provisional = Some(record("provisional", "unknown"));
+    let carried = item_of(planned, false).0.provisional.unwrap();
+    assert_eq!(carried.gates[0].slug, None);
+    assert!(
+        serde_json::to_value(&carried).unwrap()["gates"][0]
+            .get("slug")
+            .is_none()
+    );
+    // Finished work, and a step without a record, carry nothing, and serialize nothing.
+    let mut finished = step(4, L::Finished, &[]);
+    finished.provisional = Some(record("confirmed", "green"));
+    let (done, _) = item_of(finished, true);
+    assert_eq!(done.provisional, None);
+    let (plain, _) = item_of(step(4, L::InProgress, &[]), true);
+    assert_eq!(plain.provisional, None);
+    assert!(
+        serde_json::to_value(&plain)
+            .unwrap()
+            .get("provisional")
+            .is_none()
+    );
 }

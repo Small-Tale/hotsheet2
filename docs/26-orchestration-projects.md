@@ -4755,7 +4755,13 @@ A read on the server also starts the target followers of §26.9.
   decision on LCH-1, Provisional on WEB-33; running and done say it through the status
   badge), where it runs (machine · tool) and the goal ticket. List and Columns take the
   same prop, and a target project's own List and Columns show it on its planned
-  tickets (§26.29, HS2-S3FKJ7).
+  tickets (§26.29, HS2-S3FKJ7). Work started ahead of a pending gate words its ledger
+  record exactly as a worker's card does (HS2-H5H9QP, the same `provisionalLine` as
+  HS2-N8H97X): "Provisional on API-12 · CI running" (info), "At risk · repair API-12
+  first" (warning, naming the prerequisites whose gate is red) or "Reopened · the fix
+  invalidated it" (warning). The timeline item carries that record as `provisional`
+  (the ledger `state` and each gate's prerequisite, slug and `result`); confirmed work
+  keeps the plan's words.
 - **Inspector.** Selecting a card shows Where It Runs, then what it waits on (Show
   Request; Open <goal>, which opens the goal ticket; or its prerequisites), then its Run with the person's controls (Pause or
   Resume, Hand Off…, Correct… and Cancel Run…, through the run routes of §26.9 and

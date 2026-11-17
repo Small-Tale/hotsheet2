@@ -4228,7 +4228,12 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   against a loopback fake provider (`clients/web/tests/fake-github-actions.ts`), the
   dependent is dispatched ahead of it and reads CI running, the run fails and the
   inspector follows the gate to the At Risk banner and rows, then Reopen… with a reason
-  sends the real `readiness reopen` and the ledger and section read Reopened.
+  sends the real `readiness reopen` and the ledger and section read Reopened. The
+  timeline card's orchestration line follows the same record (HS2-H5H9QP): Provisional on
+  … · CI running, At risk · repair … first and Reopened, with their tones;
+  `timeline_tests.rs # hs2_h5h9qp_*` pins the item's record, slugs and version, and
+  `orchestration-timeline-board.test.ts # HS2-H5H9QP` pins the shared `provisionalLine`
+  words on cards and target lines.
 - Scheduler (HS2-77SRHC): `audit_tests.rs # hs2_77srhc` pages a journal newest first from
   empty, back to its first entry, past it, with an append between pages, a `before`
   beyond the newest and a zero limit, and reports the gap rotation left;
