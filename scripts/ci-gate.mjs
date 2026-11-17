@@ -187,6 +187,87 @@ export async function gateStatus({
   return { green, covers: coverage, waiting };
 }
 
+/** GitHub conclusions that mean the run failed; anything else completed is `cancelled` or `success`. */
+const FAILED_CONCLUSIONS = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
+
+/**
+ * The `hotsheet-cli ci report` arguments for one `gh run list` entry (HS2-W4BC5Q), or `null` when
+ * the entry is not a usable run. The server keeps the newest run per checkout and refuses stale
+ * reports itself, so this only translates fields.
+ *
+ * @param {Record<string, unknown> | null | undefined} entry
+ * @returns {string[] | null}
+ */
+export function ciReportArgs(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const started = Date.parse(String(entry.createdAt ?? ''));
+  if (!Number.isFinite(started) || !SHA.test(String(entry.headSha ?? ''))) return null;
+  let status;
+  if (
+    entry.status === 'queued' ||
+    entry.status === 'waiting' ||
+    entry.status === 'pending' ||
+    entry.status === 'requested'
+  )
+    status = 'queued';
+  else if (entry.status === 'in_progress') status = 'in_progress';
+  else if (entry.status === 'completed') {
+    if (entry.conclusion === 'success') status = 'success';
+    else if (FAILED_CONCLUSIONS.has(String(entry.conclusion))) status = 'failure';
+    else if (
+      entry.conclusion === 'cancelled' ||
+      entry.conclusion === 'skipped' ||
+      entry.conclusion === 'neutral' ||
+      entry.conclusion === 'stale'
+    )
+      status = 'cancelled';
+    else return null;
+  } else return null;
+  const args = ['ci', 'report', '--status', status, '--sha', String(entry.headSha), '--started-at-ms', String(started)];
+  if (typeof entry.headBranch === 'string' && BRANCH.test(entry.headBranch)) args.push('--branch', entry.headBranch);
+  if (typeof entry.workflowName === 'string' && entry.workflowName) args.push('--workflow', entry.workflowName);
+  if (typeof entry.url === 'string' && /^https?:\/\//.test(entry.url)) args.push('--run-url', entry.url);
+  if (status !== 'queued' && status !== 'in_progress') {
+    const finished = Date.parse(String(entry.updatedAt ?? ''));
+    if (Number.isFinite(finished) && finished >= started) args.push('--finished-at-ms', String(finished));
+  }
+  return args;
+}
+
+/**
+ * Report the branch's newest CI push run to the local Hot Sheet server (HS2-W4BC5Q), so the Stats
+ * tile and the project sidebar show it. Best effort: no server, no `hotsheet-cli`, or a `gh` error
+ * only returns `false`; it never fails the gate and never polls.
+ *
+ * @param {{ branch?: string; run?: typeof command }} [options]
+ * @returns {boolean} whether a report was accepted by the CLI
+ */
+export function reportLatestRun({ branch = 'main', run = command } = {}) {
+  try {
+    const list = run('gh', [
+      'run',
+      'list',
+      '--branch',
+      branch,
+      '--workflow',
+      'CI',
+      '--event',
+      'push',
+      '--limit',
+      '1',
+      '--json',
+      'status,conclusion,headBranch,workflowName,headSha,createdAt,updatedAt,url',
+    ]);
+    if (list.status !== 0) return false;
+    const [latest] = JSON.parse(list.stdout);
+    const args = ciReportArgs(latest);
+    if (!args) return false;
+    return run('hotsheet-cli', args).status === 0;
+  } catch {
+    return false;
+  }
+}
+
 export function parseStatusArgs(args) {
   const usage = 'usage: node scripts/ci-gate.mjs status [--branch <name>] [--covers <full-sha>]';
   if (args[0] !== 'status') throw new Error(usage);
@@ -205,6 +286,10 @@ export function parseStatusArgs(args) {
 
 async function main(args) {
   const options = parseStatusArgs(args);
+  // HS2-W4BC5Q: tell a running local Hot Sheet server about the branch's newest CI run, whatever its
+  // outcome, before anything below can return early. Best effort; it never changes this command's result.
+  if (reportLatestRun({ branch: options.branch }))
+    console.log(`Reported the latest ${options.branch} CI run to Hot Sheet.`);
   const result = await gateStatus(options);
   if (!result.green) {
     console.log(`No successful ${options.branch} push CI run found in the latest 20 successful run records.`);

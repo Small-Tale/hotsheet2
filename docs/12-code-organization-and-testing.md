@@ -1152,7 +1152,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   its note names the run and includes `CI gate commit: <full 40-character SHA>`.
   `node scripts/ci-gate.mjs status --covers <full-sha>` reads the latest successful
   `main` push run of the `CI` workflow. It reports whether that run contains the given
-  commit and lists waiting tickets with explicit markers. The helper is read-only:
+  commit and lists waiting tickets with explicit markers. It also reports the newest run of
+  that branch to a running local Hot Sheet server, best effort (HS2-W4BC5Q,
+  [32](32-notifier-plugins.md) §32.8.5). The helper is otherwise read-only:
   GitHub Actions is the shared source of truth, and a missing local commit yields
   `unknown` until the checkout has that commit. A green run covers all ancestor
   ticket commits, even when it followed several pushes. A red run triggers targeted

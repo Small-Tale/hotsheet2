@@ -1315,6 +1315,8 @@ bounds the Kerf Pane so its content slot is the sole vertical scroll owner;
 lower repository-size entry at phone, wide, and capture-matching wide viewports,
 with rendered screenshots of the top and bottom states.
 
+HS2-W4BC5Q: `scripts/ci-gate.test.mjs` also translates the newest run into `hotsheet-cli ci report` (every status and conclusion, unusable entries, unsafe URL and branch) and reports best effort without throwing.
+
 HS2-QCBEQF covers the read-only CI batch-gate helper: `scripts/ci-gate.test.mjs`
 checks recorded GitHub runs, branch/workflow filtering, ancestry, unknown local
 commits, and explicit `final_testing` markers. A live `status --covers` call verifies

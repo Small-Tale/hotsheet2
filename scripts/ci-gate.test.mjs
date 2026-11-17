@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  ciReportArgs,
   gateStatus,
   isCovered,
   latestGreenRun,
   parseStatusArgs,
+  reportLatestRun,
   startedSlugs,
   streamWaitingCommit,
   waitingCommit,
@@ -201,4 +203,100 @@ test('HS2-GT57BQ status reads the covering run on a ci-staged integration branch
     ['list'],
   ])
     assert.throws(() => parseStatusArgs(args), /usage/);
+});
+
+test('HS2-W4BC5Q translates the newest CI run into a hotsheet-cli ci report', () => {
+  const run = {
+    status: 'completed',
+    conclusion: 'failure',
+    headBranch: 'main',
+    workflowName: 'CI',
+    headSha: greenSha,
+    createdAt: '2026-11-17T10:00:00Z',
+    updatedAt: '2026-11-17T10:12:00Z',
+    url: 'https://github.com/example/repo/actions/runs/7',
+  };
+  assert.deepEqual(ciReportArgs(run), [
+    'ci',
+    'report',
+    '--status',
+    'failure',
+    '--sha',
+    greenSha,
+    '--started-at-ms',
+    String(Date.parse('2026-11-17T10:00:00Z')),
+    '--branch',
+    'main',
+    '--workflow',
+    'CI',
+    '--run-url',
+    'https://github.com/example/repo/actions/runs/7',
+    '--finished-at-ms',
+    String(Date.parse('2026-11-17T10:12:00Z')),
+  ]);
+  const status = (fields) => ciReportArgs({ ...run, ...fields })?.[3];
+  assert.equal(status({ conclusion: 'success' }), 'success');
+  assert.equal(status({ conclusion: 'timed_out' }), 'failure');
+  assert.equal(status({ conclusion: 'cancelled' }), 'cancelled');
+  assert.equal(status({ status: 'in_progress', conclusion: '' }), 'in_progress');
+  assert.equal(status({ status: 'queued', conclusion: '' }), 'queued');
+  // A running run carries no finish time.
+  assert.ok(!ciReportArgs({ ...run, status: 'in_progress', conclusion: '' }).includes('--finished-at-ms'));
+  // Unusable entries report nothing.
+  assert.equal(ciReportArgs(undefined), null);
+  assert.equal(ciReportArgs({ ...run, headSha: 'nope' }), null);
+  assert.equal(ciReportArgs({ ...run, createdAt: 'never' }), null);
+  assert.equal(ciReportArgs({ ...run, status: 'completed', conclusion: 'mystery' }), null);
+  // A non-http URL and an unsafe branch are left out rather than reported.
+  const odd = ciReportArgs({ ...run, url: 'file:///x', headBranch: '../x' });
+  assert.ok(!odd.includes('--run-url') && !odd.includes('--branch'));
+});
+
+test('HS2-W4BC5Q reports best effort and never throws', () => {
+  const calls = [];
+  const fake = (results) => (binary, args) => {
+    calls.push([binary, ...args]);
+    return results[binary];
+  };
+  const listed = {
+    status: 0,
+    stdout: JSON.stringify([
+      {
+        status: 'in_progress',
+        conclusion: '',
+        headBranch: 'main',
+        workflowName: 'CI',
+        headSha: greenSha,
+        createdAt: '2026-11-17T10:00:00Z',
+        updatedAt: '2026-11-17T10:01:00Z',
+        url: 'https://github.com/example/repo/actions/runs/8',
+      },
+    ]),
+  };
+  assert.equal(reportLatestRun({ run: fake({ gh: listed, 'hotsheet-cli': { status: 0 } }) }), true);
+  assert.deepEqual(calls[0].slice(0, 9), [
+    'gh',
+    'run',
+    'list',
+    '--branch',
+    'main',
+    '--workflow',
+    'CI',
+    '--event',
+    'push',
+  ]);
+  assert.deepEqual(calls[1].slice(0, 5), ['hotsheet-cli', 'ci', 'report', '--status', 'in_progress']);
+  // No server (the CLI fails), a gh failure, garbage output, or a throwing runner: false, no throw.
+  assert.equal(reportLatestRun({ run: fake({ gh: listed, 'hotsheet-cli': { status: 1 } }) }), false);
+  assert.equal(reportLatestRun({ run: fake({ gh: { status: 1, stdout: '' } }) }), false);
+  assert.equal(reportLatestRun({ run: fake({ gh: { status: 0, stdout: 'not json' } }) }), false);
+  assert.equal(reportLatestRun({ run: fake({ gh: { status: 0, stdout: '[]' } }) }), false);
+  assert.equal(
+    reportLatestRun({
+      run: () => {
+        throw new Error('spawn gh ENOENT');
+      },
+    }),
+    false,
+  );
 });
