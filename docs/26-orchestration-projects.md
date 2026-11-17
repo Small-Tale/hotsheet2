@@ -1687,6 +1687,9 @@ hotsheet-cli ... orchestration validation profiles --project <checkout-or-owner>
 
 `validation run` repeats its one request until the attempt is finished and the retry
 policy has nothing left, and returns at once when the target could not be confirmed.
+`validation cancel` repeats the same way until the stopped attempt has ended
+(HS2-5EZZPH): one bounded wait on a loaded host could end while the stop was still
+being confirmed.
 The result is in the JSON (`result.state`), not in the exit status. `--source` names
 the orchestration ticket's connection and may be omitted when the project has one git
 ticket source.

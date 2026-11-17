@@ -164,11 +164,13 @@ fn hs2_3d8d6v_unbinding_the_remote_target_ends_its_line_and_a_waiting_read() {
         &mut tx,
     )
     .unwrap();
-    let (unbound, waited) = waiting.join().unwrap();
+    let (unbound, _waited) = waiting.join().unwrap();
     assert!(!unbound.orchestrated && unbound.lines.is_empty());
     assert_ne!(unbound.version, bound.version);
     // The bindings file is not a watched journal: the safety re-check finds it.
-    assert!(waited < std::time::Duration::from_secs(5), "{waited:?}");
+    // HS2-5EZZPH: how soon is not asserted here; a bound on it measured how fast a
+    // loaded machine re-reads (a loaded run took 15.7 s) and the one-second re-check
+    // itself is pinned by `hs2_f8174x_target_lines_find_an_unreported_change_*`.
     // Repeated reads of the empty answer agree.
     assert_eq!(
         read(&r, &id(20), &checkout, None, 0).unwrap().version,

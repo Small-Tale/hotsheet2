@@ -448,7 +448,17 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         .concat(),
     );
     assert_eq!(held["result"]["state"], "running", "{held}");
-    let cancelled = ok(&worker, &[&["cancel"][..], &step("held")].concat());
+    // HS2-5EZZPH: the CLI repeats its bounded waits until the host confirms the stop.
+    // A host too busy to confirm within one wait answers `unverified`, and the same
+    // cancel asks again; the contract is "the same cancel again waits further".
+    let mut cancelled = ok(&worker, &[&["cancel"][..], &step("held")].concat());
+    for _ in 0..10 {
+        if cancelled["result"]["state"] != "running" {
+            break;
+        }
+        assert!(cancelled.get("unverified").is_some(), "{cancelled}");
+        cancelled = ok(&worker, &[&["cancel"][..], &step("held")].concat());
+    }
     assert_eq!(cancelled["result"]["state"], "cancelled", "{cancelled}");
     assert_eq!(cancelled["result"]["outcome"]["end"], "cancelled");
     assert_eq!(

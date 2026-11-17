@@ -375,23 +375,14 @@ async fn hs2_kb2y51_the_owner_pushes_lines_that_the_targets_viewers_read() {
     );
 
     // The controller's follower sends a change on its own: removing the step
-    // withdraws the line, and the peer's waiting read ends with it.
+    // withdraws the line, and the peer's cursor long poll ends with it.
+    // HS2-5EZZPH: the wait for the change starts once the change is made. A single
+    // read opened before the CLI process ran charged that process's own start-up (many
+    // seconds on a loaded machine) to the propagation and expired first. The peer's
+    // read is a long poll with the version as its cursor, asked again at each deadline
+    // until the version moves, so nothing polls on a timer.
     let controller = controller(&b);
     controller.spawn_target_line_push();
-    let version = shown["version"].as_str().unwrap().to_owned();
-    let waiting = {
-        let (peer, lines) = (peer.clone(), lines.clone());
-        tokio::spawn(async move {
-            api(
-                peer,
-                "GET",
-                &format!("{lines}?after={version}&wait_ms=15000"),
-                Value::Null,
-                true,
-            )
-            .await
-        })
-    };
     let worker = [
         "--actor-role",
         "ai",
@@ -406,11 +397,28 @@ async fn hs2_kb2y51_the_owner_pushes_lines_that_the_targets_viewers_read() {
         &worker,
         &["readiness", "remove", &b.step, "--project", &b.owner.id],
     );
-    let (status, changed) = tokio::time::timeout(std::time::Duration::from_secs(14), waiting)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(status, StatusCode::OK);
+    let removed = std::time::Instant::now();
+    let mut version = shown["version"].as_str().unwrap().to_owned();
+    let changed = loop {
+        let (status, read) = api(
+            peer.clone(),
+            "GET",
+            &format!("{lines}?after={version}&wait_ms=15000"),
+            Value::Null,
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{read}");
+        if read["version"] != shown["version"] {
+            break read;
+        }
+        version = read["version"].as_str().unwrap().to_owned();
+        // The follower acts within seconds of a change; a minute means it did not.
+        assert!(
+            removed.elapsed() < std::time::Duration::from_secs(60),
+            "the withdrawal never reached the peer"
+        );
+    };
     assert_ne!(changed["version"], shown["version"]);
     assert_eq!(changed["lines"], json!([]), "{changed}");
     assert_eq!(changed["orchestrated"], false);

@@ -225,9 +225,9 @@ pub(super) fn route(
             if let Some(operation_id) = operation_id {
                 body["operation_id"] = operation_id.into();
             }
-            if !no_wait {
-                body["wait_ms"] = MAX_VALIDATION_WAIT_MS.into();
-            }
+            // HS2-5EZZPH: like `run`, a waiting cancel repeats its bounded wait until
+            // the host confirms the stop; one 8-second wait is not the end of it.
+            body[WAIT] = (!no_wait).into();
             ("POST", format!("{base}/cancel"), body)
         }
         ValidationCmd::Run {
@@ -253,7 +253,9 @@ pub(super) fn route(
 /// is finished and the retry policy has nothing left to try. Each repeat is one bounded
 /// wait held open on the host; nothing sleeps between them. An answer that could not
 /// confirm the target is returned as it is, so an unreachable target never spins.
-/// `None` means the body was not a validation run.
+/// HS2-5EZZPH: a `cancel` repeats the same way until the stopped attempt has ended
+/// (it is no longer `running`); a cancel is answered as recorded once it has.
+/// `None` means the body was not a validation run or cancel.
 pub(super) fn until_finished(
     runtime: &OrchestrationRuntime,
     path: &str,
@@ -267,8 +269,10 @@ pub(super) fn until_finished(
         loop {
             let view = runtime.request_now("POST", path, body)?;
             let state = view["result"]["state"].as_str().unwrap_or_default();
-            let more = state == "running"
-                || (state == "failed" && view["attempts_left"].as_u64().unwrap_or(0) > 0);
+            let retries = !path.ends_with("/cancel")
+                && state == "failed"
+                && view["attempts_left"].as_u64().unwrap_or(0) > 0;
+            let more = state == "running" || retries;
             if !wait || !more || view.get("unverified").is_some() {
                 return Ok(view);
             }
