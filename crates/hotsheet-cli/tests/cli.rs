@@ -2642,6 +2642,7 @@ const HOOK_TESTS: &[&str] = &[
     "permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection",
     "claude_session_start_reports_its_inbox_socket_token_and_version",
     "hs2_ssmdq1_permission_hook_reconnects_a_session_the_server_forgot_and_retries",
+    "hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents",
 ];
 
 #[test]
@@ -3151,6 +3152,46 @@ fn permission_hook_reports_claude_turn_boundaries_without_prompt_content() {
         );
         assert!(!requests[0].2.contains("private prompt text"));
     }
+}
+
+/// HS2-5YCGH5: an interactive Claude session's tool call in a Hot Sheet terminal is reported to
+/// the server's activity ingest as one request carrying only the tool, command, and path, never
+/// the file contents; the hook prints no decision, so Claude's own flow is untouched.
+#[test]
+fn hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents() {
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || capture_one_request(listener));
+    let input = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "session_id": "native-session",
+        "tool_name": "Write",
+        "tool_input": { "file_path": "src/notes.md", "content": "private file body" },
+        "transcript_path": "/tmp/projects/fixture/native-session.jsonl"
+    });
+    hook_cli()
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_TERMINAL_ID", "claude-7")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .env_remove("HOTSHEET_CLAUDE_PRETOOLUSE")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(input.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    let (line, secret, body) = server.join().unwrap();
+    assert_eq!(line, "POST /terminals/claude-7/claude-activity HTTP/1.1");
+    assert_eq!(secret, "terminal-secret");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["session_id"], "native-session");
+    assert_eq!(body["hook"]["tool_name"], "Write");
+    assert_eq!(
+        body["hook"]["tool_input"],
+        serde_json::json!({ "file_path": "src/notes.md" })
+    );
+    assert!(!body.to_string().contains("private file body"));
 }
 
 /// HS2-SSMDQ1: a restarted server answers a turn report with "not connected". The hook then

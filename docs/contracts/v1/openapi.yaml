@@ -10751,6 +10751,48 @@ paths:
         required: true
         schema:
           type: string
+  /terminals/{id}/claude-activity:
+    post:
+      operationId: report_claude_activity
+      responses:
+        '204':
+          description: Completed with no response body.
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaudeActivityRequest'
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
   /mcp-presence:
     get:
       operationId: list_mcp_presence
@@ -21366,6 +21408,19 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+      additionalProperties: false
+    ClaudeActivityRequest:
+      description: One hook of an interactive Claude terminal session, reduced by the hook to the fields activity mapping reads (HS2-5YCGH5).
+      type: object
+      required:
+        - session_id
+        - hook
+      properties:
+        session_id:
+          type: string
+        hook:
+          type: object
+          additionalProperties: true
       additionalProperties: false
     ClaudeTurnRequest:
       type: object

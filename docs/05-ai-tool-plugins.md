@@ -1942,7 +1942,10 @@ text are never included in the hook request. The server keeps reported sessions 
 memory, so after a restart a Claude session that began earlier is unknown: the server
 answers its turn report `409` with code `claude_session_not_connected`, and the hook
 re-sends the `SessionStart` connection body (agent, session id, inbox) and retries the
-boundary once (HS2-SSMDQ1).
+boundary once (HS2-SSMDQ1). The server also narrates those boundaries as `turn_start` and
+`turn_end` activity, and the same hook sends an interactive session's plain `PreToolUse` to
+`/terminals/{id}/claude-activity`, reduced to the tool, command, and path, so the Announcer
+narrates terminal work (HS2-5YCGH5, [15](15-activity-narration-interface.md) §15.8).
 Claude's turn and lifecycle hooks are installed without a `matcher`: Claude 2.1.308
 skips `UserPromptSubmit` and `Stop` when they carry `matcher: "*"`. A new session can
 report its transcript path before creating the file; the server starts that cursor at

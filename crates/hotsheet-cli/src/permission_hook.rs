@@ -270,6 +270,46 @@ pub fn claude_turn_needs_reconnect(status: u16, body: &str) -> bool {
             == Some("claude_session_not_connected")
 }
 
+/// The part of a Claude tool hook the server needs to narrate an interactive terminal
+/// session's activity (HS2-5YCGH5), or `None` for a hook that is not narrated this way. Only a
+/// `PreToolUse` is: turn boundaries are narrated by the server from the `claude-turn` report the
+/// hook already sends, and question hooks belong to the session lifecycle. Only the fields
+/// `hotsheet_ticketing::activity::claude_activity` reads leave the hook: the event, session,
+/// tool name, sub-agent parent, and the tool input's command and path. File contents, edit
+/// strings, and patches never do.
+pub fn claude_activity_payload(input: &Value) -> Option<Value> {
+    let event = input.get("hook_event_name").and_then(Value::as_str)?;
+    if event != "PreToolUse" || session_hook_event(input).is_some() {
+        return None;
+    }
+    let session = input
+        .get("session_id")
+        .and_then(Value::as_str)
+        .filter(|session| !session.is_empty())?;
+    let mut hook = serde_json::Map::new();
+    hook.insert("hook_event_name".into(), event.into());
+    hook.insert("session_id".into(), session.into());
+    for key in ["tool_name", "parent_tool_use_id"] {
+        if let Some(value) = input.get(key).and_then(Value::as_str) {
+            hook.insert(key.into(), value.into());
+        }
+    }
+    let mut tool_input = serde_json::Map::new();
+    for key in ["command", "file_path", "path"] {
+        if let Some(value) = input
+            .get("tool_input")
+            .and_then(|tool| tool.get(key))
+            .and_then(Value::as_str)
+        {
+            tool_input.insert(key.into(), value.into());
+        }
+    }
+    if !tool_input.is_empty() {
+        hook.insert("tool_input".into(), Value::Object(tool_input));
+    }
+    Some(serde_json::json!({ "session_id": session, "hook": hook }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,6 +635,60 @@ mod tests {
             permission_request_decision_json(HookDecision::Ask),
             None,
             "a hook transport failure emits no decision so the native prompt retries"
+        );
+    }
+
+    #[test]
+    fn hs2_5ycgh5_claude_activity_payload_keeps_only_narrated_fields() {
+        let edit = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s-1",
+            "tool_name": "Write",
+            "transcript_path": "/tmp/t.jsonl",
+            "tool_input": { "file_path": "src/a.rs", "content": "secret body", "old_string": "x" },
+        });
+        assert_eq!(
+            super::claude_activity_payload(&edit).unwrap(),
+            serde_json::json!({
+                "session_id": "s-1",
+                "hook": {
+                    "hook_event_name": "PreToolUse",
+                    "session_id": "s-1",
+                    "tool_name": "Write",
+                    "tool_input": { "file_path": "src/a.rs" },
+                },
+            })
+        );
+        // Turn boundaries come from the server's `claude-turn` handling; other hooks and a
+        // question (part of the session lifecycle) are not narrated here; no session, no report.
+        let question = serde_json::json!({
+            "hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "AskUserQuestion",
+            "tool_use_id": "t1", "tool_input": { "questions": [] },
+        });
+        assert_eq!(
+            super::claude_activity_payload(&question).is_none(),
+            super::session_hook_event(&question).is_some()
+        );
+        for event in [
+            "UserPromptSubmit",
+            "Stop",
+            "PermissionRequest",
+            "PostToolUse",
+            "SessionStart",
+            "StopFailure",
+        ] {
+            assert!(
+                super::claude_activity_payload(
+                    &serde_json::json!({ "hook_event_name": event, "session_id": "s" })
+                )
+                .is_none()
+            );
+        }
+        assert!(
+            super::claude_activity_payload(
+                &serde_json::json!({ "hook_event_name": "PreToolUse", "tool_name": "Bash" })
+            )
+            .is_none()
         );
     }
 }
