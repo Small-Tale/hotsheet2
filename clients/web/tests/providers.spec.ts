@@ -12817,7 +12817,11 @@ test('clears needs review when a regular response follows the feedback-needed no
   await page.goto('/');
   await openMockedProject(page);
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
-  await expect(ticket.locator('.kui-summary-row__rail')).toHaveCount(0);
+  // HS2-SVA8HP: the row is in the list before its rail is judged; an absent row used to pass
+  // `toHaveCount(0)` at once. HS2-DEMO01 is Up Next, so its rail is Up Next's warning: an
+  // answered feedback note leaves no needs-review (pop) rail and no feedback badge.
+  await expect(ticket).toHaveCount(1);
+  await expect(ticket).toHaveAttribute('data-rail', 'warning');
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await ticket.click();
   const inspector = page.locator('#app-right-rail');
