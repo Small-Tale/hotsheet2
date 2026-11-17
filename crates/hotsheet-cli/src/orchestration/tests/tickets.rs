@@ -49,6 +49,41 @@ pub(super) struct Machine {
     pub(super) target_store: FsStore,
     pub(super) external: Arc<Refusing>,
 }
+/// HS2-PJYNND: a test's hosted validation steps die with its machine, on every exit
+/// path including a panic. Every step group still recorded in this machine's home whose
+/// leader is still the recorded process is killed, so no step loop outlives the test
+/// (its checkout is about to be removed, so a loop waiting on a file there never ends).
+impl Drop for Machine {
+    fn drop(&mut self) {
+        stop_recorded_steps(&self.home);
+    }
+}
+
+/// Kill every step group recorded in `home` whose leader still has its recorded start
+/// time (never a reused pid). Returns how many were signalled.
+pub(super) fn stop_recorded_steps(home: &Path) -> usize {
+    let registry = hotsheet_ticketing::orchestration::HostedValidationRegistry::new(home);
+    let mut stopped = 0;
+    for record in registry.with_process().unwrap_or_default() {
+        let Some(process) = record.process else {
+            continue;
+        };
+        if crate::orchestration::step_process::process_started(process.pid) != Some(process.started)
+        {
+            continue;
+        }
+        #[cfg(unix)]
+        if let Ok(group) = libc::pid_t::try_from(process.pid) {
+            // SAFETY: plain integers; the group's leader is the recorded step process,
+            // checked by its start time just above.
+            if unsafe { libc::killpg(group, libc::SIGKILL) } == 0 {
+                stopped += 1;
+            }
+        }
+    }
+    stopped
+}
+
 impl Machine {
     pub(super) fn owner_connection(&self) -> String {
         self.owner.sources[0].connection_id.clone()

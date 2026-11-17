@@ -1581,6 +1581,24 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
         )
         .unwrap();
     assert_eq!(running.state, HostedExecutionState::Running);
+    // HS2-PJYNND: its group, so the test can prove the loop ends with it.
+    let registry = hotsheet_ticketing::orchestration::HostedValidationRegistry::new(&m.home);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let looping = loop {
+        if let Some(process) = registry
+            .record(&m.target.id, &id(51))
+            .unwrap()
+            .unwrap()
+            .process
+        {
+            break process;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the step's group was never recorded"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
     forget_executions();
     // Finished: answered from the record, by read and by a repeated start.
     for answer in [
@@ -1655,6 +1673,11 @@ fn hs2_7btv98_hosted_executions_survive_a_restart_without_running_twice() {
     let mut sorted: Vec<&str> = lines.lines().collect();
     sorted.sort_unstable();
     assert_eq!(sorted, ["x", "y"]);
+    // HS2-PJYNND: no loop survives: the released step's whole group has ended.
+    assert!(
+        group_ends(looping.pid),
+        "the step's loop outlived its release"
+    );
 }
 
 /// A remote peer whose transport can be made to fail or to refuse.
@@ -2636,5 +2659,81 @@ fn hs2_zym6zt_the_audit_names_the_person_a_validation_run_was_requested_by() {
             .into_iter()
             .skip(seen)
             .all(|entry| entry.record.requested_by.is_none())
+    );
+}
+
+/// HS2-PJYNND: whether process group `group` has no member left within ten seconds.
+#[cfg(unix)]
+fn group_ends(pid: u32) -> bool {
+    let group = libc::pid_t::try_from(pid).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        // SAFETY: signal 0 only checks whether the group still has a member.
+        if unsafe { libc::killpg(group, 0) } != 0 {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    false
+}
+
+/// HS2-PJYNND: a test that ends before it releases a looping step, by a failed
+/// assertion or otherwise, still stops the step's whole group when its machine drops.
+#[cfg(unix)]
+#[test]
+fn hs2_pjynnd_a_dropped_machine_stops_the_steps_it_still_runs() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let started = m
+        .runtime
+        .hosted_validation_start(
+            &m.target.id,
+            HostedValidationStart {
+                execution_id: id(60),
+                check: hotsheet_ticketing::orchestration::ValidationCheck::Command {
+                    program: "/bin/sh".into(),
+                    // A child of its own, so the whole group is what must end.
+                    args: vec![
+                        "-c".into(),
+                        "sleep 30 & while [ ! -f never ]; do sleep 0.05; done".into(),
+                    ],
+                },
+                timeout_seconds: 60,
+                wait_ms: 0,
+            },
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(started.state, HostedExecutionState::Running);
+    let registry = hotsheet_ticketing::orchestration::HostedValidationRegistry::new(&m.home);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let process = loop {
+        if let Some(process) = registry
+            .record(&m.target.id, &id(60))
+            .unwrap()
+            .unwrap()
+            .process
+        {
+            break process;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the step's group was never recorded"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    // SAFETY: signal 0 only checks that the group has a member.
+    assert_eq!(
+        unsafe { libc::killpg(libc::pid_t::try_from(process.pid).unwrap(), 0) },
+        0
+    );
+    drop(m);
+    assert!(
+        group_ends(process.pid),
+        "the dropped machine left its step running"
     );
 }
