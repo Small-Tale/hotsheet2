@@ -205,6 +205,10 @@ fn launching_crates_start_processes_through_the_scrubbed_launch_constructor() {
 enum Verdict {
     Resolved,
     Safe(&'static str),
+    /// HS2-Y4VDBK: launched through the journal's detached launch, which on macOS is a
+    /// `posix_spawn` with attributes (descriptor closing, session, process group), never
+    /// a fork; off macOS the standard library path is unchanged.
+    Spawned,
     Forks(&'static str),
 }
 
@@ -274,9 +278,7 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     (
         "hotsheet-cli/src/orchestration/job_monitor.rs",
         "detached=1 env_dynamic=1",
-        Verdict::Forks(
-            "journal detached launch closes inherited descriptors in pre_exec (HS2-WEYR63); HS2-Y4VDBK",
-        ),
+        Verdict::Spawned,
     ),
     (
         "hotsheet-cli/src/orchestration/validation.rs",
@@ -295,13 +297,15 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     ),
     (
         "hotsheet-process-journal/src/lib.rs",
-        "detached=1 pre_exec=1",
-        Verdict::Forks("close_inherited_descriptors (HS2-WEYR63, HS2-ETMKCW); HS2-Y4VDBK"),
+        "detached=3 env_clear=1 env_dynamic=1 pre_exec=2",
+        Verdict::Safe(
+            "the detached launch itself: posix_spawn attributes on macOS; off macOS the std path keeps its setsid and descriptor-closing pre_exec hooks and its env_clear, unchanged",
+        ),
     ),
     (
         "hotsheet-server/src/code_review.rs",
         "detached=1",
-        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+        Verdict::Spawned,
     ),
     (
         "hotsheet-server/src/commands.rs",
@@ -311,19 +315,17 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     (
         "hotsheet-server/src/repository_browser.rs",
         "detached=1",
-        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+        Verdict::Spawned,
     ),
     (
         "hotsheet-server/src/terminal_broker.rs",
         "detached=1",
-        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+        Verdict::Spawned,
     ),
     (
         "hotsheet-server/src/terminal_launch_relay.rs",
-        "cwd=1 detached=1 env_clear=1 env_dynamic=2 pre_exec=1",
-        Verdict::Forks(
-            "setsid in pre_exec plus a detached launch of an absolute broker; HS2-Y4VDBK",
-        ),
+        "cwd=1 detached=1",
+        Verdict::Spawned,
     ),
     (
         "hotsheet-terminals/src/bootstrap.rs",
@@ -360,7 +362,13 @@ fn fork_triggers(compact: &str) -> String {
     };
     let counts = [
         ("cwd", count(".current_dir(")),
-        ("detached", count(".detached(") + count(".spawn_detached(")),
+        (
+            "detached",
+            count(".detached(")
+                + count(".spawn_detached(")
+                + count(".detached_as(")
+                + count(".spawn_detached_as("),
+        ),
         ("env_clear", count(".env_clear()")),
         ("env_dynamic", followed(".env(", '"') + count(".envs(")),
         (
@@ -385,10 +393,10 @@ fn fork_triggers(compact: &str) -> String {
 #[test]
 fn hs2_e5b0k0_fork_trigger_counting_sees_each_trigger() {
     let compact = ".current_dir(a).env(\"PATH\",p).env(k,v).envs(x).env(\"K\",v).pre_exec(f)\
-                   .spawn_detached(c).uid(1)metadata.uid().spawn_command(b).env_clear()";
+                   .spawn_detached(c).detached_as(d,e).uid(1)metadata.uid().spawn_command(b).env_clear()";
     assert_eq!(
         fork_triggers(compact),
-        "cwd=1 detached=1 env_clear=1 env_dynamic=2 env_path=1 identity=1 pre_exec=1 pty=1"
+        "cwd=1 detached=2 env_clear=1 env_dynamic=2 env_path=1 identity=1 pre_exec=1 pty=1"
     );
     assert_eq!(fork_triggers("git::command().args(a).output()"), "");
 }
@@ -441,6 +449,16 @@ fn hs2_e5b0k0_every_fork_trigger_is_resolved_safe_or_a_tracked_fork() {
                 {
                     problems.push(format!("{file}: resolved, yet calls neither git::launch_resolved nor git::program_path"));
                 }
+                Verdict::Spawned
+                    if !(compact.contains(".detached(")
+                        || compact.contains(".detached_as(")
+                        || compact.contains(".spawn_detached(")
+                        || compact.contains(".spawn_detached_as(")) =>
+                {
+                    problems.push(format!(
+                        "{file}: spawned, yet not through the journal's detached launch"
+                    ));
+                }
                 Verdict::Safe(reason) | Verdict::Forks(reason) if reason.is_empty() => {
                     problems.push(format!("{file}: needs a reason"));
                 }
@@ -461,7 +479,22 @@ fn hs2_e5b0k0_every_fork_trigger_is_resolved_safe_or_a_tracked_fork() {
         .filter(|(_, _, verdict)| matches!(verdict, Verdict::Forks(_)))
         .count();
     assert_eq!(
-        forks, 7,
-        "fork-by-design sites (HS2-Y4VDBK tracks moving them off fork)"
+        forks, 1,
+        "fork-by-design sites: only the PTY, which needs a controlling terminal"
     );
+    // HS2-Y4VDBK: the detached launch really is a posix_spawn with these attributes on macOS.
+    let journal =
+        std::fs::read_to_string(crates.join("hotsheet-process-journal/src/lib.rs")).unwrap();
+    for needle in [
+        "#[cfg(target_os = \"macos\")]\nmod spawn_attributes",
+        "libc::posix_spawn(",
+        "POSIX_SPAWN_CLOEXEC_DEFAULT",
+        "POSIX_SPAWN_SETSID",
+        "POSIX_SPAWN_SETPGROUP",
+    ] {
+        assert!(
+            journal.contains(needle),
+            "HS2-Y4VDBK: the macOS detached launch lost `{needle}`"
+        );
+    }
 }

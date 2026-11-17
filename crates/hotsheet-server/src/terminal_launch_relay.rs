@@ -99,9 +99,8 @@ impl BrokerLauncher for RelayBrokerLauncher {
     }
 
     fn launch(&self, request: &LaunchRequest) -> std::io::Result<u32> {
-        use std::os::unix::process::CommandExt;
         hotsheet_terminals::broker_socket::prepare_parent(&request.socket)?;
-        // Scrubbed of repository variables first; env_clear below then replaces the rest.
+        // Scrubbed of repository variables first; the environment below then replaces the rest.
         let mut command = hotsheet_ticketing::git::launch(&self.executable);
         broker_arguments(
             &mut command,
@@ -109,35 +108,29 @@ impl BrokerLauncher for RelayBrokerLauncher {
             &request.socket,
             &request.project,
         );
-        command
-            .env_clear()
-            .envs(
-                request
-                    .env
-                    .iter()
-                    .filter(|(key, _)| !is_launchd_context(key))
-                    .map(|(key, value)| (key, value)),
-            )
-            // The relay's own launchd context, never the requester's (see is_launchd_context).
-            .envs(
+        // Exactly the requester's variables plus the relay's own launchd context, never the
+        // requester's (see is_launchd_context). HS2-Y4VDBK: stated so the macOS posix_spawn
+        // path sees it, which cannot observe `env_clear`.
+        let environment: Vec<(std::ffi::OsString, std::ffi::OsString)> = request
+            .env
+            .iter()
+            .filter(|(key, _)| !is_launchd_context(key))
+            .map(|(key, value)| (key.into(), value.into()))
+            .chain(
                 std::env::vars_os().filter(|(key, _)| key.to_str().is_some_and(is_launchd_context)),
             )
-            .env("HOTSHEET_PROCESS_JOURNAL_HOME", &request.journal_home)
+            .chain(std::iter::once((
+                "HOTSHEET_PROCESS_JOURNAL_HOME".into(),
+                request.journal_home.clone().into_os_string(),
+            )))
+            .collect();
+        hotsheet_process_journal::replace_environment(&mut command, environment);
+        command
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         if let Some(cwd) = request.cwd.as_ref().filter(|cwd| cwd.is_dir()) {
             command.current_dir(cwd);
-        }
-        // SAFETY: setsid is async-signal-safe and only moves the forked child into its own
-        // session, so stopping or replacing the relay job never signals a running broker.
-        unsafe {
-            command.pre_exec(|| {
-                if libc::setsid() < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
         }
         let mut child = hotsheet_process_journal::LaunchContext {
             journal: hotsheet_process_journal::ProcessJournal::at(&request.journal_home),
@@ -147,8 +140,16 @@ impl BrokerLauncher for RelayBrokerLauncher {
             session_id: None,
             binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
         }
-        // The broker outlives this request: no stray descriptor of the relay's (HS2-ETMKCW).
-        .spawn_detached(&mut command)?;
+        // The broker outlives this request: no stray descriptor of the relay's (HS2-ETMKCW),
+        // and its own session, so stopping or replacing the relay job never signals a running
+        // broker. HS2-Y4VDBK: on macOS both are posix_spawn attributes, never a fork.
+        .spawn_detached_as(
+            &mut command,
+            hotsheet_process_journal::Detach {
+                process_group: false,
+                session: true,
+            },
+        )?;
         let pid = child.id();
         // The relay is the broker's parent: reap it so an exited broker never stays a zombie,
         // and record the observed exit in the journal.

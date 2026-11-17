@@ -102,7 +102,15 @@ impl DetachedJobMonitor {
                 session_id: None,
                 binary_revision: option_env!("HOT_SHEET_BUILD_REVISION").map(str::to_owned),
             }
-            .detached(&mut command)
+            // Its own process group, so a Ctrl-C in the starting terminal does not reach
+            // it (HS2-Y4VDBK: on macOS a posix_spawn attribute, never a fork).
+            .detached_as(
+                &mut command,
+                hotsheet_process_journal::Detach {
+                    process_group: true,
+                    session: false,
+                },
+            )
         };
         ensure_monitor_running(&MonitorSlot::at(home), spawn, MONITOR_ANSWER)
     }
@@ -128,12 +136,9 @@ fn current_program() -> &'static str {
 }
 
 #[cfg(unix)]
-fn detach(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-
-    // Its own process group, so a Ctrl-C in the starting terminal does not reach it.
-    command.process_group(0);
-    // HS2-WEYR63: `LaunchContext::detached` closes every stray inherited descriptor.
+fn detach(_command: &mut Command) {
+    // HS2-Y4VDBK: `LaunchContext::detached_as` gives it its own process group and closes
+    // every stray inherited descriptor (HS2-WEYR63).
 }
 
 #[cfg(windows)]

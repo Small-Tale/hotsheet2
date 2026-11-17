@@ -234,7 +234,7 @@ impl StartupContender for SpawnedBroker {
 
 fn wait_for_broker_startup(
     socket: &Path,
-    child: &mut hotsheet_process_journal::TrackedChild,
+    child: &mut impl hotsheet_process_journal::ObservedChild,
 ) -> anyhow::Result<()> {
     let pid = child.id();
     wait_for_startup(socket, pid, "spawned", BROKER_STARTUP, || {
@@ -294,7 +294,7 @@ fn wait_for_startup(
     }
 }
 
-fn tracked_child_state(child: &mut hotsheet_process_journal::TrackedChild) -> ContenderState {
+fn tracked_child_state(child: &mut impl hotsheet_process_journal::ObservedChild) -> ContenderState {
     match child.try_wait() {
         Ok(Some(status)) => ContenderState::Exited(format!("child exited: {status}")),
         Ok(None) => ContenderState::Running("child still running".to_owned()),
@@ -500,7 +500,7 @@ fn is_live(socket: &Path) -> std::io::Result<bool> {
 
 /// A broker this server started: its own child, or one the launch relay started for it.
 enum SpawnedBroker {
-    Direct(hotsheet_process_journal::TrackedChild),
+    Direct(hotsheet_process_journal::DetachedChild),
     Relayed { pid: u32 },
 }
 

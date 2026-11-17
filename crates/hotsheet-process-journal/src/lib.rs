@@ -129,10 +129,458 @@ impl LaunchContext {
 
     /// Like [`LaunchContext::spawn`] for a child that outlives this request (a broker or a
     /// monitor), keeping the handle for startup diagnostics. The child inherits no stray
-    /// descriptor (see [`close_inherited_descriptors`]).
-    pub fn spawn_detached(&self, command: &mut Command) -> io::Result<TrackedChild> {
-        close_inherited_descriptors(command);
-        self.spawn(command)
+    /// descriptor and gets null standard streams (see [`LaunchContext::spawn_detached_as`]).
+    pub fn spawn_detached(&self, command: &mut Command) -> io::Result<DetachedChild> {
+        self.spawn_detached_as(command, Detach::default())
+    }
+
+    /// [`LaunchContext::detached`] that also leaves the launcher's process group or session.
+    pub fn detached_as(&self, command: &mut Command, detach: Detach) -> io::Result<()> {
+        self.spawn_detached_as(command, detach).map(|_| ())
+    }
+
+    /// [`LaunchContext::spawn_detached`] that also leaves the launcher's process group or
+    /// session (`detach`). The child's standard streams are null and it inherits no
+    /// descriptor of the launcher's besides them (HS2-WEYR63, HS2-ETMKCW).
+    ///
+    /// HS2-Y4VDBK: on macOS the child is started with `posix_spawn` and its attributes
+    /// (`POSIX_SPAWN_CLOEXEC_DEFAULT`, `POSIX_SPAWN_SETSID`, `POSIX_SPAWN_SETPGROUP`),
+    /// never by forking this multi-threaded process, whose forked child can abort in
+    /// libSystem's fork handlers before `exec` (HS2-H1EK8R). That path reads the command
+    /// through its public getters: program, arguments, working directory and variable
+    /// changes. A command that must not inherit this process's environment says so with
+    /// [`replace_environment`], since `env_clear` is not observable there. Elsewhere the
+    /// standard library spawns it as before, with `pre_exec` hooks for the session and
+    /// the descriptor closing.
+    pub fn spawn_detached_as(
+        &self,
+        command: &mut Command,
+        detach: Detach,
+    ) -> io::Result<DetachedChild> {
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(target_os = "macos")]
+        {
+            let pid = spawn_attributes::spawn(command, detach)?;
+            let launch_id = self.record(pid);
+            Ok(DetachedChild {
+                inner: Detached::Spawned { pid, status: None },
+                journal: self.journal.clone(),
+                launch_id,
+                killed: false,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                if detach.process_group {
+                    command.process_group(0);
+                }
+                if detach.session {
+                    // SAFETY: setsid is async-signal-safe; it only moves the forked child
+                    // into its own session.
+                    unsafe {
+                        command.pre_exec(|| {
+                            if libc::setsid() < 0 {
+                                return Err(io::Error::last_os_error());
+                            }
+                            Ok(())
+                        });
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            let _ = detach;
+            close_inherited_descriptors(command);
+            let child = self.spawn(command)?;
+            Ok(DetachedChild {
+                inner: Detached::Tracked(child),
+                journal: self.journal.clone(),
+                launch_id: None,
+                killed: false,
+            })
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn record(&self, pid: u32) -> Option<String> {
+        match self.journal.start(LaunchMeta {
+            pid,
+            supervisor_pid: std::process::id(),
+            supervisor: self.supervisor.to_owned(),
+            purpose: self.purpose,
+            project_id: self.project_id.clone(),
+            session_id: self.session_id.clone(),
+            binary_revision: self.binary_revision.clone(),
+        }) {
+            Ok(record) => Some(record.launch_id),
+            Err(error) => {
+                eprintln!(
+                    "Hot Sheet process journal unavailable: {}",
+                    start_error_summary(&error)
+                );
+                None
+            }
+        }
+    }
+}
+
+/// How a detached child leaves its launcher (HS2-Y4VDBK).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Detach {
+    /// Lead its own process group, so a terminal's Ctrl-C does not reach it.
+    pub process_group: bool,
+    /// Lead its own session, so stopping the launcher's job never signals it.
+    pub session: bool,
+}
+
+/// HS2-Y4VDBK: give `command` exactly `vars` as its environment, in a way every spawn path
+/// can read. On macOS each inherited variable not in `vars` is removed by name, because
+/// the `posix_spawn` path of [`LaunchContext::spawn_detached_as`] cannot observe
+/// `env_clear`; elsewhere the environment is cleared as before.
+pub fn replace_environment<K, V>(command: &mut Command, vars: impl IntoIterator<Item = (K, V)>)
+where
+    K: AsRef<std::ffi::OsStr>,
+    V: AsRef<std::ffi::OsStr>,
+{
+    let vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = vars
+        .into_iter()
+        .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
+        .collect();
+    #[cfg(target_os = "macos")]
+    for (key, _) in std::env::vars_os() {
+        if !vars.iter().any(|(kept, _)| *kept == key) {
+            command.env_remove(key);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    command.env_clear();
+    command.envs(vars);
+}
+
+/// A detached child (HS2-Y4VDBK): its pid, its observed exit, and its journal record.
+/// Dropping it neither waits nor kills.
+pub struct DetachedChild {
+    inner: Detached,
+    journal: ProcessJournal,
+    launch_id: Option<String>,
+    killed: bool,
+}
+
+enum Detached {
+    /// Spawned by the standard library (off macOS); the tracked child keeps the record.
+    #[cfg_attr(target_os = "macos", allow(dead_code))] // HS2-Y4VDBK: the std path is off macOS
+    Tracked(TrackedChild),
+    /// Spawned with `posix_spawn` (macOS); reaped here by pid.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // HS2-Y4VDBK: macOS only
+    Spawned {
+        pid: u32,
+        status: Option<ExitStatus>,
+    },
+}
+
+impl DetachedChild {
+    /// The child's process id.
+    pub fn id(&self) -> u32 {
+        match &self.inner {
+            Detached::Tracked(child) => child.id(),
+            Detached::Spawned { pid, .. } => *pid,
+        }
+    }
+
+    /// The child's exit once it has ended, reaping it; `None` while it runs.
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        match &mut self.inner {
+            Detached::Tracked(child) => child.try_wait(),
+            Detached::Spawned { pid, status } => {
+                if status.is_none() {
+                    *status = reap(*pid, false)?;
+                }
+                let observed = *status;
+                if let Some(observed) = observed {
+                    self.finish(observed);
+                }
+                Ok(observed)
+            }
+        }
+    }
+
+    /// Wait for the child to end and reap it.
+    pub fn wait(&mut self) -> io::Result<ExitStatus> {
+        match &mut self.inner {
+            Detached::Tracked(child) => child.wait(),
+            Detached::Spawned { pid, status } => {
+                let observed = match *status {
+                    Some(observed) => observed,
+                    None => reap(*pid, true)?.ok_or_else(|| io::Error::other("no exit status"))?,
+                };
+                *status = Some(observed);
+                self.finish(observed);
+                Ok(observed)
+            }
+        }
+    }
+
+    /// Kill the child unless it was already reaped (then its pid may name another process).
+    pub fn kill(&mut self) -> io::Result<()> {
+        match &mut self.inner {
+            Detached::Tracked(child) => child.kill(),
+            Detached::Spawned { pid, status } => {
+                if status.is_none() {
+                    #[cfg(unix)]
+                    {
+                        let pid = libc::pid_t::try_from(*pid).map_err(io::Error::other)?;
+                        // SAFETY: the pid is this process's own unreaped child, so it cannot
+                        // name another process.
+                        if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                    }
+                    self.killed = true;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn finish(&mut self, status: ExitStatus) {
+        if let Some(id) = self.launch_id.take() {
+            let reason = if self.killed {
+                ExitReason::Killed
+            } else if status.success() {
+                ExitReason::Completed
+            } else {
+                ExitReason::Failed
+            };
+            let _ = self.journal.finish(&id, reason);
+        }
+    }
+}
+
+/// Reap child `pid` (blocking when `block`), or `None` while it still runs.
+#[cfg(unix)]
+fn reap(pid: u32, block: bool) -> io::Result<Option<ExitStatus>> {
+    use std::os::unix::process::ExitStatusExt;
+    let pid = libc::pid_t::try_from(pid).map_err(io::Error::other)?;
+    loop {
+        let mut status = 0;
+        // SAFETY: waits only for this process's own child; `status` is a local out-parameter.
+        let reaped =
+            unsafe { libc::waitpid(pid, &mut status, if block { 0 } else { libc::WNOHANG }) };
+        if reaped == pid {
+            return Ok(Some(ExitStatus::from_raw(status)));
+        }
+        if reaped == 0 {
+            return Ok(None);
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn reap(_pid: u32, _block: bool) -> io::Result<Option<ExitStatus>> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
+}
+
+/// The state a startup check reads from a child it launched (HS2-Y4VDBK): its pid and
+/// whether it has exited. Implemented by both [`TrackedChild`] and [`DetachedChild`].
+pub trait ObservedChild {
+    fn id(&self) -> u32;
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>>;
+}
+
+impl ObservedChild for TrackedChild {
+    fn id(&self) -> u32 {
+        TrackedChild::id(self)
+    }
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        TrackedChild::try_wait(self)
+    }
+}
+
+impl ObservedChild for DetachedChild {
+    fn id(&self) -> u32 {
+        DetachedChild::id(self)
+    }
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        DetachedChild::try_wait(self)
+    }
+}
+
+/// HS2-Y4VDBK: a detached launch through `posix_spawn` and its macOS attributes.
+#[cfg(target_os = "macos")]
+mod spawn_attributes {
+    use super::Detach;
+    use std::ffi::{CString, OsStr, OsString};
+    use std::io;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::process::Command;
+
+    /// `<sys/spawn.h>`; the `libc` crate does not define it.
+    const POSIX_SPAWN_SETSID: libc::c_short = 0x0400;
+
+    unsafe extern "C" {
+        /// macOS 10.15+; `posix_spawn_file_actions_addchdir` replaces it from macOS 26.
+        fn posix_spawn_file_actions_addchdir_np(
+            actions: *mut libc::posix_spawn_file_actions_t,
+            path: *const libc::c_char,
+        ) -> libc::c_int;
+    }
+
+    fn c_string(value: &OsStr) -> io::Result<CString> {
+        CString::new(value.as_bytes()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+    }
+
+    fn check(code: libc::c_int) -> io::Result<()> {
+        if code == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::from_raw_os_error(code))
+        }
+    }
+
+    /// Owns the attribute and file-action objects so every exit path destroys them.
+    struct Spawn {
+        attributes: libc::posix_spawnattr_t,
+        actions: libc::posix_spawn_file_actions_t,
+    }
+
+    impl Drop for Spawn {
+        fn drop(&mut self) {
+            // SAFETY: both objects were initialized in `spawn` before this guard was built.
+            unsafe {
+                libc::posix_spawnattr_destroy(&mut self.attributes);
+                libc::posix_spawn_file_actions_destroy(&mut self.actions);
+            }
+        }
+    }
+
+    /// The environment the child sees: this process's, with the command's changes.
+    fn environment(command: &Command) -> Vec<(OsString, OsString)> {
+        let mut vars: Vec<(OsString, OsString)> = std::env::vars_os().collect();
+        for (key, value) in command.get_envs() {
+            vars.retain(|(name, _)| name.as_os_str() != key);
+            if let Some(value) = value {
+                vars.push((key.to_owned(), value.to_owned()));
+            }
+        }
+        vars
+    }
+
+    pub(super) fn spawn(command: &Command, detach: Detach) -> io::Result<u32> {
+        let vars = environment(command);
+        let search = vars
+            .iter()
+            .rev()
+            .find(|(name, _)| name == "PATH")
+            .map(|(_, value)| value.as_os_str());
+        let cwd = command.get_current_dir();
+        // HS2-E5B0K0: resolved as execvp would for the child's own PATH and directory.
+        let program = hotsheet_ticketing::git::program_path(command.get_program(), search, cwd)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+        let path = c_string(program.as_os_str())?;
+        let mut argv_owned = vec![c_string(command.get_program())?];
+        for arg in command.get_args() {
+            argv_owned.push(c_string(arg)?);
+        }
+        let envp_owned = vars
+            .into_iter()
+            .map(|(key, value)| {
+                let mut pair = key.into_vec();
+                pair.push(b'=');
+                pair.extend(value.into_vec());
+                CString::new(pair).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        let mut argv: Vec<*mut libc::c_char> = argv_owned
+            .iter()
+            .map(|arg| arg.as_ptr().cast_mut())
+            .collect();
+        argv.push(std::ptr::null_mut());
+        let mut envp: Vec<*mut libc::c_char> = envp_owned
+            .iter()
+            .map(|pair| pair.as_ptr().cast_mut())
+            .collect();
+        envp.push(std::ptr::null_mut());
+        let null = c"/dev/null";
+        let directory = cwd.map(|cwd| c_string(cwd.as_os_str())).transpose()?;
+
+        // SAFETY: zeroed objects are immediately initialized by their init functions and
+        // destroyed by the guard; every pointer passed below outlives the calls.
+        unsafe {
+            let mut spawn = Spawn {
+                attributes: std::mem::zeroed(),
+                actions: std::mem::zeroed(),
+            };
+            check(libc::posix_spawnattr_init(&mut spawn.attributes))?;
+            if let Err(error) = check(libc::posix_spawn_file_actions_init(&mut spawn.actions)) {
+                libc::posix_spawnattr_destroy(&mut spawn.attributes);
+                std::mem::forget(spawn);
+                return Err(error);
+            }
+            // Every descriptor not opened below is closed in the child.
+            let mut flags = libc::POSIX_SPAWN_CLOEXEC_DEFAULT
+                | libc::POSIX_SPAWN_SETSIGMASK
+                | libc::POSIX_SPAWN_SETSIGDEF;
+            if detach.session {
+                flags |= libc::c_int::from(POSIX_SPAWN_SETSID);
+            } else if detach.process_group {
+                flags |= libc::POSIX_SPAWN_SETPGROUP;
+                check(libc::posix_spawnattr_setpgroup(&mut spawn.attributes, 0))?;
+            }
+            let flags = libc::c_short::try_from(flags).map_err(io::Error::other)?;
+            check(libc::posix_spawnattr_setflags(&mut spawn.attributes, flags))?;
+            // As the standard library does: an empty signal mask, SIGPIPE back to default.
+            let mut empty: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut empty);
+            check(libc::posix_spawnattr_setsigmask(
+                &mut spawn.attributes,
+                &empty,
+            ))?;
+            let mut defaults: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut defaults);
+            libc::sigaddset(&mut defaults, libc::SIGPIPE);
+            check(libc::posix_spawnattr_setsigdefault(
+                &mut spawn.attributes,
+                &defaults,
+            ))?;
+            for (fd, mode) in [
+                (0, libc::O_RDONLY),
+                (1, libc::O_WRONLY),
+                (2, libc::O_WRONLY),
+            ] {
+                check(libc::posix_spawn_file_actions_addopen(
+                    &mut spawn.actions,
+                    fd,
+                    null.as_ptr(),
+                    mode,
+                    0,
+                ))?;
+            }
+            if let Some(directory) = &directory {
+                check(posix_spawn_file_actions_addchdir_np(
+                    &mut spawn.actions,
+                    directory.as_ptr(),
+                ))?;
+            }
+            let mut pid: libc::pid_t = 0;
+            check(libc::posix_spawn(
+                &mut pid,
+                path.as_ptr(),
+                &spawn.actions,
+                &spawn.attributes,
+                argv.as_ptr(),
+                envp.as_ptr(),
+            ))?;
+            u32::try_from(pid).map_err(io::Error::other)
+        }
     }
 }
 
@@ -650,6 +1098,165 @@ mod tests {
         // SAFETY: the pid is the detached sleep this test just launched and has not reaped.
         unsafe { libc::kill(i32::try_from(pid).unwrap(), libc::SIGKILL) };
         assert_eq!(held, 0, "detached passed the descriptor on");
+    }
+
+    /// HS2-Y4VDBK: on macOS a detached launch is a `posix_spawn` with attributes, never a
+    /// fork of this process; it still leaves the requested group or session, runs in its
+    /// directory with exactly the stated environment, finds a bare program on the child's
+    /// own PATH, reports its exit, and journals it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn hs2_y4vdbk_detached_launches_spawn_with_attributes_and_never_fork() {
+        use std::os::unix::fs::PermissionsExt;
+        static MARKS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+        extern "C" fn child_side() {
+            let fd = MARKS.load(std::sync::atomic::Ordering::SeqCst);
+            // SAFETY: `write` is async-signal-safe; the descriptor stays open for the test.
+            unsafe {
+                libc::write(fd, b"F".as_ptr().cast(), 1);
+            }
+        }
+        let home = tempfile::tempdir().unwrap();
+        let marks = home.path().join("forks");
+        let fd = std::os::fd::IntoRawFd::into_raw_fd(
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&marks)
+                .unwrap(),
+        );
+        MARKS.store(fd, std::sync::atomic::Ordering::SeqCst);
+        // SAFETY: registers a handler that only writes one byte.
+        assert_eq!(
+            unsafe { libc::pthread_atfork(None, None, Some(child_side)) },
+            0
+        );
+        let context = LaunchContext {
+            journal: ProcessJournal::at(home.path()),
+            supervisor: "hotsheet-test",
+            purpose: Purpose::BrokerSupervisor,
+            project_id: None,
+            session_id: None,
+            binary_revision: None,
+        };
+        let sleeper = || {
+            let mut command = Command::new("sleep");
+            command.arg("30");
+            command
+        };
+        let ours = |call: unsafe extern "C" fn(libc::pid_t) -> libc::pid_t| {
+            // SAFETY: plain process-id queries.
+            unsafe { call(0) }
+        };
+        let of = |call: unsafe extern "C" fn(libc::pid_t) -> libc::pid_t, pid: u32| {
+            // SAFETY: plain process-id queries of this test's own unreaped child.
+            unsafe { call(libc::pid_t::try_from(pid).unwrap()) }
+        };
+        let pid_t = |pid: u32| libc::pid_t::try_from(pid).unwrap();
+
+        // Default: the launcher's group and session.
+        let mut plain = context.spawn_detached(&mut sleeper()).unwrap();
+        assert_eq!(of(libc::getpgid, plain.id()), ours(libc::getpgid));
+        // Its own process group.
+        let group = Detach {
+            process_group: true,
+            session: false,
+        };
+        let mut grouped = context.spawn_detached_as(&mut sleeper(), group).unwrap();
+        assert_eq!(of(libc::getpgid, grouped.id()), pid_t(grouped.id()));
+        assert_eq!(of(libc::getsid, grouped.id()), ours(libc::getsid));
+        // Its own session.
+        let session = Detach {
+            process_group: false,
+            session: true,
+        };
+        let mut leader = context.spawn_detached_as(&mut sleeper(), session).unwrap();
+        assert_eq!(of(libc::getsid, leader.id()), pid_t(leader.id()));
+        for child in [&mut plain, &mut grouped, &mut leader] {
+            assert_eq!(child.try_wait().unwrap(), None);
+            child.kill().unwrap();
+            assert_eq!(
+                std::os::unix::process::ExitStatusExt::signal(&child.wait().unwrap()),
+                Some(9)
+            );
+            // Reaped: a later kill sends nothing.
+            child.kill().unwrap();
+        }
+
+        // Its directory, exactly the stated environment, and a bare name on that PATH.
+        let tools = home.path().join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        let tool = tools.join("report");
+        fs::write(
+            &tool,
+            "#!/bin/sh\npwd > out\n/usr/bin/env >> out\nexit 17\n",
+        )
+        .unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut command = Command::new("report");
+        command.current_dir(&tools);
+        let path = format!("{}:/usr/bin:/bin", tools.display());
+        replace_environment(&mut command, [("PATH", path.as_str()), ("STEP", "y4vdbk")]);
+        let mut reported = context.spawn_detached(&mut command).unwrap();
+        assert_eq!(reported.wait().unwrap().code(), Some(17));
+        let out = fs::read_to_string(tools.join("out")).unwrap();
+        let mut lines = out.lines();
+        assert_eq!(
+            fs::canonicalize(lines.next().unwrap()).unwrap(),
+            fs::canonicalize(&tools).unwrap()
+        );
+        let mut seen: Vec<&str> = lines
+            .filter(|line| {
+                !line.starts_with("PWD=") && !line.starts_with("SHLVL=") && !line.starts_with("_=")
+            })
+            .collect();
+        seen.sort_unstable();
+        assert_eq!(seen, vec![format!("PATH={path}").as_str(), "STEP=y4vdbk"]);
+        // A name found nowhere on that PATH is not found, and nothing starts.
+        let mut missing = Command::new("no-such-tool-y4vdbk");
+        replace_environment(&mut missing, [("PATH", "/usr/bin:/bin")]);
+        assert_eq!(
+            context
+                .spawn_detached(&mut missing)
+                .err()
+                .map(|error| error.kind()),
+            Some(io::ErrorKind::NotFound)
+        );
+
+        // Every launch is journaled with its observed end.
+        let records = context.journal.list().unwrap();
+        assert_eq!(records.len(), 4, "{records:?}");
+        assert_eq!(
+            records
+                .iter()
+                .filter(|record| record.exit_reason == Some(ExitReason::Killed))
+                .count(),
+            3
+        );
+        assert_eq!(
+            records
+                .iter()
+                .filter(|record| record.exit_reason == Some(ExitReason::Failed))
+                .count(),
+            1
+        );
+        // None of it forked this process.
+        assert_eq!(
+            fs::metadata(&marks).unwrap().len(),
+            0,
+            "a detached launch forked"
+        );
+        // The detector works: a pre_exec spawn forks.
+        let mut forked = Command::new("/usr/bin/true");
+        // SAFETY: an empty hook.
+        unsafe {
+            std::os::unix::process::CommandExt::pre_exec(&mut forked, || Ok(()));
+        }
+        assert!(forked.status().unwrap().success());
+        assert!(
+            fs::metadata(&marks).unwrap().len() > 0,
+            "a forked spawn is seen"
+        );
     }
 
     #[cfg(unix)]

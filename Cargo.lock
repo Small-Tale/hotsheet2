@@ -1268,6 +1268,7 @@ dependencies = [
 name = "hotsheet-process-journal"
 version = "0.0.0"
 dependencies = [
+ "hotsheet-ticketing",
  "libc",
  "serde",
  "serde_json",

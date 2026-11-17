@@ -1135,9 +1135,20 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
   `execvp` semantics for the child's own `PATH` and directory.
 
   A source-scan policy test lists every remaining fork trigger with a reason.
-  PTY sessions need a controlling terminal and must fork. The journal's detached
-  launches and the terminal launch relay still fork by design; HS2-Y4VDBK tracks
-  moving them to `posix_spawn` attributes.
+  PTY sessions need a controlling terminal and must fork.
+
+  On macOS the journal's detached launches are a `posix_spawn` with attributes
+  (HS2-Y4VDBK). They cover the Job monitor, code review, the repository browser, the
+  terminal broker and the terminal launch relay:
+  - `POSIX_SPAWN_CLOEXEC_DEFAULT` closes every descriptor except the null standard
+    streams;
+  - `POSIX_SPAWN_SETPGROUP` gives the child its own process group (the Job monitor);
+  - `POSIX_SPAWN_SETSID` gives it its own session (the relay's broker).
+
+  This launch reads the command through its public getters, so a launch that must not
+  inherit the environment states it with `replace_environment` instead of
+  `env_clear`. Linux and Windows keep the standard-library path with its `pre_exec`
+  hooks.
 
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
   (across devices) attach at once and want different sizes. The **server is the
