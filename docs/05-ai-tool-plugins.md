@@ -1967,6 +1967,10 @@ session and cannot belong to another tab.
   rollout open while it appends, and FSEvents reports such a change only when the file is
   closed, so on macOS the rollout itself is followed per write through a kqueue vnode
   registration (HS2-TWE913); Linux inotify already reports each write.
+- **Narrate.** The same watch narrates the session for the Announcer (HS2-WH40WD,
+  [15](15-activity-narration-interface.md) §15.8): a turn's start and normal end, and each
+  completed command, file change, and MCP tool call as metadata only (command line, changed
+  paths, tool server and name).
 - **Restart.** Codex reports its session only at `SessionStart`, and the broker keeps the
   terminal alive across a server restart. Each watch therefore persists its terminal, session
   id, Codex home, report time, and usage checkout (no credential, no rollout content) in

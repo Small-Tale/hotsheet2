@@ -24,6 +24,11 @@
 //!   queued follow-up inputs until the user answers.
 //! - `event_msg` `item_completed {item {type: UserMessage}}` is user input reaching the session,
 //!   which answers or supersedes an asked question.
+//! - `event_msg` `item_completed {item {type: CommandExecution, command: [string]}}`,
+//!   `{type: FileChange, changes: {<path>: {type, unified_diff | content}}}`, and
+//!   `{type: McpToolCall, server, tool}` (codex-tui 0.167.2) are narrated as activity
+//!   (HS2-WH40WD): only the command line, the changed paths, and the tool's server and name are
+//!   read; diffs, contents, output, and arguments are skipped unread.
 //!
 //! Codex keeps the rollout open and appends to it. FSEvents reports such a file's change only
 //! when it is closed, so on macOS the rollout itself is followed per write through a kqueue
@@ -62,6 +67,10 @@ pub enum RolloutSignal {
     Question(AskedQuestion),
     /// User input reached the session, answering or superseding an asked question.
     UserInput,
+    /// A completed command, file change, or MCP tool call, or a turn that ended normally, as an
+    /// item `hotsheet_ticketing::activity::codex_activity` maps (HS2-WH40WD). Only metadata is
+    /// projected: the command line, changed paths, the tool's server and name.
+    Activity(serde_json::Value),
 }
 
 /// A question the agent asked, bounded like a Claude `AskUserQuestion` (HS2-D0QTGB).
@@ -128,6 +137,16 @@ struct ItemRecord {
     delivery: Option<String>,
     #[serde(default)]
     questions: Option<Vec<AskedPrompt>>,
+    /// A `CommandExecution`'s command: an argument list (codex 0.167) or a string.
+    #[serde(default)]
+    command: Option<serde_json::Value>,
+    /// A `FileChange`'s changes: a map keyed by path (codex 0.167) or a list of `{path}`.
+    #[serde(default)]
+    changes: Option<serde_json::Value>,
+    #[serde(default)]
+    server: Option<String>,
+    #[serde(default)]
+    tool: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -217,7 +236,11 @@ impl RolloutReader {
                 let event: EventPayload = serde_json::from_value(payload.clone()).ok()?;
                 match event.kind.as_str() {
                     "task_started" => Some(RolloutSignal::Resumed),
-                    "task_complete" => event.error.map(halted),
+                    // A turn that ended without an error closes its narration (HS2-WH40WD).
+                    "task_complete" => Some(event.error.map_or_else(
+                        || RolloutSignal::Activity(serde_json::json!({ "type": "turn_end" })),
+                        halted,
+                    )),
                     "item_completed" => {
                         let completed: CompletedItem = serde_json::from_value(payload).ok()?;
                         item_signal(completed.item)
@@ -317,9 +340,64 @@ fn item_signal(item: ItemRecord) -> Option<RolloutSignal> {
                 .collect::<Option<Vec<_>>>()?;
             Some(RolloutSignal::Question(AskedQuestion { id, questions }))
         }
+        "CommandExecution" | "commandExecution" => {
+            let command = match item.command? {
+                serde_json::Value::String(command) => command,
+                serde_json::Value::Array(parts) => parts
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                _ => return None,
+            };
+            let command = bounded(&command, MAX_COMMAND_CHARS);
+            (!command.is_empty()).then(|| {
+                RolloutSignal::Activity(
+                    serde_json::json!({ "type": "commandExecution", "command": command }),
+                )
+            })
+        }
+        "FileChange" | "fileChange" => {
+            let paths: Vec<String> = match item.changes? {
+                serde_json::Value::Object(changes) => changes.keys().cloned().collect(),
+                serde_json::Value::Array(changes) => changes
+                    .iter()
+                    .filter_map(|change| change.get("path")?.as_str().map(str::to_owned))
+                    .collect(),
+                _ => return None,
+            };
+            let changes: Vec<serde_json::Value> = paths
+                .iter()
+                .map(|path| bounded(path, MAX_PATH_CHARS))
+                .filter(|path| !path.is_empty())
+                .take(MAX_CHANGED_PATHS)
+                .map(|path| serde_json::json!({ "path": path }))
+                .collect();
+            (!changes.is_empty()).then(|| {
+                RolloutSignal::Activity(
+                    serde_json::json!({ "type": "fileChange", "changes": changes }),
+                )
+            })
+        }
+        "McpToolCall" | "mcpToolCall" => {
+            let tool = item.tool.map(|tool| bounded(&tool, MAX_TITLE_CHARS))?;
+            let server = item.server.map(|server| bounded(&server, MAX_TITLE_CHARS));
+            (!tool.is_empty()).then(|| {
+                RolloutSignal::Activity(
+                    serde_json::json!({ "type": "mcpToolCall", "tool": tool, "server": server }),
+                )
+            })
+        }
         _ => None,
     }
 }
+
+/// The longest command line narrated from a rollout (HS2-WH40WD).
+const MAX_COMMAND_CHARS: usize = 400;
+/// The longest changed path narrated from a rollout.
+const MAX_PATH_CHARS: usize = 400;
+/// The most changed paths one file change narrates.
+const MAX_CHANGED_PATHS: usize = 50;
 
 fn bounded(text: &str, max: usize) -> String {
     text.trim().chars().take(max).collect()
@@ -627,6 +705,8 @@ mod tests {
                     tokens_in: 1200,
                     tokens_out: 40,
                 }),
+                // A normal completion closes the turn's narration (HS2-WH40WD).
+                RolloutSignal::Activity(json!({ "type": "turn_end" })),
                 RolloutSignal::Resumed,
                 RolloutSignal::Halted {
                     error_type: "server_overloaded".into(),
@@ -694,7 +774,11 @@ mod tests {
         let aborted = json!({"timestamp":"2026-11-05T01:00:00Z","type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted","turn_id":"t"}});
         assert_eq!(reader.feed_line(&aborted.to_string()), None);
         let null_error = json!({"timestamp":"2026-11-05T01:00:00Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t","error":null}});
-        assert_eq!(reader.feed_line(&null_error.to_string()), None);
+        // A null error is a normal completion, which ends the turn's narration (HS2-WH40WD).
+        assert_eq!(
+            reader.feed_line(&null_error.to_string()),
+            Some(RolloutSignal::Activity(json!({ "type": "turn_end" })))
+        );
         assert_eq!(
             reader.feed_line(&complete(
                 "2026-11-05T01:00:01Z",
@@ -940,5 +1024,71 @@ mod tests {
         let home = dir.path().join("absent");
         assert!(watch_rollout(&home, SESSION, OffsetDateTime::now_utc(), |_| {}).is_err());
         assert!(!home.exists());
+    }
+
+    /// HS2-WH40WD: completed commands, file changes, and MCP tool calls of codex-tui 0.167.2 are
+    /// narrated as metadata only (the command line, changed paths, the tool's server and name);
+    /// diffs, file contents, output, arguments, reasoning, and agent messages never are.
+    #[test]
+    fn hs2_wh40wd_completed_tool_items_narrate_metadata_only() {
+        let mut reader = RolloutReader::new(SESSION, at("2026-11-05T00:00:00Z"));
+        reader.feed_line(&meta(SESSION));
+        let item = |item: serde_json::Value| {
+            json!({"timestamp":"2026-11-05T01:00:00Z","type":"event_msg","payload":{"type":"item_completed","thread_id":SESSION,"turn_id":"t","item":item,"started_at_ms":1,"completed_at_ms":2}}).to_string()
+        };
+        assert_eq!(
+            reader.feed_line(&item(json!({
+                "type":"CommandExecution","id":"c1","command":["cargo","test","-p","synthetic"],
+                "cwd":"/work","status":"completed","exit_code":0,"aggregated_output":"secret output"
+            }))),
+            Some(RolloutSignal::Activity(
+                json!({"type":"commandExecution","command":"cargo test -p synthetic"})
+            ))
+        );
+        assert_eq!(
+            reader.feed_line(&item(json!({
+                "type":"FileChange","id":"f1","status":"completed",
+                "changes":{"src/a.rs":{"type":"update","unified_diff":"secret diff"},"docs/b.md":{"type":"add","content":"secret body"}}
+            }))),
+            Some(RolloutSignal::Activity(json!({"type":"fileChange","changes":[{"path":"docs/b.md"},{"path":"src/a.rs"}]})))
+        );
+        assert_eq!(
+            reader.feed_line(&item(json!({
+                "type":"McpToolCall","id":"m1","server":"hotsheet","tool":"hotsheet_get",
+                "arguments":{"id":"secret"},"status":"completed"
+            }))),
+            Some(RolloutSignal::Activity(
+                json!({"type":"mcpToolCall","tool":"hotsheet_get","server":"hotsheet"})
+            ))
+        );
+        // Reasoning and agent messages are not narrated, and empty items signal nothing.
+        for skipped in [
+            json!({"type":"Reasoning","id":"r1","summary_text":["private"],"raw_content":["private"]}),
+            json!({"type":"AgentMessage","id":"a1","content":[{"type":"text","text":"private"}]}),
+            json!({"type":"CommandExecution","id":"c2","command":[]}),
+            json!({"type":"FileChange","id":"f2","changes":{}}),
+        ] {
+            assert_eq!(reader.feed_line(&item(skipped.clone())), None, "{skipped}");
+        }
+        // A long command is bounded.
+        let long = "x".repeat(MAX_COMMAND_CHARS + 50);
+        let Some(RolloutSignal::Activity(bounded)) = reader.feed_line(&item(
+            json!({"type":"CommandExecution","id":"c3","command":long}),
+        )) else {
+            panic!("a long command still narrates");
+        };
+        assert_eq!(
+            bounded["command"].as_str().unwrap().chars().count(),
+            MAX_COMMAND_CHARS
+        );
+        // Items before the session reported are history, not narration.
+        let mut late = RolloutReader::new(SESSION, at("2026-11-06T00:00:00Z"));
+        late.feed_line(&meta(SESSION));
+        assert_eq!(
+            late.feed_line(&item(
+                json!({"type":"CommandExecution","id":"c4","command":["ls"]})
+            )),
+            None
+        );
     }
 }

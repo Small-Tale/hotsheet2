@@ -772,6 +772,115 @@ async fn hs2_b4eq87_codex_terminal_usage_records_in_its_project_store() {
     call(router, "DELETE", "/terminals/codex-b", None).await;
 }
 
+/// HS2-WH40WD: an interactive Codex terminal session is narrated from its rollout: the turn's
+/// start, its commands and file changes, and its end become activity in the project's store,
+/// attributed to the session and the claimed ticket, with no diff, content, or output.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_wh40wd_codex_terminal_session_is_narrated_from_its_rollout() {
+    const SESSION: &str = "00000000-0000-4000-8000-0000000000c5";
+    let h = harness();
+    let b = ProjectB::open(&h, "codex-say").await;
+    let router = &b.router;
+    let (_, created) = call(
+        router,
+        "POST",
+        &format!("/stores/{}/tickets", b.id),
+        Some(json!({"title":"Codex narration in B"})),
+    )
+    .await;
+    let ticket = created["id"].as_str().unwrap().to_string();
+    let (status, _) = call(
+        router,
+        "POST",
+        &format!("/checkouts/{}/tickets/{ticket}/claim", b.checkout),
+        Some(
+            json!({"worker":hotsheet_aitools::session_worker_id("codex", "codex-say"),
+            "lease_minutes":60}),
+        ),
+    )
+    .await;
+    assert!(status.is_success(), "{status}");
+    let home = h._dir.path().join("codex-say-home");
+    std::fs::create_dir_all(&home).unwrap();
+    let (status, _) = call(
+        router,
+        "POST",
+        "/terminals/codex-say/ai-connection",
+        Some(json!({"agent":"codex","session_id":SESSION,"codex_home":home})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let at = (time::OffsetDateTime::now_utc() + time::Duration::seconds(1))
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let completed = |item: serde_json::Value| {
+        json!({"timestamp": at, "type": "event_msg", "payload": {"type": "item_completed",
+            "thread_id": SESSION, "turn_id": "t1", "item": item,
+            "started_at_ms": 1, "completed_at_ms": 2}})
+    };
+    let rows = [
+        json!({"timestamp": "2026-11-06T00:00:00Z", "type": "session_meta",
+            "payload": {"id": SESSION, "originator": "codex-tui"}}),
+        json!({"timestamp": at, "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "t1"}}),
+        completed(
+            json!({"type": "CommandExecution", "id": "c1", "command": ["cargo", "test"],
+            "status": "completed", "aggregated_output": "secret output"}),
+        ),
+        completed(
+            json!({"type": "FileChange", "id": "f1", "status": "completed",
+            "changes": {"src/lib.rs": {"type": "update", "unified_diff": "secret diff"}}}),
+        ),
+        json!({"timestamp": at, "type": "event_msg",
+            "payload": {"type": "task_complete", "turn_id": "t1"}}),
+    ];
+    let text: String = rows.iter().map(|row| format!("{row}\n")).collect();
+    let day = home.join("sessions/2026/11/06");
+    std::fs::create_dir_all(&day).unwrap();
+    std::fs::write(
+        day.join(format!("rollout-2026-11-06T00-00-00-{SESSION}.jsonl")),
+        text,
+    )
+    .unwrap();
+    // The watch follows the rollout off the request path; wait for its narration to land.
+    let deadline = std::time::Instant::now() + LIVE_PUSH_TIMEOUT;
+    let events = loop {
+        let events = hotsheet_ticketing::activity::read_recent(&b.store).unwrap();
+        if events.len() >= 4 || std::time::Instant::now() >= deadline {
+            break events;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    let kinds: Vec<_> = events
+        .iter()
+        .map(|event| serde_json::to_value(event.kind).unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            json!("turn_start"),
+            json!("command"),
+            json!("edit"),
+            json!("turn_end")
+        ],
+        "{events:?}"
+    );
+    assert!(events.iter().all(|event| event.tool == "codex"
+        && event.session.as_deref() == Some(SESSION)
+        && event.ticket.as_deref() == Some(ticket.as_str())));
+    assert_eq!(events[1].detail["command"], "cargo test");
+    assert_eq!(events[2].detail["path"], "src/lib.rs");
+    let text = serde_json::to_string(&events).unwrap();
+    assert!(!text.contains("secret"), "{text}");
+    // Nothing is narrated into the machine's bootstrap store.
+    assert!(
+        hotsheet_ticketing::activity::read_recent(&b.primary)
+            .unwrap()
+            .is_empty()
+    );
+    call(router, "DELETE", "/terminals/codex-say", None).await;
+}
+
 // ---- HS2-MHW3SX: persisted inputs and the minute rebuild ----------------------------------
 
 /// A bus event for a ticket write, as a server route or the store watcher publishes it.
