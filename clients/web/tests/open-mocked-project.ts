@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /**
  * HS2-DXJ2RZ, HS2-GDBK53: the next answer to a ticket list read. Opening a project makes about
@@ -23,4 +23,15 @@ export async function openMockedProject(page: Page): Promise<void> {
   const listed = ticketListLoaded(page);
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await listed;
+}
+
+/**
+ * The project tab named `name` (HS2-YGSYJT). A project tab's accessible name carries its work counts
+ * after the project name ("drafts 1 Up Next ticket"), and they change as tickets enter Up Next or
+ * become active, so an exact-name match stops finding a tab whose project gains work. Match the
+ * project name, followed by the end of the label or a space.
+ */
+export function projectTab(scope: Page | Locator, name: string): Locator {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return scope.getByRole('tab', { name: new RegExp(`^${escaped}(?: |$)`, 'u') });
 }

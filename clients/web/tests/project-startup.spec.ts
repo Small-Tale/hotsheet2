@@ -3,6 +3,7 @@ import { expect, type Page, test } from '@playwright/test';
 import type { Capabilities } from '../src/api';
 import type { Project } from '../src/interactions/types';
 import { remoteProjectId } from '../src/remote-projects/identity';
+import { projectTab } from './open-mocked-project';
 
 const capabilities: Capabilities = {
   create: true,
@@ -503,10 +504,10 @@ test('shows the active project while other remembered projects are still opening
   await page.locator('.project-tab-bar').screenshot({ path: testInfo.outputPath('pending-tab-replaced-in-place.png') });
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   // Selecting the still-opening alpha shows its opening panel, then the project once it is ready (HS2-XGSSK1).
-  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  await projectTab(page, 'alpha').click();
   const opening = page.locator('[data-project-opening-state="true"]');
   await expect(opening).toContainText('Opening alpha…');
-  await expect(page.getByRole('tab', { name: 'alpha', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(projectTab(page, 'alpha')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'false');
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.screenshot({ path: 'target/visual-captures/hs2-xgssk1-opening-panel-1280.png' });
@@ -523,7 +524,7 @@ test('shows the active project while other remembered projects are still opening
   await page.getByRole('tab', { name: /^beta/ }).click();
   await expect(opening).toHaveCount(0);
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  await projectTab(page, 'alpha').click();
   await expect(opening).toBeVisible();
   fixture.pending.get('alpha')!.release();
   await expect(tabs).toHaveText(['alpha', 'beta1', 'gamma']);
@@ -566,9 +567,9 @@ test('keeps each failed root and recovery identity, then recovers the selected t
     ['beta', 2],
   ]);
   expect(heavyCalls(fixture.calls)).toEqual([]);
-  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  await projectTab(page, 'alpha').click();
   await expect(failure).toContainText('111');
-  await page.getByRole('tab', { name: 'beta', exact: true }).click();
+  await projectTab(page, 'beta').click();
   await expect(failure).toContainText('beta server unavailable');
   // The failure panel uses the phone shell like every other branch (HS2-RSX13Q).
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -576,7 +577,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'beta', exact: true })).toBeHidden();
+  await expect(projectTab(page, 'beta')).toBeHidden();
   await expect(failure).toBeVisible();
   await expect(page.locator('kui-select[name="mobile-project"]')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-390.png' });
@@ -590,7 +591,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   );
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
-  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  await projectTab(page, 'alpha').click();
   await expect(failure).toContainText('111');
   await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-partial-recovery-wide.png', fullPage: true });
 });

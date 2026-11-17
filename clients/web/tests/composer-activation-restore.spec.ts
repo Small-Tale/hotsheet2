@@ -10,6 +10,7 @@ import {
   sessionSaved,
   stage,
 } from './desktop-draft-files-fixture';
+import { projectTab } from './open-mocked-project';
 
 const commandsResponse = (page: Page, id: string) =>
   page.waitForResponse((response) => new URL(response.url()).pathname === `/__hotsheet/project-api/${id}/commands`);
@@ -41,7 +42,7 @@ test.describe('composer activation restoration (HS2-40JX5Q)', () => {
         refresh = app.pauseApi((method, path) => method === 'GET' && path === '/commands');
         app.failApiWhen((method, path) => fails && method === 'GET' && path === '/commands');
         const placeholderSaved = sessionSaved(page, 'unsaved-held.bin');
-        await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+        await projectTab(page, 'drafts').click();
         await refresh.started;
         await placeholderSaved;
         await expect(dialog(page)).toBeHidden();
@@ -69,7 +70,7 @@ test.describe('composer activation restoration (HS2-40JX5Q)', () => {
           expect(durable.open).toBe(true);
           expect(durable.title).toBe('Synthetic held unsaved draft');
           expect(durable.attachments.map((item: { name: string }) => item.name)).toEqual(['unsaved-held.bin']);
-          await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+          await projectTab(page, 'drafts').click();
           await expect(dialog(page)).toBeVisible();
           await expect(dialog(page).getByRole('textbox', { name: 'Ticket Title' })).toHaveValue(
             'Synthetic held unsaved draft',
@@ -103,7 +104,7 @@ test.describe('composer activation restoration (HS2-40JX5Q)', () => {
       await dialog(page).getByRole('textbox', { name: 'Ticket Title' }).fill('Synthetic parked original');
       await app.addProject(page);
       refresh = app.pauseApi((method, path) => method === 'GET' && path === '/commands');
-      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await projectTab(page, 'drafts').click();
       await refresh.started;
       await expect(dialog(page)).toBeHidden();
       await openNewTicket(page);
@@ -183,11 +184,11 @@ test.describe('composer activation restoration (HS2-40JX5Q)', () => {
           const matches = (method: string, path: string) => method === 'GET' && path === '/commands';
           refresh = app.pauseApi(matches);
           app.failApiWhen((method, path) => fails && matches(method, path));
-          await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+          await projectTab(page, 'drafts').click();
           await refresh.started;
           await expect(dialog(page)).toBeHidden();
           if (outcome === 'switch') {
-            await page.getByRole('tab', { name: 'other-project', exact: true }).click();
+            await projectTab(page, 'other-project').click();
           } else {
             await openNewTicket(page);
             await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();

@@ -18,7 +18,7 @@ import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { appRequests } from './app-requests';
-import { openMockedProject, ticketListLoaded } from './open-mocked-project';
+import { openMockedProject, projectTab, ticketListLoaded } from './open-mocked-project';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -35713,7 +35713,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await expect(tickets.first()).toContainText('Other scroll ticket');
   await expect.poll(scroll).toBe(0);
   const otherTop = await setScroll(1200);
-  await page.getByRole('tab', { name: 'demo', exact: true }).click();
+  await projectTab(page, 'demo').click();
   await expect(tickets.first()).toContainText('Demo scroll ticket');
   await expect.poll(scroll).toBe(queueTop);
   await page.screenshot({
@@ -35743,7 +35743,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   });
   await page.setViewportSize({ width: 1400, height: 760 });
   await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
-  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  await projectTab(page, 'other').click();
   await page.getByLabel('List View').click();
   await expect.poll(scroll).toBe(otherTop);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
@@ -35754,7 +35754,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
     return node.scrollTop;
   });
   expect(gridTop).toBe(250);
-  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  await projectTab(page, 'other').click();
   await expect.poll(scroll).toBe(otherTop);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect.poll(() => grid.evaluate((node) => node.scrollTop)).toBe(gridTop);
@@ -35763,10 +35763,10 @@ test('remembers scroll per project, mode and view through delayed loading and sh
     fullPage: true,
     animations: 'disabled',
   });
-  await page.getByRole('tab', { name: 'other', exact: true }).click();
+  await projectTab(page, 'other').click();
   // Change the inactive project's contents, then revisit the saved list destination.
   demoRows = demoRows.filter((item) => item.status === 'backlog').concat(demoRows.slice(0, 20));
-  await page.getByRole('tab', { name: 'demo', exact: true }).click();
+  await projectTab(page, 'demo').click();
   await page.getByLabel('List View').click();
   await expect(tickets).toHaveCount(20);
   await expect

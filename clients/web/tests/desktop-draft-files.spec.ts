@@ -14,6 +14,7 @@ import {
   sessionSaved,
   stage,
 } from './desktop-draft-files-fixture';
+import { projectTab } from './open-mocked-project';
 
 test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
   test.setTimeout(150_000);
@@ -294,7 +295,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
       await failed;
       await expect(dialog(page).getByText("Couldn't save", { exact: false })).toBeVisible();
       await app.addProject(page);
-      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await projectTab(page, 'drafts').click();
       await expect(dialog(page)).toBeVisible();
       await expect(dialog(page).getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Synthetic unsaved origin');
       await expect(dialog(page).getByText('unsaved-switch.bin', { exact: true })).toBeVisible();
@@ -439,7 +440,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
       await persisted;
       await app.addProject(page);
       hold = app.pauseBridge((method, key) => method === 'GET' && key.startsWith(`composer:${app.server.checkoutId}:`));
-      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await projectTab(page, 'drafts').click();
       await hold.started;
       await openNewTicket(page);
       await expect(dialog(page).getByText('restore-old.bin', { exact: true })).toBeVisible();
@@ -498,7 +499,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
             (method, key) => method === 'GET' && key.startsWith(`not-working:${app.server.checkoutId}:`),
           );
           await app.addProject(page);
-          await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+          await projectTab(page, 'drafts').click();
           await hold.started;
           report = page.getByRole('dialog', { name: `Not Working — ${original.slug}` });
         }
@@ -544,7 +545,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
       restore = app.pauseBridge(
         (method, key) => method === 'GET' && key.startsWith(`composer:${app.server.checkoutId}:`),
       );
-      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await projectTab(page, 'drafts').click();
       await refresh.started;
       await openNewTicket(page);
       refresh.release();
@@ -587,7 +588,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
         detail = app.pauseApi(
           (method, path) => method === 'GET' && path.includes('/tickets/') && !path.endsWith('/tickets'),
         );
-        await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+        await projectTab(page, 'drafts').click();
         await detail.started;
         const restored = page.getByRole('dialog', { name: `Not Working — ${ticket.slug}` });
         await restored.getByRole('textbox').fill('Synthetic edited note-only report');
@@ -642,7 +643,7 @@ test.describe('desktop draft attachment persistence (HS2-791W19)', () => {
       restore = app.pauseBridge(
         (method, key) => method === 'GET' && key.startsWith(`composer:${app.server.checkoutId}:`),
       );
-      await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+      await projectTab(page, 'drafts').click();
       await refresh.started;
       await openNewTicket(page);
       refresh.release();

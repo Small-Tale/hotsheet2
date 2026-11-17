@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import config from '../playwright.config';
+import { projectTab } from '../tests/open-mocked-project';
 
 describe('Playwright output isolation (HS2-ZJJ4K6)', () => {
   it('rotates browser artifacts only under the generated directory excluded from UI doctor traversal', () => {
@@ -74,5 +75,38 @@ describe('mocked project open waits for the ticket list (HS2-GDBK53)', () => {
       .filter((name) => name.endsWith('.spec.ts'))
       .filter((name) => raw.test(readFileSync(new URL(name, tests), 'utf8')));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('project tabs are found by name, not by their full label (HS2-YGSYJT)', () => {
+  it('locates page-level project tabs through projectTab, never by exact accessible name', () => {
+    // A project tab's accessible name carries its work counts ("drafts 1 Up Next ticket"), so an
+    // exact-name match stops finding it once its project gains work. Scoped tab lists (the inspector,
+    // the terminal drawer, a pending tab's own name) may still match exactly.
+    const tests = new URL('../tests/', import.meta.url),
+      exact = /\bpage\.getByRole\(\s*'tab',\s*\{\s*name: [^,}]+,\s*exact: true\s*\}\)/u;
+    const offenders = readdirSync(tests)
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) => exact.test(readFileSync(new URL(name, tests), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
+  it('matches a project name before its counts and nothing longer', () => {
+    let used: { name?: unknown } = {};
+    const scope = {
+      getByRole: (_role: string, options: { name?: unknown }) => {
+        used = options;
+        return {};
+      },
+    } as unknown as Parameters<typeof projectTab>[0];
+    const pattern = (project: string) => {
+      projectTab(scope, project);
+      return used.name as RegExp;
+    };
+    expect(pattern('drafts').test('drafts')).toBe(true);
+    expect(pattern('drafts').test('drafts 1 Up Next ticket')).toBe(true);
+    expect(pattern('drafts').test('drafts-old')).toBe(false);
+    expect(pattern('other').test('other-project')).toBe(false);
+    expect(pattern('a.b').test('axb')).toBe(false);
   });
 });

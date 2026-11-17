@@ -10,6 +10,7 @@ import {
   sessionSaved,
   stage,
 } from './desktop-draft-files-fixture';
+import { projectTab } from './open-mocked-project';
 
 test('restores a parked draft while AI discovery is held on A→B→A (HS2-3VR31Y)', async ({ context, baseURL }) => {
   test.setTimeout(90_000);
@@ -43,7 +44,7 @@ test('restores a parked draft while AI discovery is held on A→B→A (HS2-3VR31
     expect(parked.title).toBe('Synthetic draft during discovery');
     expect(parked.attachments.map((item: { name: string }) => item.name)).toEqual(['held-discovery.bin']);
 
-    await page.getByRole('tab', { name: 'drafts', exact: true }).click();
+    await projectTab(page, 'drafts').click();
     // The AI responses are still held. Restoration must depend only on the ticket/session reads.
     await expect(dialog(page)).toBeVisible();
     await expect(title).toHaveValue('Synthetic draft during discovery');

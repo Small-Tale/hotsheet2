@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { FullTicket } from '../src/api';
 import { DESKTOP_DRAFT_FILES_DIRECTORY, desktopStorageBridge } from '../src/desktop-storage-bridge';
 import { projectScopedServerPath } from '../src/project-bridge';
+import { projectTab } from './open-mocked-project';
 import { expectProjectSidebarLayout } from './project-sidebar-layout';
 import { realTicketServer } from './real-ticket-server';
 
@@ -242,8 +243,8 @@ export async function desktopApp(
       // HS2-F277XB: a project tab's name carries its work counts ("other-project 1 Up Next ticket"),
       // and the tab is not selected until the open finishes. This store is shared with the first
       // project, so a ticket a test returned to Up Next names the counts before the open ends and an
-      // exact-name match never sees the tab selected. Match the project name, then its selection.
-      await expect(page.getByRole('tab', { name: /^other-project(?: |$)/u })).toHaveAttribute('aria-selected', 'true', {
+      // exact-name match never sees the tab selected. Match the project name (HS2-YGSYJT).
+      await expect(projectTab(page, 'other-project')).toHaveAttribute('aria-selected', 'true', {
         timeout: 30_000,
       });
       return checkout.id;

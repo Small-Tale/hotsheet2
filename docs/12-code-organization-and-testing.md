@@ -1736,6 +1736,14 @@ spec asserts on rows, so a loaded gate cannot outrun it (HS2-GDBK53). A test tha
 holds or never answers that read keeps the raw clicks behind an `// HS2-GDBK53:` comment naming
 why; `src/playwright-config.test.ts` fails on any other raw open sequence.
 
+Specs find a project tab with `projectTab(page, name)` from the same module (HS2-YGSYJT). A project
+tab's accessible name carries its work counts after the project name ("drafts 1 Up Next ticket").
+Those counts change as the project gains Up Next or active tickets, so an exact-name match stops
+finding the tab. `projectTab` matches the name followed by the end of the label or a space. The
+same test file fails on a page-level `getByRole('tab', { name, exact: true })`. Scoped tab lists
+(the inspector, the terminal drawer, a pending tab whose own name is the assertion) may still match
+exactly.
+
 When a browser test asserts an intermediate state that only exists while a request is
 outstanding, the route fixture must hold that response behind an explicit gate (a promise the test
 resolves after asserting). Examples are a pending spinner, an optimistic projection, an in-flight
