@@ -142,3 +142,39 @@ describe('ProjectLiveSection (HS2-F788GW)', () => {
     expect(String(projectSidebarPanel(base).content)).not.toContain('project-live-section');
   });
 });
+
+describe('ProjectLiveSection main CI (HS2-57BYEA)', () => {
+  const ci = {
+    status: 'failure' as const,
+    checkout: 'demo-ab12',
+    branch: 'main',
+    sha: '9f8e7d6c5b4a',
+    run_url: null,
+    workflow: 'CI',
+    started_at_ms: DEMO_LIVE_NOW_MS - 18 * 60_000,
+    finished_at_ms: DEMO_LIVE_NOW_MS - 12 * 60_000,
+    reported_at_ms: DEMO_LIVE_NOW_MS - 12 * 60_000,
+  };
+  const failing = projectLiveSummary([{ ...demoLiveState('quiet'), ci }], DEMO_LIVE_NOW_MS);
+  const passing = projectLiveSummary(
+    [{ ...demoLiveState('quiet'), ci: { ...ci, status: 'success' } }],
+    DEMO_LIVE_NOW_MS,
+  );
+
+  it('shows a glyph-only danger chip for a failing run in compact mode, titled with the run', () => {
+    const markup = String(ProjectLiveSection({ summary: failing }));
+    expect(markup).toContain('data-live-chip="ci"');
+    expect(markup).toContain('title="main CI failed · 9f8e7d6"');
+    expect(markup).toContain('data-lucide="circle-x"');
+  });
+
+  it('shows no chip for a passing run, but an expanded row for any reported run', () => {
+    expect(String(ProjectLiveSection({ summary: passing }))).not.toContain('data-live-chip="ci"');
+    const expanded = String(ProjectLiveSection({ summary: passing, expanded: true }));
+    expect(expanded).toContain('data-live-row="ci"');
+    expect(expanded).toContain('main CI passed · 9f8e7d6');
+    expect(expanded).toContain('12m ago');
+    expect(expanded).toContain('data-lucide="circle-check"');
+    expect(String(ProjectLiveSection({ summary: quiet, expanded: true }))).not.toContain('data-live-row="ci"');
+  });
+});

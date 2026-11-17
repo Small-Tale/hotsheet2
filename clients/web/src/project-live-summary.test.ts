@@ -235,3 +235,45 @@ describe('workersLive (HS2-6B9S7P)', () => {
     expect(workersLive(fresh)).toEqual({ live: 2 });
   });
 });
+
+describe('main CI chip and row model (HS2-57BYEA)', () => {
+  const run = (
+    status: NonNullable<LiveStoreState['ci']>['status'],
+    minutesAgo = 12,
+  ): NonNullable<LiveStoreState['ci']> => ({
+    status,
+    checkout: 'demo-ab12',
+    branch: 'main',
+    sha: '9f8e7d6c5b4a',
+    run_url: 'https://ci.example.test/runs/1',
+    workflow: 'CI',
+    started_at_ms: DEMO_LIVE_NOW_MS - (minutesAgo + 6) * MINUTE,
+    finished_at_ms: status === 'in_progress' || status === 'queued' ? null : DEMO_LIVE_NOW_MS - minutesAgo * MINUTE,
+    reported_at_ms: DEMO_LIVE_NOW_MS - minutesAgo * MINUTE,
+  });
+  const withCi = (ci?: NonNullable<LiveStoreState['ci']>) =>
+    summary({ ...demoLiveState('quiet'), ...(ci ? { ci } : {}) });
+
+  it('carries the newest reported run, or none for an older server', () => {
+    expect(withCi().ci).toEqual({ status: 'unavailable', branch: 'main' });
+    expect(withCi(run('failure')).ci).toMatchObject({ status: 'failure', shortSha: '9f8e7d6', ageMs: 12 * MINUTE });
+  });
+
+  it('adds a CI chip only when the run fails, runs, or waits', () => {
+    expect(liveChips(withCi(run('failure')))).toEqual([
+      { kind: 'ci', text: '', title: 'main CI failed · 9f8e7d6', tone: 'danger' },
+    ]);
+    expect(liveChips(withCi(run('in_progress')))).toEqual([
+      { kind: 'ci', text: '', title: 'main CI running · 9f8e7d6', tone: 'neutral' },
+    ]);
+    expect(liveChips(withCi(run('queued')))[0]?.title).toBe('main CI queued · 9f8e7d6');
+    for (const status of ['success', 'cancelled', 'unavailable'] as const)
+      expect(liveChips(withCi(run(status)))).toEqual([]);
+    expect(liveChips(withCi())).toEqual([]);
+  });
+
+  it('puts the CI chip after Needs you and the ETA overrun', () => {
+    const chips = liveChips(summary({ ...demoLiveState('attention'), ci: run('failure') }));
+    expect(chips.map((chip) => chip.kind)).toEqual(['waiting', 'overrun', 'ci']);
+  });
+});

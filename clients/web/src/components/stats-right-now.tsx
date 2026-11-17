@@ -8,19 +8,10 @@ import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
-import {
-  CircleCheck,
-  CircleDashed,
-  CircleSlash,
-  CircleX,
-  Clock,
-  ExternalLink,
-  type IconNode,
-  LoaderCircle,
-} from 'lucide';
+import { ExternalLink } from 'lucide';
 
-import type { LiveCiStatus } from '../api';
-import { formatDuration, type RightNowCi, type RightNowRow, type RightNowTiles } from '../stats-right-now';
+import { CI_PRESENTATION, ciDetail } from '../ci-presentation';
+import type { RightNowRow, RightNowTiles } from '../stats-right-now';
 import { GlanceGauge } from './glance-gauge';
 import { formatGlanceValue } from './glance-gauge-geometry';
 import { GlanceSparkline } from './glance-sparkline';
@@ -40,29 +31,6 @@ export interface StatsRightNowProps {
 }
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-
-/** The `main` CI tile's word and glyph per reported status (HS2-E16ZEK). */
-const CI_PRESENTATION: Record<LiveCiStatus, { word: string; icon: IconNode; name: string }> = {
-  success: { word: 'Passed', icon: CircleCheck, name: 'circle-check' },
-  failure: { word: 'Failed', icon: CircleX, name: 'circle-x' },
-  in_progress: { word: 'Running', icon: LoaderCircle, name: 'loader-circle' },
-  queued: { word: 'Queued', icon: Clock, name: 'clock' },
-  cancelled: { word: 'Cancelled', icon: CircleSlash, name: 'circle-slash' },
-  unavailable: { word: 'No CI reported', icon: CircleDashed, name: 'circle-dashed' },
-};
-
-/** "main CI · 1a2b3c4 · 12m ago", or "running 4m" while it has not finished. */
-function ciDetail(ci: RightNowCi): string {
-  const parts = [`${ci.branch} CI`];
-  if (ci.shortSha) parts.push(ci.shortSha);
-  if (ci.ageMs !== undefined)
-    parts.push(
-      ci.status === 'in_progress' || ci.status === 'queued'
-        ? `${ci.status === 'queued' ? 'waiting' : 'running'} ${formatDuration(ci.ageMs)}`
-        : `${formatDuration(ci.ageMs)} ago`,
-    );
-  return parts.join(' · ');
-}
 
 /** "4 PM" on the hour, else "4:30 PM". */
 function clockTime(ms: number): string {

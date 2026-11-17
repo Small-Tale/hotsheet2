@@ -590,8 +590,8 @@ public URL is needed, and the source is independent of the ticket provider.
   (`version` 1) and read again after a restart. An unreadable file or one of another version
   is ignored, and the stores start as `unavailable`.
 - **Limit.** Status is only as fresh as the last report. Wiring `ci-gate.mjs` and the
-  integrator to report is HS2-W4BC5Q. The Stats Right now tile renders it (HS2-E16ZEK); the
-  project sidebar chip and row are HS2-57BYEA.
+  integrator to report is HS2-W4BC5Q. The Stats Right now tile (HS2-E16ZEK) and the project
+  sidebar Live chip and row (HS2-57BYEA) render it.
 
 ## 32.9 Headless CLI and REST API
 

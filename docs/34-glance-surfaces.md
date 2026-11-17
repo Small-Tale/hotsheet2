@@ -186,8 +186,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
   change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
-  Halted) is a glyph whose title gives the state and the last-progress age. The live state now carries
-  `main` CI (HS2-M8HHEA, [32](32-notifier-plugins.md) §32.8.5); rendering the chip and row is HS2-57BYEA.
+  Halted) is a glyph whose title gives the state and the last-progress age. `main` CI (HS2-57BYEA) comes
+  from the newest run the project's stores reported in their live `ci` (HS2-M8HHEA,
+  [32](32-notifier-plugins.md) §32.8.5): the compact chip is a glyph shown only while that run failed
+  (danger), runs, or waits to run (neutral), titled with the branch, word, and short sha; the expanded row
+  names any reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs
+  match the Stats tile (HS2-E16ZEK).
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes
