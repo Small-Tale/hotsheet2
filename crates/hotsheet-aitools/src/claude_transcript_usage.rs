@@ -444,13 +444,53 @@ pub fn subagent_transcripts(transcript: &Path) -> Vec<(String, std::path::PathBu
 
 /// Call `on_change` from a background thread whenever `transcript`'s directory or its
 /// session's own directory (where subagent transcripts live, HS2-JW6N67) changes, once
-/// right away, and once more after [`WATCH_SETTLE`]. The session directory is watched as
-/// soon as it exists. Wakes come from filesystem notifications and are coalesced; nothing
-/// polls. The transcript's directory must exist.
+/// right away, once more when the native watch is live, and once more after
+/// [`WATCH_SETTLE`]. Wakes come from filesystem notifications and are coalesced; nothing
+/// polls while the watch is live. The transcript's directory must exist.
+///
+/// HS2-PTK0CK: under load the macOS file-event service took seconds to start a stream and
+/// up to tens of seconds to restart one, while it still delivered events within
+/// milliseconds. So no wake waits behind a stream start or restart:
+/// - the first read happens before the stream starts;
+/// - on macOS one stream covers the transcript directory recursively from the start,
+///   filtered to the transcript directory's own entries and this session's directory, so
+///   the session directory created later never restarts the stream (elsewhere, where adding
+///   a path restarts nothing, the session directory is still added once it exists);
+/// - a stream the platform refuses is retried with a bounded backoff
+///   ([`START_RETRY_FIRST`] doubling to [`START_RETRY_MAX`]), reading at each step, instead
+///   of ending the watch silently.
 pub fn watch_transcript(
     transcript: &Path,
-    mut on_change: impl FnMut() + Send + 'static,
+    on_change: impl FnMut() + Send + 'static,
 ) -> io::Result<TranscriptWatch> {
+    watch_transcript_with(transcript, on_change, |paths, handler| {
+        hotsheet_jobs::watch::PathWatcher::start(paths, handler)
+    })
+}
+
+/// The first wait before a refused native stream is started again (HS2-PTK0CK).
+const START_RETRY_FIRST: std::time::Duration = std::time::Duration::from_millis(100);
+/// The longest wait between attempts while the native stream is refused.
+const START_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// What starts a native watch over the transcript's paths: the platform watcher, or a
+/// test's stand-in that refuses some attempts.
+type WatchHandler = Box<dyn FnMut(hotsheet_jobs::watch::Delivery) + Send>;
+
+/// [`watch_transcript`] with the native watch started by `start`.
+fn watch_transcript_with<S>(
+    transcript: &Path,
+    mut on_change: impl FnMut() + Send + 'static,
+    mut start: S,
+) -> io::Result<TranscriptWatch>
+where
+    S: FnMut(
+            &[(&Path, hotsheet_jobs::watch::RecursiveMode)],
+            WatchHandler,
+        ) -> Result<hotsheet_jobs::watch::PathWatcher, hotsheet_jobs::watch::Error>
+        + Send
+        + 'static,
+{
     use hotsheet_jobs::watch::{Delivery, EventKind, PathWatcher, RecursiveMode};
     use std::sync::mpsc::{RecvTimeoutError, channel};
     let dir = transcript
@@ -461,34 +501,96 @@ pub fn watch_transcript(
     let session = session_dir(transcript);
     let (wake, woken) = channel::<bool>();
     let notify_wake = wake.clone();
-    let handler = move |event: Delivery| {
-        // Our own reads must not wake us again.
-        if event.is_ok_and(|event| !matches!(event.kind, EventKind::Access(_))) {
-            let _ = notify_wake.send(true);
-        }
+    // HS2-PTK0CK: on macOS the stream is recursive from the start, so only the transcript
+    // directory's own entries and this session's directory wake the follower.
+    let recursive_from_start = cfg!(target_os = "macos");
+    // The platform reports resolved paths (`/private/var/...` for `/var/...`), so both the
+    // given and the resolved forms are matched.
+    let resolved = dir.canonicalize().unwrap_or_else(|_| dir.clone());
+    let forms: Vec<(std::path::PathBuf, std::path::PathBuf)> = [dir.clone(), resolved]
+        .into_iter()
+        .map(|form| {
+            let session = session
+                .file_name()
+                .map_or_else(|| session.clone(), |name| form.join(name));
+            (form, session)
+        })
+        .collect();
+    let wanted = move |path: &Path| {
+        !recursive_from_start
+            || forms.iter().any(|(dir, session)| {
+                path == dir || path.parent() == Some(dir.as_path()) || path.starts_with(session)
+            })
+    };
+    let handler = move || -> WatchHandler {
+        let (notify_wake, wanted) = (notify_wake.clone(), wanted.clone());
+        Box::new(move |event: Delivery| {
+            // Our own reads must not wake us again. A rescan notice names no path.
+            if event.is_ok_and(|event| {
+                !matches!(event.kind, EventKind::Access(_))
+                    && (event.paths.is_empty() || event.paths.iter().any(|path| wanted(path)))
+            }) {
+                let _ = notify_wake.send(true);
+            }
+        })
     };
     std::thread::spawn(move || {
-        // Starting a native stream can take seconds under load; do it off the caller.
+        // Right away: what is already there does not wait for the native stream, whose
+        // start can take seconds under load.
+        on_change();
         // HS2-654VBY: an existing session directory is registered with the transcript
         // directory, so the watcher starts once rather than once per path.
-        let mut session_watched = session.is_dir();
-        let mut paths = vec![(dir.as_path(), RecursiveMode::NonRecursive)];
-        if session_watched {
-            paths.push((session.as_path(), RecursiveMode::Recursive));
-        }
-        let Ok(mut watcher) = PathWatcher::start(&paths, handler) else {
-            return;
-        };
-        // Claude creates the session directory on first use; its creation wakes the
-        // transcript directory's watch, and the next wake starts watching it.
-        let mut watch_session = |watcher: &mut PathWatcher| {
-            if !session_watched && session.is_dir() {
-                session_watched = watcher.add(&session, RecursiveMode::Recursive).is_ok();
+        let mut retry = START_RETRY_FIRST;
+        let (mut watcher, mut session_watched) = loop {
+            let (paths, session_watched) = if recursive_from_start {
+                (vec![(dir.as_path(), RecursiveMode::Recursive)], true)
+            } else if session.is_dir() {
+                (
+                    vec![
+                        (dir.as_path(), RecursiveMode::NonRecursive),
+                        (session.as_path(), RecursiveMode::Recursive),
+                    ],
+                    true,
+                )
+            } else {
+                (vec![(dir.as_path(), RecursiveMode::NonRecursive)], false)
+            };
+            match start(&paths, handler()) {
+                Ok(watcher) => break (watcher, session_watched),
+                Err(_) => {
+                    // HS2-PTK0CK: refused. Read again after a bounded backoff and try once
+                    // more; a drop of the watch ends the wait at once.
+                    match woken.recv_timeout(retry) {
+                        Ok(false) | Err(RecvTimeoutError::Disconnected) => return,
+                        Ok(true) | Err(RecvTimeoutError::Timeout) => {}
+                    }
+                    retry = (retry * 2).min(START_RETRY_MAX);
+                    on_change();
+                }
             }
         };
-        watch_session(&mut watcher);
+        // Claude creates the session directory on first use; its creation wakes the
+        // transcript directory's watch, and the next wake starts watching it. A refused
+        // addition is retried with the same backoff rather than on the next change only.
+        let mut add_retry = START_RETRY_FIRST;
+        let mut watch_session = |watcher: &mut PathWatcher| -> Option<std::time::Duration> {
+            if session_watched || !session.is_dir() {
+                return None;
+            }
+            session_watched = watcher.add(&session, RecursiveMode::Recursive).is_ok();
+            if session_watched {
+                return None;
+            }
+            let wait = add_retry;
+            add_retry = (add_retry * 2).min(START_RETRY_MAX);
+            Some(wait)
+        };
+        let retry_add = watch_session(&mut watcher);
         on_change();
-        let mut settle = Some(std::time::Instant::now() + WATCH_SETTLE);
+        let mut settle = Some(
+            std::time::Instant::now()
+                + retry_add.map_or(WATCH_SETTLE, |wait| wait.min(WATCH_SETTLE)),
+        );
         loop {
             let next = match settle {
                 Some(at) => match woken
@@ -511,7 +613,10 @@ pub fn watch_transcript(
                             return;
                         }
                     }
-                    watch_session(&mut watcher);
+                    if let Some(wait) = watch_session(&mut watcher) {
+                        let at = std::time::Instant::now() + wait;
+                        settle = Some(settle.map_or(at, |current| current.min(at)));
+                    }
                     on_change();
                 }
                 Ok(false) | Err(_) => return,
@@ -742,21 +847,207 @@ mod tests {
         assert_eq!(found[0].1, agents.join("agent-a1.jsonl"));
     }
 
+    /// HS2-PTK0CK: a watch whose native stream the platform refuses at first. The follower
+    /// is woken right away, before any stream exists, and again at each bounded retry; once
+    /// the stream starts, a change wakes it as usual. Before, a refused start ended the
+    /// watch thread silently and its follower never woke (`a wake arrives: Timeout`).
     #[test]
-    fn hs2_jw6n67_transcript_watch_wakes_on_subagent_appends_in_a_later_session_directory() {
+    fn hs2_ptk0ck_a_refused_native_watch_still_wakes_its_follower_and_is_retried() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("session.jsonl");
+        let attempts = std::sync::Arc::new(AtomicUsize::new(0));
+        let counted = attempts.clone();
         let (sent, received) = std::sync::mpsc::channel();
-        let _watch = watch_transcript(&path, move || {
-            let _ = sent.send(());
-        })
+        let (live, started) = std::sync::mpsc::channel();
+        let mut start = starter_telling(live);
+        let _watch = watch_transcript_with(
+            &path,
+            move || {
+                let _ = sent.send(());
+            },
+            move |paths, handler| {
+                // Refused twice, as the platform did under load, then started for real.
+                if counted.fetch_add(1, Ordering::SeqCst) < 2 {
+                    return Err(hotsheet_jobs::watch::Error::generic(
+                        "unable to start FSEvent stream",
+                    ));
+                }
+                start(paths, handler)
+            },
+        )
         .unwrap();
         let wait = || {
             received
                 .recv_timeout(std::time::Duration::from_secs(10))
                 .expect("a wake arrives");
         };
+        // Right away, then once per refused attempt, without waiting for any stream.
+        for _ in 0..3 {
+            wait();
+        }
+        started
+            .recv_timeout(STREAM_START)
+            .expect("the stream starts");
+        // Then once the stream is live.
         wait();
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            3,
+            "retried until it started"
+        );
+        while received.try_recv().is_ok() {}
+        // A change in the transcript directory now wakes the follower.
+        for attempt in 0.. {
+            std::fs::write(&path, format!("{attempt}\n")).unwrap();
+            if received
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_ok()
+            {
+                break;
+            }
+            assert!(attempt < 10, "an append never woke the follower");
+        }
+    }
+
+    /// HS2-PTK0CK: a stream start the platform holds up (seconds under load) does not hold
+    /// up the first read: the follower is woken while the start is still blocked, and again
+    /// once it returns.
+    #[test]
+    fn hs2_ptk0ck_the_first_read_never_waits_for_the_stream_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let (sent, received) = std::sync::mpsc::channel();
+        let (entered, entering) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let released = std::sync::Mutex::new(released);
+        let _watch = watch_transcript_with(
+            &path,
+            move || {
+                let _ = sent.send(());
+            },
+            move |paths, handler| {
+                let _ = entered.send(());
+                // Held until the test lets the platform answer.
+                let _ = released.lock().unwrap().recv();
+                hotsheet_jobs::watch::PathWatcher::start(paths, handler)
+            },
+        )
+        .unwrap();
+        entering
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the start is attempted");
+        received
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the first read does not wait for the start");
+        assert!(
+            received.try_recv().is_err(),
+            "nothing else before the start"
+        );
+        release.send(()).unwrap();
+        received
+            .recv_timeout(STREAM_START)
+            .expect("the live read follows the start");
+    }
+
+    /// HS2-PTK0CK: while the native stream stays refused, the follower keeps reading with a
+    /// backoff that never shortens, and dropping the watch ends the retries.
+    #[test]
+    fn hs2_ptk0ck_a_watch_that_never_starts_backs_off_and_stops_when_dropped() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let attempts = std::sync::Arc::new(AtomicUsize::new(0));
+        let counted = attempts.clone();
+        let (sent, received) = std::sync::mpsc::channel();
+        let watch = watch_transcript_with(
+            &path,
+            move || {
+                let _ = sent.send(std::time::Instant::now());
+            },
+            move |_paths, _handler| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Err(hotsheet_jobs::watch::Error::generic("refused"))
+            },
+        )
+        .unwrap();
+        let wakes: Vec<std::time::Instant> = (0..5)
+            .map(|_| {
+                received
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .expect("a degraded wake arrives")
+            })
+            .collect();
+        // 100, 200, 400, 800 ms apart (bounded by START_RETRY_MAX): never a tighter loop.
+        for (pair, floor) in wakes.windows(2).skip(1).zip([100_u64, 200, 400]) {
+            assert!(
+                pair[1] - pair[0] >= std::time::Duration::from_millis(floor),
+                "{:?} < {floor} ms",
+                pair[1] - pair[0]
+            );
+        }
+        drop(watch);
+        let before = attempts.load(Ordering::SeqCst);
+        // The retry thread sees the drop on its next wait and ends; nothing else wakes.
+        assert!(
+            received
+                .recv_timeout(START_RETRY_MAX + std::time::Duration::from_secs(2))
+                .is_err()
+        );
+        assert!(attempts.load(Ordering::SeqCst) <= before + 1);
+    }
+
+    /// The platform watcher, telling the test once a stream is live: a stream start is the
+    /// platform's own latency (seconds under load), which no wake waits behind any more, so
+    /// a test that needs a live stream waits for exactly that (HS2-PTK0CK).
+    fn starter_telling(
+        live: std::sync::mpsc::Sender<()>,
+    ) -> impl FnMut(
+        &[(&Path, hotsheet_jobs::watch::RecursiveMode)],
+        WatchHandler,
+    ) -> Result<hotsheet_jobs::watch::PathWatcher, hotsheet_jobs::watch::Error>
+    + Send
+    + 'static {
+        move |paths, handler| {
+            let started = hotsheet_jobs::watch::PathWatcher::start(paths, handler);
+            if started.is_ok() {
+                let _ = live.send(());
+            }
+            started
+        }
+    }
+
+    /// How long a test lets the platform take to start one stream: its service, not ours,
+    /// and measured at up to 7 s on a loaded machine (HS2-PTK0CK).
+    const STREAM_START: std::time::Duration = std::time::Duration::from_secs(60);
+
+    #[test]
+    fn hs2_jw6n67_transcript_watch_wakes_on_subagent_appends_in_a_later_session_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let (sent, received) = std::sync::mpsc::channel();
+        let (live, started) = std::sync::mpsc::channel();
+        let _watch = watch_transcript_with(
+            &path,
+            move || {
+                let _ = sent.send(());
+            },
+            starter_telling(live),
+        )
+        .unwrap();
+        let wait = || {
+            received
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .expect("a wake arrives");
+        };
+        // HS2-PTK0CK: the first read never waits for the native stream.
+        wait();
+        started
+            .recv_timeout(STREAM_START)
+            .expect("the platform starts the native stream");
+        // Its live read.
+        wait();
+        while received.try_recv().is_ok() {}
         // The session directory appears after the watch started; its creation wakes once,
         // and from then on appends deep inside it wake the follower too.
         let agents = dir.path().join("session").join("subagents");
@@ -776,6 +1067,70 @@ mod tests {
             }
             assert!(attempt < 10, "a subagent append never woke the follower");
         }
+    }
+
+    /// HS2-PTK0CK: on macOS one stream covers the transcript directory from the start, so a
+    /// later session directory is followed without restarting the stream (a restart took up
+    /// to tens of seconds under load), and only this session's files and the transcript
+    /// directory's own entries wake the follower, never another session's directory.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn hs2_ptk0ck_one_stream_covers_a_later_session_and_ignores_other_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let other = dir.path().join("other-session").join("subagents");
+        std::fs::create_dir_all(&other).unwrap();
+        let starts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = starts.clone();
+        let (sent, received) = std::sync::mpsc::channel();
+        let (live, started) = std::sync::mpsc::channel();
+        let mut start = starter_telling(live);
+        let _watch = watch_transcript_with(
+            &path,
+            move || {
+                let _ = sent.send(());
+            },
+            move |paths, handler| {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                start(paths, handler)
+            },
+        )
+        .unwrap();
+        started
+            .recv_timeout(STREAM_START)
+            .expect("the stream starts");
+        let settled = || {
+            // Every wake so far, including the settle read, has arrived.
+            while received
+                .recv_timeout(WATCH_SETTLE + std::time::Duration::from_secs(1))
+                .is_ok()
+            {}
+        };
+        settled();
+        // Another session's subagent writes are not this follower's business.
+        std::fs::write(other.join("agent-x.jsonl"), "x\n").unwrap();
+        assert!(
+            received
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_err(),
+            "another session's subagent woke this follower"
+        );
+        // This session's later directory and its subagents wake it with the same stream.
+        let agents = dir.path().join("session").join("subagents");
+        std::fs::create_dir_all(&agents).unwrap();
+        received
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the session directory's creation wakes the follower");
+        settled();
+        std::fs::write(agents.join("agent-a1.jsonl"), "1\n").unwrap();
+        received
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("a subagent append wakes the follower");
+        assert_eq!(
+            starts.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "one stream, never restarted"
+        );
     }
 
     fn row(id: &str, at: &str, input: u64, cached: u64, output: u64, model: &str) -> String {

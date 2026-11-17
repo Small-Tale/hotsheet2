@@ -231,6 +231,13 @@ metrics reroute-bootstrap-usage` previews moving them; `--apply` moves them. It 
   because an agent can outlive the parent's turn and its last message has no successor.
   Agent transcripts already present when a follow starts begin at their end; ones that
   appear later begin at their start; their resume offsets persist with the follow.
+  The watch reads once right away, before the platform's file-event stream exists, and
+  never waits behind a stream start or restart: under load the macOS service took seconds
+  to start a stream and up to tens of seconds to restart one, while it delivered events in
+  milliseconds. On macOS one stream therefore covers the transcript directory from the
+  start, filtered to its own entries and this session's directory, so a later session
+  directory never restarts it; a stream the platform refuses is retried with a bounded
+  backoff (100 ms doubling to 5 s) that reads at each step (HS2-PTK0CK).
   The follow's resume offset (the first row of the oldest unrecorded message), session,
   transcript path, and usage checkout persist in `${HOTSHEET_HOME}/claude-usage/<terminal>.json`;
   a restarted server resumes the follows of terminals its broker kept alive and drops
