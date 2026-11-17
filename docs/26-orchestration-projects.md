@@ -5261,3 +5261,8 @@ dispatcher again.
   changes nothing.
 - The scheduler's plan, explanation and decision log carry `role` on a role session's
   placement, and the decision's detail names the role.
+
+The whole sequence runs end to end across two servers in
+`remote_servers/e2e_roles.rs` (HS2-1NJ04Q): a dispatcher started on a remote target
+before its worker and seen to join, an integrator started for the handoff, and all
+three sessions wound down when nothing is left.

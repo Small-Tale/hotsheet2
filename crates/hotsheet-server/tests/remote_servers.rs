@@ -505,6 +505,10 @@ mod e2e_failures;
 #[cfg(unix)]
 #[path = "remote_servers/e2e_loop.rs"]
 mod e2e_loop;
+// HS2-1NJ04Q: the scheduler's role sessions on a remote target, end to end.
+#[cfg(unix)]
+#[path = "remote_servers/e2e_roles.rs"]
+mod e2e_roles;
 #[path = "remote_servers/gates.rs"]
 mod gates;
 // HS2-K2YE6A: the host watches only its checkout's own repository.
