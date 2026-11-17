@@ -3,7 +3,7 @@ name: hotsheet-integrator
 description: Keep a local main-branch integrator reviewing, shipping and completing dispatcher or legacy worker handoffs.
 ---
 
-<!-- hotsheet-skill-version: 28 -->
+<!-- hotsheet-skill-version: 29 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -94,7 +94,7 @@ Batch changes only the gate, push and CI steps.
    <id> --integrator-session <session> --assignment <id>... --phase-ticket
    <slug>... --gate-arg --smoke`. `scripts/check.sh --smoke` runs only the project's
    declared checks (`scripts/gate-smoke.json`: build, lint and a fast sanity set),
-   never affected suites or browser suites.
+   never affected suites or browser suites. Run it as a background command and wait for its completion notice, never under a foreground tool timeout (a shell tool that stops a 600 s command interrupts the gate, HS2-K3W691), or pre-run `scripts/check.sh` in the background so the push only reuses its receipt.
    - If the smoke gate fails, nothing is pushed. Restore `main`, run `coordination
      batch-abort --batch <id> --reason "<failed check>"` to return every member to
      handoff, then fix or return the responsible handoff.
@@ -144,7 +144,7 @@ steps 3 to 6; `main` moves only by fast-forward to an exact SHA whose CI run pas
    <branch> --integrator-id <id> --integrator-session <session> --assignment <id>...
    --phase-ticket <slug>... --gate-arg --smoke`. It pushes HEAD to the staging
    branch, never to `main`. A rebuilt tip replaces only an old staging tip that
-   `main` does not contain.
+   `main` does not contain. Run it as a background command and wait for its completion notice, never under a foreground tool timeout (a shell tool that stops a 600 s command interrupts the gate, HS2-K3W691), or pre-run `scripts/check.sh` in the background so the push only reuses its receipt.
 3. **Record.** `coordination batch-staged --batch <id> --staged-commit <pushed HEAD>
    --shipping <assignment>=<staged sha>... --smoke-check <check>...` puts every
    member in `ci`. Then run `node scripts/integration-batch.mjs record ...`: each
@@ -161,7 +161,8 @@ steps 3 to 6; `main` moves only by fast-forward to an exact SHA whose CI run pas
    --promote <sha>` and records `coordination batch-promote`. Only then does it record
    each ticket's integration against `main`. Then reclaim and complete every promoted
    ticket and mark each mailbox `done`; `mark --phase done` refuses a staged member
-   until its batch is promoted.
+   until its batch is promoted. Run the promote push as a background command and wait
+   for its completion notice, never under a foreground tool timeout (HS2-K3W691).
 7. **Main moved.** If `main` moved and no longer fast-forwards to the green SHA,
    promotion is refused and `main` is untouched. Never merge or rewrite `main`. Run
    `coordination batch-restage --batch <id> --reason "main moved"` and stage the
@@ -473,6 +474,7 @@ For a code handoff, follow these integration steps:
    failures before pushing. Set the ticket to `initial_testing`, then run
    `scripts/push.sh origin main --integrator-id <id> --integrator-session <session>
    --assignment <active-code-handoff-id> --gate-arg --ticket --gate-arg <slug>`.
+   A full or browser gate takes 14 to 35 minutes: run it as a background command and wait for its completion notice, never under a foreground tool timeout (a shell tool that stops a 600 s command interrupts the gate, HS2-K3W691), or pre-run `scripts/check.sh` in the background so the push only reuses its receipt.
    Forward every analyzed T2 stage with another `--gate-arg --t2-stage --gate-arg
    <cwd::command>`, and forward `--gate-arg --full` when the reviewed plan requires
    a full gate. Use `--source-store <path>` when this coordinator's source

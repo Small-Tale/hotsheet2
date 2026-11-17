@@ -4,7 +4,7 @@ description: Keep a local worker session receiving exact dispatcher or legacy as
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 51 -->
+<!-- hotsheet-skill-version: 52 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -225,7 +225,10 @@ Never claim the requested ticket yourself.
    work** (HS2-5EGBTH): run `hotsheet-cli edit <slug> --started-phase working`
    before the first edit, and `--started-phase initial_testing` before any lint,
    policy, type or test gate. Go back to `working` when a gate failure sends you back
-   to edit, and set `initial_testing` again before rerunning the gates. Hand off
+   to edit, and set `initial_testing` again before rerunning the gates. Run a long
+   `scripts/check.sh` gate as a background command and wait for its completion
+   notice, never under a foreground tool timeout, which stops it mid-run
+   (HS2-K3W691). Hand off
    from `initial_testing`; the integrator records `integrating`. Claiming a Not
    Started ticket only enters `analyzing`, and a claim never advances the phase. The
    live claim signals active work, so never infer from a ticket's status or phase

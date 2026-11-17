@@ -438,8 +438,18 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 51 -->")); // HS2-2SJPCH, HS2-7YSKXE
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 28 -->")); // HS2-2SJPCH
+    assert!(worker.contains("<!-- hotsheet-skill-version: 52 -->")); // HS2-2SJPCH, HS2-7YSKXE, HS2-K3W691
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 29 -->")); // HS2-2SJPCH, HS2-K3W691
+    // HS2-K3W691: long gates and pushes run in the background, never under a foreground
+    // tool timeout that stops them mid-run: once per integrator push step, once for the worker.
+    assert_eq!(
+        flatten(integrator)
+            .matches("never under a foreground tool timeout")
+            .count(),
+        4,
+        "integrator smoke, staged, promote and serial push steps"
+    );
+    assert!(flatten(worker).contains("never under a foreground tool timeout"));
     assert!(flatten(integrator).contains("A `partial` result (exit 2)")); // HS2-EBART6
     assert!(flatten(worker).contains("Record the selected source and test plan in the ticket"));
     assert!(
