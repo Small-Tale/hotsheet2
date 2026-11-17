@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -60,9 +61,7 @@ test('HS2-0BJ1A3 rebuilt Workers view shows the real source cadence across sizes
     expect((await view()).cadence).toMatchObject({ goal_minutes: 360, last_green_main_at: null });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-segment-value="workers"]').first().click();
     const cadence = page.locator('[data-cadence-source]');
     await expect(cadence).toContainText('Green main goal · 360 min');

@@ -4,6 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -34,9 +35,7 @@ async function openProject(page: Page, server: Server, beforeLoad?: () => Promis
   // Routes registered here win over the project proxy above (Playwright tries the newest first).
   await beforeLoad?.();
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 // HS2-F788GW: the project sidebar's Live section, from the server's real `/live-state` and the change

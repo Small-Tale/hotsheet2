@@ -6,6 +6,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { FullTicket } from '../src/api';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 /**
@@ -114,9 +115,7 @@ async function open(
   // switch clicked while the project still loads could otherwise be lost and only fail at the test timeout.
   await test.step('open the project and wait until it is ready', async () => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.locator('[data-component="ticket-list"] [data-ticket-slug]').first()).toBeVisible();
     await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   });

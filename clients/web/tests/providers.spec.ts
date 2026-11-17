@@ -18,6 +18,7 @@ import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { appRequests } from './app-requests';
+import { openMockedProject, ticketListLoaded } from './open-mocked-project';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -49,9 +50,7 @@ test('routes live server notices into the project inbox and bell (HS2-ZP869N)', 
         await route.fulfill({ response });
       });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Notifications View' }).click();
     const center = page.locator('[data-component="notification-center"]');
     await expect(center).toBeVisible();
@@ -270,9 +269,7 @@ test('opens the Workers workspace and its shared ticket summary (HS2-E9SR7R)', a
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workers' }).click();
   const columns = page.locator('.worker-columns');
   await expect(columns).toBeVisible();
@@ -460,9 +457,7 @@ test('lists each uncovered Workers source once by name, with failures apart from
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workers' }).click();
   const columns = page.locator('.worker-columns'),
     problems = columns.locator('[data-worker-coverage-problems]'),
@@ -567,9 +562,7 @@ test('reads Workers coverage from the authenticated real checkout cursor (HS2-E9
       await route.fulfill({ response });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Workers' }).click();
     await expect(page.locator('.worker-columns')).toBeVisible();
     await expect(page.locator('.worker-columns__zero')).toContainText('No workers are registered');
@@ -659,9 +652,7 @@ test('HS2-1Z3T0Z shows workers-first and late registration from real coordinatio
       await route.fulfill({ response });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Workers' }).click();
     const columns = page.locator('.worker-columns');
     await expect(columns.locator('[data-worker-id="synthetic-worker-first"]')).toHaveCount(1);
@@ -870,9 +861,7 @@ test('suggests every development strategy override tag for the open project only
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -967,9 +956,7 @@ test('shows ticket changes an interrupted recovery never restored above a publis
   );
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // Wide, phone, then wide again: the strip stays readable and inside the viewport.
   for (const [pass, width] of [1280, 390, 1280].entries()) {
     await page.setViewportSize({ width, height: 844 });
@@ -1033,9 +1020,7 @@ test('shows the sync strip AI repair state with a working repair-ticket link in 
   );
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const banner = page.locator('[data-component="ticket-store-sync-banner"]');
   const link = banner.getByRole('button', { name: 'Open HS2-DEMO01' });
   for (const scheme of ['light', 'dark'] as const) {
@@ -1150,9 +1135,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   const sources = page.locator('[data-component="ticket-sources-settings"]');
   await expect(sources.getByText('Identity mismatch')).toBeVisible();
@@ -1164,9 +1147,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   await mockProject(narrow);
   await narrow.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
   await narrow.goto(new URL('/', page.url()).toString());
-  await narrow.getByRole('button', { name: 'Open Project' }).click();
-  await narrow.getByRole('button', { name: 'Local Project' }).click();
-  await narrow.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(narrow);
   await narrow.getByLabel('Settings View').click();
   const narrowSources = narrow.locator('[data-component="ticket-sources-settings"]');
   await expect(narrowSources.getByText('Identity mismatch')).toBeVisible();
@@ -1214,9 +1195,7 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
       route.fulfill({ status: 409, json: { error: 'linked Git store cannot be verified' } }),
     );
     await surface.goto(url);
-    await surface.getByRole('button', { name: 'Open Project' }).click();
-    await surface.getByRole('button', { name: 'Local Project' }).click();
-    await surface.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(surface);
     await surface.getByLabel('Settings View').click();
     const sources = surface.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.getByText('Store unavailable')).toBeVisible();
@@ -1264,9 +1243,7 @@ test('keeps workspace toolbar visibility responsive without CSS probe work durin
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sort = page.locator('[data-hide-below="416px"]').first();
   await expect(sort).toBeVisible();
   expect(await page.evaluate(() => (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites)).toBe(
@@ -1396,9 +1373,7 @@ async function haltedSessionFixture(page: Page) {
 test('alerts for a terminal question and opens its originating session (HS2-KP9K85)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await fixture.question('tool-1');
   const popup = page.getByRole('dialog', { name: 'AI waiting for your answer' });
   await expect(popup).toBeVisible();
@@ -1444,9 +1419,7 @@ for (const width of [1280, 768, 390]) {
       }),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSidebar.isVisible()) await showSidebar.click();
@@ -1492,9 +1465,7 @@ for (const width of [1280, 390]) {
       }),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const popup = page.locator('[data-component="permission-request-popup"]');
     await popup.getByRole('button', { name: 'Always Allow', exact: true }).click();
     await expect(popup).toContainText('Rule owner');
@@ -1508,9 +1479,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await fixture.question('tool-multi', [
       { question: 'Which direction should I take?', options: [{ label: 'North' }, { label: 'South' }] },
       { question: 'What else?', options: [{ label: 'Fast' }, { label: 'Safe' }], multiSelect: true },
@@ -1559,9 +1528,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
     const popup = page.getByRole('dialog', { name: 'AI session halted' }),
       permission = page.locator('[data-component="permission-request-popup"]');
@@ -1622,9 +1589,7 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
 }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
   await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Keep this draft');
@@ -1656,9 +1621,7 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
 test('prioritizes an ignored foreground permission request over queued halts (HS2-E6KAWY)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   await fixture.permission('hotsheet-project-chat-codex-demo-checkout');
@@ -1686,9 +1649,7 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1728,9 +1689,7 @@ test('opens a halted session in its originating project and follows another wind
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: /^other/ })).toHaveAttribute('aria-selected', 'true');
@@ -1786,9 +1745,7 @@ test('keeps live halt dedupe when device storage is unavailable (HS2-E6KAWY)', a
   });
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
   await fixture.halt('memory-only');
   await expect(popup).toBeVisible();
@@ -1845,9 +1802,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
       void route.close();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const report = { error_type: 'overloaded', message: 'Real Claude model capacity failure.', agent: 'claude' },
       popup = page.getByRole('dialog', { name: 'AI session halted' });
     await mutateHalt('POST', '/terminals/real-halt/halt', report);
@@ -3984,6 +3939,7 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
     return route.fulfill({ json: { recovered: true } });
   });
   await page.goto('/');
+  // HS2-GDBK53: the local server is made unresponsive, so the list read never answers, so this open must not wait for the ticket list.
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -4012,9 +3968,7 @@ test('always confirms before closing a project without running resources', async
     route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -4075,9 +4029,7 @@ test('falls back to the project dialog when the direct native chooser fails', as
     await route.fulfill({ status: 500, json: { error: 'The native folder chooser failed.' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
@@ -4107,9 +4059,7 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     await page.goto('/');
     // The first pass opens the project; the reload restores it through the same open path.
     if (width === 1280) {
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
     }
     const banner = page.locator('[data-component="project-setup-warning-banner"]');
     await expect(banner).toContainText('Project setup needs attention');
@@ -4141,9 +4091,7 @@ test('keeps a project usable through a mismatched shared server and explains it 
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/');
     if (width === 1280) {
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
     }
     const banner = page.locator('[data-component="server-build-notice-banner"]');
     await expect(banner).toContainText('Server build differs from this host');
@@ -4179,9 +4127,7 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     if (width === 1280) {
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
     }
     const banner = page.locator('[data-component="codex-hooks-notice-banner"]');
     await expect(banner).toContainText('Review Updated Codex Hooks');
@@ -4213,9 +4159,7 @@ test('clears a failed project-open error when retrying successfully', async ({ p
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   let failNextOpen = true;
   await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, async (route) => {
     if (failNextOpen) {
@@ -4279,9 +4223,7 @@ test('opens the native folder chooser directly from Add project and only onboard
     return route.fulfill({ status: 201, json: { ticketStore: '/work/other.hs2', connectionId: 'git-other' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
@@ -4324,9 +4266,7 @@ test('changes a sole project source color in settings and inspector while cards 
 }, testInfo) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticketRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-single-list-wide.png' });
@@ -4398,9 +4338,7 @@ test('changes a git source ticket prefix through the real server on Enter and bl
       },
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.locator(`[data-source-row][data-source-id="${gitId}"]`).click();
     const editor = page.locator('[data-ticket-source-setup-dialog] [data-component="git-source-editor"]'),
@@ -4462,9 +4400,7 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
 }, testInfo) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
@@ -4568,9 +4504,7 @@ test('shows a host-access refusal for a Git relink as the host-only explanation 
     route.fulfill({ status: 403, json: { error: 'host access required', code: 'host_access_required' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
@@ -4586,9 +4520,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
@@ -4609,9 +4541,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
 test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQV)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await expect(page.locator('[data-source-row][data-source-id="git-local"]')).toContainText('Review required');
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-required-wide.png', animations: 'disabled' });
@@ -4645,9 +4575,7 @@ test('centers the compact source mark with the type icon and ticket number in co
 }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const listRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(listRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
   await listRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-wide.png' });
@@ -4674,9 +4602,7 @@ test('centers the compact source mark with the type icon and ticket number in co
 test('aligns ticket source marks with their names in project settings (HS2-Q93H9A) @ci-smoke', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   const settings = page.locator('[data-component="ticket-sources-settings"]');
   for (const row of [
@@ -4695,9 +4621,7 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]');
   const icon = await toolbar.locator('[data-source-identity] .ticket-source-icon').boundingBox();
@@ -4728,9 +4652,7 @@ test('opens GitHub sign-in directly when the desktop shell returns no popup wind
   );
   await page.route('**/accounts', (route) => route.fulfill({ json: [] }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await setup.getByRole('button', { name: 'Sign in with GitHub' }).click();
@@ -4767,9 +4689,7 @@ test('links the first GitHub installation and refreshes granted repositories (HS
     );
   await page.goto('/');
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await setup.getByRole('button', { name: 'Sign in with GitHub' }).click();
@@ -4841,9 +4761,7 @@ for (const width of [1280, 390])
     await page
       .context()
       .grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]');
     await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -4905,9 +4823,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
@@ -5401,9 +5317,7 @@ for (const width of [1280, 390])
       if (path.endsWith('/github-repositories')) repositoryReads.push(path);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]');
     await expect(setup).toHaveAttribute('open', '');
@@ -5520,9 +5434,7 @@ test('removes an orphaned account source while keeping its sign-in (HS2-G0E8ZS)'
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.locator('#app-left-rail nav[aria-label="Settings categories"] [data-item-id="accounts"]').click();
   // Each account is a Kerf FramedList card with one row per source (HS2-EN1E76).
@@ -5596,9 +5508,7 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
     if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     form = setup.locator('[data-action="save-provider-connection"]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -5689,9 +5599,7 @@ for (const width of [1280, 390])
         creates.push(request.postDataJSON());
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]'),
       field = (name: string) => form.locator(`input[name="${name}"]`),
@@ -5797,9 +5705,7 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
     if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     form = setup.locator('[data-action="save-provider-connection"]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -6011,9 +5917,7 @@ test('blocks a new ticket store before an older project server can accept it', a
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await expect(setup).toHaveAttribute('open', '');
   await setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true }).click();
@@ -6030,9 +5934,7 @@ test('keeps a dismissed ticket-source setup dialog closed across later project r
 }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await expect(setup).toHaveAttribute('open', '');
   await setup.getByRole('button', { name: 'Close' }).click();
@@ -6048,9 +5950,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await page.setViewportSize({ width: 1100, height: 840 });
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
     dialogOpacity = () =>
       dialog.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('dialog')!).opacity);
@@ -6102,9 +6002,7 @@ test('adds a second git ticket store and connects its remote from one guided for
       : route.fulfill({ json: { connected: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
@@ -6153,9 +6051,7 @@ test('expands the workspace grid and exits full screen on project navigation (HS
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const shell = page.locator('[data-component="app-shell"]');
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
@@ -6216,9 +6112,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await mockProject(page);
   await useLightweightTerminalPreviews(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     operations = page.getByRole('region', { name: 'Terminal operations sidebar' });
@@ -6483,9 +6377,7 @@ test('preserves column view after visiting the terminal dashboard (HS2-BH8ZVD)',
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
@@ -6515,9 +6407,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
     workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace Grid Controls' });
@@ -6577,9 +6467,7 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   await installFakeTerminalSockets(page, true);
   await mockProject(page, true, false, 0, 0, 0, false, 48);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(48);
@@ -6645,9 +6533,7 @@ test('keeps workspace visibility controls fixed with equal type widths and a scr
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
   const dialog = page.locator('[data-terminal-visibility-dialog]');
@@ -6682,9 +6568,7 @@ for (const theme of ['light', 'dark'] as const) {
     await installFakeTerminalSockets(page, true);
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     const segments = toolbar.getByRole('group', { name: 'View mode', exact: true });
     const icons = {
@@ -6780,9 +6664,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const rail = page.locator('#app-right-rail');
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
@@ -6857,9 +6739,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
@@ -7122,9 +7002,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   await mockProject(page);
   await useLightweightTerminalPreviews(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const viewport = page.locator('[data-component="terminal-viewport"][data-terminal-id="codex-main"]').first();
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
@@ -7291,9 +7169,7 @@ test('keeps dashboard terminals inset and scaled through aggressive viewport res
   await mockProject(page);
   await useLightweightTerminalPreviews(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
@@ -7360,9 +7236,7 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
@@ -7406,9 +7280,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
   const projectTab = page.locator('[data-tab-kind="project"]');
   await expect(projectTab.locator('.kui-tab-bar-item__trailing')).toHaveCount(1);
@@ -7614,9 +7486,7 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     codex = drawer.getByRole('tab', { name: /Codex Main/ }),
@@ -7706,9 +7576,7 @@ test('closes a terminal tab after its process has stopped (HS2-DPTG65)', async (
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     stopped = drawer.getByRole('tab', { name: /Tests/ });
@@ -7726,9 +7594,7 @@ test('returns to the last ticket view when the current project tab is clicked fr
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const tab = page.getByRole('tab', { name: 'demo' }),
     list = page.locator('[data-component="ticket-list"]'),
@@ -7771,9 +7637,7 @@ test('hides the bottom terminal drawer on Notifications and Settings Views, pres
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const drawerRegion = page.locator('#app-bottom-drawer'),
     restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
@@ -7820,9 +7684,7 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -7897,9 +7759,7 @@ test('HS2-6S1346 asks in app before Bypass permissions: Escape and Cancel keep t
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]');
@@ -8003,9 +7863,7 @@ test('HS2-6S1346 confirms a saved command in app: Cancel runs nothing, Run Comma
     if (request.method() === 'POST' && path.endsWith('/commands/deploy/run')) runs.push(path);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const trigger = page.getByRole('button', { name: 'Deploy preview' });
   const dialog = confirmationDialog(page, 'Deploy preview?');
   await trigger.click();
@@ -8074,9 +7932,7 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 
   // Project scope: each provider's default chat permission mode lives in Settings → AI tools.
   await page.getByLabel('Settings View').click();
@@ -8189,9 +8045,7 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: /AI tools/ }).click();
@@ -8238,9 +8092,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // Claude keeps its own default model, distinct from the project's default provider (HS2-EK24KF).
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
@@ -8375,9 +8227,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
   });
   await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -8420,9 +8270,7 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -8487,9 +8335,7 @@ test('names the AI shell after the only installed provider (HS2-3HT4PA)', async 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -8515,9 +8361,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const region = page.locator('#app-bottom-drawer'),
@@ -8660,9 +8504,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -8722,9 +8564,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await page.setViewportSize({ width: 1280, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
@@ -8788,9 +8628,7 @@ test('keeps production workspace search and More on one row through a phone resi
   await page.setViewportSize({ width: 1280, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const header = page.locator('.kui-toolbar[aria-label="Workspace Toolbar"]');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
@@ -8836,9 +8674,7 @@ test('hides nonempty search on disabled views and restores its open editor on re
   await page.setViewportSize({ width: 1728, height: 971 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
   const search = toolbar.locator('.ticket-search-field');
   const modes = toolbar.getByRole('group', { name: 'View mode', exact: true });
@@ -8891,9 +8727,7 @@ for (const width of [2048, 760]) {
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     await toolbar.getByRole('button', { name: 'Search tickets' }).click();
     const editor = toolbar.getByRole('searchbox', { name: 'Search tickets' });
@@ -8951,9 +8785,7 @@ test('remeasures a reopened search after a closed resize without restyling the a
   await page.setViewportSize({ width: 2048, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
     slot = toolbar.locator('.workspace-header__search-actions'),
     field = toolbar.locator('.ticket-search-field'),
@@ -8998,9 +8830,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9092,9 +8922,7 @@ test('opening and closing a chat message menu keeps the reading position (HS2-BT
   await page.setViewportSize({ width: 1662, height: 1286 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -9152,9 +8980,7 @@ test('keeps the chat reading position when a slow host renders before the scroll
   await page.setViewportSize({ width: 1662, height: 1286 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -9335,9 +9161,7 @@ test('selects and copies chat messages before saving that range without choosing
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9485,9 +9309,7 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]');
@@ -9552,9 +9374,7 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
     route.fulfill({ body: Buffer.from([0x89, 0x50, 0x4e, 0x47]), headers: { 'content-type': 'image/png' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9705,9 +9525,7 @@ test('selects single and non-contiguous messages with modifier keys in the drawe
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9733,9 +9551,7 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9800,9 +9616,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -9843,9 +9657,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -9889,9 +9701,7 @@ test('selects single and non-contiguous messages with modifier keys in the main 
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -9930,9 +9740,7 @@ test('copies and downloads AI chat messages from a scoped context menu (HS2-YR40
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -9997,9 +9805,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -10075,9 +9881,7 @@ test('previews running project resources with shared menus and explicit keep-run
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -10244,9 +10048,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       });
     await page.routeWebSocket(/\/terminals\/[^/?]+\/attach(?:\?.*)?$/, (route) => void route.close());
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-session"]');
     await expect(tab).toBeVisible();
@@ -10339,9 +10141,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="claude-session"]'),
@@ -10499,9 +10299,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-shell"]'),
@@ -10658,9 +10456,7 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-01TAB"]'),
     connection = tab.locator('.terminal-drawer__ai-connection'),
@@ -10779,9 +10575,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     // The drawer terminal fits the wide drawer and drives the PTY off its 80x24 spawn size.
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -10844,9 +10638,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -10963,9 +10755,7 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
@@ -10983,9 +10773,7 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await expect(closeDialog).toContainText('Terminals and AI chat tabs return when reopened');
   await closeDialog.getByRole('button', { name: 'Keep Running' }).click();
   await expect(projectTab).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   drawer = page.locator('[data-component="terminal-drawer"]');
   const restoredTab = drawer.getByRole('tab', { name: 'Codex chat' });
   await expect(restoredTab).toBeVisible();
@@ -11022,9 +10810,7 @@ test('restores an AI transcript and resumes its durable session after client and
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
@@ -11077,9 +10863,7 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -11111,9 +10895,7 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click();
@@ -11177,9 +10959,7 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     region = page.locator('#app-bottom-drawer'),
@@ -11223,9 +11003,7 @@ for (const theme of ['light', 'dark'] as const) {
         : route.fallback(),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     // HS2-S4FJ85: New Drawer Item slides with the ~220 ms drawer-open transition; click it once open.
@@ -11337,9 +11115,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     codex = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
@@ -11463,9 +11239,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -11513,9 +11287,7 @@ test('parks inactive dedicated terminal viewports and restores their live DOM on
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
@@ -11546,9 +11318,7 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
   await mockProject(page, true, false, 0, 0, 0, false, 12);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().click();
@@ -11588,9 +11358,7 @@ test('renames a terminal from its tab menu, saves it on the server, and keeps it
       renames.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
@@ -11636,9 +11404,7 @@ test('uploads a rename saved only in this browser before names were shared (HS2-
       renames.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer.getByRole('tab', { name: /Legacy shell/ })).toBeVisible();
@@ -11658,9 +11424,7 @@ for (const width of [1280, 390])
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
@@ -11715,9 +11479,7 @@ test('serializes terminal name writes so a reset made during a slow rename still
     await route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     dialog = page.locator('[data-terminal-rename-dialog]'),
@@ -11766,9 +11528,7 @@ for (const width of [1280, 390])
         renames.push(request.postDataJSON());
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
@@ -11865,9 +11625,7 @@ test('shares a terminal rename with other devices and restores it through the re
       });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     return page.locator('[data-component="terminal-drawer"]');
   };
@@ -11941,9 +11699,7 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   // The drawer may grow down to the shell's bottom edge (it docks below the main column).
   const main = page.locator('.app-shell'),
@@ -11980,9 +11736,7 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
@@ -12031,9 +11785,7 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
 test('selects a drawer command after rapidly closing and reopening its popup', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -12060,9 +11812,7 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     rail = drawer.locator('.terminal-drawer__rail'),
@@ -12096,9 +11846,7 @@ for (const width of [1440, 390])
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       region = page.locator('#app-bottom-drawer'),
@@ -12138,9 +11886,7 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const shell = page.locator('.app-shell');
   await expect(shell).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   // HS2-6X8AQP: the transitioning flag lasts one 220 ms visibility motion, which a loaded runner can
@@ -12216,9 +11962,7 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
   await expect(restore).toBeVisible();
   const restoreToolbar = page.getByRole('toolbar', { name: 'Terminal Drawer Controls' });
@@ -12256,9 +12000,7 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket).toHaveAttribute('data-rail', 'pop');
   await expect(ticket.locator('.kui-summary-row__rail')).toBeVisible();
@@ -12299,9 +12041,7 @@ test('clicks exact feedback character positions, removes a split, and composes a
 }) => {
   const patches = await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
@@ -12375,9 +12115,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
 }) => {
   const patches = await mockProject(page, true, 'choices');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
@@ -12423,9 +12161,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
 test('responds to feedback choices embedded in the ticket description', async ({ page }) => {
   const patches = await mockProject(page, true, 'details');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
@@ -12477,9 +12213,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
 test('records No response needed as a subtle regular response and clears review state', async ({ page }) => {
   const patches = await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
@@ -12511,9 +12245,7 @@ test('records No response needed as a subtle regular response and clears review 
 test('answers two feedback requests independently and keeps review visible until both close', async ({ page }) => {
   const patches = await mockProject(page, true, 'two');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   const inspector = page.locator('#app-right-rail');
@@ -12552,9 +12284,7 @@ test('answers a feedback prompt with new notes and never rewrites the prompt', a
   // HS2-MB2Q10: a reply typed into a click-opened prompt editor overwrote the AI's FEEDBACK NEEDED note.
   const patches = await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     sidebarPrompt = inspector.locator('article[data-note-id="N4"]');
@@ -12606,9 +12336,7 @@ test('opens reader at the active feedback note from its inspector action', async
   await page.setViewportSize({ width: 1100, height: 640 });
   await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
@@ -12719,9 +12447,7 @@ test('browses repository files and commits with host-native actions', async ({ p
     return route.fulfill({ status: 204 });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const summary = page.locator('[data-component="repository-summary"]');
   await summary.getByRole('button').click();
   const popover = page.locator('[data-repository-surface="repository-status"]');
@@ -12932,9 +12658,7 @@ test('refreshes repository status from the project long-poll stream without simp
     pending.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const summary = page.locator('[data-component="repository-summary"]');
   await expect(summary.getByRole('button')).toHaveAccessibleName(/0 ahead/);
   await expect.poll(() => pending.length).toBeGreaterThan(0);
@@ -12985,9 +12709,7 @@ test('keeps 24px desktop and 16px narrow gutters around the ticket reader', asyn
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
@@ -13034,9 +12756,7 @@ test('enlarges reader description and note text 1.5× with a remembered global t
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
@@ -13095,9 +12815,7 @@ test('enlarges reader description and note text 1.5× with a remembered global t
 test('clears needs review when a regular response follows the feedback-needed note', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.kui-summary-row__rail')).toHaveCount(0);
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
@@ -13126,9 +12844,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('[data-blocked-badge]')).toHaveCount(0);
@@ -13188,9 +12904,7 @@ test('disables host-only diff actions with an explanation on a remote device (HS
 test('lists associated commits and opens a validated commit or range in the configured diff tool', async ({ page }) => {
   const actions = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -13322,9 +13036,7 @@ test('marks unmerged worktree commits and opens them before they are merged (HS2
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -13389,9 +13101,7 @@ test('shows recorded shipping work separately from a stale checkout and later pe
   );
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   let inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -13459,9 +13169,7 @@ test('wraps follow-up titles inside the inspector Code Review tab (HS2-08EPQM)',
   );
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -13536,9 +13244,7 @@ test('renders the exact shared Code Review component in the inspector and reader
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('tab', { name: 'Code Review' }).click();
@@ -13594,9 +13300,7 @@ test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', asy
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -13622,9 +13326,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
   const actions = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
@@ -13682,9 +13384,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   let sidebar = page.locator('#app-right-rail'),
     sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
@@ -13778,9 +13478,7 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
   const activeRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
@@ -13846,9 +13544,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const pillOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-confidence-badge]`);
   const assertPills = async (score: string, band: string) => {
@@ -13980,9 +13676,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
@@ -14081,9 +13775,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const etaOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-claim-eta]`),
     estimateEta = etaOf('HS2-DEMO01'),
@@ -14150,9 +13842,7 @@ test('copies the ticket number when the browser refuses the Clipboard API (HS2-1
   });
   await mockProject(page, true, false, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const region = page.locator('#app-right-rail');
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
@@ -14166,9 +13856,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await mockProject(page, true, false, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const region = page.locator('#app-right-rail');
   await expect(region).toBeVisible();
   const before = await region.evaluate((node) => node.getBoundingClientRect().width);
@@ -14212,9 +13900,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
 test('renders an uncached ticket from its list row while the full detail loads (HS2-15833W)', async ({ page }) => {
   await mockProject(page, true, false, 800);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const region = page.locator('#app-right-rail');
   await page.locator('[data-ticket-slug="HS2-START02"]').click();
   // The list row's summary renders at once; details and notes are placeholders and nothing is actionable.
@@ -14253,9 +13939,7 @@ test('pushes an uncached ticket row-backed partial detail onto the terminal rail
   await installFakeTerminalSockets(page, true);
   await mockProject(page, true, false, 800);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const rail = page.locator('#app-right-rail');
   await rail.locator('[data-ticket-slug="HS2-START02"]').click();
@@ -14300,9 +13984,7 @@ test('pushes an uncached ticket row-backed partial detail onto the terminal rail
 test('reopens a recently viewed ticket without the loading skeleton (HS2-4Q04Z9)', async ({ page }) => {
   await mockProject(page, true, false, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const region = page.locator('#app-right-rail'),
     skeleton = region.locator('[data-component="ticket-inspector-skeleton-body"]');
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -14360,9 +14042,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
       detailReads += 1;
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const inspector = page.locator('#app-right-rail');
@@ -14466,9 +14146,7 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Jira routed ticket');
@@ -14587,9 +14265,7 @@ test('shows selected Jira advisory conflict, provisional state, and safe actions
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('No advisory process claim');
@@ -14764,9 +14440,7 @@ test('HS2-WHW46N two open clients reconcile advisory claim, conflict, provisiona
       });
       await client.setViewportSize({ width: 1440, height: 900 });
       await client.goto('/');
-      await client.getByRole('button', { name: 'Open Project' }).click();
-      await client.getByRole('button', { name: 'Local Project' }).click();
-      await client.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(client);
       await client.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
       await expect(client.locator('#app-right-rail')).toContainText('No advisory process claim');
     }
@@ -14901,9 +14575,7 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
   const sync = page.getByRole('region', { name: 'Jira Sync Status' });
   await expect(sync).toContainText('Needs attention');
@@ -15002,9 +14674,7 @@ for (const refusal of [
       return route.fallback();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-8"]').click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('heading', { name: 'Synthetic queued fallback' }).dblclick();
@@ -15118,9 +14788,7 @@ for (const refusal of [
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const rows = ids.map((id) =>
       page.locator(`[data-component="summary-row"][data-ticket-slug="JIRA-${id.slice(5)}"]`),
     );
@@ -15173,9 +14841,7 @@ for (const refusal of [
 test('omits separators below every right-sidebar toolbar state', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
   // Every right-rail surface's toolbar is the Workbench-composed panel toolbar (HS2-QQW6CT).
@@ -15205,9 +14871,7 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
 test('resizes and persists both production shell sidebars', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('#app-left-rail'),
     inspector = page.locator('#app-right-rail');
   const sidebarHandle = sidebar.getByRole('separator', { name: 'Resize Sidebar rail' }),
@@ -15350,9 +15014,7 @@ test('orders equal status priority and title groups by most recently updated', a
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const order = () =>
     page
@@ -15379,9 +15041,7 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect
     .poll(() => pageQueries.some((query) => query.get('sort') === 'updated' && query.get('direction') === 'descending'))
     .toBe(true);
@@ -15412,9 +15072,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebarTabs = page.locator('#app-right-rail .ticket-inspector__tabs');
   const captureTabChrome = async (tabs: Locator, path: string) => {
@@ -15549,9 +15207,7 @@ test('shows no spurious permission popup or repeated work while an open project 
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.waitForTimeout(1_000);
   permissionRequests.length = 0;
   await resetRenderMetrics(page);
@@ -15723,9 +15379,7 @@ test('projects background AI activity without rerendering the closed conversatio
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const drive = page.locator('#app-left-rail [data-action="toggle-drive"]');
   await drive.click();
@@ -15769,9 +15423,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const select = page.locator('[data-inspector-status-menu]');
@@ -15906,9 +15558,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
 test('switches to Queue so a ticket created in Backlog with Up Next stays visible (HS2-F6937Q)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await expect(sidebar.locator('[data-action="select-view"][data-item-id="backlog"]')).toHaveAttribute(
@@ -15933,9 +15583,7 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
 test('drags a newly created selected ticket without requiring reselection (HS2-6E9RRS)', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -15976,9 +15624,7 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
 test('remembers the last ticket category after cancelling and refreshing', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' }),
     category = composer.locator('kui-select[name="new-ticket-category"]');
@@ -16060,9 +15706,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
       creates.push(url.search);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     source = dialog.locator('kui-select[name="new-ticket-source"]');
@@ -16190,9 +15834,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
@@ -16484,9 +16126,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
     sourceSelect = dialog.locator('kui-select[name="new-ticket-source"]'),
@@ -16602,9 +16242,7 @@ test('keeps the plain source label and default routing for a single writable sou
       creates.push(url.search);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet Git');
@@ -16619,9 +16257,7 @@ test('keeps production ticket creation inside the Web Awesome modal lifecycle', 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await launcher.click();
@@ -16662,9 +16298,7 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     title = dialog.getByRole('textbox', { name: 'Ticket Title' }),
@@ -16694,9 +16328,7 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
 
@@ -16728,9 +16360,7 @@ test('creating a ticket on a desktop leaves the inspector as the user set it (HS
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Created title');
@@ -16743,9 +16373,7 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -16854,9 +16482,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -17089,9 +16715,7 @@ test('naturally makes room before fading in a ticket created from the composer',
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const existing = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]').locator('..'),
     before = await existing.boundingBox();
@@ -17204,9 +16828,7 @@ test('finishes local ticket creation motion without redundantly reconciling its 
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   const readsBefore = ticketGets;
@@ -17233,9 +16855,7 @@ test('finishes local ticket creation motion without redundantly reconciling its 
 test('runs grouped local commands, confirms stop, exposes history, and saves settings', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const command = page.getByRole('button', { name: 'Run checks' });
   await expect(page.getByText('Quality', { exact: true })).toBeVisible();
   await expect(command).toHaveAttribute('title', 'Press and hold for command history.');
@@ -17291,9 +16911,7 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   await page.setViewportSize({ width: 1280, height: 760 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('#app-left-rail'),
     queue = sidebar.locator('[data-action="select-view"][data-item-id="all"]'),
     queueIcon = queue.locator('.kui-list-item__icon'),
@@ -17376,9 +16994,7 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
       terminalRequests.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   let refreshStarted = false,
     releaseRefresh!: () => void;
   const refreshGate = new Promise<void>((resolve) => {
@@ -17446,9 +17062,7 @@ test('serves the repository Quality commands from a real server and queues Every
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     for (const width of [2048, 768, 390, 2048]) {
       await page.setViewportSize({ width, height: 900 });
       // HS2-STN4PR: let Workbench apply its responsive rail state before opening it.
@@ -17519,9 +17133,7 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
     dialog = conversation;
@@ -17579,9 +17191,7 @@ test('keeps a custom AI command ticket when no AI connection is available', asyn
       requests.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() ?? {} });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Review without a live AI' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toContainText('Review without a live AI');
   await expect(page.locator('.app-toast')).toContainText('Queued HS2-NEW001.');
@@ -17600,9 +17210,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
@@ -17716,9 +17324,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const editor = page.locator('[data-component="command-settings-editor"]'),
     ideas = editor.locator('[data-command-group="Ideas"]'),
     openCommandSettings = async () => {
@@ -17841,9 +17447,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const editor = page.locator('[data-component="command-settings-editor"]'),
       ideas = editor.locator('[data-command-group="Ideas"]'),
       openCommandSettings = async () => {
@@ -17900,9 +17504,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const editor = page.locator('[data-component="command-settings-editor"]'),
       commandDialog = page.locator('#command-editor-dialog'),
       openCommandSettings = async () => {
@@ -18009,9 +17611,7 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]'),
@@ -18138,9 +17738,7 @@ test('collapses individual project command groups independently and remembers ea
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   let commands = page.locator('[data-component="command-navigation"]'),
     quality = commands.getByRole('button', { name: 'Quality', exact: true }),
     git = commands.getByRole('button', { name: 'Git', exact: true });
@@ -18214,9 +17812,7 @@ for (const viewport of [
       return route.fallback();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     if (viewport.width === 390) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
     const commands = page.locator('[data-component="command-navigation"]');
     await expect(commands.getByRole('button', { name: 'Everything' })).toBeVisible();
@@ -18265,9 +17861,7 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first().click();
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
       title = composer.locator('input[name="new-ticket-title"]'),
@@ -18314,9 +17908,7 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DEMO01"]:visible').first().click();
     await page.getByRole('button', { name: 'Edit Ticket details' }).locator('visible=true').first().click();
     const details = page.getByRole('textbox', { name: 'Ticket details' }),
@@ -18355,9 +17947,7 @@ test('aligns settings page copy with field labels, group headers, row content, a
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   // The left edge of the first rendered text glyph run inside an element.
   const textLeft = (selector: string) =>
@@ -18429,9 +18019,7 @@ test('aligns settings page copy with field labels, group headers, row content, a
 test('switches settings categories from the project sidebar', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const selected = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await selected.click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
@@ -18500,9 +18088,7 @@ for (const width of [1280, 390])
       return route.fulfill({ json: { discarded: 1 } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     if (width === 390) await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
     await page.getByRole('button', { name: 'Permissions' }).click();
@@ -18593,9 +18179,7 @@ test('answers identical permission requests for this chat and revokes the rememb
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await expect(popup).toContainText('2 identical requests are waiting');
@@ -18800,9 +18384,7 @@ for (const width of [1280, 390]) {
       }),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const popup = page.locator('[data-component="permission-request-popup"]');
     await expect(popup).toBeVisible();
     await expect(popup.getByRole('button', { name: 'Allow', exact: true })).toBeVisible();
@@ -18837,9 +18419,7 @@ for (const width of [1280, 390]) {
       }),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSidebar.isVisible()) await showSidebar.click();
@@ -18942,9 +18522,7 @@ for (const width of [1280, 390]) {
       }),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSidebar.isVisible()) await showSidebar.click();
@@ -18992,9 +18570,7 @@ test('shows locked remembered answers when the vault read fails (HS2-CA5MSD)', a
     route.fulfill({ status: 503, json: { error: 'permission-rule store locked or unavailable' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
@@ -19026,9 +18602,7 @@ test('reloads remembered answers after the vault recovers without restarting the
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
@@ -19079,9 +18653,7 @@ test('reapproves a legacy Bash answer after reviewing the exact command again (H
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const remembered = page.locator('[data-component="permission-rules-settings"]');
@@ -19173,9 +18745,7 @@ for (const width of [1280, 390]) {
       return route.fulfill({ status: 204, body: '' });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSidebar.isVisible()) await showSidebar.click();
@@ -19295,9 +18865,7 @@ for (const width of [1280, 390]) {
       return route.fulfill({ json: [rule] });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (await showSidebar.isVisible()) await showSidebar.click();
@@ -19383,9 +18951,7 @@ test('reports a lock found by the refresh after a saved reviewed match (HS2-9YVX
     return route.fulfill({ json: [rule] });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions', exact: true }).click();
   const preview = page.locator('[data-component="permission-rules-settings"]');
@@ -19451,9 +19017,7 @@ async function bulkPermissionRulesFixture(page: import('@playwright/test').Page)
     return route.fulfill({ json: state.rules });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   const showSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
   if (await showSidebar.isVisible()) await showSidebar.click();
@@ -19663,9 +19227,7 @@ test('validates and applies the dedicated match editor through a real permission
       await route.fulfill({ response });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Permissions', exact: true }).click();
     const preview = page.locator('[data-component="permission-rules-settings"]');
@@ -19757,9 +19319,7 @@ test('reviews a placeholder grant and edits its saved match in Settings (HS2-JCS
     return route.fulfill({ json: { connection: 'chat', decision: 'allow', persisted: false } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await popup.getByRole('button', { name: 'Allow This AI Session' }).click();
   await popup.getByLabel('Permission rule type').selectOption('template');
@@ -19840,9 +19400,7 @@ test('offers secret spans without changing the exact default and lets each be re
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await popup.getByRole('button', { name: 'Allow This AI Session' }).click();
   await expect(popup.getByLabel('Permission rule type')).toHaveValue('exact');
@@ -19912,9 +19470,7 @@ test('previews three recent permission answers and searches the scrollable full 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.locator('[data-component="permission-rules-settings"]'),
@@ -20048,9 +19604,7 @@ test('loads remembered answers in 100-row batches while search and selection cro
   await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Show all 205 answers' }).click();
@@ -20108,9 +19662,7 @@ test('filters remembered answers by lifetime and decision while preserving searc
   await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
   await page.setViewportSize({ width: 1416, height: 1816 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Show all 208 answers' }).click();
@@ -20191,9 +19743,7 @@ test('selects remembered-answer rows with modifiers and Command-A (HS2-ZVP9CB)',
   await page.route('**/permissions/rules', (route) => route.fulfill({ json: rules }));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.getByRole('button', { name: 'Show all 6 answers' }).click();
@@ -20253,9 +19803,7 @@ test('uses selected-answer toolbar menus for decisions, duration, and deletion (
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' }),
@@ -20345,9 +19893,7 @@ test('applies the one selected-answer menu to multiple preview and dialog rows (
   });
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const settings = page.locator('[data-component="permission-rules-settings"]'),
@@ -20410,9 +19956,7 @@ test('keeps phone Settings content inside the viewport after closing its sidebar
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -20464,9 +20008,7 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await page.setViewportSize({ width: 2048, height: 1128 });
@@ -20553,9 +20095,7 @@ test('changes remembered answer duration in compact and expanded lists and keeps
   });
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
@@ -20660,9 +20200,7 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
       polls.push(route);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Permissions' }).click();
     const remembered = page.locator('[data-component="permission-rules-settings"]');
@@ -20785,9 +20323,7 @@ for (const width of [1280, 390]) {
     // stalled instead of surfacing later as a board that never rendered.
     await test.step('open the project and wait for its first ticket page', async () => {
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
       await expect(page.locator('[data-ticket-slug="HS2-SCROLL1000"]').first()).toBeVisible();
       await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
     });
@@ -20868,9 +20404,7 @@ test('renders exactly once when the long poll announces a permission request', a
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect.poll(() => polls.length).toBeGreaterThan(0);
@@ -20980,9 +20514,7 @@ for (const viewport of [
       await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const popup = page.locator('[data-component="permission-request-popup"]');
     await expect(popup).toContainText('cargo test --workspace');
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -21056,9 +20588,7 @@ for (const viewport of [
       await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
     await expect(popup).toContainText('request-61');
     // Without a modal the popup is an ordinary, non-blocking popover.
@@ -21164,9 +20694,7 @@ test('hides a permission popup when its server disconnects and restores only liv
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('cargo test');
   const announce = async (id: number) => {
@@ -21206,9 +20734,7 @@ test('records externally resolved empty-action permissions in notification histo
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Wants permission to use ToolSearch');
   await expect(popup.locator('.notification-card__details')).toHaveCount(0);
@@ -21318,9 +20844,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 
   const stale = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-QQRY00"]');
   await expect(stale).toBeVisible();
@@ -21491,9 +21015,7 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Ticket errors/ }).click();
   const newer = page.locator('[data-component="corrupt-ticket-row"]');
   await expect(newer).toContainText('Hot Sheet 2 update required');
@@ -21540,9 +21062,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: /Ticket errors/ }).click();
     const corrupt = page.locator('[data-component="corrupt-ticket-row"]');
     await expect(corrupt).toContainText(created.slug);
@@ -21635,9 +21155,7 @@ test('updates the open project after external ticket additions edits and deletio
   };
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const original = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await original.click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
@@ -21728,9 +21246,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   };
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -21830,9 +21346,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -21893,9 +21407,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
@@ -21955,9 +21467,7 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
     });
   };
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -21992,9 +21502,7 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
 test('translates urgent priority through the canonical server contract', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   // Dispatch only into the loaded inspector: the inert row-backed preview shown while the detail
   // loads (HS2-15833W) also renders this select, and an event there is no edit (HS2-975G1J).
@@ -22022,9 +21530,7 @@ test('translates urgent priority through the canonical server contract', async (
 test('moves tickets to Backlog and Archive from every shipped status menu', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Archive/ }).click();
   const archived = page.locator('[data-ticket-slug="HS2-ARCH01"]');
   await archived.click();
@@ -22059,9 +21565,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
 test('projects Up Next immediately and reconciles without a full project refresh', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const row = page.locator('[data-component="summary-row"]', { hasText: 'Not started ticket' }),
     projectTab = page.locator('[data-tab-kind="project"]', { hasText: 'demo' });
   await expect(projectTab.locator('.project-tab__work-count')).not.toContainText('≥');
@@ -22207,9 +21711,7 @@ test('keeps primary 138-ticket interactions within the painted UI budget @quaran
     route.fulfill({ json: { connection: 'perf-session', decision: 'allow', persisted: false } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="permission-request-popup"]').getByRole('button', { name: 'Ignore' }).click();
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
@@ -22434,9 +21936,7 @@ for (const viewport of [
       for (const release of held) release();
     };
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Add Project' }).click();
     await page.getByRole('button', { name: 'Local Project' }).click();
     const projectPicker = page.locator('kui-select[name="mobile-project"]');
@@ -22718,9 +22218,7 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
       restoreRequests.push(new URL(request.url()).pathname);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const navigation = page.locator('[data-component="view-navigation"]'),
     labels = () =>
       navigation
@@ -22768,9 +22266,7 @@ test('projects a newly created ticket within one frame without a collection refr
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const requests: string[] = [];
   page.on('request', (request) => requests.push(`${request.method()} ${new URL(request.url()).pathname}`));
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -22859,9 +22355,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail'),
     status = inspector.locator('.ticket-status-menu'),
@@ -22946,9 +22440,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const sidebar = page.locator('#app-right-rail');
   const expectDetailsSpacing = async (surface: Locator) => {
@@ -22996,9 +22488,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
 test('autosaves ticket text fields without explicit save or cancel controls', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -23047,9 +22537,7 @@ test('links ticket numbers in the blocked reason without stealing its edit entry
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const reasonText = 'Waits on earlier tickets (HS2-NEXT01 and siblings), which wait on backlog HS2-BACK01.';
@@ -23119,9 +22607,7 @@ test('links ticket numbers in the blocked reason without stealing its edit entry
 test('honors the first control click while ticket details is focused', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -23141,9 +22627,7 @@ test('honors the first control click while ticket details is focused', async ({ 
 test('creates, cancels, edits, and deletes notes through the shared inspector and reader', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Add Note' }).first().click();
@@ -23208,9 +22692,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
 test('creates a regular note once after a typing pause', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Add Note' }).first().click();
@@ -23241,9 +22723,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const patches = await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByText('Use real project tickets').click();
     const inspector = page.locator('#app-right-rail');
     const parent = inspector.locator('[data-component="note-card"][data-note-id="N1"]');
@@ -23341,9 +22821,7 @@ test('aligns the empty Notes text and preserves Add note before the first note e
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const add = inspector.locator('.ticket-notes__add');
@@ -23399,9 +22877,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
@@ -23467,9 +22943,7 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.setViewportSize({ width: 1280, height: 720 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const title = inspector.getByRole('heading', { name: 'Use real project tickets' });
@@ -23513,9 +22987,7 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
@@ -23558,9 +23030,7 @@ test('caps and discloses long mobile titles in the shipped inspector and reader 
     'A long ticket title that fills more than three lines on a phone and can be expanded in the sidebar or reader independently';
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
   const inspector = page.locator('#app-right-rail');
   await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
@@ -23605,9 +23075,7 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const inspector = page.locator('#app-right-rail'),
     sidebarEditor = inspector.getByRole('textbox', { name: 'Ticket Title' }),
     ringVisible = (editor: Locator) =>
@@ -23690,9 +23158,7 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
 test('hides title and tag mutation affordances when the provider cannot update', async ({ page }) => {
   await mockProject(page, false);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('heading', { name: 'Use real project tickets' }).dblclick();
@@ -23717,9 +23183,7 @@ test('keeps an open inspector status popup at its trigger after its anchor is mo
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const status = page.locator('#app-right-rail .ticket-status-menu'),
     trigger = status.locator('[data-inspector-status-menu] > button'),
@@ -23752,9 +23216,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
       patches.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const status = inspector.locator('.ticket-status-menu');
@@ -23941,9 +23403,7 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   await page.setViewportSize({ width: 800, height: 500 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const shell = page.locator('[data-component="app-shell"]'),
     bounds = await shell.boundingBox();
@@ -23963,9 +23423,7 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
 test('shows reactive open and Up Next counts immediately above Drive', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(400);
   const sidebar = page.locator('#app-left-rail'),
@@ -24007,9 +23465,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const sidebar = page.locator('#app-left-rail'),
     drive = sidebar.locator('[data-action="toggle-drive"]'),
@@ -24085,9 +23541,7 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }),
     menu = sidebar.locator('[data-context-menu="drive-options"]');
@@ -24183,9 +23637,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-left-rail'),
@@ -24339,9 +23791,7 @@ test('keeps activity before the result that resumes after a permission pause', a
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
     dialog = conversation,
@@ -24416,9 +23866,7 @@ for (const viewport of [
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -24478,9 +23926,7 @@ for (const viewport of [
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     // The intentionally long shell popup covers this row before the conversation owns its sidecar.
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').dispatchEvent('click');
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
@@ -24540,9 +23986,7 @@ test('clears a foreground permission from its authoritative event while the Allo
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -24615,9 +24059,7 @@ test('restores an optimistically dismissed permission only when communication fa
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await popup.getByRole('button', { name: 'Deny' }).click();
@@ -24652,9 +24094,7 @@ test('does not reopen a permission popup after the server reports that approval 
     return route.fulfill({ status: 404, json: { error: 'Unknown permission request' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await popup.getByRole('button', { name: 'Allow Once' }).click();
@@ -24668,9 +24108,7 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const host = page.locator('[data-dialog-component="ai-conversation"]'),
@@ -24736,9 +24174,7 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const expectThinking = async (host: Locator) => {
     const pending = host.locator('.ai-conversation__message--assistant').last();
     await expect(pending).toHaveAttribute('data-status', 'streaming');
@@ -24906,9 +24342,7 @@ for (const width of [1280, 390] as const)
     await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -24926,9 +24360,7 @@ for (const width of [1280, 390] as const)
     await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25079,9 +24511,7 @@ test("keeps the default-height drawer chat's last message clear of its composer 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   // The drawer stays at its default height, where the HS2-KMNQ21 capture showed the overlap.
@@ -25127,9 +24557,7 @@ test("keeps the conversation dialog's last message clear of its composer after a
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const host = page.locator('[data-dialog-component="ai-conversation"]');
@@ -25169,9 +24597,7 @@ for (const width of [390, 1280] as const)
       return route.fallback();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const sidebar = page.locator('#app-left-rail'),
       drive = sidebar.locator('[data-action="toggle-drive"]');
     if (width < 640) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
@@ -25225,9 +24651,7 @@ test('omits the removed terminal message action across viewport transitions (HS2
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
@@ -25273,9 +24697,7 @@ for (const width of [390, 1280] as const)
     await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     // The drawer keeps its default (not maximized) height.
@@ -25371,9 +24793,7 @@ for (const [server, content] of [
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25451,9 +24871,7 @@ test('keeps a stopped turn ended when its interrupt reply arrives after the turn
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25501,9 +24919,7 @@ for (const [server, content] of [
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     let drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25541,9 +24957,7 @@ test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const host = page.locator('[data-dialog-component="ai-conversation"]');
@@ -25555,9 +24969,7 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const caretAt = (field: Locator) => field.evaluate((element: HTMLTextAreaElement) => element.selectionStart);
   // Drawer chat tab: send two messages, then browse them around an in-progress draft.
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -25637,9 +25049,7 @@ test('clears the sending dialog composer while the drawer chat stays mounted wit
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25668,9 +25078,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25808,9 +25216,7 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25858,9 +25264,7 @@ test('reflows the shell and drawer chat across the phone breakpoint without a re
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const shell = page.locator('[data-component="app-shell"]'),
@@ -25935,9 +25339,7 @@ test('collapses streamed chat activity to its latest item and toggles it on clic
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -25993,9 +25395,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
@@ -26073,9 +25473,7 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
@@ -26172,9 +25570,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
@@ -26271,9 +25667,7 @@ test('sends a manually entered live-conversation model literally', async ({ page
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const chat = page.locator('[data-dialog-component="ai-conversation"]'),
     custom = 'legacy model "chat"';
@@ -26338,9 +25732,7 @@ test('shows runtime-discovered Antigravity and OpenCode model catalogs', async (
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
@@ -26391,9 +25783,7 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect.poll(() => baseAttempts).toBeGreaterThan(0);
   const sidebar = page.locator('#app-left-rail'),
@@ -26441,9 +25831,7 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const summary = page.locator('[data-component="project-summary"]'),
     chart = summary.locator('[role="img"]');
@@ -26553,9 +25941,7 @@ test('Stats Right now shows live tiles and projects sorted by need, scoped and r
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
   const region = page.getByRole('region', { name: 'Cross-Project Stats' });
@@ -26680,9 +26066,7 @@ test('Stats This Mac cards show the server host, tint crossed thresholds, and re
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
   const region = page.getByRole('region', { name: 'Cross-Project Stats' });
@@ -26793,9 +26177,7 @@ test('Stats This Mac CPU card follows the live per-core feed only while Stats sh
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   // Nothing asks for live CPU until Stats shows.
   expect(held).toHaveLength(0);
@@ -26883,9 +26265,7 @@ test('Stats This Mac asks once about a newly detected disk and shows each monito
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
   const thisMac = page.getByRole('region', { name: 'Server Host studio' });
@@ -27013,9 +26393,7 @@ test('App Settings manages the disks host health monitors, by switch, path, and 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'General', exact: true }).click();
@@ -27157,9 +26535,7 @@ test('keeps project Stats attached to the selected project until its tab returns
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -27214,9 +26590,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
 
   const shell = page.locator('[data-component="app-shell"]'),
@@ -27267,9 +26641,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
 test('keeps the priority select open when opened right after creating a ticket (HS2-43F14D)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
   const form = page.locator('[data-action="create-ticket-form"]');
@@ -27295,9 +26667,7 @@ for (const width of [390, 1280])
     await mockProject(page);
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const launcher = page.getByRole('button', { name: 'New ticket…' });
     await launcher.click();
     const form = page.locator('[data-action="create-ticket-form"]');
@@ -27334,9 +26704,7 @@ for (const width of [390, 1280])
 test('focuses the ticket title every time the real composer expands', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
   const title = page.locator('input[name="new-ticket-title"]');
@@ -27358,9 +26726,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // The native Kerf Button bubbles the drag to the app-owned drop shell (HS2-H2ASWT).
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     launcherHost = page.locator('[data-component="quick-ticket-composer-launcher"]');
@@ -27492,9 +26858,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
     return Array.from(new Uint8Array(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()));
   });
   videoBodies.set('VIDEO1', Buffer.from(portableVideo));
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await expect.poll(() => posters.has('VIDEO1')).toBe(true);
@@ -27577,9 +26941,7 @@ test('releases video resources and event work after repeated gallery playback cy
     route.fulfill({ contentType: 'video/mp4', body: 'video fixture' }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const opener = page.getByRole('button', { name: 'Open walkthrough.mp4 in media gallery' });
@@ -27812,9 +27174,7 @@ test('keeps decoded video seeks responsive across repeated real playback session
       },
     });
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const opener = page.getByRole('button', { name: 'Open reliability.webm in media gallery' }),
@@ -27889,9 +27249,7 @@ test('keeps decoded video seeks responsive across repeated real playback session
 test('restores project-scoped ticket creation and staged files after reload', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('A ticket draft that survives refresh');
@@ -27925,9 +27283,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.evaluate((node: HTMLElement) => {
@@ -27964,9 +27320,7 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
@@ -27991,9 +27345,7 @@ test('suppresses background app shortcuts while a modal dialog is open (HS2-FW4P
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const searchField = page.getByRole('searchbox', { name: 'Search tickets' });
   // Open the modal ticket reader, then the Open-search shortcut must NOT reach the background search.
@@ -28021,9 +27373,7 @@ for (const width of [1280, 390])
         await mockProject(page);
         await page.setViewportSize({ width, height: 900 });
         await page.goto('/');
-        await page.getByRole('button', { name: 'Open Project' }).click();
-        await page.getByRole('button', { name: 'Local Project' }).click();
-        await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+        await openMockedProject(page);
         const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
         await test.step('Select the workspace ticket', () => row.click({ timeout: 10_000 }));
         const opener = page.getByRole('button', { name: 'Open Ticket Reader', exact: true });
@@ -28173,9 +27523,7 @@ test('renders canonical attachment references for filenames containing backticks
     route.request().method() === 'GET' ? route.fulfill({ json: { store: 'git-local', ...ticket } }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     reference = inspector.getByRole('link', { name: filename });
@@ -28208,9 +27556,7 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
       );
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28279,9 +27625,7 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
 test('keeps gallery shortcuts out of a focused annotation note (HS2-V14PVP)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByLabel('Browse and add attachments').setInputFiles({
@@ -28331,9 +27675,7 @@ test.describe('phone touch annotation editing (HS2-BCA512)', () => {
     test.skip(browserName === 'firefox', 'Firefox has no mobile (isMobile) emulation.');
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('tab', { name: /Attachments/ }).click();
     await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28380,9 +27722,7 @@ test('coalesces annotation-note typing into one gallery update per pause and on 
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28443,9 +27783,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
       writes.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28611,9 +27949,7 @@ test('keeps failed gallery markup through retry or discard (HS2-VXCSMZ, HS2-8SD6
       : route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28670,9 +28006,7 @@ test('keeps the markup-saved toast clear of the gallery zoom controls at wide an
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
     toast = page.locator('wa-toast-item:has(.app-toast)'),
@@ -28750,9 +28084,7 @@ test('keeps a toast dismissible over the modal media gallery and lifts one alrea
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
     toast = page.locator('wa-toast-item:has(.app-toast)'),
@@ -28835,9 +28167,7 @@ test('Shift and Option constrain annotation drags like ux-review (HS2-58BJ0P)', 
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -28929,9 +28259,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
       writes.push(request.postDataJSON() as { annotations: MediaAnnotation[] });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -29268,9 +28596,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   };
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: `Open ${videoName} in media gallery, 2 annotations` }).click();
@@ -29481,9 +28807,7 @@ test('links ticket references in details and notes and layers the referenced tic
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const backlogLink = inspector.getByRole('link', { name: 'HS2-BACK01' }),
@@ -29518,9 +28842,7 @@ test('pushes, covers, and pops native reader layers with Escape at desktop and p
   );
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
@@ -29556,9 +28878,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
       hostActions.push(request.postData() ?? '');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
@@ -29816,9 +29136,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
 test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Use real project tickets').click();
   const preview = page.getByRole('button', { name: 'Edit Ticket details' });
   await preview.click({ position: { x: 4, y: 4 } });
@@ -29880,9 +29198,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
 test('keeps reader details, blocked reason, and note edit state independent from the sidebar', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.dblclick();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
@@ -29930,9 +29246,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
 test('persists separate sidebar, reader, and new-ticket heights through rerenders', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     resize = async (locator: Locator, height: number) => {
@@ -30012,9 +29326,7 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
 test('keeps backlog and archived tickets out of the active Queue', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
@@ -30099,9 +29411,7 @@ test('loads all 138 Queue tickets before mixed-status pagination is applied', as
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-component="summary-row"]')).toHaveCount(138);
   expect(collectionRequests).toContain('queue');
   await page.screenshot({ path: 'target/visual-captures/hs2-cs8agd-queue-138.png', fullPage: true });
@@ -30153,9 +29463,7 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const more = page.getByRole('button', { name: 'Load more tickets' });
   await expect(more).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toHaveCount(0);
@@ -30211,9 +29519,7 @@ test('pages the Archive newest-first in the active sort and appends older rows a
     return route.fulfill({ json: body });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Archive/ }).click();
   const rows = page.locator('[data-component="summary-row"]'),
     slugs = () => rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-ticket-slug')));
@@ -30281,9 +29587,7 @@ test('recovers from a stale Archive cursor by reloading page one instead of erro
     return route.fulfill({ json: body });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Archive/ }).click();
   const rows = page.locator('[data-component="summary-row"]');
   await expect(rows).toHaveCount(200);
@@ -30372,9 +29676,7 @@ test('loads each board column independently, 100 rows at a time in the active so
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-CP000"]')).toBeVisible();
   const listRequests = globalBoardRequests;
   await page.getByLabel('Columns View').click();
@@ -30530,9 +29832,7 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
     await route.fulfill({ json: changed });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const completedColumn = page.locator('[data-column-id="completed"]'),
     verifiedColumn = page.locator('[data-column-id="verified"]'),
@@ -30603,9 +29903,7 @@ test('rolls a rejected bulk move back across the prefetched Completed page (HS2-
     await route.fulfill({ status: 409, json: { error: 'Ticket modified concurrently by another client.' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const completedColumn = page.locator('[data-column-id="completed"]'),
     verifiedColumn = page.locator('[data-column-id="verified"]'),
@@ -30688,9 +29986,7 @@ test('paginates the merged Completed column through completed then verified when
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const board = page.locator('[data-component="ticket-board"]');
   const column = (name: string) => board.getByRole('region', { name: `${name} Column`, exact: true });
@@ -30759,9 +30055,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Columns View').click();
     const completed = page.locator('[data-column-id="completed"]'),
       verified = page.locator('[data-column-id="verified"]'),
@@ -30951,9 +30245,7 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
       writes.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Terminals', exact: true }).click();
   const option = page.getByRole('checkbox', { name: 'Use my global shell history' });
@@ -30981,9 +30273,7 @@ test('keeps managed workspace search open and focused through repeated controlle
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const field = page.locator('[data-search-field-id="workspace-search"]'),
     editor = page.getByRole('searchbox', { name: 'Search tickets' }),
     group = page.locator('.ticket-search-field').filter({ has: field });
@@ -31053,9 +30343,7 @@ for (const width of [1280, 390]) {
     await mockProject(page);
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       editor = page.getByRole('searchbox', { name: 'Search tickets' }),
       field = page.locator('[data-search-field-id="workspace-search"]'),
@@ -31109,9 +30397,7 @@ test('searches indexed ticket details and notes without discarding the full proj
       searchRequests.push(url.searchParams.get('text')!);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('QQRY00');
   await expect(page.locator('[data-ticket-slug="HS2-QQRY00"]')).toBeVisible();
@@ -31161,9 +30447,7 @@ test('clips animated ticket search results above the terminal drawer (HS2-29T4D8
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Columns View' }).click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
@@ -31272,9 +30556,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('stability');
   const navigation = page.getByRole('navigation', { name: 'Ticket Views' });
@@ -31396,9 +30678,7 @@ test('filters duplicate tickets on the server before bounded search pagination',
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('is:duplicate ');
   await expect(page.locator('[data-component="search-field-token"][data-token-value="is:duplicate"]')).toBeVisible();
@@ -31450,9 +30730,7 @@ test('evaluates boolean search matches beyond the first ticket page', async ({ p
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('late AND (matching OR missing)');
   await expect(page.locator('[data-ticket-slug="HS2-BOOL-LATE"]')).toBeVisible();
@@ -31473,9 +30751,7 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.getByRole('button', { name: 'Advanced search' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
@@ -31501,9 +30777,7 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
 test('deletes inline search tokens from either adjacent caret boundary', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
     chip = page.locator('[data-component="search-field-token"]');
@@ -31545,9 +30819,7 @@ test('deletes inline search tokens from either adjacent caret boundary', async (
 test('deletes a trailing token immediately after Space commits it', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
     chip = page.locator('[data-component="search-field-token"]');
@@ -31566,9 +30838,7 @@ for (const width of [1440, 390]) {
     await mockProject(page);
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       query = page.getByRole('searchbox', { name: 'Search tickets' }),
       chip = query.locator('[data-component="search-field-token"]'),
@@ -31636,9 +30906,7 @@ for (const surface of ['workspace', 'saved-view']) {
     await page.route('**/views', (route) => route.fulfill({ json: [] }));
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page
       .getByRole('button', { name: surface === 'workspace' ? 'Search tickets' : 'Add view', exact: true })
       .click();
@@ -31775,9 +31043,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
   await query.fill('tag:cl');
@@ -31889,9 +31155,7 @@ for (const width of [1280, 390])
       if (request.method() === 'GET' && /\/checkouts\/demo-checkout\/tickets$/.test(url.pathname)) requests.push(url);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Search tickets' }).first().click();
     const query = page.getByRole('searchbox', { name: 'Search tickets' });
     await query.fill('tag:client ');
@@ -31958,9 +31222,7 @@ test('distinguishes pending and empty ticket search feedback in list and board v
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('missing parser');
   await expect(page.getByRole('status').filter({ hasText: 'Searching tickets' })).toContainText(
@@ -31987,9 +31249,7 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--project/);
   await expect(empty).toContainText('No tickets yet');
@@ -32039,9 +31299,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
   await expect(page.locator('[data-work-summary]')).toContainText('1 open');
@@ -32099,9 +31357,7 @@ test('keeps healthy search rows while hiding incomplete sidebar totals, then res
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' }),
     navigation = page.getByRole('navigation', { name: 'Ticket Views' });
@@ -32152,9 +31408,7 @@ test('marks continuation totals partial while retaining both healthy pages (HS2-
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Load more tickets' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT08"]')).toBeVisible();
@@ -32175,9 +31429,7 @@ test('shows view-specific feedback when a populated project has no tickets in th
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--view/);
   await expect(empty).toContainText('No tickets in Queue');
@@ -32221,9 +31473,7 @@ test('shows honest loading feedback while a selected view collection is unresolv
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Archive/ }).click();
   const loading = page.locator('[data-component="empty-state"].ticket-empty-state--view-loading');
   await expect(loading).toContainText('Loading Archive');
@@ -32264,6 +31514,7 @@ test('does not announce an empty project while its initial ticket collection is 
   });
   await page.setViewportSize({ width: 1920, height: 1040 });
   await page.goto('/');
+  // HS2-GDBK53: the test holds the initial ticket collection to see the loading state, so this open must not wait for the ticket list.
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -32290,9 +31541,7 @@ test('leaves individual empty board columns blank when another column has ticket
   );
   await page.setViewportSize({ width: 1920, height: 1040 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const verified = page.getByRole('region', { name: 'Verified Column' });
   await expect(verified.getByLabel('0 tickets')).toBeVisible();
@@ -32319,9 +31568,7 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Trash/ }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
   const emptyButton = page.getByRole('button', { name: 'Empty Trash' }),
@@ -32371,9 +31618,7 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
     route.fulfill({ status: 500, json: { error: 'Could not update the ticket store' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Trash/ }).click();
   await page.getByRole('button', { name: 'Empty Trash' }).click();
   await page
@@ -32391,9 +31636,7 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
 test('derives board columns from the selected view and merges Verified by project setting', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   const board = page.locator('.ticket-board');
   await expect(board.locator('.ticket-board-column')).toHaveCount(4);
@@ -32476,9 +31719,7 @@ test('switches and searches large ticket views without cloning every row into mo
     return route.fulfill({ json: { items: matches, counts: {} } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-component="summary-row"]')).toHaveCount(60);
   for (const [view, count] of [
     ['Backlog', 18],
@@ -32532,9 +31773,7 @@ test('switches and searches large ticket views without cloning every row into mo
 test('matches HS1 multi-selection semantics and selected outlines in list and column views', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const inspector = page.locator('#app-right-rail'),
     first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START03"]'),
     second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]');
@@ -32590,9 +31829,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
 test('HS2-RNR35H keeps the project tab and New ticket label in the narrow board header', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
   await page.getByLabel('Columns View').click();
@@ -32651,9 +31888,7 @@ test('HS2-MQPY61 compacts the Commands add pills before the project tab clips at
   await mockProject(page);
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const strip = page.locator('[data-component="project-tab-bar"]'),
@@ -32696,9 +31931,7 @@ test('HS2-MQPY61 compacts the Commands add pills before the project tab clips at
 test('drops ticket selection across ticket views but preserves it across view modes', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const inspector = page.locator('#app-right-rail'),
     active = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await active.click();
@@ -32724,9 +31957,7 @@ test('drops ticket selection across ticket views but preserves it across view mo
 test('styles completed and verified titles consistently in list and column rows', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const completed = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"] strong');
   await expect(completed).toHaveCSS('text-decoration-line', 'line-through');
   const quietColor = await completed.evaluate((node) => {
@@ -32743,19 +31974,6 @@ test('styles completed and verified titles consistently in list and column rows'
   await expect(verified).toHaveCSS('text-decoration-line', 'line-through');
   await expect(verified).toHaveCSS('color', quietColor);
 });
-
-/**
- * HS2-DXJ2RZ: the next answer to a ticket list read. Opening a project makes about twenty mocked
- * requests before the list read, each a round trip through the test process, so under full-gate
- * load the first rows could arrive after one expect timeout. Wait for the list itself, within the
- * test's budget, before asserting on its rows.
- */
-function ticketListLoaded(page: Page) {
-  return page.waitForResponse(
-    (response) =>
-      response.request().method() === 'GET' && /\/checkouts\/[^/]+\/tickets$/.test(new URL(response.url()).pathname),
-  );
-}
 
 /** HS2-DXJ2RZ: the answer to the next Reopen Ticket (`not-working`) operation, which carries the reopened ticket. */
 function reopenAnswered(page: Page) {
@@ -32778,7 +31996,11 @@ test('offers Up Next only on active tickets across rows and inspector', async ({
   ).toHaveCount(0);
   await page.getByText('Completed ticket', { exact: true }).click();
   await expect(page.locator('#app-right-rail [data-action="toggle-inspector-up-next"]')).toHaveCount(0);
+  // HS2-GDBK53: a zero count passes before the archive list loads, so wait for its row first.
+  const archived = ticketListLoaded(page);
   await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
+  await archived;
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
   await expect(
     page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"] [data-action="toggle-row-up-next"]'),
   ).toHaveCount(0);
@@ -32787,9 +32009,7 @@ test('offers Up Next only on active tickets across rows and inspector', async ({
 test('offers completed verification actions only for one completed ticket', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 750);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const completed = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"]'),
     verified = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-VERIFY01"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -32886,9 +32106,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
 test('hides Reopen Ticket when the provider cannot update tickets', async ({ page }) => {
   await mockProject(page, false);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const menu = page.locator('[data-context-menu="ticket"]');
   await page.locator('[data-ticket-slug="HS2-VERIFY01"]').click({ button: 'right' });
   await expect(menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true })).toHaveCount(0);
@@ -32906,9 +32124,7 @@ test('reports a completed ticket with note and evidence through one atomic provi
       requests.push(request.postData() ?? '');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const completed = page.locator('[data-ticket-slug="HS2-DONE01"]');
   await completed.click({ button: 'right' });
   await page.locator('[data-context-action="Report not working"]').click();
@@ -32958,9 +32174,7 @@ test('hides a pending Not Working report immediately and restores its draft on f
     return route.fulfill({ status: 500, json: { error: 'atomic report failed' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
   await page
     .locator('[data-context-menu="ticket"]')
@@ -32987,9 +32201,7 @@ test('hides a pending Not Working report immediately and restores its draft on f
 test('opens the matching ticket reader on row double-click in list and columns', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
@@ -33001,9 +32213,7 @@ test('opens the matching ticket reader on row double-click in list and columns',
 test('opens shared Markdown links safely in new tabs across the real inspector and reader', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     projectGuide = inspector.getByRole('link', { name: 'Project guide' });
@@ -33026,9 +32236,7 @@ test('opens ticket references without leaving column view (HS2-230NY7)', async (
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Columns View').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.locator('#app-right-rail').getByRole('link', { name: 'HS2-START02' }).click();
@@ -33116,9 +32324,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   );
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   const otherTab = page.getByRole('tab', { name: 'other' }),
@@ -33239,9 +32445,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const legacyLink = inspector.getByRole('link', { name: 'HS-7', exact: true });
@@ -33262,9 +32466,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -33321,9 +32523,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
     if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -33394,9 +32594,7 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
     if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.evaluate(() => {
     (window as Window & { __bulkTiming?: unknown }).__bulkTiming = undefined;
     document.addEventListener('hotsheet:mutation-timing', (event) => {
@@ -33440,9 +32638,7 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.evaluate(() => {
     (window as Window & { __bulkOutcome?: string }).__bulkOutcome = undefined;
     document.addEventListener('hotsheet:mutation-timing', (event) => {
@@ -33472,9 +32668,7 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
 test('keeps optimistically archived verified tickets hidden through an intermediate change event', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 1_500, 0, false, 2, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -33507,9 +32701,7 @@ test('keeps optimistically archived verified tickets hidden through an intermedi
 test('applies selected-ticket toolbar actions and clears tickets moved outside the current view', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     star = page.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' }),
@@ -33548,9 +32740,7 @@ test('copies one or every selected ticket ID from row and More actions menus (HS
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -33584,9 +32774,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       await installFakeTerminalSockets(page, true);
       await mockProject(page);
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
       if (surface === 'rail') await page.getByRole('button', { name: 'Workspace Grid' }).click();
       else await page.getByRole('button', { name: 'Columns View', exact: true }).click();
       const rail = page.locator('#app-right-rail');
@@ -33756,9 +32944,7 @@ for (const surface of ['workspace', 'rail'] as const) {
     await installFakeTerminalSockets(page, true);
     await mockProject(page, false);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
     if (surface === 'rail') await page.getByRole('button', { name: 'Workspace Grid' }).click();
     const controls =
@@ -33779,9 +32965,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
     overflow = toolbar.locator('[data-workspace-overflow]'),
     trigger = overflow.getByRole('button', { name: 'More Workspace Controls' }),
@@ -33866,9 +33050,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
 test('dismisses ticket context menus on every true outside pointerdown', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -33898,9 +33080,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   const nextPatch = () =>
@@ -33962,9 +33142,7 @@ test('drags single and selected tickets across columns, views, and the duplicate
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     dragTo = async (source: Locator, target: string) => {
@@ -34016,9 +33194,7 @@ test('keeps the sidebar drop highlight through a re-render mid-drag (HS2-G8EK08)
   await page.setViewportSize({ width: 1280, height: 800 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const sidebar = page.locator('[data-component="view-navigation"]'),
     backlog = sidebar.locator('[data-ticket-drop-status="backlog"]'),
     archive = sidebar.locator('[data-ticket-drop-status="archive"]'),
@@ -34086,9 +33262,7 @@ test('clears every ticket drop highlight when a drag ends without dragend reachi
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -34155,9 +33329,7 @@ test('aligns the Up Next star with the row icons on the left content edge (HS2-Z
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   for (const mode of ['List View', 'Columns View'] as const) {
     await page.getByLabel(mode).click();
     const row = page.locator('[data-ticket-slug="HS2-DEMO01"]').first();
@@ -34186,9 +33358,7 @@ test('aligns the Up Next star with the row icons on the left content edge (HS2-Z
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     background = await row.evaluate((node) => getComputedStyle(node).backgroundColor),
     shadow = await row.evaluate((node) => getComputedStyle(node).boxShadow);
@@ -34239,9 +33409,7 @@ test('drops selected tickets on another project tab to copy them there', async (
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -34310,9 +33478,7 @@ test('drops files on another project tab to stage a new ticket in that project (
       uploads.push(`${path}:${decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? '')}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -34418,9 +33584,7 @@ test('switches already-open projects from cache within one frame and rejects sta
     return route.fulfill({ json: ticketsJson(route.request(), rows) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
@@ -34591,9 +33755,7 @@ test('keeps the new-ticket composer open when it is opened right after a project
     return route.fulfill({ json: ticketsJson(route.request(), other ? [otherRow] : [row, notStartedRow]) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
@@ -34689,9 +33851,7 @@ test('keeps a ticket selected right after a project tab switch when the session 
     return route.fulfill({ json: ticketsJson(route.request(), other ? [otherRow] : [row, notStartedRow]) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
@@ -34744,9 +33904,7 @@ test('keeps an inspector tab chosen during a held activation refresh when the se
     return route.fulfill({ json: ticketsJson(route.request(), other ? [] : [row, notStartedRow]) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // Park the demo project with a selected ticket on the Info tab, then switch away.
   await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${row.slug}"]`).first().click();
   const inspector = page.locator('#app-right-rail'),
@@ -34810,9 +33968,7 @@ test('reorders project and terminal tabs while preserving project order and comp
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   const projectTabs = page.locator('[data-tab-kind="project"]'),
@@ -34902,9 +34058,7 @@ test('copies selected ticket ids to the local pasteboard without the async Clipb
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await page.keyboard.press(`${shortcut}+c`);
   await expect
@@ -34934,9 +34088,7 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
         });
     });
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const workArea = page.locator('.app-shell__work-area'),
     ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     focusColor = await resolvedColor(workArea, 'var(--wa-color-focus)');
@@ -35003,9 +34155,7 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const source = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await source.click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
@@ -35056,9 +34206,7 @@ test('shows and resolves cross-project permission notifications with badges and 
     return route.fulfill({ json: { connection: 'claude-session', decision: 'allow', persisted: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await expect(popup).toContainText('demo');
@@ -35150,9 +34298,7 @@ test('shows equally timed permission decisions in newest recorded order', async 
   );
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /Notifications View/ }).click();
   await page.getByRole('button', { name: /Last 24 Hours/ }).click();
   const cards = page.locator('[data-component="notification-center"] [data-resolved="true"]');
@@ -35236,9 +34382,7 @@ test('scopes the notification center, navigation counts, and header badge to the
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await popup.getByRole('button', { name: 'Ignore' }).click();
   await page.getByRole('button', { name: 'Add Project' }).click();
@@ -35347,9 +34491,7 @@ test('counts permission automation only while its popup is visible', async ({ pa
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Auto-allow in');
   await popup.screenshot({ path: 'target/visual-captures/hs2-wemn20-popup-wide.png' });
@@ -35443,9 +34585,7 @@ test('keeps the Permissions settings controls reachable by pointer while a reque
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Auto-allow in');
   await expect(popup).toHaveAttribute('data-layer', 'top');
@@ -35546,9 +34686,7 @@ test('keeps the Settings work area at its resting x when a control takes focus a
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions', exact: true }).click();
   const leftRail = page.locator('.kui-workbench__rail--left'),
@@ -35649,9 +34787,7 @@ test('auto-allows during an Always review, then remembers the rule before showin
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('npm test');
   await expect(popup).toContainText('Auto-allow in');
@@ -35710,9 +34846,7 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const popup = page.locator('[data-component="permission-request-popup"]'),
     banner = page.locator('[data-component="notifications-paused-banner"]');
   await expect(popup).toContainText('Auto-allow in');
@@ -35763,9 +34897,7 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
 test('persists and restores per-project permission automation Settings', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const action = page.locator('kui-select[name="permission-automation-action"]'),
@@ -35835,9 +34967,7 @@ test('auto-allows immediately at 0 seconds without ever presenting the popup (HS
       JSON.stringify({ action: 'allow', delayMs: 0 }),
     );
   });
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect.poll(() => bodies).toEqual([{ decision: 'allow', scope: 'once' }]);
   await page.getByRole('button', { name: /Notifications View/ }).click();
   const center = page.locator('[data-component="notification-center"]');
@@ -35855,9 +34985,7 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const action = page.locator('kui-select[name="permission-automation-action"]'),
@@ -35945,9 +35073,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   const settings = page.locator('[data-component="trash-settings"]'),
@@ -36055,9 +35181,7 @@ test('shares the settings category across projects but scopes command drafts to 
     route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   let editor = page.locator('[data-component="command-settings-editor"]');
@@ -36254,9 +35378,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   });
   await page.setViewportSize({ width: 1400, height: 820 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const menu = page.locator('[data-context-menu="ticket"]');
   await expect(page.locator('[data-action="select-ticket-row"]').first()).toBeVisible();
   // List View: scroll the workspace, then open the context menu on a currently-visible row.
@@ -36498,9 +35620,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   });
   await page.setViewportSize({ width: 1400, height: 760 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const workspace = page.locator('.app-shell__workspace'),
     tickets = workspace.locator('[data-component="summary-row"]'),
     scroll = () => workspace.evaluate((node) => node.scrollTop),
@@ -36744,9 +35864,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   });
   await page.setViewportSize({ width: 1400, height: 760 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const workspace = page.locator('.app-shell__workspace');
   const listTarget = page.locator('[data-component="summary-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
@@ -36884,9 +36002,7 @@ test('preserves list and every board-column scroll position across ticket mutati
 test('dismisses every remaining dialog through its native close event (HS2-3RQ7V7)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
@@ -36976,9 +36092,7 @@ test('edits and contains a wrapping attachment group title through the productio
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first(),
@@ -37063,9 +36177,7 @@ test('keeps a production attachment label edit open while a live ticket update r
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first();
@@ -37178,9 +36290,7 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
         .map((key) => JSON.parse(localStorage.getItem(key)!) as { base: string; draft: string }),
     );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await openAttachments();
   const inspector = page.locator('#app-right-rail'),
     batch = inspector.locator('[data-attachment-group-drop-target]').first(),
@@ -37359,9 +36469,7 @@ test('moves a media thumbnail between batches and removes active media from its 
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const thumbnail = page.getByRole('button', { name: 'Open proof.png in media gallery' }),
@@ -37401,9 +36509,7 @@ test('shows the decorative server-busy bars while a server request is in flight 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page, true, false, 0, 0, 450);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const bars = page.locator('[data-component="server-busy-bars"]');
   await expect(bars).toBeAttached();
   await expect(bars).toHaveAttribute('aria-hidden', 'true');
@@ -37433,9 +36539,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const apple = await page.evaluate(() => /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));
   const mod = apple ? 'Meta' : 'Control';
   await page.getByLabel('Settings View').click();
@@ -37492,9 +36596,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
 test('applies a saved command color and icon to the sidebar command button (HS2-656XJ2)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const command = page.locator('[data-action="run-command"][data-item-id="check"]');
   await expect(command).toBeVisible();
   await page.getByLabel('Settings View').click();
@@ -37528,9 +36630,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
 test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-5VSNV3)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const command = page.locator('[data-action="run-command"][data-item-id="check"]');
   await expect(command).toBeVisible();
   await page.getByLabel('Settings View').click();
@@ -37589,9 +36689,7 @@ test('keeps the open new-ticket composer and its draft through a background tick
       .fulfill({ json: { cursor, events: [{ store: 'git-local', kind, id, slug }], overflow: false } });
   };
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
   await expect(dialog).toHaveAttribute('open', '');
@@ -37621,9 +36719,7 @@ test('keeps the open new-ticket composer and its draft through a background tick
 test('recovers the open new-ticket composer and its draft after a reload/restart (HS2-D4PB9Y)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
   await expect(dialog).toHaveAttribute('open', '');
@@ -37675,9 +36771,7 @@ test('opens a distinct terminal for each shell command even when a create is sti
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Lint project' }).click();
   await expect.poll(() => posted).toEqual(['npm run lint']); // the first create's POST is held in flight
   await page.getByRole('button', { name: 'Test project' }).click(); // a second click arrives during the pending create
@@ -37719,9 +36813,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const row = page.locator(`[data-ticket-slug="${created.slug}"]`).first();
     await row.click();
     await row.click({ button: 'right' });
@@ -37835,9 +36927,7 @@ test('creates and reviews a durable follow-up through the real app (HS2-2Z11A5)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const sourceRow = page.locator(`[data-ticket-slug="${source.slug}"]`).first();
     await expect(sourceRow).toBeVisible();
     await sourceRow.click({ button: 'right' });
@@ -37964,9 +37054,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
@@ -38069,9 +37157,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
@@ -38183,9 +37269,7 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail'),
       card = (text: string) => inspector.locator(`[data-component="note-card"][data-note-id="${noteId(text)}"]`);
@@ -38288,9 +37372,7 @@ test('quiets AI-created ticket summaries in the real list and column views (HS2-
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
 
     let view = page.locator('[data-component="ticket-list"]');
     const summary = (slug: string) => view.locator(`[data-ticket-slug="${slug}"]`);
@@ -38401,9 +37483,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-component="project-summary"]').first().click();
     const analytics = page.locator('[data-component="stats-dashboard"]');
     await expect(analytics).toContainText(/2\s*Tickets/u);
@@ -38505,9 +37585,7 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-component="project-summary"]').first().click();
     const panel = page.locator('[data-component="repository-size"]');
     await expect(panel).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
@@ -38588,9 +37666,7 @@ test('warns in the project shell while a repository is over a GitHub size limit 
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const banner = page.locator('[data-component="repository-size-banner"]');
   await expect(banner).toBeVisible({ timeout: 15_000 });
   await expect(banner).toContainText("Ticket store: demo.hs2 is over GitHub's 5 GB soft limit");
@@ -38696,9 +37772,7 @@ test('project statistics previews and executes ticket-store compaction (HS2-T2Q7
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-component="project-summary"]').first().click();
   const panel = page.locator('[data-component="repository-size"]');
   await expect(panel.getByRole('button', { name: 'Preview Attachment Compaction' })).toBeVisible();
@@ -38858,9 +37932,7 @@ test('a server size-limit crossing event brings up the repository size banner wi
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const banner = page.locator('[data-component="repository-size-banner"]');
   await expect.poll(() => sizeRequests).toBe(1);
   await expect(banner).toHaveCount(0);
@@ -38933,9 +38005,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     const status = inspector.locator('.ticket-status-menu');
@@ -38986,9 +38056,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Columns View').click();
     const board = page.locator('[data-component="ticket-board"]'),
       column = (name: string) => board.getByRole('region', { name: `${name} Column`, exact: true }),
@@ -39049,9 +38117,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const row = page.locator(`[data-component="summary-row"][data-ticket-slug="${created.slug}"]`);
     await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
     await row.click();
@@ -39100,9 +38166,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
@@ -39162,9 +38226,7 @@ test('keeps terminal visibility anchored through close, resize, and repeated reo
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
   // Kerf's Select (beta.106) is a native combobox trigger plus a top-layer listbox popover; a close
   // interrupted by a resize must still reopen anchored to the trigger and inside the viewport.
@@ -39229,9 +38291,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   );
   await page.setViewportSize({ width: 1400, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   const tabs = page.locator('.project-tab-bar [role="tab"]'),
@@ -39293,9 +38353,7 @@ test('keeps Add project beside the last project tab on dashboard project strips 
   await mockProject(page);
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const strip = page.locator('.project-tab-bar'),
     add = strip.getByRole('button', { name: 'Add Project' });
   for (const [mode, width] of [
@@ -39324,9 +38382,7 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
   await mockProject(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // Tapping the ticket opens the inspector as a Workbench rail overlay, which covers the work area.
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'false');
@@ -39404,9 +38460,7 @@ test('paints magnified terminals above every surface from the workspace grid and
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   // Sample the paint at the four corners and the centre: every point must belong to the overlay, so it
   // is neither clipped to its region nor painted under a rail, the drawer, or the shell toolbar.
   const coversViewport = (name: string) =>
@@ -39501,9 +38555,7 @@ test('reconciles permissions from the change stream with no polling timer, backi
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await expect.poll(() => permissionGets.length).toBeGreaterThan(0);
@@ -39574,9 +38626,7 @@ test('surfaces a real server permission request through the live stream with no 
       },
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
     const permissionGets = () => forwarded.filter((entry) => entry === 'GET /permissions').length;
     await expect.poll(permissionGets).toBeGreaterThan(0);
@@ -39611,9 +38661,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39643,9 +38691,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
     const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39678,9 +38724,7 @@ test('keeps a delayed completion from an earlier turn out of the next turn (HS2-
       turns.push(request.postDataJSON() as { content: string; turn_id?: string });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39708,9 +38752,7 @@ test('restores an idle server failure when a persisted conversation still has an
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39754,9 +38796,7 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39804,9 +38844,7 @@ test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', a
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
@@ -39872,9 +38910,7 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
       connectionId = request.postDataJSON().connection_id;
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -39936,9 +38972,7 @@ test('a terminal created from the desktop drawer menu takes input focus even und
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     menu = drawer.locator('[data-terminal-drawer-create]');
@@ -40023,9 +39057,7 @@ test('shows the testing-phase time-left estimate on list rows, column cards, and
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const estimateOf = (slug: string) =>
     page.locator(`[data-component="summary-row"][data-ticket-slug="${slug}"] [data-phase-estimate]`);
@@ -40061,9 +39093,7 @@ test('coalesces Not Working note typing per pause and submits the latest draft (
     return route.fulfill({ status: 500, json: { error: 'kept open for inspection' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
   await page
     .locator('[data-context-menu="ticket"]')
@@ -40109,9 +39139,7 @@ test('coalesces Not Working note typing per pause and submits the latest draft (
 test('opens row, gallery, and reference attachment menus through the shared opener (HS2-1RQA1E)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const menu = page.locator('[data-context-menu="attachment"]'),
     popup = menu.getByRole('menu').first(),
@@ -40212,9 +39240,7 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   };
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
   const chatButton = page.locator('[data-action="open-conversation"]'),
     badge = page.locator('.project-sidebar__conversation-badge'),
@@ -40320,9 +39346,7 @@ test('counts AI chat replies that settle while the page is hidden and reads them
     }, state);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
   const chatButton = page.locator('[data-action="open-conversation"]'),
     badge = page.locator('.project-sidebar__conversation-badge');
@@ -40393,9 +39417,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const rowFor = (ticket: FullTicket) => page.locator(`[data-ticket-slug="${ticket.slug}"]`).first(),
       menu = page.locator('[data-context-menu="ticket"]'),
       toast = page.locator('.app-toast'),
@@ -40553,9 +39575,7 @@ test('HS2-5E8Y9R previews an AI note kind repair and applies it through the real
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     const card = inspector.locator(`article[data-note-id="${note.id}"]`);
@@ -40645,9 +39665,7 @@ test('HS2-Q0GWXT edits and clears note metadata through the sidebar and reader',
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const card = page.locator(`#app-right-rail article[data-note-id="${activity.id}"]`);
     await card.getByRole('button', { name: 'Note Actions' }).click();
@@ -40770,9 +39788,7 @@ test('HS2-WZSFHK resends a note metadata edit after the ticket changed underneat
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const card = page.locator(`#app-right-rail article[data-note-id="${activity.id}"]`);
     const noteOf = async () =>
@@ -40845,9 +39861,7 @@ test('HS2-J4G9GB links, relinks, and unlinks an existing note as a feedback resp
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const rail = page.locator('#app-right-rail');
     const card = rail.locator(`article[data-note-id="${decision.id}"]`);
@@ -40973,9 +39987,7 @@ test('preserves explicit note kinds and infers omitted UI requests through the r
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     const header = inspector.locator('[data-component="ticket-inspector-header"]');
@@ -41112,9 +40124,7 @@ test('keeps the list Needs review marker aligned with details after a kind corre
       await expect(rowMarker(slug)).toHaveCount(needsReview ? 1 : 0);
     };
     const openProject = async () => {
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
     };
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
@@ -41170,9 +40180,7 @@ test('centers count badges in sidebar view rows and board column headers (HS2-RA
   await page.setViewportSize({ width: 1600, height: 1000 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page
     .getByRole('button', { name: /Columns View/ })
@@ -41250,9 +40258,7 @@ test('records shell and AI command launches through the real server and lists th
     });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const history = page.locator('[data-dialog-component="command-run-dialog"]');
     const openHistory = async (name: string) => {
       const button = page.getByRole('button', { name, exact: true });
@@ -41351,9 +40357,7 @@ test('sizes the magnified Workspace Grid terminal to its 80x24 aspect and fills 
   await mockProject(page);
   await useLightweightTerminalPreviews(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
@@ -41459,9 +40463,7 @@ test('resolves a stale No Response Needed without a doomed write after its reque
     const { writes } = await proxyRealServer(page, server);
     await page.setViewportSize({ width: 2048, height: 1128 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
@@ -41592,9 +40594,7 @@ test('dismisses a legacy implicit feedback request through failure, retry, selec
     const { writes, hold } = await proxyRealServer(page, server);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const inspector = page.locator('#app-right-rail');
     const header2 = () => page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]');
     // The list parent: the sidebar inspector's Respond to Feedback opens the reader editor.
@@ -42084,9 +41084,7 @@ test('opens command history from a hold when a busy page runs the hold timer lat
       runs.push(request.url());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const command = page.getByRole('button', { name: 'Run checks' }),
     history = page.locator('[data-dialog-component="command-run-dialog"]');
   await expect(command).toHaveAttribute('title', 'Press and hold for command history.');

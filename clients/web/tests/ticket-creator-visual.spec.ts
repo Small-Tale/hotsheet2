@@ -1,6 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-1NBJZH: compare the actual painted list/column surfaces with a private real server.
@@ -38,9 +39,7 @@ test('quietly paints ordinary AI ticket surfaces without dimming content', async
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
 
     const surfaceAlpha = (row: Locator) =>
       row.locator('[data-component="summary-row"]').evaluate((node) => {

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const row = {
   connection_id: 'git',
@@ -111,9 +112,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
   });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-IMAGES"]').click();
   const visibleInspector = page.locator('#app-right-rail'),
     details = visibleInspector.locator('.ticket-info-panel__details-surface');

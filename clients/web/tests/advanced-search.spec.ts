@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 /**
  * Wait until the layout's finite animations (the rail-collapse transition after a resize) have
@@ -209,9 +210,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' }),
@@ -583,9 +582,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
   });
   await page.setViewportSize({ width: 680, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await search.fill('a wrapped production search query that leaves the project identity readable');

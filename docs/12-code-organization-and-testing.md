@@ -1730,6 +1730,12 @@ and attach to the test result. Historical named captures and videos use the port
 Git-ignored `clients/web/target/visual-captures` directory, which Playwright prepares
 without rotating it (HS2-SRGAH3).
 
+Browser specs open the mocked local project with `openMockedProject(page)` from
+`clients/web/tests/open-mocked-project.ts`, which waits for the first ticket list read before the
+spec asserts on rows, so a loaded gate cannot outrun it (HS2-GDBK53). A test that deliberately
+holds or never answers that read keeps the raw clicks behind an `// HS2-GDBK53:` comment naming
+why; `src/playwright-config.test.ts` fails on any other raw open sequence.
+
 When a browser test asserts an intermediate state that only exists while a request is
 outstanding, the route fixture must hold that response behind an explicit gate (a promise the test
 resolves after asserting). Examples are a pending spinner, an optimistic projection, an in-flight

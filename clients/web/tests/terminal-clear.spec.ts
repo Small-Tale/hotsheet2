@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 // HS2-N2AG8V: the drawer's Clear Terminal button and Command-K clear the terminal display, like
@@ -11,9 +12,7 @@ type FeedbackWindow = typeof window & { __terminalFeedbackSockets: Array<{ url: 
 async function openDrawerTerminal(page: Page) {
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 interface Report {
@@ -85,9 +86,7 @@ for (const viewport of [
       });
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
       const row = page.locator('[data-action="select-ticket-row"]').filter({ hasText: 'Slow to open' });
       await expect(row).toBeVisible({ timeout: 30_000 });
       // Let project-open work settle, then forget its reports so only the armed click is judged.

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 test('HS2-25TP3N saves human feedback and offers a project session chooser across resize', async ({ page }) => {
@@ -63,9 +64,7 @@ test('HS2-25TP3N saves human feedback and offers a project session chooser acros
     });
     await page.setViewportSize({ width: 1280, height: 850 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${created.slug}"]`).click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Add Note' }).first().click();

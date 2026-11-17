@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { RegisteredProject } from '../src/registered-projects-model';
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 const OPEN = 'web-4c1d2e3f4a5b';
@@ -60,9 +61,7 @@ test('reviews and removes registered projects in App Settings → Projects', asy
   await installTerminalFixture(page);
   const requests = await routeRegisteredProjects(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Projects', exact: true }).click();
 

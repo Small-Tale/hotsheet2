@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -125,9 +126,7 @@ test('HS2-R0E39D crashed worker lease expires before a synthetic claim is taken 
       );
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-segment-value="workers"]').first().click();
     const firstCard = page.locator(`[data-worker-column="${first}"]`);
     await expect(firstCard).toContainText(slug);

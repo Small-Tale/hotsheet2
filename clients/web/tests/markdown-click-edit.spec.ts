@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-H1K9YY: rendered Markdown fields (ticket Details and notes) enter their editor on a single
 // click. Links, ticket references, and other controls inside the rendered Markdown keep their own
@@ -160,9 +161,7 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
 
 async function openTicket(page: Page, tap = false) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT01"]');
   if (tap) await row.tap();
   else await row.click();

@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 
 import type { FullTicket, TicketRow } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-DQJPW0: a live claim written by a separate Hot Sheet host and seen through the synced
 // store is marked remote in the queue and the inspector; this server's own claims keep their
@@ -47,9 +48,7 @@ test('marks a claim from another Hot Sheet host as remote and keeps local worker
       .toBe('remote');
 
     const page = await app.launch();
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const row = (slug: string) => page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${slug}"]`);
     const owner = (slug: string) => row(slug).locator('[data-claim-origin="remote"]');
     await expect(owner(remote.slug)).toHaveText('Remote');

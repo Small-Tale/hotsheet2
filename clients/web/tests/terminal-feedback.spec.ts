@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
 
 test.use({ deviceScaleFactor: 2 });
@@ -10,9 +11,7 @@ test('ellipsizes the project tab before scrolling at medium width with the drawe
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'Project Grid' }).click();
@@ -58,9 +57,7 @@ test('never ellipsizes a remote project tab name (HS2-08P0V5)', async ({ page })
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await page.locator('[data-component="terminal-drawer"]').getByRole('button', { name: 'Project Grid' }).click();
   const tab = page.locator('[data-component="project-tab-bar"] [data-tab-kind="project"][data-location="remote"]');
@@ -191,9 +188,7 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
@@ -240,9 +235,7 @@ test('opens ticket references from interactive terminals without linking scaled 
   await page.setViewportSize({ width: 1280, height: 820 });
   await installTerminalFixture(page, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
@@ -336,9 +329,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator(
@@ -546,9 +537,7 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
   await page.setViewportSize({ width: 1180, height: 760 });
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-component="terminal-tile"][data-terminal-key="terminal-feedback:nano"]'),
@@ -612,9 +601,7 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   await page.setViewportSize({ width: 1280, height: 800 });
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
@@ -718,9 +705,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   let drawer = page.locator('[data-component="terminal-drawer"]');
@@ -942,9 +927,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1004,9 +987,7 @@ test('fits one 80x24 terminal per phone grid row and keeps phone zoom separate (
   await page.setViewportSize({ width: 390, height: 844 });
   await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     preview = dashboard.locator('[data-terminal-key="terminal-feedback:nano"] [data-display-mode="scaled-preview"]');
@@ -1055,9 +1036,7 @@ test('a zoomed Workspace Grid terminal keeps 80x24 sizing across zoom, unzoom, z
   // A real server round trip: the zoom focuses the terminal before its socket opens.
   await installTerminalFixture(page, false, false, { openDelayMs: 300, warmLimit: 0 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-component="terminal-tile"][data-terminal-key="terminal-feedback:nano"]'),
@@ -1122,9 +1101,7 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
     page = await context.newPage();
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1190,9 +1167,7 @@ test('renders the magnified terminal at scaled 80x24 on a phone (HS2-SA08XA)', a
   await page.setViewportSize({ width: 390, height: 844 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
@@ -1235,9 +1210,7 @@ test('adapts the phone magnified terminal to the keyboard with a fixed grid (HS2
   });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
@@ -1344,9 +1317,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
     cdp = await context.newCDPSession(page);
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1459,9 +1430,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1623,9 +1592,7 @@ test('recovers a drawer terminal whose socket closed on focus, typing, visibilit
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -1766,9 +1733,7 @@ test('shows a moved Nano terminal at scaled 80x24 in both grids across widths (H
   await page.setViewportSize({ width: 1440, height: 900 });
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');

@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // Search scope across the built-in views: searching from Trash searches only Trash (HS2-S6TXSW), and
 // any other search can switch into All Tickets from its floating toolbar (HS2-4J6764).
@@ -161,9 +162,7 @@ async function mockSearchProject(page: Page, views: Array<{ id: string; name: st
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]').first()).toBeVisible();
   return searches;
 }

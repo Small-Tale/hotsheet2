@@ -1,6 +1,7 @@
 import { expect, type Page, type Route, test, type WebSocketRoute } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const projects = {
   alpha: {
@@ -213,9 +214,7 @@ async function installProjects(page: Page) {
 
 async function openBothProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true');

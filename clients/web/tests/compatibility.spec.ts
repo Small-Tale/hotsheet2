@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import type { CompatibilityAssessment } from '../src/compatibility';
 import { releaseBinaryEnvironment } from '../src/local-host';
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { ticketsJson } from './ticket-page-fixture';
 
 test('selects current local server, CLI, and migrator binaries from the real checkout', () => {
@@ -50,9 +51,7 @@ async function openWithCompatibility(
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 test('does not offer unsafe restart for an old server', async ({ page }) => {

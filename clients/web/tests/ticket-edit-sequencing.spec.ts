@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-K9SG2R: two rapid edits to the same field of the same ticket used to self-conflict — the second
 // edit read the same pre-first concurrency token and got a false "ticket was modified". Per-ticket
@@ -173,9 +174,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   // The inert preview renders a visible priority select before the detail arrives; it is not the
   // control an edit goes through (HS2-975G1J).
@@ -309,9 +308,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const priority_ = page.locator(loadedInspectorPriority);
   await expect(priority_).toBeVisible();
@@ -426,9 +423,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
@@ -556,9 +551,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
     await page.goto('/');
     const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
     if (!openedOnce) {
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
       openedOnce = true;
     }
     // After reload, the remembered project must restore the row without another open.
@@ -712,9 +705,7 @@ for (const keepTyping of [true, false])
       return route.continue();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();

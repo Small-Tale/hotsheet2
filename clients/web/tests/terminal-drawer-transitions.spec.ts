@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
 
 // HS2-AQ40G7: adding or removing a drawer tab never passes through the drawer's Project grid.
@@ -106,9 +107,7 @@ for (const width of [1280, 900, 390]) {
     await installTerminalFixture(page);
     const gates = await installGatedTerminals(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="nano"] .kui-tab-bar-item__select').click();

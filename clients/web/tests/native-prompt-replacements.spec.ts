@@ -29,6 +29,7 @@ async function launchedApp(context: Parameters<typeof desktopApp>[0], baseURL: s
 }
 
 async function clickOpenProject(page: Page) {
+  // HS2-GDBK53: this click returns before the open finishes (HS2-ED4A0G holds discovery), so this open must not wait for the ticket list.
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();

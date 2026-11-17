@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const project = {
   id: 'no-git',
@@ -181,9 +182,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-action="open-repository-status"]').click();
   const dialog = page.locator('[data-repository-surface="repository-status"]');
   await expect(dialog).toHaveAttribute('data-state', 'uninitialized');

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-9DF0DA: on a live project, another writer's change refreshes the open list. That refresh used
@@ -51,9 +52,7 @@ test('keeps rows appended by Load more when a concurrent change refreshes the li
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page
       .getByRole('button', { name: /^Archive/ })
       .first()

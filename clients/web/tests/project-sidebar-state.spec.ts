@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const capabilities = {
   create: true,
@@ -417,9 +418,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const summary = page.locator('#app-left-rail [data-component="project-summary"]'),
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');

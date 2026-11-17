@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { FullTicket } from '../src/api';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -67,9 +68,7 @@ async function openFeedbackProjects(
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   if (source !== target) {
     await page.getByRole('button', { name: 'Add Project', exact: true }).click();
     await page.getByRole('button', { name: 'Local Project' }).click();

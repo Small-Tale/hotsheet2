@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -55,9 +56,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, shows th
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
     const settings = page.locator('[data-component="development-strategy-settings"]');
@@ -218,9 +217,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
       }
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
     const settings = page.locator('[data-component="development-strategy-settings"]');

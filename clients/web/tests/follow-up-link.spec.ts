@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -58,9 +59,7 @@ async function openProject(page: Page, server: Server, providers?: (body: unknow
     }
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 async function openCodeReview(page: Page, slug: string) {

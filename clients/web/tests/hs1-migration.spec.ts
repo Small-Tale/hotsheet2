@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { MigrationJob, MigrationProgress } from '../src/migration-progress';
+import { openMockedProject } from './open-mocked-project';
 import { ticketsJson } from './ticket-page-fixture';
 
 async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 'repair' = 'hs1') {
@@ -234,9 +235,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   const { state, releaseImport, releaseRemote, advance, failImport } = await mockHs1Project(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const dialog = page.locator('[data-component="hs1-migration-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('tickets, notes, attachments, settings, and AI-tool setup');
@@ -364,9 +363,7 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   const { state } = await mockHs1Project(page, 'imported');
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const banner = page.locator('[data-component="hs1-cleanup-banner"] [data-component="state-banner"]');
   await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -388,9 +385,7 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
   const { state } = await mockHs1Project(page, 'repair');
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const banner = page.locator('[data-component="hs1-cleanup-banner"] [data-component="state-banner"]');
   await expect(banner).toContainText('Hot Sheet 1 may reopen this imported project');
   await expect(banner).toHaveAttribute('data-tone', 'warning');

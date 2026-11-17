@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { ticketsJson } from './ticket-page-fixture';
 
 const project = {
@@ -216,9 +217,7 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
 
 async function openBulkProject(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Columns View' }).click();
 }
 

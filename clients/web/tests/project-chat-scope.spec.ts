@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { ticketsJson } from './ticket-page-fixture';
 
 /**
@@ -142,9 +143,7 @@ test('a project restores only its own AI chats from the machine-wide connection 
     localStorage.setItem('hotsheet.terminals.drawer-open', 'true');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toBeVisible();
   const chats = drawer.locator('[data-tab-kind="ai-chat"]');

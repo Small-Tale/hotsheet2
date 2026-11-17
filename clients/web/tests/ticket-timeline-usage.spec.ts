@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-ZA7W6E / HS2-J14225: the Timeline tab shows the AI tokens and models recorded in each
 // phase gap next to the elapsed time, and the ticket's per-model total below the rail.
@@ -167,9 +168,7 @@ for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByText('Measure the phases').click();
     await page.getByRole('tab', { name: 'Timeline' }).click();
     const timeline = page.locator('[data-component="ticket-timeline"]');
@@ -253,9 +252,7 @@ test('shows priced Fable terminal usage in the narrow ticket timeline (HS2-TTYZG
     settled_through: '',
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
   const breakdown = page.locator('[data-component="ticket-timeline"] [data-component="value-table"]');
@@ -268,9 +265,7 @@ test('keeps the timeline unchanged when a ticket has no recorded usage', async (
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page, { events: [], settled_cost_usd: 0, settled_through: '' });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
   const timeline = page.locator('[data-component="ticket-timeline"]');
@@ -286,9 +281,7 @@ for (const width of [1280, 390])
     let currentUsage = { events: [] as typeof usage.events, settled_cost_usd: 0, settled_through: '' };
     await mockProject(page, () => currentUsage);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByText('Measure the phases').click();
     await page.getByRole('tab', { name: 'Timeline' }).click();
     const timeline = page.locator('[data-component="ticket-timeline"]');
@@ -372,9 +365,7 @@ async function openLiveTimeline(page: Page, width: number) {
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByText('Measure the phases').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
   return { timeline: page.locator('[data-component="ticket-timeline"]'), phaseReports };

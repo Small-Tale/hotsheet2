@@ -64,3 +64,15 @@ describe('Playwright native keychain isolation (HS2-XTQHPK)', () => {
     expect(process.env.HOTSHEET_NATIVE_SECRETS).toBe('deny');
   });
 });
+
+describe('mocked project open waits for the ticket list (HS2-GDBK53)', () => {
+  it('opens mocked projects through openMockedProject, except where a test holds the list read', () => {
+    const tests = new URL('../tests/', import.meta.url),
+      raw =
+        /(?<!\/\/ HS2-GDBK53:[^\n]*\n[ \t]*)await (\w+)\.getByRole\('button', \{ name: 'Open Project' \}\)\.click\(\);\s*await \1\.getByRole\('button', \{ name: 'Local Project' \}\)\.click\(\);\s*await \1\.getByRole\('button', \{ name: 'Open Project', exact: true \}\)\.last\(\)\.click\(\);/;
+    const offenders = readdirSync(tests)
+      .filter((name) => name.endsWith('.spec.ts'))
+      .filter((name) => raw.test(readFileSync(new URL(name, tests), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+});
