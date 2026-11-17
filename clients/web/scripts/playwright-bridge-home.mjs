@@ -50,7 +50,8 @@ export function releaseBridgeHome({
   cli = bridgeCliBinary(env),
   exists = existsSync,
   run = spawnSync,
-  remove = (path) => rmSync(path, { recursive: true, force: true }),
+  // Node retries ENOTEMPTY, EBUSY, and EPERM itself: the stopped server can still be writing (HS2-XFFBA7).
+  remove = (path) => rmSync(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
   warn = (message) => console.warn(message),
 }) {
   const store = join(home, 'server-bootstrap.hs2');
@@ -69,7 +70,16 @@ export function releaseBridgeHome({
       warn(`Could not stop the Playwright bridge's bootstrap Hot Sheet server (${store}): ${error}`);
     } else outcome = { stopped: true };
   }
-  for (const directory of directories) remove(directory);
+  // A directory that still cannot be removed is reported, never thrown: this runs in the runner's exit
+  // handler, and the next run's sweep releases a home whose owner record remains (HS2-XFFBA7, HS2-P69XHN).
+  for (const directory of directories)
+    try {
+      remove(directory);
+    } catch (error) {
+      warn(
+        `Could not remove the Playwright run directory ${directory}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   return outcome;
 }
 
