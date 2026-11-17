@@ -769,7 +769,12 @@ Codex's models is a probe too (HS2-BJ7A59): it leads its own process group, is k
 reaped when its listing returns or times out, at the probe deadline, or when the server stops,
 while long-lived drive sessions keep their own lifecycle. Every probe child, the app-server
 included, is spawned and registered in one step against the stop, so a stop that lands
-mid-spawn still kills it before the server exits (HS2-3EJNYY, HS2-F6S04C).
+mid-spawn still kills it before the server exits (HS2-3EJNYY, HS2-F6S04C). A probe group is
+signalled only while its leader is known to be unreaped, so a kill can never reach a pid the
+kernel has handed out again (HS2-9820JG). When another owner holds the leader's `Child` (the
+app-server's transport, which can reap it by observing its exit), the guard and a stop signal
+the group only while holding that handle and only if it reports the leader still running, and
+reap the leader through the handle instead of a raw `waitpid`.
 
 **Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
 such as a test harness or the scale-stress script, passes the hidden

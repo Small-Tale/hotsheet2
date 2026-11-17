@@ -1057,9 +1057,11 @@ impl StdioTransport {
         env: &[(String, String)],
         deadline: std::time::Duration,
     ) -> std::io::Result<(Box<Self>, crate::probe::ProbeGroup)> {
+        // HS2-9820JG: the transport owns the leader's `Child`; the guard signals and reaps
+        // it only through that handle.
         let (child, guard) = crate::probe::ProbeGroup::spawn(
             || StreamChild::spawn_with(program, &["app-server"], cwd, env, true),
-            StreamChild::id,
+            StreamChild::probe_leader,
             deadline,
         )?;
         Ok((Box::new(Self(child)), guard))

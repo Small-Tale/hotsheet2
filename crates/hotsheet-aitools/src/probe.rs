@@ -9,11 +9,11 @@
 
 use hotsheet_process_journal::{ExitReason, LaunchMeta, ProcessJournal, Purpose};
 use hotsheet_sync::LockExt;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::Read;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, mpsc};
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::time::Duration;
 
 /// Default deadline for one probe (a `--version` or catalog listing).
@@ -21,13 +21,70 @@ pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 static PROBE_TIMEOUT_MS: AtomicU64 = AtomicU64::new(DEFAULT_PROBE_TIMEOUT.as_millis() as u64);
 
-/// Process ids (each its own process-group leader) of probes still running.
+/// Process ids (each its own process-group leader) of probes still running, each with the
+/// handle that owns its leader when another owner can reap it (HS2-9820JG).
 ///
 /// Why process-global (HS2-YEYF6Y): these registries track OS child processes, which belong
 /// to the process, not to any one server state. Shutdown (`stop_probes`) must reach every
 /// probe started by any caller (detection, catalog listing, tests) from a signal path that
 /// has no `AppState`, and the timeout is set once from a process-level CLI flag.
-static IN_FLIGHT: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+static IN_FLIGHT: Mutex<Option<HashMap<u32, LeaderHandle>>> = Mutex::new(None);
+
+/// The handle that owns a registered probe leader, when one other than this module does.
+type LeaderHandle = Option<Arc<dyn ProbeLeader>>;
+
+/// HS2-9820JG: the handle that owns a probe leader whose exit someone else may observe
+/// (and so reap) through it, such as a transport's `Child`. A group is signalled only while
+/// that handle is held and says its leader is unreaped, so the pid cannot have been handed
+/// out again in between; the leader is reaped only through the handle. Lock order: the
+/// in-flight registry, then the handle.
+pub(crate) trait ProbeLeader: Send + Sync {
+    /// Run `signal` while holding the handle, if the leader is still unreaped. Whether it ran.
+    fn while_unreaped(&self, signal: &mut dyn FnMut()) -> bool;
+    /// Wait for the leader through the handle; its status if it can still be read.
+    fn reap(&self) -> Option<ExitStatus>;
+}
+
+impl ProbeLeader for Mutex<Child> {
+    fn while_unreaped(&self, signal: &mut dyn FnMut()) -> bool {
+        let mut child = self.lock_or_recover();
+        let unreaped = matches!(child.try_wait(), Ok(None));
+        if unreaped {
+            signal();
+        }
+        unreaped
+    }
+
+    fn reap(&self) -> Option<ExitStatus> {
+        self.lock_or_recover().wait().ok()
+    }
+}
+
+/// A probe child to register: its pid, and the handle that owns it when the caller keeps
+/// one that can reap it (see [`ProbeLeader`]).
+pub(crate) struct Leader {
+    pub(crate) pid: u32,
+    pub(crate) handle: Option<Arc<dyn ProbeLeader>>,
+}
+
+impl Leader {
+    /// A leader only this module reaps.
+    pub(crate) fn pid(pid: u32) -> Self {
+        Self { pid, handle: None }
+    }
+}
+
+/// Signal the group of `pid` only if its leader is still unreaped: through its owning
+/// handle when there is one, otherwise because this module is its only reaper.
+fn signal_group(pid: u32, handle: Option<&Arc<dyn ProbeLeader>>) -> bool {
+    match handle {
+        Some(handle) => handle.while_unreaped(&mut || kill_group(pid)),
+        None => {
+            kill_group(pid);
+            true
+        }
+    }
+}
 static JOURNAL: OnceLock<ProcessJournal> = OnceLock::new();
 
 /// Configure machine-local probe diagnostics once in a production host. In-process
@@ -83,11 +140,11 @@ pub fn kill_in_flight_probes() -> usize {
     // Signal under the lock: a probe leaves the set before it is reaped, so every pid seen
     // here is still this process's own unreaped child.
     let guard = IN_FLIGHT.lock_or_recover();
-    let pids: Vec<u32> = guard.iter().flatten().copied().collect();
-    for pid in &pids {
-        kill_group(*pid);
-    }
-    pids.len()
+    guard
+        .iter()
+        .flatten()
+        .filter(|(pid, handle)| signal_group(**pid, handle.as_ref()))
+        .count()
 }
 
 /// Stop probing for the rest of this process: kill every running probe and refuse new
@@ -113,8 +170,8 @@ pub fn probes_stopped() -> bool {
 /// passes, and kills and reaps it when dropped — on success, error, or timeout alike.
 pub struct ProbeGroup {
     pid: u32,
-    finished: std::sync::Arc<Mutex<bool>>,
-    record: std::sync::Arc<Mutex<Option<(ProcessJournal, String)>>>,
+    finished: Arc<Mutex<bool>>,
+    record: Arc<Mutex<Option<(ProcessJournal, String)>>>,
     disarm: Option<mpsc::Sender<()>>,
 }
 
@@ -129,21 +186,23 @@ impl ProbeGroup {
     /// Spawn a probe child and register it in the same step as the stop check, then track
     /// it like [`ProbeGroup::track`]. A stop either refuses the spawn or sees the child in
     /// its kill snapshot; it can never finish in the gap between the two (HS2-F6S04C).
+    /// `leader` names the child, and the handle that owns it when the caller keeps one
+    /// that can reap it (HS2-9820JG).
     pub(crate) fn spawn<T>(
         spawn: impl FnOnce() -> std::io::Result<T>,
-        pid: impl Fn(&T) -> u32,
+        leader: impl Fn(&T) -> Leader,
         deadline: Duration,
     ) -> std::io::Result<(T, Self)> {
-        let child = spawn_registered(spawn, &pid)
+        let child = spawn_registered(spawn, &leader)
             .ok_or_else(|| std::io::Error::other("not probed: the process is stopping"))??;
-        let guard = Self::armed(pid(&child), deadline);
+        let guard = Self::armed(leader(&child).pid, deadline);
         Ok((child, guard))
     }
 
     /// Arm the deadline watchdog and drop guard for an already registered probe `pid`.
     fn armed(pid: u32, deadline: Duration) -> Self {
-        let finished = std::sync::Arc::new(Mutex::new(false));
-        let record = std::sync::Arc::new(Mutex::new(record_probe(pid)));
+        let finished = Arc::new(Mutex::new(false));
+        let record = Arc::new(Mutex::new(record_probe(pid)));
         let (disarm, disarmed) = mpsc::channel::<()>();
         let watchdog = finished.clone();
         let watchdog_record = record.clone();
@@ -170,25 +229,44 @@ impl Drop for ProbeGroup {
 
 /// Kill a tracked probe group once, stop tracking it, and reap its leader. The leader is
 /// reaped only after it leaves the in-flight set (under that set's lock), so a pid that
-/// [`kill_in_flight_probes`] can still see is never one the kernel could have reused. Its
-/// `Child` handle (owned by a stream reader) is dropped without waiting, so without this
-/// the killed child would linger as a zombie.
+/// [`kill_in_flight_probes`] can still see is never one the kernel could have reused.
+///
+/// HS2-9820JG: when the leader's handle belongs to someone else (a transport's `Child`),
+/// that owner may already have reaped it. The group is then signalled only under the
+/// handle and only while it reports the leader unreaped, and the leader is reaped through
+/// the handle, never by a raw `waitpid` on a pid that may no longer be this process's
+/// child. Otherwise this module is the only reaper: the `Child` handle (owned by a stream
+/// reader) is dropped without waiting, so without the reap the killed child would linger
+/// as a zombie.
 fn finish(pid: u32, finished: &Mutex<bool>, record: &Mutex<Option<(ProcessJournal, String)>>) {
     let mut finished = finished.lock_or_recover();
     if *finished {
         return;
     }
     *finished = true;
-    kill_group(pid);
-    {
+    let (signalled, status) = {
         let mut guard = IN_FLIGHT.lock_or_recover();
-        if let Some(set) = guard.as_mut() {
-            set.remove(&pid);
+        let handle = guard.as_mut().and_then(|set| set.remove(&pid)).flatten();
+        match handle {
+            Some(handle) => {
+                let signalled = signal_group(pid, Some(&handle));
+                (signalled, handle.reap())
+            }
+            None => {
+                kill_group(pid);
+                reap(pid);
+                (true, None)
+            }
         }
-        reap(pid);
-    }
+    };
     if let Some((journal, launch_id)) = record.lock_or_recover().take() {
-        let _ = journal.finish(&launch_id, ExitReason::Killed);
+        let reason = match status {
+            _ if signalled => ExitReason::Killed,
+            Some(status) if status.success() => ExitReason::Completed,
+            Some(_) => ExitReason::Failed,
+            None => ExitReason::Unknown,
+        };
+        let _ = journal.finish(&launch_id, reason);
     }
 }
 
@@ -230,7 +308,7 @@ fn reap(_pid: u32) {}
 
 /// The number of probes currently running (diagnostics and tests).
 pub fn in_flight_probes() -> usize {
-    IN_FLIGHT.lock_or_recover().as_ref().map_or(0, HashSet::len)
+    IN_FLIGHT.lock_or_recover().as_ref().map_or(0, HashMap::len)
 }
 
 /// Run `command` to completion within [`probe_timeout`], capturing stdout and stderr.
@@ -312,7 +390,7 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
 /// writes can lose a race with process exit (HS2-3EJNYY).
 fn spawn_tracked(command: &mut Command) -> Result<Child, String> {
     let program = command.get_program().to_string_lossy().into_owned();
-    spawn_registered(|| command.spawn(), Child::id)
+    spawn_registered(|| command.spawn(), |child: &Child| Leader::pid(child.id()))
         .ok_or_else(|| format!("'{program}' not probed: the process is stopping"))?
         .map_err(|error| format!("starting '{program}': {error}"))
 }
@@ -322,14 +400,15 @@ fn spawn_tracked(command: &mut Command) -> Result<Child, String> {
 /// finish between them. `None` means the process is already stopping and nothing spawned.
 fn spawn_registered<T>(
     spawn: impl FnOnce() -> std::io::Result<T>,
-    pid: impl FnOnce(&T) -> u32,
+    leader: impl FnOnce(&T) -> Leader,
 ) -> Option<std::io::Result<T>> {
     let mut guard = IN_FLIGHT.lock_or_recover();
     if STOPPED.load(Ordering::SeqCst) {
         return None;
     }
     Some(spawn().inspect(|child| {
-        guard.get_or_insert_with(HashSet::new).insert(pid(child));
+        let Leader { pid, handle } = leader(child);
+        guard.get_or_insert_with(HashMap::new).insert(pid, handle);
     }))
 }
 
@@ -346,9 +425,9 @@ fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<V
 fn track(pid: u32, running: bool) {
     {
         let mut guard = IN_FLIGHT.lock_or_recover();
-        let set = guard.get_or_insert_with(HashSet::new);
+        let set = guard.get_or_insert_with(HashMap::new);
         if running {
-            set.insert(pid);
+            set.insert(pid, None);
             // Spawned after a stop began (the check above raced it): kill it now.
             if STOPPED.load(Ordering::SeqCst) {
                 kill_group(pid);
@@ -361,6 +440,8 @@ fn track(pid: u32, running: bool) {
 
 #[cfg(unix)]
 fn kill_group(pid: u32) {
+    #[cfg(test)]
+    tests::record_signal(pid);
     let Ok(pid) = i32::try_from(pid) else {
         return;
     };
@@ -407,6 +488,138 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
+
+    /// Every group this module signalled, for the HS2-9820JG tests (each checks only its
+    /// own pid, so parallel tests do not disturb one another).
+    static SIGNALLED: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+    pub(super) fn record_signal(pid: u32) {
+        SIGNALLED.lock_or_recover().push(pid);
+    }
+
+    fn signalled(pid: u32) -> bool {
+        SIGNALLED.lock_or_recover().contains(&pid)
+    }
+
+    /// A probe leader in its own group whose `Child` a stand-in transport owns, as the
+    /// codex app-server catalog probe's `StreamChild` does.
+    fn transport_owned(script: &str) -> (Arc<Mutex<Child>>, ProbeGroup) {
+        use std::os::unix::process::CommandExt;
+        let (child, guard) = ProbeGroup::spawn(
+            || {
+                sh(script)
+                    .process_group(0)
+                    .spawn()
+                    .map(|child| Arc::new(Mutex::new(child)))
+            },
+            |child: &Arc<Mutex<Child>>| Leader {
+                pid: child.lock_or_recover().id(),
+                handle: Some(child.clone() as Arc<dyn ProbeLeader>),
+            },
+            Duration::from_secs(60),
+        )
+        .unwrap();
+        (child, guard)
+    }
+
+    /// The stand-in transport observes the leader's exit through its own handle, which
+    /// reaps it (as `ChildSignals::has_exited` does with `try_wait`).
+    fn transport_reaps(child: &Mutex<Child>) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while child.lock_or_recover().try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "the probe leader never exited");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// HS2-9820JG: the transport reaps the leader before the guard drops. The pid may since
+    /// have been handed out again, so the guard sends nothing to its group and does not wait
+    /// for a pid that is no longer this process's child; the probe still leaves the set.
+    #[test]
+    fn hs2_9820jg_a_leader_its_transport_reaped_is_never_signalled_by_the_guard() {
+        let (child, guard) = transport_owned("exit 0");
+        let pid = guard.pid;
+        transport_reaps(&child);
+        drop(guard);
+        assert!(
+            !signalled(pid),
+            "the guard signalled a reaped leader's group"
+        );
+        assert!(
+            IN_FLIGHT
+                .lock_or_recover()
+                .as_ref()
+                .is_none_or(|set| !set.contains_key(&pid)),
+            "the reaped probe stayed in flight"
+        );
+    }
+
+    /// HS2-9820JG: the same order at the probe deadline: the watchdog's `finish` finds the
+    /// leader reaped and leaves its group alone.
+    #[test]
+    fn hs2_9820jg_the_deadline_never_signals_a_reaped_leader() {
+        use std::os::unix::process::CommandExt;
+        let child = Arc::new(Mutex::new(sh("exit 0").process_group(0).spawn().unwrap()));
+        let pid = child.lock_or_recover().id();
+        transport_reaps(&child);
+        // Registered as the codex probe registers its handle, then left to its deadline.
+        IN_FLIGHT
+            .lock_or_recover()
+            .get_or_insert_with(HashMap::new)
+            .insert(pid, Some(child.clone() as Arc<dyn ProbeLeader>));
+        let guard = ProbeGroup::armed(pid, Duration::from_millis(20));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !*guard.finished.lock_or_recover() {
+            assert!(Instant::now() < deadline, "the deadline never fired");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drop(guard);
+        assert!(
+            !signalled(pid),
+            "the deadline signalled a reaped leader's group"
+        );
+    }
+
+    /// HS2-9820JG: a stop finds the transport already reaped the leader and leaves its group
+    /// alone, while a live leader in the same snapshot is still killed.
+    #[test]
+    fn hs2_9820jg_a_stop_never_signals_a_reaped_leader() {
+        if isolated_probe_test("probe::tests::hs2_9820jg_a_stop_never_signals_a_reaped_leader") {
+            return;
+        }
+        let (reaped, reaped_guard) = transport_owned("exit 0");
+        let (live, live_guard) = transport_owned("exec sleep 30");
+        transport_reaps(&reaped);
+        assert_eq!(kill_in_flight_probes(), 1);
+        assert!(
+            !signalled(reaped_guard.pid),
+            "the stop signalled a reaped leader's group"
+        );
+        assert!(signalled(live_guard.pid), "the stop missed a live probe");
+        drop(reaped_guard);
+        drop(live_guard);
+        assert!(
+            !live
+                .lock_or_recover()
+                .try_wait()
+                .unwrap()
+                .unwrap()
+                .success()
+        );
+        assert_eq!(in_flight_probes(), 0);
+    }
+
+    /// HS2-9820JG: a live, transport-owned leader is still killed with its group and reaped
+    /// through its handle when the guard drops.
+    #[test]
+    fn hs2_9820jg_a_live_transport_owned_leader_is_killed_and_reaped() {
+        let (child, guard) = transport_owned("exec sleep 30");
+        let pid = guard.pid;
+        drop(guard);
+        assert!(signalled(pid));
+        let status = child.lock_or_recover().try_wait().unwrap();
+        assert!(status.is_some_and(|status| !status.success()), "{status:?}");
+    }
 
     fn sh(script: &str) -> Command {
         let mut command = Command::new("/bin/sh");
@@ -550,7 +763,7 @@ mod tests {
                     release_rx.recv().unwrap();
                     Ok(child)
                 },
-                Child::id,
+                |child: &Child| Leader::pid(child.id()),
                 Duration::from_secs(60),
             )
         });
@@ -577,7 +790,11 @@ mod tests {
         assert!(stop_waited, "stop finished before the probe registered");
         assert_eq!(stopped, 1, "stop missed probe {pid}");
         assert_eq!(in_flight_probes(), 0);
-        let refused = ProbeGroup::spawn(|| sh("exit 0").spawn(), Child::id, Duration::from_secs(5));
+        let refused = ProbeGroup::spawn(
+            || sh("exit 0").spawn(),
+            |child: &Child| Leader::pid(child.id()),
+            Duration::from_secs(5),
+        );
         assert!(refused.is_err_and(|error| error.to_string().contains("stopping")));
     }
 }

@@ -176,9 +176,19 @@ impl StreamChild {
         })
     }
 
-    /// The child's process id.
+    /// The child's process id (tests; a probe registers [`Self::probe_leader`]).
+    #[cfg(test)]
     pub(crate) fn id(&self) -> u32 {
         self.pid
+    }
+
+    /// HS2-9820JG: this child as a probe leader whose handle this stream owns, so a probe
+    /// guard signals its group and reaps it only through that handle.
+    pub(crate) fn probe_leader(&self) -> crate::probe::Leader {
+        crate::probe::Leader {
+            pid: self.pid,
+            handle: Some(self.child.clone() as Arc<dyn crate::probe::ProbeLeader>),
+        }
     }
 
     /// A handle that can signal this process; it stays valid after [`Self::into_halves`].
