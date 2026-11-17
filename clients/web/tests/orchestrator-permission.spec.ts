@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 const TARGET = '01ARZ3NDEKTSV4RRFFQ69G5FAZ';
 
@@ -84,9 +85,7 @@ for (const scheme of ['light', 'dark'] as const)
         const page = await app.launch();
         await page.emulateMedia({ colorScheme: scheme });
         await page.setViewportSize({ width, height: 900 });
-        await page.getByRole('button', { name: 'Open Project' }).click();
-        await page.getByRole('button', { name: 'Local Project' }).click();
-        await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+        await openMockedProject(page);
         await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
         await orchestratorRequest(app.server, 'op-browser-1');
         const popup = page.locator('[data-component="permission-request-popup"]');
@@ -143,9 +142,7 @@ test('keeps an orchestrator card out of the project auto-allow (HS2-42WS4Z)', as
     });
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
     await orchestratorRequest(app.server, 'op-browser-auto');
     const popup = page.locator('[data-component="permission-request-popup"]');
@@ -192,9 +189,7 @@ test('keeps orchestrator answers listed and revocable while the vault is locked 
           : route.continue(),
     );
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
     await orchestratorRequest(app.server, 'op-locked-1');
     const popup = page.locator('[data-component="permission-request-popup"]');
@@ -253,9 +248,7 @@ test('sets an orchestrator rule sentence in body type (HS2-7NGC69)', async ({ co
   try {
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.getByRole('button', { name: 'New ticket…' })).toBeVisible();
     await orchestratorRequest(app.server, 'op-type-1');
     await app.server.request(`/checkouts/${app.server.checkoutId}/orchestration/permission-rules`, 'POST', {

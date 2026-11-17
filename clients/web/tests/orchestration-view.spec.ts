@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
@@ -125,9 +126,7 @@ async function openProject(page: Page, server: Server, name: string) {
     }
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 const columnTitles = (page: Page) =>

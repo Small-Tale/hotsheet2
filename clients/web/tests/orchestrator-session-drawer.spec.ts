@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 const TOOL = 'hs-synthetic-agent';
 const RUN = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
@@ -83,9 +84,7 @@ test('labels an orchestrator-started session in the real drawer (HS2-KTHJN2)', a
 
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     const tab = drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
@@ -146,9 +145,7 @@ test('takes an orchestrator session over from its drawer tab (HS2-6MNMVB)', asyn
 
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const tab = page
       .locator('[data-component="terminal-drawer"]')
@@ -222,9 +219,7 @@ test("records closing an orchestrator session's tab as a person's stop (HS2-HVKS
     const terminal = started.session!.session.session_id;
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const tab = page
       .locator('[data-component="terminal-drawer"]')

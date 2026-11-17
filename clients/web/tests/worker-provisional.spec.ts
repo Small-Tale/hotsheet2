@@ -5,6 +5,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { fakeGithubActions } from './fake-github-actions';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -118,9 +119,7 @@ test('HS2-N8H97X a worker’s provisional ticket turns at risk when its base gat
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-segment-value="workers"]').first().click();
     const column = page.locator(`[data-worker-column="${workerId}"]`);
     const line = column.locator(

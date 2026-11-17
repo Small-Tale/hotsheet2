@@ -24974,9 +24974,7 @@ test('sending from the conversation dialog clears its own draft, not the drawer 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
