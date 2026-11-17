@@ -1,5 +1,6 @@
 import type { TicketRow } from './api';
 import { ServerResponseShapeError } from './server-response-parsers';
+import { parseWorkerSpeculation, type WorkerSpeculation } from './worker-provisional';
 
 export interface WorkerTicketRef {
   connection_id: string;
@@ -105,6 +106,8 @@ export interface WorkerView {
   coverage_gaps?: WorkerCoverageGap[];
   connection_coverage: boolean;
   cadence?: WorkerCadence;
+  /** HS2-N8H97X: provisional assignments (HS2-2SJPCH); absent when the pool never reserved any. */
+  speculation?: WorkerSpeculation;
 }
 
 export interface WorkerCadence {
@@ -345,6 +348,8 @@ export function parseWorkerView(value: unknown): WorkerView {
             throw new ServerResponseShapeError('worker view');
           })(),
     ...(item.cadence === undefined ? {} : { cadence: cadence(item.cadence) }),
+    // Read leniently: a malformed speculation member never makes the Workers view unavailable.
+    ...(item.speculation === undefined ? {} : { speculation: parseWorkerSpeculation(item.speculation) }),
   };
 }
 

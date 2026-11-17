@@ -111,6 +111,22 @@ export function DemoWorkerColumns({
     uncovered_sources: coverage === 'gaps' ? DEMO_COVERAGE_GAPS.map((gap) => gap.connection_id) : [],
     ...(coverage === 'gaps' ? { coverage_gaps: DEMO_COVERAGE_GAPS } : {}),
     connection_coverage: true,
+    // HS2-N8H97X: Codex B's ticket was built ahead of the integrator's ticket, whose CI failed.
+    ...(rows[0] && rows[1]
+      ? {
+          speculation: {
+            records: [
+              {
+                qualified: `demo:${rows[1].native_id}`,
+                slug: rows[1].slug,
+                state: 'at_risk',
+                gates: [{ slug: rows[0].slug, result: 'red' }],
+              },
+            ],
+            repair_first: [rows[0].slug],
+          },
+        }
+      : {}),
     workers: [
       worker('Integrator', 'integrator', rows[0] ? [assignment(rows[0], 'integrating', true)] : [], []),
       worker('Codex B', 'worker', rows[1] ? [assignment(rows[1], 'accepted', true)] : [], planned),

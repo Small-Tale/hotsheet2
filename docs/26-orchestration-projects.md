@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08), provisional assignments on Workers view cards (HS2-N8H97X),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -5419,3 +5419,16 @@ true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), 
 "At least" when events have no price, and keeps its cents and up to four sub-cent
 digits rather than rounding (`clients/web/src/orchestration-progress.ts`). Per-run
 measures, utilization and external waits stay headless.
+
+### Provisional assignments in the Workers view (HS2-N8H97X)
+
+The worker view (`coordination workers`, the worker route and MCP `hotsheet_workers`)
+carries the pool's speculation status of HS2-2SJPCH. The Workers view reads it
+leniently, so a malformed member never makes the view unavailable, and puts each
+record on its ticket's card through the shared TicketRow orchestration line, with no
+new prop: "Provisional on API-12 · CI running" (info, each base with its CI result),
+"At risk · repair API-12 first" (warning, the bases `repair_first` names, else every
+base) and "Reopened · the fix invalidated it" (warning). Confirmed work carries no
+line. On the Workers view the pool's own state wins over an orchestration project's
+line for the same ticket. The view's existing long poll brings changes; nothing new
+is read (`clients/web/src/worker-provisional.ts`).

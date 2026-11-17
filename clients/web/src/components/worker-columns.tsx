@@ -12,6 +12,7 @@ import { Bot, CircleHelp, UserRound } from 'lucide';
 
 import type { TicketRow as WireTicketRow } from '../api';
 import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
+import { provisionalLines } from '../worker-provisional';
 import {
   integrationStrategyLabel,
   mergeWorkerViews,
@@ -196,7 +197,9 @@ export function WorkerColumns({
       coverage.notes.length > 0 ||
       coverage.sourcesUnknown ||
       coverage.connectionUnknown,
-    cadenceViews = currentViews.filter((view) => view.cadence);
+    cadenceViews = currentViews.filter((view) => view.cadence),
+    // HS2-N8H97X: work built ahead of a prerequisite's CI, on the shared TicketRow orchestration line.
+    provisional = provisionalLines(currentViews.map((view) => view.speculation));
   return (
     <section
       class="worker-columns"
@@ -293,6 +296,7 @@ export function WorkerColumns({
                             {detail ? (
                               <TicketRow
                                 {...ticketRow(detail)}
+                                {...(provisional[qualified] ? { orchestration: provisional[qualified] } : {})}
                                 qualifiedId={qualified}
                                 selected={selectedQualifiedId === qualified}
                                 presentation="column"

@@ -125,6 +125,44 @@ describe('HS2-E9SR7R Workers composition', () => {
     expect(markup.match(/data-component="ticket-list-row-container"/g)).toHaveLength(2);
   });
 
+  it('HS2-N8H97X puts provisional work on the shared orchestration line of the worker’s card', () => {
+    const markup = (speculation: WorkerView['speculation']) =>
+      String(
+        WorkerColumns({
+          views: [{ ...view, speculation }],
+          details: Object.fromEntries(rows.map((item) => [item.qualified_id, item])),
+          ticketRow: row,
+          loading: false,
+          sourceErrors: [],
+          sources: [],
+          layout: 'grid',
+        }),
+      );
+    const risky = markup({
+      records: [
+        { qualified: 'one:same', slug: 'HS2-SAME', state: 'at_risk', gates: [{ slug: 'HS2-BASE', result: 'red' }] },
+        {
+          qualified: 'two:same',
+          slug: 'HS2-SAME',
+          state: 'provisional',
+          gates: [{ slug: 'HS2-BASE', result: 'pending' }],
+        },
+      ],
+      repair_first: ['HS2-BASE'],
+    });
+    expect(risky).toContain('At risk · repair HS2-BASE first');
+    expect(risky).toContain('Provisional on HS2-BASE · CI running');
+    expect(risky.match(/data-row-orchestration="true"/g)).toHaveLength(2);
+    // Confirmed work, and a view without speculation, carry no line.
+    expect(
+      markup({
+        records: [{ qualified: 'one:same', slug: 'HS2-SAME', state: 'confirmed', gates: [] }],
+        repair_first: [],
+      }),
+    ).not.toContain('data-row-orchestration');
+    expect(markup(undefined)).not.toContain('data-row-orchestration');
+  });
+
   it('HS2-D5KXBA removes a completed card and count while keeping its worker header', () => {
     const completed = { ...rows[0], status: 'completed' };
     const markup = String(
