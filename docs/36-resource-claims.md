@@ -247,7 +247,10 @@ long polls: one request parks on the backend's release signal and answers when t
 resource changes hands, when the holder's lease lapses, or when the wait ends. The
 server parks one request for at most 55 seconds; a client with a later deadline asks
 again as soon as the previous answer arrives, and sends nothing in between. The MCP tool
-does this for a `wait` of up to 10 minutes per call. At most 64 requests park at a time;
+does this for a `wait` of up to 10 minutes per call. Only a request the server held for
+its whole capped wait is followed by another; the answer to the request that carried the
+rest of the wait is final, even when the server's clock ends it a millisecond before the
+caller's own deadline (HS2-MP402X). At most 64 requests park at a time;
 another is refused with 503 `capacity`. A parked request does not hold an API request
 slot. If the client disconnects while parked and the request then wins the resource,
 the server releases that grant at once, because nobody received its token. A parked

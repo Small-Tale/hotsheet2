@@ -451,7 +451,10 @@ async fn hs2_fmhh9y_a_waiting_mcp_client_sends_one_request_and_none_while_idle()
             json!({"action":"acquire","target":"vms/mac-1","duration":"10m","wait":"1500ms"}),
         )
         .unwrap();
-        assert!(started.elapsed() >= Duration::from_millis(1_500));
+        // HS2-MP402X: the server times the wait by its whole-millisecond wall clock, so
+        // its verdict may land a millisecond before this caller's deadline; that verdict is
+        // final, never a reason to ask again.
+        assert!(started.elapsed() >= Duration::from_millis(1_490));
         assert_eq!(timed_out["code"], "wait_timeout");
         assert_eq!(
             *seen.lock().unwrap(),
