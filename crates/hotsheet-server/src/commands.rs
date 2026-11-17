@@ -281,7 +281,13 @@ impl CommandManager {
             .or_else(|| self.roots.lock_or_recover().get(project).cloned())
             .ok_or_else(|| "unknown command project".to_string())?;
         let (program, args) = execution(&def, &root)?;
-        let mut command = hotsheet_ticketing::git::launch(program);
+        // HS2-E5B0K0: a configured relative program (`./scripts/x`) under a working
+        // directory is resolved here, so it starts with posix_spawn, never a fork.
+        let mut command = hotsheet_ticketing::git::launch_resolved(
+            &program,
+            std::env::var_os("PATH").as_deref(),
+            Some(&root),
+        );
         command
             .args(args)
             .current_dir(root)

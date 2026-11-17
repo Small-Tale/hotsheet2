@@ -395,28 +395,15 @@ pub(super) fn execute_reporting(
     launched: &dyn Fn(u32),
 ) -> ExecutionOutcome {
     let started = Instant::now();
-    // A relative program with a directory part is the checkout's own script; a bare
-    // name is looked up on the host's PATH.
-    let path = Path::new(program);
     let environment = validation_environment(std::env::vars_os(), execution_id);
-    let resolved = if path.is_relative() && path.components().count() > 1 {
-        root.join(path)
-    } else if cfg!(unix) && path.is_relative() {
-        // HS2-H1EK8R: a bare name is looked up here, on the step's own PATH. Spawning a
-        // bare name under a changed PATH makes std fork this multi-threaded process; on
-        // macOS the forked child can then abort (SIGKILL, before exec) in libSystem's
-        // fork handlers when another thread was mid-initialization. A full path is
-        // spawned with posix_spawn, which runs no handlers in a copy of this process.
-        let search = environment
-            .iter()
-            .find(|(name, _)| name == "PATH")
-            .map(|(_, value)| value.clone());
-        match on_path(program, search.as_deref(), root) {
-            Some(found) => found,
-            None => return ended(ExecutionEnd::ProgramNotFound, started_at_ms, started),
-        }
-    } else {
-        path.to_path_buf()
+    // A relative program with a directory part is the checkout's own script; a bare
+    // name is looked up on the step's own PATH. HS2-H1EK8R: resolved here so the step
+    // starts with posix_spawn, never by forking this multi-threaded host.
+    let search = hotsheet_ticketing::git::child_path(environment.iter().map(|(k, v)| (k, v)));
+    let Some(resolved) =
+        hotsheet_ticketing::git::program_path(program, search.as_deref(), Some(root))
+    else {
+        return ended(ExecutionEnd::ProgramNotFound, started_at_ms, started);
     };
     let mut command = hotsheet_ticketing::git::launch(&resolved);
     command
@@ -503,31 +490,6 @@ pub(super) fn execute_reporting(
         settle(&mut outcome, status);
     }
     outcome
-}
-
-/// HS2-H1EK8R: the executable file a bare program name names on `search` (a PATH
-/// value), as `execvp` would find it: the first entry holding an executable regular
-/// file of that name. An empty or relative entry is relative to the step's `root`.
-pub(super) fn on_path(
-    program: &str,
-    search: Option<&std::ffi::OsStr>,
-    root: &Path,
-) -> Option<std::path::PathBuf> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::env::split_paths(search?)
-            .map(|entry| root.join(entry).join(program))
-            .find(|candidate| {
-                std::fs::metadata(candidate)
-                    .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
-            })
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (search, root);
-        Some(std::path::PathBuf::from(program))
-    }
 }
 
 /// HS2-H1EK8R: how a step that ended by itself ended, from the status the operating

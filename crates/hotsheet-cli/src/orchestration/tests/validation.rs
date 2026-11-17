@@ -1243,34 +1243,6 @@ fn hs2_h1ek8r_only_an_observed_signal_reads_as_signalled() {
     );
 }
 
-/// HS2-H1EK8R: a bare program name is found on the step's own PATH, as `execvp` would:
-/// the first executable regular file, relative entries under the step's root.
-#[cfg(unix)]
-#[test]
-fn hs2_h1ek8r_a_bare_program_is_found_on_the_steps_path() {
-    use std::os::unix::fs::PermissionsExt;
-    let root = tempfile::tempdir().unwrap();
-    let (plain, tools, other) = (
-        root.path().join("plain"),
-        root.path().join("tools"),
-        root.path().join("other"),
-    );
-    for dir in [&plain, &tools, &other] {
-        std::fs::create_dir_all(dir).unwrap();
-    }
-    // Not executable, then a directory of that name: both passed over.
-    std::fs::write(plain.join("step"), "#!/bin/sh\n").unwrap();
-    std::fs::create_dir(other.join("step")).unwrap();
-    let script = tools.join("step");
-    std::fs::write(&script, "#!/bin/sh\n").unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let search = std::env::join_paths([plain.clone(), other.clone(), "tools".into()]).unwrap();
-    let on_path = crate::orchestration::validation::on_path;
-    assert_eq!(on_path("step", Some(&search), root.path()), Some(script));
-    assert_eq!(on_path("missing", Some(&search), root.path()), None);
-    assert_eq!(on_path("step", None, root.path()), None);
-}
-
 /// HS2-H1EK8R: a step named by a bare program starts without forking the hosting
 /// process. A fork of a multi-threaded host could abort in the child before `exec`
 /// (macOS libSystem fork handlers), which read as the step being SIGKILLed.

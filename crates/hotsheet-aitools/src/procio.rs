@@ -105,7 +105,11 @@ impl StreamChild {
         own_group: bool,
         context: Option<ProcessContext>,
     ) -> std::io::Result<Self> {
-        let mut cmd = hotsheet_ticketing::git::launch(program);
+        // HS2-E5B0K0: resolved for the child's own PATH and directory, so a session
+        // whose environment sets PATH starts with posix_spawn, never a fork of this process.
+        let search = hotsheet_ticketing::git::child_path(envs.iter().map(|(k, v)| (k, v)));
+        let mut cmd =
+            hotsheet_ticketing::git::launch_resolved(program, search.as_deref(), Some(cwd));
         #[cfg(unix)]
         if own_group {
             use std::os::unix::process::CommandExt;

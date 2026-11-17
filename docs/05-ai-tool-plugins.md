@@ -1121,6 +1121,24 @@ install --server <bundled hotsheet-server>` before it starts the local bridge. T
   `hotsheet_ticketing::git::launch`. A server started from a git hook therefore
   never hands the hook's repository to an agent or shell working in a checkout
   ([`02` §2.12.1](02-ticket-storage.md)).
+- **No fork of a multi-threaded host (HS2-E5B0K0).** The standard library starts a
+  child with `fork` + `exec` instead of `posix_spawn` in these cases:
+  - a bare program name under a changed `PATH`;
+  - a relative path under a changed working directory;
+  - a `pre_exec` hook.
+
+  On macOS such a forked child can abort before `exec` and read as killed
+  (HS2-H1EK8R). A launch whose environment may set `PATH`, or whose program may be
+  relative while it sets a working directory, therefore starts through
+  `git::launch_resolved`. That covers AI sessions and probes, configured commands,
+  catalog probes and validation steps. `launch_resolved` resolves the program with
+  `execvp` semantics for the child's own `PATH` and directory.
+
+  A source-scan policy test lists every remaining fork trigger with a reason.
+  PTY sessions need a controlling terminal and must fork. The journal's detached
+  launches and the terminal launch relay still fork by design; HS2-Y4VDBK tracks
+  moving them to `posix_spawn` attributes.
+
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
   (across devices) attach at once and want different sizes. The **server is the
   sole arbiter** of the size: viewers send _size claims_, the server picks the size

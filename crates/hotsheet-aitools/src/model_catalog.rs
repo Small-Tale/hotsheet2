@@ -81,7 +81,12 @@ impl CommandModelCatalog {
 
     fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
         let program = self.safe_program()?;
-        let mut command = hotsheet_ticketing::git::launch(&program);
+        // HS2-E5B0K0: resolved for the directory it runs in (posix_spawn, no fork).
+        let mut command = hotsheet_ticketing::git::launch_resolved(
+            &program,
+            std::env::var_os("PATH").as_deref(),
+            cwd,
+        );
         command.args(args);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);

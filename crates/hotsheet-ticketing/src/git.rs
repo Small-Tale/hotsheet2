@@ -103,6 +103,82 @@ pub fn launch(program: impl AsRef<OsStr>) -> Command {
     cmd
 }
 
+/// HS2-H1EK8R, HS2-E5B0K0: the full path `program` names for a child that runs in `cwd`
+/// with `search` as its `PATH`, as `execvp` would find it. An absolute path is kept. A
+/// relative path with a directory part is joined to `cwd` (kept as given without one).
+/// A bare name is the first executable regular file of that name on `search`, an empty
+/// or relative entry counting from `cwd` (or this process's directory); `None` when no
+/// entry holds one.
+///
+/// Why: the standard library starts a bare name under a changed `PATH`, or a relative
+/// path under a changed working directory, with `fork` + `exec` instead of
+/// `posix_spawn`. Hot Sheet's processes are multi-threaded, and on macOS a forked child
+/// can abort in libSystem's fork handlers before `exec` when another thread was inside
+/// a one-time initialization; the parent then sees the child killed (SIGKILL). A full
+/// path is started with `posix_spawn`, which runs no handlers in a copy of this process.
+/// Off Unix the program is returned as given.
+#[must_use]
+pub fn program_path(
+    program: impl AsRef<OsStr>,
+    search: Option<&OsStr>,
+    cwd: Option<&Path>,
+) -> Option<std::path::PathBuf> {
+    let program = Path::new(program.as_ref());
+    if cfg!(not(unix)) || program.is_absolute() {
+        return Some(program.to_path_buf());
+    }
+    let base = cwd.map_or_else(|| Path::new(".").to_path_buf(), Path::to_path_buf);
+    if program.components().count() > 1 {
+        return Some(cwd.map_or_else(|| program.to_path_buf(), |cwd| cwd.join(program)));
+    }
+    std::env::split_paths(search?)
+        .map(|entry| base.join(entry).join(program))
+        .find(|candidate| is_executable_file(candidate))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+/// The `PATH` a child launched with `envs` applied sees: the last `PATH` among them, or
+/// this process's own (HS2-E5B0K0).
+#[must_use]
+pub fn child_path<K, V>(envs: impl IntoIterator<Item = (K, V)>) -> Option<std::ffi::OsString>
+where
+    K: AsRef<OsStr>,
+    V: AsRef<OsStr>,
+{
+    envs.into_iter()
+        .filter(|(key, _)| key.as_ref() == "PATH")
+        .last()
+        .map(|(_, value)| value.as_ref().to_owned())
+        .or_else(|| std::env::var_os("PATH"))
+}
+
+/// [`launch`] for `program` resolved by [`program_path`] against the `PATH` (`search`)
+/// and working directory (`cwd`) the child will have, so the standard library starts it
+/// with `posix_spawn`, never by forking this multi-threaded process (HS2-E5B0K0). A name
+/// found nowhere is kept as given, so its spawn fails with "not found" as before.
+#[must_use]
+pub fn launch_resolved(
+    program: impl AsRef<OsStr>,
+    search: Option<&OsStr>,
+    cwd: Option<&Path>,
+) -> Command {
+    match program_path(program.as_ref(), search, cwd) {
+        Some(path) => launch(path),
+        None => launch(program),
+    }
+}
+
 /// Prefix of the local host's build-pin variables removed from launched processes.
 pub const BUILD_PIN_PREFIX: &str = "HOT_SHEET_";
 
@@ -404,5 +480,59 @@ mod tests {
         let expected = std::env::current_dir().unwrap().join("relative/store");
         assert_eq!(cmd.get_current_dir(), Some(expected.as_path()));
         assert_eq!(cmd.get_args().nth(1), Some(expected.as_os_str()));
+    }
+
+    /// HS2-E5B0K0: a program resolves as `execvp` would find it for the child's own
+    /// `PATH` and working directory; absolute paths are kept, a relative path with a
+    /// directory part counts from the working directory, a name found nowhere is `None`.
+    #[cfg(unix)]
+    #[test]
+    fn hs2_e5b0k0_a_program_resolves_for_the_childs_path_and_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        for dir in ["plain", "tools", "other", "bin"] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        // Not executable, then a directory of that name: both passed over.
+        std::fs::write(root.join("plain/step"), "#!/bin/sh\n").unwrap();
+        std::fs::create_dir(root.join("other/step")).unwrap();
+        let script = root.join("tools/step");
+        std::fs::write(&script, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let search =
+            std::env::join_paths([root.join("plain"), root.join("other"), "tools".into()]).unwrap();
+        assert_eq!(
+            program_path("step", Some(&search), Some(root)),
+            Some(script.clone())
+        );
+        assert_eq!(program_path("missing", Some(&search), Some(root)), None);
+        assert_eq!(program_path("step", None, Some(root)), None);
+        assert_eq!(program_path(&script, None, None), Some(script.clone()));
+        assert_eq!(
+            program_path("bin/run", None, Some(root)),
+            Some(root.join("bin/run"))
+        );
+        assert_eq!(
+            program_path("bin/run", None, None),
+            Some(PathBuf::from("bin/run"))
+        );
+        // A name found nowhere is launched as given, so its spawn still reports not found.
+        assert_eq!(
+            launch_resolved("missing", Some(&search), Some(root)).get_program(),
+            "missing"
+        );
+        assert_eq!(
+            launch_resolved("step", Some(&search), Some(root)).get_program(),
+            script.as_os_str()
+        );
+    }
+
+    /// HS2-E5B0K0: the child's `PATH` is the last one its launch sets, else this process's.
+    #[test]
+    fn hs2_e5b0k0_the_childs_path_is_the_last_one_set() {
+        let set = [("PATH", "/a"), ("HOME", "/h"), ("PATH", "/b")];
+        assert_eq!(child_path(set), Some("/b".into()));
+        assert_eq!(child_path([("HOME", "/h")]), std::env::var_os("PATH"));
     }
 }

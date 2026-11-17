@@ -129,7 +129,10 @@ impl AppServerModelCatalog {
 
 impl RuntimeModelCatalogSource for AppServerModelCatalog {
     fn version(&self) -> Result<String, String> {
-        let mut command = hotsheet_ticketing::git::launch(&self.program);
+        // HS2-E5B0K0: resolved for the child's own PATH (posix_spawn, no fork).
+        let search = hotsheet_ticketing::git::child_path(self.env.iter().map(|(k, v)| (k, v)));
+        let mut command =
+            hotsheet_ticketing::git::launch_resolved(&self.program, search.as_deref(), None);
         command.arg("--version");
         for (key, value) in &self.env {
             command.env(key, value);

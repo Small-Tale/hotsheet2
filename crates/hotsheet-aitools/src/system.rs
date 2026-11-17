@@ -29,7 +29,13 @@ fn spawn(
     spec: &SpawnSpec,
     context: Option<ProcessContext>,
 ) -> std::io::Result<Box<dyn SpawnedProcess>> {
-    let mut cmd = hotsheet_ticketing::git::launch(&spec.program);
+    // HS2-E5B0K0: resolved for the child's own PATH and directory (posix_spawn, no fork).
+    let search = hotsheet_ticketing::git::child_path(spec.env.iter().map(|(k, v)| (k, v)));
+    let mut cmd = hotsheet_ticketing::git::launch_resolved(
+        &spec.program,
+        search.as_deref(),
+        Some(spec.cwd.as_ref()),
+    );
     cmd.args(&spec.args).current_dir(&spec.cwd);
     for (k, v) in &spec.env {
         cmd.env(k, v);

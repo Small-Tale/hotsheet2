@@ -197,3 +197,271 @@ fn launching_crates_start_processes_through_the_scrubbed_launch_constructor() {
          friends are dropped (HS2-J79CZF): {offenders:?}"
     );
 }
+
+/// HS2-E5B0K0: how a production spawn site that touches a fork trigger is settled.
+/// `Resolved` sites start their program through `git::launch_resolved` or
+/// `git::program_path`; `Safe` ones cannot take the fork path for the stated reason;
+/// `Forks` ones need `fork` by design and name the ticket that tracks it.
+enum Verdict {
+    Resolved,
+    Safe(&'static str),
+    Forks(&'static str),
+}
+
+/// HS2-E5B0K0: every production source file with a fork trigger, its exact trigger counts,
+/// and its verdict. The standard library starts a child with `fork` + `exec` (not
+/// `posix_spawn`) for a bare name under a changed `PATH` (`env_clear`, a `PATH` set or
+/// removed, or any variable list that may carry one), a relative path under a changed
+/// working directory, a `pre_exec` hook (the journal's detached launches use one), or an
+/// identity change. On macOS a forked child of a multi-threaded process can abort before
+/// `exec` (HS2-H1EK8R). A new trigger fails this test until its site is settled here.
+const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
+    (
+        "hotsheet-aitools/src/appserver.rs",
+        "env_dynamic=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-aitools/src/launch_safety.rs",
+        "cwd=1",
+        Verdict::Safe("bare `git` without a PATH change"),
+    ),
+    (
+        "hotsheet-aitools/src/model_catalog.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-aitools/src/probe.rs",
+        "env_dynamic=1",
+        Verdict::Safe("test-only helper: the absolute test executable, a constant variable"),
+    ),
+    (
+        "hotsheet-aitools/src/procio.rs",
+        "cwd=1 env_dynamic=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-aitools/src/system.rs",
+        "cwd=1 env_dynamic=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-cli/src/coordination/development_strategy.rs",
+        "cwd=1",
+        Verdict::Safe("bare `git` without a PATH change"),
+    ),
+    (
+        "hotsheet-cli/src/dispatch/claim_process.rs",
+        "env_dynamic=1",
+        Verdict::Safe("the absolute current executable; a constant non-PATH variable"),
+    ),
+    (
+        "hotsheet-cli/src/dispatch/setup.rs",
+        "cwd=1 env_dynamic=1",
+        Verdict::Safe("launch_safety::resolve_program returns an absolute path"),
+    ),
+    (
+        "hotsheet-cli/src/dispatch/store.rs",
+        "cwd=1",
+        Verdict::Safe("git::command(): bare `git` without a PATH change"),
+    ),
+    (
+        "hotsheet-cli/src/lib.rs",
+        "cwd=2",
+        Verdict::Safe("git::command(): bare `git` without a PATH change"),
+    ),
+    (
+        "hotsheet-cli/src/orchestration/job_monitor.rs",
+        "detached=1 env_dynamic=1",
+        Verdict::Forks(
+            "journal detached launch closes inherited descriptors in pre_exec (HS2-WEYR63); HS2-Y4VDBK",
+        ),
+    ),
+    (
+        "hotsheet-cli/src/orchestration/validation.rs",
+        "cwd=1 env_clear=1 env_dynamic=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-plugins/src/guidance_sources.rs",
+        "cwd=1",
+        Verdict::Safe("bare `rulesync` without a PATH change"),
+    ),
+    (
+        "hotsheet-plugins/src/rulesync_updates.rs",
+        "cwd=1",
+        Verdict::Safe("a canonical absolute executable"),
+    ),
+    (
+        "hotsheet-process-journal/src/lib.rs",
+        "detached=1 pre_exec=1",
+        Verdict::Forks("close_inherited_descriptors (HS2-WEYR63, HS2-ETMKCW); HS2-Y4VDBK"),
+    ),
+    (
+        "hotsheet-server/src/code_review.rs",
+        "detached=1",
+        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+    ),
+    (
+        "hotsheet-server/src/commands.rs",
+        "cwd=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-server/src/repository_browser.rs",
+        "detached=1",
+        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+    ),
+    (
+        "hotsheet-server/src/terminal_broker.rs",
+        "detached=1",
+        Verdict::Forks("journal detached launch; HS2-Y4VDBK"),
+    ),
+    (
+        "hotsheet-server/src/terminal_launch_relay.rs",
+        "cwd=1 detached=1 env_clear=1 env_dynamic=2 pre_exec=1",
+        Verdict::Forks(
+            "setsid in pre_exec plus a detached launch of an absolute broker; HS2-Y4VDBK",
+        ),
+    ),
+    (
+        "hotsheet-terminals/src/bootstrap.rs",
+        "pre_exec=1",
+        Verdict::Safe("test-only hook (null bootstrap port), never in a shipped launch"),
+    ),
+    (
+        "hotsheet-terminals/src/terminal.rs",
+        "env_clear=1 env_dynamic=1 pty=1",
+        Verdict::Forks(
+            "a PTY child needs setsid and a controlling terminal, which only fork gives",
+        ),
+    ),
+    (
+        "hotsheet-ticketing/src/git.rs",
+        "cwd=1 env_dynamic=1",
+        Verdict::Resolved,
+    ),
+    (
+        "hotsheet-ticketing/src/repository_compaction.rs",
+        "cwd=1",
+        Verdict::Safe("git::command_in(): bare `git` without a PATH change"),
+    ),
+];
+
+/// Fork-trigger counts of compacted production `text`, as `name=count` sorted by name.
+fn fork_triggers(compact: &str) -> String {
+    let count = |needle: &str| compact.matches(needle).count();
+    let followed = |needle: &str, not: char| {
+        compact
+            .match_indices(needle)
+            .filter(|(at, _)| !compact[at + needle.len()..].starts_with(not))
+            .count()
+    };
+    let counts = [
+        ("cwd", count(".current_dir(")),
+        ("detached", count(".detached(") + count(".spawn_detached(")),
+        ("env_clear", count(".env_clear()")),
+        ("env_dynamic", followed(".env(", '"') + count(".envs(")),
+        (
+            "env_path",
+            count(".env(\"PATH\"") + count(".env_remove(\"PATH\""),
+        ),
+        (
+            "identity",
+            followed(".uid(", ')') + followed(".gid(", ')') + followed(".groups(", ')'),
+        ),
+        ("pre_exec", count(".pre_exec(")),
+        ("pty", count(".spawn_command(")),
+    ];
+    counts
+        .iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(name, n)| format!("{name}={n}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn hs2_e5b0k0_fork_trigger_counting_sees_each_trigger() {
+    let compact = ".current_dir(a).env(\"PATH\",p).env(k,v).envs(x).env(\"K\",v).pre_exec(f)\
+                   .spawn_detached(c).uid(1)metadata.uid().spawn_command(b).env_clear()";
+    assert_eq!(
+        fork_triggers(compact),
+        "cwd=1 detached=1 env_clear=1 env_dynamic=2 env_path=1 identity=1 pre_exec=1 pty=1"
+    );
+    assert_eq!(fork_triggers("git::command().args(a).output()"), "");
+}
+
+#[test]
+fn hs2_e5b0k0_every_fork_trigger_is_resolved_safe_or_a_tracked_fork() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let mut files = Vec::new();
+    rust_sources(crates, &mut files);
+    let mut found = std::collections::BTreeMap::new();
+    for file in files {
+        let rel = file
+            .strip_prefix(crates)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let name = rel.rsplit('/').next().unwrap_or("");
+        if !rel.contains("/src/")
+            || rel.contains("/tests/")
+            || name == "tests.rs"
+            || name.ends_with("_tests.rs")
+        {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap();
+        let code: String = without_test_modules(&text)
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let compact: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+        let triggers = fork_triggers(&compact);
+        if !triggers.is_empty() {
+            found.insert(rel, (triggers, compact));
+        }
+    }
+    let mut problems = Vec::new();
+    for (file, expected, verdict) in FORK_TRIGGER_INVENTORY {
+        match found.remove(*file) {
+            None => problems.push(format!("{file}: inventoried but has no fork trigger")),
+            Some((actual, _)) if actual != *expected => {
+                problems.push(format!(
+                    "{file}: triggers `{actual}`, inventoried `{expected}`"
+                ));
+            }
+            Some((_, compact)) => match verdict {
+                Verdict::Resolved
+                    if !compact.contains("launch_resolved(")
+                        && !compact.contains("program_path(") =>
+                {
+                    problems.push(format!("{file}: resolved, yet calls neither git::launch_resolved nor git::program_path"));
+                }
+                Verdict::Safe(reason) | Verdict::Forks(reason) if reason.is_empty() => {
+                    problems.push(format!("{file}: needs a reason"));
+                }
+                _ => {}
+            },
+        }
+    }
+    for (file, (triggers, _)) in found {
+        problems.push(format!(
+            "{file}: new fork trigger `{triggers}`; start the program through \
+             git::launch_resolved (or settle it in FORK_TRIGGER_INVENTORY)"
+        ));
+    }
+    assert!(problems.is_empty(), "HS2-E5B0K0: {problems:#?}");
+    // The inventory only shrinks: a fork by design is removed, never added silently.
+    let forks = FORK_TRIGGER_INVENTORY
+        .iter()
+        .filter(|(_, _, verdict)| matches!(verdict, Verdict::Forks(_)))
+        .count();
+    assert_eq!(
+        forks, 7,
+        "fork-by-design sites (HS2-Y4VDBK tracks moving them off fork)"
+    );
+}
