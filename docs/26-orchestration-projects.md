@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -5332,3 +5332,24 @@ details again on each new event, because a validation result, a gate change or a
 reconciliation can leave the timeline itself unchanged. It ends when the selection,
 the project or the view changes. The request ids live in the view's
 memory: after a reload, Run Validation asks again under a new operation.
+
+### Built Ahead (HS2-0D60T8)
+
+A card whose work was started ahead of a pending gate (§26.22) shows **Built Ahead**
+after Plan, replacing the earlier one-line banner (answer A: its own section). Each
+gate it rests on reads "WEB-33 · CI running on 3f9c2a1" (the prerequisite by its
+slug on the timeline), then its **State** (Provisional, Confirmed, At risk, Reopened
+with its reason), its **Depth** against the smallest limit of the policies involved
+("1 of 2 allowed") and, when the work must stay off the target's shipping branch
+now, "Held off the shipping branch for now". At-risk work adds a warning
+**At Risk** banner naming what to repair first and how the work recovers after
+(rebased onto the fix, or checked again by the next covering CI run). **Reopen…** (a
+person's act, provisional or at-risk work only) offers three reason codes,
+`fix_changed_contract`, `fix_changed_behavior` and `work_needs_redo`, confirms,
+and calls `readiness reopen` as the browser's person; the run itself is left to its
+own controls. The section reads `readiness show` for the selected step
+(`provisional` and `speculation`) with the run's other details, and the run-event
+long poll refreshes it on each `provisional` event. Before the record is read a
+provisional card says only that it rests on a prerequisite whose CI is still
+running. The list of every failed prerequisite with the work stacked on it
+(`repair_first`) is the speculation read's, not one card's.

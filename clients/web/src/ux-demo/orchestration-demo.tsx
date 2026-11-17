@@ -176,6 +176,26 @@ export function OrchestrationInspectorDemo() {
               { step_id: 'e2e-login', check: 'profile', state: 'skipped', reason: 'prerequisite_not_passed' },
             ],
             runRead: true,
+            // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
+            builtAhead:
+              orchestrationDemoSettings.selected.value === 'step-5'
+                ? {
+                    state: 'at_risk',
+                    depth: 1,
+                    max_depth: 2,
+                    recovery: 'rebase_onto_fix',
+                    held: true,
+                    gates: [
+                      {
+                        target_id: 'web',
+                        connection_id: 'web-tickets',
+                        native_id: 'ticket-WEB-33',
+                        commit: '3f9c2a1d00',
+                        result: 'red',
+                      },
+                    ],
+                  }
+                : undefined,
             reconciliation: {
               at_ms: timeline.now_ms - 120_000,
               disposition: 'continue',
@@ -252,6 +272,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       showRequest: () => undefined,
       openGoal: () => undefined,
       runValidation: () => undefined,
+      reopen: () => undefined,
     }),
   );
   return () => {

@@ -16,6 +16,8 @@ export const ORCHESTRATION_ACTIONS = {
   openOrchestrationGoal: action('open-orchestration-goal'),
   /** HS2-9XJEZC: run every validation step of the selected card that has not passed. */
   runOrchestrationValidation: action('run-orchestration-validation'),
+  /** HS2-0D60T8: reopen the selected card's built-ahead work with the item's `data-reopen-reason`. */
+  reopenOrchestrationWork: action('reopen-orchestration-work'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */

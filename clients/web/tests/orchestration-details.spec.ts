@@ -148,3 +148,94 @@ test('HS2-9XJEZC Run Validation asks through the permission prompt and shows eac
     await server.stop(page);
   }
 });
+
+test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens it with a reason', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    await plan.dispatch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    // A red CI gate needs a provider, so the ledger's record is added to the real readiness answer: the
+    // same shape `readiness show` gives for work started ahead of a gate that then failed (§26.22).
+    const reopened: Array<Record<string, unknown>> = [];
+    await page.route('**/orchestration/readiness/show', async (route) => {
+      const real = await send(
+        server,
+        'POST',
+        `/checkouts/${server.checkoutId}/orchestration/readiness/show`,
+        route.request().postDataJSON(),
+      );
+      await route.fulfill({
+        json: {
+          ...real,
+          provisional: {
+            assignment: 'assignment-1',
+            step_id: real.step_id,
+            ticket: { connection_id: plan.goal.connection_id, native_id: plan.goal.id },
+            target: { target_id: TARGET, connection_id: plan.first.connection_id, native_id: plan.first.id },
+            operation_id: 'op-details',
+            state: reopened.length > 0 ? 'reopened' : 'at_risk',
+            depth: 1,
+            explain: `provisional on ${plan.second.slug} CI run-7`,
+            gates: [
+              {
+                target_id: TARGET,
+                connection_id: plan.second.connection_id,
+                native_id: plan.second.id,
+                commit: '3f9c2a1d00aa3f9c2a1d00aa3f9c2a1d00aa3f9c',
+                gate_ids: ['gate-1'],
+                result: 'red',
+                run: 'run-7',
+              },
+            ],
+            recovery: 'rebase_onto_fix',
+            reopen_reason: reopened.length > 0 ? 'fix_changed_contract' : undefined,
+            recorded_at_ms: Date.now(),
+            integration: 'ready',
+            held: true,
+          },
+        },
+      });
+    });
+    await page.route('**/orchestration/readiness/reopen', async (route) => {
+      reopened.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ json: { step_id: reopened[0].step_id, state: 'reopened' } });
+    });
+    const view = page.locator('[data-orchestration-view="true"]');
+    const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Built Ahead"]');
+    await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
+    await expect(section).toContainText('At Risk');
+    await expect(section).toContainText(`Repair ${plan.second.slug} first`);
+    await expect(section).toContainText(`${plan.second.slug} · CI failed on 3f9c2a1`);
+    await expect(section).toContainText('Held off the shipping branch for now');
+    const order = await page
+      .locator('[data-orchestration-inspector] [data-orchestration-section]')
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-orchestration-section')));
+    expect(order.slice(0, 4)).toEqual(['Where It Runs', 'Plan', 'Built Ahead', 'Run']);
+    await visualPass(page, 'hs2-0d60t8', 'at-risk', {
+      show: section,
+      check: () => expect(section).toContainText('At Risk'),
+      atPhone: () => view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click(),
+    });
+
+    // Reopen… asks which reason, then confirms, as the browser's person.
+    await section.getByRole('button', { name: 'Reopen…' }).click();
+    await page.getByRole('menuitem', { name: 'The Fix Changed the Contract…' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText(`Reopen the work on ${plan.first.slug}?`);
+    await capture(page, 'hs2-0d60t8', 'reopen-confirm-1440');
+    await dialog.getByRole('button', { name: 'Reopen', exact: true }).click();
+    await expect.poll(() => reopened.length).toBe(1);
+    expect(reopened[0]).toMatchObject({ reason: 'fix_changed_contract', actor: { role: 'human' } });
+    await expect(section).toContainText('Reopened (fix changed contract)');
+    await expect(section.getByRole('button', { name: 'Reopen…' })).toHaveCount(0);
+    await expect(section).not.toContainText('At Risk');
+  } finally {
+    await server.stop(page);
+  }
+});

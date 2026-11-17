@@ -131,7 +131,8 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(decision).toContain('Open LCH-1');
     expect(inspector('step-9')).toContain('API-15');
     expect(inspector('step-8')).toContain('target cap');
-    expect(inspector('step-5')).toContain('Building Ahead');
+    // HS2-0D60T8: provisional work has its Built Ahead section instead of a banner.
+    expect(inspector('step-5')).toContain('data-orchestration-section="Built Ahead"');
     // A finished or unstarted item has no run controls.
     expect(inspector('step-8')).not.toContain('data-control=');
     expect(inspector('step-1')).not.toContain('data-control=');
@@ -220,6 +221,54 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(done).toContain('Every step passed or is running');
   });
 
+  it('HS2-0D60T8 shows built-ahead work with its gates, the At Risk banner and Reopen… for a person', () => {
+    const work = {
+      state: 'at_risk',
+      depth: 1,
+      max_depth: 2,
+      recovery: 'rebase_onto_fix',
+      held: true,
+      gates: [
+        {
+          target_id: 'web',
+          connection_id: 'web-tickets',
+          native_id: 'ticket-WEB-33',
+          commit: '3f9c2a1d00',
+          result: 'red',
+        },
+      ],
+    };
+    const section = (details: object) => {
+      const markup = inspector('step-5', { details: { loading: false, ...details } });
+      return markup.slice(markup.indexOf('data-orchestration-section="Built Ahead"'));
+    };
+    const risky = section({ readinessRead: true, builtAhead: work });
+    expect(risky).toContain('At Risk');
+    expect(risky).toContain('WEB-33’s CI failed. Repair WEB-33 first');
+    expect(risky).toContain('WEB-33 · CI failed on 3f9c2a1');
+    expect(risky).toContain('1 of 2 allowed');
+    expect(risky).toContain('Held off the shipping branch for now');
+    expect(risky).toContain('Reopen…');
+    expect(risky).toContain('data-reopen-reason="fix_changed_contract"');
+    const reopened = section({
+      readinessRead: true,
+      builtAhead: { ...work, state: 'reopened', reopen_reason: 'work_needs_redo' },
+    });
+    expect(reopened).toContain('Reopened (work needs redo)');
+    expect(reopened).not.toContain('Reopen…');
+    expect(reopened).not.toContain('At Risk');
+    // Before the record is read, the section says only what the card is.
+    expect(section({})).toContain('rests on a prerequisite whose CI is still running');
+    // Plan comes first, then Built Ahead, then the Run.
+    const order = [...inspector('step-5').matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(order).toEqual(['Where It Runs', 'Plan', 'Built Ahead', 'Run']);
+    // A running card shows the section only once a record says it was built ahead.
+    expect(inspector('step-3')).not.toContain('Built Ahead');
+    expect(inspector('step-3', { details: { loading: false, builtAhead: { ...work, state: 'confirmed' } } })).toContain(
+      'data-orchestration-section="Built Ahead"',
+    );
+  });
+
   it('is a right-rail panel with an empty selection', () => {
     expect(String(OrchestrationInspector({}))).toContain('Select a card');
     const panel = orchestrationInspectorPanel({ item: item('step-3'), timeline: demoTimeline('running') });
@@ -247,6 +296,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       showRequest: (id: string) => calls.push(`request ${id}`),
       openGoal: () => calls.push('goal'),
       runValidation: () => calls.push('validate'),
+      reopen: (reason: string) => calls.push(`reopen ${reason}`),
     };
     wireOrchestrationTimeline({} as HTMLElement, bindings);
     const view = { dataset: { orchestrationView: 'true' } };
@@ -273,6 +323,8 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'show-orchestration-request', target({ requestId: 'request-6' }));
     run('click', 'open-orchestration-goal', target({}));
     run('click', 'run-orchestration-validation', target({}));
+    run('click', 'reopen-orchestration-work', target({ reopenReason: 'fix_changed_contract' }));
+    run('click', 'reopen-orchestration-work', target({}));
     expect(calls).toEqual([
       'select step-3',
       'select step-5',
@@ -285,6 +337,7 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'request request-6',
       'goal',
       'validate',
+      'reopen fix_changed_contract',
     ]);
   });
 });
@@ -346,6 +399,7 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       showRequest: noop,
       openGoal: noop,
       runValidation: noop,
+      reopen: noop,
     });
     const focused: string[] = [];
     const column = { scrollIntoView: noop };

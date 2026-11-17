@@ -6489,6 +6489,7 @@ export async function startHotSheetWebClient() {
       },
       openGoal: () => void orchestrationView.openGoal(),
       runValidation: () => void orchestrationView.runValidation(),
+      reopen: (reason) => void orchestrationView.reopen(reason),
     },
     runAutomaticTicketGroup: (slugs) => {
       void automaticTicketGrouping.run(slugs);

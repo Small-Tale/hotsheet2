@@ -2356,6 +2356,20 @@ export class Api {
       },
       false,
     );
+  /** HS2-0D60T8: one plan step's readiness with its provisional work (HS2-42TARA, HS2-JSF985); reads only. */
+  orchestrationReadiness = (checkout: string, step: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/readiness/show`,
+      { method: 'POST', body: JSON.stringify({ step_id: step }) },
+      false,
+    );
+  /** HS2-0D60T8: a person reopens provisional work the fix invalidated, with a reason code (HS2-JSF985). */
+  orchestrationReopen = (checkout: string, step: string, reason: string, actorId: string) =>
+    this.parsed(parseOrchestrationRecord, `/checkouts/${encodeURIComponent(checkout)}/orchestration/readiness/reopen`, {
+      method: 'POST',
+      body: JSON.stringify({ step_id: step, reason, actor: { role: 'human', id: actorId } }),
+    });
   /** The validation steps of one orchestration ticket with their latest evidence (HS2-WN0MXZ). */
   orchestrationValidations = (checkout: string, ticket: { connection_id: string; native_id: string }) =>
     this.parsed(

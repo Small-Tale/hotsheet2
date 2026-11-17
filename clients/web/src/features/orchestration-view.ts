@@ -13,6 +13,7 @@ import type { OrchestrationProposeAvailability } from '../components/orchestrati
 import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
+import { parseBuiltAhead } from '../orchestration-built-ahead';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseRunReconciliation } from '../orchestration-run-checks';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -158,6 +159,7 @@ export function parseOrchestrationDetails(
   validations: ReadonlyArray<Record<string, unknown>> | undefined,
   targetId: string,
   run?: Record<string, unknown>,
+  readiness?: Record<string, unknown>,
 ): OrchestrationInspectorDetails {
   const text = (value: unknown) => (typeof value === 'string' ? value : undefined);
   const gateList = Array.isArray(gates?.gates) ? (gates.gates as Array<Record<string, unknown>>) : [];
@@ -166,6 +168,8 @@ export function parseOrchestrationDetails(
     loading: false,
     runRead: run !== undefined,
     reconciliation: parseRunReconciliation(run),
+    readinessRead: readiness !== undefined,
+    builtAhead: parseBuiltAhead(readiness),
     ci: text(gates?.ci),
     gates: gateList
       .filter((gate) => gate.superseded_by === undefined)
@@ -441,11 +445,12 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
     details.value = { ...(details.value ?? {}), loading: true };
     const client = clientFor(current);
-    const [gates, events, validations, record] = await Promise.allSettled([
+    const [gates, events, validations, record, readiness] = await Promise.allSettled([
       client.orchestrationRunGates(current.id, run.run_id),
       client.orchestrationRunEvents(current.id, run.run_id),
       client.orchestrationValidations(current.id, item.goal),
       client.orchestrationRun(current.id, run.run_id),
+      client.orchestrationReadiness(current.id, item.step_id),
     ]);
     if (request !== detailsRequest) return;
     const value = <T>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : undefined);
@@ -460,6 +465,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         value(validations),
         item.target.target_id,
         value(record),
+        value(readiness),
       ),
       error: failed ? 'Some of this run’s records could not be read.' : undefined,
       pendingValidations: pending,
@@ -709,6 +715,32 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     }
   }
 
+  /** HS2-0D60T8: a person reopens the selected card's built-ahead work; the record and note follow. */
+  async function reopen(reason: string) {
+    const current = dependencies.project(),
+      item = selected();
+    if (!current || !item || busy.value) return;
+    const name = item.slug ?? item.project_label;
+    const confirmed = await dependencies.confirm({
+      title: `Reopen the work on ${name}?`,
+      message:
+        'It is marked reopened and never confirmed by a later CI result. Its run keeps going; cancel or hand it off with the run’s own controls.',
+      confirmLabel: 'Reopen',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    busy.value = true;
+    try {
+      await clientFor(current).orchestrationReopen(current.id, item.step_id, reason, dependencies.personId());
+      dependencies.showToast(`The work on ${name} was reopened.`);
+    } catch (reason) {
+      dependencies.showToast(`The work could not be reopened: ${message(reason)}`);
+    } finally {
+      busy.value = false;
+    }
+    void refreshDetails();
+  }
+
   async function propose() {
     const current = dependencies.project();
     if (!current || busy.value || !planner.availability(current).available) return;
@@ -775,6 +807,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     pause: () => setAutomatic(false),
     runControl,
     runValidation,
+    reopen,
     propose,
     showRequest,
     openGoal,

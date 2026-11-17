@@ -4,7 +4,6 @@ import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
-import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
@@ -22,6 +21,7 @@ import {
 } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
+import type { BuiltAheadView } from '../orchestration-built-ahead';
 import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
@@ -34,6 +34,7 @@ import {
   toolLabel,
 } from '../orchestration-timeline-board';
 import type { PendingValidation, ValidationStepView } from '../orchestration-validation-steps';
+import { OrchestrationBuiltAheadSection } from './orchestration-built-ahead-section';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 import { OrchestrationPlanSection } from './orchestration-plan-section';
 import { OrchestrationValidationSection } from './orchestration-validation-section';
@@ -45,6 +46,9 @@ export interface OrchestrationInspectorDetails {
   error?: string;
   ci?: string;
   gates?: ReadonlyArray<{ kind: string; state: string; provider?: string; commit?: string }>;
+  /** HS2-0D60T8: the step was read; its work built ahead of a pending gate, absent when none is recorded. */
+  readinessRead?: boolean;
+  builtAhead?: BuiltAheadView;
   /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
@@ -319,14 +323,6 @@ function stateDetail(item: TimelineItem) {
         </OrchestrationInspectorSection>
       );
     case 'provisional':
-      return (
-        <StateBanner
-          copyLayout="stacked"
-          tone="info"
-          title="Building Ahead"
-          detail="This work rests on a prerequisite whose CI is still running. If that CI fails, this work is held back from shipping."
-        />
-      );
     case 'running':
     case 'done':
       return undefined;
@@ -430,6 +426,9 @@ export function OrchestrationInspector({
       <WhereItRuns item={item} timeline={timeline} clock={clock} />
       {stateDetail(item)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
+      {item.state === 'provisional' || details?.builtAhead ? (
+        <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />
+      ) : undefined}
       {item.run && <RunSection item={item} busy={busy} clock={clock} details={details} />}
       {item.run && details && <Evidence details={details} clock={clock} busy={busy} />}
     </List>
