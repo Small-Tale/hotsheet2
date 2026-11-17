@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 
 import { expect, type Page, test } from '@playwright/test';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { fakeGithubActions } from './fake-github-actions';
 import {
   capture,
@@ -198,7 +199,8 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
   const provider = await fakeGithubActions();
   const server = await realTicketServer({
     env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' },
-    seed: async ({ store, root, env, cli }) => {
+    seed: async ({ store, root, env: inherited, cli }) => {
+      const env = withoutGitRepositoryEnv(inherited);
       await execute('git', ['init', '-q', '-b', 'main'], { cwd: root, env });
       await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic base'], { cwd: root, env });
       // The target project opts in to building ahead of a pending gate (docs/05 §5.9.1).

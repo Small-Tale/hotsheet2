@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 
 import { expect, type Page, test } from '@playwright/test';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { fakeGithubActions } from './fake-github-actions';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
@@ -23,7 +24,8 @@ test('HS2-N8H97X a worker’s provisional ticket turns at risk when its base gat
   let commit = '';
   const server = await realTicketServer({
     env: provider.env(),
-    seed: async ({ store, root, env, cli }) => {
+    seed: async ({ store, root, env: inherited, cli }) => {
+      const env = withoutGitRepositoryEnv(inherited);
       const git = (...args: string[]) => execute('git', args, { cwd: root, env });
       const pool = (...args: string[]) =>
         execute(cli, ['-C', store, 'coordination', '--project', root, ...args], { cwd: root, env });
