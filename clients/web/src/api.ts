@@ -1550,6 +1550,10 @@ export interface LiveTokenTotal {
   until_ms: number;
   tokens: number;
   complete: boolean;
+  /** The recorded cost of priced usage in the window, USD (HS2-9V4CGN); absent from an older server. */
+  cost_usd?: number;
+  /** Tokens in the window recorded without a cost because their model has no price. */
+  unpriced_tokens?: number;
 }
 export interface LiveStoreState {
   store: string;

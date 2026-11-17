@@ -39,6 +39,7 @@ function digest(scenario: Scenario): AwayDigest {
         completed: 14,
         needYou: 3,
         tokens: 412_000,
+        costUsd: 6.2,
         // Oldest first, as the controller orders them.
         events: [
           {
@@ -77,13 +78,14 @@ function digest(scenario: Scenario): AwayDigest {
         completed: 6,
         needYou: 0,
         tokens: 98_000,
+        costUsd: null,
         events: [{ kind: 'run_finished', store: 'kerf', name: 'Kerf', atMs: at(1, 2), tickets: 5 }],
       };
     case 'completions-only':
-      return { ...base, completed: 2, needYou: 0, tokens: 0, events: [] };
+      return { ...base, completed: 2, needYou: 0, tokens: 0, costUsd: 0, events: [] };
     // HS2-ZTRF4Q: the window read failed and no snapshot counted any, so the tile shows a dash, not 0.
     case 'tokens-unknown':
-      return { ...base, completed: 2, needYou: 0, tokens: null, events: [] };
+      return { ...base, completed: 2, needYou: 0, tokens: null, costUsd: null, events: [] };
     default:
       return scenario satisfies never;
   }

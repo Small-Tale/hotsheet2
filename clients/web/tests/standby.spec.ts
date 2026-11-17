@@ -335,7 +335,8 @@ test.describe('standby (HS2-EQVZTZ)', () => {
       }),
     );
     // HS2-ZTRF4Q: the server's `GET /stores/{id}/live-tokens` shape, read once on exit for the whole window.
-    let windowTokens = 0;
+    let windowTokens = 0,
+      windowCost = 0;
     const tokenReads: URL[] = [];
     // Every open store answers; only `stw` worked during standby.
     await page.route('**/stores/*/live-tokens**', (route) => {
@@ -349,6 +350,9 @@ test.describe('standby (HS2-EQVZTZ)', () => {
           until_ms: Number(url.searchParams.get('until_ms')),
           tokens: storeId === 'stw' ? windowTokens : 0,
           complete: true,
+          // HS2-9V4CGN: the recorded cost of that usage; every token here was priced.
+          cost_usd: storeId === 'stw' ? windowCost : 0,
+          unpriced_tokens: 0,
         },
       });
     });
@@ -383,11 +387,13 @@ test.describe('standby (HS2-EQVZTZ)', () => {
       socket.send(JSON.stringify({ cursor: 1, store: 'stw', kind: 'live_state', id: 'stw', slug: '', live: waiting }));
     // No snapshot carries these tokens (the pushed series covers five minutes); only the window read does.
     windowTokens = 48_000;
+    windowCost = 6.2;
     await page.clock.fastForward(3 * 60 * MINUTE);
     await standby(page).click({ position: { x: 700, y: 450 } });
     await expect(digest).toBeVisible();
     await expect(digest.getByText('While you were away')).toBeVisible();
     await expect(digest.locator('[data-away-tile="tokens"]')).toContainText('48k');
+    await expect(digest.locator('[data-away-tile="tokens"]')).toContainText('Tokens · $6.20');
     const read = tokenReads.at(-1)!;
     expect(Number(read.searchParams.get('until_ms')) - Number(read.searchParams.get('since_ms'))).toBeGreaterThan(
       3 * 60 * MINUTE,

@@ -4473,7 +4473,12 @@ export async function startHotSheetWebClient() {
         }),
       );
       if (totals.some((total) => total === undefined || !total.complete)) return undefined;
-      return totals.reduce((sum, total) => sum + (total?.tokens ?? 0), 0);
+      // HS2-9V4CGN: the cost stands only when every store reported it and priced all its usage.
+      const priced = totals.every((total) => total?.cost_usd !== undefined && total.unpriced_tokens === 0);
+      return {
+        tokens: totals.reduce((sum, total) => sum + (total?.tokens ?? 0), 0),
+        costUsd: priced ? totals.reduce((sum, total) => sum + (total?.cost_usd ?? 0), 0) : null,
+      };
     },
   });
   let standbySettingsServer: string | undefined;

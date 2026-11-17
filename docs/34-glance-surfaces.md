@@ -357,8 +357,12 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
     read, a gap of more than the pushed snapshot's 5-minute series between snapshots read as 0. The
     tile never shows fewer than the distinct per-minute buckets the snapshots carried. When any store's
     read fails, or the window starts before the server's two-day retention, it falls back to those
-    buckets; with none it shows "—" (unknown) rather than 0. The live state carries no cost, so the
-    tile shows tokens only; the cost follow-up is HS2-9V4CGN.
+    buckets; with none it shows "—" (unknown) rather than 0. The same read returns `cost_usd`, the
+    recorded cost of that usage (events are priced when recorded, `docs/14` §14.2), and
+    `unpriced_tokens`, the tokens recorded without a cost because their model has no price
+    (HS2-9V4CGN). The tile reads `Tokens · $6.20` when every store reported a cost and priced all its
+    usage, and the window read's tokens are the ones shown; otherwise it shows tokens alone (an
+    unpriced model, an older server, or the snapshot fallback).
 - **Silent exit.** The digest shows only when some row, completion, or token was recorded; otherwise
   standby exits silently. Re-entering standby while the exit's completions load drops that digest.
 - **Dialog.** Kerf `DialogSurface`, named "While you were away" and described by the time range. Need

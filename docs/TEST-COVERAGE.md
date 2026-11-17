@@ -163,7 +163,7 @@ members (plain and admin-only sessions get 404 without forwarding);
 a remote change-mux subscription for a plain session, and resolves it for a local session. Manual:
 open a paired server's project from Safari on a remote-mode host.
 
-HS2-ZTRF4Q: `crates/hotsheet-server/tests/live_state.rs # hs2_ztrf4q_live_tokens_sums_the_recorded_window`
+HS2-ZTRF4Q: `crates/hotsheet-server/tests/live_state.rs # hs2_ztrf4q_live_tokens_sums_the_recorded_window`; HS2-9V4CGN: `crates/hotsheet-server/tests/live_state.rs # hs2_9v4cgn_live_tokens_sums_recorded_cost_and_unpriced_tokens`, `clients/web/src/away-digest.test.ts # HS2-9V4CGN carries the window cost when every token was priced, and none otherwise`, `clients/web/tests/standby.spec.ts # leaving standby shows what happened while you were away (Tokens · $6.20)`
 sums recorded usage over a window (bounds, retention, 404, 401); `clients/web/src/away-digest.test.ts`
 and `clients/web/src/features/standby.test.ts` prefer the exit-time window read, never show fewer than
 the snapshots saw, and show unknown when neither counts; `clients/web/tests/standby.spec.ts` shows a

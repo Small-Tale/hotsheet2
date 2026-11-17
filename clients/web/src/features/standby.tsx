@@ -4,6 +4,7 @@ import type { CalibrationReport, ChangeEvent, LiveStoreState } from '../api';
 import {
   type AwayDigest,
   type AwayRecord,
+  type AwayWindowUsage,
   beginAwayRecord,
   completionsBetween,
   finishAwayDigest,
@@ -62,7 +63,7 @@ export interface StandbyControllerDependencies {
     stores: ReadonlyArray<{ projectId: string; store: string }>,
     sinceMs: number,
     untilMs: number,
-  ) => Promise<number | undefined>;
+  ) => Promise<AwayWindowUsage | undefined>;
   /** Injected for tests. */
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -177,7 +178,7 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
       // Need you counts what waits at the moment standby exits.
       current = dependencies.liveStates.forProjects(open);
     let reports: readonly CalibrationReport[] = [];
-    let windowTokens: number | undefined;
+    let windowTokens: AwayWindowUsage | undefined;
     const stores = current.flatMap((state) => {
       const projectId = state.checkouts.find((id) => open.includes(id));
       return projectId ? [{ projectId, store: state.store }] : [];

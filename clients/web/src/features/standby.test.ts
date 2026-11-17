@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalibrationReport, LiveStoreState } from '../api';
+import type { AwayWindowUsage } from '../away-digest';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
 import type { HostHealthSnapshot } from '../host-health';
 import { createLiveStateStore, type LiveStateStore } from '../live-state';
@@ -25,7 +26,7 @@ function harness(
       stores: ReadonlyArray<{ projectId: string; store: string }>,
       sinceMs: number,
       untilMs: number,
-    ) => Promise<number | undefined>;
+    ) => Promise<AwayWindowUsage | undefined>;
   } = {},
 ) {
   let clock = 1_000_000;
@@ -377,8 +378,8 @@ describe('standby controller (HS2-EQVZTZ)', () => {
           stores: ReadonlyArray<{ projectId: string; store: string }>,
           sinceMs: number,
           untilMs: number,
-        ) => Promise<number>
-      >(() => Promise.resolve(48_000));
+        ) => Promise<AwayWindowUsage>
+      >(() => Promise.resolve({ tokens: 48_000, costUsd: 6.2 }));
       const { controller } = harness({ liveStates, openProjectIds: () => ['p1'], windowTokens });
       controller.enter();
       expect(windowTokens).not.toHaveBeenCalled();
@@ -386,6 +387,7 @@ describe('standby controller (HS2-EQVZTZ)', () => {
       await vi.waitFor(() => {
         expect(controller.awayDigest.value?.tokens).toBe(48_000);
       });
+      expect(controller.awayDigest.value?.costUsd).toBe(6.2);
       expect(windowTokens).toHaveBeenCalledTimes(1);
       const [stores, sinceMs, untilMs] = windowTokens.mock.calls[0];
       expect(stores).toEqual([{ projectId: 'p1', store: live(1).store }]);

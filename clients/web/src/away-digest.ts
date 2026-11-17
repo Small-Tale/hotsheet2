@@ -46,6 +46,8 @@ export interface AwayDigest {
   needYou: number;
   /** `null` when neither the server's window read nor the pushed snapshots could count them (HS2-ZTRF4Q). */
   tokens: number | null;
+  /** What those tokens cost, USD, or `null` when some had no price or only the snapshots counted them (HS2-9V4CGN). */
+  costUsd: number | null;
   events: AwayEvent[];
 }
 
@@ -191,15 +193,24 @@ export function completionsBetween(reports: readonly CalibrationReport[], fromMs
 }
 
 /** The digest to show on exit, or `undefined` when nothing happened (an uneventful standby exits silently). */
+/** Tokens the server recorded across the standby window, and their cost when every one was priced. */
+export interface AwayWindowUsage {
+  tokens: number;
+  /** `null` when some usage had no price (an unpriced model) or a server did not report cost. */
+  costUsd: number | null;
+}
+
 export function finishAwayDigest(
   record: AwayRecord,
   current: Iterable<LiveStoreState>,
   completed: number,
   nowMs: number,
-  /** Tokens the server recorded across the whole window, read once on exit (HS2-ZTRF4Q); `undefined` when
-   * that read failed. Pushed snapshots carry only five minutes, so a longer gap between them loses tokens. */
-  windowTokens?: number,
+  /** Tokens (and their cost) the server recorded across the whole window, read once on exit (HS2-ZTRF4Q,
+   * HS2-9V4CGN); `undefined` when that read failed. Pushed snapshots carry only five minutes, so a longer gap
+   * between them loses tokens. */
+  window?: AwayWindowUsage,
 ): AwayDigest | undefined {
+  const windowTokens = window?.tokens;
   let recorded = 0;
   for (const [key, value] of record.tokenMinutes) {
     const start = Number(key.slice(key.indexOf('\0') + 1));
@@ -217,6 +228,8 @@ export function finishAwayDigest(
     completed,
     needYou,
     tokens,
+    // The cost covers the window read's tokens, so it stands only when those are the tokens shown.
+    costUsd: window && tokens === window.tokens ? window.costUsd : null,
     events: [...record.events].sort((a, b) => eventTime(a) - eventTime(b)),
   };
 }
@@ -312,4 +325,11 @@ export function awayEventRow(event: AwayEvent, clock: (ms: number) => string = a
     default:
       return event satisfies never;
   }
+}
+
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+
+/** Dollars with cents, e.g. "$6.20"; a nonzero amount under half a cent reads "less than one cent" as `<$0.01` (HS2-9V4CGN). */
+export function formatAwayCost(usd: number): string {
+  return usd > 0 && usd < 0.005 ? '<$0.01' : USD.format(usd);
 }

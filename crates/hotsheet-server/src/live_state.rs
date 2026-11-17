@@ -813,6 +813,16 @@ struct UsageTail {
     offsets: HashMap<PathBuf, u64>,
     /// Tokens (in + out) per minute start, kept for two days.
     minutes: BTreeMap<i64, u64>,
+    /// The recorded cost per minute start, and the tokens of events recorded without one (an
+    /// unpriced model), kept like `minutes` (HS2-9V4CGN).
+    costs: BTreeMap<i64, MinuteCost>,
+}
+
+/// One minute's recorded cost and the tokens no price covered.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct MinuteCost {
+    usd: f64,
+    unpriced_tokens: u64,
 }
 
 impl UsageTail {
@@ -845,6 +855,13 @@ impl UsageTail {
                 }
                 let minute = minute_of(unix_ms(at));
                 *self.minutes.entry(minute).or_default() += tokens;
+                // Usage is priced when it is recorded (`metrics::price_event`); an event still
+                // without a cost had no price for its model.
+                let cost = self.costs.entry(minute).or_default();
+                match event.cost_usd {
+                    Some(usd) if usd.is_finite() => cost.usd += usd,
+                    _ => cost.unpriced_tokens = cost.unpriced_tokens.saturating_add(tokens),
+                }
                 added.push(minute);
             }
         }
@@ -856,6 +873,7 @@ impl UsageTail {
     fn prune(&mut self, now_ms: i64) {
         let keep = now_ms - TOKEN_RETENTION_MS;
         self.minutes = self.minutes.split_off(&keep);
+        self.costs = self.costs.split_off(&keep);
         let days = [day_of(now_ms - 86_400_000), day_of(now_ms)];
         self.offsets.retain(|path, _| {
             path.file_stem()
@@ -1009,13 +1027,18 @@ const TOKEN_RETENTION_MS: i64 = 2 * 86_400_000;
 /// it once on exit, so a gap between pushed snapshots longer than the snapshot's five-minute
 /// series cannot lose tokens. `complete` is false when the window starts before the retained
 /// series, so the sum may be short.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LiveTokenTotal {
     pub store: String,
     pub since_ms: i64,
     pub until_ms: i64,
     pub tokens: u64,
     pub complete: bool,
+    /// The recorded cost of those tokens in USD (HS2-9V4CGN). It covers only priced usage, so
+    /// read it with `unpriced_tokens`.
+    pub cost_usd: f64,
+    /// Tokens in the window recorded without a cost because their model has no price.
+    pub unpriced_tokens: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1055,15 +1078,24 @@ pub fn tokens_between_at(
     let now_ms = unix_ms(now);
     let until_ms = until_ms.unwrap_or(now_ms).min(now_ms);
     let stores = state.live_states.stores.lock_or_recover();
-    let minutes = &stores.get(store)?.usage.minutes;
+    let usage = &stores.get(store)?.usage;
     let first = minute_of(since_ms);
-    let tokens = if first > until_ms {
-        0
+    let (tokens, cost) = if first > until_ms {
+        (0, MinuteCost::default())
     } else {
-        minutes
+        let tokens = usage
+            .minutes
             .range(first..=until_ms)
             .map(|(_, tokens)| *tokens)
-            .sum()
+            .sum();
+        let cost = usage.costs.range(first..=until_ms).fold(
+            MinuteCost::default(),
+            |total, (_, minute)| MinuteCost {
+                usd: total.usd + minute.usd,
+                unpriced_tokens: total.unpriced_tokens.saturating_add(minute.unpriced_tokens),
+            },
+        );
+        (tokens, cost)
     };
     Some(LiveTokenTotal {
         store: store.to_string(),
@@ -1071,6 +1103,8 @@ pub fn tokens_between_at(
         until_ms,
         tokens,
         complete: since_ms >= now_ms - TOKEN_RETENTION_MS,
+        cost_usd: cost.usd,
+        unpriced_tokens: cost.unpriced_tokens,
     })
 }
 

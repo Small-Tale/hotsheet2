@@ -1301,6 +1301,72 @@ async fn hs2_m8hhea_reported_ci_runs_are_pushed_in_the_live_state() {
     assert_eq!(after["ci"]["checkout"], worktree_id.as_str());
 }
 
+/// HS2-9V4CGN: the window read also sums the recorded cost and counts the tokens of events
+/// recorded without one (an unpriced model), so the away digest can show cost or tokens alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_9v4cgn_live_tokens_sums_recorded_cost_and_unpriced_tokens() {
+    use time::format_description::well_known::Rfc3339;
+    let h = harness();
+    let router = app(h.state.clone());
+    let now = time::OffsetDateTime::now_utc();
+    let raw = h._dir.path().join("demo.hs2").join("metrics").join("raw");
+    std::fs::create_dir_all(&raw).unwrap();
+    // Priced, priced, and one unpriced event (no cost recorded); synthetic numbers only.
+    for (minutes_ago, tokens, cost) in [
+        (25, 1000_u64, Some(1.25_f64)),
+        (15, 3000, Some(4.95)),
+        (5, 400, None),
+    ] {
+        let at = now - time::Duration::minutes(minutes_ago);
+        let file = raw.join(format!(
+            "{:04}-{:02}-{:02}.jsonl",
+            at.year(),
+            u8::from(at.month()),
+            at.day()
+        ));
+        let cost = cost.map_or(String::new(), |usd| format!(",\"cost_usd\":{usd}"));
+        let line = format!(
+            "{{\"ts\":\"{}\",\"tool\":\"claude\",\"model\":\"m\",\"tokens_in\":{tokens},\"tokens_out\":0{cost}}}\n",
+            at.format(&Rfc3339).unwrap()
+        );
+        let mut text = std::fs::read_to_string(&file).unwrap_or_default();
+        text.push_str(&line);
+        std::fs::write(&file, text).unwrap();
+    }
+    let ms = |at: time::OffsetDateTime| (at.unix_timestamp_nanos() / 1_000_000) as i64;
+    let read = |since: i64, until: Option<i64>| {
+        let router = router.clone();
+        let path = match until {
+            Some(until) => format!(
+                "/stores/{}/live-tokens?since_ms={since}&until_ms={until}",
+                h.store_id
+            ),
+            None => format!("/stores/{}/live-tokens?since_ms={since}", h.store_id),
+        };
+        async move { call(&router, "GET", &path, None).await }
+    };
+    let (status, all) = read(ms(now - time::Duration::minutes(30)), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all["tokens"], 4400, "{all}");
+    assert!(
+        (all["cost_usd"].as_f64().unwrap() - 6.2).abs() < 1e-9,
+        "{all}"
+    );
+    assert_eq!(all["unpriced_tokens"], 400, "{all}");
+    // A window holding only priced usage has no unpriced tokens; an empty one costs nothing.
+    let (_, priced) = read(
+        ms(now - time::Duration::minutes(30)),
+        Some(ms(now - time::Duration::minutes(10))),
+    )
+    .await;
+    assert_eq!(priced["tokens"], 4000, "{priced}");
+    assert_eq!(priced["unpriced_tokens"], 0, "{priced}");
+    let (_, empty) = read(ms(now - time::Duration::minutes(2)), None).await;
+    assert_eq!(empty["tokens"], 0, "{empty}");
+    assert_eq!(empty["cost_usd"], 0.0, "{empty}");
+    assert_eq!(empty["unpriced_tokens"], 0, "{empty}");
+}
+
 /// HS2-ZTRF4Q: the standby digest reads one store's recorded tokens for its whole window, so a
 /// long gap between pushed snapshots (each carries only five minutes) cannot read as zero.
 #[tokio::test(flavor = "multi_thread")]
