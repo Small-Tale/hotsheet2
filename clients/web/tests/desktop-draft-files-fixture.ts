@@ -237,9 +237,12 @@ export async function desktopApp(
       await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: root } }));
       await page.getByRole('button', { name: 'Add Project', exact: true }).dispatchEvent('click');
       await page.getByRole('button', { name: 'Local Project' }).click();
+      // Opening a project is a chain of bridge and API reads; two gates sharing the machine took it
+      // past the default 10 s expect window (HS2-F277XB). The bound only stops an open that never ends.
       await expect(page.getByRole('tab', { name: 'other-project', exact: true })).toHaveAttribute(
         'aria-selected',
         'true',
+        { timeout: 30_000 },
       );
       return checkout.id;
     },
