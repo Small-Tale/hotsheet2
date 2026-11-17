@@ -311,6 +311,36 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     expect(empty).toContain('Not started; the plan is a dry run');
   });
 
+  it('HS2-5GRXFN shows the resource a deferred card needs and the overview’s contention', () => {
+    const now = demoTimeline('running').now_ms;
+    const why = inspector('step-8', {
+      details: {
+        loading: false,
+        explanation: {
+          standing: 'not_placed',
+          reason: 'resource_held',
+          retry_at_ms: now,
+          resources: [{ namespace: 'vm', resource: 'macos-vm', state: 'held', expires_at_ms: now }],
+        },
+      },
+    });
+    expect(why).toContain('Waits: a resource it needs is held');
+    expect(why).toContain('held until about 14:00 unless renewed');
+    const overview = (contention?: object[]) =>
+      String(
+        OrchestrationInspector({
+          timeline: demoTimeline('running'),
+          clock: demoClock,
+          overview: { contention } as never,
+        }),
+      );
+    expect(
+      overview([{ namespace: 'vm', resource: 'macos-vm', state: 'held', expires_at_ms: now, waiting: ['step-8'] }]),
+    ).toContain('Held until about 14:00 unless renewed · DOC-9 waits');
+    expect(overview([])).toContain('No work waits on a resource.');
+    expect(overview()).toContain('Reading who holds the resources work needs…');
+  });
+
   it('HS2-77SRHC lists the whole log newest first with Load Earlier while older decisions remain', () => {
     expect(String(OrchestrationDecisionsDialog({}))).toBe('');
     const open = String(

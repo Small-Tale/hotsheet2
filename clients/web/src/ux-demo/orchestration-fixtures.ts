@@ -349,3 +349,16 @@ export function demoDecisions(): SchedulerDecisionPage {
     ],
   };
 }
+
+/** HS2-5GRXFN: the scheduler plan's contention for the running timeline: the VM DOC-9 waits for. */
+export function demoContention() {
+  return [
+    {
+      namespace: 'vm',
+      resource: 'macos-vm',
+      state: 'held',
+      expires_at_ms: DEMO_NOW + 40 * MINUTE,
+      waiting: ['step-8'],
+    },
+  ];
+}

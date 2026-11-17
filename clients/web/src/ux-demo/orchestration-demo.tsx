@@ -15,7 +15,7 @@ import type { TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { demoClock, demoDecisions, demoTimeline } from './orchestration-fixtures';
+import { demoClock, demoContention, demoDecisions, demoTimeline } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
 /** HS2-J89JC7: the Orchestration view's production components with synthetic timelines. */
@@ -177,6 +177,23 @@ export function OrchestrationInspectorDemo() {
               { step_id: 'e2e-login', check: 'profile', state: 'skipped', reason: 'prerequisite_not_passed' },
             ],
             runRead: true,
+            // HS2-77SRHC, HS2-5GRXFN: DOC-9 is ready and waits for the VM someone holds.
+            explanation:
+              orchestrationDemoSettings.selected.value === 'step-8'
+                ? {
+                    standing: 'not_placed',
+                    reason: 'resource_held',
+                    retry_at_ms: timeline.now_ms + 40 * 60_000,
+                    resources: [
+                      {
+                        namespace: 'vm',
+                        resource: 'macos-vm',
+                        state: 'held',
+                        expires_at_ms: timeline.now_ms + 40 * 60_000,
+                      },
+                    ],
+                  }
+                : undefined,
             // HS2-0D60T8: DOC-7 was built ahead of WEB-33's CI, which failed.
             builtAhead:
               orchestrationDemoSettings.selected.value === 'step-5'
@@ -215,7 +232,7 @@ export function OrchestrationInspectorDemo() {
           timeline={timeline}
           projectName="Launch"
           clock={demoClock}
-          overview={{ decisions: demoDecisions() }}
+          overview={{ decisions: demoDecisions(), contention: demoContention() }}
         />
       </CatalogExample>
       <CatalogExample label="No Timeline Yet" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>

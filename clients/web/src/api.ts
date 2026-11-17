@@ -2378,6 +2378,14 @@ export class Api {
       { method: 'POST', body: JSON.stringify({ step_id: step, actor: { role: 'human', id: actorId } }) },
       false,
     );
+  /** HS2-5GRXFN: the schedule a pass would compute now, as this browser's person; a dry run that logs nothing. */
+  orchestrationSchedulerPlan = (checkout: string, actorId: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/scheduler/plan`,
+      { method: 'POST', body: JSON.stringify({ actor: { role: 'human', id: actorId } }) },
+      false,
+    );
   /** HS2-77SRHC: the newest scheduler decisions first, before `before` when given (paging back). */
   orchestrationDecisions = (checkout: string, page: { limit: number; before?: number }) =>
     this.parsed(

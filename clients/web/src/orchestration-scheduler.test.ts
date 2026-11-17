@@ -108,6 +108,7 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
       reason: 'cooldown',
       retry_at_ms: 3,
       detail: 'd',
+      resources: [],
     });
   });
 });

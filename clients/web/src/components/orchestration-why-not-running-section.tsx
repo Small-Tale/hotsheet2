@@ -1,12 +1,15 @@
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 
+import { resourceRows } from '../orchestration-resources';
 import { explanationRows, type SchedulerExplanation } from '../orchestration-scheduler';
-import type { TimelineItem } from '../orchestration-timeline';
+import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import type { ClockFormat } from '../orchestration-timeline-board';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
 
 export interface OrchestrationWhyNotRunningSectionProps {
   item: TimelineItem;
+  /** For the slugs of steps a resource was given to. */
+  timeline?: OrchestrationTimeline;
   /** `scheduler explain` for the card; absent until it is read. */
   explanation?: SchedulerExplanation;
   clock: ClockFormat;
@@ -21,6 +24,7 @@ const words = (code: string) => code.replaceAll('_', ' ');
  */
 export function OrchestrationWhyNotRunningSection({
   item,
+  timeline,
   explanation,
   clock,
 }: OrchestrationWhyNotRunningSectionProps) {
@@ -38,7 +42,11 @@ export function OrchestrationWhyNotRunningSection({
   return (
     <OrchestrationInspectorSection label="Why It Is Not Running">
       <ValueTable label="Why it is not running" density="compact" stackBelow="narrow">
-        {explanationRows(explanation, clock, item.placement?.at_ms).map((row) => (
+        {[
+          ...explanationRows(explanation, clock, item.placement?.at_ms),
+          // HS2-5GRXFN: the resources the work needs and any that is not free.
+          ...resourceRows(explanation.resources ?? [], timeline, clock),
+        ].map((row) => (
           <ValueTableRow label={row.label} value={row.value} />
         ))}
       </ValueTable>

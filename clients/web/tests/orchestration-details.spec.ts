@@ -328,3 +328,65 @@ test('HS2-77SRHC a ready card says why it is not running and the overview lists 
     await server.stop(page);
   }
 });
+
+test('HS2-5GRXFN a held resource shows on the deferred card and in the overview with who waits', async ({ page }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    // A ready step that needs the one VM, which someone holds through the claim service.
+    const ready = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
+      title: 'Run the synthetic VM smoke test',
+    });
+    await send(server, 'POST', `${base}/readiness/define`, {
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: ready.id,
+      prerequisites: [],
+      resources: [{ namespace: 'vm', resource: 'macos-vm' }],
+      actor: scheduler,
+    });
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: 'synthetic-tool' }], max_sessions: 2 }],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: { role: 'human', id: 'maintainer' },
+    });
+    const grant = await send(server, 'POST', '/resource-claims/vm/macos-vm/acquire', { duration_ms: 600_000 });
+    expect(grant.acquired).toBe(true);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+
+    // The overview: the resource, until when it is held, and the step that waits for it.
+    const resources = page.locator('[data-orchestration-overview] [data-orchestration-section="Resources"]');
+    await expect(resources).toContainText('vm/macos-vm', { timeout: 30_000 });
+    await expect(resources).toContainText(/Held until about .* unless renewed/);
+    await expect(resources).toContainText(`${ready.slug} waits`);
+    await visualPass(page, 'hs2-5grxfn', 'overview-resources', {
+      show: resources,
+      check: () => expect(resources).toContainText('vm/macos-vm'),
+      atPhone: () => page.locator('[data-action="toggle-ticket-inspector"]').first().click(),
+    });
+
+    // The deferred card: what it needs and how that resource stands.
+    await view.locator(`[data-ticket-slug="${ready.slug}"]`).click();
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    await expect(why).toContainText('Needs');
+    await expect(why).toContainText('vm/macos-vm');
+    await expect(why).toContainText(/held until about/);
+    await visualPass(page, 'hs2-5grxfn', 'why-resource', {
+      show: why,
+      check: () => expect(why).toContainText('vm/macos-vm'),
+      atPhone: () => view.locator(`[data-ticket-slug="${ready.slug}"]`).click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});

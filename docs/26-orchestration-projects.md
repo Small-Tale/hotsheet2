@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -3619,8 +3619,8 @@ and each deferred step's record carries the reason, the resource and the expiry.
 
 `scheduler explain` adds `resources`: every resource the work requires with its
 state, its machine, the expiry or the step that was given it, and `declared_by`
-(`step` or `target`). The orchestration workspace shows none of this yet
-(HS2-5GRXFN).
+(`step` or `target`). The Orchestration view shows both in its inspector (§26.30,
+HS2-5GRXFN).
 
 A step's run is dispatched before its session starts (§26.19), so the step is in
 progress, and out of the ready work, before the session can claim anything: its own
@@ -5385,3 +5385,20 @@ hotsheet-cli ... orchestration scheduler decisions --newest [--before <seq>] [--
 ```
 
 MCP `hotsheet_targets` `scheduler_decisions` takes `newest` and `before`.
+
+### Resources (HS2-5GRXFN)
+
+Resource contention (§26.20) shows from the scheduler's own answers, with no second
+source. A ready card's Why It Is Not Running adds **Needs** (every resource the work
+requires, `scheduler explain`'s `resources`) and a row for each one that is not free:
+"held until about 15:40 unless renewed", "given to API-12 in this pass", or that its
+claims or its machine could not be read; together with **Next** (the held claim's
+expiry is the scheduler's retry time) it says when to expect a change. The overview
+adds **Resources**: `scheduler plan`'s `contention`, each resource that deferred work
+with how it stands and the steps that wait for it ("vm/macos-vm: Held until about
+15:40 unless renewed · DOC-9 waits"), or "No work waits on a resource". The plan is a
+dry run that changes and logs nothing; the overview reads it as the browser's person,
+so each involved target's claims are read through the gate as an observation, whenever
+the timeline's version changes while the overview shows. A claim's holder is never
+reported (§26.20): a held resource says until when, and a resource given in a pass
+names the step it was given to.

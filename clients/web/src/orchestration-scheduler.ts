@@ -4,6 +4,7 @@
  * the Show All Decisions… dialog (`scheduler decisions` with `newest`). Pure; codes it does not know read
  * as their words. Identifiers and codes only, as the decision log holds.
  */
+import { parseRequiredResources, type ResourceStandingView } from './orchestration-resources';
 import type { OrchestrationTimeline } from './orchestration-timeline';
 import { type ClockFormat, toolLabel } from './orchestration-timeline-board';
 
@@ -35,6 +36,8 @@ export interface SchedulerExplanation {
   reason: string;
   detail?: string;
   retry_at_ms?: number;
+  /** HS2-5GRXFN: every resource the work requires and how this pass saw it. */
+  resources?: ResourceStandingView[];
 }
 
 const words = (code: string) => code.replaceAll('_', ' ');
@@ -177,5 +180,6 @@ export function parseExplanation(value: Record<string, unknown> | undefined): Sc
     reason: value.reason,
     detail: typeof value.detail === 'string' ? value.detail : undefined,
     retry_at_ms: typeof value.retry_at_ms === 'number' ? value.retry_at_ms : undefined,
+    resources: parseRequiredResources(value),
   };
 }

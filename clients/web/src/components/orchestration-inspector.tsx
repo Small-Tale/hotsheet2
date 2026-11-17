@@ -259,7 +259,12 @@ function RunSection({
   );
 }
 
-function stateDetail(item: TimelineItem, clock: ClockFormat, details?: OrchestrationInspectorDetails) {
+function stateDetail(
+  item: TimelineItem,
+  timeline: OrchestrationTimeline,
+  clock: ClockFormat,
+  details?: OrchestrationInspectorDetails,
+) {
   switch (item.state) {
     case 'waits_for_permission': {
       const permission = item.permission;
@@ -319,7 +324,14 @@ function stateDetail(item: TimelineItem, clock: ClockFormat, details?: Orchestra
         </OrchestrationInspectorSection>
       );
     case 'ready':
-      return <OrchestrationWhyNotRunningSection item={item} explanation={details?.explanation} clock={clock} />;
+      return (
+        <OrchestrationWhyNotRunningSection
+          item={item}
+          timeline={timeline}
+          explanation={details?.explanation}
+          clock={clock}
+        />
+      );
     case 'provisional':
     case 'running':
     case 'done':
@@ -426,7 +438,7 @@ export function OrchestrationInspector({
         </Row>
       </List>
       <WhereItRuns item={item} timeline={timeline} clock={clock} />
-      {stateDetail(item, clock, details)}
+      {stateDetail(item, timeline, clock, details)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.state === 'provisional' || details?.builtAhead ? (
         <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />
