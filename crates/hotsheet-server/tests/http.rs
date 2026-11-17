@@ -2526,8 +2526,11 @@ async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket
     let halt =
         || async { body_json(send("GET", "/terminals/watched", None).await).await["halt"].clone() };
     async fn eventually<F: std::future::Future<Output = bool>>(mut check: impl FnMut() -> F) {
-        // HS2-AY33TG: allow the macOS rollout watcher to register under full-suite load.
-        for _ in 0..1500 {
+        // HS2-AY33TG: allow the macOS rollout watcher to register under full-suite load. HS2-815R2V:
+        // a wall-clock bound, since a loaded gate stretched the old 1,500-iteration count past it;
+        // a passing check returns at once.
+        let deadline = std::time::Instant::now() + WATCHER_WAIT;
+        while std::time::Instant::now() < deadline {
             if check().await {
                 return;
             }
@@ -3534,7 +3537,9 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
     let until = |want: &'static [u64]| {
         let recorded = &recorded;
         async move {
-            for _ in 0..600 {
+            // HS2-815R2V: a wall-clock bound for the transcript follow under load.
+            let deadline = std::time::Instant::now() + WATCHER_WAIT;
+            while std::time::Instant::now() < deadline {
                 if recorded() == want {
                     return;
                 }
@@ -27287,6 +27292,11 @@ async fn hs2_6yxgkh_provider_ticket_lists_are_bounded() {
 // (HS2-RXWXQ8) ---
 
 /// Create a ticket in `store` claimed by `worker` under a far-future lease; returns its id.
+/// How long a test waits for a file-watcher-driven effect (a rollout watch or transcript follow)
+/// before failing (HS2-815R2V). Starting native streams on a loaded Mac took the former ~30 s
+/// iteration-count waits past their bound in full gates; this only stops a wait that never ends.
+const WATCHER_WAIT: std::time::Duration = std::time::Duration::from_secs(90);
+
 fn claimed_by(store: &FsStore, worker: &str) -> hotsheet_model::Ulid {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};
