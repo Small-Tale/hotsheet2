@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
+
 import { expect, type Page, test } from '@playwright/test';
 
 import { fakeGithubActions } from './fake-github-actions';
