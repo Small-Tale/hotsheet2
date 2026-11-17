@@ -54,6 +54,7 @@ fn outcome(end: ExecutionEnd, exit_code: Option<i32>, stdout: Option<&str>) -> E
     ExecutionOutcome {
         end,
         exit_code,
+        signal: None,
         started_at_ms: 1_000,
         duration_ms: 25,
         stdout: stdout.map(|sha256| StreamRef {

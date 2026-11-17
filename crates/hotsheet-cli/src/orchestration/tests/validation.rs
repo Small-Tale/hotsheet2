@@ -1159,11 +1159,18 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
     assert!(loud.stdout.is_none());
     let quick = sh("printf 0123456789ab", 10);
     assert_eq!(quick.end, ExecutionEnd::OutputLimit);
+    // HS2-H1EK8R: a signalled step names the signal, so its sender can be told apart.
     let killed = sh("kill -9 $$", 1024);
     assert_eq!(
-        (killed.end, killed.exit_code),
-        (ExecutionEnd::Signalled, None)
+        (killed.end, killed.exit_code, killed.signal),
+        (ExecutionEnd::Signalled, None, Some(9))
     );
+    let terminated = sh("kill -TERM $$", 1024);
+    assert_eq!(
+        (terminated.end, terminated.signal),
+        (ExecutionEnd::Signalled, Some(15))
+    );
+    assert_eq!(small.signal, None);
     // A step's children end with it.
     let started = std::time::Instant::now();
     let family = execute(
@@ -1178,11 +1185,147 @@ fn hs2_wn0mxz_the_hosted_half_runs_an_execution_id_once_and_bounds_what_it_reads
         None,
     );
     assert_eq!(family.end, ExecutionEnd::TimedOut);
+    // The host's own stop is its own end, never a signal from elsewhere.
+    assert_eq!(family.signal, None);
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
     assert_eq!(
         family.stdout.unwrap().bytes,
         0,
         "the stream ended: nothing still holds it"
+    );
+}
+
+/// HS2-H1EK8R: only a status that names a signal reads as `signalled`. A status the
+/// host could not read proves nothing, so the step is `exit_code_unknown` (unverified),
+/// never a failure by a signal nobody observed; an exit code is kept as it was.
+#[cfg(unix)]
+#[test]
+fn hs2_h1ek8r_only_an_observed_signal_reads_as_signalled() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    let settled = |status: Option<ExitStatus>| {
+        let mut outcome = crate::orchestration::validation::ended_for_test(ExecutionEnd::Exited);
+        crate::orchestration::validation::settle(&mut outcome, status);
+        outcome
+    };
+    let expected = hotsheet_ticketing::orchestration::ExpectedEvidence {
+        exit_code: 0,
+        stdout_sha256: None,
+    };
+    let lost = settled(None);
+    assert_eq!(
+        (lost.end, lost.exit_code, lost.signal),
+        (ExecutionEnd::Exited, None, None)
+    );
+    assert_eq!(
+        hotsheet_ticketing::orchestration::evaluate(&expected, &lost),
+        (ValidationState::Unverified, Some("exit_code_unknown"))
+    );
+    // A raw wait status: the exit code in the second byte, a signal in the low bits.
+    let exited = settled(Some(ExitStatus::from_raw(3 << 8)));
+    assert_eq!(
+        (exited.end, exited.exit_code, exited.signal),
+        (ExecutionEnd::Exited, Some(3), None)
+    );
+    let passed = settled(Some(ExitStatus::from_raw(0)));
+    assert_eq!(
+        hotsheet_ticketing::orchestration::evaluate(&expected, &passed),
+        (ValidationState::Passed, None)
+    );
+    let killed = settled(Some(ExitStatus::from_raw(libc::SIGKILL)));
+    assert_eq!(
+        (killed.end, killed.exit_code, killed.signal),
+        (ExecutionEnd::Signalled, None, Some(libc::SIGKILL))
+    );
+    assert_eq!(
+        hotsheet_ticketing::orchestration::evaluate(&expected, &killed),
+        (ValidationState::Failed, Some("terminated_by_signal"))
+    );
+}
+
+/// HS2-H1EK8R: a bare program name is found on the step's own PATH, as `execvp` would:
+/// the first executable regular file, relative entries under the step's root.
+#[cfg(unix)]
+#[test]
+fn hs2_h1ek8r_a_bare_program_is_found_on_the_steps_path() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let (plain, tools, other) = (
+        root.path().join("plain"),
+        root.path().join("tools"),
+        root.path().join("other"),
+    );
+    for dir in [&plain, &tools, &other] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    // Not executable, then a directory of that name: both passed over.
+    std::fs::write(plain.join("step"), "#!/bin/sh\n").unwrap();
+    std::fs::create_dir(other.join("step")).unwrap();
+    let script = tools.join("step");
+    std::fs::write(&script, "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let search = std::env::join_paths([plain.clone(), other.clone(), "tools".into()]).unwrap();
+    let on_path = crate::orchestration::validation::on_path;
+    assert_eq!(on_path("step", Some(&search), root.path()), Some(script));
+    assert_eq!(on_path("missing", Some(&search), root.path()), None);
+    assert_eq!(on_path("step", None, root.path()), None);
+}
+
+/// HS2-H1EK8R: a step named by a bare program starts without forking the hosting
+/// process. A fork of a multi-threaded host could abort in the child before `exec`
+/// (macOS libSystem fork handlers), which read as the step being SIGKILLed.
+#[cfg(unix)]
+#[test]
+fn hs2_h1ek8r_a_bare_program_starts_without_forking_the_host() {
+    static FORKS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+    extern "C" fn child_side() {
+        let fd = FORKS.load(std::sync::atomic::Ordering::SeqCst);
+        // SAFETY: `write` is async-signal-safe; the fd stays open for this test.
+        unsafe {
+            libc::write(fd, b"F".as_ptr().cast(), 1);
+        }
+    }
+    let marks = tempfile::NamedTempFile::new().unwrap();
+    let fd = std::os::fd::IntoRawFd::into_raw_fd(
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(marks.path())
+            .unwrap(),
+    );
+    FORKS.store(fd, std::sync::atomic::Ordering::SeqCst);
+    // SAFETY: registers a plain handler that only writes one byte.
+    assert_eq!(
+        unsafe { libc::pthread_atfork(None, None, Some(child_side)) },
+        0
+    );
+    let root = tempfile::tempdir().unwrap();
+    let ran = execute(
+        root.path(),
+        "true",
+        &[],
+        std::time::Duration::from_secs(20),
+        1024,
+        7,
+        &AtomicBool::new(false),
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        None,
+    );
+    assert_eq!((ran.end, ran.exit_code), (ExecutionEnd::Exited, Some(0)));
+    assert_eq!(
+        std::fs::metadata(marks.path()).unwrap().len(),
+        0,
+        "the step was spawned without a fork"
+    );
+    // The detector works: a bare name under a changed PATH is what std forks for.
+    let control = hotsheet_ticketing::git::launch("true")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .status()
+        .unwrap();
+    assert!(control.success());
+    assert!(
+        std::fs::metadata(marks.path()).unwrap().len() > 0,
+        "a forked spawn is seen"
     );
 }
 

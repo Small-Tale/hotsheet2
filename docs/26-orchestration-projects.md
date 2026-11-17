@@ -1378,7 +1378,11 @@ unique within that ticket.
   bytes and 32 arguments together.
 - A program with a directory part (`scripts/check.sh`) is the checkout's own file; a
   bare name is looked up on the host's `PATH`. Both run with the target checkout as
-  the working directory.
+  the working directory. On Unix the host resolves a bare name itself, on the `PATH`
+  the step receives, and starts the full path with `posix_spawn`. Starting a bare name
+  under a changed `PATH` would fork the multi-threaded host process. On macOS such a
+  forked child can abort before it runs the program, which reads as the step being
+  killed (HS2-H1EK8R). A name found nowhere on that `PATH` is `program_not_found`.
 
 ### Offering test profiles (HS2-YYNW9F)
 
@@ -1454,7 +1458,10 @@ list is `validation_invalid_transition`. A result begins `running`, or directly
 Each state other than `passed` and `running` carries a reason code:
 
 - `failed`: `exit_code_mismatch`, `output_mismatch`, `timed_out`,
-  `terminated_by_signal`, `output_limit_exceeded`.
+  `terminated_by_signal`, `output_limit_exceeded`. A step is `terminated_by_signal`
+  only when the operating system reported a signal for it; the outcome then names the
+  signal number. A status the host could not read is `exit_code_unknown` instead
+  (HS2-H1EK8R).
 - `skipped`: `prerequisite_not_passed`.
 - `unavailable`: `profile_not_defined`, `program_not_found`, `launch_failed`, or the
   target's own refusal code, such as `target_provider_unauthorized` for a read-only
@@ -1471,7 +1478,8 @@ Each state other than `passed` and `running` carries a reason code:
 
 A result holds its `result_id`, the caller's `operation_id`, the attempt number, the
 step revision, the state and reason, the actor, an optional `run_id`, and the
-outcome the host observed: how the execution ended, the exit code, when it started,
+outcome the host observed: how the execution ended, the exit code (or the signal
+number, HS2-H1EK8R), when it started,
 how long it took, and for each of standard output and standard error the SHA-256 and
 the size in bytes.
 

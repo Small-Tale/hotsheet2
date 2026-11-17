@@ -178,6 +178,7 @@ fn hs2_t2ks8g_an_older_reader_parses_a_newer_answer_with_an_extra_field() {
         outcome: Some(ExecutionOutcome {
             end: ExecutionEnd::Exited,
             exit_code: Some(0),
+            signal: None,
             started_at_ms: 1,
             duration_ms: 2,
             stdout: Some(StreamRef {

@@ -273,6 +273,10 @@ pub struct ExecutionOutcome {
     pub end: ExecutionEnd,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
+    /// HS2-H1EK8R: the signal number the operating system reported for a `signalled`
+    /// end, so the sender of an unexpected signal can be told apart (9 is a kill).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
     pub started_at_ms: u64,
     pub duration_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -211,11 +211,18 @@ fn ended(end: ExecutionEnd, started_at_ms: u64, started: Instant) -> ExecutionOu
     ExecutionOutcome {
         end,
         exit_code: None,
+        signal: None,
         started_at_ms,
         duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         stdout: None,
         stderr: None,
     }
+}
+
+/// HS2-H1EK8R: an outcome as [`execute_reporting`] starts it, for the settle tests.
+#[cfg(test)]
+pub(super) fn ended_for_test(end: ExecutionEnd) -> ExecutionOutcome {
+    ended(end, 0, Instant::now())
 }
 
 /// Read a stream to its end, keeping only its digest and size. Past `limit` it stops
@@ -391,15 +398,30 @@ pub(super) fn execute_reporting(
     // A relative program with a directory part is the checkout's own script; a bare
     // name is looked up on the host's PATH.
     let path = Path::new(program);
+    let environment = validation_environment(std::env::vars_os(), execution_id);
     let resolved = if path.is_relative() && path.components().count() > 1 {
         root.join(path)
+    } else if cfg!(unix) && path.is_relative() {
+        // HS2-H1EK8R: a bare name is looked up here, on the step's own PATH. Spawning a
+        // bare name under a changed PATH makes std fork this multi-threaded process; on
+        // macOS the forked child can then abort (SIGKILL, before exec) in libSystem's
+        // fork handlers when another thread was mid-initialization. A full path is
+        // spawned with posix_spawn, which runs no handlers in a copy of this process.
+        let search = environment
+            .iter()
+            .find(|(name, _)| name == "PATH")
+            .map(|(_, value)| value.clone());
+        match on_path(program, search.as_deref(), root) {
+            Some(found) => found,
+            None => return ended(ExecutionEnd::ProgramNotFound, started_at_ms, started),
+        }
     } else {
         path.to_path_buf()
     };
     let mut command = hotsheet_ticketing::git::launch(&resolved);
     command
         .env_clear()
-        .envs(validation_environment(std::env::vars_os(), execution_id))
+        .envs(environment)
         .args(args)
         .current_dir(root)
         .stdin(Stdio::null())
@@ -446,6 +468,9 @@ pub(super) fn execute_reporting(
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {}
+            // HS2-H1EK8R: a signal delivered to this process during the wait interrupts
+            // it; the child is still there to be asked again.
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => break None,
         }
         if cancel.load(Ordering::SeqCst) {
@@ -475,12 +500,55 @@ pub(super) fn execute_reporting(
         outcome.end = ExecutionEnd::OutputLimit;
     }
     if outcome.end == ExecutionEnd::Exited {
-        match status.and_then(|status| status.code()) {
-            Some(code) => outcome.exit_code = Some(code),
-            None => outcome.end = ExecutionEnd::Signalled,
-        }
+        settle(&mut outcome, status);
     }
     outcome
+}
+
+/// HS2-H1EK8R: the executable file a bare program name names on `search` (a PATH
+/// value), as `execvp` would find it: the first entry holding an executable regular
+/// file of that name. An empty or relative entry is relative to the step's `root`.
+pub(super) fn on_path(
+    program: &str,
+    search: Option<&std::ffi::OsStr>,
+    root: &Path,
+) -> Option<std::path::PathBuf> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::env::split_paths(search?)
+            .map(|entry| root.join(entry).join(program))
+            .find(|candidate| {
+                std::fs::metadata(candidate)
+                    .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+            })
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (search, root);
+        Some(std::path::PathBuf::from(program))
+    }
+}
+
+/// HS2-H1EK8R: how a step that ended by itself ended, from the status the operating
+/// system reported. Only a status without an exit code is `signalled`, with the signal
+/// it names. A status this process could not read proves nothing either way, so the
+/// step stays `exited` without a code (`exit_code_unknown`) instead of reporting a
+/// signal nobody observed.
+pub(super) fn settle(outcome: &mut ExecutionOutcome, status: Option<std::process::ExitStatus>) {
+    let Some(status) = status else {
+        return;
+    };
+    if let Some(code) = status.code() {
+        outcome.exit_code = Some(code);
+        return;
+    }
+    outcome.end = ExecutionEnd::Signalled;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        outcome.signal = status.signal();
+    }
 }
 
 fn hosted_reply(execution_id: &str, outcome: Option<ExecutionOutcome>) -> HostedValidation {

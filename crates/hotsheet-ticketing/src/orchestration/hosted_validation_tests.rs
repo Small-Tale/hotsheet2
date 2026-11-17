@@ -7,6 +7,7 @@ fn outcome(end: ExecutionEnd, exit_code: Option<i32>) -> ExecutionOutcome {
     ExecutionOutcome {
         end,
         exit_code,
+        signal: None,
         started_at_ms: 5,
         duration_ms: 7,
         stdout: None,

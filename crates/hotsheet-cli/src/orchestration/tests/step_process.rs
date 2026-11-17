@@ -10,7 +10,7 @@ use hotsheet_ticketing::orchestration::{
 
 use super::tickets::{machine, unsupported};
 use super::*;
-use crate::orchestration::step_process::process_started;
+use crate::orchestration::step_process::{process_started, spawned_started};
 use crate::orchestration::validation::{
     HostedExecutionState, HostedValidationCancel, HostedValidationStart,
 };
@@ -85,15 +85,21 @@ fn hs2_hts89s_an_orphaned_step_group_is_stopped_and_nothing_else_is() {
         60,
         StepProcess {
             pid: orphan.id(),
-            started: process_started(orphan.id()).unwrap(),
+            started: spawned_started(orphan.id()).unwrap(),
             host_pid: dead_pid,
             host_started: dead_started,
         },
     );
     // 2. Its leader ended, a member still runs: the group can only be the step's.
-    let mut leader = group("sleep 30 & echo $! > member; exit 0", &root);
+    // HS2-H1EK8R: the leader waits until its start time is read; an exited leader
+    // (a zombie) has none to read, which a loaded machine reached first.
+    let mut leader = group(
+        "sleep 30 & echo $! > member; while [ ! -e go ]; do sleep 0.02; done; exit 0",
+        &root,
+    );
     let leader_pid = leader.id();
-    let leader_started = process_started(leader_pid).unwrap();
+    let leader_started = spawned_started(leader_pid).unwrap();
+    std::fs::write(root.join("go"), "").unwrap();
     leader.wait().unwrap();
     let member: u32 = std::fs::read_to_string(root.join("member"))
         .unwrap()
@@ -120,7 +126,7 @@ fn hs2_hts89s_an_orphaned_step_group_is_stopped_and_nothing_else_is() {
         62,
         StepProcess {
             pid: stranger.id(),
-            started: process_started(stranger.id()).unwrap() + 1,
+            started: spawned_started(stranger.id()).unwrap() + 1,
             host_pid: dead_pid,
             host_started: dead_started,
         },
@@ -133,7 +139,7 @@ fn hs2_hts89s_an_orphaned_step_group_is_stopped_and_nothing_else_is() {
         63,
         StepProcess {
             pid: hosted.id(),
-            started: process_started(hosted.id()).unwrap(),
+            started: spawned_started(hosted.id()).unwrap(),
             host_pid: me.0,
             host_started: me.1,
         },
@@ -238,7 +244,7 @@ fn hs2_hts89s_a_running_step_records_its_group_and_a_cancel_stops_an_orphan() {
         71,
         StepProcess {
             pid: orphan.id(),
-            started: process_started(orphan.id()).unwrap(),
+            started: spawned_started(orphan.id()).unwrap(),
             host_pid: dead_pid,
             host_started: dead_started,
         },

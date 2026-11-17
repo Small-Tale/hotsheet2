@@ -21497,6 +21497,10 @@ components:
             - cancelled
         exit_code:
           type: integer
+        signal:
+          description: HS2-H1EK8R. The signal number the operating system reported for a `signalled` end.
+          type: integer
+          minimum: 1
         started_at_ms:
           type: integer
           minimum: 0

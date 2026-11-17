@@ -465,6 +465,7 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
         ExecutionOutcome {
             end: ExecutionEnd::Cancelled,
             exit_code: None,
+            signal: None,
             started_at_ms: spec.started_at_ms,
             duration_ms: 0,
             stdout: None,
