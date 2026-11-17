@@ -5,6 +5,7 @@ import { expect, type Locator, test } from '@playwright/test';
 
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-D0QTGB: a question a Codex session asks through `request_user_input_async` reaches the
 // in-app prompt from its own rollout, across resize, and clears when the terminal answers it.
@@ -41,9 +42,7 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     });
     expect(report.status).toBe(204);
     const page = await app.launch();
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
 
     await appendFile(
       rollout,

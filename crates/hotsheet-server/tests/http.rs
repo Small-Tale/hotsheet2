@@ -2526,8 +2526,11 @@ async fn hs2_cyhawb_an_in_process_codex_rollout_halts_resumes_and_records_ticket
     let halt =
         || async { body_json(send("GET", "/terminals/watched", None).await).await["halt"].clone() };
     async fn eventually<F: std::future::Future<Output = bool>>(mut check: impl FnMut() -> F) {
-        // HS2-AY33TG: allow the macOS rollout watcher to register under full-suite load.
-        for _ in 0..1500 {
+        // HS2-AY33TG: allow the macOS rollout watcher to register under full-suite load. HS2-815R2V:
+        // a wall-clock bound, since a loaded gate stretched the old 1,500-iteration count past it;
+        // a passing check returns at once.
+        let deadline = std::time::Instant::now() + WATCHER_WAIT;
+        while std::time::Instant::now() < deadline {
             if check().await {
                 return;
             }
@@ -2868,6 +2871,115 @@ async fn hs2_h8bzgy_a_restarted_server_resumes_a_codex_rollout_watch_and_records
     std::fs::write(&persisted, record).unwrap();
     hotsheet_server::resume_codex_session_watches(&server(), &[]);
     assert!(!persisted.exists());
+}
+
+/// HS2-5YCGH5: an interactive Claude session in a Hot Sheet terminal narrates its turns and
+/// tools through the same activity mapping as driven turns, attributed to the session and the
+/// ticket the terminal's worker claims. Only the connected session may report, an unmapped hook
+/// records nothing, and no file contents reach the timeline.
+#[tokio::test]
+async fn hs2_5ycgh5_an_interactive_claude_terminal_session_is_narrated() {
+    let (dir, state) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let router = app(state);
+    let send = |path: &'static str, body: serde_json::Value| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed("POST", path, Some(&body.to_string())))
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    assert_eq!(
+        send(
+            "/terminals",
+            serde_json::json!({"command":"cat","id":"claude-say"})
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            "/terminals/claude-say/ai-connection",
+            serde_json::json!({"agent":"claude","session_id":"live-session"}),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let ticket = claimed_by(&store, "terminal-claude-say");
+    let hook =
+        |hook: serde_json::Value| serde_json::json!({ "session_id": "live-session", "hook": hook });
+    let endpoint = "/terminals/claude-say/claude-activity";
+    assert_eq!(
+        send(endpoint, serde_json::json!({ "session_id": "other", "hook": {"hook_event_name":"UserPromptSubmit"} })).await,
+        StatusCode::CONFLICT
+    );
+    // The turn boundaries arrive as the usage `claude-turn` reports the hook already sends; a
+    // repeated prompt or Stop narrates nothing twice.
+    let transcript_dir = dir.path().join("projects").join("fixture");
+    std::fs::create_dir_all(&transcript_dir).unwrap();
+    let transcript = transcript_dir.join("live-session.jsonl");
+    let turn = |event: &str| {
+        serde_json::json!({
+            "event": event, "session_id": "live-session",
+            "transcript_path": transcript.to_string_lossy(),
+        })
+    };
+    let turns = "/terminals/claude-say/claude-turn";
+    assert_eq!(send(turns, turn("start")).await, StatusCode::NO_CONTENT);
+    assert_eq!(send(turns, turn("start")).await, StatusCode::NO_CONTENT);
+    for (event, extra) in [
+        (
+            "PreToolUse",
+            serde_json::json!({ "tool_name": "Bash", "tool_input": { "command": "cargo test" } }),
+        ),
+        (
+            "PreToolUse",
+            serde_json::json!({ "tool_name": "Edit", "tool_input": { "file_path": "src/lib.rs", "new_string": "secret body" } }),
+        ),
+        ("PermissionRequest", serde_json::json!({})),
+    ] {
+        let mut body = extra;
+        body["hook_event_name"] = event.into();
+        body["session_id"] = "live-session".into();
+        assert_eq!(
+            send(endpoint, hook(body)).await,
+            StatusCode::NO_CONTENT,
+            "{event}"
+        );
+    }
+    std::fs::write(&transcript, "").unwrap();
+    assert_eq!(send(turns, turn("stop")).await, StatusCode::NO_CONTENT);
+    let events = hotsheet_ticketing::activity::read_recent(&store).unwrap();
+    let kinds: Vec<_> = events
+        .iter()
+        .map(|event| serde_json::to_value(event.kind).unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            serde_json::json!("turn_start"),
+            serde_json::json!("command"),
+            serde_json::json!("edit"),
+            serde_json::json!("turn_end"),
+        ]
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.session.as_deref() == Some("live-session")
+                && event.ticket.as_deref() == Some(ticket.to_string().as_str())
+                && event.tool == "claude")
+    );
+    assert_eq!(events[1].detail["command"], "cargo test");
+    assert_eq!(events[2].detail["path"], "src/lib.rs");
+    assert!(
+        !serde_json::to_string(&events)
+            .unwrap()
+            .contains("secret body")
+    );
 }
 
 #[tokio::test]
@@ -3425,7 +3537,9 @@ async fn hs2_jw6n67_claude_subagent_usage_is_recorded_once_and_resumes_after_res
     let until = |want: &'static [u64]| {
         let recorded = &recorded;
         async move {
-            for _ in 0..600 {
+            // HS2-815R2V: a wall-clock bound for the transcript follow under load.
+            let deadline = std::time::Instant::now() + WATCHER_WAIT;
+            while std::time::Instant::now() < deadline {
                 if recorded() == want {
                     return;
                 }
@@ -27355,6 +27469,11 @@ async fn hs2_6yxgkh_provider_ticket_lists_are_bounded() {
 // (HS2-RXWXQ8) ---
 
 /// Create a ticket in `store` claimed by `worker` under a far-future lease; returns its id.
+/// How long a test waits for a file-watcher-driven effect (a rollout watch or transcript follow)
+/// before failing (HS2-815R2V). Starting native streams on a loaded Mac took the former ~30 s
+/// iteration-count waits past their bound in full gates; this only stops a wait that never ends.
+const WATCHER_WAIT: std::time::Duration = std::time::Duration::from_secs(90);
+
 fn claimed_by(store: &FsStore, worker: &str) -> hotsheet_model::Ulid {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

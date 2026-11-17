@@ -126,6 +126,7 @@ import { copyText } from '../copy-text';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
 import { syncDesktopWindowTheme } from '../desktop-window-theme';
+import { developmentStrategyTagSuggestions } from '../development-strategy-tags';
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
@@ -379,7 +380,6 @@ export async function startHotSheetWebClient() {
     workerSources = signal<WorkerCoverageSource[] | undefined>(undefined),
     workerLoading = signal(false);
   const developmentReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
-    developmentPreviewReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
     developmentDrafts = signal<Record<string, DevelopmentStrategyDraft | undefined>>({}),
     developmentMessages = signal<Record<string, string>>({}),
     developmentStatuses = signal<Record<string, string>>({}),
@@ -1837,7 +1837,6 @@ export async function startHotSheetWebClient() {
       const report = await new Api(current.apiPath, '').developmentStrategy(id);
       if (developmentReadVersions.get(id) !== version) return;
       developmentReports.value = { ...developmentReports.value, [id]: report };
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
       developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(report) };
     } catch (error) {
       if (developmentReadVersions.get(id) !== version) return;
@@ -1877,7 +1876,6 @@ export async function startHotSheetWebClient() {
     };
     developmentMessages.value = { ...developmentMessages.value, [current.id]: '' };
     developmentStatuses.value = { ...developmentStatuses.value, [current.id]: '' };
-    developmentPreviewReports.value = { ...developmentPreviewReports.value, [current.id]: undefined };
   }
   async function saveDevelopmentStrategy() {
     const current = project();
@@ -1894,7 +1892,6 @@ export async function startHotSheetWebClient() {
         saved = await new Api(current.apiPath, '').saveDevelopmentStrategy(id, policy);
       invalidateDevelopmentReads(id);
       developmentReports.value = { ...developmentReports.value, [id]: saved };
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
       if (developmentDrafts.value[id] === draft) {
         developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(saved) };
       }
@@ -1906,34 +1903,6 @@ export async function startHotSheetWebClient() {
       };
     } finally {
       developmentSaving.value = { ...developmentSaving.value, [id]: false };
-    }
-  }
-  async function previewDevelopmentStrategy() {
-    const current = project();
-    if (!current) return;
-    const id = current.id,
-      draft = developmentDrafts.value[id];
-    if (!draft) return;
-    const version = invalidateDevelopmentReads(id);
-    developmentMessages.value = { ...developmentMessages.value, [id]: '' };
-    developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
-    try {
-      const report = await new Api(current.apiPath, '').developmentStrategy(id, {
-        session: draft.sessionOverride.trim() || undefined,
-        ticket: draft.ticketOverride.trim() || undefined,
-      });
-      if (developmentReadVersions.get(id) !== version) return;
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: report };
-      developmentStatuses.value = {
-        ...developmentStatuses.value,
-        [id]: 'Effective policy preview; project settings unchanged.',
-      };
-    } catch (error) {
-      if (developmentReadVersions.get(id) !== version) return;
-      developmentMessages.value = {
-        ...developmentMessages.value,
-        [id]: error instanceof Error ? error.message : String(error),
-      };
     }
   }
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
@@ -2007,7 +1976,32 @@ export async function startHotSheetWebClient() {
     const capabilities = newTicketSource()?.capabilities;
     return (capabilities?.create ?? true) && (capabilities?.attachments ?? true);
   };
-  const tagSuggestions = () => [...new Set(tickets.value.flatMap((ticket) => ticket.tags))];
+  // Existing tags plus a development-strategy override tag for each strategy this project can use,
+  // including its own custom ones once its policy has been read (HS2-PN74AH).
+  const tagSuggestions = () => [
+    ...new Set([
+      ...tickets.value.flatMap((ticket) => ticket.tags),
+      ...developmentStrategyTagSuggestions(developmentReports.value[project()?.id ?? '']),
+    ]),
+  ];
+  // Read the project's strategy policy once, when a ticket is first selected there, so the tag
+  // editor can offer its custom strategies. One attempt per project server, never retried in a loop.
+  const strategyTagReads = new Set<string>();
+  effect(() => {
+    const current = project();
+    if (!current || selectedTicketSlugs.value.length === 0) return;
+    const key = `${current.id}:${current.apiPath}`;
+    if (strategyTagReads.has(key)) return;
+    strategyTagReads.add(key);
+    if (developmentReports.peek()[current.id]) return;
+    void new Api(current.apiPath, '').developmentStrategy(current.id).then(
+      (report) => {
+        if (!developmentReports.peek()[current.id])
+          developmentReports.value = { ...developmentReports.peek(), [current.id]: report };
+      },
+      () => undefined,
+    );
+  });
   const api = () => new Api(project()?.apiPath ?? '');
   const advisoryClaimResource = createAdvisoryClaimResource(api);
   // Created on first advisory use, never at startup: a page whose random source fails must
@@ -4558,7 +4552,12 @@ export async function startHotSheetWebClient() {
         }),
       );
       if (totals.some((total) => total === undefined || !total.complete)) return undefined;
-      return totals.reduce((sum, total) => sum + (total?.tokens ?? 0), 0);
+      // HS2-9V4CGN: the cost stands only when every store reported it and priced all its usage.
+      const priced = totals.every((total) => total?.cost_usd !== undefined && total.unpriced_tokens === 0);
+      return {
+        tokens: totals.reduce((sum, total) => sum + (total?.tokens ?? 0), 0),
+        costUsd: priced ? totals.reduce((sum, total) => sum + (total?.cost_usd ?? 0), 0) : null,
+      };
     },
   });
   let standbySettingsServer: string | undefined;
@@ -5250,7 +5249,7 @@ export async function startHotSheetWebClient() {
         sourceIds = new Set(gitSources),
         currentStream = current && workerStreamKey === `${current.id}:${current.apiPath}:${gitSources.join(',')}`;
       return {
-        report: developmentPreviewReports.value[projectId] ?? developmentReports.value[projectId],
+        report: developmentReports.value[projectId],
         draft: developmentDrafts.value[projectId],
         loading: developmentLoading.value[projectId] ?? false,
         saving: developmentSaving.value[projectId] ?? false,
@@ -6868,7 +6867,6 @@ export async function startHotSheetWebClient() {
     setSettingsCategory,
     updateDevelopmentStrategyField,
     saveDevelopmentStrategy,
-    previewDevelopmentStrategy,
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,

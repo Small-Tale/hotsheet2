@@ -1063,6 +1063,9 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
     let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(&executable, permissions).unwrap();
+    // HS2-9K9CP7: the CLI gives `rulesync --version` 5 s. Under full-suite load the fixture's
+    // first exec can take longer, so launch it once without a deadline first.
+    first_launch::launched(&executable, &["--version"]);
     let path = std::env::join_paths(
         std::iter::once(bin.clone())
             .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
@@ -1079,8 +1082,8 @@ fn standalone_rulesync_update_cli_reports_lock_state_without_writing() {
         .stdout
         .clone();
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
-    assert_eq!(report["state"], "outdated");
-    assert_eq!(report["executable_version"], "38.0.0");
+    assert_eq!(report["state"], "outdated", "report: {report}");
+    assert_eq!(report["executable_version"], "38.0.0", "report: {report}");
     assert_eq!(report["sources"][0]["locked_ref"], "first");
     assert_eq!(report["sources"][0]["latest_ref"], "second");
     assert_eq!(
@@ -2639,6 +2642,7 @@ const HOOK_TESTS: &[&str] = &[
     "permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection",
     "claude_session_start_reports_its_inbox_socket_token_and_version",
     "hs2_ssmdq1_permission_hook_reconnects_a_session_the_server_forgot_and_retries",
+    "hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents",
 ];
 
 #[test]
@@ -3148,6 +3152,46 @@ fn permission_hook_reports_claude_turn_boundaries_without_prompt_content() {
         );
         assert!(!requests[0].2.contains("private prompt text"));
     }
+}
+
+/// HS2-5YCGH5: an interactive Claude session's tool call in a Hot Sheet terminal is reported to
+/// the server's activity ingest as one request carrying only the tool, command, and path, never
+/// the file contents; the hook prints no decision, so Claude's own flow is untouched.
+#[test]
+fn hs2_5ycgh5_permission_hook_reports_claude_tool_activity_without_file_contents() {
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || capture_one_request(listener));
+    let input = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "session_id": "native-session",
+        "tool_name": "Write",
+        "tool_input": { "file_path": "src/notes.md", "content": "private file body" },
+        "transcript_path": "/tmp/projects/fixture/native-session.jsonl"
+    });
+    hook_cli()
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_TERMINAL_ID", "claude-7")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .env_remove("HOTSHEET_CLAUDE_PRETOOLUSE")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(input.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    let (line, secret, body) = server.join().unwrap();
+    assert_eq!(line, "POST /terminals/claude-7/claude-activity HTTP/1.1");
+    assert_eq!(secret, "terminal-secret");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["session_id"], "native-session");
+    assert_eq!(body["hook"]["tool_name"], "Write");
+    assert_eq!(
+        body["hook"]["tool_input"],
+        serde_json::json!({ "file_path": "src/notes.md" })
+    );
+    assert!(!body.to_string().contains("private file body"));
 }
 
 /// HS2-SSMDQ1: a restarted server answers a turn report with "not connected". The hook then
@@ -11179,6 +11223,140 @@ fn hs2_qr1k8r_sync_continues_an_unfinished_rebase_and_defers_commits_meanwhile()
     hs(&peer).args(["show", &during]).assert().success();
 }
 
+/// HS2-RDPT34 end to end with real CLI processes: a recovery that set a ticket write aside
+/// and died before writing it back leaves it only in its `-saved-writes` backup ref.
+/// `sync --status` names it and the restore command, `sync --restore-saved-writes` writes
+/// it back and commits it once, a second run changes nothing, and `sync` publishes it.
+#[test]
+fn hs2_rdpt34_restore_saved_writes_recovers_a_write_an_interrupted_recovery_stranded() {
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "--bare", "--quiet"]);
+    let a = tempfile::tempdir().unwrap();
+    let a = a.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    git(
+        a,
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    let slug = new_ticket(a, "saved during a stall");
+    hs(a).arg("sync").assert().success();
+    let file = git(
+        a,
+        &[
+            "grep",
+            "-l",
+            &format!("slug: {slug}"),
+            "HEAD",
+            "--",
+            "tickets",
+        ],
+    );
+    let file = file.trim_start_matches("HEAD:").to_string();
+
+    // The shape an interrupted recovery leaves: the saved write in a backup commit on the
+    // HEAD it was saved on, under a `-saved-writes` ref; the branch's version in the tree.
+    let original = std::fs::read_to_string(a.join(&file)).unwrap();
+    let saved = original.replace("saved during a stall", "retitled during the stall");
+    assert_ne!(saved, original);
+    std::fs::write(a.join(&file), &saved).unwrap();
+    git(a, &["add", "--", &file]);
+    let tree = git(a, &["write-tree"]);
+    let commit = git(
+        a,
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            "HEAD",
+            "-m",
+            "Hot Sheet: changes saved while a rebase or merge was unfinished",
+        ],
+    );
+    let backup_ref = "refs/hotsheet/sync-backup/1700000000000000000-saved-writes";
+    git(a, &["update-ref", backup_ref, &commit]);
+    git(a, &["reset", "--quiet", "--hard", "HEAD"]);
+    assert_eq!(std::fs::read_to_string(a.join(&file)).unwrap(), original);
+
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert_eq!(
+        status["stranded_saved_writes"],
+        serde_json::json!([{ "backup_ref": backup_ref, "paths": [file] }])
+    );
+    assert!(
+        status["next_action"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("--restore-saved-writes {backup_ref}")),
+        "{status}"
+    );
+    hs(a)
+        .args(["sync", "--status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "1 change saved during an interrupted",
+        ));
+
+    let before = git(a, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--restore-saved-writes", backup_ref])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Restored 1 change saved under"));
+    assert_eq!(git(a, &["rev-parse", "HEAD^"]), before);
+    hs(a)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("retitled during the stall"));
+    let status = hs(a)
+        .args(["sync", "--status", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: serde_json::Value = serde_json::from_slice(&status).unwrap();
+    assert!(status.get("stranded_saved_writes").is_none(), "{status}");
+
+    // Idempotent, and the conflicting flags are refused.
+    let after = git(a, &["rev-parse", "HEAD"]);
+    hs(a)
+        .args(["sync", "--restore-saved-writes", backup_ref])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing to restore"));
+    assert_eq!(git(a, &["rev-parse", "HEAD"]), after);
+    hs(a)
+        .args(["sync", "--status", "--restore-saved-writes", backup_ref])
+        .assert()
+        .failure();
+    hs(a).arg("sync").assert().success();
+    assert_eq!(git(a, &["rev-parse", "@{u}"]), after);
+}
+
 /// HS2-JGH11Q end to end with real CLI processes: a person pauses a rebase in the store;
 /// ticket edits made meanwhile are saved but not committed onto the detached `HEAD`, the
 /// status says so, `sync --abort-stalled-rebase` keeps and commits them on the branch,
@@ -14003,6 +14181,7 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
 
     // The machine host, anchored on the bootstrap store, exactly as headless launch starts it.
     let cli_bin = workspace_bin::path("hotsheet-cli");
+    let serve_log = root.path().join("serve.stderr");
     let mut serve = std::process::Command::new(&cli_bin)
         .arg("--test-fixture-credentials")
         .arg("-C")
@@ -14017,7 +14196,8 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
         .env("CLAUDE_CONFIG_DIR", home.join("claude-home"))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        // HS2-TX1AZ7: keep the host's diagnostics, so an exit during startup says why.
+        .stderr(std::fs::File::create(&serve_log).unwrap())
         .spawn()
         .unwrap();
     let mut ready = false;
@@ -14026,10 +14206,12 @@ fn hs2_82a7a7_ticket_flow_and_activity_read_the_project_through_the_machine_host
             ready = true;
             break;
         }
-        assert!(
-            serve.try_wait().unwrap().is_none(),
-            "machine host exited during startup"
-        );
+        if let Some(status) = serve.try_wait().unwrap() {
+            panic!(
+                "machine host exited during startup ({status}): {}",
+                std::fs::read_to_string(&serve_log).unwrap_or_default()
+            );
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(ready, "machine host did not become ready");

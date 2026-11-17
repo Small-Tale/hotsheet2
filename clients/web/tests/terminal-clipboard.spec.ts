@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 // HS2-FRB545: phone terminals copy their text through a selectable sheet and paste from the clipboard,
@@ -25,9 +26,7 @@ async function installPhone(page: Page) {
 
 async function openProject(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 async function openFocusedDrawerTerminal(page: Page) {

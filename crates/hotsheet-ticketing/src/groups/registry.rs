@@ -68,6 +68,11 @@ impl GroupRegistry {
         super::git_sync::read_status(&self.root)
     }
 
+    /// The code checkout this registry belongs to.
+    pub fn checkout_root(&self) -> &Path {
+        &self.root
+    }
+
     /// The directory holding the entry files.
     pub fn dir(&self) -> PathBuf {
         self.root.join(GROUP_REGISTRY_DIR)

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -40,9 +41,7 @@ async function openProject(page: Page, server: Server, providers?: (body: unknow
     }
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 /** Select a ticket and return its Info tab's Blocked By section and Add Blocker action. */

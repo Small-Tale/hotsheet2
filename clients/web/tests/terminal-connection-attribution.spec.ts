@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import type { PermissionRequest, PollResponse, TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 import { printThenEcho } from './terminal-fixture-command';
 
 const TARGET = 'codex-synthetic-target';
@@ -27,9 +28,7 @@ test('reconciles independent hook and MCP attribution without guessing terminal 
     // Advance only the browser's local grace display. The isolated server and MCP TTL
     // retain real time; no network polling interval is accelerated by this simulation.
     await page.clock.install();
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     const tab = (id: string) => drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
@@ -283,9 +282,7 @@ test('keeps every hooked session connected and marks one primary across close an
     await open('primary-a');
     await open('primary-b');
     const page = await app.launch();
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     const tab = (id: string) => drawer.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);

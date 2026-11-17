@@ -6,6 +6,7 @@ import {
   beginAwayRecord,
   completionsBetween,
   finishAwayDigest,
+  formatAwayCost,
   formatAwayDuration,
   observeAwayHost,
   observeAwayStates,
@@ -203,12 +204,16 @@ describe('away digest (HS2-JJ9RYN)', () => {
     const record = beginAwayRecord([before], T0);
     // No snapshot during a long standby (the reported 27 minutes): the window read counts what the
     // five-minute snapshot series could not.
-    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, 48_000)).toMatchObject({ tokens: 48_000 });
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, { tokens: 48_000, costUsd: null })).toMatchObject({
+      tokens: 48_000,
+    });
     // The read failed and nothing was seen: unknown, not 0, and an otherwise quiet standby stays silent.
     expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE)).toBeUndefined();
     expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE)).toMatchObject({ tokens: null });
     // A read of zero is a real zero.
-    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE, 0)).toMatchObject({ tokens: 0 });
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE, { tokens: 0, costUsd: 0 })).toMatchObject({
+      tokens: 0,
+    });
     // Snapshot minutes count when the read failed, and the read never reports fewer than they saw.
     observeAwayStates(
       record,
@@ -226,7 +231,30 @@ describe('away digest (HS2-JJ9RYN)', () => {
       T0 + MINUTE,
     );
     expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE)).toMatchObject({ tokens: 700 });
-    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, 500)).toMatchObject({ tokens: 700 });
+    expect(finishAwayDigest(record, [before], 0, T0 + 27 * MINUTE, { tokens: 500, costUsd: 0.4 })).toMatchObject({
+      tokens: 700,
+      // The window's cost covered 500 tokens, not the 700 shown, so no cost is claimed (HS2-9V4CGN).
+      costUsd: null,
+    });
+  });
+
+  it('HS2-9V4CGN carries the window cost when every token was priced, and none otherwise', () => {
+    const before = store();
+    const record = beginAwayRecord([before], T0);
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE, { tokens: 412_000, costUsd: 6.2 })).toMatchObject({
+      tokens: 412_000,
+      costUsd: 6.2,
+    });
+    // An unpriced model (or a server without cost) leaves the tokens alone.
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE, { tokens: 412_000, costUsd: null })).toMatchObject({
+      costUsd: null,
+    });
+    // Without a window read only the snapshots counted, and they carry no cost.
+    expect(finishAwayDigest(record, [before], 1, T0 + 27 * MINUTE)).toMatchObject({ costUsd: null });
+    expect(formatAwayCost(6.2)).toBe('$6.20');
+    expect(formatAwayCost(1234.5)).toBe('$1,234.50');
+    expect(formatAwayCost(0)).toBe('$0.00');
+    expect(formatAwayCost(0.003)).toBe('<$0.01');
   });
 
   it('counts completions inside the window once across projects that share a store', () => {

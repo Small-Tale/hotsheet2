@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const sourceProject = {
   id: 'source-project',
@@ -220,9 +221,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
 
   await page.setViewportSize({ width: 1080, height: 1190 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Hot Sheet 2' })).toHaveAttribute('aria-selected', 'true');

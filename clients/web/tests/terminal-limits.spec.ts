@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
@@ -37,9 +38,7 @@ test('saves machine-wide terminal limits and updates mounted terminals', async (
     expect(initial.configured).toEqual({ history_lines: null, replay_bytes: null, warm_terminals: null });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('tab', { name: 'Terminal feedback' }).click();
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await page.getByRole('tab', { name: 'Nano Busy' }).click();
@@ -112,9 +111,7 @@ test('shows Terminal memory settings on a fresh phone viewport (HS2-ZWVDTZ)', as
       await route.fulfill({ response });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
     await page.getByRole('button', { name: 'Terminal memory', exact: true }).click();

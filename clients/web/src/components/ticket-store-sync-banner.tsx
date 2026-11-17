@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CloudAlert } from 'lucide';
 
@@ -107,14 +108,69 @@ export function aiHelpSentence(help: TicketStoreAiHelp): string {
   }
 }
 
+/**
+ * Whether the server's next step already says whom Hot Sheet asked and how that went (HS2-GEF1AS). For an
+ * ask in progress or a session that ended, the server's next step restates it, so the strip shows it once;
+ * a failed ask or a ticket-only fallback keeps the client sentence, since the next step only names the
+ * procedure.
+ */
+export function restatesAiHelp(help: TicketStoreAiHelp, nextAction: string | undefined): boolean {
+  if (!nextAction) return false;
+  return help.outcome === 'started' || help.outcome === 'session_asked' || help.outcome === 'finished';
+}
+
 /** The server's reason as a sentence: its first letter capitalized. */
 function sentence(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  const plain = plainServerText(text);
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
+}
+
+/**
+ * Server sentences mark commands as Markdown code spans, a command between backticks. The strip shows
+ * plain text, so the delimiters are dropped rather than shown as literal backticks (HS2-GN2S3F).
+ */
+export function plainServerText(text: string): string {
+  return text.replace(/`+([^`]+)`+/g, '$1');
 }
 
 function unpublishedSentence(count: number): string {
   if (count === 0) return 'Tickets are saved on this computer.';
   return `Tickets are saved on this computer, but ${count.toLocaleString('en-US')} local ${count === 1 ? 'change is' : 'changes are'} not published.`;
+}
+
+/**
+ * The project's ticket stores holding ticket changes an interrupted rebase or merge recovery saved but
+ * never wrote back (HS2-RDPT34, HS2-1HRYD9). Those edits exist only in a Hot Sheet backup ref until
+ * `hotsheet-cli sync --restore-saved-writes` restores them, whatever the store's publication state.
+ */
+export function strandedTicketStores(report: TicketStoreSyncReport | undefined): FailingStore[] {
+  return (report?.stores ?? []).filter(({ health }) => (health.stranded_saved_writes ?? []).length > 0);
+}
+
+/** How many changes a store holds stranded, across its backup refs. */
+export function strandedChangeCount(health: TicketStoreSyncHealth): number {
+  return (health.stranded_saved_writes ?? []).reduce((total, saved) => total + saved.paths.length, 0);
+}
+
+/** The title and detail of the stranded-changes strip, or `undefined` when no store holds any. */
+export function strandedBannerCopy(stranded: FailingStore[]): { title: string; detail: string } | undefined {
+  const first = stranded.at(0);
+  if (!first) return;
+  const count = strandedChangeCount(first.health),
+    others = stranded.length - 1,
+    changes = `${count.toLocaleString('en-US')} ticket ${count === 1 ? 'change' : 'changes'}`;
+  return {
+    title: `${changes} in ${first.label} ${count === 1 ? 'was' : 'were'} never restored`,
+    detail: [
+      'A rebase or merge recovery set them aside and stopped before writing them back; they are kept only in a Hot Sheet backup.',
+      first.health.next_action && plainServerText(first.health.next_action),
+      others > 0
+        ? `${others} more ${others === 1 ? 'store holds' : 'stores hold'} changes to restore; run hotsheet-cli sync --status in each.`
+        : undefined,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(' '),
+  };
 }
 
 /**
@@ -133,7 +189,22 @@ export function TicketStoreSyncBanner({
 }) {
   const failing = failingTicketStores(report, nowMs);
   const first = failing.at(0);
-  if (!first) return;
+  // A failing store's next step already names any restore (the server appends it), so the stranded
+  // strip shows only while every store publishes (HS2-1HRYD9).
+  if (!first) {
+    const stranded = strandedBannerCopy(strandedTicketStores(report));
+    return (
+      stranded && (
+        <ShellBanner
+          component="ticket-store-sync-banner"
+          tone="warning"
+          title={stranded.title}
+          detail={stranded.detail}
+          icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
+        />
+      )
+    );
+  }
   const others = failing.length - 1;
   const title =
     others === 0
@@ -142,9 +213,9 @@ export function TicketStoreSyncBanner({
   const help = first.health.ai_help;
   const detail = [
     others === 0 ? syncFailureSummary(first.health) : `${first.label}: ${syncFailureSummary(first.health)}`,
-    help ? aiHelpSentence(help) : undefined,
+    help && !restatesAiHelp(help, first.health.next_action) ? aiHelpSentence(help) : undefined,
     unpublishedSentence(first.health.unpublished_commits),
-    first.health.next_action,
+    first.health.next_action && plainServerText(first.health.next_action),
     others > 0
       ? `${others} more ${others === 1 ? 'store needs' : 'stores need'} attention; run hotsheet-cli sync --status in each.`
       : undefined,
@@ -160,14 +231,16 @@ export function TicketStoreSyncBanner({
       icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
       action={
         help?.ticket ? (
-          <a
-            href={`#ticket-${help.ticket}`}
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.attrs}
-            data-ticket-slug={help.ticket}
+          // StateBanner's action is a compact pill Button (HS2-GEF1AS), not a page-styled link.
+          <Button
+            size="compact"
+            shape="pill"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.value}
             title={`Open ${help.ticket}`}
+            rootAttributes={{ 'data-ticket-slug': help.ticket }}
           >
             {`Open ${help.ticket}`}
-          </a>
+          </Button>
         ) : undefined
       }
     />

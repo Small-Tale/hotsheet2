@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 interface Box {
   x: number;
@@ -49,9 +50,7 @@ test('keeps the app toast clear of the terminal drawer restore button (HS2-T90WC
     });
     const page = await app.launch();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
     await expect(restore).toBeVisible();
     await page.locator(`[data-action="select-ticket-row"][data-ticket-slug="${ticket.slug}"]`).click();

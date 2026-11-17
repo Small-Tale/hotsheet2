@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
 // HS2-TWZSZF: a borderless, iconic search button next to the drawer's hide button expands into a field
@@ -9,9 +10,7 @@ test.use({ viewport: { width: 1280, height: 800 } });
 async function openDrawerTerminal(page: Page) {
   await installTerminalFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -305,7 +304,7 @@ interface SearchReport {
   resultCount: number;
 }
 
-test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes and Enter steps on from it', async ({
+test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resizes, stays on screen (HS2-X96PS0), and Enter steps on from it', async ({
   page,
 }) => {
   const { drawer } = await openDrawerTerminal(page);
@@ -352,6 +351,9 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
     await active(index);
     await expect(editor).toBeFocused();
     expect(await total()).toBeGreaterThanOrEqual(2);
+    // The active match was on screen before the resize, so it is brought back on screen after it; xterm
+    // draws the selection only for visible rows (HS2-X96PS0).
+    await expect(drawer.locator('.xterm-selection > div').first()).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`hs2-swy5dq-active-${index}-${width}.png`) });
   };
 

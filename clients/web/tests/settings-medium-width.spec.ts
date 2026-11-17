@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { desktopApp } from './desktop-draft-files-fixture';
+import { openMockedProject } from './open-mocked-project';
 
 /** Wait out the Workbench rails' responsive collapse or restore motion before measuring a settled layout. */
 async function railMotionSettled(page: Page) {
@@ -51,9 +52,7 @@ test('keeps App Settings content inside its column at 600 px and back (HS2-21E07
   try {
     const page = await app.launch();
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page
       .getByRole('navigation', { name: 'App Settings' })

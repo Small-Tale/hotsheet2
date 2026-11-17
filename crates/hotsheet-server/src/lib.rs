@@ -197,8 +197,8 @@ pub(crate) use routes::terminals::{
     open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
     put_checkout_trash_settings, put_terminal_limits, put_terminal_settings, read_terminal,
     reconcile_terminal_limits, remember_permission_after_allow, rename_terminal,
-    report_claude_turn, resolve_permission, resolve_terminal_question, revoke_permission_rule,
-    update_permission_rule, write_terminal,
+    report_claude_activity, report_claude_turn, resolve_permission, resolve_terminal_question,
+    revoke_permission_rule, update_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -2591,6 +2591,11 @@ pub fn app(state: AppState) -> Router {
             post(connect_terminal_ai).delete(disconnect_terminal_ai),
         )
         .route("/terminals/{id}/claude-turn", post(report_claude_turn))
+        // Interactive Claude terminal sessions narrate their turns and tools (HS2-5YCGH5).
+        .route(
+            "/terminals/{id}/claude-activity",
+            post(report_claude_activity),
+        )
         // Live hotsheet-mcp presence leases (HS2-HNXE38).
         .route(
             "/mcp-presence",

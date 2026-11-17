@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { defineConfig } from '@playwright/test';
 
-import { releaseBridgeHome } from './scripts/playwright-bridge-home.mjs';
+import { recordBridgeOwner, releaseBridgeHome, sweepAbandonedBridgeHomes } from './scripts/playwright-bridge-home.mjs';
 import { playwrightServerPort } from './scripts/playwright-port.mjs';
 import { runnerWebkitGuard } from './scripts/playwright-webkit-guard.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
@@ -46,6 +46,11 @@ for (const directory of ['claude', 'claude-501'])
 process.once('exit', () => {
   releaseBridgeHome({ home: bridgeHome, directories: [viteCacheDir, bridgeHome, bridgeLegacyHome] });
 });
+// A runner killed outright (SIGKILL) never reaches that handler, so its server and directories
+// outlive it. Each run records its owner, and the next runner releases homes whose owner is gone
+// (HS2-P69XHN). Workers load this config too; only the runner sweeps.
+recordBridgeOwner({ home: bridgeHome, directories: [viteCacheDir, bridgeHome, bridgeLegacyHome] });
+if (process.env.TEST_WORKER_INDEX === undefined) sweepAbandonedBridgeHomes({ root: tmpdir() });
 
 export default defineConfig({
   testDir: 'tests',

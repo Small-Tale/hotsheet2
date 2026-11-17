@@ -410,6 +410,13 @@ fn base_tools_list() -> Value {
             }, "required": ["checkout"] }
         },
         {
+            "name": "hotsheet_sync_health",
+            "description": "Read-only: each linked Git ticket store's sync health for a checkout (state, unpublished and incoming commits, last attempt and success, failure reason, next step, stranded saved writes). Computed locally without contacting the remote. Same JSON as GET /checkouts/{id}/repository/sync; `hotsheet-cli sync --status --json` prints one store's health.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("checkout id, id prefix, alias, or path")
+            }, "required": ["checkout"] }
+        },
+        {
             "name": "hotsheet_workers",
             "description": "Read the authoritative worker view for a registered checkout and linked source. Shows exact coordination sessions, assignments, claims, and unknown source coverage; `speculation` lists provisional assignments with their speculative base SHA, pending CI gates, state and the repairs that come first (HS2-2SJPCH; opt a ticket out with the `speculate:never` tag through hotsheet_update). It never registers a worker or claims a ticket.",
             "inputSchema": { "type": "object", "properties": {
@@ -1048,6 +1055,16 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
             .get(
                 &format!(
                     "/checkouts/{}/repository/size",
+                    encode_checkout_reference(&arg_str(args, "checkout")?)
+                ),
+                &[],
+            )
+            .map_err(be_msg),
+        // HS2-G7RTP4: ticket-store sync health, read-only.
+        "hotsheet_sync_health" => backend
+            .get(
+                &format!(
+                    "/checkouts/{}/repository/sync",
                     encode_checkout_reference(&arg_str(args, "checkout")?)
                 ),
                 &[],
@@ -2661,6 +2678,20 @@ mod core_backend {
                     .resolve(&reference)
                     .map_err(checkout_err)?;
                 return Ok(to_value(&hotsheet_ticketing::repository_size::report(
+                    &checkout,
+                )));
+            }
+            // Ticket-store sync health (HS2-G7RTP4): the server endpoint's report, read locally.
+            if let Some(reference) = path
+                .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/repository/sync"))
+            {
+                let reference = decode_checkout_reference(reference)?;
+                let checkout = self
+                    .checkout_registry
+                    .resolve(&reference)
+                    .map_err(checkout_err)?;
+                return Ok(to_value(&hotsheet_ticketing::sync_health::checkout_report(
                     &checkout,
                 )));
             }
@@ -7591,6 +7622,64 @@ mod tests {
         assert_eq!(
             with_completion_phase_reminder(json!({ "error": "x" }), true),
             json!({ "error": "x" })
+        );
+    }
+
+    /// HS2-G7RTP4: `hotsheet_sync_health` returns the same JSON as the server's
+    /// `GET /checkouts/{id}/repository/sync` serverless, and routes to that endpoint over HTTP.
+    #[test]
+    fn sync_health_tool_matches_the_checkout_report() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("code");
+        let store_root = root.path().join("store");
+        std::fs::create_dir_all(&checkout_root).unwrap();
+        let store = FsStore::init_git(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &checkout_root,
+                Some("synced"),
+                None,
+                vec![store_root.clone()],
+            )
+            .unwrap();
+        let expected = serde_json::to_value(hotsheet_ticketing::sync_health::checkout_report(
+            &registry.describe("synced").unwrap(),
+        ))
+        .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        for reference in ["synced", checkout.id.as_str()] {
+            let report = call(
+                &backend,
+                "hotsheet_sync_health",
+                json!({ "checkout": reference }),
+            );
+            assert_eq!(report, expected);
+        }
+        assert_eq!(expected["checkout_id"], checkout.id.as_str());
+        assert_eq!(expected["stores"].as_array().unwrap().len(), 1);
+        // A store without a remote reports that state rather than failing.
+        assert_eq!(expected["stores"][0]["health"]["state"], "no_remote");
+        let missing = call(
+            &backend,
+            "hotsheet_sync_health",
+            json!({ "checkout": "no-such" }),
+        );
+        assert!(
+            missing["error"].as_str().unwrap().contains("error 404"),
+            "{missing}"
+        );
+        let unnamed = call(&backend, "hotsheet_sync_health", json!({}));
+        assert!(unnamed["error"].as_str().unwrap().contains("checkout"));
+        // Over HTTP the tool reads the server endpoint.
+        let fake = FakeBackend::default();
+        call(&fake, "hotsheet_sync_health", json!({ "checkout": "web" }));
+        assert!(
+            fake.calls.borrow()[0].starts_with("GET /checkouts/web/repository/sync"),
+            "{:?}",
+            fake.calls.borrow()
         );
     }
 

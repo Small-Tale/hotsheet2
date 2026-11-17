@@ -5,8 +5,12 @@ import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
+import { ExternalLink } from 'lucide';
 
+import { CI_PRESENTATION, ciDetail } from '../ci-presentation';
 import type { RightNowRow, RightNowTiles } from '../stats-right-now';
 import { GlanceGauge } from './glance-gauge';
 import { formatGlanceValue } from './glance-gauge-geometry';
@@ -128,6 +132,47 @@ export function StatsRightNow({ scope, stores, tiles, rows, completed, asOfMs }:
                   <Text variant="span" size="compact" tone="quiet" flush>
                     Workers live
                   </Text>
+                </List>
+              </ContentItem>
+              <ContentItem
+                appearance={tiles.ci.status === 'failure' ? 'danger' : 'surface'}
+                frame="framed"
+                rootAttributes={{
+                  'data-tile': 'ci',
+                  'data-ci-status': tiles.ci.status,
+                  'data-attention': String(tiles.ci.status === 'failure'),
+                }}
+              >
+                <List gap="2xs">
+                  <Row gap="xs" vAlign="middle">
+                    <LucideIcon
+                      icon={CI_PRESENTATION[tiles.ci.status].icon}
+                      name={CI_PRESENTATION[tiles.ci.status].name}
+                    />
+                    <Text
+                      variant="span"
+                      size={tiles.ci.status === 'unavailable' ? 'medium' : 'xlarge'}
+                      weight="strong"
+                      tone={tiles.ci.status === 'unavailable' ? 'quiet' : 'default'}
+                      flush
+                    >
+                      {CI_PRESENTATION[tiles.ci.status].word}
+                    </Text>
+                  </Row>
+                  <Text variant="span" size="compact" tone="quiet" flush>
+                    {tiles.ci.status === 'unavailable' ? 'main CI · no watcher has reported a run' : ciDetail(tiles.ci)}
+                  </Text>
+                  {tiles.ci.runUrl === undefined ? undefined : (
+                    <a
+                      class="stats-right-now__run-link"
+                      href={tiles.ci.runUrl}
+                      target="_blank"
+                      rel="noopener"
+                      data-ci-run-link=""
+                    >
+                      View run <LucideIcon size={14} icon={ExternalLink} name="external-link" />
+                    </a>
+                  )}
                 </List>
               </ContentItem>
             </Grid>

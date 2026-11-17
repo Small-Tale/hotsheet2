@@ -205,32 +205,7 @@ export function DevelopmentStrategySettings({
         )}
         {report && (
           <List gap="xs" className="development-strategy-settings__effective">
-            <Text variant="h3">Effective policy</Text>
-            <Text tone="quiet" size="compact">
-              Preview an explicit session or ticket selection without saving it to this project. Ticket takes
-              precedence.
-            </Text>
-            {draft ? (
-              <Grid minColumnWidth={rem(14)} gap="m">
-                <TextField
-                  name="development-sessionOverride"
-                  label="Session Override (Optional)"
-                  value={draft.sessionOverride}
-                />
-                <TextField
-                  name="development-ticketOverride"
-                  label="Ticket Override (Optional)"
-                  value={draft.ticketOverride}
-                />
-              </Grid>
-            ) : null}
-            <Button
-              action={COMMANDS_AND_AI_ACTIONS.previewDevelopmentStrategy.value}
-              emphasis="secondary"
-              disabled={loading || saving}
-            >
-              Preview Effective Policy
-            </Button>
+            <Text variant="h3">Saved policy</Text>
             <Text>{`Selection: ${report.effective.preset} · ${report.effective.source.replaceAll('-', ' ')}`}</Text>
             <Text>{`Local verification: ${report.effective.local_gate.replaceAll('-', ' ')} · integration: ${report.effective.integration}`}</Text>
             <Text>{`Connected CI: ${report.effective.custom?.ci_gate ?? 'CI'} · ${report.effective.require_green_main_sha ? 'exact green main SHA required' : 'main SHA requirement absent'}`}</Text>

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const row = {
   connection_id: 'git',
@@ -104,9 +105,7 @@ test('bare annotation shortcuts enter markup through its normal session at every
 
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-GALLERY"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open sample.svg in media gallery' }).click();

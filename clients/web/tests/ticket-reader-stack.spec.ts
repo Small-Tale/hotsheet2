@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import type { Attachment } from '../src/api';
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { attachmentRevealLabel } from './platform-labels';
 import { ticketsJson } from './ticket-page-fixture';
 
@@ -354,9 +355,7 @@ test('vetoes reader dismissal when an asynchronous draft flush fails', async ({ 
 
 async function openProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Hot Sheet 2' })).toHaveAttribute('aria-selected', 'true');

@@ -661,6 +661,8 @@ export interface TicketStoreSyncHealth {
   merge_driver_repaired_at?: string;
   /** Present while an AI was asked to repair the stall and the store has not published since. */
   ai_help?: TicketStoreAiHelp;
+  /** Writes an interrupted recovery saved but never wrote back, by backup ref (HS2-RDPT34). */
+  stranded_saved_writes?: Array<{ backup_ref: string; paths: string[] }>;
 }
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ): every linked Git ticket store. */
 export interface TicketStoreSyncReport {
@@ -1753,6 +1755,10 @@ export interface LiveTokenTotal {
   until_ms: number;
   tokens: number;
   complete: boolean;
+  /** The recorded cost of priced usage in the window, USD (HS2-9V4CGN); absent from an older server. */
+  cost_usd?: number;
+  /** Tokens in the window recorded without a cost because their model has no price. */
+  unpriced_tokens?: number;
 }
 export interface LiveStoreState {
   store: string;

@@ -60,10 +60,40 @@ describe('HS2-ERTNJ7 StatsRightNow', () => {
     expect(tile(calm, 'needs-you')).not.toContain('warning');
   });
 
-  it('omits the completed tile until analytics load and never shows a main CI tile (HS2-M8HHEA)', () => {
+  it('omits the completed tile until analytics load, and says when no CI run was reported (HS2-E16ZEK)', () => {
     const html = String(StatsRightNow(props({ completed: undefined })));
     expect(html).not.toContain('data-tile="completed"');
-    expect(html).not.toContain('main CI');
+    expect(html).toContain('data-tile="ci"');
+    expect(html).toContain('data-ci-status="unavailable"');
+    expect(html).toContain('No CI reported');
+    expect(html).not.toContain('data-ci-run-link');
+  });
+
+  it('shows the main CI run with its word, glyph, sha, age, and link, tinting only a failure (HS2-E16ZEK)', () => {
+    const tile = (ci: StatsRightNowProps['tiles']['ci']) => {
+      const html = String(StatsRightNow(props({ tiles: { ...props().tiles, ci } })));
+      return /<[^>]*data-tile="ci"[\s\S]*?(?=<[^>]*data-right-now-projects)/u.exec(html)?.[0] ?? '';
+    };
+    const passed = tile({
+      status: 'success',
+      branch: 'main',
+      shortSha: '1a2b3c4',
+      ageMs: 12 * 60_000,
+      runUrl: 'https://ci.example.test/runs/7',
+    });
+    expect(passed).toContain('Passed');
+    expect(passed).toContain('data-lucide="circle-check"');
+    expect(passed).toContain('main CI · 1a2b3c4 · 12m ago');
+    expect(passed).toContain('href="https://ci.example.test/runs/7"');
+    expect(passed).toContain('data-attention="false"');
+    const failed = tile({ status: 'failure', branch: 'main', shortSha: '9f8e7d6', ageMs: 3 * 60_000 });
+    expect(failed).toContain('Failed');
+    expect(failed).toContain('data-lucide="circle-x"');
+    expect(failed).toContain('data-attention="true"');
+    expect(failed).not.toContain('data-ci-run-link');
+    expect(tile({ status: 'in_progress', branch: 'main', ageMs: 4 * 60_000 })).toContain('main CI · running 4m');
+    expect(tile({ status: 'queued', branch: 'release', ageMs: 60_000 })).toContain('release CI · waiting 1m');
+    expect(tile({ status: 'cancelled', branch: 'main' })).toContain('data-lucide="circle-slash"');
   });
 
   it('shows an empty state, not zero tiles, without live stores', () => {

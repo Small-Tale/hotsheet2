@@ -710,6 +710,9 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     };
     let input: serde_json::Value =
         serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
+    // HS2-5YCGH5: narrate an interactive Claude session in a Hot Sheet terminal. Best effort and
+    // silent; never changes the hook's decision or output.
+    report_claude_activity_hook(installed_agent, &input);
 
     // Session lifecycle events report a halted or resumed AI session (HS2-HJ4D1H), and a session
     // that started or ended with these hooks active (HS2-EV1XK3), to the Hot Sheet terminal this
@@ -834,6 +837,38 @@ fn hook_terminal_id(installed_agent: Option<&str>) -> Option<String> {
 
 /// Report a native Claude turn boundary without sending prompt or transcript content.
 /// The server reads only numeric usage from the new transcript bytes after the start hook.
+/// Forward an interactive Claude session's turn and tool hooks to the server's activity ingest
+/// for its Hot Sheet terminal (HS2-5YCGH5), so the Announcer narrates terminal work as it does
+/// driven turns. Only a Hot Sheet terminal session forwards: a Hot Sheet-driven headless session
+/// (`HOTSHEET_CLAUDE_PRETOOLUSE`) already records its activity, and no terminal or no reachable
+/// server sends nothing. A failed report is ignored.
+fn report_claude_activity_hook(installed_agent: Option<&str>, input: &serde_json::Value) {
+    if installed_agent != Some("claude")
+        || std::env::var("HOTSHEET_CLAUDE_PRETOOLUSE").as_deref() == Ok("1")
+    {
+        return;
+    }
+    let Some(payload) = hotsheet_cli::permission_hook::claude_activity_payload(input) else {
+        return;
+    };
+    let Some(terminal) = hook_terminal_id(installed_agent).filter(|id| !id.is_empty()) else {
+        return;
+    };
+    let Some((url, secret)) = hook_server_route() else {
+        return;
+    };
+    let endpoint = format!(
+        "{}/terminals/{}/claude-activity",
+        url.trim_end_matches('/'),
+        urlencoding_component(&terminal)
+    );
+    let _ = ureq::post(&endpoint)
+        .set("X-Hotsheet-Secret", &secret)
+        .set("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(2))
+        .send_string(&payload.to_string());
+}
+
 fn report_claude_turn_hook(
     url: &str,
     secret: &str,

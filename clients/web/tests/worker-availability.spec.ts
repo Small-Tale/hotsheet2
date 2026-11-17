@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
@@ -78,9 +79,7 @@ test('HS2-KX87JC replays a short worker lease into the rebuilt Workers view with
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-segment-value="workers"]').first().click();
 
     const column = page.locator(`[data-worker-column="${workerId}"]`);
@@ -212,9 +211,7 @@ test('HS2-KX87JC source failure must not leave a stale Available worker card', a
       return route.fulfill({ json: snapshot });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.locator('[data-segment-value="workers"]').first().click();
     const column = page.locator(`[data-worker-column="${workerId}"]`);
     await expect(column).toContainText('Available');

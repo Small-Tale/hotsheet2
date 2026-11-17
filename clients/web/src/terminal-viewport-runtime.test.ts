@@ -78,6 +78,9 @@ vi.mock('@xterm/xterm', () => ({
       this.selection = '';
     });
     getSelection = vi.fn(() => this.selection);
+    // The active search match's buffer range (HS2-X96PS0).
+    selectionPosition: { start: { x: number; y: number }; end: { x: number; y: number } } | undefined;
+    getSelectionPosition = vi.fn(() => this.selectionPosition);
     element?: { style: Record<string, string> };
     options: Record<string, unknown>;
     userInputListeners: Array<() => void> = [];
@@ -111,9 +114,14 @@ vi.mock('@xterm/xterm', () => ({
       this.renderHandler = handler;
       return { dispose: this.render };
     }
+    // xterm notifies every scroll listener; the search tracks whether its active match is on screen (HS2-X96PS0).
+    scrollHandlers: Array<() => void> = [];
     scrollHandler?: () => void;
     onScroll(handler: () => void) {
-      this.scrollHandler = handler;
+      this.scrollHandlers.push(handler);
+      this.scrollHandler = () => {
+        for (const listener of this.scrollHandlers) listener();
+      };
       return { dispose: vi.fn() };
     }
     // xterm notifies every resize listener; the search (HS2-SWY5DQ) listens beside the viewport re-sync.
@@ -621,6 +629,97 @@ describe('terminal search (HS2-TWZSZF)', () => {
     terminal.resizeHandler!();
     expect(ask('File')).toBe(true);
     expect(addon.findNext).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+});
+
+describe('terminal search after a resize (HS2-X96PS0)', () => {
+  it('reveals the re-anchored active match only when the reader was looking at it before the resize', async () => {
+    searchAddons.length = 0;
+    const { viewport, listeners } = element();
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
+    const ask = (direction: 'next' | 'previous' = 'next') => {
+      const detail: TerminalSearchDetail = { query: 'File', direction, incremental: false };
+      search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
+    };
+    const terminal = allocated.terminals.at(-1) as unknown as {
+      clearSelection: ReturnType<typeof vi.fn>;
+      scrollToLine: ReturnType<typeof vi.fn>;
+      buffer: { active: { viewportY: number } };
+      rows: number;
+      selectionPosition: { start: { x: number; y: number }; end: { x: number; y: number } } | undefined;
+      resizeHandler?: () => void;
+      scrollHandler?: () => void;
+    };
+    // Three matches on buffer rows 5, 40 and 80 of a 24-row viewport.
+    const rowsOf = [5, 40, 80];
+    let selected = -1;
+    const select = (index: number) => {
+      selected = index;
+      terminal.selectionPosition =
+        index < 0 ? undefined : { start: { x: 0, y: rowsOf[index] }, end: { x: 4, y: rowsOf[index] } };
+    };
+    const report = (resultIndex: number) => {
+      for (const listener of searchAddons[0].resultsListeners) listener({ resultIndex, resultCount: 3 });
+    };
+    terminal.buffer.active.viewportY = 30;
+    ask();
+    const addon = searchAddons[0];
+    addon.findNext.mockImplementation(() => {
+      select((selected + 1) % 3);
+      report(selected);
+      return true;
+    });
+    terminal.clearSelection.mockImplementation(() => {
+      select(-1);
+    });
+    ask();
+    ask();
+    expect(selected).toBe(1);
+
+    // Visible before the resize (rows 30-53 show row 40); the reflow scrolls to 60 and the addon's own
+    // re-search moves the match, so the re-anchor scrolls the match back to the middle of the viewport.
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 60;
+    terminal.scrollHandler!();
+    terminal.scrollToLine.mockClear();
+    select(-1);
+    report(2);
+    await Promise.resolve();
+    expect(selected).toBe(1);
+    expect(terminal.scrollToLine).toHaveBeenLastCalledWith(40 - 12);
+
+    // A re-search that keeps the active match also reveals it.
+    terminal.buffer.active.viewportY = 28;
+    terminal.scrollHandler!();
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 60;
+    terminal.scrollToLine.mockClear();
+    report(1);
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(40 - 12);
+
+    // A match already on screen after the reflow is not scrolled.
+    terminal.buffer.active.viewportY = 28;
+    terminal.scrollHandler!();
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 35;
+    terminal.scrollToLine.mockClear();
+    report(1);
+    expect(terminal.scrollToLine).not.toHaveBeenCalled();
+
+    // The reader scrolled away from the match: a resize keeps the scroll position the reflow left.
+    terminal.buffer.active.viewportY = 0;
+    terminal.scrollHandler!();
+    terminal.resizeHandler!();
+    terminal.buffer.active.viewportY = 60;
+    terminal.scrollToLine.mockClear();
+    select(-1);
+    report(2);
+    await Promise.resolve();
+    expect(selected).toBe(1);
+    expect(terminal.scrollToLine).toHaveBeenLastCalledWith(60);
+    expect(terminal.scrollToLine).not.toHaveBeenCalledWith(40 - 12);
     dispose();
   });
 });

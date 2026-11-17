@@ -10,7 +10,7 @@ import { Spacer } from '@kerfjs/ui/spacer';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 
-import { awayClock, type AwayDigest, awayEventRow, formatAwayDuration } from '../away-digest';
+import { awayClock, type AwayDigest, awayEventRow, formatAwayCost, formatAwayDuration } from '../away-digest';
 import { SHELL_AND_GLOBAL_ACTIONS as actions } from '../interaction-attrs/shell-and-global';
 import { formatGlanceValue } from './glance-gauge-geometry';
 
@@ -88,7 +88,7 @@ export function AwayDigestDialog({ digest, clock = awayClock }: AwayDigestDialog
                 {digest.tokens === null ? '—' : formatGlanceValue(digest.tokens)}
               </Text>
               <Text variant="span" size="compact" tone="quiet" flush>
-                Tokens
+                {digest.costUsd === null ? 'Tokens' : `Tokens · ${formatAwayCost(digest.costUsd)}`}
               </Text>
             </List>
           </ContentItem>

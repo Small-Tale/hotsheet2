@@ -278,6 +278,17 @@ ticket store publishes tickets, without disturbing anything else in that checkou
   state (`none` once there is no status). It comes from whichever step recorded it: the
   background committer about 400 ms after a write, or a sync-loop pass that fails or
   recovers. It carries no detail text or paths.
+- **Registry edits (HS2-70JS8B).** A rename and the other registry edits change no ticket,
+  so they are announced on their own as a replayable `group_registry_changed` event per
+  checkout registered at that code checkout (`id` the checkout id, empty `slug`, no names or
+  paths). The server's group routes announce it after each successful create of a new entry,
+  rename, merge, ungroup, and migration. Edits from another process (the CLI) and entries a
+  pull brings, in `.hotsheet2/groups/` or the `.hotsheet2/groups-remote.json` overlay, are
+  announced by the checkout's repository watcher, which compares the registry listing (names,
+  sizes, modification times) after filesystem events, or on its Git-status cadence when no
+  native watcher runs, and announces only a change. A checkout without a Git repository has
+  no repository watcher, so only edits through the server reach its other clients. The web
+  client rereads the group list on this event exactly as on `group_registry_sync`.
 - **Web client (HS2-VFYSQK).** The web client keeps `registry_sync` from each group-list
   read (on project load, after each group operation, and on a `group_registry_sync` event
   for the shown project; no timer) and shows

@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 const project = {
   id: 'saved-views',
@@ -145,9 +146,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   await expect(dialog.getByRole('textbox', { name: 'View Name' })).toBeVisible();
@@ -290,9 +289,7 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
@@ -514,9 +511,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });

@@ -315,3 +315,159 @@ fn hs2_jgh11q_an_abort_without_deferred_writes_adds_nothing() {
     assert_eq!(head(&root), local_head);
     assert!(clean(&root));
 }
+
+/// A rebase stopped at a conflict with three deferred writes (seed.md edited, written.md
+/// created, gone.md deleted), then a recovery that set them aside and aborted but died
+/// before writing them back (HS2-RDPT34). Returns the saved-writes ref.
+fn interrupted_recovery(root: &Path, peer: &Path, store: &FsStore) -> String {
+    commit_file(root, "shared.md", "local body\n");
+    peer_pushes(peer, "shared.md");
+    ok(root, &["fetch", "--quiet"]);
+    assert!(!git_ok(root, &["rebase", "--quiet", "@{u}"]));
+    write_while_stalled(root, store, 1);
+    let saved = crate::sync_saved_writes::save(root).unwrap().unwrap();
+    crate::sync_saved_writes::set_aside(&saved).unwrap();
+    // Still unfinished: a restore would commit onto the rebase, so it is refused.
+    let refused = restore_saved_writes(root, &saved.backup_ref).unwrap_err();
+    assert!(refused.to_string().contains("unfinished"), "{refused}");
+    ok(root, &["rebase", "--abort"]);
+    assert!(attached(root) && !unfinished(root));
+    saved.backup_ref
+}
+
+/// Commit `file` with a committer date `seconds` after now, so it is unambiguously later
+/// than the backup (Git dates have one-second resolution).
+fn commit_later(root: &Path, file: &str, body: &str, seconds: i64) {
+    std::fs::write(root.join(file), body).unwrap();
+    ok(root, &["add", "--", file]);
+    let at = time::OffsetDateTime::now_utc().unix_timestamp() + seconds;
+    let status = crate::git::command()
+        .arg("-C")
+        .arg(root)
+        .args(["commit", "-q", "-m", "later edit", "--", file])
+        .env("GIT_COMMITTER_DATE", format!("@{at} +0000"))
+        .env("GIT_AUTHOR_DATE", format!("@{at} +0000"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// The ticket's sequence: an interrupted recovery leaves the writes only in the backup ref;
+/// sync health names them and the restore command; the restore writes them back and
+/// commits them once; a second restore changes nothing and the report clears.
+#[test]
+fn hs2_rdpt34_an_interrupted_recovery_is_reported_and_restored_once() {
+    let (_dir, root, peer, store) = published_store();
+    let saved_ref = interrupted_recovery(&root, &peer, &store);
+    // Neither the branch nor the working tree has the writes.
+    assert_eq!(read(&root, "seed.md").as_deref(), Some("seed\n"));
+    assert!(read(&root, "written.md").is_none());
+    assert!(read(&root, "gone.md").is_some());
+
+    let reported = health(&root);
+    assert_eq!(
+        reported.stranded_saved_writes,
+        vec![crate::sync_saved_writes::StrandedSavedWrites {
+            backup_ref: saved_ref.clone(),
+            paths: vec!["gone.md".into(), "seed.md".into(), "written.md".into()],
+        }]
+    );
+    let reason = reported.reason.unwrap();
+    assert!(
+        reason.contains("3 changes saved during an interrupted rebase or merge recovery"),
+        "{reason}"
+    );
+    let action = reported.next_action.unwrap();
+    assert!(
+        action.contains(&format!("--restore-saved-writes {saved_ref}")),
+        "{action}"
+    );
+
+    // Refs that are not saved-writes backups, or do not exist, are refused.
+    assert!(restore_saved_writes(&root, "refs/heads/main").is_err());
+    assert!(restore_saved_writes(&root, "refs/hotsheet/sync-backup/1-saved-writes").is_err());
+
+    let before = head(&root);
+    let restored = restore_saved_writes(&root, &saved_ref).unwrap();
+    assert_eq!(
+        restored,
+        crate::sync_saved_writes::RestoredSavedWrites {
+            restored: 3,
+            committed: true
+        }
+    );
+    assert_eq!(git_stdout(&root, &["rev-parse", "HEAD^"]).unwrap(), before);
+    assert!(subject(&root, "HEAD").contains("saved while a rebase or merge was unfinished"));
+    assert_eq!(
+        read(&root, "seed.md").as_deref(),
+        Some("edited during the stall 1\n")
+    );
+    assert_eq!(
+        read(&root, "written.md").as_deref(),
+        Some("created during the stall 1\n")
+    );
+    assert!(read(&root, "gone.md").is_none());
+    assert!(clean(&root));
+    assert!(health(&root).stranded_saved_writes.is_empty());
+
+    // Idempotent: nothing left to restore, no commit.
+    let after = head(&root);
+    assert_eq!(
+        restore_saved_writes(&root, &saved_ref).unwrap(),
+        crate::sync_saved_writes::RestoredSavedWrites {
+            restored: 0,
+            committed: false
+        }
+    );
+    assert_eq!(head(&root), after);
+}
+
+/// A recovery that completed leaves nothing stranded; after an interrupted one, a later
+/// commit of one saved ticket supersedes it, so only the others are restored; and a
+/// working-tree change at a stranded path is never overwritten.
+#[test]
+fn hs2_rdpt34_completed_and_superseded_saves_are_not_restored() {
+    let (_dir, root, peer, store) = published_store();
+    commit_file(&root, "shared.md", "local body\n");
+    peer_pushes(&peer, "shared.md");
+    ok(&root, &["fetch", "--quiet"]);
+    assert!(!git_ok(&root, &["rebase", "--quiet", "@{u}"]));
+    write_while_stalled(&root, &store, 1);
+    assert!(
+        abort_stalled_integration(&root)
+            .unwrap()
+            .saved_writes_committed
+    );
+    assert!(health(&root).stranded_saved_writes.is_empty());
+
+    let (_dir2, root2, peer2, store2) = published_store();
+    let saved_ref = interrupted_recovery(&root2, &peer2, &store2);
+    commit_later(&root2, "seed.md", "edited after the recovery\n", 5);
+    let stranded = health(&root2).stranded_saved_writes;
+    assert_eq!(stranded.len(), 1);
+    assert_eq!(stranded[0].paths, vec!["gone.md", "written.md"]);
+
+    // An uncommitted file at a stranded path blocks the restore instead of being replaced.
+    std::fs::write(root2.join("written.md"), "typed by a person\n").unwrap();
+    let refused = restore_saved_writes(&root2, &saved_ref).unwrap_err();
+    assert!(refused.to_string().contains("written.md"), "{refused}");
+    assert_eq!(
+        read(&root2, "written.md").as_deref(),
+        Some("typed by a person\n")
+    );
+    std::fs::remove_file(root2.join("written.md")).unwrap();
+
+    let restored = restore_saved_writes(&root2, &saved_ref).unwrap();
+    assert_eq!(restored.restored, 2);
+    assert!(restored.committed);
+    assert_eq!(
+        read(&root2, "seed.md").as_deref(),
+        Some("edited after the recovery\n")
+    );
+    assert_eq!(
+        read(&root2, "written.md").as_deref(),
+        Some("created during the stall 1\n")
+    );
+    assert!(read(&root2, "gone.md").is_none());
+    assert!(health(&root2).stranded_saved_writes.is_empty());
+}

@@ -9,6 +9,7 @@ import {
   tokensPerMinute,
   worstLiveWord,
 } from './live-state';
+import { newestCi, type RightNowCi } from './stats-right-now';
 
 /**
  * The project sidebar's Live section numbers (HS2-F788GW, docs/34-glance-surfaces.md §34.6), derived
@@ -66,6 +67,8 @@ export interface ProjectLiveSummary {
   overrun?: ProjectLiveOverrun;
   /** How many claims are past their ETA. */
   overrunCount: number;
+  /** The newest `main` CI run the project's stores reported, or none (HS2-57BYEA). */
+  ci: RightNowCi;
 }
 
 /** The project's live numbers, or `undefined` when none of its stores has reported yet. */
@@ -96,8 +99,11 @@ export function projectLiveSummary(states: readonly LiveStoreState[], nowMs: num
     waiting: aggregate.waiting,
     ...(overruns[0] ? { overrun: overruns[0] } : {}),
     overrunCount: overruns.length,
+    ci: newestCi(states, nowMs),
   };
 }
+
+const CI_STATUS_TITLES = { failure: 'failed', in_progress: 'running', queued: 'queued' } as const;
 
 /** The work-state sentence for titles and the expanded row, e.g. `Active · 2 workers live`. */
 export function liveStateDescription(summary: ProjectLiveSummary): string {
@@ -114,7 +120,7 @@ export function lastProgressDescription(summary: ProjectLiveSummary): string {
 
 /** One compact chip: a glyph and a raw number, with its explanation only in `title` and `label`. */
 export interface LiveChip {
-  kind: 'state' | 'waiting' | 'overrun';
+  kind: 'state' | 'waiting' | 'overrun' | 'ci';
   /** The raw number or short value on the chip's face; empty for a glyph-only chip. */
   text: string;
   /** The hover title and accessible name. */
@@ -150,6 +156,16 @@ export function liveChips(summary: ProjectLiveSummary): LiveChip[] {
         summary.overrunCount > 1 ? ` · ${summary.overrunCount} claims past ETA` : ''
       }`,
       tone: 'warning',
+    });
+  // `main` CI only when it is non-trivial (§34.6): failing, running, or waiting to run (HS2-57BYEA).
+  if (summary.ci.status === 'failure' || summary.ci.status === 'in_progress' || summary.ci.status === 'queued')
+    chips.push({
+      kind: 'ci',
+      text: '',
+      title: `${summary.ci.branch} CI ${CI_STATUS_TITLES[summary.ci.status]}${
+        summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''
+      }`,
+      tone: summary.ci.status === 'failure' ? 'danger' : 'neutral',
     });
   return chips;
 }

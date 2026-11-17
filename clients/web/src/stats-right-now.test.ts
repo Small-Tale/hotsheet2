@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LiveStoreState } from './api';
 import {
   completedSinceUtcMidnight,
   formatDuration,
+  newestCi,
   rightNowRow,
   rightNowRows,
   type RightNowTargets,
@@ -152,5 +154,60 @@ describe('HS2-ERTNJ7 formatting helpers', () => {
       sinceMs: Date.parse('2026-11-06T00:00:00Z'),
     });
     expect(completedSinceUtcMidnight({}, NOW).count).toBe(0);
+  });
+});
+
+describe('newestCi (HS2-E16ZEK)', () => {
+  const MIN = 60_000;
+  const ci = (overrides: Partial<NonNullable<LiveStoreState['ci']>>): NonNullable<LiveStoreState['ci']> => ({
+    status: 'success',
+    checkout: 'demo-ab12',
+    branch: 'main',
+    sha: '1a2b3c4d5e6f7a8b9c0d',
+    run_url: 'https://ci.example.test/runs/7',
+    workflow: 'CI',
+    started_at_ms: NOW - 20 * MIN,
+    finished_at_ms: NOW - 12 * MIN,
+    reported_at_ms: NOW - 12 * MIN,
+    ...overrides,
+  });
+
+  it('says none was reported when no store has a run, or a store predates the field', () => {
+    expect(newestCi([], NOW)).toEqual({ status: 'unavailable', branch: 'main' });
+    const unavailable = ci({
+      status: 'unavailable',
+      sha: null,
+      run_url: null,
+      started_at_ms: null,
+      finished_at_ms: null,
+      reported_at_ms: null,
+    });
+    expect(newestCi([liveStateFixture({ ci: unavailable }), liveStateFixture()], NOW).status).toBe('unavailable');
+  });
+
+  it('picks the newest reported run across stores, with its short sha, age, and link', () => {
+    const older = liveStateFixture({ ci: ci({ status: 'failure', reported_at_ms: NOW - 40 * MIN }) });
+    const newer = liveStateFixture({ ci: ci({}) });
+    expect(newestCi([older, newer], NOW)).toEqual({
+      status: 'success',
+      branch: 'main',
+      shortSha: '1a2b3c4',
+      ageMs: 12 * MIN,
+      runUrl: 'https://ci.example.test/runs/7',
+    });
+  });
+
+  it('ages a running run from its start, and leaves out what the report lacks', () => {
+    const running = liveStateFixture({
+      ci: ci({
+        status: 'in_progress',
+        finished_at_ms: null,
+        run_url: null,
+        sha: null,
+        branch: null,
+        reported_at_ms: NOW - MIN,
+      }),
+    });
+    expect(newestCi([running], NOW)).toEqual({ status: 'in_progress', branch: 'main', ageMs: 20 * MIN });
   });
 });

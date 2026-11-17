@@ -89,6 +89,14 @@ describe('project change long polling', () => {
     expect(containsTicketChange(changed)).toBe(false);
   });
 
+  it('rereads groups when the registry entries change, scoped to their checkout (HS2-70JS8B)', () => {
+    const renamed = response(7, 'group_registry_changed');
+    renamed.events[0].id = 'checkout-one';
+    expect(containsGroupRegistrySyncChange(renamed, 'checkout-one')).toBe(true);
+    expect(containsGroupRegistrySyncChange(renamed, 'checkout-two')).toBe(false);
+    expect(containsTicketChange(renamed)).toBe(false);
+  });
+
   it('handshakes, coalesces batches, ignores unrelated events, and refreshes overflow', async () => {
     const pending = deferred<PollResponse>();
     const pollEvents = vi

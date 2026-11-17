@@ -221,6 +221,9 @@ pub struct SyncHealth {
     /// (HS2-QR1K8R): how it went, the tool, and the repair ticket.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ai_help: Option<crate::sync_ai::AiHelp>,
+    /// Writes an interrupted recovery saved but never wrote back (HS2-RDPT34).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stranded_saved_writes: Vec<crate::sync_saved_writes::StrandedSavedWrites>,
 }
 
 /// One linked Git ticket source's sync health.
@@ -288,6 +291,7 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
         merge_driver: crate::merge_driver::status(store_path),
         merge_driver_repaired_at: record.merge_driver_repaired_at.clone(),
         ai_help: None,
+        stranded_saved_writes: Vec::new(),
     };
     if git_dir(store_path).is_none() {
         health.state = SyncState::NotRepository;
@@ -344,6 +348,30 @@ fn health_at(store_path: &Path, now: OffsetDateTime) -> SyncHealth {
     health.unpublished_commits = ahead;
     health.incoming_commits = behind;
     health.next_action = next_action(&health);
+    // HS2-RDPT34: a recovery that stopped between setting writes aside and restoring them
+    // left them only in its backup ref; say so whatever the state, with the restore command.
+    health.stranded_saved_writes = crate::sync_saved_writes::stranded(store_path);
+    if let Some(first) = health.stranded_saved_writes.first() {
+        let count: usize = health
+            .stranded_saved_writes
+            .iter()
+            .map(|stranded| stranded.paths.len())
+            .sum();
+        let line = stranded_writes_line(count);
+        health.reason = Some(match health.reason.take() {
+            Some(reason) => format!("{reason}\n{line}"),
+            None => line,
+        });
+        let restore = format!(
+            "Run `hotsheet-cli sync --restore-saved-writes {}` to write them back and commit \
+             them on the branch.",
+            first.backup_ref
+        );
+        health.next_action = Some(match health.next_action.take() {
+            Some(action) => format!("{action} {restore}"),
+            None => restore,
+        });
+    }
     // HS2-QR1K8R: while a stall is being repaired, say who was asked and where the
     // procedure is; say why when no AI could be asked.
     if matches!(
@@ -389,6 +417,19 @@ fn deferred_writes_line(pending: usize) -> String {
          `hotsheet-cli sync --abort-stalled-rebase` keeps {verb} and commits {verb} on the \
          branch. To finish it with Git instead, stage {verb} (`git add -A`) before \
          continuing it, because Git refuses to continue over unstaged changes."
+    )
+}
+
+/// The reason line for writes an interrupted recovery never wrote back (HS2-RDPT34).
+fn stranded_writes_line(count: usize) -> String {
+    let changes = if count == 1 {
+        "1 change".to_string()
+    } else {
+        format!("{count} changes")
+    };
+    format!(
+        "{changes} saved during an interrupted rebase or merge recovery were never written \
+         back; they are kept only in a Hot Sheet backup ref."
     )
 }
 

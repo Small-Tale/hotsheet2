@@ -592,9 +592,19 @@ public URL is needed, and the source is independent of the ticket provider.
 - **Persistence.** Runs are kept in the machine-local `<machine home>/ci-status.json`
   (`version` 1) and read again after a restart. An unreadable file or one of another version
   is ignored, and the stores start as `unavailable`.
-- **Limit.** Status is only as fresh as the last report. Wiring `ci-gate.mjs` and the
-  integrator to report is HS2-W4BC5Q; the Stats tile and the project sidebar chip and row are
-  HS2-E16ZEK and HS2-57BYEA.
+- **Reporters (HS2-W4BC5Q).** `node scripts/ci-gate.mjs status`, which integrators run while
+  a ticket waits in `final_testing`, reports the branch's newest `CI` push run (any status:
+  queued, running, passed, failed, or cancelled; GitHub conclusions such as `timed_out` count
+  as failed) through `hotsheet-cli ci report` before it reads coverage. It is best effort: with
+  no local server or no `gh`, nothing is reported and the gate's output and exit status are
+  unchanged. Nothing polls; a report happens only when the tool runs.
+- **Other CI systems.** Any CI that can run a command on the developer's machine, or a local
+  watcher that learns of a run, reports it the same way, for example:
+  `hotsheet-cli ci report --status success --branch main --sha <commit> --workflow <name>
+--run-url <link> --started-at-ms <ms> --finished-at-ms <ms>`. Report `in_progress` when a
+  run starts and the outcome when it ends; the server keeps the newest run per checkout.
+- **Limit.** Status is only as fresh as the last report. The Stats Right now tile (HS2-E16ZEK)
+  and the project sidebar Live chip and row (HS2-57BYEA) render it.
 
 ## 32.9 Headless CLI and REST API
 

@@ -1,6 +1,7 @@
 import { expect, type Page, test, type WebSocketRoute, type Worker } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch } from './real-ticket-server';
 
 /**
@@ -221,9 +222,7 @@ async function installProjects(page: Page) {
 
 async function openBothProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true');
@@ -319,9 +318,7 @@ test('keeps the main-thread stream when the worker setting is off', async ({ pag
   page.on('worker', (worker) => workers.push(worker.url()));
   const fixture = await installProjects(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();
@@ -362,9 +359,7 @@ for (const mode of ['main-thread', 'worker'] as const)
     const beta = projects.beta.id,
       handshake = fixture.holdHandshake(beta);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByRole('button', { name: 'Add Project' }).click();
     await page.getByRole('button', { name: 'Local Project' }).click();
     await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();

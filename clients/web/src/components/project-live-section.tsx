@@ -9,6 +9,7 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
 import { BatteryWarning, Cpu, HardDrive, type IconNode, MemoryStick, Thermometer, Timer, WifiOff } from 'lucide';
 
+import { CI_PRESENTATION, ciAge } from '../ci-presentation';
 import type { HostHealthSignalId } from '../host-health';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { LIVE_STATE_ICONS } from '../live-state-icons';
@@ -49,6 +50,8 @@ function chipIcon(chip: LiveChip, summary: ProjectLiveSummary): { icon: IconNode
       return LIVE_STATE_ICONS.waiting_on_you;
     case 'overrun':
       return { icon: Timer, name: 'timer' };
+    case 'ci':
+      return CI_PRESENTATION[summary.ci.status];
     default:
       return chip.kind satisfies never;
   }
@@ -196,6 +199,15 @@ function expandedContent(summary: ProjectLiveSummary) {
           { icon: Timer, name: 'timer' },
           `${summary.overrun.slug} past ETA`,
           `+${formatGlanceDuration(summary.overrun.ms)}`,
+        )}
+      {summary.ci.status !== 'unavailable' &&
+        detailRow(
+          'ci',
+          CI_PRESENTATION[summary.ci.status],
+          `${summary.ci.branch} CI ${CI_PRESENTATION[summary.ci.status].word.toLowerCase()}${
+            summary.ci.shortSha ? ` · ${summary.ci.shortSha}` : ''
+          }`,
+          ciAge(summary.ci) ?? '',
         )}
     </List>
   );

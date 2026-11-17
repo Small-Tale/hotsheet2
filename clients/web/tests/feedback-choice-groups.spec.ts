@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-83YCDP: a FEEDBACK NEEDED prompt with several CHOICE groups renders every group as its own
 // selection list (including the blank-line header form) and answers each group under its question.
@@ -141,9 +142,7 @@ async function mock(page: Page, where: 'note' | 'details', prompt = PROMPT) {
     return route.fulfill({ status: 404, json: { error: 'not mocked' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await page.locator('[data-ticket-slug="HS2-GROUPS"]').click();
   return writes;
 }

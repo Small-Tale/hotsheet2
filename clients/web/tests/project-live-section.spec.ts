@@ -4,6 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -34,9 +35,7 @@ async function openProject(page: Page, server: Server, beforeLoad?: () => Promis
   // Routes registered here win over the project proxy above (Playwright tries the newest first).
   await beforeLoad?.();
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
 }
 
 // HS2-F788GW: the project sidebar's Live section, from the server's real `/live-state` and the change
@@ -133,6 +132,71 @@ test('project sidebar Live section is compact by default and remembers the detai
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await expect(live.locator('button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-f788gw-live-compact-1280.png' });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+// HS2-57BYEA: `main` CI reported to the real server (POST ci-status, HS2-M8HHEA) reaches the Live section
+// through the change stream: a failing run is a danger chip in compact mode, a passing one is no chip but
+// an expanded row, wide to medium to wide.
+test('project sidebar Live section shows reported main CI as a chip only when it fails and as a row (HS2-57BYEA)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server);
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    await expect(live.locator('[data-live-chip="ci"]')).toHaveCount(0);
+
+    const now = Date.now();
+    const report = (status: 'failure' | 'success', sha: string, startedMinutesAgo: number) =>
+      server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+        status,
+        branch: 'main',
+        sha,
+        workflow: 'CI',
+        started_at_ms: now - startedMinutesAgo * 60_000,
+        finished_at_ms: now - (startedMinutesAgo - 6) * 60_000,
+      });
+    await report('failure', '9f8e7d6c5b4a', 18);
+    const chip = live.locator('[data-live-chip="ci"]');
+    await expect(chip).toBeVisible({ timeout: 30_000 });
+    await expect(chip).toHaveAttribute('title', 'main CI failed · 9f8e7d6');
+    await expect(chip).toHaveAttribute('data-tone', 'danger');
+    await expect(chip.locator('[data-lucide="circle-x"]')).toBeVisible();
+    await page.mouse.move(640, 880);
+    for (const width of [1280, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(chip).toBeVisible();
+      await live.screenshot({ path: `target/visual-captures/hs2-57byea-ci-chip-compact-${width}.png` });
+    }
+
+    // A newer passing run clears the chip; the expanded rows name it.
+    await report('success', '1a2b3c4d5e6f', 8);
+    await expect(chip).toHaveCount(0, { timeout: 30_000 });
+    await live.getByRole('button', { name: /^Show live details\. / }).click();
+    await expect(live).toHaveAttribute('data-mode', 'expanded');
+    const row = live.locator('[data-live-row="ci"]');
+    await expect(row).toContainText('main CI passed · 1a2b3c4');
+    await expect(row).toContainText(/\dm ago/u);
+    await expect(row.locator('[data-lucide="circle-check"]')).toBeVisible();
+    await page.mouse.move(640, 880);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    for (const width of [1280, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(row).toBeVisible();
+      const fits = await row.evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
+      expect(fits).toBe(true);
+      await live.screenshot({ path: `target/visual-captures/hs2-57byea-ci-row-expanded-${width}.png` });
+    }
   } finally {
     await server.stop(page);
   }

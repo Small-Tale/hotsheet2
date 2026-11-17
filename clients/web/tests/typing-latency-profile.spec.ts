@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 // HS2-EQTXTJ profiling harness: per-keystroke Event Timing (input delay + handlers + next paint) while
@@ -110,9 +111,7 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     const rows = page.locator('[data-action="select-ticket-row"]');
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1500);

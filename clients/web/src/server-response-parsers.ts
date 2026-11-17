@@ -1080,13 +1080,18 @@ export const parseLiveStateList = shape<LiveStateList>('live state list', {
   stores: listOf(parseLiveStoreState.check),
 });
 const isHistoryState: Check = (field) => field === 'waiting_on_ci' || isLiveWord(field);
-export const parseLiveTokenTotal = shape<LiveTokenTotal>('live tokens', {
-  store: isString,
-  since_ms: isNumber,
-  until_ms: isNumber,
-  tokens: isNumber,
-  complete: isBoolean,
-});
+export const parseLiveTokenTotal = shape<LiveTokenTotal>(
+  'live tokens',
+  {
+    store: isString,
+    since_ms: isNumber,
+    until_ms: isNumber,
+    tokens: isNumber,
+    complete: isBoolean,
+  },
+  {},
+  { cost_usd: isNumber, unpriced_tokens: isNumber },
+);
 
 export const parseLiveHistoryList = shape<LiveHistoryList>('live history', {
   since_ms: isNumber,
@@ -1187,6 +1192,9 @@ const ticketStoreSyncHealth = shape<TicketStoreSyncHealth>(
     merge_driver: (field) => field === 'registered' || field === 'repaired' || field === 'missing',
     merge_driver_repaired_at: isString,
     ai_help: ticketStoreAiHelp.check,
+    stranded_saved_writes: listOf(
+      shape('stranded saved writes', { backup_ref: isString, paths: listOf(isString) }).check,
+    ),
   },
 );
 /** `GET /checkouts/{id}/repository/sync` (HS2-ADHFKZ). */

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 
 // HS2-6AXG6Z: with a workspace search active, selecting a matching ticket that is not on the base
 // view's first page and then editing it (whose autosave change event triggers a background refresh)
@@ -138,9 +139,7 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toBeVisible();
 
   const viewTitle = (await page.locator('#workspace-page-title').textContent())!.trim();

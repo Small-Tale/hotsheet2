@@ -1152,7 +1152,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   its note names the run and includes `CI gate commit: <full 40-character SHA>`.
   `node scripts/ci-gate.mjs status --covers <full-sha>` reads the latest successful
   `main` push run of the `CI` workflow. It reports whether that run contains the given
-  commit and lists waiting tickets with explicit markers. The helper is read-only:
+  commit and lists waiting tickets with explicit markers. It also reports the newest run of
+  that branch to a running local Hot Sheet server, best effort (HS2-W4BC5Q,
+  [32](32-notifier-plugins.md) §32.8.5). The helper is otherwise read-only:
   GitHub Actions is the shared source of truth, and a missing local commit yields
   `unknown` until the checkout has that commit. A green run covers all ancestor
   ticket commits, even when it followed several pushes. A red run triggers targeted
@@ -1555,8 +1557,13 @@ The bridge starts a detached bootstrap `hotsheet-server` for `<home>/server-boot
 time a spec opens a project through it. Removing the home does not stop that server, so the exit
 handler first runs `hotsheet-cli serve -C <home>/server-bootstrap.hs2 --stop --force` through
 `scripts/playwright-bridge-home.mjs`, then removes the directories (HS2-B0WP94). A failed stop is
-reported as a warning, never thrown. A runner killed by `SIGKILL` skips exit handlers, so that one
-path can still leave the server running.
+reported as a warning, never thrown. Removal retries the transient `ENOTEMPTY`, `EBUSY`, and `EPERM`
+failures a just-stopped server's last writes cause, and a directory that still cannot be removed is
+reported, not thrown, so the runner exits cleanly (HS2-XFFBA7). A runner killed by `SIGKILL` skips exit handlers, so each run
+also writes `<home>/playwright-owner.json` naming its pid and run directories, and the next runner
+(never a worker) releases every `hotsheet-playwright-home-*` whose recorded owner no longer exists
+through the same stop-then-remove path (HS2-P69XHN). A home without a record, or whose owner is
+alive, is left alone, and only run-prefixed directories directly under the temporary root are removed.
 
 A run on a taken port now refuses with `[WebServer] Error: Port <port> is already in use` and
 `Process from config.webServer was not able to start`. Choose another port and rerun the whole
@@ -1722,6 +1729,12 @@ directory, so lint and browser tests can run together without a directory-scan r
 and attach to the test result. Historical named captures and videos use the portable,
 Git-ignored `clients/web/target/visual-captures` directory, which Playwright prepares
 without rotating it (HS2-SRGAH3).
+
+Browser specs open the mocked local project with `openMockedProject(page)` from
+`clients/web/tests/open-mocked-project.ts`, which waits for the first ticket list read before the
+spec asserts on rows, so a loaded gate cannot outrun it (HS2-GDBK53). A test that deliberately
+holds or never answers that read keeps the raw clicks behind an `// HS2-GDBK53:` comment naming
+why; `src/playwright-config.test.ts` fails on any other raw open sequence.
 
 When a browser test asserts an intermediate state that only exists while a request is
 outstanding, the route fixture must hold that response behind an explicit gate (a promise the test

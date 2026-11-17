@@ -6,7 +6,11 @@ import {
   aiHelpSentence,
   failingTicketStores,
   PERSISTENT_OFFLINE_FAILURES,
+  plainServerText,
   repairInProgress,
+  restatesAiHelp,
+  strandedChangeCount,
+  strandedTicketStores,
   syncFailureSummary,
   TicketStoreSyncBanner,
 } from './ticket-store-sync-banner';
@@ -183,12 +187,27 @@ describe('TicketStoreSyncBanner AI repair (HS2-QR1K8R)', () => {
 
   it('shows the ask and links the repair ticket through the shared ticket-link action', () => {
     const html = String(TicketStoreSyncBanner({ report: report(['tickets.hs2', asked('started', 'codex')]) }));
-    expect(html).toContain('Hot Sheet started codex to repair it.');
+    // The server's next step already says who was asked, so it is said once (HS2-GEF1AS).
+    expect(html).toContain('Hot Sheet started codex to repair the store');
+    expect(html).not.toContain('Hot Sheet started codex to repair it.');
     expect(html).toContain('sync publishes once it is repaired');
-    expect(html).toContain('href="#ticket-HS-ABC123"');
     expect(html).toContain('data-ticket-slug="HS-ABC123"');
     expect(html).toContain('data-action="open-linked-ticket"');
     expect(html).toContain('Open HS-ABC123');
+    // The action is StateBanner's compact pill Button, not a page link.
+    expect(html).toMatch(/<button[^>]*data-action="open-linked-ticket"/);
+  });
+
+  it('keeps the outcome sentence only when the next step does not restate it (HS2-GEF1AS)', () => {
+    const withNext = (outcome: TicketStoreAiHelp['outcome']) =>
+      String(TicketStoreSyncBanner({ report: report(['tickets.hs2', asked(outcome, 'codex')]) }));
+    expect(withNext('failed')).toContain('The codex session Hot Sheet started ended with an error.');
+    expect(withNext('ticket_only')).toContain('Hot Sheet could not ask an AI to repair it.');
+    for (const outcome of ['started', 'session_asked', 'finished'] as const)
+      expect(restatesAiHelp(help(outcome), 'next')).toBe(true);
+    for (const outcome of ['failed', 'ticket_only'] as const) expect(restatesAiHelp(help(outcome), 'next')).toBe(false);
+    // Without a server next step the client sentence is the only account of the ask.
+    expect(restatesAiHelp(help('started'), undefined)).toBe(false);
   });
 
   it('has no ticket link and no ask sentence when no AI was asked', () => {
@@ -240,5 +259,116 @@ describe('TicketStoreSyncBanner while Hot Sheet repairs the stall (HS2-D4TK0W)',
     expect(shown(stalled('conflict', 'started'), now)).toBe(false);
     expect(shown(stalled('conflict', 'failed'), now)).toBe(true);
     expect(shown(health('synced'), now)).toBe(false);
+  });
+});
+
+describe('TicketStoreSyncBanner stranded saved writes (HS2-1HRYD9)', () => {
+  const ref = 'refs/hotsheet/sync-backup/1-saved-writes';
+  const restore = `Run \`hotsheet-cli sync --restore-saved-writes ${ref}\` to write them back and commit them on the branch.`;
+  const STRANDED = health('synced', {
+    next_action: restore,
+    stranded_saved_writes: [
+      { backup_ref: ref, paths: ['tickets/AB/one.md', 'tickets/CD/two.md'] },
+      { backup_ref: 'refs/hotsheet/sync-backup/2-saved-writes', paths: ['tickets/EF/three.md'] },
+    ],
+  });
+
+  it('lists only stores holding stranded changes, in any publication state', () => {
+    const one = health('up_to_date', { stranded_saved_writes: [{ backup_ref: ref, paths: ['tickets/AB/one.md'] }] });
+    expect(
+      strandedTicketStores(report(['a.hs2', STRANDED], ['b.hs2', health('synced')], ['c.hs2', one])).map(
+        (store) => store.label,
+      ),
+    ).toEqual(['a.hs2', 'c.hs2']);
+    expect(strandedTicketStores(report(['b.hs2', health('synced', { stranded_saved_writes: [] })]))).toEqual([]);
+    expect(strandedChangeCount(STRANDED)).toBe(3);
+    expect(strandedChangeCount(health('synced'))).toBe(0);
+  });
+
+  it('shows a publishing store with stranded changes, their count, and the restore command', () => {
+    const html = String(TicketStoreSyncBanner({ report: report(['hotsheet2.hs2', STRANDED]) }));
+    expect(html).toContain('data-component="ticket-store-sync-banner"');
+    expect(html).toContain('3 ticket changes in hotsheet2.hs2 were never restored');
+    expect(html).toContain('kept only in a Hot Sheet backup');
+    expect(html).toContain(`hotsheet-cli sync --restore-saved-writes ${ref}`);
+    expect(html).not.toContain('not publishing');
+    const single = health('synced', {
+      next_action: restore,
+      stranded_saved_writes: [{ backup_ref: ref, paths: ['a'] }],
+    });
+    expect(String(TicketStoreSyncBanner({ report: report(['web.hs2', single]) }))).toContain(
+      '1 ticket change in web.hs2 was never restored',
+    );
+  });
+
+  it('counts other stranded stores, and a failing store keeps the publication strip with the restore in its next step', () => {
+    const several = String(
+      TicketStoreSyncBanner({ report: report(['a.hs2', STRANDED], ['b.hs2', STRANDED], ['c.hs2', health('synced')]) }),
+    );
+    expect(several).toContain('1 more store holds changes to restore');
+    const failing = health('rejected', {
+      consecutive_failures: 1,
+      next_action: `Read the remote's reason, then run \`hotsheet-cli sync\`. ${restore}`,
+      stranded_saved_writes: STRANDED.stranded_saved_writes,
+    });
+    const html = String(TicketStoreSyncBanner({ report: report(['a.hs2', failing]) }));
+    expect(html).toContain('Ticket store a.hs2 is not publishing changes');
+    expect(html).toContain('--restore-saved-writes');
+    expect(html).not.toContain('never restored');
+  });
+
+  it('clears once the changes are restored (stranded, then none)', () => {
+    expect(TicketStoreSyncBanner({ report: report(['hotsheet2.hs2', STRANDED]) })).toBeDefined();
+    expect(TicketStoreSyncBanner({ report: report(['hotsheet2.hs2', health('synced')]) })).toBeUndefined();
+  });
+});
+
+describe('server sentences as plain text (HS2-GN2S3F)', () => {
+  it('drops Markdown code-span delimiters and keeps the command', () => {
+    expect(plainServerText('Fix it, then run `hotsheet-cli sync`.')).toBe('Fix it, then run hotsheet-cli sync.');
+    expect(plainServerText('Run `a` or `b`.')).toBe('Run a or b.');
+    expect(plainServerText('No code here.')).toBe('No code here.');
+    expect(plainServerText('')).toBe('');
+  });
+
+  it('shows no backtick in the failing, blocked, and stranded strips', () => {
+    const failing = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'kerf.hs2',
+          health('rejected', { unpublished_commits: 1, next_action: 'Fix the cause, then run `hotsheet-cli sync`.' }),
+        ]),
+      }),
+    );
+    expect(failing).toContain('then run hotsheet-cli sync.');
+    expect(failing).not.toContain('`');
+    const blocked = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'web.hs2',
+          health('blocked', {
+            consecutive_failures: PERSISTENT_OFFLINE_FAILURES,
+            reason: '`index.lock` has blocked sync for 5 minutes',
+            next_action: 'Run `hotsheet-cli sync --recover-stale-locks`.',
+          }),
+        ]),
+      }),
+    );
+    expect(blocked).toContain('Index.lock has blocked sync');
+    expect(blocked).toContain('Run hotsheet-cli sync --recover-stale-locks.');
+    expect(blocked).not.toContain('`');
+    const stranded = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'web.hs2',
+          health('synced', {
+            next_action: 'Run `hotsheet-cli sync --restore-saved-writes refs/x` to write them back.',
+            stranded_saved_writes: [{ backup_ref: 'refs/x', paths: ['tickets/AB/one.md'] }],
+          }),
+        ]),
+      }),
+    );
+    expect(stranded).toContain('Run hotsheet-cli sync --restore-saved-writes refs/x to write them back.');
+    expect(stranded).not.toContain('`');
   });
 });

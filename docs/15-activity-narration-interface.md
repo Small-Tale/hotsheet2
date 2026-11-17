@@ -50,9 +50,12 @@ The `activity` capability turns native signals → events; the host owns the str
 
 - **Claude** — channel/hook events + the turn transcript: `PreToolUse` → `tool_call`/
   `command`/`edit`, `UserPromptSubmit` → `turn_start`, `Stop` → `turn_end`,
-  `FEEDBACK NEEDED` → `note`/`blocked`.
+  `FEEDBACK NEEDED` → `note`/`blocked`. An interactive session in a Hot Sheet terminal is
+  narrated through the hooks it already runs (HS2-5YCGH5, §15.8), not only driven turns.
 - **Codex** — the app-server **turn transcript** (docs/121 already emits
-  start/item/end) maps directly: items → `edit`/`command`/`decision`, end → `turn_end`.
+  start/item/end) maps directly: items → `edit`/`command`/`decision`, end → `turn_end`. An
+  interactive Codex session in a Hot Sheet terminal is narrated from its rollout file
+  (HS2-WH40WD, §15.8).
 - **ACP** (OpenCode/Goose) — `session/update` payloads carry tool-use + text → the
   same kinds; `stopReason` → `turn_end`.
 - A tool that exposes **nothing** narratable omits the capability (absence = the
@@ -267,6 +270,42 @@ client adapter, never a server dependency; other clients can inject another
 - **Shipped (HS2-5PSQJQ, HS2-A93BHS):** the Announcer UI and local speech choices
   consume retained and live activity. Edit content is fetched only on demand as a
   bounded current checkout diff; retained activity contains metadata only.
+- **Shipped (HS2-5YCGH5) — interactive Claude terminal sessions:** before, only turns Hot
+  Sheet drives produced activity, so the Announcer stayed silent through interactive
+  terminal work. Claude Code in a Hot Sheet terminal already runs `hotsheet-cli
+permission-hook` for `PreToolUse`, `UserPromptSubmit`, and `Stop` (§5.7 of
+  [05](05-ai-tool-plugins.md)), so no new hook is installed:
+  - a `PreToolUse` that is not part of a question is reduced by the hook to the event, session,
+    tool name, sub-agent parent, and the tool input's `command` and `file_path`/`path` (never
+    file contents or edit strings) and sent to `POST /terminals/{id}/claude-activity`;
+  - turn boundaries come from the `claude-turn` report the hook already sends, so the server
+    records `turn_start` (not for a repeated prompt) and `turn_end` (once per Stop, not for a
+    failure) without a second request;
+  - the server accepts only the session connected to that terminal, maps with
+    `claude_activity`, and records to the terminal's project store attributed to the session,
+    checkout, and the terminal worker's claimed ticket, under the per-turn volume admission
+    (HS2-26M48F). A Hot Sheet-driven headless session (`HOTSHEET_CLAUDE_PRETOOLUSE`) forwards
+    nothing, since its turn already records activity. No terminal or no reachable server sends
+    nothing, and a failed report never changes the hook's decision.
+
+  Interactive Codex sessions and sessions outside Hot Sheet terminals are HS2-WH40WD.
+
+- **Shipped (HS2-WH40WD) — interactive Codex terminal sessions:** Codex has no per-tool hook,
+  so the rollout watch that already follows a Hot Sheet Codex terminal's session for halts and
+  usage (HS2-CYHAWB) also narrates it. Each `item_completed` `CommandExecution`, `FileChange`,
+  and `McpToolCall` (codex-tui 0.167.2) is projected to the item `codex_activity` maps: the
+  command line (bounded to 400 characters), the changed paths (bounded to 50), and the tool's
+  server and name. Diffs, file contents, command output, tool arguments, reasoning, and agent
+  messages are never projected. `task_started` narrates `turn_start` and a `task_complete`
+  without an error `turn_end` (an error halts the terminal as before). Records written before
+  the session reported are history and are not narrated. Events are recorded to the turn's
+  project store, attributed to the session, checkout, and the turn's claimed ticket, under the
+  same volume admission.
+
+  **Sessions outside Hot Sheet terminals are not narrated (decision, HS2-WH40WD).** Such a
+  session never reports a terminal connection, so it has no trusted session identity and no
+  claimed-ticket attribution; narrating it from the working directory alone could mix in
+  unrelated sessions on the machine. Revisit if external sessions gain a connection handshake.
 
 ## 15.9 Cross-references
 

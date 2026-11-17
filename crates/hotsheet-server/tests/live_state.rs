@@ -68,13 +68,19 @@ async fn call(
     )
 }
 
+/// How long a pushed `live_state` may take (HS2-VB0BN1). A Codex rollout reaches the store
+/// through up to three subscription changes (home, `sessions/`, the rollout), and starting each
+/// native stream can take seconds on a loaded Mac, so a full gate exceeded the former 10 s. This
+/// bound only stops a push that never comes; a passing test returns as soon as it arrives.
+const LIVE_PUSH_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// The next pushed `live_state` for the store that satisfies `want`.
 async fn next_live(
     events: &mut tokio::sync::broadcast::Receiver<ChangeEvent>,
     store: &str,
     want: impl Fn(&Value) -> bool,
 ) -> Value {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    tokio::time::timeout(LIVE_PUSH_TIMEOUT, async {
         loop {
             let event = events.recv().await.expect("change bus open");
             if event.kind != "live_state" || event.store != store {
@@ -792,6 +798,115 @@ async fn hs2_b4eq87_codex_terminal_usage_records_in_its_project_store() {
             .is_empty()
     );
     call(router, "DELETE", "/terminals/codex-b", None).await;
+}
+
+/// HS2-WH40WD: an interactive Codex terminal session is narrated from its rollout: the turn's
+/// start, its commands and file changes, and its end become activity in the project's store,
+/// attributed to the session and the claimed ticket, with no diff, content, or output.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_wh40wd_codex_terminal_session_is_narrated_from_its_rollout() {
+    const SESSION: &str = "00000000-0000-4000-8000-0000000000c5";
+    let h = harness();
+    let b = ProjectB::open(&h, "codex-say").await;
+    let router = &b.router;
+    let (_, created) = call(
+        router,
+        "POST",
+        &format!("/stores/{}/tickets", b.id),
+        Some(json!({"title":"Codex narration in B"})),
+    )
+    .await;
+    let ticket = created["id"].as_str().unwrap().to_string();
+    let (status, _) = call(
+        router,
+        "POST",
+        &format!("/checkouts/{}/tickets/{ticket}/claim", b.checkout),
+        Some(
+            json!({"worker":hotsheet_aitools::session_worker_id("codex", "codex-say"),
+            "lease_minutes":60}),
+        ),
+    )
+    .await;
+    assert!(status.is_success(), "{status}");
+    let home = h._dir.path().join("codex-say-home");
+    std::fs::create_dir_all(&home).unwrap();
+    let (status, _) = call(
+        router,
+        "POST",
+        "/terminals/codex-say/ai-connection",
+        Some(json!({"agent":"codex","session_id":SESSION,"codex_home":home})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let at = (time::OffsetDateTime::now_utc() + time::Duration::seconds(1))
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let completed = |item: serde_json::Value| {
+        json!({"timestamp": at, "type": "event_msg", "payload": {"type": "item_completed",
+            "thread_id": SESSION, "turn_id": "t1", "item": item,
+            "started_at_ms": 1, "completed_at_ms": 2}})
+    };
+    let rows = [
+        json!({"timestamp": "2026-11-06T00:00:00Z", "type": "session_meta",
+            "payload": {"id": SESSION, "originator": "codex-tui"}}),
+        json!({"timestamp": at, "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "t1"}}),
+        completed(
+            json!({"type": "CommandExecution", "id": "c1", "command": ["cargo", "test"],
+            "status": "completed", "aggregated_output": "secret output"}),
+        ),
+        completed(
+            json!({"type": "FileChange", "id": "f1", "status": "completed",
+            "changes": {"src/lib.rs": {"type": "update", "unified_diff": "secret diff"}}}),
+        ),
+        json!({"timestamp": at, "type": "event_msg",
+            "payload": {"type": "task_complete", "turn_id": "t1"}}),
+    ];
+    let text: String = rows.iter().map(|row| format!("{row}\n")).collect();
+    let day = home.join("sessions/2026/11/06");
+    std::fs::create_dir_all(&day).unwrap();
+    std::fs::write(
+        day.join(format!("rollout-2026-11-06T00-00-00-{SESSION}.jsonl")),
+        text,
+    )
+    .unwrap();
+    // The watch follows the rollout off the request path; wait for its narration to land.
+    let deadline = std::time::Instant::now() + LIVE_PUSH_TIMEOUT;
+    let events = loop {
+        let events = hotsheet_ticketing::activity::read_recent(&b.store).unwrap();
+        if events.len() >= 4 || std::time::Instant::now() >= deadline {
+            break events;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    let kinds: Vec<_> = events
+        .iter()
+        .map(|event| serde_json::to_value(event.kind).unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            json!("turn_start"),
+            json!("command"),
+            json!("edit"),
+            json!("turn_end")
+        ],
+        "{events:?}"
+    );
+    assert!(events.iter().all(|event| event.tool == "codex"
+        && event.session.as_deref() == Some(SESSION)
+        && event.ticket.as_deref() == Some(ticket.as_str())));
+    assert_eq!(events[1].detail["command"], "cargo test");
+    assert_eq!(events[2].detail["path"], "src/lib.rs");
+    let text = serde_json::to_string(&events).unwrap();
+    assert!(!text.contains("secret"), "{text}");
+    // Nothing is narrated into the machine's bootstrap store.
+    assert!(
+        hotsheet_ticketing::activity::read_recent(&b.primary)
+            .unwrap()
+            .is_empty()
+    );
+    call(router, "DELETE", "/terminals/codex-say", None).await;
 }
 
 // ---- HS2-MHW3SX: persisted inputs and the minute rebuild ----------------------------------
@@ -1566,6 +1681,72 @@ async fn hs2_pfhrs9_a_session_started_for_an_account_limits_only_that_account() 
     for id in [terminal.as_str(), "plain"] {
         call(&router, "DELETE", &format!("/terminals/{id}"), None).await;
     }
+}
+
+/// HS2-9V4CGN: the window read also sums the recorded cost and counts the tokens of events
+/// recorded without one (an unpriced model), so the away digest can show cost or tokens alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn hs2_9v4cgn_live_tokens_sums_recorded_cost_and_unpriced_tokens() {
+    use time::format_description::well_known::Rfc3339;
+    let h = harness();
+    let router = app(h.state.clone());
+    let now = time::OffsetDateTime::now_utc();
+    let raw = h._dir.path().join("demo.hs2").join("metrics").join("raw");
+    std::fs::create_dir_all(&raw).unwrap();
+    // Priced, priced, and one unpriced event (no cost recorded); synthetic numbers only.
+    for (minutes_ago, tokens, cost) in [
+        (25, 1000_u64, Some(1.25_f64)),
+        (15, 3000, Some(4.95)),
+        (5, 400, None),
+    ] {
+        let at = now - time::Duration::minutes(minutes_ago);
+        let file = raw.join(format!(
+            "{:04}-{:02}-{:02}.jsonl",
+            at.year(),
+            u8::from(at.month()),
+            at.day()
+        ));
+        let cost = cost.map_or(String::new(), |usd| format!(",\"cost_usd\":{usd}"));
+        let line = format!(
+            "{{\"ts\":\"{}\",\"tool\":\"claude\",\"model\":\"m\",\"tokens_in\":{tokens},\"tokens_out\":0{cost}}}\n",
+            at.format(&Rfc3339).unwrap()
+        );
+        let mut text = std::fs::read_to_string(&file).unwrap_or_default();
+        text.push_str(&line);
+        std::fs::write(&file, text).unwrap();
+    }
+    let ms = |at: time::OffsetDateTime| (at.unix_timestamp_nanos() / 1_000_000) as i64;
+    let read = |since: i64, until: Option<i64>| {
+        let router = router.clone();
+        let path = match until {
+            Some(until) => format!(
+                "/stores/{}/live-tokens?since_ms={since}&until_ms={until}",
+                h.store_id
+            ),
+            None => format!("/stores/{}/live-tokens?since_ms={since}", h.store_id),
+        };
+        async move { call(&router, "GET", &path, None).await }
+    };
+    let (status, all) = read(ms(now - time::Duration::minutes(30)), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all["tokens"], 4400, "{all}");
+    assert!(
+        (all["cost_usd"].as_f64().unwrap() - 6.2).abs() < 1e-9,
+        "{all}"
+    );
+    assert_eq!(all["unpriced_tokens"], 400, "{all}");
+    // A window holding only priced usage has no unpriced tokens; an empty one costs nothing.
+    let (_, priced) = read(
+        ms(now - time::Duration::minutes(30)),
+        Some(ms(now - time::Duration::minutes(10))),
+    )
+    .await;
+    assert_eq!(priced["tokens"], 4000, "{priced}");
+    assert_eq!(priced["unpriced_tokens"], 0, "{priced}");
+    let (_, empty) = read(ms(now - time::Duration::minutes(2)), None).await;
+    assert_eq!(empty["tokens"], 0, "{empty}");
+    assert_eq!(empty["cost_usd"], 0.0, "{empty}");
+    assert_eq!(empty["unpriced_tokens"], 0, "{empty}");
 }
 
 /// HS2-ZTRF4Q: the standby digest reads one store's recorded tokens for its whole window, so a

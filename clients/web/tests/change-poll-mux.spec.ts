@@ -1,6 +1,7 @@
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { realTicketServer } from './real-ticket-server';
 
 /**
@@ -287,9 +288,7 @@ async function installBridge(
 
 async function openAllProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.getByRole('tab', { name: projects[0].name })).toBeVisible();
   for (const project of projects.slice(1)) {
     await page.getByRole('button', { name: 'Add Project' }).click();
@@ -375,9 +374,7 @@ test('dense changes reconcile the latest real-server ticket collection within th
       corrupt: () => server.request(`/checkouts/${server.checkoutId}/corrupt-tickets`),
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect(page.getByText('First live ticket')).toBeVisible();
     await expect.poll(() => bridge.subscriptions.has(target.id)).toBe(true);
     const created = await server.request<{ slug: string }>(`/checkouts/${server.checkoutId}/tickets`, 'POST', {

@@ -1,4 +1,4 @@
-import type { LiveStoreState, LiveWord } from './api';
+import type { LiveCi, LiveCiStatus, LiveStoreState, LiveWord } from './api';
 import { aggregateLiveStates, etaOverrunMs, progressAgeMs, tokenHours, tokensPerMinute } from './live-state';
 
 /**
@@ -52,6 +52,41 @@ export interface RightNowTiles {
   needsYou: number;
   workersLive: number;
   workersExpected: number;
+  ci: RightNowCi;
+}
+
+/** The `main` CI tile (HS2-E16ZEK): the newest run any store in scope reported, or none reported. */
+export interface RightNowCi {
+  status: LiveCiStatus;
+  /** The branch the run was for; the tile names `main` when the report leaves it out. */
+  branch: string;
+  /** The first seven characters of the run's commit. */
+  shortSha?: string;
+  /** Since the run finished, or, while it runs or waits, since it started; from the display clock. */
+  ageMs?: number;
+  runUrl?: string;
+}
+
+/**
+ * The newest reported CI run across `states` (HS2-E16ZEK). A store reports `status: unavailable`
+ * until a CI watcher has told it about a run (docs/32-notifier-plugins.md §32.8.5); a reported run is
+ * newer by when it was reported, then finished, then started.
+ */
+export function newestCi(states: readonly LiveStoreState[], nowMs: number): RightNowCi {
+  const at = (ci: LiveCi) => ci.reported_at_ms ?? ci.finished_at_ms ?? ci.started_at_ms ?? 0;
+  const reported = states
+    .flatMap((state) => (state.ci && state.ci.status !== 'unavailable' ? [state.ci] : []))
+    .sort((a, b) => at(b) - at(a));
+  const ci = reported.at(0);
+  if (!ci) return { status: 'unavailable', branch: 'main' };
+  const since = ci.finished_at_ms ?? ci.started_at_ms ?? undefined;
+  return {
+    status: ci.status,
+    branch: ci.branch ?? 'main',
+    ...(ci.sha ? { shortSha: ci.sha.slice(0, 7) } : {}),
+    ...(since === undefined ? {} : { ageMs: Math.max(0, nowMs - since) }),
+    ...(ci.run_url ? { runUrl: ci.run_url } : {}),
+  };
 }
 
 export function rightNowTiles(states: readonly LiveStoreState[], nowMs: number): RightNowTiles {
@@ -64,6 +99,7 @@ export function rightNowTiles(states: readonly LiveStoreState[], nowMs: number):
     needsYou: aggregate.waiting,
     workersLive: aggregate.workersLive,
     workersExpected: aggregate.workersExpected,
+    ci: newestCi(states, nowMs),
   };
 }
 

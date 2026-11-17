@@ -181,7 +181,21 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
                     RolloutSignal::Resumed => {
                         flush(&mut batches);
                         clear_terminal_halt_on_resume(&signal_state, &signal_id);
-                        turn_target = Some(target());
+                        let started = target();
+                        // The new turn opens the session's narration (HS2-WH40WD).
+                        narrate_codex(
+                            &signal_state,
+                            &signal_id,
+                            &signal_session,
+                            &started,
+                            &serde_json::json!({ "type": "turn_start" }),
+                        );
+                        turn_target = Some(started);
+                    }
+                    RolloutSignal::Activity(item) => {
+                        flush(&mut batches);
+                        let target = turn_target.get_or_insert_with(target).clone();
+                        narrate_codex(&signal_state, &signal_id, &signal_session, &target, &item);
                     }
                     RolloutSignal::Question(asked) => {
                         record_codex_question(&signal_state, &signal_id, &signal_session, asked);
@@ -228,6 +242,43 @@ fn start_watch(state: &AppState, record: WatchRecord) -> bool {
     );
     let _ = registered.send(());
     true
+}
+
+/// Record one narrated item of an interactive Codex terminal session (HS2-WH40WD): map it with
+/// the same [`hotsheet_ticketing::activity::codex_activity`] driven turns use (a `turn_start`
+/// item becomes a turn start) and record it to the turn's project store, attributed to the
+/// session, the checkout, and the turn's claimed ticket, under the per-turn volume admission.
+fn narrate_codex(
+    state: &AppState,
+    terminal: &str,
+    session: &str,
+    target: &UsageTarget,
+    item: &serde_json::Value,
+) {
+    let id = hotsheet_model::Ulid::new().to_string();
+    let ts = now().as_str().to_owned();
+    let event = if item.get("type").and_then(serde_json::Value::as_str) == Some("turn_start") {
+        Some(hotsheet_ticketing::ActivityEvent::new(
+            id,
+            ts,
+            "codex",
+            hotsheet_ticketing::ActivityKind::TurnStart,
+            serde_json::Value::Null,
+        ))
+    } else {
+        hotsheet_ticketing::activity::codex_activity(item, &id, &ts)
+    };
+    let Some(mut event) = event else {
+        return;
+    };
+    event.session = Some(session.to_owned());
+    if event.ticket.is_none() {
+        event.ticket.clone_from(&target.ticket);
+    }
+    event.project = super::usage_store::terminal_usage_checkout(state, terminal);
+    if let Err(error) = state.record_activity(&target.store, event) {
+        tracing::warn!(%error, "recording Codex terminal activity failed");
+    }
 }
 
 /// Where terminal `terminal`'s watch persists, or `None` for an id unsafe as a file name.

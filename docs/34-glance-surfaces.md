@@ -186,8 +186,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   live state of the project's linked stores and the host health snapshot, both pushed and resynced on the
   change stream. Ages and decaying rates re-render from a local 30-second render clock that runs only while
   live state exists and never issues a request. The compact problem-state chip (May be stuck, Stalled,
-  Halted) is a glyph whose title gives the state and the last-progress age. The live state now carries
-  `main` CI (HS2-M8HHEA, [32](32-notifier-plugins.md) §32.8.5); rendering the chip and row is HS2-57BYEA.
+  Halted) is a glyph whose title gives the state and the last-progress age. `main` CI (HS2-57BYEA) comes
+  from the newest run the project's stores reported in their live `ci` (HS2-M8HHEA,
+  [32](32-notifier-plugins.md) §32.8.5): the compact chip is a glyph shown only while that run failed
+  (danger), runs, or waits to run (neutral), titled with the branch, word, and short sha; the expanded row
+  names any reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs
+  match the Stats tile (HS2-E16ZEK).
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes
@@ -253,9 +257,12 @@ A **Right now** section above the existing "Ticket flow and usage" on the Stats 
 - **Shipped (HS2-ERTNJ7).** `StatsRightNow` and `StatsProjectsTable` render from the pushed live
   state; a 30-second local display clock ages values only while Stats is shown and never requests.
   "Data as of" is when the client last applied a snapshot. Completed counts today's UTC calendar day
-  from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile is
-  still omitted: the live state carries `ci` since HS2-M8HHEA ([32](32-notifier-plugins.md) §32.8.5), and
-  rendering it is HS2-E16ZEK. The Tokens 12h column draws
+  from the analytics the page already loads, labelled with that midnight's local time. The `main` CI tile
+  (HS2-E16ZEK) renders the newest run any store in scope reported in its live `ci` (HS2-M8HHEA,
+  [32](32-notifier-plugins.md) §32.8.5): a status word and glyph (Passed, Failed, Running, Queued,
+  Cancelled), the branch and short sha, the age of `finished_at_ms` (or how long it has run or waited)
+  from the local display clock, and a View run link when `run_url` is set. Only a failure tints it. With
+  no reported run it says No CI reported. It makes no request. The Tokens 12h column draws
   a `GlanceSparkline` of the snapshot's 12 hourly token buckets (HS2-TRZGT3), aligned to the display
   clock, with the current tokens/min beside it.
 - **Overnight timeline (HS2-9AN4DN):** one swimlane per project over a selectable window (default: since
@@ -350,8 +357,12 @@ Shown on leaving standby, approved as `m7-away-digest-light`, composed with Kerf
     read, a gap of more than the pushed snapshot's 5-minute series between snapshots read as 0. The
     tile never shows fewer than the distinct per-minute buckets the snapshots carried. When any store's
     read fails, or the window starts before the server's two-day retention, it falls back to those
-    buckets; with none it shows "—" (unknown) rather than 0. The live state carries no cost, so the
-    tile shows tokens only; the cost follow-up is HS2-9V4CGN.
+    buckets; with none it shows "—" (unknown) rather than 0. The same read returns `cost_usd`, the
+    recorded cost of that usage (events are priced when recorded, `docs/14` §14.2), and
+    `unpriced_tokens`, the tokens recorded without a cost because their model has no price
+    (HS2-9V4CGN). The tile reads `Tokens · $6.20` when every store reported a cost and priced all its
+    usage, and the window read's tokens are the ones shown; otherwise it shows tokens alone (an
+    unpriced model, an older server, or the snapshot fallback).
 - **Silent exit.** The digest shows only when some row, completion, or token was recorded; otherwise
   standby exits silently. Re-entering standby while the exit's completions load drops that digest.
 - **Dialog.** Kerf `DialogSurface`, named "While you were away" and described by the time range. Need

@@ -83,6 +83,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             abort_stalled_rebase,
             adopt,
             recover_stale_locks,
+            restore_saved_writes,
             run_repair,
             repair_prompt,
             repair_project,
@@ -91,6 +92,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
                 cmd_sync_run_repair(path, &stall, &prompt, &project)
             }
             _ if recover_stale_locks => cmd_sync_recover_stale_locks(path),
+            _ if restore_saved_writes.is_some() => {
+                cmd_sync_restore_saved_writes(path, restore_saved_writes.as_deref().unwrap_or(""))
+            }
             _ => cmd_sync(path, status, json, abort_stalled_rebase, adopt.as_deref()),
         },
         Cmd::Doctor { project } => cmd_doctor(path, &project),
@@ -608,6 +612,29 @@ pub(crate) fn cmd_sync_recover_stale_locks(path: &Path) -> Result<()> {
         pass.remaining.join(", "),
         hotsheet_ticketing::sync_locks::LOCK_RECOVERY_ACTION
     )
+}
+
+/// `sync --restore-saved-writes REF` (HS2-RDPT34).
+fn cmd_sync_restore_saved_writes(path: &Path, backup_ref: &str) -> Result<()> {
+    FsStore::open_without_maintenance(path)?;
+    let restored = hotsheet_ticketing::sync::restore_saved_writes(path, backup_ref)?;
+    let count = restored.restored;
+    let plural = if count == 1 { "" } else { "s" };
+    if count == 0 {
+        println!(
+            "Nothing to restore: every change saved under {backup_ref} is already on the branch, in the working tree, or superseded by a later commit."
+        );
+    } else if restored.committed {
+        println!(
+            "Restored {count} change{plural} saved under {backup_ref} and committed them on the branch."
+        );
+        println!("Run `hotsheet-cli sync` to publish.");
+    } else {
+        println!(
+            "Restored {count} change{plural} saved under {backup_ref}; they match the branch, so nothing was committed."
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn cmd_sync(

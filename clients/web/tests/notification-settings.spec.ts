@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
@@ -62,9 +63,7 @@ test('manages notifier channels and rules through App Settings → Notifications
     await installTerminalFixture(page);
     await routeNotifierApi(page, server);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Notifications', exact: true }).click();
     const settings = page.locator('[data-component="notification-settings"]');
@@ -199,9 +198,7 @@ test('chooses saved views, categories, and priorities in the rule dialog', async
       settings: { command: ['true'] },
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Notifications', exact: true }).click();
     const settings = page.locator('[data-component="notification-settings"]');
@@ -313,9 +310,7 @@ test.describe('quiet hours follow the device', () => {
       await installTerminalFixture(page);
       await routeNotifierApi(page, server);
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open Project' }).click();
-      await page.getByRole('button', { name: 'Local Project' }).click();
-      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      await openMockedProject(page);
       await page.getByLabel('Settings View').click();
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       const settings = page.locator('[data-component="notification-settings"]');
@@ -395,9 +390,7 @@ test('keeps a notifier choice setting across wide-narrow-wide re-renders', async
     await installTerminalFixture(page);
     await routeNotifierApi(page, server);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Notifications', exact: true }).click();
     const settings = page.locator('[data-component="notification-settings"]');

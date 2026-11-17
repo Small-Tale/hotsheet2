@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 import { expect, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, type RealTicketFixtureContext, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
 
-test('HS2-NBDXPW saves presets and Custom through the real project API, previews overrides, and keeps live cadence visible', async ({
+test('HS2-NBDXPW saves presets and Custom through the real project API, shows the saved policy, and keeps live cadence visible', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -55,9 +56,7 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
     const settings = page.locator('[data-component="development-strategy-settings"]');
@@ -115,20 +114,15 @@ test('HS2-NBDXPW saves presets and Custom through the real project API, previews
           ).policy.default_custom,
       )
       .toBe('reviewed-fast');
-    await settings.getByLabel('Session Override (Optional)').fill('steady-main');
-    await settings.getByLabel('Ticket Override (Optional)').fill('risk-guided');
-    await settings.getByRole('button', { name: 'Preview Effective Policy' }).click();
-    await expect(settings).toContainText('Selection: risk-guided · ticket');
-    await expect
-      .poll(
-        async () =>
-          (
-            await server.request<{ policy: { default_custom?: string } }>(
-              `/checkouts/${server.checkoutId}/development-strategy`,
-            )
-          ).policy.default_custom,
-      )
-      .toBe('reviewed-fast');
+    // HS2-MN0MXT: no hypothetical override preview; the summary describes the saved project policy.
+    await expect(settings.getByLabel('Session Override (Optional)')).toHaveCount(0);
+    await expect(settings.getByLabel('Ticket Override (Optional)')).toHaveCount(0);
+    await expect(settings.getByRole('button', { name: 'Preview Effective Policy' })).toHaveCount(0);
+    await expect(settings).not.toContainText('Effective policy');
+    await expect(settings.getByText('Saved policy', { exact: true })).toBeVisible();
+    await expect(settings).toContainText('· project');
+    await settings.getByText('Saved policy', { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath('development-strategy-saved-policy-wide.png') });
     await page.reload();
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
@@ -222,9 +216,7 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
       }
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Development strategy' }).click();
     const settings = page.locator('[data-component="development-strategy-settings"]');
@@ -256,38 +248,6 @@ test('HS2-NBDXPW project switching shows only the selected checkout policy and r
     await page.locator('[data-component="tab-bar-item"]').filter({ hasText: 'Synthetic One' }).click();
     await expect(settings.getByLabel('Green Main Goal (Minutes)')).toHaveValue('90');
     await expect(settings.locator(`[data-cadence-source="${firstSource}"]`)).toHaveCount(1);
-
-    const stalePreview = await first.request<unknown>(
-      `/checkouts/${first.checkoutId}/development-strategy?ticket=ticket-assured`,
-    );
-    let releasePreview: () => void = () => {},
-      previewStarted: () => void = () => {},
-      previewDelivered: () => void = () => {};
-    const previewHold = new Promise<void>((resolve) => {
-        releasePreview = resolve;
-      }),
-      previewRequest = new Promise<void>((resolve) => {
-        previewStarted = resolve;
-      }),
-      previewResponse = new Promise<void>((resolve) => {
-        previewDelivered = resolve;
-      });
-    await page.route(/\/development-strategy\?ticket=ticket-assured$/, async (route) => {
-      previewStarted();
-      await previewHold;
-      await route.fulfill({ json: stalePreview });
-      previewDelivered();
-    });
-    await settings.getByLabel('Ticket Override (Optional)').fill('ticket-assured');
-    await settings.getByRole('button', { name: 'Preview Effective Policy' }).click();
-    await previewRequest;
-    await settings.getByLabel('Green Main Goal (Minutes)').fill('105');
-    await settings.getByRole('button', { name: 'Save Strategy' }).click();
-    await expect(settings.getByRole('status')).toContainText('saved');
-    releasePreview();
-    await previewResponse;
-    await expect(settings).toContainText('· project');
-    await expect(settings).not.toContainText('· ticket');
   } finally {
     await first.stop(page);
     await second.stop(page);

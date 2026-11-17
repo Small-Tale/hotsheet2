@@ -69,7 +69,10 @@ Trash sidebar destinations apply the corresponding status — Trash soft-deletes
 visibly highlight during dragover. A sidebar view, board column, or new-ticket target
 renders that highlight from the drag's current target, so a render mid-drag, such as the
 sidebar after a view switch, keeps it; it clears when the drag leaves the target, drops, or
-ends (HS2-G8EK08). A newly created ticket is inserted into both the active
+ends (HS2-G8EK08). Every ticket drop highlight, project tabs included, also clears when the
+drag ends without `dragend` reaching the document: the dragged row hears its own `dragend`
+after a render removes it, and a window blur, pointer press, or Escape after a lost drag
+ends it (HS2-43A1Y8). A newly created ticket is inserted into both the active
 collection and its project cache before it is selected, so that first selected presentation
 can be dragged immediately without a deselect/reselect workaround (HS2-6E9RRS).
 Right-clicking either a list or board TicketRow preserves an existing multi-selection
@@ -104,6 +107,11 @@ Dismissal ends the status popup's anchor tracking so later renders do not reopen
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a Kerf Combobox. It snapshots unused tag suggestions when
 opened; the suggestion listbox rises above the popover instead of clipping inside it.
+Suggestions are the project's existing tags plus a `development-strategy:<name>` override tag
+for every built-in strategy and every custom strategy in the open project's own policy, even
+when no ticket carries it yet. The policy is read once per project server when a ticket is
+first selected there; another project's custom names never appear, and tags the ticket
+already has are not offered (HS2-PN74AH).
 Enter, comma, or choosing a suggestion can add repeated tags. Escape restores focus to the
 trigger, and read-only providers omit the action entirely. Kerf owns the field, label, and
 hint geometry; a List sets the title-to-field rhythm (HS2-4Y6SM9, HS2-C32ERK).
@@ -225,7 +233,9 @@ machine registry, not browser storage. Tabs include the server label and use
 composite ids so identical checkout ids on different hosts remain independent.
 The desktop bridge routes REST and change WebSockets to each tab's reviewed
 server; removing or reviewing one binding closes only its sessions. The phone
-browser continues to list projects from its single connected host.
+browser continues to list projects from its single connected host. The dialog's
+form scrolls in Kerf's native dialog body, so a focused field keeps its whole focus
+ring at every width (HS2-MV0BA4).
 **Remote terminals (HS2-PPHJMZ, HS2-JJKVJJ).** A remote tab's terminal drawer
 attaches to that server's PTYs: the bridge upgrades `/terminals/{id}/attach` on the
 reviewed server with that server's private session, Origin and CSRF proof (and its
@@ -554,7 +564,9 @@ same explanation (HS2-CGXGWY).
   project with its attention badge at 1024px with the inspector open), the far-edge New ticket
   launcher shortens to the terminal rail's compact `Ticket…` label so the tabs fit; it returns to
   `New ticket…` once the strip has room for the full label again, so it never alternates at the
-  boundary (HS2-RNR35H). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
+  boundary (HS2-RNR35H). Settings → Commands' `Add group…` and `Add command…` pills shorten to their
+  compact `Group…` and `Command…` form under the same rule, so at medium widths such as 1100px with
+  both rails open the project tab keeps its label (HS2-MQPY61). The overflow, the launcher's width, and the bar's spare room (`endFree`) come only from
   Kerf's public `wireTabBars` `onFitChange` report, never from TabBar's private parts or the app's own
   measurement (HS2-A2CSNB, HS2-YATB6S). The Workspace Grid and Cross-project Stats strips keep it
   beside the last project tab too, never on the far edge (HS2-YFKQT1). Workspace Grid and Cross-project
@@ -1185,9 +1197,11 @@ same explanation (HS2-CGXGWY).
   **Project Settings → Development strategy** reads and writes the same versioned shared
   project policy as the CLI (HS2-NBDXPW, docs/34). It describes the three built-ins,
   edits a named Custom strategy with the server's mandatory-gate validation, and keeps an
-  invalid draft visible with its refusal. Session and ticket strategy names can be
-  previewed without saving them; the effective report names its source and ticket takes
-  precedence. The current project's green-main cadence and last green promotion come
+  invalid draft visible with its refusal. A Saved policy summary shows what the saved
+  project policy resolves to: selection and source, local verification, integration,
+  connected CI, red-CI handling, and the green-main goal. There is no hypothetical
+  session or ticket override preview in the GUI (HS2-MN0MXT); the GET route's optional
+  `session` and `ticket` parameters remain for headless use (docs/34). The current project's green-main cadence and last green promotion come
   from the Workers event stream while this category is visible. Switching projects resets
   the stream, so no previous project's status can leak into the new one. No fixed-interval
   network request is used. The integration-only editor and Workers badge remain
@@ -3846,7 +3860,9 @@ follows query edits and re-counts when output arrives while the search is open. 
 survives a drawer or window resize (HS2-SWY5DQ). When the terminal reflows, xterm drops or strands the
 selection that the search addon steps from, and the addon refreshes its match list only after a delay.
 The viewport therefore remembers the active match's index. After a resize it re-highlights and
-re-selects that match through the addon's public API, keeping the scroll position. It does this
+re-selects that match through the addon's public API. If the match was on screen before the resize
+and the reflow left it off screen, the viewport centers it; otherwise it keeps the scroll position the
+reflow left, so a reader who scrolled away from the match stays where they were (HS2-X96PS0). It does this
 before the next Enter or Shift-Enter step, and again whenever the addon's own re-search reports a
 different match, until a re-search confirms it. If a redraw at the new width changes how many matches
 exist, the same index stays active while it still exists. Emptying the field
@@ -5216,15 +5232,23 @@ transition history (HS2-XKXE7V).
   HS2-6ACT5Y) for three or more passes. A `blocked` store's sentence is the server's
   reason, which names the lock file and its age. A
   `conflict` or `rebase_in_progress` that Hot Sheet is still repairing (an AI ask
-  `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). The banner:
+  `started` or `session_asked`, under 30 minutes old) shows no banner (HS2-D4TK0W). While every
+  store publishes but one holds `stranded_saved_writes` (ticket changes an interrupted recovery set
+  aside and never wrote back, HS2-RDPT34), the same strip says how many ticket changes in that store
+  were never restored, that they are kept only in a Hot Sheet backup, and repeats the server's next
+  step naming `hotsheet-cli sync --restore-saved-writes <ref>`; a failing store's next step already
+  names that restore (HS2-1HRYD9). The banner for a failing store:
   - names the store, or the number of failing stores;
   - says why in one sentence, naming an oversized unpublished file and its size;
   - says that tickets are saved on this computer and how many local changes are
     unpublished;
-  - repeats the server's next step, which names the headless `hotsheet-cli` command;
+  - repeats the server's next step, which names the headless `hotsheet-cli` command, as
+    plain text: the server's Markdown code-span backticks are dropped (HS2-GN2S3F);
   - while an AI was asked to repair the stall (`ai_help`, HS2-QR1K8R), says whom Hot Sheet
-    asked and how it went, and links the repair ticket with the shared
-    `open-linked-ticket` action.
+    asked and how it went, once: when the server's next step already says so (an ask in
+    progress or an ended session) the strip does not repeat it, and a failed ask keeps its
+    own sentence. An `Open <slug>` compact pill button, StateBanner's action, opens the
+    repair ticket through the shared `open-linked-ticket` action (HS2-GEF1AS).
 
   It has no dismiss and clears when a sync publishes again. The state contract is
   [02](02-ticket-storage.md) §2.12.2.

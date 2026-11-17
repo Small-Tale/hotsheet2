@@ -6,8 +6,6 @@ export interface DevelopmentStrategyDraft {
   selection: string;
   name: string;
   greenGoal: string;
-  sessionOverride: string;
-  ticketOverride: string;
   custom: {
     integration: CustomDevelopmentStrategy['integration'];
     local_gate: CustomDevelopmentStrategy['local_gate'];
@@ -51,8 +49,6 @@ export function draftFromDevelopmentReport(report: DevelopmentStrategyReport): D
     selection,
     name: report.policy.default_custom ?? '',
     greenGoal: String(report.policy.green_main_goal_minutes),
-    sessionOverride: '',
-    ticketOverride: '',
     custom: customDraft(report.policy.custom[selection]),
   };
 }
@@ -78,7 +74,6 @@ export function changeDevelopmentStrategyField(
   if (field === 'selection') return { ...draft, selection: String(value) };
   if (field === 'name') return { ...draft, name: String(value) };
   if (field === 'greenGoal') return { ...draft, greenGoal: String(value) };
-  if (field === 'sessionOverride' || field === 'ticketOverride') return { ...draft, [field]: String(value) };
   if (!(field in draft.custom)) return draft;
   if (field === 'integration' && value !== 'ci-staged')
     return {

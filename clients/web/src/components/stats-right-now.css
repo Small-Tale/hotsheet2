@@ -3,3 +3,12 @@
 .stats-right-now {
   min-width: 0;
 }
+
+/* The main CI tile's run link (HS2-E16ZEK) keeps its external-link glyph on the label's line in a
+   narrow tile, as the provider setup links do. */
+.stats-right-now__run-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wa-space-2xs);
+  width: fit-content;
+}

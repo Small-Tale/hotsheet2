@@ -86,7 +86,7 @@ struct FollowRecord {
     subagents: Option<BTreeMap<String, u64>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum TurnEvent {
     Start,
@@ -99,6 +99,70 @@ pub(crate) struct ClaudeTurnReq {
     event: TurnEvent,
     session_id: String,
     transcript_path: String,
+}
+
+/// `POST /terminals/{id}/claude-activity` (HS2-5YCGH5): one hook of an interactive Claude
+/// session in that Hot Sheet terminal, already reduced by the hook to the fields activity
+/// mapping reads (`hotsheet_cli::permission_hook::claude_activity_payload`).
+#[derive(Deserialize)]
+pub(crate) struct ClaudeActivityReq {
+    session_id: String,
+    hook: serde_json::Value,
+}
+
+/// Narrate an interactive Claude terminal session (HS2-5YCGH5): map its turn and tool hooks
+/// with the same [`hotsheet_ticketing::activity::claude_activity`] that driven turns use, and
+/// record the event to the terminal's project store, attributed to the session, the checkout,
+/// and the ticket the terminal's worker claims, under the per-turn volume admission. Only the
+/// session connected to this terminal may report; an unmapped hook records nothing.
+pub(crate) async fn report_claude_activity(
+    State(state): State<AppState>,
+    Path(terminal): Path<String>,
+    Json(body): Json<ClaudeActivityReq>,
+) -> Result<StatusCode, ApiError> {
+    check_claude_session(&state, &terminal, &body.session_id)?;
+    tokio::task::spawn_blocking(move || {
+        record_terminal_claude_activity(&state, &terminal, &body.session_id, &body.hook)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Map one Claude hook of terminal `terminal`'s session and record it to the terminal's project
+/// store, attributed to the session, the checkout, and the ticket the terminal's worker claims
+/// (HS2-5YCGH5). An unmapped hook records nothing. Blocking.
+fn record_terminal_claude_activity(
+    state: &AppState,
+    terminal: &str,
+    session_id: &str,
+    hook: &serde_json::Value,
+) -> Result<(), hotsheet_ticketing::StoreError> {
+    let id = hotsheet_model::Ulid::new().to_string();
+    let ts = crate::now().as_str().to_string();
+    let Some(mut event) = hotsheet_ticketing::activity::claude_activity(hook, &id, &ts) else {
+        return Ok(());
+    };
+    let ai_worker = hotsheet_aitools::session_worker_id("claude", terminal);
+    let shell_worker = super::launch::terminal_session_worker_id(terminal);
+    let target = terminal_usage_target(state, terminal, &[&ai_worker, &shell_worker])?;
+    event.session = Some(session_id.to_string());
+    if event.ticket.is_none() {
+        event.ticket = target.ticket.clone();
+    }
+    event.project = super::usage_store::terminal_usage_checkout(state, terminal);
+    state.record_activity(&target.store, event)?;
+    Ok(())
+}
+
+/// Narrate a turn boundary the `claude-turn` report already carries (HS2-5YCGH5), so the hook
+/// makes no second request for it. A failure only logs: usage recording must not depend on it.
+fn narrate_turn_boundary(state: &AppState, terminal: &str, session_id: &str, event: &str) {
+    let hook = serde_json::json!({ "hook_event_name": event, "session_id": session_id });
+    if let Err(error) = record_terminal_claude_activity(state, terminal, session_id, &hook) {
+        tracing::warn!(%error, "recording Claude terminal activity failed");
+    }
 }
 
 fn transcript_for_session(path: &str, session_id: &str) -> Result<PathBuf, ApiError> {
@@ -498,6 +562,11 @@ pub(crate) async fn report_claude_turn(
                     inner.turn_messages = 0;
                 }
                 persist(&state, &inner);
+                drop(inner);
+                // A repeated prompt boundary narrates nothing new either.
+                if !repeated {
+                    narrate_turn_boundary(&state, &terminal, &body.session_id, "UserPromptSubmit");
+                }
             }
             TurnEvent::Stop | TurnEvent::Failure => {
                 // A follow first seen at a stop knows nothing of the turn that ended.
@@ -513,6 +582,9 @@ pub(crate) async fn report_claude_turn(
                         return Ok(());
                     }
                     waiting.stop_waiting = true;
+                }
+                if body.event == TurnEvent::Stop {
+                    narrate_turn_boundary(&state, &terminal, &body.session_id, "Stop");
                 }
                 let deadline = Instant::now() + TRANSCRIPT_FLUSH_WAIT;
                 let result = loop {

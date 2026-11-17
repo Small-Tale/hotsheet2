@@ -85,4 +85,29 @@ describe('Playwright bridge home release (HS2-B0WP94)', () => {
       expect(removed).toEqual(['/tmp/a', '/tmp/home']);
     }
   });
+
+  it('reports a directory it cannot remove and still removes the rest (HS2-XFFBA7)', () => {
+    const removed = [],
+      warnings = [];
+    const outcome = releaseBridgeHome({
+      home: '/tmp/home',
+      directories: ['/tmp/vite', '/tmp/home', '/tmp/legacy'],
+      cli: '/bin/hotsheet-cli',
+      exists: () => false,
+      run: () => {
+        throw new Error('no store, so no stop');
+      },
+      remove: (path) => {
+        if (path === '/tmp/home')
+          throw Object.assign(new Error('ENOTEMPTY: directory not empty'), { code: 'ENOTEMPTY' });
+        removed.push(path);
+      },
+      warn: (message) => warnings.push(message),
+    });
+    expect(outcome).toEqual({ stopped: false });
+    expect(removed).toEqual(['/tmp/vite', '/tmp/legacy']);
+    expect(warnings).toEqual([
+      'Could not remove the Playwright run directory /tmp/home: ENOTEMPTY: directory not empty',
+    ]);
+  });
 });

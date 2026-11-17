@@ -1,6 +1,7 @@
 import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
 
@@ -215,9 +216,7 @@ async function installHost(page: Page, withTicket = false) {
 
 async function openProject(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.getByRole('button', { name: 'Local Project' }).click();
-  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await openMockedProject(page);
   await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
 }
 
