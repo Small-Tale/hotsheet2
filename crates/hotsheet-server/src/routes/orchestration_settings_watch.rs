@@ -8,8 +8,11 @@
 //! from, natively and without recursion: the owner's `.hotsheet2` directory and the
 //! machine home. A file event wakes the watcher; after a short quiet period it
 //! compares the owner's settings fingerprint with the last one seen and publishes the
-//! same `orchestration_changed` event when it differs. Nothing here reads on a timer:
-//! the wait only checks whether the server is stopping.
+//! same `orchestration_changed` event when it differs. HS2-WD475E: when no event
+//! arrives for a second it compares too, as every change waiter re-checks
+//! (`hotsheet_jobs::ChangeWaiter`), and it compares before it watches a directory that
+//! appeared (a restart of the platform's event stream that took up to twenty seconds on
+//! a loaded machine). The re-check reads local files only and never makes a request.
 use crate::AppState;
 use hotsheet_cli::orchestration::OrchestrationRuntime;
 use hotsheet_jobs::watch::{Delivery, PathWatcher, RecursiveMode};
@@ -44,8 +47,9 @@ const IN_FLIGHT_LIMIT: Duration = Duration::from_secs(30);
 
 /// Writes land as several events (a temporary file, a rename); wait for them to pause.
 const QUIET: Duration = Duration::from_millis(150);
-/// How often an idle watcher checks whether the server is stopping. It reads nothing.
-const STOP_CHECK: Duration = Duration::from_secs(1);
+/// HS2-WD475E: how long an idle watcher waits for an event before it compares the
+/// settings anyway (local files only), and checks whether the server is stopping.
+const SAFETY_RECHECK: Duration = Duration::from_secs(1);
 
 /// The owner whose orchestration settings a request reads, so its files are watched.
 pub(super) fn settings_owner(method: &axum::http::Method, path: &str) -> Option<String> {
@@ -269,29 +273,63 @@ fn follow(
     owner: &str,
     key: &str,
     paths: &[PathBuf],
-    (mut watcher, mut watched): (PathWatcher, Vec<PathBuf>),
+    watching: (PathWatcher, Vec<PathBuf>),
     rx: &std::sync::mpsc::Receiver<Delivery>,
 ) {
+    let (rescan, asks) = std::sync::mpsc::channel();
+    let owned = paths.to_vec();
+    if std::thread::Builder::new()
+        .name(format!("hotsheet-orchestration-settings-watch-{owner}"))
+        .spawn(move || keep_watching(watching, owned, asks))
+        .is_err()
+    {
+        return;
+    }
     while !state.is_stopping() {
-        match rx.recv_timeout(STOP_CHECK) {
-            Ok(_) => {}
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+        let evented = match rx.recv_timeout(SAFETY_RECHECK) {
+            Ok(_) => true,
+            // HS2-WD475E: no event for a while: compare anyway, unless the server is
+            // making a change itself, which it records and announces.
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => false,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
-        }
-        // Let the rest of this write arrive, then read once. HS2-2EKDSM: while the
-        // server is making a change itself, wait for it to record what it announces.
-        let deferred = std::time::Instant::now();
-        while rx.recv_timeout(QUIET).is_ok()
-            || (in_flight(key) && deferred.elapsed() < IN_FLIGHT_LIMIT)
-        {}
-        add_watches(&mut watcher, &mut watched, paths);
-        let since = begun(key);
-        let Ok(fingerprint) = runtime.orchestration_fingerprint(owner) else {
-            continue;
         };
-        if record_unless_changing(key, since, fingerprint) {
+        if evented {
+            // Let the rest of this write arrive, then read once. HS2-2EKDSM: while the
+            // server is making a change itself, wait for it to record what it announces.
+            let deferred = std::time::Instant::now();
+            while rx.recv_timeout(QUIET).is_ok()
+                || (in_flight(key) && deferred.elapsed() < IN_FLIGHT_LIMIT)
+            {}
+        } else if in_flight(key) {
+            continue;
+        }
+        // HS2-WD475E: compare and announce here, and watch any directory that appeared
+        // on the watcher's own thread. Watching one more restarts the platform's event
+        // stream, which took up to twenty seconds on a loaded machine; done here, it held
+        // back the announcement of the change that created `.hotsheet2` and of every
+        // change made while it restarted. Those are found at the next safety re-check.
+        let since = begun(key);
+        if let Ok(fingerprint) = runtime.orchestration_fingerprint(owner)
+            && record_unless_changing(key, since, fingerprint)
+        {
             super::orchestration::note_orchestration_change(state, owner);
         }
+        let _ = rescan.send(());
+    }
+}
+
+/// HS2-WD475E: keep the platform watcher on a thread of its own that adds each
+/// directory that appeared when asked, so a slow event-stream restart never holds back
+/// the follower's comparisons. It ends, dropping the watcher, when the follower ends.
+fn keep_watching(
+    (mut watcher, mut watched): (PathWatcher, Vec<PathBuf>),
+    paths: Vec<PathBuf>,
+    asks: std::sync::mpsc::Receiver<()>,
+) {
+    while asks.recv().is_ok() {
+        // Several asks while a restart ran are one look.
+        while asks.try_recv().is_ok() {}
+        add_watches(&mut watcher, &mut watched, &paths);
     }
 }
 

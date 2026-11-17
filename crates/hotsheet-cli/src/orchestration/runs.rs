@@ -449,10 +449,18 @@ impl OrchestrationRuntime {
         if wait_ms == 0 {
             return journal.read(after, limit, run_id);
         }
-        // Watch before reading, so an event appended in between is not missed.
-        let waiter = hotsheet_jobs::ChangeWaiter::new(journal.directory())?;
         let deadline = std::time::Instant::now()
             + std::time::Duration::from_millis(wait_ms.min(MAX_EVENT_WAIT_MS));
+        // HS2-WD475E: an answer already there needs no watcher.
+        let page = journal.read(after, limit, run_id)?;
+        if !page.entries.is_empty() || page.gap {
+            return Ok(page);
+        }
+        // The watcher starts in the background: until it runs, each wait ends at the
+        // one-second safety re-check and the journal is read again, so an event appended
+        // meanwhile is found within that interval rather than after a start that took
+        // seconds on a loaded machine.
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[journal.directory()])?;
         loop {
             let page = journal.read(after, limit, run_id)?;
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());

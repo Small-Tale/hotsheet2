@@ -595,7 +595,9 @@ impl OrchestrationRuntime {
             (self.home.clone(), checkout_id.to_owned(), execution.clone());
         std::thread::spawn(move || {
             let directory = super::validation_runner::steps_dir(&home, &checkout_id);
-            let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).ok();
+            // HS2-WD475E: started in the background; until it runs, each wait ends at
+            // the one-second re-check below, so the record is still read promptly.
+            let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
             let registry = HostedValidationRegistry::new(&home);
             let mut asked_to_stop = false;
             loop {
@@ -650,9 +652,12 @@ impl OrchestrationRuntime {
         wait_ms: u64,
     ) -> HostedValidation {
         let directory = super::validation_runner::steps_dir(&self.home, checkout_id);
-        let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).ok();
         let registry = self.hosted_validation_registry();
         let deadline = Instant::now() + Duration::from_millis(wait_ms);
+        // HS2-WD475E: the watcher starts only when the record does not answer at once,
+        // and in the background: a start that took seconds on a loaded machine delayed
+        // even an immediate answer, long enough for a step's own timeout to pass.
+        let mut waiter: Option<Option<hotsheet_jobs::ChangeWaiter>> = None;
         loop {
             match registry.record(checkout_id, execution_id) {
                 Ok(Some(record)) => {
@@ -669,7 +674,10 @@ impl OrchestrationRuntime {
             if left.is_zero() {
                 return hosted_reply(execution_id, None);
             }
-            match &waiter {
+            let waiter = waiter.get_or_insert_with(|| {
+                hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok()
+            });
+            match waiter {
                 Some(waiter) => {
                     waiter.wait(left);
                 }

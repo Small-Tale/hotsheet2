@@ -301,3 +301,47 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
     assert_eq!(shared.matches(".paths_mut()").count(), 2);
     assert_eq!(shared.matches("watcher.watch(").count(), 1);
 }
+
+/// HS2-WD475E: a waiter that starts its platform watcher in the background answers at
+/// once, re-checks at the safety interval until the watcher runs, then wakes on each
+/// change like any other; one dropped before its start finishes leaves nothing behind.
+#[test]
+fn hs2_wd475e_a_background_start_returns_at_once_and_then_wakes_on_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let directories: Vec<PathBuf> = ["a", "b/deep"]
+        .iter()
+        .map(|name| root.path().join(name))
+        .collect();
+    let paths: Vec<&Path> = directories.iter().map(PathBuf::as_path).collect();
+    // Created at once, directories included, whatever the platform start takes.
+    let started = Instant::now();
+    let waiter = ChangeWaiter::starting(&paths).unwrap();
+    assert!(directories.iter().all(|directory| directory.is_dir()));
+    // A wait never outlasts the safety re-check, started or not.
+    let waited = Instant::now();
+    waiter.wait(Duration::from_secs(3600));
+    assert!(waited.elapsed() < Duration::from_secs(30));
+    // The start finishes on its own; the waiter then wakes on each change.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while waiter.platform_starts() == 0 {
+        assert!(Instant::now() < deadline, "the watcher never started");
+        waiter.wait(Duration::from_millis(100));
+    }
+    assert_eq!(waiter.platform_starts(), 1);
+    assert!(started.elapsed() < Duration::from_secs(60));
+    settle(&waiter);
+    for (index, name) in [0, 1, 0].into_iter().zip("xyz".chars()) {
+        std::fs::write(directories[index].join(name.to_string()), b"x").unwrap();
+        assert!(wakes(&waiter), "a write under directory {index} must wake");
+        settle(&waiter);
+    }
+    // Dropped at once, again and again: nothing panics or leaks a running watch that
+    // would keep waking a gone waiter.
+    for _ in 0..8 {
+        drop(ChangeWaiter::starting(&paths).unwrap());
+    }
+    // A waiter over a path that cannot be created fails like `watching`.
+    let file = root.path().join("file");
+    std::fs::write(&file, b"x").unwrap();
+    assert!(ChangeWaiter::starting(&[file.join("below").as_path()]).is_err());
+}

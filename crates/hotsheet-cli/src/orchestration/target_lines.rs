@@ -170,7 +170,11 @@ impl OrchestrationRuntime {
         if wait_ms == 0 || after.is_none() {
             return Ok(self.target_lines_now(of, tx)?.0);
         }
-        // Watch before reading, so a change in between is not missed. The journals
+        // HS2-WD475E: the deadline counts from the request, whatever the reads and the
+        // watcher's start take, so a reader's `wait_ms` is the longest it waits.
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
+        // The journals
         // keep one file per owner in shared directories, so one watch covers them all;
         // the directory name does not depend on the id given.
         let any = "target-lines";
@@ -193,18 +197,14 @@ impl OrchestrationRuntime {
         ];
         let unique: BTreeMap<&PathBuf, ()> = stores.iter().map(|store| (store, ())).collect();
         dirs.extend(unique.keys().map(|store| store.as_path()));
-        let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {
+        // HS2-F8174X: the stores to watch are known only after the first read, so the
+        // watcher starts after it. HS2-WD475E: it starts in the background; until it
+        // runs, each wait ends at the one-second safety re-check and the lines are read
+        // again, so a change made meanwhile is found within that interval instead of
+        // after a start that took seconds on a loaded machine.
+        let Ok(waiter) = hotsheet_jobs::ChangeWaiter::starting(&dirs) else {
             return Ok(first);
         };
-        // HS2-F8174X: the stores to watch are known only after the first read, so the
-        // watcher starts after it. Read once more now that it runs, so a change made in
-        // between is not missed (as HS2-ANQXQ4 does for the timeline).
-        let (current, ..) = self.target_lines_now(of, tx)?;
-        if current.version != first.version {
-            return Ok(current);
-        }
-        let deadline = std::time::Instant::now()
-            + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if remaining.is_zero() {

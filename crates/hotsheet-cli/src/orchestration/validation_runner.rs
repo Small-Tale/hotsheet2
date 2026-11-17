@@ -441,15 +441,23 @@ fn run_claimed(home: &Path, registry: &HostedValidationRegistry, spec: &StepSpec
         let (cancel, done, marker) = (cancel.clone(), done.clone(), marker.clone());
         let directory = steps_dir(home, &spec.checkout_id);
         std::thread::spawn(move || {
-            let Ok(waiter) = hotsheet_jobs::ChangeWaiter::new(&directory) else {
-                return;
-            };
+            // HS2-WD475E: the marker is checked before and between waits, and the
+            // watcher starts in the background. Started first and in the way, a start
+            // that took seconds on a loaded machine kept a cancel unseen that long; a
+            // watcher that could not start ended this thread, so a cancel was never seen.
+            let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
             while !done.load(Ordering::SeqCst) {
                 if marker.exists() {
                     cancel.store(true, Ordering::SeqCst);
                     return;
                 }
-                waiter.wait(Duration::from_secs(1));
+                match &waiter {
+                    Some(waiter) => {
+                        waiter.wait(Duration::from_secs(1));
+                    }
+                    // A local file check each second; no request is made.
+                    None => std::thread::sleep(Duration::from_secs(1)),
+                }
             }
         })
     };

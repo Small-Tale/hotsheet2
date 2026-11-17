@@ -4752,7 +4752,12 @@ step waits on changes the permission ledger, and a response to the goal ticket's
 note changes the owner's store, without waiting for the next run event or scheduler pass.
 The waiter's one-second safety re-check reads the timeline again too, from local files
 only, so a change no watched directory reported (an event the platform watcher dropped)
-ends the wait within a second instead of at the deadline (HS2-1C77XH).
+ends the wait within a second instead of at the deadline (HS2-1C77XH). The platform
+watcher starts in the background (`ChangeWaiter::starting`, HS2-WD475E): its start took
+one to twenty seconds on a loaded machine, and a read that waited for it found nothing
+meanwhile, so until it runs the same one-second re-check reads again. The deadline counts
+from the request, so `wait_ms` is the longest a read waits. The run-event, target-lines
+and hosted-validation waits work the same way.
 A read on the server also starts the target followers of §26.9.
 
 ### The view
@@ -4974,9 +4979,13 @@ flight the watcher defers its comparison (at most 30 seconds), so the server's o
 change is announced once (HS2-2EKDSM). A change that begins after the watcher's
 quiet check, while it reads the settings, is left to the server too: the watcher
 records and announces what it read only if no change of the server's own began since
-its check, decided under the same lock that starts a change (HS2-N8VRFC). The watcher
-reads nothing on a timer and
-ends when the server stops. The watched paths are `orchestration_watch_paths`.
+its check, decided under the same lock that starts a change (HS2-N8VRFC). HS2-WD475E:
+after a second with no event it compares too (local files only), as every change waiter
+re-checks, and a directory that appears is added to the watch on a thread of its own:
+restarting the platform's event stream took up to twenty seconds on a loaded machine,
+and done in line it held back the announcement of the change that created the
+directory and of every change made during the restart. The watcher ends when the
+server stops. The watched paths are `orchestration_watch_paths`.
 
 ### Headless surface
 
@@ -5075,9 +5084,9 @@ the others.
 With `after` equal to the current version and `wait_ms` (at most 20 seconds) the read is
 a long poll on the same records the timeline watches; a checkout nothing orchestrates
 still waits to the deadline, so a reader that keeps asking never spins. Like the
-timeline, it reads once more after its watcher starts and again at each one-second
-safety re-check, so a change no watched directory reported ends the wait within a
-second (HS2-F8174X).
+timeline, its watcher starts in the background and it reads again at each one-second
+safety re-check, so a change no watched directory reported, or one made while the
+watcher was starting, ends the wait within a second (HS2-F8174X, HS2-WD475E).
 
 ### The client
 

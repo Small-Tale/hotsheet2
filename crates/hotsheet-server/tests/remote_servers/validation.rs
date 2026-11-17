@@ -662,6 +662,18 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         mcp_named(&home, &backend, "hotsheet_targets", arguments)
     };
     let of = json!({"native_id":orchestration.slug});
+    // HS2-WD475E: a call waits a bounded time; the same call again waits further, as
+    // the tool says, which a loaded machine may need before a step's end is recorded.
+    let settled = |arguments: Value| {
+        let mut answer = call(arguments.clone());
+        for _ in 0..5 {
+            if answer["result"]["state"] != "running" {
+                break;
+            }
+            answer = call(arguments.clone());
+        }
+        answer
+    };
     let defined = call(
         json!({"action":"validation_define","target_id":TARGET,"ticket":of,
         "step":{"step_id":"smoke","check":{"kind":"profile","name":"smoke"},
@@ -672,7 +684,7 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
     assert_eq!(defined["step"]["definition"]["target_id"], TARGET);
     let run = json!({"action":"validation_run","ticket":of,"step_id":"smoke",
         "operation_id":"op-mcp-val","wait_ms":8000});
-    let passed = call(run.clone());
+    let passed = settled(run.clone());
     assert_eq!(passed["result"]["state"], "passed", "{passed}");
     assert_eq!(passed["result"]["outcome"]["stdout"]["sha256"], OK_SHA256);
     assert_eq!(passed["attempts_left"], 0);
@@ -702,7 +714,7 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
     std::fs::write(project.join("go"), "").unwrap();
     let mut waiting = gated.clone();
     waiting["wait_ms"] = json!(8000);
-    let finished = call(waiting);
+    let finished = settled(waiting);
     assert_eq!(finished["result"]["state"], "passed", "{finished}");
     assert_eq!(
         finished["result"]["result_id"],
@@ -736,7 +748,7 @@ async fn hs2_wn0mxz_stdio_mcp_defines_runs_and_reads_validation_on_a_live_servic
         "operation_id":"op-mcp-held","wait_ms":0}),
     );
     assert_eq!(held["result"]["state"], "running", "{held}");
-    let cancelled = call(
+    let cancelled = settled(
         json!({"action":"validation_cancel","ticket":of,"step_id":"held",
         "wait_ms":8000}),
     );

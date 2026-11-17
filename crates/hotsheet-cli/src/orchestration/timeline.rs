@@ -361,6 +361,10 @@ impl OrchestrationRuntime {
         if wait_ms == 0 || after.is_none() {
             return Ok(self.timeline_now(&owner.id, tx)?.0);
         }
+        // HS2-WD475E: the deadline counts from the request, whatever the reads and the
+        // watcher's start take, so a reader's `wait_ms` is the longest it waits.
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
         let runs = RunEventJournal::new(&self.home, &owner.id)?;
         let decisions = DecisionJournal::new(&self.home, &owner.id)?;
         let wake = self.home.join(WAKE_DIRECTORY);
@@ -378,18 +382,15 @@ impl OrchestrationRuntime {
             permissions.as_path(),
         ];
         dirs.extend(stores.iter().map(PathBuf::as_path));
-        let Ok(waiter) = hotsheet_jobs::ChangeWaiter::watching(&dirs) else {
+        // HS2-ANQXQ4: the stores to watch are known only after the first read, so the
+        // watcher starts after it. HS2-WD475E: it starts in the background; until it
+        // runs, each wait ends at the one-second safety re-check and the timeline is
+        // read again, so a change made meanwhile (an answer given while the first read
+        // ran) is found within that interval instead of after a start that took seconds
+        // on a loaded machine.
+        let Ok(waiter) = hotsheet_jobs::ChangeWaiter::starting(&dirs) else {
             return Ok(first);
         };
-        // HS2-ANQXQ4: the stores to watch are known only after the first read, so the
-        // watcher starts after it. Read once more now that it runs: a change made in
-        // between (an answer given while the first read ran) is not missed.
-        let (current, _) = self.timeline_now(&owner.id, tx)?;
-        if current.version != first.version {
-            return Ok(current);
-        }
-        let deadline = std::time::Instant::now()
-            + std::time::Duration::from_millis(wait_ms.min(MAX_TIMELINE_WAIT_MS));
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if remaining.is_zero() {

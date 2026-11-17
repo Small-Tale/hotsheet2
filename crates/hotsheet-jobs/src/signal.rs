@@ -25,8 +25,10 @@ struct Changed {
 /// Wakes when anything under its directories changes.
 pub struct ChangeWaiter {
     changed: Arc<Changed>,
-    // Dropping the watcher stops the events, so it lives as long as the waiter.
-    watcher: Option<PathWatcher>,
+    // Dropping the watcher stops the events, so it lives as long as the waiter. Empty
+    // while a background start ([`ChangeWaiter::starting`]) is still under way, or when
+    // the platform watcher could not start; waits then end at the safety re-check.
+    watcher: Arc<Mutex<Option<PathWatcher>>>,
 }
 
 impl std::fmt::Debug for ChangeWaiter {
@@ -55,14 +57,47 @@ impl ChangeWaiter {
             .iter()
             .map(|dir| (*dir, RecursiveMode::Recursive))
             .collect();
-        let watcher = PathWatcher::start(&paths, move |event| {
-            if event.is_ok_and(|event| is_change(&event)) {
-                *signal.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
-                signal.woke.notify_all();
-            }
+        let watcher = start_watcher(&paths, signal);
+        Ok(Self {
+            changed,
+            watcher: Arc::new(Mutex::new(watcher)),
         })
-        .ok();
-        Ok(Self { changed, watcher })
+    }
+
+    /// HS2-WD475E: [`ChangeWaiter::watching`] that returns at once and starts the
+    /// platform watcher on a background thread. On a loaded machine a start took one to
+    /// five seconds, and longer while many started together; a reader that waited for
+    /// it first noticed nothing, not even a change its own re-check would find. Until
+    /// the watcher runs, and if it never starts, every wait still ends at the safety
+    /// re-check, so a caller that reads again after each wait finds a change made
+    /// meanwhile within that interval. Dropping the waiter before the start finishes
+    /// drops the watcher as soon as it has started.
+    pub fn starting(dirs: &[&Path]) -> io::Result<Self> {
+        for dir in dirs {
+            fs::create_dir_all(dir)?;
+        }
+        let changed = Arc::new(Changed::default());
+        let slot: Arc<Mutex<Option<PathWatcher>>> = Arc::new(Mutex::new(None));
+        let (signal, weak) = (Arc::clone(&changed), Arc::downgrade(&slot));
+        let owned: Vec<PathBuf> = dirs.iter().map(|dir| dir.to_path_buf()).collect();
+        let spawned = std::thread::Builder::new()
+            .name("hotsheet-change-waiter-start".into())
+            .spawn(move || {
+                let paths: Vec<(&Path, RecursiveMode)> = owned
+                    .iter()
+                    .map(|dir| (dir.as_path(), RecursiveMode::Recursive))
+                    .collect();
+                let started = start_watcher(&paths, signal);
+                if let Some(slot) = weak.upgrade() {
+                    *slot.lock().unwrap_or_else(PoisonError::into_inner) = started;
+                }
+            });
+        // Without a thread the waiter still waits, re-checking as an unwatched one does.
+        let _ = spawned;
+        Ok(Self {
+            changed,
+            watcher: slot,
+        })
     }
 
     /// Block until something changed or `timeout` passed, whichever is first, and never
@@ -84,10 +119,26 @@ impl ChangeWaiter {
     }
 
     /// How many times the platform watcher was started for this waiter; zero when it
-    /// could not start at all.
+    /// could not start at all, or a background start has not finished yet.
     pub fn platform_starts(&self) -> usize {
-        self.watcher.as_ref().map_or(0, PathWatcher::starts)
+        self.watcher
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map_or(0, PathWatcher::starts)
     }
+}
+
+/// The platform watcher over `paths`, raising `signal` on each change; `None` when it
+/// could not start.
+fn start_watcher(paths: &[(&Path, RecursiveMode)], signal: Arc<Changed>) -> Option<PathWatcher> {
+    PathWatcher::start(paths, move |event| {
+        if event.is_ok_and(|event| is_change(&event)) {
+            *signal.seen.lock().unwrap_or_else(PoisonError::into_inner) = true;
+            signal.woke.notify_all();
+        }
+    })
+    .ok()
 }
 
 /// A content change, as opposed to a file merely being opened or closed. Lock files are
@@ -237,7 +288,7 @@ mod tests {
     fn unwatched() -> ChangeWaiter {
         ChangeWaiter {
             changed: Arc::new(Changed::default()),
-            watcher: None,
+            watcher: Arc::new(Mutex::new(None)),
         }
     }
 

@@ -205,9 +205,19 @@ fn hs2_bwapsx_a_detached_runner_is_shown_among_the_machines_jobs() {
     assert!(running.lease.is_some());
     // It ends; the Job ends with the step's end, by codes and numbers only.
     std::fs::write(root.join("go"), "").unwrap();
-    let finished = runtime
+    // HS2-WD475E: one read waits a bounded time; the same read again waits further,
+    // which a loaded machine may need before the step's end is recorded.
+    let mut finished = runtime
         .hosted_validation(&checkout, &id(90), MAX_VALIDATION_WAIT_MS)
         .unwrap();
+    for _ in 0..5 {
+        if finished.state != HostedExecutionState::Running {
+            break;
+        }
+        finished = runtime
+            .hosted_validation(&checkout, &id(90), MAX_VALIDATION_WAIT_MS)
+            .unwrap();
+    }
     assert_eq!(finished.state, HostedExecutionState::Finished);
     let job = job_of(&id(90)).unwrap();
     assert_eq!(job.status, Status::Failed);
@@ -227,16 +237,22 @@ fn hs2_bwapsx_a_detached_runner_is_shown_among_the_machines_jobs() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
-    runtime
-        .hosted_validation_cancel(
-            &checkout,
-            HostedValidationCancel {
-                execution_id: id(91),
-                wait_ms: MAX_VALIDATION_WAIT_MS,
-            },
-            &mut tx,
-        )
-        .unwrap();
+    // HS2-WD475E: the same cancel again waits further until the runner confirms it.
+    for _ in 0..5 {
+        let stopped = runtime
+            .hosted_validation_cancel(
+                &checkout,
+                HostedValidationCancel {
+                    execution_id: id(91),
+                    wait_ms: MAX_VALIDATION_WAIT_MS,
+                },
+                &mut tx,
+            )
+            .unwrap();
+        if stopped.state != HostedExecutionState::Running {
+            break;
+        }
+    }
     assert_eq!(job_of(&id(91)).unwrap().status, Status::Cancelled);
     let kinds: Vec<_> = store
         .list(&checkout)
