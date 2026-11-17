@@ -15,6 +15,7 @@ import type { WorkspaceViewMode } from '../components/workspace-controls';
 import type { ConfirmationOptions } from '../confirmation';
 import type { Project } from '../interactions/types';
 import { parseBuiltAhead } from '../orchestration-built-ahead';
+import { parseProgressSummary, type ProgressSummaryView } from '../orchestration-progress';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseContention, type ResourceContentionView } from '../orchestration-resources';
 import { parseRunReconciliation } from '../orchestration-run-checks';
@@ -244,7 +245,13 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   const busy = signal(false);
   /** HS2-2XJSJK: with no card selected, what the overview read (HS2-77SRHC: the newest decisions). */
   const overview = signal<
-    { decisions?: SchedulerDecisionPage; contention?: ResourceContentionView[]; error?: string } | undefined
+    | {
+        decisions?: SchedulerDecisionPage;
+        contention?: ResourceContentionView[];
+        summary?: ProgressSummaryView;
+        error?: string;
+      }
+    | undefined
   >(undefined);
   /** HS2-77SRHC: the open Show All Decisions… dialog and the cursor of the page before what it shows. */
   const decisionsDialog = signal<OrchestrationDecisionsDialogState | undefined>(undefined);
@@ -648,16 +655,19 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     if (!current || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
     const client = clientFor(current);
     // HS2-5GRXFN: the scheduler's own dry-run plan says which resources hold work back; it logs nothing.
-    const [page, plan] = await Promise.allSettled([
+    const [page, plan, summary] = await Promise.allSettled([
       client.orchestrationDecisions(current.id, { limit: 30 }),
       client.orchestrationSchedulerPlan(current.id, dependencies.personId()),
+      // HS2-XJEH08: progress and cost from this machine's records.
+      client.orchestrationSummary(current.id),
     ]);
     if (request !== overviewRequest) return;
     overview.value = {
       decisions: page.status === 'fulfilled' ? parseDecisionPage(page.value) : overview.value?.decisions,
       contention: plan.status === 'fulfilled' ? parseContention(plan.value) : overview.value?.contention,
+      summary: summary.status === 'fulfilled' ? parseProgressSummary(summary.value) : overview.value?.summary,
       error:
-        page.status === 'rejected' || plan.status === 'rejected'
+        page.status === 'rejected' || plan.status === 'rejected' || summary.status === 'rejected'
           ? 'Some of the scheduler’s records could not be read.'
           : undefined,
     };

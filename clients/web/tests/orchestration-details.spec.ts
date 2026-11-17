@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 import {
   capture,
@@ -11,6 +11,22 @@ import {
   TARGET,
   visualPass,
 } from './orchestration-real-fixtures';
+
+/**
+ * On a phone the inspector is a sheet; with no card selected, its toggle opens it. Whether the sheet is
+ * open is read from whether the overview takes a click (a closed sheet keeps it laid out but inert).
+ */
+async function openInspector(page: Page) {
+  const overview = page.locator('[data-orchestration-overview]');
+  const open = await overview
+    .locator('h2')
+    .first()
+    .click({ trial: true, timeout: 2_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!open) await page.locator('[data-action="toggle-ticket-inspector"]').first().click();
+  await expect(overview).toBeInViewport();
+}
 
 /**
  * The orchestration details signed off on HS2-2XJSJK, through the real Orchestration view and its card
@@ -289,7 +305,7 @@ test('HS2-77SRHC a ready card says why it is not running and the overview lists 
     await visualPass(page, 'hs2-77srhc', 'overview', {
       show: latest,
       check: () => expect(latest).toContainText(/Would start|Deferred/),
-      atPhone: () => page.locator('[data-action="toggle-ticket-inspector"]').first().click(),
+      atPhone: () => openInspector(page),
     });
 
     // Show All Decisions…: newest first, Load Earlier reads the page before, Close and Escape dismiss.
@@ -308,7 +324,7 @@ test('HS2-77SRHC a ready card says why it is not running and the overview lists 
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Scheduler Decisions' })).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator('[data-action="toggle-ticket-inspector"]').first().click();
+    await openInspector(page);
     await latest.getByRole('button', { name: 'Show All Decisions…' }).click();
     await expect(page.getByRole('dialog', { name: 'Scheduler Decisions' })).toBeVisible();
     await capture(page, 'hs2-77srhc', 'decisions-390');
@@ -372,7 +388,7 @@ test('HS2-5GRXFN a held resource shows on the deferred card and in the overview 
     await visualPass(page, 'hs2-5grxfn', 'overview-resources', {
       show: resources,
       check: () => expect(resources).toContainText('vm/macos-vm'),
-      atPhone: () => page.locator('[data-action="toggle-ticket-inspector"]').first().click(),
+      atPhone: () => openInspector(page),
     });
 
     // The deferred card: what it needs and how that resource stands.
@@ -385,6 +401,39 @@ test('HS2-5GRXFN a held resource shows on the deferred card and in the overview 
       show: why,
       check: () => expect(why).toContainText('vm/macos-vm'),
       atPhone: () => view.locator(`[data-ticket-slug="${ready.slug}"]`).click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-XJEH08 the overview shows progress and cost, with an unknown cost never read as zero', async ({ page }) => {
+  test.setTimeout(150_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const run = (await plan.dispatch()) as { run_id: string };
+    // The first step finishes: its run completes, so its lead time is known; no usage was recorded.
+    await server.request(`/tickets/${plan.first.id}`, 'PATCH', { status: 'completed' });
+    await send(server, 'POST', `${base}/runs/${run.run_id}/sync`, { actor: scheduler });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const progress = page.locator('[data-orchestration-overview] [data-orchestration-section="Progress"]');
+    await expect(progress).toContainText('1 of 2', { timeout: 30_000 });
+    await expect(progress).toContainText(/on average over 1 run/);
+    await expect(progress).not.toContainText('About under');
+    await expect(progress).toContainText('Unknown (no usage recorded)');
+    await expect(progress).not.toContainText('$0.00');
+    const projects = page.locator('[data-orchestration-overview] [data-orchestration-section="Projects"]');
+    await expect(projects).toContainText('Self');
+    await expect(projects).toContainText('1 done');
+    await expect(projects).toContainText('cost unknown (no usage recorded)');
+    await visualPass(page, 'hs2-xjeh08', 'overview-progress', {
+      show: progress,
+      check: () => expect(progress).toContainText('1 of 2'),
+      atPhone: () => openInspector(page),
     });
   } finally {
     await server.stop(page);

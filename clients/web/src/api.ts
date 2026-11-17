@@ -2378,6 +2378,14 @@ export class Api {
       { method: 'POST', body: JSON.stringify({ step_id: step, actor: { role: 'human', id: actorId } }) },
       false,
     );
+  /** HS2-XJEH08: progress and cost of the project's runs (HS2-S13719); from this machine's records, asks no one. */
+  orchestrationSummary = (checkout: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/summary`,
+      {},
+      false,
+    );
   /** HS2-5GRXFN: the schedule a pass would compute now, as this browser's person; a dry run that logs nothing. */
   orchestrationSchedulerPlan = (checkout: string, actorId: string) =>
     this.parsed(

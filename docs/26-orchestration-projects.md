@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC), resources in a ready card's Why It Is Not Running and in the overview (HS2-5GRXFN), the overview's progress and cost (HS2-XJEH08),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -3785,8 +3785,7 @@ journal (§26.17) and the policy's caps (§26.8).
 
 The decision journal logs only passes that changed something, so an episode lasts
 until the next recorded decision about its subject. When retention removed decisions,
-idle and limited time are `decisions_trimmed` rather than a lower figure. The panel
-that shows these measures waits on design sign-off (HS2-2XJSJK).
+idle and limited time are `decisions_trimmed` rather than a lower figure.
 
 ### Waiting on external systems (HS2-9FXASE)
 
@@ -3818,10 +3817,11 @@ or plan steps (for provider limits) that waited at all.
 
 Journal measures are `decisions_trimmed` when retention removed decisions.
 
-### Not measured yet
+### In the Orchestration view
 
-The workspace view is HS2-XJEH08; the summary panel waits on design sign-off
-(HS2-2XJSJK).
+The overview of the Orchestration view's inspector shows the totals and each
+project's figures (§26.30, HS2-XJEH08). Per-run measures, utilization and external
+waits are read headlessly.
 
 ### Headless surface
 
@@ -5402,3 +5402,20 @@ so each involved target's claims are read through the gate as an observation, wh
 the timeline's version changes while the overview shows. A claim's holder is never
 reported (§26.20): a held resource says until when, and a resource given in a pass
 names the step it was given to.
+
+### Progress and cost (HS2-XJEH08)
+
+The overview opens with **Progress**: done of all planned steps, working now
+(running and provisional), waiting (with how many wait for a person: a permission or
+a decision), **Lead time** and **Cost**; then **Projects**, one row per project with
+its done and working steps and its cost. Counts come from the timeline. Lead time and
+cost come from the summary of §26.21 (`GET .../orchestration/summary`), read with the
+overview on each change of the timeline's version. Lead time is the average over the
+runs whose lead time is known, with the unknown ones counted beside it and their
+reason ("About 52 min on average over 3 runs · 2 unknown (run unfinished)"). An
+unknown measure is never shown as zero: with nothing known the row reads
+"Unknown (<reason>)". A cost total is labelled partial unless `cost.complete` is
+true ("$12.40 so far · partial: 1 work item has no cost (no usage recorded)"), reads
+"At least" when events have no price, and keeps its cents and up to four sub-cent
+digits rather than rounding (`clients/web/src/orchestration-progress.ts`). Per-run
+measures, utilization and external waits stay headless.

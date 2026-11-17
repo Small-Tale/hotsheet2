@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { findTimelineItem } from '../orchestration-timeline-board';
-import { demoClock, demoDecisions, demoTimeline } from '../ux-demo/orchestration-fixtures';
+import { demoClock, demoDecisions, demoSummary, demoTimeline } from '../ux-demo/orchestration-fixtures';
 import { OrchestrationDecisionsDialog } from './orchestration-decisions-dialog';
 import { OrchestrationInspector, orchestrationInspectorPanel } from './orchestration-inspector';
 import { OrchestrationTimelineView } from './orchestration-timeline-view';
@@ -339,6 +339,23 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     ).toContain('Held until about 14:00 unless renewed · DOC-9 waits');
     expect(overview([])).toContain('No work waits on a resource.');
     expect(overview()).toContain('Reading who holds the resources work needs…');
+  });
+
+  it('HS2-XJEH08 shows progress and cost in the overview, never an unknown as zero', () => {
+    const markup = String(
+      OrchestrationInspector({
+        timeline: demoTimeline('running'),
+        clock: demoClock,
+        overview: { summary: demoSummary() },
+      }),
+    );
+    const order = [...markup.matchAll(/data-orchestration-section="([^"]+)"/g)].map((match) => match[1]);
+    expect(order).toEqual(['Progress', 'Projects', 'Scheduler', 'Resources', 'Latest Decisions']);
+    expect(markup).toContain('2 of 10');
+    expect(markup).toContain('5 (2 for you)');
+    expect(markup).toContain('$12.40 so far · partial: 1 work item has no cost (no usage recorded)');
+    expect(markup).toContain('cost unknown (no usage recorded)');
+    expect(markup).not.toContain('$0.00');
   });
 
   it('HS2-77SRHC lists the whole log newest first with Load Earlier while older decisions remain', () => {

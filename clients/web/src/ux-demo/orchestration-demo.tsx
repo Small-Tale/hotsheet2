@@ -15,7 +15,7 @@ import type { TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { demoClock, demoContention, demoDecisions, demoTimeline } from './orchestration-fixtures';
+import { demoClock, demoContention, demoDecisions, demoSummary, demoTimeline } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
 /** HS2-J89JC7: the Orchestration view's production components with synthetic timelines. */
@@ -232,7 +232,7 @@ export function OrchestrationInspectorDemo() {
           timeline={timeline}
           projectName="Launch"
           clock={demoClock}
-          overview={{ decisions: demoDecisions(), contention: demoContention() }}
+          overview={{ decisions: demoDecisions(), contention: demoContention(), summary: demoSummary() }}
         />
       </CatalogExample>
       <CatalogExample label="No Timeline Yet" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>

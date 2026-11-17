@@ -3,6 +3,7 @@
  * project "Launch" plans work in "API" (remote, on "Build host"), "Web" and "Docs" (on this machine).
  * Every name, id and time is invented; nothing is read from a server or a real project.
  */
+import type { CostTotals, ProgressSummaryView } from '../orchestration-progress';
 import type { SchedulerDecisionPage } from '../orchestration-scheduler';
 import type {
   OrchestrationTimeline,
@@ -361,4 +362,27 @@ export function demoContention() {
       waiting: ['step-8'],
     },
   ];
+}
+
+/** HS2-XJEH08: progress and cost figures for the running timeline; Docs reports no cost. */
+export function demoSummary(): ProgressSummaryView {
+  const cost = (known_usd: number, complete: boolean, items_known: number, items_unknown: number): CostTotals => ({
+    known_usd,
+    complete,
+    items_known,
+    items_unknown,
+    unpriced_events: 0,
+    unknown_reasons: items_unknown > 0 ? { no_usage_recorded: items_unknown } : {},
+  });
+  return {
+    totals: {
+      lead_time: { known: 2, unknown: 3, total_ms: 2 * 104 * MINUTE, unknown_reasons: { run_unfinished: 3 } },
+      cost: cost(12.4, false, 3, 1),
+    },
+    targets: {
+      api: { cost: cost(8.1, true, 2, 0) },
+      web: { cost: cost(4.3, true, 1, 0) },
+      docs: { cost: cost(0, false, 0, 1) },
+    },
+  };
 }

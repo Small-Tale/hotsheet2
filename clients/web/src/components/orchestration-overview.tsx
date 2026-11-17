@@ -7,6 +7,7 @@ import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { History } from 'lucide';
 
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
+import { progressRows, type ProgressSummaryView, projectRows } from '../orchestration-progress';
 import { contentionRows, type ResourceContentionView } from '../orchestration-resources';
 import { decisionText, lastPassText, latestDecisions, type SchedulerDecisionPage } from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
@@ -17,6 +18,8 @@ import { OrchestrationInspectorSection } from './orchestration-inspector-section
 export interface OrchestrationOverviewData {
   /** The newest page of the scheduler's decision log. */
   decisions?: SchedulerDecisionPage;
+  /** HS2-XJEH08: the progress and cost summary's totals and per-project figures. */
+  summary?: ProgressSummaryView;
   /** HS2-5GRXFN: `scheduler plan`'s contention: each resource that deferred work, and who waits. */
   contention?: ResourceContentionView[];
   /** A read failed; the parts that were read still show. */
@@ -44,6 +47,7 @@ const placementText = (timeline: OrchestrationTimeline) =>
  * HS2-2XJSJK answer A: with no card selected, the inspector shows the orchestration overview. HS2-77SRHC:
  * the scheduler's placement mode, sessions and last pass, and its latest three decisions with Show All
  * Decisions…, which opens the whole log in a dialog. HS2-5GRXFN: each contended resource and who waits.
+ * HS2-XJEH08: progress and cost, overall and per project; unknown is never zero and partial is labelled.
  */
 export function OrchestrationOverview({ timeline, overview, projectName, clock }: OrchestrationOverviewProps) {
   const decisions = overview?.decisions,
@@ -64,6 +68,22 @@ export function OrchestrationOverview({ timeline, overview, projectName, clock }
           </Text>
         ) : undefined}
       </List>
+      <OrchestrationInspectorSection label="Progress">
+        <ValueTable label="Progress" density="compact" stackBelow="narrow">
+          {progressRows(timeline, overview?.summary).map((row) => (
+            <ValueTableRow label={row.label} value={row.value} />
+          ))}
+        </ValueTable>
+      </OrchestrationInspectorSection>
+      {timeline.targets.length > 0 ? (
+        <OrchestrationInspectorSection label="Projects">
+          <ValueTable label="Projects" density="compact" stackBelow="narrow">
+            {projectRows(timeline, overview?.summary).map((row) => (
+              <ValueTableRow label={row.label} value={row.value} />
+            ))}
+          </ValueTable>
+        </OrchestrationInspectorSection>
+      ) : undefined}
       <OrchestrationInspectorSection label="Scheduler">
         <ValueTable label="Scheduler" density="compact" stackBelow="narrow">
           <ValueTableRow label="Placement" value={placementText(timeline)} />
