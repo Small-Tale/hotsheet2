@@ -1188,9 +1188,11 @@ same explanation (HS2-CGXGWY).
   **Project Settings → Development strategy** reads and writes the same versioned shared
   project policy as the CLI (HS2-NBDXPW, docs/34). It describes the three built-ins,
   edits a named Custom strategy with the server's mandatory-gate validation, and keeps an
-  invalid draft visible with its refusal. Session and ticket strategy names can be
-  previewed without saving them; the effective report names its source and ticket takes
-  precedence. The current project's green-main cadence and last green promotion come
+  invalid draft visible with its refusal. A Saved policy summary shows what the saved
+  project policy resolves to: selection and source, local verification, integration,
+  connected CI, red-CI handling, and the green-main goal. There is no hypothetical
+  session or ticket override preview in the GUI (HS2-MN0MXT); the GET route's optional
+  `session` and `ticket` parameters remain for headless use (docs/34). The current project's green-main cadence and last green promotion come
   from the Workers event stream while this category is visible. Switching projects resets
   the stream, so no previous project's status can leak into the new one. No fixed-interval
   network request is used. The integration-only editor and Workers badge remain

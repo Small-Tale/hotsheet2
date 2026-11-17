@@ -367,7 +367,6 @@ export async function startHotSheetWebClient() {
     workerSources = signal<WorkerCoverageSource[] | undefined>(undefined),
     workerLoading = signal(false);
   const developmentReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
-    developmentPreviewReports = signal<Record<string, DevelopmentStrategyReport | undefined>>({}),
     developmentDrafts = signal<Record<string, DevelopmentStrategyDraft | undefined>>({}),
     developmentMessages = signal<Record<string, string>>({}),
     developmentStatuses = signal<Record<string, string>>({}),
@@ -1823,7 +1822,6 @@ export async function startHotSheetWebClient() {
       const report = await new Api(current.apiPath, '').developmentStrategy(id);
       if (developmentReadVersions.get(id) !== version) return;
       developmentReports.value = { ...developmentReports.value, [id]: report };
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
       developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(report) };
     } catch (error) {
       if (developmentReadVersions.get(id) !== version) return;
@@ -1863,7 +1861,6 @@ export async function startHotSheetWebClient() {
     };
     developmentMessages.value = { ...developmentMessages.value, [current.id]: '' };
     developmentStatuses.value = { ...developmentStatuses.value, [current.id]: '' };
-    developmentPreviewReports.value = { ...developmentPreviewReports.value, [current.id]: undefined };
   }
   async function saveDevelopmentStrategy() {
     const current = project();
@@ -1880,7 +1877,6 @@ export async function startHotSheetWebClient() {
         saved = await new Api(current.apiPath, '').saveDevelopmentStrategy(id, policy);
       invalidateDevelopmentReads(id);
       developmentReports.value = { ...developmentReports.value, [id]: saved };
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
       if (developmentDrafts.value[id] === draft) {
         developmentDrafts.value = { ...developmentDrafts.value, [id]: draftFromDevelopmentReport(saved) };
       }
@@ -1892,34 +1888,6 @@ export async function startHotSheetWebClient() {
       };
     } finally {
       developmentSaving.value = { ...developmentSaving.value, [id]: false };
-    }
-  }
-  async function previewDevelopmentStrategy() {
-    const current = project();
-    if (!current) return;
-    const id = current.id,
-      draft = developmentDrafts.value[id];
-    if (!draft) return;
-    const version = invalidateDevelopmentReads(id);
-    developmentMessages.value = { ...developmentMessages.value, [id]: '' };
-    developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: undefined };
-    try {
-      const report = await new Api(current.apiPath, '').developmentStrategy(id, {
-        session: draft.sessionOverride.trim() || undefined,
-        ticket: draft.ticketOverride.trim() || undefined,
-      });
-      if (developmentReadVersions.get(id) !== version) return;
-      developmentPreviewReports.value = { ...developmentPreviewReports.value, [id]: report };
-      developmentStatuses.value = {
-        ...developmentStatuses.value,
-        [id]: 'Effective policy preview; project settings unchanged.',
-      };
-    } catch (error) {
-      if (developmentReadVersions.get(id) !== version) return;
-      developmentMessages.value = {
-        ...developmentMessages.value,
-        [id]: error instanceof Error ? error.message : String(error),
-      };
     }
   }
   function setSettingsCategory(_projectId: string, category: SettingsCategory) {
@@ -5134,7 +5102,7 @@ export async function startHotSheetWebClient() {
         sourceIds = new Set(gitSources),
         currentStream = current && workerStreamKey === `${current.id}:${current.apiPath}:${gitSources.join(',')}`;
       return {
-        report: developmentPreviewReports.value[projectId] ?? developmentReports.value[projectId],
+        report: developmentReports.value[projectId],
         draft: developmentDrafts.value[projectId],
         loading: developmentLoading.value[projectId] ?? false,
         saving: developmentSaving.value[projectId] ?? false,
@@ -6673,7 +6641,6 @@ export async function startHotSheetWebClient() {
     setSettingsCategory,
     updateDevelopmentStrategyField,
     saveDevelopmentStrategy,
-    previewDevelopmentStrategy,
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,

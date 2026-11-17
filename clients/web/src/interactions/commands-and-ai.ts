@@ -198,7 +198,6 @@ export interface CommandAndAiInteractionsDependencies {
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
   readonly updateDevelopmentStrategyField?: (field: string, value: string | boolean) => void;
   readonly saveDevelopmentStrategy?: () => Promise<void>;
-  readonly previewDevelopmentStrategy?: () => Promise<void>;
   readonly refreshProviderConnections: (current?: Project) => Promise<void>;
   readonly refreshTerminalSettings: (current?: Project) => Promise<void>;
   /** Machine-wide terminal limits (HS2-Y5DYC0); optional so focused harnesses can omit them. */
@@ -362,7 +361,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     setSettingsCategory,
     updateDevelopmentStrategyField,
     saveDevelopmentStrategy,
-    previewDevelopmentStrategy,
     refreshProviderConnections,
     refreshTerminalSettings,
     terminalLimitsSettings,
@@ -1137,11 +1135,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.saveDevelopmentStrategy.selector, () => {
       void saveDevelopmentStrategy?.();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.previewDevelopmentStrategy.selector, () => {
-      void previewDevelopmentStrategy?.();
     }),
   );
   lifetime.add(
