@@ -31,6 +31,10 @@ export interface OrchestrationTimelineBindings {
   readonly runValidation: () => void;
   /** HS2-0D60T8: Reopen… with the chosen reason code. */
   readonly reopen: (reason: string) => void;
+  /** HS2-77SRHC: open the decision log dialog, read the page before it, and close it. */
+  readonly showDecisions: () => void;
+  readonly loadEarlierDecisions: () => void;
+  readonly closeDecisions: () => void;
 }
 
 const inView = (target: Element) => Boolean(target.closest(ORCHESTRATION_TARGETS.view.selector));
@@ -177,6 +181,22 @@ export function wireOrchestrationTimeline(root: HTMLElement, bindings: Orchestra
     delegate(root, 'click', ORCHESTRATION_ACTIONS.reopenOrchestrationWork.selector, (_event, target) => {
       const reason = (target as HTMLElement).dataset.reopenReason;
       if (reason) bindings.reopen(reason);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.showOrchestrationDecisions.selector, () => {
+      bindings.showDecisions();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ORCHESTRATION_ACTIONS.loadEarlierOrchestrationDecisions.selector, () => {
+      bindings.loadEarlierDecisions();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'kui-request-close', ORCHESTRATION_TARGETS.decisionsDialog.selector, (event, target) => {
+      // Only the dialog's own close request counts (Escape, the backdrop).
+      if (event.target === target) bindings.closeDecisions();
     }),
   );
   return () => {

@@ -239,3 +239,92 @@ test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens
     await server.stop(page);
   }
 });
+
+test('HS2-77SRHC a ready card says why it is not running and the overview lists the scheduler’s decisions', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer();
+  try {
+    await orchestrateSelf(server);
+    const plan = await planTwoSteps(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    // A third step with nothing before it is ready and not running.
+    const ready = await server.request<{ id: string; slug: string }>('/tickets', 'POST', {
+      title: 'Add the synthetic audit log',
+    });
+    await send(server, 'POST', `${base}/readiness/define`, {
+      ticket: { native_id: plan.goal.id },
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: ready.id,
+      prerequisites: [],
+      actor: scheduler,
+    });
+    await plan.dispatch();
+    // A limits policy for a tool no machine has, so every pass is the same wherever this runs.
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        tools: [{ tool: 'synthetic-tool', max_sessions: 2 }],
+        targets: [{ target_id: TARGET, tools: [{ tool: 'synthetic-tool' }], max_sessions: 2 }],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: { role: 'human', id: 'maintainer' },
+    });
+    // Enough logged passes that the dialog has an earlier page (50 per page).
+    for (let pass = 0; pass < 30; pass += 1)
+      await send(server, 'POST', `${base}/scheduler/tick`, { dry_run: true, actor: scheduler });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+
+    // Nothing selected: the overview, with the scheduler and its latest three decisions.
+    const overview = page.locator('[data-orchestration-overview]');
+    const scheduling = overview.locator('[data-orchestration-section="Scheduler"]');
+    await expect(scheduling).toContainText('Last pass');
+    await expect(scheduling).toContainText('(dry run)');
+    const latest = overview.locator('[data-orchestration-section="Latest Decisions"]');
+    await expect(latest).toContainText(/Would start|Deferred/);
+    await visualPass(page, 'hs2-77srhc', 'overview', {
+      show: latest,
+      check: () => expect(latest).toContainText(/Would start|Deferred/),
+      atPhone: () => page.locator('[data-action="toggle-ticket-inspector"]').first().click(),
+    });
+
+    // Show All Decisions…: newest first, Load Earlier reads the page before, Close and Escape dismiss.
+    await latest.getByRole('button', { name: 'Show All Decisions…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Scheduler Decisions' });
+    await expect(dialog).toBeVisible();
+    const before = await dialog.innerText();
+    await capture(page, 'hs2-77srhc', 'decisions-1440');
+    await dialog.getByRole('button', { name: 'Load Earlier' }).click();
+    await expect.poll(async () => (await dialog.innerText()).length).toBeGreaterThan(before.length);
+    // The dialog's own close control dismisses it.
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toHaveCount(0);
+    await latest.getByRole('button', { name: 'Show All Decisions…' }).click();
+    await expect(page.getByRole('dialog', { name: 'Scheduler Decisions' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Scheduler Decisions' })).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-action="toggle-ticket-inspector"]').first().click();
+    await latest.getByRole('button', { name: 'Show All Decisions…' }).click();
+    await expect(page.getByRole('dialog', { name: 'Scheduler Decisions' })).toBeVisible();
+    await capture(page, 'hs2-77srhc', 'decisions-390');
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    // The ready card: the scheduler's own explanation.
+    await view.locator(`[data-ticket-slug="${ready.slug}"]`).click();
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    await expect(why).toContainText('Scheduler');
+    await visualPass(page, 'hs2-77srhc', 'why-not-running', {
+      show: why,
+      check: () => expect(why).toContainText('Scheduler'),
+      atPhone: () => view.locator(`[data-ticket-slug="${ready.slug}"]`).click(),
+    });
+  } finally {
+    await server.stop(page);
+  }
+});

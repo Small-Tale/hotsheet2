@@ -5,6 +5,7 @@ import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { OrchestrationDecisionsDialog } from '../components/orchestration-decisions-dialog';
 import { OrchestrationInspector } from '../components/orchestration-inspector';
 import { wireOrchestrationTimeline } from '../components/orchestration-timeline-interactions';
 import { OrchestrationTimelineView } from '../components/orchestration-timeline-view';
@@ -14,7 +15,7 @@ import type { TimelinePhase } from '../orchestration-timeline';
 import { findTimelineItem, timelineCard } from '../orchestration-timeline-board';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { demoClock, demoTimeline } from './orchestration-fixtures';
+import { demoClock, demoDecisions, demoTimeline } from './orchestration-fixtures';
 import { syncSettingsControls } from './settings-controls';
 
 /** HS2-J89JC7: the Orchestration view's production components with synthetic timelines. */
@@ -209,8 +210,25 @@ export function OrchestrationInspectorDemo() {
           }}
         />
       </CatalogExample>
-      <CatalogExample label="Nothing Selected" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>
+      <CatalogExample label="Nothing Selected: Overview" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>
+        <OrchestrationInspector
+          timeline={timeline}
+          projectName="Launch"
+          clock={demoClock}
+          overview={{ decisions: demoDecisions() }}
+        />
+      </CatalogExample>
+      <CatalogExample label="No Timeline Yet" viewport={{ width: 'compact', height: 'app', frame: 'solid' }}>
         <OrchestrationInspector />
+      </CatalogExample>
+      {/* HS2-77SRHC: Show All Decisions… opens this dialog over the view; the catalog shows it in place. */}
+      <CatalogExample label="Show All Decisions…" viewport={{ width: 'full' }}>
+        <OrchestrationDecisionsDialog
+          presentation="embedded"
+          state={{ entries: demoDecisions().entries, more: true, loading: false }}
+          timeline={timeline}
+          clock={demoClock}
+        />
       </CatalogExample>
     </>
   );
@@ -273,6 +291,9 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       openGoal: () => undefined,
       runValidation: () => undefined,
       reopen: () => undefined,
+      showDecisions: () => undefined,
+      loadEarlierDecisions: () => undefined,
+      closeDecisions: () => undefined,
     }),
   );
   return () => {

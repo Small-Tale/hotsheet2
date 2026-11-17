@@ -38,12 +38,20 @@ enum SchedulerCmd {
     },
     /// The decision log after a cursor, oldest first: one record per pass and one per
     /// decision, each with its reason, its inputs and, when applied, its outcome.
+    /// With --newest, the latest decisions newest first; pass the answer's cursor as
+    /// --before for the page before it (HS2-77SRHC).
     Decisions {
-        #[arg(long, default_value_t = 0)]
+        #[arg(long, default_value_t = 0, conflicts_with = "newest")]
         after: u64,
         /// Page size, 1 to 200.
         #[arg(long)]
         limit: Option<usize>,
+        /// The newest decisions first.
+        #[arg(long)]
+        newest: bool,
+        /// With --newest: only decisions older than this sequence number.
+        #[arg(long, requires = "newest")]
+        before: Option<u64>,
     },
     /// Run one scheduling pass and log its decisions. Sessions are started or wound
     /// down only when the policy sets placement.automatic; otherwise, or with
@@ -78,9 +86,21 @@ pub(super) fn route(
             };
             ("POST", format!("{base}/explain"), body)
         }
-        SchedulerCmd::Decisions { after, limit } => {
+        SchedulerCmd::Decisions {
+            after,
+            limit,
+            newest,
+            before,
+        } => {
             let mut body = Map::new();
-            body.insert("after".into(), after.into());
+            if newest {
+                body.insert("newest".into(), true.into());
+                if let Some(before) = before {
+                    body.insert("before".into(), before.into());
+                }
+            } else {
+                body.insert("after".into(), after.into());
+            }
             if let Some(limit) = limit {
                 body.insert("limit".into(), limit.into());
             }

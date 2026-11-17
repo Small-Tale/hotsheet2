@@ -64,6 +64,8 @@ pub(crate) fn definition() -> Value {
         "load":{"type":"object","description":"access_check for a session start: {target_sessions, machine_sessions, tool_sessions, account?, account_sessions?}; a start without it is denied policy_load_unknown"},
         "operation_id":{"type":"string","description":"access_check: the operation a permission request would be for; validation_run/session_start/plan_propose: retained across repeats of one request; validation_cancel: the request to stop (omit for the running attempt)"},
         "after":{"type":"integer","minimum":0,"description":"audit, scheduler_decisions: return entries after this sequence number"},
+        "newest":{"type":"boolean","description":"scheduler_decisions: the latest decisions newest first instead of the entries after a cursor; pass the answer's cursor as before for the page before it (HS2-77SRHC)"},
+        "before":{"type":"integer","minimum":0,"description":"scheduler_decisions with newest: only decisions older than this sequence number"},
         "version":{"type":"string","maxLength":160,"description":"timeline, target_lines: the version already seen; with wait_ms, wait for the next change instead of polling; capacity: the snapshot version already seen, with wait_ms (at most 8000) to wait for the capacity to change (HS2-P5GTSW)"},
         "limit":{"type":"integer","minimum":1,"maximum":500,"description":"audit: page size; scheduler_decisions: page size, at most 200; ticket_list: page size, at most 100 (default 50)"},
         "project_type":{"type":"string","enum":["software","orchestration"],"description":"project_type_set: the type to switch to"},
@@ -850,7 +852,7 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
         let keys: &[&str] = match operation {
             "plan" => &[],
             "explain" => &["step_id", "connection_id", "native_id"],
-            "decisions" => &["after", "limit"],
+            "decisions" => &["after", "limit", "newest", "before"],
             "tick" => &["dry_run"],
             _ => return Err("unsupported target action".into()),
         };
@@ -2165,6 +2167,8 @@ mod tests {
                 "native_id":"TGT-2","worker_id":"ignored"}),
             json!({"action":"scheduler_decisions"}),
             json!({"action":"scheduler_decisions","after":7,"limit":50,"dry_run":true}),
+            // HS2-77SRHC: the newest decisions, paging back.
+            json!({"action":"scheduler_decisions","newest":true,"before":12,"limit":3}),
             json!({"action":"scheduler_tick"}),
             json!({"action":"scheduler_tick","dry_run":true,"after":3}),
         ] {
@@ -2185,6 +2189,10 @@ mod tests {
                 post(
                     "scheduler/decisions",
                     json!({"after":7,"limit":50,"actor":actor})
+                ),
+                post(
+                    "scheduler/decisions",
+                    json!({"limit":3,"newest":true,"before":12,"actor":actor})
                 ),
                 post("scheduler/tick", json!({"actor":actor})),
                 post("scheduler/tick", json!({"dry_run":true,"actor":actor})),

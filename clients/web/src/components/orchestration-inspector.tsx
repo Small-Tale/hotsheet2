@@ -23,6 +23,7 @@ import {
 import { ORCHESTRATION_ACTIONS } from '../interaction-attrs/orchestration';
 import type { BuiltAheadView } from '../orchestration-built-ahead';
 import { reconciliationRows, type RunReconciliation } from '../orchestration-run-checks';
+import type { SchedulerExplanation } from '../orchestration-scheduler';
 import type { OrchestrationTimeline, TimelineItem } from '../orchestration-timeline';
 import {
   cardTime,
@@ -36,8 +37,10 @@ import {
 import type { PendingValidation, ValidationStepView } from '../orchestration-validation-steps';
 import { OrchestrationBuiltAheadSection } from './orchestration-built-ahead-section';
 import { OrchestrationInspectorSection } from './orchestration-inspector-section';
+import { OrchestrationOverview, type OrchestrationOverviewData } from './orchestration-overview';
 import { OrchestrationPlanSection } from './orchestration-plan-section';
 import { OrchestrationValidationSection } from './orchestration-validation-section';
+import { OrchestrationWhyNotRunningSection } from './orchestration-why-not-running-section';
 import { inspectorToggle, type SidebarPanelParts } from './sidebar-panel';
 
 /** What the inspector read about the selected item's run: its gates, validation steps, and events. */
@@ -49,6 +52,8 @@ export interface OrchestrationInspectorDetails {
   /** HS2-0D60T8: the step was read; its work built ahead of a pending gate, absent when none is recorded. */
   readinessRead?: boolean;
   builtAhead?: BuiltAheadView;
+  /** HS2-77SRHC: `scheduler explain` for a ready card. */
+  explanation?: SchedulerExplanation;
   /** HS2-9XJEZC: the card's validation steps with their latest evidence. */
   validations?: readonly ValidationStepView[];
   /** HS2-9XJEZC: Run Validation requests that wait on a person's answer. */
@@ -66,6 +71,9 @@ export interface OrchestrationInspectorProps {
   /** A run control is on its way to the server. */
   busy?: boolean;
   clock?: ClockFormat;
+  /** HS2-2XJSJK: with no card selected, what the overview read, and the project's name. */
+  overview?: OrchestrationOverviewData;
+  projectName?: string;
 }
 
 const words = (code: string) => code.replaceAll('_', ' ');
@@ -251,7 +259,7 @@ function RunSection({
   );
 }
 
-function stateDetail(item: TimelineItem) {
+function stateDetail(item: TimelineItem, clock: ClockFormat, details?: OrchestrationInspectorDetails) {
   switch (item.state) {
     case 'waits_for_permission': {
       const permission = item.permission;
@@ -311,17 +319,7 @@ function stateDetail(item: TimelineItem) {
         </OrchestrationInspectorSection>
       );
     case 'ready':
-      return (
-        <OrchestrationInspectorSection label="Why It Is Not Running">
-          <Note
-            text={
-              item.placement?.reason
-                ? `The scheduler's last pass: ${words(item.placement.reason)}.`
-                : 'It is ready; it starts when a session is free for it.'
-            }
-          />
-        </OrchestrationInspectorSection>
-      );
+      return <OrchestrationWhyNotRunningSection item={item} explanation={details?.explanation} clock={clock} />;
     case 'provisional':
     case 'running':
     case 'done':
@@ -398,7 +396,11 @@ export function OrchestrationInspector({
   details,
   busy = false,
   clock = clockTime,
+  overview,
+  projectName,
 }: OrchestrationInspectorProps) {
+  if (!item && timeline && timeline.phase !== 'no_projects')
+    return <OrchestrationOverview timeline={timeline} overview={overview} projectName={projectName} clock={clock} />;
   if (!item || !timeline)
     return (
       <List fill hAlign="center" vAlign="middle" textInsets="rl">
@@ -424,7 +426,7 @@ export function OrchestrationInspector({
         </Row>
       </List>
       <WhereItRuns item={item} timeline={timeline} clock={clock} />
-      {stateDetail(item)}
+      {stateDetail(item, clock, details)}
       <OrchestrationPlanSection item={item} timeline={timeline} />
       {item.state === 'provisional' || details?.builtAhead ? (
         <OrchestrationBuiltAheadSection work={details?.builtAhead} timeline={timeline} busy={busy} />

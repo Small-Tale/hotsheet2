@@ -55,7 +55,7 @@
 > the orchestration line on a target project's own tickets (§26.29, HS2-S3FKJ7),
 > the Orchestration view with its dependency-wave timeline, the orchestration line on
 > ticket rows, the card inspector and kick-off (§26.26, HS2-J89JC7), the card
-> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8),
+> inspector's Plan section (§26.30, HS2-15G5T4), its Run checks (HS2-XM692S), its Validation section with Run Validation (HS2-9XJEZC), its Built Ahead section with Reopen… (HS2-0D60T8), the overview's scheduler and latest decisions with Show All Decisions… and a ready card's Why It Is Not Running (HS2-77SRHC),
 > and the headless CLI,
 > authenticated HTTP and MCP adapters are implemented and covered by automated tests,
 > with end-to-end failure scenarios across two servers (§26.23, HS2-2EY9DP);
@@ -1691,7 +1691,7 @@ ticket source.
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. MCP `hotsheet_targets` adds `validation_define`,
 `validation_list`, `validation_evidence`, `validation_run`, `validation_remove`,
-`validation_cancel` and `validation_profiles`. The workspace view is HS2-9XJEZC.
+`validation_cancel` and `validation_profiles`. The Orchestration view shows them in the card inspector (§26.30, HS2-9XJEZC).
 
 ## 26.13 CI and deployment gates (HS2-5JBYPV)
 
@@ -2309,7 +2309,7 @@ hotsheet-cli --actor-role human ... orchestration run correct <run-id> --project
 
 MCP `hotsheet_targets` adds `run_reconcile` (all runs without `run_id`), `run_pause`,
 `run_resume`, `run_handoff` and `run_correct`. Acting on a disposition is the
-scheduler's (HS2-AH8CRS), and the workspace view is HS2-XM692S.
+scheduler's (HS2-AH8CRS), and the card inspector's Run section shows the outcome (§26.30, HS2-XM692S).
 
 ## 26.15 Prerequisites and readiness (HS2-42TARA)
 
@@ -2555,7 +2555,7 @@ cancelling reduces activity and asks no one (HS2-YFPZFP, §26.24).
 Milestones and wider cross-project planning stay with their own tickets: the
 milestone model (HS2-8T71YW, HS2-A820C1, HS2-PX50E8, HS2-6E0H3X), cross-project
 planning (HS2-HX5MH3) and aggregate views (HS2-42B2FD). A milestone as a prerequisite
-kind is HS2-2CR7H3, and the workspace view of the plan is HS2-15G5T4.
+kind is HS2-2CR7H3, and the card inspector's Plan section shows a step's place in the plan (§26.30, HS2-15G5T4).
 
 ## 26.16 Orchestrator-owned sessions (HS2-GDJXGZ)
 
@@ -3208,8 +3208,9 @@ machine reads as `capacity_unknown`.
 | `/checkouts/{owner}/orchestration/scheduler/{plan,explain,decisions,tick}` | POST scheduler operations; machine-local |
 
 MCP `hotsheet_targets` adds `scheduler_plan`, `scheduler_explain`,
-`scheduler_decisions` and `scheduler_tick` (with `dry_run`). The workspace view is
-HS2-77SRHC.
+`scheduler_decisions` and `scheduler_tick` (with `dry_run`). `scheduler decisions`
+also reads the newest first (`newest`, `before`); the Orchestration view shows the
+explanation and the log in its inspector (§26.30, HS2-77SRHC).
 
 ## 26.18 Provisional readiness inside one project (HS2-2SJPCH)
 
@@ -4039,7 +4040,7 @@ target and rewrites nothing; the `provisional` event of a result is what wakes i
 - `scheduler explain` adds `speculation`, `provisional` and `provisional_dependents`,
   so it names which work is provisional on which gate from either side.
 
-The workspace view of provisional state is HS2-0D60T8.
+The card inspector's Built Ahead section shows it (§26.30, HS2-0D60T8).
 
 ### What is not reused from the single-project code
 
@@ -5353,3 +5354,34 @@ long poll refreshes it on each `provisional` event. Before the record is read a
 provisional card says only that it rests on a prerequisite whose CI is still
 running. The list of every failed prerequisite with the work stacked on it
 (`repair_first`) is the speculation read's, not one card's.
+
+### Why It Is Not Running, and the scheduler's decisions (HS2-77SRHC)
+
+A ready card's **Why It Is Not Running** reads the scheduler's own explanation
+(`scheduler explain` for the step, as the browser's person; observation never asks):
+**Scheduler** says what the last pass decided ("Waits: the project's session limit is
+reached (last pass 14:02)") and **Next** when it looks again: the retry time a held
+resource's expiry or a backoff gives, or when something it waits on changes. Until it
+is read, the scheduler's last logged reason for the step stands in.
+
+With no card selected, the inspector shows the **overview** (answer A): the
+orchestration project's name, then **Scheduler** (placement: automatic, paused or a
+dry-run plan; the sessions running; the last pass with how many starts and deferrals
+it decided) and **Latest Decisions**: the three newest decisions about work, newest
+first, in words ("Started API-12 on Claude", "Deferred DOC-9: a resource it needs is
+held", "API-15 waits for permission"). **Show All Decisions…** opens the whole log
+in a Kerf `DialogSurface`, newest first, with **Load Earlier** while older decisions
+are retained; the dialog's own close control and Escape dismiss it. The overview reads
+the newest 30 decisions whenever the timeline's version changes.
+
+Reading the log newest first needed one addition to the decision log read of §26.17:
+`scheduler decisions` takes `newest` (and an optional `before`) and answers the
+latest decisions newest first, with `cursor` the `before` of the page before it and
+`more` when older ones are retained (`Journal::read_newest`). The oldest-first read
+after a cursor is unchanged, and mixing the two is refused.
+
+```sh
+hotsheet-cli ... orchestration scheduler decisions --newest [--before <seq>] [--limit <n>] --project <owner>
+```
+
+MCP `hotsheet_targets` `scheduler_decisions` takes `newest` and `before`.

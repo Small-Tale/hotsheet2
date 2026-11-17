@@ -22916,7 +22916,8 @@ components:
     SchedulerOperation:
       description:
         Body of a scheduler operation (HS2-ECWG50). `plan` takes nothing; `explain` takes `step_id`, or `target_id`,
-        `connection_id` and `native_id`; `decisions` takes `after` and `limit`; `tick` takes `dry_run`.
+        `connection_id` and `native_id`; `decisions` takes `after` and `limit`, or `newest` with an optional `before`
+        for the latest decisions newest first (HS2-77SRHC); `tick` takes `dry_run`.
       type: object
       properties:
         actor:
@@ -22941,6 +22942,13 @@ components:
           type: integer
           minimum: 1
           maximum: 200
+        newest:
+          description: The latest decisions newest first; the answer's `cursor` is the `before` of the page before it (HS2-77SRHC).
+          type: boolean
+        before:
+          description: With `newest`, only decisions older than this sequence number.
+          type: integer
+          minimum: 0
         dry_run:
           type: boolean
       additionalProperties: false

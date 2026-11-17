@@ -3,6 +3,7 @@
  * project "Launch" plans work in "API" (remote, on "Build host"), "Web" and "Docs" (on this machine).
  * Every name, id and time is invented; nothing is read from a server or a real project.
  */
+import type { SchedulerDecisionPage } from '../orchestration-scheduler';
 import type {
   OrchestrationTimeline,
   TimelineItem,
@@ -307,3 +308,44 @@ export const demoClock = (ms: number) => {
   const date = new Date(ms);
   return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
 };
+
+/** HS2-77SRHC: the newest page of a synthetic decision log for the running timeline. */
+export function demoDecisions(): SchedulerDecisionPage {
+  const at = (minutes: number) => DEMO_NOW - minutes * MINUTE;
+  const decision = (
+    seq: number,
+    minutes: number,
+    kind: string,
+    rest: Partial<SchedulerDecisionPage['entries'][number]> = {},
+  ) => ({
+    seq,
+    at_ms: at(minutes),
+    tick_id: `tick-${Math.floor(seq / 10)}`,
+    mode: 'applied',
+    kind,
+    ...rest,
+  });
+  return {
+    cursor: 34,
+    more: true,
+    entries: [
+      decision(42, 2, 'tick', { tick_id: 'tick-4' }),
+      decision(41, 2, 'start', { tick_id: 'tick-4', step_id: 'step-3', tool: 'claude' }),
+      decision(40, 2, 'unplaced', {
+        tick_id: 'tick-4',
+        step_id: 'step-8',
+        reason: 'resource_held',
+        detail: 'vm/macos-vm',
+      }),
+      decision(39, 21, 'start', {
+        tick_id: 'tick-3',
+        step_id: 'step-6',
+        tool: 'codex',
+        outcome: 'permission_required',
+      }),
+      decision(38, 21, 'tick', { tick_id: 'tick-3' }),
+      decision(37, 40, 'keep', { tick_id: 'tick-3', step_id: 'step-4', reason: 'mid_turn' }),
+      decision(36, 60, 'wind_down', { tick_id: 'tick-3', reason: 'no_ready_work' }),
+    ],
+  };
+}

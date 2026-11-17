@@ -337,3 +337,62 @@ fn hs2_5zt4gy_continued_validation_waits_fold_per_operation() {
     elsewhere.target_id = Some("t2".into());
     assert!(!repeats(&journal, &elsewhere));
 }
+
+#[test]
+fn hs2_77srhc_newest_pages_walk_back_to_the_oldest_retained_entry() {
+    let home = tempfile::tempdir().unwrap();
+    let log = journal(home.path());
+    // Empty: nothing, no cursor movement, nothing older.
+    let empty = log.read_newest(None, 3).unwrap();
+    assert!(empty.entries.is_empty() && !empty.more && !empty.gap);
+    assert_eq!(empty.cursor, 0);
+    for index in 1..=7u64 {
+        log.append(record(index, "tickets_write", AuditOutcome::Succeeded))
+            .unwrap();
+    }
+    let seqs = |page: &JournalPage<AuditRecord>| -> Vec<u64> {
+        page.entries.iter().map(|entry| entry.seq).collect()
+    };
+    let first = log.read_newest(None, 3).unwrap();
+    assert_eq!(seqs(&first), vec![7, 6, 5]);
+    assert!(first.more);
+    assert_eq!(first.cursor, 5);
+    let second = log.read_newest(Some(first.cursor), 3).unwrap();
+    assert_eq!(seqs(&second), vec![4, 3, 2]);
+    let third = log.read_newest(Some(second.cursor), 3).unwrap();
+    assert_eq!(seqs(&third), vec![1]);
+    assert!(!third.more && !third.gap);
+    // Past the start: nothing more, and the cursor stays where it was asked.
+    let past = log.read_newest(Some(1), 3).unwrap();
+    assert!(past.entries.is_empty() && !past.more);
+    assert_eq!(past.cursor, 1);
+    // Repeating a page reads the same page; an entry appended since does not shift it.
+    log.append(record(8, "tickets_write", AuditOutcome::Succeeded))
+        .unwrap();
+    assert_eq!(
+        seqs(&log.read_newest(Some(first.cursor), 3).unwrap()),
+        vec![4, 3, 2]
+    );
+    assert_eq!(seqs(&log.read_newest(None, 1).unwrap()), vec![8]);
+    // A `before` beyond the newest reads from the newest; the limit is capped, never zero.
+    assert_eq!(seqs(&log.read_newest(Some(1000), 2).unwrap()), vec![8, 7]);
+    assert_eq!(log.read_newest(None, 0).unwrap().entries.len(), 1);
+}
+
+#[test]
+fn hs2_77srhc_newest_pages_report_a_gap_where_retention_removed_older_entries() {
+    let home = tempfile::tempdir().unwrap();
+    let log = journal(home.path()).with_segment_limit(600);
+    for index in 1..=12u64 {
+        log.append(record(index, "tickets_write", AuditOutcome::Succeeded))
+            .unwrap();
+    }
+    let retained = log.read(0, 500).unwrap().entries.len();
+    let newest = log.read_newest(None, 2).unwrap();
+    assert_eq!(newest.entries[0].seq, 12);
+    assert!(newest.more && !newest.gap);
+    let all = log.read_newest(None, 500).unwrap();
+    assert_eq!(all.entries.len(), retained);
+    // The page that reaches the oldest retained entry says older ones were removed.
+    assert!(!all.more && all.gap);
+}

@@ -18,10 +18,15 @@ export const ORCHESTRATION_ACTIONS = {
   runOrchestrationValidation: action('run-orchestration-validation'),
   /** HS2-0D60T8: reopen the selected card's built-ahead work with the item's `data-reopen-reason`. */
   reopenOrchestrationWork: action('reopen-orchestration-work'),
+  /** HS2-77SRHC: the overview's Show All Decisions…, and the dialog's Load Earlier. */
+  showOrchestrationDecisions: action('show-orchestration-decisions'),
+  loadEarlierOrchestrationDecisions: action('load-earlier-orchestration-decisions'),
 } as const;
 
 /** Other delegated targets of the Orchestration view. */
 export const ORCHESTRATION_TARGETS = {
   /** The view's root: ticket-collection and group handlers leave what is inside it to this view. */
   view: attr('data-orchestration-view', 'true'),
+  /** HS2-77SRHC: the Show All Decisions… dialog, whose own close request dismisses it. */
+  decisionsDialog: attr('data-dialog-component', 'orchestration-decisions-dialog'),
 } as const;

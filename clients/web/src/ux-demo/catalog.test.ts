@@ -454,6 +454,12 @@ describe('UX demo catalog', () => {
         'Titled section shell of the cataloged OrchestrationInspector, rendered by every one of its sections (demoed).',
       'orchestration-built-ahead-section':
         'Built Ahead section of the cataloged OrchestrationInspector, rendered for a card with work built ahead (HS2-0D60T8, demoed).',
+      'orchestration-why-not-running-section':
+        'Why It Is Not Running section of the cataloged OrchestrationInspector, for a ready card (HS2-77SRHC, demoed).',
+      'orchestration-overview':
+        'Overview the cataloged OrchestrationInspector shows with no card selected (HS2-2XJSJK, demoed as Nothing Selected).',
+      'orchestration-decisions-dialog':
+        'Show All Decisions… dialog opened from the cataloged OrchestrationInspector overview (HS2-77SRHC, demoed in place).',
       'orchestration-validation-section':
         'Validation section of the cataloged OrchestrationInspector, rendered for a card with validation steps (HS2-9XJEZC, demoed).',
       'orchestration-plan-section':

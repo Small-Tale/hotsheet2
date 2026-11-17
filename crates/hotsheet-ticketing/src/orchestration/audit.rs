@@ -307,6 +307,40 @@ impl<R: JournalRecord> Journal<R> {
         Ok((entry, true))
     }
 
+    /// HS2-77SRHC: the newest entries with `seq < before` (every retained entry when
+    /// `before` is `None`), newest first, at most `limit` (capped). `cursor` is the
+    /// oldest sequence returned, to pass as `before` for the page before it (or the
+    /// request's `before`, else 0, when nothing is returned); `more` says retained
+    /// entries older than this page exist. Retention never leaves a hole inside the
+    /// retained history, so `gap` is true only when entries older than the oldest
+    /// retained one were removed and this page reaches it.
+    pub fn read_newest(
+        &self,
+        before: Option<u64>,
+        limit: usize,
+    ) -> Result<JournalPage<R>, OrchestrationError> {
+        let limit = limit.clamp(1, MAX_AUDIT_PAGE);
+        let mut retained = self.entries(&self.previous())?;
+        retained.extend(self.entries(&self.current())?);
+        let first_retained = retained.first().map(|entry| entry.seq);
+        let mut older: Vec<_> = retained
+            .into_iter()
+            .filter(|entry| before.is_none_or(|before| entry.seq < before))
+            .collect();
+        let more = older.len() > limit;
+        let page: Vec<_> = older
+            .drain(older.len().saturating_sub(limit)..)
+            .rev()
+            .collect();
+        let cursor = page.last().map_or(before.unwrap_or(0), |entry| entry.seq);
+        Ok(JournalPage {
+            gap: !more && first_retained.is_some_and(|first| first > 1) && !page.is_empty(),
+            cursor,
+            more,
+            entries: page,
+        })
+    }
+
     /// Entries with `seq > after`, oldest first, at most `limit` (capped).
     pub fn read(&self, after: u64, limit: usize) -> Result<JournalPage<R>, OrchestrationError> {
         self.read_matching(after, limit, |_| true)

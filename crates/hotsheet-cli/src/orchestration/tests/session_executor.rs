@@ -2283,6 +2283,7 @@ fn hs2_7q428z_concurrent_passes_start_and_log_one_session_once() {
                 &DecisionsRequest {
                     after: 0,
                     limit: Some(200),
+                    ..DecisionsRequest::default()
                 },
             )
             .unwrap()

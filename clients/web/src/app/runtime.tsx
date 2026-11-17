@@ -85,6 +85,7 @@ import {
 } from '../components/note-metadata-dialog';
 import { NoteRepairReview } from '../components/note-repair-review';
 import { type NotificationView } from '../components/notification-navigation';
+import { OrchestrationDecisionsDialog } from '../components/orchestration-decisions-dialog';
 import { orchestrationInspectorPanel } from '../components/orchestration-inspector';
 import { OrchestrationToolbar } from '../components/orchestration-toolbar';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
@@ -6038,6 +6039,8 @@ export async function startHotSheetWebClient() {
           timeline: orchestrationView.timeline.value,
           details: orchestrationView.details.value,
           busy: orchestrationView.busy.value,
+          overview: orchestrationView.overview.value,
+          projectName: project()?.name,
         }),
     },
     permissionPopupSurface,
@@ -6166,6 +6169,12 @@ export async function startHotSheetWebClient() {
     canStageNewTicketAttachments,
     changeEvidenceSurface,
     commandDialogSurface,
+    orchestrationDecisionsDialog: () => (
+      <OrchestrationDecisionsDialog
+        state={orchestrationView.decisionsDialog.value}
+        timeline={orchestrationView.timeline.value}
+      />
+    ),
     composerAttachmentError,
     composerAttachmentMessage,
     composerAttachments,
@@ -6490,6 +6499,15 @@ export async function startHotSheetWebClient() {
       openGoal: () => void orchestrationView.openGoal(),
       runValidation: () => void orchestrationView.runValidation(),
       reopen: (reason) => void orchestrationView.reopen(reason),
+      showDecisions: () => {
+        orchestrationView.showDecisions();
+      },
+      loadEarlierDecisions: () => {
+        orchestrationView.loadEarlierDecisions();
+      },
+      closeDecisions: () => {
+        orchestrationView.closeDecisions();
+      },
     },
     runAutomaticTicketGroup: (slugs) => {
       void automaticTicketGrouping.run(slugs);

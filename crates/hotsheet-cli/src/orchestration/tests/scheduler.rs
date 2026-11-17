@@ -452,6 +452,25 @@ fn hs2_ecwg50_a_policy_without_automatic_placement_only_plans_and_logs() {
             )
             .unwrap();
     assert_eq!(rest.entries.len(), 1);
+    // HS2-77SRHC: the newest first, paging back with `before`; mixing the two
+    // directions is refused.
+    let decide = |body: serde_json::Value| {
+        s.m.runtime
+            .scheduler_decisions(&owner, &serde_json::from_value(body).unwrap())
+    };
+    let newest = decide(json!({"newest": true, "limit": 3})).unwrap();
+    let seqs = |page: &hotsheet_ticketing::orchestration::DecisionPage| {
+        page.entries
+            .iter()
+            .map(|entry| entry.seq)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(seqs(&newest), vec![4, 3, 2]);
+    assert!(newest.more);
+    let earlier = decide(json!({"newest": true, "before": newest.cursor, "limit": 3})).unwrap();
+    assert_eq!((seqs(&earlier), earlier.more), (vec![1], false));
+    assert!(decide(json!({"newest": true, "after": 1})).is_err());
+    assert!(decide(json!({"before": 3})).is_err());
     for limit in [0, 201] {
         assert!(
             s.m.runtime

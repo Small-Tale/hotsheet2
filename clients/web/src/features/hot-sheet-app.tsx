@@ -115,6 +115,8 @@ export interface HotSheetAppDependencies {
   canStageNewTicketAttachments: () => boolean;
   changeEvidenceSurface: (readerScope?: string) => SafeHtml;
   commandDialogSurface: () => SafeHtml;
+  /** HS2-77SRHC: the Orchestration view's Show All Decisions… dialog. */
+  orchestrationDecisionsDialog: () => SafeHtml;
   composerAttachmentError: Signal<boolean>;
   composerAttachmentMessage: Signal<string>;
   composerAttachments: Signal<PendingEvidence[]>;
@@ -269,6 +271,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     canStageNewTicketAttachments,
     changeEvidenceSurface,
     commandDialogSurface,
+    orchestrationDecisionsDialog,
     composerAttachmentError,
     composerAttachmentMessage,
     composerAttachments,
@@ -579,6 +582,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         />
         <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />
         {commandDialogSurface()}
+        {orchestrationDecisionsDialog()}
         <ConnectionDetailsSurface
           assessment={project()?.compatibility}
           clientBundle={{ loaded: loadedClientBuildId(), served: hostClientBuild.value }}

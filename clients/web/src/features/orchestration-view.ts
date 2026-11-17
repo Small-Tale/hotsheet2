@@ -8,6 +8,7 @@
 import { batch, computed, effect, type Signal, signal } from 'kerfjs';
 
 import { Api } from '../api';
+import type { OrchestrationDecisionsDialogState } from '../components/orchestration-decisions-dialog';
 import type { OrchestrationInspectorDetails } from '../components/orchestration-inspector';
 import type { OrchestrationProposeAvailability } from '../components/orchestration-timeline-view';
 import type { WorkspaceViewMode } from '../components/workspace-controls';
@@ -16,6 +17,7 @@ import type { Project } from '../interactions/types';
 import { parseBuiltAhead } from '../orchestration-built-ahead';
 import { createRemoteLabelReader, type RemoteTicketLabel, withRemoteLabels } from '../orchestration-remote-labels';
 import { parseRunReconciliation } from '../orchestration-run-checks';
+import { parseDecisionPage, parseExplanation, type SchedulerDecisionPage } from '../orchestration-scheduler';
 import type { OrchestrationTimeline } from '../orchestration-timeline';
 import { findTimelineItem, startColumnId } from '../orchestration-timeline-board';
 import { parseValidationStep, type PendingValidation, stepsToRun } from '../orchestration-validation-steps';
@@ -239,6 +241,11 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   const selectedStep = signal<string | undefined>(undefined);
   const details = signal<OrchestrationInspectorDetails | undefined>(undefined);
   const busy = signal(false);
+  /** HS2-2XJSJK: with no card selected, what the overview read (HS2-77SRHC: the newest decisions). */
+  const overview = signal<{ decisions?: SchedulerDecisionPage; error?: string } | undefined>(undefined);
+  /** HS2-77SRHC: the open Show All Decisions… dialog and the cursor of the page before what it shows. */
+  const decisionsDialog = signal<OrchestrationDecisionsDialogState | undefined>(undefined);
+  let decisionsBefore = 0;
   /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
   const pendingValidations = signal<Readonly<Record<string, PendingValidation>>>({});
   /** HS2-HCW7MD: where planning stands (`idle`, `planning`, `ended`), read when the timeline changes. */
@@ -305,6 +312,8 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
         error.value = undefined;
         selectedStep.value = undefined;
         details.value = undefined;
+        overview.value = undefined;
+        decisionsDialog.value = undefined;
         loading.value = Boolean(key);
         planning.value = undefined;
       });
@@ -332,6 +341,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
           reader.fill(view);
           placeTimeline();
           void refreshDetails();
+          void refreshOverview();
           void refreshPlanning(current, run);
         },
         onError: (reason) => {
@@ -439,6 +449,14 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
       item = selected(),
       run = item?.run;
     const request = ++detailsRequest;
+    // HS2-77SRHC: a ready card reads why it is not running from the scheduler itself.
+    if (current && item?.state === 'ready' && !run) {
+      const explained = await clientFor(current)
+        .orchestrationSchedulerExplain(current.id, item.step_id, dependencies.personId())
+        .catch(() => undefined);
+      if (request === detailsRequest) details.value = { loading: false, explanation: parseExplanation(explained) };
+      return;
+    }
     if (!current || !item || !run) {
       details.value = undefined;
       return;
@@ -617,6 +635,58 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     } finally {
       busy.value = false;
     }
+  }
+
+  /** HS2-2XJSJK: the overview's reads, while the view shows it (no card selected). */
+  let overviewRequest = 0;
+  async function refreshOverview() {
+    const current = dependencies.project();
+    const request = ++overviewRequest;
+    if (!current || selectedStep.value || dependencies.viewMode.value !== 'orchestration') return;
+    try {
+      const page = await clientFor(current).orchestrationDecisions(current.id, { limit: 30 });
+      if (request === overviewRequest) overview.value = { decisions: parseDecisionPage(page) };
+    } catch (reason) {
+      if (request === overviewRequest)
+        overview.value = {
+          ...overview.value,
+          error: `The scheduler's decisions could not be read: ${message(reason)}`,
+        };
+    }
+  }
+
+  const openDecisions = () => decisionsDialog.value;
+  /** HS2-77SRHC: Show All Decisions… opens the log, newest first; Load Earlier reads the page before it. */
+  async function readDecisions(earlier: boolean) {
+    const current = dependencies.project(),
+      open = decisionsDialog.value;
+    if (!current || !open) return;
+    decisionsDialog.value = { ...open, loading: true, error: undefined };
+    try {
+      const page = parseDecisionPage(
+        await clientFor(current).orchestrationDecisions(current.id, {
+          limit: 50,
+          before: earlier ? decisionsBefore : undefined,
+        }),
+      );
+      // The person may have closed the dialog while the page was read.
+      const shown = openDecisions();
+      if (!shown) return;
+      decisionsBefore = page.cursor;
+      decisionsDialog.value = {
+        entries: earlier ? [...shown.entries, ...page.entries] : page.entries,
+        more: page.more,
+        loading: false,
+      };
+    } catch (reason) {
+      const shown = openDecisions();
+      if (shown) decisionsDialog.value = { ...shown, loading: false, error: message(reason) };
+    }
+  }
+
+  function showDecisions() {
+    decisionsDialog.value = { entries: [], more: false, loading: true };
+    void readDecisions(false);
   }
 
   function select(stepId: string) {
@@ -808,6 +878,15 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     runControl,
     runValidation,
     reopen,
+    overview,
+    decisionsDialog,
+    showDecisions,
+    loadEarlierDecisions: () => {
+      if (decisionsDialog.value?.more && !decisionsDialog.value.loading) void readDecisions(true);
+    },
+    closeDecisions: () => {
+      decisionsDialog.value = undefined;
+    },
     propose,
     showRequest,
     openGoal,

@@ -78,6 +78,13 @@ pub struct DecisionsRequest {
     pub after: u64,
     #[serde(default)]
     pub limit: Option<usize>,
+    /// HS2-77SRHC: the newest decisions first, before `before` when given, instead of
+    /// the entries after `after`. The answer's `cursor` is the `before` of the page
+    /// before it.
+    #[serde(default)]
+    pub newest: bool,
+    #[serde(default)]
+    pub before: Option<u64>,
 }
 
 /// One computed schedule with what it was computed from.
@@ -1041,7 +1048,8 @@ impl OrchestrationRuntime {
         Ok(answer)
     }
 
-    /// The decision log after a cursor, oldest first.
+    /// The decision log after a cursor, oldest first, or with `newest` the latest
+    /// decisions newest first, paging back with `before` (HS2-77SRHC).
     pub fn scheduler_decisions(
         &self,
         owner_id: &str,
@@ -1050,6 +1058,17 @@ impl OrchestrationRuntime {
         let limit = request.limit.unwrap_or(100);
         if limit == 0 || limit > MAX_DECISION_PAGE {
             return Err(OrchestrationError::Invalid("limit must be 1 to 200"));
+        }
+        if request.newest {
+            if request.after != 0 {
+                return Err(OrchestrationError::Invalid(
+                    "newest pages take before, not after",
+                ));
+            }
+            return self.decisions(owner_id)?.read_newest(request.before, limit);
+        }
+        if request.before.is_some() {
+            return Err(OrchestrationError::Invalid("before needs newest"));
         }
         self.decisions(owner_id)?.read(request.after, limit)
     }

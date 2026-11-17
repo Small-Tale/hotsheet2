@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { findTimelineItem } from '../orchestration-timeline-board';
-import { demoClock, demoTimeline } from '../ux-demo/orchestration-fixtures';
+import { demoClock, demoDecisions, demoTimeline } from '../ux-demo/orchestration-fixtures';
+import { OrchestrationDecisionsDialog } from './orchestration-decisions-dialog';
 import { OrchestrationInspector, orchestrationInspectorPanel } from './orchestration-inspector';
 import { OrchestrationTimelineView } from './orchestration-timeline-view';
 import { OrchestrationToolbar } from './orchestration-toolbar';
@@ -269,6 +270,71 @@ describe('OrchestrationInspector (HS2-J89JC7)', () => {
     );
   });
 
+  it('HS2-77SRHC explains a ready card and shows the overview with the latest decisions', () => {
+    const ready = inspector('step-8', {
+      details: { loading: false, explanation: { standing: 'not_placed', reason: 'target_cap', retry_at_ms: 0 } },
+    });
+    expect(ready).toContain('Waits: the project’s session limit is reached (last pass 14:00)');
+    expect(ready).toContain('Looked at again by');
+    // Until the explanation is read, the last logged reason stands in.
+    expect(inspector('step-8')).toContain('target cap');
+    const overview = String(
+      OrchestrationInspector({
+        timeline: demoTimeline('running'),
+        projectName: 'Launch',
+        clock: demoClock,
+        overview: { decisions: demoDecisions() },
+      }),
+    );
+    expect(overview).toContain('Launch Orchestration');
+    for (const section of ['Scheduler', 'Latest Decisions'])
+      expect(overview).toContain(`data-orchestration-section="${section}"`);
+    expect(overview).toContain('Automatic');
+    expect(overview).toContain('13:58 · started 1, deferred 1');
+    expect(overview).toContain('Started API-12 on Claude');
+    expect(overview).toContain('API-15 waits for permission');
+    expect(overview).not.toContain('Kept the session');
+    expect(overview).toContain('data-action="show-orchestration-decisions"');
+    const unread = String(OrchestrationInspector({ timeline: demoTimeline('paused') }));
+    expect(unread).toContain('Paused; running work continues');
+    expect(unread).toContain('Reading the decision log…');
+    expect(unread).toMatch(
+      /data-action="show-orchestration-decisions"[^>]*disabled|disabled[^>]*data-action="show-orchestration-decisions"/,
+    );
+    const empty = String(
+      OrchestrationInspector({
+        timeline: demoTimeline('proposed'),
+        overview: { decisions: { entries: [], cursor: 0, more: false } },
+      }),
+    );
+    expect(empty).toContain('The scheduler has decided nothing yet.');
+    expect(empty).toContain('Not started; the plan is a dry run');
+  });
+
+  it('HS2-77SRHC lists the whole log newest first with Load Earlier while older decisions remain', () => {
+    expect(String(OrchestrationDecisionsDialog({}))).toBe('');
+    const open = String(
+      OrchestrationDecisionsDialog({
+        state: { entries: demoDecisions().entries, more: true, loading: false },
+        timeline: demoTimeline('running'),
+        clock: demoClock,
+      }),
+    );
+    expect(open).toContain('Scheduler Decisions');
+    expect(open).toContain('Deferred DOC-9: a resource it needs is held (vm/macos-vm)');
+    expect(open.indexOf('Started API-12')).toBeLessThan(open.indexOf('Kept the session'));
+    expect(open).toContain('data-action="load-earlier-orchestration-decisions"');
+    const all = String(
+      OrchestrationDecisionsDialog({ state: { entries: [], more: false, loading: false, error: 'Offline.' } }),
+    );
+    expect(all).not.toContain('load-earlier');
+    expect(all).toContain('The scheduler has decided nothing yet.');
+    expect(all).toContain('Offline.');
+    expect(String(OrchestrationDecisionsDialog({ state: { entries: [], more: true, loading: true } }))).toContain(
+      'Reading the decision log…',
+    );
+  });
+
   it('is a right-rail panel with an empty selection', () => {
     expect(String(OrchestrationInspector({}))).toContain('Select a card');
     const panel = orchestrationInspectorPanel({ item: item('step-3'), timeline: demoTimeline('running') });
@@ -297,6 +363,9 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       openGoal: () => calls.push('goal'),
       runValidation: () => calls.push('validate'),
       reopen: (reason: string) => calls.push(`reopen ${reason}`),
+      showDecisions: () => calls.push('decisions'),
+      loadEarlierDecisions: () => calls.push('earlier'),
+      closeDecisions: () => calls.push('close'),
     };
     wireOrchestrationTimeline({} as HTMLElement, bindings);
     const view = { dataset: { orchestrationView: 'true' } };
@@ -325,6 +394,15 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
     run('click', 'run-orchestration-validation', target({}));
     run('click', 'reopen-orchestration-work', target({ reopenReason: 'fix_changed_contract' }));
     run('click', 'reopen-orchestration-work', target({}));
+    run('click', 'show-orchestration-decisions', target({}));
+    run('click', 'load-earlier-orchestration-decisions', target({}));
+    const dialog = target({});
+    registrations
+      .find((item) => item.event === 'kui-request-close')!
+      .handle({ target: dialog } as unknown as Event, dialog);
+    registrations
+      .find((item) => item.event === 'kui-request-close')!
+      .handle({ target: target({}) } as unknown as Event, dialog);
     expect(calls).toEqual([
       'select step-3',
       'select step-5',
@@ -338,6 +416,9 @@ describe('wireOrchestrationTimeline (HS2-J89JC7)', () => {
       'goal',
       'validate',
       'reopen fix_changed_contract',
+      'decisions',
+      'earlier',
+      'close',
     ]);
   });
 });
@@ -400,6 +481,9 @@ describe('arrow keys on the Orchestration board (HS2-T4V1TX)', () => {
       openGoal: noop,
       runValidation: noop,
       reopen: noop,
+      showDecisions: noop,
+      loadEarlierDecisions: noop,
+      closeDecisions: noop,
     });
     const focused: string[] = [];
     const column = { scrollIntoView: noop };

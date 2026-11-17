@@ -2370,6 +2370,22 @@ export class Api {
       method: 'POST',
       body: JSON.stringify({ step_id: step, reason, actor: { role: 'human', id: actorId } }),
     });
+  /** HS2-77SRHC: why one plan step is not running, read as this browser's person (observation never asks). */
+  orchestrationSchedulerExplain = (checkout: string, step: string, actorId: string) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/scheduler/explain`,
+      { method: 'POST', body: JSON.stringify({ step_id: step, actor: { role: 'human', id: actorId } }) },
+      false,
+    );
+  /** HS2-77SRHC: the newest scheduler decisions first, before `before` when given (paging back). */
+  orchestrationDecisions = (checkout: string, page: { limit: number; before?: number }) =>
+    this.parsed(
+      parseOrchestrationRecord,
+      `/checkouts/${encodeURIComponent(checkout)}/orchestration/scheduler/decisions`,
+      { method: 'POST', body: JSON.stringify({ newest: true, ...page }) },
+      false,
+    );
   /** The validation steps of one orchestration ticket with their latest evidence (HS2-WN0MXZ). */
   orchestrationValidations = (checkout: string, ticket: { connection_id: string; native_id: string }) =>
     this.parsed(

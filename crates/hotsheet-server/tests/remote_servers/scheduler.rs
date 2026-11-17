@@ -278,6 +278,14 @@ async fn hs2_ecwg50_cli_plans_explains_ticks_and_reads_the_decision_log() {
         scheduler(&["decisions", "--limit", "1"])["more"],
         json!(true)
     );
+    // HS2-77SRHC: the CLI reads the newest decision first and pages back from it.
+    let newest = scheduler(&["decisions", "--newest", "--limit", "1"]);
+    assert_eq!(newest["entries"][0]["kind"], "unplaced");
+    assert_eq!(newest["more"], json!(true));
+    let before = newest["cursor"].to_string();
+    let earlier = scheduler(&["decisions", "--newest", "--before", &before]);
+    assert_eq!(earlier["entries"][0]["kind"], "tick");
+    assert_eq!(earlier["more"], json!(false));
     assert!(!home.join("orchestration-scheduler.json").exists());
 
     // Automatic placement: the pass is applied. The machine could not be read, so
