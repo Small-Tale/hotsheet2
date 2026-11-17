@@ -6,6 +6,7 @@ import {
   aiHelpSentence,
   failingTicketStores,
   PERSISTENT_OFFLINE_FAILURES,
+  plainServerText,
   repairInProgress,
   strandedChangeCount,
   strandedTicketStores,
@@ -303,5 +304,55 @@ describe('TicketStoreSyncBanner stranded saved writes (HS2-1HRYD9)', () => {
   it('clears once the changes are restored (stranded, then none)', () => {
     expect(TicketStoreSyncBanner({ report: report(['hotsheet2.hs2', STRANDED]) })).toBeDefined();
     expect(TicketStoreSyncBanner({ report: report(['hotsheet2.hs2', health('synced')]) })).toBeUndefined();
+  });
+});
+
+describe('server sentences as plain text (HS2-GN2S3F)', () => {
+  it('drops Markdown code-span delimiters and keeps the command', () => {
+    expect(plainServerText('Fix it, then run `hotsheet-cli sync`.')).toBe('Fix it, then run hotsheet-cli sync.');
+    expect(plainServerText('Run `a` or `b`.')).toBe('Run a or b.');
+    expect(plainServerText('No code here.')).toBe('No code here.');
+    expect(plainServerText('')).toBe('');
+  });
+
+  it('shows no backtick in the failing, blocked, and stranded strips', () => {
+    const failing = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'kerf.hs2',
+          health('rejected', { unpublished_commits: 1, next_action: 'Fix the cause, then run `hotsheet-cli sync`.' }),
+        ]),
+      }),
+    );
+    expect(failing).toContain('then run hotsheet-cli sync.');
+    expect(failing).not.toContain('`');
+    const blocked = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'web.hs2',
+          health('blocked', {
+            consecutive_failures: PERSISTENT_OFFLINE_FAILURES,
+            reason: '`index.lock` has blocked sync for 5 minutes',
+            next_action: 'Run `hotsheet-cli sync --recover-stale-locks`.',
+          }),
+        ]),
+      }),
+    );
+    expect(blocked).toContain('Index.lock has blocked sync');
+    expect(blocked).toContain('Run hotsheet-cli sync --recover-stale-locks.');
+    expect(blocked).not.toContain('`');
+    const stranded = String(
+      TicketStoreSyncBanner({
+        report: report([
+          'web.hs2',
+          health('synced', {
+            next_action: 'Run `hotsheet-cli sync --restore-saved-writes refs/x` to write them back.',
+            stranded_saved_writes: [{ backup_ref: 'refs/x', paths: ['tickets/AB/one.md'] }],
+          }),
+        ]),
+      }),
+    );
+    expect(stranded).toContain('Run hotsheet-cli sync --restore-saved-writes refs/x to write them back.');
+    expect(stranded).not.toContain('`');
   });
 });

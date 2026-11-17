@@ -987,6 +987,9 @@ test('shows ticket changes an interrupted recovery never restored above a publis
     await expect(banner).toContainText('2 ticket changes in demo.hs2 were never restored');
     await expect(banner).toContainText(`hotsheet-cli sync --restore-saved-writes ${backupRef}`);
     await expect(banner).not.toContainText('not publishing');
+    // The server's Markdown code span reads as plain text, not literal backticks (HS2-GN2S3F).
+    await expect(banner).not.toContainText('`');
+    await banner.screenshot({ path: `target/visual-captures/hs2-gn2s3f-strip-${pass}-${width}.png` });
     const fits = await banner.evaluate((node) => {
       const box = node.getBoundingClientRect();
       return box.left >= 0 && box.right <= innerWidth + 0.5 && node.scrollWidth <= node.clientWidth + 1;

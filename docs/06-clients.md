@@ -5228,7 +5228,8 @@ transition history (HS2-XKXE7V).
   - says why in one sentence, naming an oversized unpublished file and its size;
   - says that tickets are saved on this computer and how many local changes are
     unpublished;
-  - repeats the server's next step, which names the headless `hotsheet-cli` command;
+  - repeats the server's next step, which names the headless `hotsheet-cli` command, as
+    plain text: the server's Markdown code-span backticks are dropped (HS2-GN2S3F);
   - while an AI was asked to repair the stall (`ai_help`, HS2-QR1K8R), says whom Hot Sheet
     asked and how it went, and links the repair ticket with the shared
     `open-linked-ticket` action.

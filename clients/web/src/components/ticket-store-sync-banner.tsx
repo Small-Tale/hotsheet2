@@ -109,7 +109,16 @@ export function aiHelpSentence(help: TicketStoreAiHelp): string {
 
 /** The server's reason as a sentence: its first letter capitalized. */
 function sentence(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  const plain = plainServerText(text);
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
+}
+
+/**
+ * Server sentences mark commands as Markdown code spans, a command between backticks. The strip shows
+ * plain text, so the delimiters are dropped rather than shown as literal backticks (HS2-GN2S3F).
+ */
+export function plainServerText(text: string): string {
+  return text.replace(/`+([^`]+)`+/g, '$1');
 }
 
 function unpublishedSentence(count: number): string {
@@ -142,7 +151,7 @@ export function strandedBannerCopy(stranded: FailingStore[]): { title: string; d
     title: `${changes} in ${first.label} ${count === 1 ? 'was' : 'were'} never restored`,
     detail: [
       'A rebase or merge recovery set them aside and stopped before writing them back; they are kept only in a Hot Sheet backup.',
-      first.health.next_action,
+      first.health.next_action && plainServerText(first.health.next_action),
       others > 0
         ? `${others} more ${others === 1 ? 'store holds' : 'stores hold'} changes to restore; run hotsheet-cli sync --status in each.`
         : undefined,
@@ -194,7 +203,7 @@ export function TicketStoreSyncBanner({
     others === 0 ? syncFailureSummary(first.health) : `${first.label}: ${syncFailureSummary(first.health)}`,
     help ? aiHelpSentence(help) : undefined,
     unpublishedSentence(first.health.unpublished_commits),
-    first.health.next_action,
+    first.health.next_action && plainServerText(first.health.next_action),
     others > 0
       ? `${others} more ${others === 1 ? 'store needs' : 'stores need'} attention; run hotsheet-cli sync --status in each.`
       : undefined,
