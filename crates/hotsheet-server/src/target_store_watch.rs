@@ -14,10 +14,14 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, EventKind, RecursiveMode, WatchStatus};
+use hotsheet_jobs::watch::{
+    BackgroundWatcher, Delivery, EventKind, PENDING_RECHECK, PathWatcher, RecursiveMode,
+    StartStream, WatchStatus,
+};
 use hotsheet_model::Ulid;
 use tokio::sync::broadcast;
 
@@ -38,6 +42,8 @@ pub(crate) struct UnhostedStore {
 
 struct Watch {
     _watcher: BackgroundWatcher,
+    /// HS2-R49D43: the pending re-check ends once this is dropped.
+    _pending: Arc<()>,
     asked: Instant,
 }
 
@@ -75,7 +81,7 @@ impl TargetStoreWatches {
         };
         // A native stream can take seconds to start under load; other feeds keep going.
         for store in missing {
-            let Some(watcher) = watch_tickets(&store, event_log, events) else {
+            let Some((watcher, pending)) = watch_tickets(&store, event_log, events) else {
                 continue;
             };
             // A concurrent request may have started the same watch; keep the first.
@@ -84,6 +90,7 @@ impl TargetStoreWatches {
                 .entry(store.connection_id)
                 .or_insert(Watch {
                     _watcher: watcher,
+                    _pending: pending,
                     asked: now,
                 });
         }
@@ -109,11 +116,27 @@ impl TargetStoreWatches {
 /// and dropping an idle watch never waits for its stream to stop. A ticket written before
 /// the stream was live is not reported by it, so going live (and each refused start while
 /// it is retried) records every ticket file modified since the watch was asked for.
+///
+/// HS2-R49D43: a start took over a minute on a loaded machine, and a write made meanwhile
+/// waited that long for the feed. Until the stream is live, the store is read again every
+/// [`PENDING_RECHECK`], as `ChangeWaiter`'s safety re-check does: local files only, and
+/// each modified ticket file recorded once. The re-check ends when the stream goes live or
+/// the returned token is dropped.
 fn watch_tickets(
     store: &UnhostedStore,
     event_log: &Arc<Mutex<EventLog>>,
     events: &broadcast::Sender<ChangeEvent>,
-) -> Option<BackgroundWatcher> {
+) -> Option<(BackgroundWatcher, Arc<()>)> {
+    watch_tickets_with(store, event_log, events, Box::new(PathWatcher::start))
+}
+
+/// [`watch_tickets`] with the stream started by `start`, for a test's stand-in.
+fn watch_tickets_with(
+    store: &UnhostedStore,
+    event_log: &Arc<Mutex<EventLog>>,
+    events: &broadcast::Sender<ChangeEvent>,
+    start: StartStream,
+) -> Option<(BackgroundWatcher, Arc<()>)> {
     // A store without a tickets directory has nothing to follow yet.
     let tickets = std::fs::canonicalize(store.root.join("tickets")).ok()?;
     let (log, sender, connection) = (
@@ -149,26 +172,86 @@ fn watch_tickets(
         }
         on_event(changed_tickets(event.paths));
     };
-    let asked = std::time::SystemTime::now();
-    let walked = tickets.clone();
-    let status = move |_: WatchStatus| emit(changed_tickets(modified_since(&walked, asked)));
-    Some(BackgroundWatcher::start(
+    let recent = Arc::new(Mutex::new(Recent::since(std::time::SystemTime::now())));
+    let live = Arc::new(AtomicBool::new(false));
+    let read = {
+        let (recent, tickets, emit) = (recent.clone(), tickets.clone(), emit.clone());
+        move || emit(changed_tickets(recent.lock_or_recover().changed(&tickets)))
+    };
+    let on_status = read.clone();
+    let went_live = live.clone();
+    let status = move |status: WatchStatus| {
+        if status == WatchStatus::Live {
+            went_live.store(true, Ordering::SeqCst);
+        }
+        on_status();
+    };
+    let watcher = BackgroundWatcher::start_with(
         &[(&tickets, RecursiveMode::Recursive)],
         handler,
         status,
-    ))
+        start,
+    );
+    let pending = Arc::new(());
+    let owner = Arc::downgrade(&pending);
+    let spawned = std::thread::Builder::new()
+        .name("target-store-recheck".into())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(PENDING_RECHECK);
+                if live.load(Ordering::SeqCst) || owner.upgrade().is_none() {
+                    return;
+                }
+                read();
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!(%error, "no pending re-check for a linked store; it waits for its watch");
+    }
+    Some((watcher, pending))
+}
+
+/// The ticket files of one store recorded since its watch was asked for, by their
+/// modification time, so a re-check records each write once.
+struct Recent {
+    since: std::time::SystemTime,
+    seen: HashMap<PathBuf, std::time::SystemTime>,
+}
+
+impl Recent {
+    fn since(since: std::time::SystemTime) -> Self {
+        Self {
+            since,
+            seen: HashMap::new(),
+        }
+    }
+
+    /// The ticket files modified since the watch was asked for that were not recorded
+    /// yet at their current modification time.
+    fn changed(&mut self, tickets: &Path) -> Vec<PathBuf> {
+        modified_since(tickets, self.since)
+            .into_iter()
+            .filter(|(path, modified)| self.seen.insert(path.clone(), *modified) != Some(*modified))
+            .map(|(path, _)| path)
+            .collect()
+    }
 }
 
 /// The ticket files under `tickets` (its shard directories included) modified at or after
-/// `since`, give or take the file system's timestamp granularity.
-fn modified_since(tickets: &Path, since: std::time::SystemTime) -> Vec<PathBuf> {
+/// `since`, give or take the file system's timestamp granularity, with their times.
+fn modified_since(
+    tickets: &Path,
+    since: std::time::SystemTime,
+) -> Vec<(PathBuf, std::time::SystemTime)> {
     let floor = since
         .checked_sub(std::time::Duration::from_secs(2))
         .unwrap_or(since);
-    let recent = |path: &Path| {
-        std::fs::metadata(path)
+    let recent = |path: PathBuf| {
+        std::fs::metadata(&path)
             .and_then(|meta| meta.modified())
-            .is_ok_and(|modified| modified >= floor)
+            .ok()
+            .filter(|modified| *modified >= floor)
+            .map(|modified| (path, modified))
     };
     let mut found = Vec::new();
     let Ok(entries) = std::fs::read_dir(tickets) else {
@@ -182,11 +265,12 @@ fn modified_since(tickets: &Path, since: std::time::SystemTime) -> Vec<PathBuf> 
                     inner
                         .flatten()
                         .map(|entry| entry.path())
-                        .filter(|path| path.is_file() && recent(path)),
+                        .filter(|path| path.is_file())
+                        .filter_map(recent),
                 );
             }
-        } else if recent(&path) {
-            found.push(path);
+        } else if let Some(file) = recent(path) {
+            found.push(file);
         }
     }
     found
@@ -267,6 +351,67 @@ mod tests {
         }
         watches.forget("linked-connection");
         assert!(watches.watched().is_empty());
+    }
+
+    /// HS2-R49D43: while the stream has not started (over a minute on a loaded machine),
+    /// a ticket written in the store still reaches the log within the re-check, once per
+    /// write, and dropping the watch ends the re-check.
+    #[test]
+    fn hs2_r49d43_a_write_before_the_stream_is_live_is_recorded_by_the_recheck() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("linked");
+        let shard = root.join("tickets").join("AB");
+        std::fs::create_dir_all(&shard).unwrap();
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(16);
+        // A start that never finishes while the test runs.
+        let (hold, held) = std::sync::mpsc::channel::<()>();
+        let held = Mutex::new(held);
+        let start: StartStream = Box::new(move |_, _| {
+            let _ = held.lock_or_recover().recv();
+            Err(hotsheet_jobs::watch::Error::generic("stopped"))
+        });
+        let store = UnhostedStore {
+            connection_id: "linked-connection".into(),
+            root: root.clone(),
+        };
+        let (watcher, pending) = watch_tickets_with(&store, &log, &events, start).unwrap();
+        let recorded = |id: &str| {
+            log.lock_or_recover()
+                .since(0)
+                .0
+                .iter()
+                .filter(|event| event.kind == TARGET_STORE_CHANGE_KIND && event.id == id)
+                .count()
+        };
+        let until_recorded = |id: &str, times: usize| {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while recorded(id) < times {
+                assert!(Instant::now() < deadline, "the write was never recorded");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        };
+        let id = Ulid::new().to_string();
+        let file = shard.join(format!("{id}.md"));
+        std::fs::write(&file, "---\n---\n").unwrap();
+        until_recorded(&id, 1);
+        assert!(!watcher.is_live());
+        // Re-checks of an unchanged file record nothing more.
+        std::thread::sleep(PENDING_RECHECK * 3);
+        assert_eq!(recorded(&id), 1);
+        // A later write to the same ticket is recorded again.
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::write(&file, "---\nstatus: started\n---\n").unwrap();
+        until_recorded(&id, 2);
+        // Dropped, the watch stops reading.
+        drop((watcher, pending));
+        std::thread::sleep(PENDING_RECHECK * 2);
+        let other = Ulid::new().to_string();
+        std::fs::write(shard.join(format!("{other}.md")), "---\n---\n").unwrap();
+        std::thread::sleep(PENDING_RECHECK * 3);
+        assert_eq!(recorded(&other), 0);
+        // Only now may the stand-in start end (as refused, which reads once more).
+        drop(hold);
     }
 
     #[test]

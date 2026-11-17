@@ -23,6 +23,11 @@ use serde_json::{Value, json};
 
 const DEADLINE: Duration = Duration::from_secs(30);
 
+/// HS2-R49D43: unchanged polls back off by half each time, to two minutes. A step of a
+/// test that took seconds on a loaded machine let the next poll drift past its deadline,
+/// so a fixture change made then went unseen. Capped, the monitor sees it within this.
+const MAX_POLL_MS: &str = "500";
+
 struct Fixture {
     home: tempfile::TempDir,
     operations: tempfile::TempDir,
@@ -113,7 +118,7 @@ impl Fixture {
 
     /// Wait for a condition on the Job directory, waking on its file changes.
     fn until<T>(&self, what: &str, mut check: impl FnMut() -> Option<T>) -> T {
-        let waiter = ChangeWaiter::new(self.slot.dir()).unwrap();
+        let waiter = ChangeWaiter::starting(&[self.slot.dir()]).unwrap();
         let deadline = Instant::now() + DEADLINE;
         loop {
             if let Some(value) = check() {
@@ -291,7 +296,14 @@ fn the_monitor_reports_a_watch_job_to_its_outcome_and_then_exits() {
     let fx = Fixture::new();
     fx.operation("build-1", json!({"etag": "1", "state": "waiting"}));
     let job = fx.watch_job("build-1");
-    let started = fx.start(&["--poll-ms", "30", "--idle-exit-ms", "400"]);
+    let started = fx.start(&[
+        "--poll-ms",
+        "30",
+        "--max-poll-ms",
+        MAX_POLL_MS,
+        "--idle-exit-ms",
+        "400",
+    ]);
     let owner = started["monitor"]["owner"].as_str().unwrap().to_owned();
 
     let waiting = fx.until_job(&job.id, "the monitor to attach", |job| {
@@ -299,6 +311,14 @@ fn the_monitor_reports_a_watch_job_to_its_outcome_and_then_exits() {
     });
     let lease = waiting.lease.unwrap();
     assert_eq!((lease.owner, lease.generation), (owner, 1));
+    // HS2-R49D43: attaching marks the Job waiting before its first poll. Change the
+    // operation only once that poll has read it, or the first read sees the change.
+    let polls_path = fx.operations.path().join("build-1.polls");
+    fx.until("the first read", || {
+        std::fs::read_to_string(&polls_path)
+            .ok()
+            .filter(|polls| polls.lines().any(|line| line == "full"))
+    });
 
     fx.operation(
         "build-1",
@@ -341,7 +361,6 @@ fn the_monitor_reports_a_watch_job_to_its_outcome_and_then_exits() {
     assert_eq!(shown["feed_page"]["cursor"], json!(1));
 
     // While the file is unchanged the monitor asks conditionally instead of rereading.
-    let polls_path = fx.operations.path().join("build-1.polls");
     fx.until("a conditional poll", || {
         std::fs::read_to_string(&polls_path)
             .ok()
@@ -380,6 +399,8 @@ fn a_killed_monitor_leaves_the_job_stalled_then_lost_and_a_new_monitor_reattache
         "300",
         "--poll-ms",
         "30",
+        "--max-poll-ms",
+        MAX_POLL_MS,
         "--idle-exit-ms",
         "60000",
     ];
@@ -449,7 +470,7 @@ fn a_killed_monitor_leaves_the_job_stalled_then_lost_and_a_new_monitor_reattache
 fn a_stopped_monitor_releases_its_jobs_and_the_next_start_resumes_them_at_once() {
     let fx = Fixture::new();
     // The default 60 second lease: a resume inside this test proves the release.
-    let timing = ["--poll-ms", "30"];
+    let timing = ["--poll-ms", "30", "--max-poll-ms", MAX_POLL_MS];
     fx.operation("build-3", json!({"etag": "1", "state": "waiting"}));
     let job = fx.watch_job("build-3");
     fx.start(&timing);

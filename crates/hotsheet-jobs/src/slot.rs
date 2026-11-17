@@ -161,12 +161,18 @@ pub fn ensure_monitor_running(
         return Ok((info, false));
     }
     let started = slot.state()? == SlotState::Free;
+    // HS2-R49D43: a monitor that was killed leaves its info behind. The new one takes the
+    // lock a moment before it replaces that info, and in between the slot read as held
+    // by the dead monitor, so the start reported the dead monitor as the one it started.
+    let stale = if started { slot.read_info() } else { None };
     if started {
         spawn()?;
     }
     let deadline = std::time::Instant::now() + timeout;
     loop {
-        if let SlotState::Held(Some(info)) = slot.state()? {
+        if let SlotState::Held(Some(info)) = slot.state()?
+            && stale.as_ref() != Some(&info)
+        {
             return Ok((info, started));
         }
         if std::time::Instant::now() >= deadline {
@@ -253,6 +259,51 @@ mod tests {
         slot.request_stop("monitor-b").unwrap();
         let claim = slot.try_claim(&info("monitor-b")).unwrap().unwrap();
         assert!(!claim.stop_requested());
+    }
+
+    /// HS2-R49D43: a killed monitor's info is still on disk when the next one takes the
+    /// lock; the start waits for the new monitor's own info rather than reporting the dead
+    /// one as started.
+    #[test]
+    fn a_start_after_a_killed_monitor_reports_the_new_monitor() {
+        let home = tempfile::tempdir().unwrap();
+        let slot = MonitorSlot::at(home.path());
+        // What `kill -9` leaves: the info file, and no lock holder.
+        let claim = slot.try_claim(&info("monitor-dead")).unwrap().unwrap();
+        let left = fs::read(slot.dir().join(INFO_FILE)).unwrap();
+        drop(claim);
+        fs::write(slot.dir().join(INFO_FILE), left).unwrap();
+        assert_eq!(slot.state().unwrap(), SlotState::Free);
+
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let (locked, is_locked) = std::sync::mpsc::channel::<()>();
+        let spawned = slot.clone();
+        let monitor = std::sync::Mutex::new(None);
+        let (found, started) = ensure_monitor_running(
+            &slot,
+            || {
+                // The new monitor takes the lock first and writes its info a moment later.
+                *monitor.lock().unwrap() = Some(std::thread::spawn(move || {
+                    let lock = DirLock::try_acquire(spawned.lock_file().unwrap())
+                        .unwrap()
+                        .unwrap();
+                    locked.send(()).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let bytes = serde_json::to_vec(&info("monitor-new")).unwrap();
+                    fs::write(spawned.dir().join(INFO_FILE), bytes).unwrap();
+                    let _ = released.recv();
+                    drop(lock);
+                }));
+                is_locked.recv().unwrap();
+                Ok(())
+            },
+            std::time::Duration::from_secs(10),
+        )
+        .unwrap();
+        assert!(started);
+        assert_eq!(found, info("monitor-new"));
+        drop(release);
+        monitor.lock().unwrap().take().unwrap().join().unwrap();
     }
 
     #[test]

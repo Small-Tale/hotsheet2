@@ -12,6 +12,33 @@ fn started(entry: &Value) -> bool {
     entry["kind"] == "start" && entry["outcome"] == "started"
 }
 
+/// HS2-R49D43: every record is a start the peer refused for its session cap, and each
+/// refused start after the first waited out the backoff of the refusals before it.
+fn assert_refused_with_backoff(records: &[Value]) {
+    let mut records = records.to_vec();
+    records.sort_by_key(|record| record["created_at_ms"].as_u64());
+    assert!(!records.is_empty(), "no refused start");
+    for record in &records {
+        assert_eq!(record["state"], "failed", "{records:#?}");
+        assert_eq!(
+            record["history"].as_array().unwrap().last().unwrap()["reason"],
+            "session_cap_reached",
+            "{records:#?}"
+        );
+    }
+    // The backoff counts from the start of the pass that recorded the refusal, which is
+    // a little before its session record; half the backoff tells a waited-out retry
+    // from an immediate one with room for a slow pass.
+    for (refusals, pair) in (1u32..).zip(records.windows(2)) {
+        let gap =
+            pair[1]["created_at_ms"].as_u64().unwrap() - pair[0]["created_at_ms"].as_u64().unwrap();
+        assert!(
+            gap >= hotsheet_ticketing::orchestration::refusal_backoff_ms(refusals) / 2,
+            "a refused target was asked again inside its backoff: {records:#?}"
+        );
+    }
+}
+
 async fn starts(fleet: &Fleet) -> Vec<Value> {
     fleet
         .decisions()
@@ -872,13 +899,7 @@ async fn hs2_2ey9dp_a_refusing_peer_and_a_limited_tool_are_waited_out_and_failed
         .await;
     assert_eq!(backoff["detail"], "session_cap_reached", "{backoff}");
     assert!(fleet.drawer(Side::Peer).await.is_empty());
-    let failed = fleet.sessions().await;
-    assert_eq!(failed.len(), 1, "{failed:#?}");
-    assert_eq!(failed[0]["state"], "failed", "{failed:#?}");
-    assert_eq!(
-        failed[0]["history"].as_array().unwrap().last().unwrap()["reason"],
-        "session_cap_reached"
-    );
+    assert_refused_with_backoff(&fleet.sessions().await);
 
     // The owner opens the machine again. After the backoff the loop starts the session
     // on the tool that is not limited.
@@ -891,12 +912,26 @@ async fn hs2_2ey9dp_a_refusing_peer_and_a_limited_tool_are_waited_out_and_failed
     assert_eq!(start["tool"], super::e2e::TOOL_A, "{start}");
     let (session, terminal, _) = fleet.started_session(&start).await;
     assert_eq!(session["tool"], super::e2e::TOOL_A, "{session}");
-    // A replacement of the refused start, under the next operation id.
+    // HS2-R49D43: a loaded machine may see the backoff run out before the owner opens
+    // the machine, and the peer refuses again, each after a longer backoff. The
+    // started session replaces the last refused start, under the next operation id.
+    let mut failed: Vec<Value> = fleet
+        .sessions()
+        .await
+        .into_iter()
+        .filter(|record| record["session_id"] != session["session_id"])
+        .collect();
+    failed.sort_by_key(|record| record["created_at_ms"].as_u64());
+    assert_refused_with_backoff(&failed);
     assert_eq!(
         session["operation_id"],
-        format!("sched-start-{step}.2").as_str()
+        format!("sched-start-{step}.{}", failed.len() + 1).as_str()
     );
-    assert_eq!(session["replaces"], failed[0]["session_id"], "{session}");
+    assert_eq!(
+        session["replaces"],
+        failed.last().unwrap()["session_id"],
+        "{session}"
+    );
     assert!(
         fleet
             .drawer(Side::Peer)

@@ -220,7 +220,16 @@ impl Fixture {
         let mut args = vec!["job", "watch", "ci"];
         args.extend(target.iter().map(String::as_str));
         args.extend_from_slice(extra);
-        args.extend_from_slice(&["--poll-ms", "40", "--idle-exit-ms", "500"]);
+        // HS2-R49D43: the unchanged-poll backoff capped, so a change after a slow step is
+        // seen at the next poll rather than up to two minutes later.
+        args.extend_from_slice(&[
+            "--poll-ms",
+            "40",
+            "--max-poll-ms",
+            "500",
+            "--idle-exit-ms",
+            "500",
+        ]);
         self.json(&args)
     }
 
@@ -233,7 +242,7 @@ impl Fixture {
     }
 
     fn until_job(&self, id: &str, what: &str, check: impl Fn(&Job) -> bool) -> Job {
-        let waiter = ChangeWaiter::new(MonitorSlot::at(self.home.path()).dir()).unwrap();
+        let waiter = ChangeWaiter::starting(&[MonitorSlot::at(self.home.path()).dir()]).unwrap();
         let deadline = Instant::now() + DEADLINE;
         loop {
             let job = self.store.get(&self.checkout_id, id).unwrap();

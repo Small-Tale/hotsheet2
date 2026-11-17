@@ -117,7 +117,19 @@ fn ticket(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
 pub(super) fn with_monitor(source: &Path, home: &Path, url: &str) -> OrchestrationRuntime {
     shared_runtime(source, home, &Arc::new(Memory::default())).with_job_monitor(Arc::new(
         DetachedJobMonitor::new("hotsheet-server")
-            .flags(["--poll-ms", "40", "--idle-exit-ms", "3000"].map(String::from))
+            .flags(
+                // HS2-R49D43: the unchanged-poll backoff capped, so a verdict after
+                // a slow step is seen at the next poll, not minutes later.
+                [
+                    "--poll-ms",
+                    "40",
+                    "--max-poll-ms",
+                    "500",
+                    "--idle-exit-ms",
+                    "3000",
+                ]
+                .map(String::from),
+            )
             .env("HOTSHEET_GITHUB_API_URL", url)
             .env("GH_TOKEN", TOKEN),
     ))

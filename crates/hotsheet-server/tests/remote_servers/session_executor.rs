@@ -99,7 +99,7 @@ async fn decided(
 ) -> (Value, Vec<Value>) {
     let directory = home.join("orchestration-scheduler-decisions");
     std::fs::create_dir_all(&directory).unwrap();
-    let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).unwrap();
+    let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).unwrap();
     let deadline = std::time::Instant::now() + within;
     loop {
         let log = decisions(router, base).await;

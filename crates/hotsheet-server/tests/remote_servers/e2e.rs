@@ -292,7 +292,19 @@ impl Fleet {
             .with_session_executor(Arc::new(OwnedSessions))
             .with_job_monitor(Arc::new(
                 DetachedJobMonitor::new("hotsheet-server")
-                    .flags(["--poll-ms", "40", "--idle-exit-ms", "3000"].map(String::from))
+                    .flags(
+                        // HS2-R49D43: the unchanged-poll backoff capped, so a verdict after
+                        // a slow step is seen at the next poll, not minutes later.
+                        [
+                            "--poll-ms",
+                            "40",
+                            "--max-poll-ms",
+                            "500",
+                            "--idle-exit-ms",
+                            "3000",
+                        ]
+                        .map(String::from),
+                    )
                     .env("HOTSHEET_GITHUB_API_URL", provider_url)
                     .env("GH_TOKEN", TOKEN),
             ));
@@ -519,7 +531,9 @@ impl Fleet {
     ) -> Value {
         let directory = self.home.join("orchestration-scheduler-decisions");
         std::fs::create_dir_all(&directory).unwrap();
-        let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).unwrap();
+        // HS2-R49D43: read first. A synchronous stream start took over a minute on a
+        // loaded machine, long enough for a refusal backoff to run out unobserved.
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).unwrap();
         let deadline = std::time::Instant::now() + within;
         loop {
             let log = self.decisions().await;

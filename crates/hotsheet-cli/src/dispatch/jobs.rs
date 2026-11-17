@@ -129,6 +129,11 @@ pub(crate) struct MonitorArgs {
     lost_after_ms: Option<u64>,
     #[arg(long, hide = true)]
     poll_ms: Option<u64>,
+    /// HS2-R49D43: the ceiling of the unchanged-poll backoff. A test that changes its
+    /// fixture after a slow step (seconds on a loaded machine) otherwise waits out a
+    /// backed-off poll of up to two minutes.
+    #[arg(long, hide = true)]
+    max_poll_ms: Option<u64>,
     #[arg(long, hide = true)]
     idle_exit_ms: Option<u64>,
 }
@@ -148,7 +153,10 @@ impl MonitorArgs {
         let poll_ms = self.poll_ms.unwrap_or(defaults.poll_ms);
         MonitorConfig {
             poll_ms,
-            max_poll_ms: defaults.max_poll_ms.max(poll_ms),
+            max_poll_ms: self
+                .max_poll_ms
+                .unwrap_or(defaults.max_poll_ms)
+                .max(poll_ms),
             idle_exit_ms: self.idle_exit_ms.unwrap_or(defaults.idle_exit_ms),
             ..defaults
         }
@@ -159,6 +167,7 @@ impl MonitorArgs {
             ("--lease-ms", self.lease_ms),
             ("--lost-after-ms", self.lost_after_ms),
             ("--poll-ms", self.poll_ms),
+            ("--max-poll-ms", self.max_poll_ms),
             ("--idle-exit-ms", self.idle_exit_ms),
         ]
         .into_iter()

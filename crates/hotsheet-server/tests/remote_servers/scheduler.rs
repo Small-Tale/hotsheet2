@@ -331,7 +331,7 @@ async fn logged(
 ) -> Vec<Value> {
     let directory = home.join("orchestration-scheduler-decisions");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-    let waiter = hotsheet_jobs::ChangeWaiter::new(&directory).unwrap();
+    let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).unwrap();
     loop {
         let page = api(
             router.clone(),
