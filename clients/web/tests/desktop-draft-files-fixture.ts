@@ -239,11 +239,13 @@ export async function desktopApp(
       await page.getByRole('button', { name: 'Local Project' }).click();
       // Opening a project is a chain of bridge and API reads; two gates sharing the machine took it
       // past the default 10 s expect window (HS2-F277XB). The bound only stops an open that never ends.
-      await expect(page.getByRole('tab', { name: 'other-project', exact: true })).toHaveAttribute(
-        'aria-selected',
-        'true',
-        { timeout: 30_000 },
-      );
+      // HS2-F277XB: a project tab's name carries its work counts ("other-project 1 Up Next ticket"),
+      // and the tab is not selected until the open finishes. This store is shared with the first
+      // project, so a ticket a test returned to Up Next names the counts before the open ends and an
+      // exact-name match never sees the tab selected. Match the project name, then its selection.
+      await expect(page.getByRole('tab', { name: /^other-project(?: |$)/u })).toHaveAttribute('aria-selected', 'true', {
+        timeout: 30_000,
+      });
       return checkout.id;
     },
     records: async () => (await readdir(drafts).catch(() => [])).filter((name) => name.endsWith('.draft')),
