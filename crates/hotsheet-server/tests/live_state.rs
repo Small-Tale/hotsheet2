@@ -68,13 +68,19 @@ async fn call(
     )
 }
 
+/// How long a pushed `live_state` may take (HS2-VB0BN1). A Codex rollout reaches the store
+/// through up to three subscription changes (home, `sessions/`, the rollout), and starting each
+/// native stream can take seconds on a loaded Mac, so a full gate exceeded the former 10 s. This
+/// bound only stops a push that never comes; a passing test returns as soon as it arrives.
+const LIVE_PUSH_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// The next pushed `live_state` for the store that satisfies `want`.
 async fn next_live(
     events: &mut tokio::sync::broadcast::Receiver<ChangeEvent>,
     store: &str,
     want: impl Fn(&Value) -> bool,
 ) -> Value {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    tokio::time::timeout(LIVE_PUSH_TIMEOUT, async {
         loop {
             let event = events.recv().await.expect("change bus open");
             if event.kind != "live_state" || event.store != store {
