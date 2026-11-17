@@ -1,5 +1,9 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { expect, type Page, test } from '@playwright/test';
 
+import { fakeGithubActions } from './fake-github-actions';
 import {
   capture,
   openOrchestration,
@@ -9,8 +13,12 @@ import {
   scheduler,
   send,
   TARGET,
+  type Ticket,
   visualPass,
 } from './orchestration-real-fixtures';
+
+const execute = promisify(execFile);
+const REPO = 'acme/synthetic-widgets';
 
 /**
  * On a phone the inspector is a sheet; with no card selected, its toggle opens it. Whether the sheet is
@@ -168,91 +176,132 @@ test('HS2-9XJEZC Run Validation asks through the permission prompt and shows eac
 test('HS2-0D60T8 the Built Ahead section shows work at risk and a person reopens it with a reason', async ({
   page,
 }) => {
-  test.setTimeout(150_000);
-  const server = await realTicketServer();
+  test.setTimeout(180_000);
+  // HS2-8KV14Y: real provisional work and a real red CI gate, end to end. The prerequisite's gate is
+  // watched by the server's own Job monitor through the real GitHub Actions client against a loopback
+  // fake provider; nothing is added to the server's answers.
+  const provider = await fakeGithubActions();
+  const server = await realTicketServer({
+    env: { ...provider.env(), HOTSHEET_JOB_MONITOR_AUTOSTART: 'on' },
+    seed: async ({ store, root, env, cli }) => {
+      await execute('git', ['init', '-q', '-b', 'main'], { cwd: root, env });
+      await execute('git', ['commit', '-q', '--allow-empty', '-m', 'Synthetic base'], { cwd: root, env });
+      // The target project opts in to building ahead of a pending gate (docs/05 §5.9.1).
+      await execute(
+        cli,
+        ['-C', store, 'coordination', '--project', root, 'speculation-policy', '--enable', '--base-branch', 'main'],
+        { cwd: root, env },
+      );
+    },
+  });
   try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const human = { role: 'human', id: 'maintainer' };
     await orchestrateSelf(server);
-    const plan = await planTwoSteps(server);
-    await plan.dispatch();
+    // Observing a gate never asks; building ahead is its own remembered decision.
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'provisional_dispatch',
+      actor: human,
+    });
+    // The orchestration policy allows provisional work.
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      actor: human,
+      policy: { speculation: { allowed: true } },
+    });
+    const goal = await server.request<Ticket>('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
+    const prerequisite = await server.request<Ticket>('/tickets', 'POST', {
+      title: 'Add the synthetic token endpoint',
+    });
+    const built = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic login page' });
+    const define = (native: string, prerequisites: object[]) =>
+      send(server, 'POST', `${base}/readiness/define`, {
+        ticket: { native_id: goal.id },
+        target_id: TARGET,
+        connection_id: prerequisite.connection_id,
+        native_id: native,
+        prerequisites,
+        actor: scheduler,
+      });
+    const dispatch = (native: string, operation: string) =>
+      send(server, 'POST', `${base}/runs`, {
+        ticket: { native_id: goal.id },
+        target_id: TARGET,
+        connection_id: prerequisite.connection_id,
+        native_id: native,
+        operation_id: operation,
+        worker_id: `worker-${operation}`,
+        actor: scheduler,
+      });
+    // The prerequisite runs and is integrated at a commit whose CI run starts.
+    await define(prerequisite.id, []);
+    const run = await dispatch(prerequisite.id, 'op-prerequisite');
+    const commit = '3f9c2a1d00aa3f9c2a1d00aa3f9c2a1d00aa3f9c';
+    provider.run(REPO, { id: 7, sha: commit, status: 'in_progress' });
+    const linked = await send(server, 'POST', `${base}/runs/${String(run.run_id)}/gates`, {
+      commit,
+      repository: REPO,
+      actor: scheduler,
+    });
+    expect((linked.gate as { state: string }).state).toBe('pending');
+    // The dependent needs the prerequisite with CI: provisional, and dispatched ahead of the gate.
+    const step = await define(built.id, [
+      {
+        kind: 'ticket',
+        target_id: TARGET,
+        connection_id: prerequisite.connection_id,
+        native_id: prerequisite.id,
+        gates: 'ci',
+      },
+    ]);
+    expect(step.level).toBe('provisional');
+    expect((await dispatch(built.id, 'op-built')).state).toBe('dispatched');
+
     await page.setViewportSize({ width: 1440, height: 900 });
     await openOrchestration(page, server);
-    // A red CI gate needs a provider, so the ledger's record is added to the real readiness answer: the
-    // same shape `readiness show` gives for work started ahead of a gate that then failed (§26.22).
-    const reopened: Array<Record<string, unknown>> = [];
-    await page.route('**/orchestration/readiness/show', async (route) => {
-      const real = await send(
-        server,
-        'POST',
-        `/checkouts/${server.checkoutId}/orchestration/readiness/show`,
-        route.request().postDataJSON(),
-      );
-      await route.fulfill({
-        json: {
-          ...real,
-          provisional: {
-            assignment: 'assignment-1',
-            step_id: real.step_id,
-            ticket: { connection_id: plan.goal.connection_id, native_id: plan.goal.id },
-            target: { target_id: TARGET, connection_id: plan.first.connection_id, native_id: plan.first.id },
-            operation_id: 'op-details',
-            state: reopened.length > 0 ? 'reopened' : 'at_risk',
-            depth: 1,
-            explain: `provisional on ${plan.second.slug} CI run-7`,
-            gates: [
-              {
-                target_id: TARGET,
-                connection_id: plan.second.connection_id,
-                native_id: plan.second.id,
-                commit: '3f9c2a1d00aa3f9c2a1d00aa3f9c2a1d00aa3f9c',
-                gate_ids: ['gate-1'],
-                result: 'red',
-                run: 'run-7',
-              },
-            ],
-            recovery: 'rebase_onto_fix',
-            reopen_reason: reopened.length > 0 ? 'fix_changed_contract' : undefined,
-            recorded_at_ms: Date.now(),
-            integration: 'ready',
-            held: true,
-          },
-        },
-      });
-    });
-    await page.route('**/orchestration/readiness/reopen', async (route) => {
-      reopened.push(route.request().postDataJSON() as Record<string, unknown>);
-      await route.fulfill({ json: { step_id: reopened[0].step_id, state: 'reopened' } });
-    });
     const view = page.locator('[data-orchestration-view="true"]');
     const section = page.locator('[data-orchestration-inspector] [data-orchestration-section="Built Ahead"]');
-    await view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click();
-    await expect(section).toContainText('At Risk');
-    await expect(section).toContainText(`Repair ${plan.second.slug} first`);
-    await expect(section).toContainText(`${plan.second.slug} · CI failed on 3f9c2a1`);
-    await expect(section).toContainText('Held off the shipping branch for now');
+    await view.locator(`[data-ticket-slug="${built.slug}"]`).click();
+    await expect(section).toContainText(`${prerequisite.slug} · CI running on 3f9c2a1`);
+    await expect(section).not.toContainText('At Risk');
+
+    // The prerequisite's run fails. The server's monitor records the red verdict and its gate follower puts
+    // the work at risk; the inspector follows the run events to it.
+    provider.run(REPO, { id: 7, sha: commit, status: 'completed', conclusion: 'failure' });
+    await expect(section).toContainText('At Risk', { timeout: 60_000 });
+    await expect(section).toContainText(`Repair ${prerequisite.slug} first`);
+    await expect(section).toContainText(`${prerequisite.slug} · CI failed on 3f9c2a1`);
     const order = await page
       .locator('[data-orchestration-inspector] [data-orchestration-section]')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-orchestration-section')));
     expect(order.slice(0, 4)).toEqual(['Where It Runs', 'Plan', 'Built Ahead', 'Run']);
-    await visualPass(page, 'hs2-0d60t8', 'at-risk', {
+    await visualPass(page, 'hs2-8kv14y', 'at-risk', {
       show: section,
       check: () => expect(section).toContainText('At Risk'),
-      atPhone: () => view.locator(`[data-ticket-slug="${plan.first.slug}"]`).click(),
+      atPhone: () => view.locator(`[data-ticket-slug="${built.slug}"]`).click(),
     });
 
-    // Reopen… asks which reason, then confirms, as the browser's person.
+    // Reopen… asks which reason, then confirms; the real `readiness reopen` records it as the person.
     await section.getByRole('button', { name: 'Reopen…' }).click();
     await page.getByRole('menuitem', { name: 'The Fix Changed the Contract…' }).click();
     const dialog = page.getByRole('alertdialog');
-    await expect(dialog).toContainText(`Reopen the work on ${plan.first.slug}?`);
-    await capture(page, 'hs2-0d60t8', 'reopen-confirm-1440');
+    await expect(dialog).toContainText(`Reopen the work on ${built.slug}?`);
+    await capture(page, 'hs2-8kv14y', 'reopen-confirm-1440');
     await dialog.getByRole('button', { name: 'Reopen', exact: true }).click();
-    await expect.poll(() => reopened.length).toBe(1);
-    expect(reopened[0]).toMatchObject({ reason: 'fix_changed_contract', actor: { role: 'human' } });
     await expect(section).toContainText('Reopened (fix changed contract)');
     await expect(section.getByRole('button', { name: 'Reopen…' })).toHaveCount(0);
     await expect(section).not.toContainText('At Risk');
+    const listed = await send(server, 'POST', `${base}/readiness/speculation`, { actor: scheduler });
+    expect(listed.work).toEqual([
+      expect.objectContaining({ state: 'reopened', reopen_reason: 'fix_changed_contract' }),
+    ]);
+    // The monitor only read the provider.
+    expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
   } finally {
+    await execute(server.cli, ['job', 'watch', 'stop'], { cwd: server.root, env: server.env }).catch(() => undefined);
     await server.stop(page);
+    await provider.close();
   }
 });
 

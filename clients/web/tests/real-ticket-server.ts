@@ -77,6 +77,11 @@ export async function realTicketServer(
      * still lies under the project root the client opened (HS2-KTHJN2).
      */
     canonicalRoot?: boolean;
+    /**
+     * Extra environment for the server, the seed and the returned `cli` calls, such as a fake CI
+     * provider's API root (HS2-8KV14Y). It cannot replace the isolated home.
+     */
+    env?: NodeJS.ProcessEnv;
   } = {},
 ) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
@@ -100,12 +105,13 @@ export async function realTicketServer(
     // into the developer checkout (HS2-RRD417).
     env = {
       ...withoutGitRepositoryEnv(process.env),
-      HOTSHEET_HOME: resolve(directory, 'home'),
       HOTSHEET_NO_AUTOCOMMIT: options.autoCommit ? undefined : '1',
       GIT_AUTHOR_NAME: 'Hot Sheet browser test',
       GIT_AUTHOR_EMAIL: 'browser@example.invalid',
       GIT_COMMITTER_NAME: 'Hot Sheet browser test',
       GIT_COMMITTER_EMAIL: 'browser@example.invalid',
+      ...options.env,
+      HOTSHEET_HOME: resolve(directory, 'home'),
     };
   await mkdir(root);
   try {
@@ -200,6 +206,9 @@ export async function realTicketServer(
       store,
       pid: child.pid,
       home: env.HOTSHEET_HOME,
+      /** The isolated fixture CLI and the environment the server runs in, for headless steps. */
+      cli,
+      env,
       request,
       stop,
     };

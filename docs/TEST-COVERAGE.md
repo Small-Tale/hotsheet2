@@ -2923,7 +2923,7 @@ discard flow remains covered by its existing real-router test.
 - Behavior: with the committed `speculation` policy enabled, `coordination assign` accepts a `blocked_by` prerequisite that is in `final_testing`, has a recorded `CI gate commit` reachable from the shipping branch and an undecided gate, within `max_depth` (default 1) and without a `speculate:never` tag on either ticket. The reservation records the speculative base SHA, pending gates and depth; the gate result confirms the work, or marks it at risk with a ticket note naming the run until it is rebased onto the fix or reopened. With the policy off, behaviour is unchanged.
 - Unit: `crates/hotsheet-ticketing/src/provisional_tests.rs # hs2_2sjpch_*` covers the matrix of prerequisite state (started, final_testing pushed, unrecorded, unpushed, completed) by CI result (pending, green, red, superseded, cancelled, unknown) under the enabled and the default policy, every closed status, unknown reachability, opt-out on either ticket and its withdrawal, stacked depth, a dependency cycle, several prerequisites, gate-commit parsing and shared-only policy storage. `crates/hotsheet-cli/src/coordination/speculation_tests.rs # hs2_2sjpch_*` covers the ledger matrix of recorded gate by incoming result with replay, two gates in either order with a late red, invalid records and runs, the untouched default pool, snapshot and worker view, the recorded base, gate, depth and explanation, green, red with a parked and an integrated dependent across two restarts with owed notes, repeated red, the repair-first refusal, rebase after the fix, empty then refill, a result before the claim, superseded and cancelled gates, the parked rule, reopen of a closed ticket, the idle wait (one read per wake, none on a timer), and the live probe against real Git and the CI watch Job store with the branch record. `crates/hotsheet-mcp/src/lib.rs # hs2_2sjpch_*` covers MCP `hotsheet_workers` and the tag opt-out through `hotsheet_update`; `crates/hotsheet-plugins/src/tests.rs # hs2_2sjpch_*` pins the role skills and the project rule.
 - End to end: `crates/hotsheet-cli/tests/coordination_speculation.rs # hs2_2sjpch_*` drives separate CLI processes: the exact default refusal, policy validation and opt-in, the explanation, a provisional reservation that wakes a waiting integrator, replay, the workers view, opt-out by tag, a red result with notes and a second wake, rebase onto a real fix commit, the branch record and green. `crates/hotsheet-server/tests/http.rs # hs2_2sjpch_provisional_assignments_reach_rest_workers` reads the records, `reevaluate` and `repair_first` through the real worker route.
-- Web: the Workers view shows each record on its card (HS2-N8H97X, `clients/web/tests/worker-provisional.spec.ts`); a connected multi-session pilot with a real CI provider remains with HS2-K1QNGC.
+- Web: the Workers view shows each record on its card (HS2-N8H97X, `clients/web/tests/worker-provisional.spec.ts`), driven end to end by a real reservation and a red gate from a loopback fake CI provider (HS2-8KV14Y); a connected multi-session pilot with a real CI provider remains with HS2-K1QNGC.
 
 ### Integration strategy framework (HS2-NEY1QH)
 
@@ -4223,10 +4223,12 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
 - Built Ahead (HS2-0D60T8): `orchestration-built-ahead.test.ts` parses the record with the
   rule's limit, labels a gate's ticket by slug, through what waits on it or its
   project, tables the rows, the banner's two recoveries and who may reopen; the spec
-  adds the ledger record to the real `readiness show` answer (a red CI gate needs a
-  provider), checks the At Risk banner and rows in the real inspector, picks a reason
-  in Reopen…, confirms, and sees the person's request with that reason and the
-  section reading Reopened.
+  (HS2-8KV14Y) records real provisional work end to end: the prerequisite's linked CI
+  gate is followed by the server's Job monitor through the real GitHub Actions client
+  against a loopback fake provider (`clients/web/tests/fake-github-actions.ts`), the
+  dependent is dispatched ahead of it and reads CI running, the run fails and the
+  inspector follows the gate to the At Risk banner and rows, then Reopen… with a reason
+  sends the real `readiness reopen` and the ledger and section read Reopened.
 - Scheduler (HS2-77SRHC): `audit_tests.rs # hs2_77srhc` pages a journal newest first from
   empty, back to its first entry, past it, with an append between pages, a `before`
   beyond the newest and a zero limit, and reports the gap rotation left;
@@ -4250,8 +4252,11 @@ ticketing, extsync, CLI, MCP and server suites, and the OpenAPI routes are regen
   leniently (a malformed one leaves the worker view available), words provisional with
   one and several bases and results, at risk with and without `repair_first`, reopened,
   and no line for confirmed work; the WorkerColumns test renders both lines on real
-  cards; the spec adds the speculation member to the real pool's worker answer and reads
-  both cards at 1440, 1100 and 390, wide again and dark.
+  cards; the spec (HS2-8KV14Y) reserves real provisional work in a real pool, claims and
+  accepts it as the worker, watches the prerequisite's commit with `job watch ci` on the
+  loopback fake provider (`clients/web/tests/fake-github-actions.ts`), reads Provisional
+  · CI running, fails the run, syncs, and reads At risk · repair … first on the open view
+  at 1440, 1100 and 390, wide again and dark.
 
 ### Terminal ownership after shell navigation (HS2-S46J0W)
 

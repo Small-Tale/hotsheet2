@@ -3,39 +3,94 @@ import { promisify } from 'node:util';
 
 import { expect, type Page, test } from '@playwright/test';
 
-import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { fakeGithubActions } from './fake-github-actions';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 const execute = promisify(execFile);
+const REPO = 'acme/synthetic-widgets';
 
 /**
- * HS2-N8H97X: provisional assignments in the real Workers view, on the shared TicketRow orchestration
- * line. The pool and its worker are real; reserving provisional work needs a prerequisite's CI on a
- * provider, so the pool's speculation status and the worker's assignment are added to the real worker
- * answer in the shape `coordination workers` gives (HS2-2SJPCH). Synthetic tickets only.
+ * HS2-N8H97X, HS2-8KV14Y: provisional work in the real Workers view, on the shared TicketRow orchestration
+ * line, end to end. The pool, its integrator and worker, the provisional reservation and the CI gate are all
+ * real: the prerequisite's commit is watched by `job watch ci` through the real GitHub Actions client
+ * against a loopback fake provider, its run fails, and `coordination speculation-sync` records the red
+ * result (§5.9.1). Nothing is added to the worker answer. Synthetic tickets and commits only.
  */
-test('HS2-N8H97X a worker’s provisional and at-risk tickets say so on their cards', async ({ page }) => {
-  test.setTimeout(150_000);
+test('HS2-N8H97X a worker’s provisional ticket turns at risk when its base gate goes red', async ({ page }) => {
+  test.setTimeout(180_000);
   const workerId = 'synthetic-provisional-worker';
+  const provider = await fakeGithubActions();
+  let commit = '';
   const server = await realTicketServer({
+    env: provider.env(),
     seed: async ({ store, root, env, cli }) => {
-      const cleanEnv = withoutGitRepositoryEnv(env);
-      const git = (...args: string[]) => execute('git', args, { cwd: root, env: cleanEnv });
+      const git = (...args: string[]) => execute('git', args, { cwd: root, env });
       const pool = (...args: string[]) =>
-        execute(cli, ['-C', store, 'coordination', '--project', root, ...args], { cwd: root, env: cleanEnv });
+        execute(cli, ['-C', store, 'coordination', '--project', root, ...args], { cwd: root, env });
       await git('init', '-q', '-b', 'main');
       await git('commit', '-q', '--allow-empty', '-m', 'Synthetic base');
+      commit = (await git('rev-parse', 'HEAD')).stdout.trim();
       await pool('setup');
-      await pool('register', '--role', 'worker', '--id', workerId, '--session', 'w1', '--route', 'human');
+      for (const [role, id, session] of [
+        ['integrator', 'integrator', 'root'],
+        ['worker', workerId, 'w1'],
+      ])
+        await pool('register', '--role', role, '--id', id, '--session', session, '--lease-seconds', '600');
+      await pool('speculation-policy', '--enable', '--base-branch', 'main');
     },
   });
+  const cli = (...args: string[]) =>
+    execute(server.cli, ['-C', server.store, ...args], { cwd: server.root, env: server.env });
+  const pool = (...args: string[]) => cli('coordination', '--project', server.root, ...args);
+  const watch = ['--commit', commit, '--repo', REPO, '--checkout', server.root];
   try {
     type Ticket = { id: string; slug: string; connection_id: string };
     const base = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic token endpoint' });
-    const built = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic login page' });
-    const risky = await server.request<Ticket>('/tickets', 'POST', { title: 'Add the synthetic audit log' });
-    // The Workers view shows a worker's started tickets.
-    for (const ticket of [built, risky]) await server.request(`/tickets/${ticket.id}`, 'PATCH', { status: 'started' });
+    // The prerequisite is pushed and waits on CI (`final_testing` with its `CI gate commit`).
+    await server.request(`/tickets/${base.id}`, 'PATCH', {
+      status: 'started',
+      started_phase: 'final_testing',
+      note: `Pushed; waiting on CI.\n\nCI gate commit: ${commit}\n`,
+    });
+    const built = await server.request<Ticket>('/tickets', 'POST', {
+      title: 'Add the synthetic login page',
+      up_next: true,
+      blocked_by: [base.id],
+    });
+    // The integrator reserves the dependent ahead of the pending gate: a real provisional record.
+    await pool(
+      'assign',
+      '--id',
+      'integrator',
+      '--session',
+      'root',
+      '--worker',
+      workerId,
+      '--worker-session',
+      'w1',
+      '--operation',
+      'op-built',
+      '--connection',
+      built.connection_id,
+      '--native-id',
+      built.id,
+      '--slug',
+      built.slug,
+      '--base',
+      commit,
+    );
+    // The worker claims the offered ticket and accepts the assignment, as its role skill does.
+    await cli('claim', built.slug, '--worker', workerId, '--eta', '1h');
+    await pool('worker', '--id', workerId, '--session', 'w1', '--assignment', 'op-built', '--phase', 'accepted');
+    // The prerequisite's CI run starts; the real watch reads it as pending.
+    provider.run(REPO, { id: 7, sha: commit, status: 'in_progress' });
+    await cli('job', 'watch', 'ci', ...watch, '--poll-ms', '100');
+    const gate = async (wait: string) =>
+      JSON.parse((await cli('job', 'watch', 'gate', ...watch, '--wait-seconds', wait)).stdout) as { state: string };
+    await expect.poll(async () => (await gate('5')).state, { timeout: 30_000 }).toBe('pending');
+    // The integrator's sync reads the watch Job: the record's gate goes from unknown to pending.
+    await pool('speculation-sync');
+
     const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
@@ -59,55 +114,6 @@ test('HS2-N8H97X a worker’s provisional and at-risk tickets say so on their ca
         await route.abort().catch(() => undefined);
       }
     });
-    const assignment = (ticket: Ticket, id: string) => ({
-      ticket: { connection_id: ticket.connection_id, native_id: ticket.id },
-      slug: ticket.slug,
-      assignment_id: id,
-      assignment_phase: 'accepted',
-      claim_expires_at: null,
-      started_phase: null,
-      eta_at: null,
-    });
-    const gate = (result: string) => ({
-      blocker: base.id,
-      slug: base.slug,
-      commit: 'a'.repeat(40),
-      result,
-      run: 'run-7',
-    });
-    const record = (ticket: Ticket, id: string, state: string, result: string) => ({
-      assignment: id,
-      ticket: { connection_id: ticket.connection_id, native_id: ticket.id },
-      slug: ticket.slug,
-      worker: workerId,
-      base: 'b'.repeat(40),
-      depth: 1,
-      state,
-      gates: [gate(result)],
-      explain: `provisional on ${base.slug} CI run-7`,
-    });
-    const original = await server.request<{ workers: Array<Record<string, unknown>> }>(
-      `/checkouts/${server.checkoutId}/workers?wait_ms=0`,
-    );
-    const snapshot = {
-      ...original,
-      workers: original.workers.map((worker) =>
-        worker.id === workerId
-          ? { ...worker, tickets: [assignment(built, 'assign-1'), assignment(risky, 'assign-2')] }
-          : worker,
-      ),
-      speculation: {
-        records: [record(risky, 'assign-2', 'at_risk', 'red'), record(built, 'assign-1', 'provisional', 'pending')],
-        repair_first: [base.slug],
-        reevaluate: [],
-      },
-    };
-    await page.route(`**${apiPath}/checkouts/${server.checkoutId}/workers?*`, async (route) => {
-      // A cursor read is the long poll: it answers when something changes, which nothing does here.
-      if (new URL(route.request().url()).searchParams.has('after'))
-        await new Promise((resolve) => setTimeout(resolve, 20_000));
-      await route.fulfill({ json: snapshot }).catch(() => undefined);
-    });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
@@ -115,10 +121,23 @@ test('HS2-N8H97X a worker’s provisional and at-risk tickets say so on their ca
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-segment-value="workers"]').first().click();
     const column = page.locator(`[data-worker-column="${workerId}"]`);
-    const line = (ticket: Ticket) =>
-      column.locator(`[data-worker-ticket="${ticket.connection_id}:${ticket.id}"] [data-orchestration-part="state"]`);
-    await expect(line(built)).toHaveText(`Provisional on ${base.slug} · CI running`);
-    await expect(line(risky)).toHaveText(`At risk · repair ${base.slug} first`);
+    const line = column.locator(
+      `[data-worker-ticket="${built.connection_id}:${built.id}"] [data-orchestration-part="state"]`,
+    );
+    await expect(line).toHaveText(`Provisional on ${base.slug} · CI running`);
+
+    // The run fails. The watch records the red verdict, the sync applies it to the ledger, and the open
+    // Workers view follows the pool's cursor to the at-risk line, with no reload.
+    provider.run(REPO, { id: 7, sha: commit, status: 'completed', conclusion: 'failure' });
+    await expect.poll(async () => (await gate('20')).state, { timeout: 60_000 }).toBe('red');
+    const synced = JSON.parse((await pool('speculation-sync')).stdout) as {
+      status: { repair_first: string[] };
+    };
+    expect(synced.status.repair_first).toContain(base.slug);
+    await expect(line).toHaveText(`At risk · repair ${base.slug} first`, { timeout: 30_000 });
+    // The watch only read the provider.
+    expect(provider.requests.every((request) => request.startsWith('GET '))).toBe(true);
+
     const shot = async (name: string) => {
       // The phone layout replaces the desktop one after a resize; capture once it has, with nothing sliding.
       await page.waitForFunction(
@@ -130,7 +149,7 @@ test('HS2-N8H97X a worker’s provisional and at-risk tickets say so on their ca
               (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
             ),
       );
-      await page.screenshot({ path: test.info().outputPath(`hs2-n8h97x-${name}.png`) });
+      await page.screenshot({ path: test.info().outputPath(`hs2-8kv14y-${name}.png`) });
     };
     const pass = async (narrow: (page: Page) => Promise<void>) => {
       for (const [width, height] of [
@@ -140,23 +159,24 @@ test('HS2-N8H97X a worker’s provisional and at-risk tickets say so on their ca
       ] as const) {
         await page.setViewportSize({ width, height });
         if (width === 390) await narrow(page);
-        await expect(line(risky)).toBeVisible();
-        await shot(`workers-${width}`);
+        await expect(line).toBeVisible();
+        await shot(`workers-at-risk-${String(width)}`);
       }
       await page.setViewportSize({ width: 1440, height: 900 });
-      await expect(line(built)).toBeVisible();
-      await shot('workers-1440-after-narrow');
+      await expect(line).toBeVisible();
+      await shot('workers-at-risk-1440-after-narrow');
       await page.emulateMedia({ colorScheme: 'dark' });
-      await shot('workers-1440-dark');
-      await page.setViewportSize({ width: 390, height: 844 });
-      await narrow(page);
-      await shot('workers-390-dark');
+      await shot('workers-at-risk-1440-dark');
       await page.emulateMedia({ colorScheme: 'light' });
     };
+    // A phone pages the worker columns; bring the worker's column, and so its card, on screen.
     await pass(async () => {
-      await expect(page.locator('[data-worker-column]').first()).toBeInViewport();
+      await line.scrollIntoViewIfNeeded();
+      await expect(line).toBeInViewport();
     });
   } finally {
+    await cli('job', 'watch', 'stop').catch(() => undefined);
     await server.stop(page);
+    await provider.close();
   }
 });
