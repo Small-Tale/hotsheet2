@@ -999,6 +999,112 @@ test('shows ticket changes an interrupted recovery never restored above a publis
   }
 });
 
+test('shows the sync strip AI repair state with a working repair-ticket link in both schemes (HS2-GEF1AS)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  // A conflict Hot Sheet asked Codex to repair two hours ago: past the 30-minute grace, so a person is told.
+  const askedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  await page.route('**/checkouts/*/repository/sync', (route) =>
+    route.fulfill({
+      json: {
+        checkout_id: project.id,
+        stores: [
+          {
+            connection_id: 'git-local',
+            label: 'demo.hs2',
+            locator: '/work/demo.hs2',
+            health: {
+              state: 'conflict',
+              syncing: false,
+              unpublished_commits: 3,
+              incoming_commits: 2,
+              consecutive_failures: 1,
+              reason: 'A ticket changed on both sides.',
+              next_action:
+                'Hot Sheet started codex to repair the store (ticket HS2-DEMO01); sync publishes once it is repaired.',
+              merge_driver: 'registered',
+              ai_help: { outcome: 'started', mode: 'start', tool: 'codex', ticket: 'HS2-DEMO01', asked_at: askedAt },
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Local Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const banner = page.locator('[data-component="ticket-store-sync-banner"]');
+  const link = banner.getByRole('button', { name: 'Open HS2-DEMO01' });
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [pass, width] of [1280, 900, 390, 1280].entries()) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(() =>
+        Promise.allSettled(
+          document
+            .getAnimations()
+            .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+            .map((animation) => animation.finished),
+        ),
+      );
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText('Ticket store demo.hs2 is not publishing changes');
+      // Said once: the server's next step already names the session Hot Sheet started.
+      await expect(banner).toContainText('Hot Sheet started codex to repair the store (ticket HS2-DEMO01)');
+      await expect(banner).not.toContainText('Hot Sheet started codex to repair it.');
+      await expect(banner).toContainText('3 local changes are not published');
+      await expect(link).toBeVisible();
+      // The longer detail wraps inside the strip, and the action link sits inside it.
+      const fits = await banner.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth + 0.5 && node.scrollWidth <= node.clientWidth + 1;
+      });
+      expect(fits, `${scheme} ${width}`).toBe(true);
+      const linkBox = await link.boundingBox(),
+        bannerBox = await banner.boundingBox();
+      expect(
+        linkBox &&
+          bannerBox &&
+          linkBox.x >= bannerBox.x &&
+          linkBox.x + linkBox.width <= bannerBox.x + bannerBox.width + 0.5,
+      ).toBe(true);
+      // Keyboard focus draws the link's ring without a clipping ancestor cutting it.
+      await link.focus();
+      await expect(link).toBeFocused();
+      const cuts = await link.evaluate((node) => {
+        const reach = 4,
+          box = node.getBoundingClientRect(),
+          found: string[] = [];
+        for (
+          let parent = node.parentElement;
+          parent && parent !== document.documentElement;
+          parent = parent.parentElement
+        ) {
+          const style = getComputedStyle(parent);
+          if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+          const clip = parent.getBoundingClientRect();
+          if (
+            box.left - reach < clip.left - 0.5 ||
+            box.right + reach > clip.right + 0.5 ||
+            box.top - reach < clip.top - 0.5 ||
+            box.bottom + reach > clip.bottom + 0.5
+          )
+            found.push(parent.className || parent.tagName);
+        }
+        return found;
+      });
+      expect(cuts, `${scheme} ${width} focus ring`).toEqual([]);
+      await page.screenshot({ path: `target/visual-captures/hs2-gef1as-ai-repair-${scheme}-${pass}-${width}.png` });
+    }
+  }
+  // The link opens the repair ticket.
+  await link.click();
+  await expect(page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01 in demo' })).toBeVisible();
+});
+
 test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0ECV)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>

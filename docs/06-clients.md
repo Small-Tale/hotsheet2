@@ -5235,8 +5235,10 @@ transition history (HS2-XKXE7V).
   - repeats the server's next step, which names the headless `hotsheet-cli` command, as
     plain text: the server's Markdown code-span backticks are dropped (HS2-GN2S3F);
   - while an AI was asked to repair the stall (`ai_help`, HS2-QR1K8R), says whom Hot Sheet
-    asked and how it went, and links the repair ticket with the shared
-    `open-linked-ticket` action.
+    asked and how it went, once: when the server's next step already says so (an ask in
+    progress or an ended session) the strip does not repeat it, and a failed ask keeps its
+    own sentence. An `Open <slug>` compact pill button, StateBanner's action, opens the
+    repair ticket through the shared `open-linked-ticket` action (HS2-GEF1AS).
 
   It has no dismiss and clears when a sync publishes again. The state contract is
   [02](02-ticket-storage.md) §2.12.2.

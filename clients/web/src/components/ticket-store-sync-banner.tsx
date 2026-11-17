@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CloudAlert } from 'lucide';
 
@@ -107,6 +108,17 @@ export function aiHelpSentence(help: TicketStoreAiHelp): string {
   }
 }
 
+/**
+ * Whether the server's next step already says whom Hot Sheet asked and how that went (HS2-GEF1AS). For an
+ * ask in progress or a session that ended, the server's next step restates it, so the strip shows it once;
+ * a failed ask or a ticket-only fallback keeps the client sentence, since the next step only names the
+ * procedure.
+ */
+export function restatesAiHelp(help: TicketStoreAiHelp, nextAction: string | undefined): boolean {
+  if (!nextAction) return false;
+  return help.outcome === 'started' || help.outcome === 'session_asked' || help.outcome === 'finished';
+}
+
 /** The server's reason as a sentence: its first letter capitalized. */
 function sentence(text: string): string {
   const plain = plainServerText(text);
@@ -201,7 +213,7 @@ export function TicketStoreSyncBanner({
   const help = first.health.ai_help;
   const detail = [
     others === 0 ? syncFailureSummary(first.health) : `${first.label}: ${syncFailureSummary(first.health)}`,
-    help ? aiHelpSentence(help) : undefined,
+    help && !restatesAiHelp(help, first.health.next_action) ? aiHelpSentence(help) : undefined,
     unpublishedSentence(first.health.unpublished_commits),
     first.health.next_action && plainServerText(first.health.next_action),
     others > 0
@@ -219,14 +231,16 @@ export function TicketStoreSyncBanner({
       icon={<LucideIcon icon={CloudAlert} name="cloud-alert" />}
       action={
         help?.ticket ? (
-          <a
-            href={`#ticket-${help.ticket}`}
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.attrs}
-            data-ticket-slug={help.ticket}
+          // StateBanner's action is a compact pill Button (HS2-GEF1AS), not a page-styled link.
+          <Button
+            size="compact"
+            shape="pill"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.value}
             title={`Open ${help.ticket}`}
+            rootAttributes={{ 'data-ticket-slug': help.ticket }}
           >
             {`Open ${help.ticket}`}
-          </a>
+          </Button>
         ) : undefined
       }
     />

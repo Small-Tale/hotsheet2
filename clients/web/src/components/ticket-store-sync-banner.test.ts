@@ -8,6 +8,7 @@ import {
   PERSISTENT_OFFLINE_FAILURES,
   plainServerText,
   repairInProgress,
+  restatesAiHelp,
   strandedChangeCount,
   strandedTicketStores,
   syncFailureSummary,
@@ -186,12 +187,27 @@ describe('TicketStoreSyncBanner AI repair (HS2-QR1K8R)', () => {
 
   it('shows the ask and links the repair ticket through the shared ticket-link action', () => {
     const html = String(TicketStoreSyncBanner({ report: report(['tickets.hs2', asked('started', 'codex')]) }));
-    expect(html).toContain('Hot Sheet started codex to repair it.');
+    // The server's next step already says who was asked, so it is said once (HS2-GEF1AS).
+    expect(html).toContain('Hot Sheet started codex to repair the store');
+    expect(html).not.toContain('Hot Sheet started codex to repair it.');
     expect(html).toContain('sync publishes once it is repaired');
-    expect(html).toContain('href="#ticket-HS-ABC123"');
     expect(html).toContain('data-ticket-slug="HS-ABC123"');
     expect(html).toContain('data-action="open-linked-ticket"');
     expect(html).toContain('Open HS-ABC123');
+    // The action is StateBanner's compact pill Button, not a page link.
+    expect(html).toMatch(/<button[^>]*data-action="open-linked-ticket"/);
+  });
+
+  it('keeps the outcome sentence only when the next step does not restate it (HS2-GEF1AS)', () => {
+    const withNext = (outcome: TicketStoreAiHelp['outcome']) =>
+      String(TicketStoreSyncBanner({ report: report(['tickets.hs2', asked(outcome, 'codex')]) }));
+    expect(withNext('failed')).toContain('The codex session Hot Sheet started ended with an error.');
+    expect(withNext('ticket_only')).toContain('Hot Sheet could not ask an AI to repair it.');
+    for (const outcome of ['started', 'session_asked', 'finished'] as const)
+      expect(restatesAiHelp(help(outcome), 'next')).toBe(true);
+    for (const outcome of ['failed', 'ticket_only'] as const) expect(restatesAiHelp(help(outcome), 'next')).toBe(false);
+    // Without a server next step the client sentence is the only account of the ask.
+    expect(restatesAiHelp(help('started'), undefined)).toBe(false);
   });
 
   it('has no ticket link and no ask sentence when no AI was asked', () => {
