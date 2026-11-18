@@ -353,6 +353,7 @@ impl AppState {
             build_revision: meta.build_revision,
             executable: meta.executable,
             launcher: Some(meta.launcher),
+            anchor: Some(self.store.root().display().to_string()),
         };
         // Hold this store's index-writer lock too, so a second machine server can't
         // double-write its index (HS2-AYCA1W). The primary store's lock is already held by
@@ -361,6 +362,22 @@ impl AppState {
         // to a single server; this is belt-and-suspenders against a stray duplicate.
         let is_primary = same_path(store_path, self.store.root());
         let instances = self.instance_registry();
+        // HS2-JFE7JJ: a store another live server is anchored on stays that server's. Its
+        // clients (and the terminals it launched) find it by this record; hosting the
+        // store here as well must not redirect them, and this server's guard must not
+        // own the file.
+        if !is_primary
+            && let Some(owner) = instances.find_instance(store_path)
+            && owner.pid != std::process::id()
+            && owner.anchored_on(store_path)
+        {
+            tracing::info!(
+                store = %store_path.display(),
+                owner_pid = owner.pid,
+                "store is anchored on another live server; its instance record is left as is"
+            );
+            return;
+        }
         if !is_primary {
             match instances.acquire_writer_lock(store_path) {
                 Ok(lock) => {

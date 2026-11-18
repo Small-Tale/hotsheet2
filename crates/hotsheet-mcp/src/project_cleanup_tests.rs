@@ -76,6 +76,7 @@ fn hs2_4j6v46_project_wrapper_cleanup_uses_cached_loopback_without_reopen_or_sta
         root: root.clone(),
         home: home.clone(),
         route: Mutex::new((origin, "synthetic-secret".into(), b"old registry".to_vec())),
+        launched: None,
     };
     assert_eq!(backend.get(path, &[]).unwrap()["revision"], 2);
     assert_eq!(
@@ -130,6 +131,7 @@ fn hs2_4j6v46_project_wrapper_remote_cleanup_origin_is_denied_before_recovery_or
             "synthetic".into(),
             Vec::new(),
         )),
+        launched: None,
     };
     let path = "/checkouts/owner/orchestration/targets/id/binding";
     assert_eq!(backend.get(path, &[]).unwrap_err().status, Some(403));

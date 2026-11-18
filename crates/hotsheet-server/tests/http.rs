@@ -19935,6 +19935,85 @@ async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     );
 }
 
+/// HS2-JFE7JJ: a machine server that also hosts a store another live server is anchored
+/// on leaves that server's instance record as it is, so the other server's clients and the
+/// terminals it launched keep finding it, and this server's guard never removes the record.
+/// A record of a server merely hosting the store (no anchor, or another anchor) is still
+/// taken over, as when a machine host is replaced.
+#[tokio::test]
+async fn hs2_jfe7jj_hosting_a_store_never_takes_over_its_anchored_servers_record() {
+    let home = tempfile::tempdir().unwrap();
+    let dir1 = tempfile::tempdir().unwrap();
+    let store1 = FsStore::init_git(dir1.path(), &StoreMetadata::new("AA")).unwrap();
+    let st = AppState::new(store1, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path());
+    let registry = st.instance_registry();
+    let app = app(st.clone());
+    let anchored = tempfile::tempdir().unwrap();
+    FsStore::init_git(anchored.path(), &StoreMetadata::new("BB")).unwrap();
+    let hosted = tempfile::tempdir().unwrap();
+    FsStore::init_git(hosted.path(), &StoreMetadata::new("CC")).unwrap();
+    // A live process stands in for the other server.
+    let mut other = std::process::Command::new("sleep")
+        .arg("60")
+        .spawn()
+        .unwrap();
+    let record = |store: &std::path::Path, anchor: Option<&std::path::Path>| {
+        hotsheet_server::lifecycle::InstanceInfo {
+            pid: other.id(),
+            url: "http://127.0.0.1:1".into(),
+            secret: "other-secret".into(),
+            store_path: store.display().to_string(),
+            index_path: "(in-memory)".into(),
+            started_at: "2026-11-18T00:00:00Z".into(),
+            build_revision: None,
+            executable: None,
+            launcher: Some("cli".into()),
+            anchor: anchor.map(|anchor| anchor.display().to_string()),
+        }
+    };
+    let anchored_record = record(anchored.path(), Some(anchored.path()));
+    let hosted_record = record(hosted.path(), None);
+    let _anchored_guard = registry
+        .register_instance(&anchored_record, anchored.path())
+        .unwrap();
+    let _hosted_guard = registry
+        .register_instance(&hosted_record, hosted.path())
+        .unwrap();
+    for store in [anchored.path(), hosted.path()] {
+        let body = format!(r#"{{"path":"{}"}}"#, store.display());
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/stores", Some(&body)))
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+    }
+    st.publish_instances("http://127.0.0.1:2".into(), "2026-11-18T00:00:01Z".into());
+
+    let read = |store: &std::path::Path| {
+        serde_json::from_str::<hotsheet_server::lifecycle::InstanceInfo>(
+            &std::fs::read_to_string(registry.instance_path(store)).unwrap(),
+        )
+        .unwrap()
+    };
+    assert_eq!(read(anchored.path()), anchored_record);
+    let taken = read(hosted.path());
+    assert_eq!(taken.pid, std::process::id());
+    assert_eq!(taken.url, "http://127.0.0.1:2");
+    assert_eq!(
+        taken.anchor.as_deref(),
+        Some(dir1.path().display().to_string().as_str())
+    );
+    // Unhosting here never removes the anchored server's record.
+    drop(st);
+    drop(app);
+    assert_eq!(read(anchored.path()), anchored_record);
+    let _ = other.kill();
+    let _ = other.wait();
+}
+
 #[tokio::test]
 async fn a_registered_store_gets_its_own_watcher() {
     use hotsheet_model::{Timestamp, Ulid};

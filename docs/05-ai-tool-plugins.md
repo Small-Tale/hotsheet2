@@ -574,6 +574,21 @@ covers each client's local layer (HS2-PN848F):
 | OpenCode    | `opencode.json`           | None documented; project config is the highest standard file                                                                                                             | Prints a limitation notice                                                            |
 | Antigravity | `.agents/mcp_config.json` | None documented beside the global `~/.gemini/config/mcp_config.json`                                                                                                     | Prints a limitation notice                                                            |
 
+**Inside a Hot Sheet-launched session (HS2-JFE7JJ).** A shim whose environment names the
+server that launched its terminal (`HOTSHEET_SERVER` and `HOTSHEET_SECRET`) opens the
+project through that server, provided a live server with that route is recorded in the
+shim's own machine home. A route inherited from another home is never used. The shim never
+starts a machine host of its own, so it leaves no second server or terminal broker
+behind, and the launching server receives its presence and permission traffic. If that
+server is no longer running, the shim moves to a machine host that is already running. If
+none is running, the shim fails and says so. Under a shared host (the Codex app-server
+daemon) the inherited route belongs to another session, so it is ignored (HS2-MRR6Z0).
+Outside a Hot Sheet terminal the shim starts or reuses the machine host as before.
+
+A server never takes over the instance record of a store that another live server is
+anchored on. Each record names its server's anchor store, and a machine host that also
+hosts such a store leaves that record alone.
+
 The plugin manifest declares the layer (`[mcp] local_layer = "claude-local-scope"`), so
 the host never branches on the tool id. The Claude override is idempotent and refreshed on
 every setup or refresh, so a moved binary is picked up on the next project open. It edits

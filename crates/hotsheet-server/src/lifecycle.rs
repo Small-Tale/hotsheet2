@@ -45,6 +45,23 @@ pub struct InstanceInfo {
     /// or an explicit `--launcher` label (HS2-GWFEAA). Absent in legacy records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launcher: Option<String>,
+    /// HS2-JFE7JJ: the store this server is anchored on (its primary store), so another
+    /// server hosting the same store never takes over the record of a server anchored on
+    /// it. Absent in legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+}
+
+impl InstanceInfo {
+    /// HS2-JFE7JJ: whether this record's server is anchored on `store_path` itself (its
+    /// primary store), not merely hosting it beside its own anchor.
+    #[must_use]
+    pub fn anchored_on(&self, store_path: &Path) -> bool {
+        let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.anchor
+            .as_deref()
+            .is_some_and(|anchor| canonical(Path::new(anchor)) == canonical(store_path))
+    }
 }
 
 /// The launcher label of a **pinned** host: the production local host that runs startup
@@ -575,6 +592,7 @@ mod tests {
             build_revision: None,
             executable: None,
             launcher: None,
+            anchor: None,
         }
     }
 

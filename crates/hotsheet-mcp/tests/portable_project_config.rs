@@ -156,6 +156,11 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
         .args(&args)
         .current_dir(&nested)
         .env("HOTSHEET_HOME", &home)
+        // HS2-JFE7JJ: not a launched session, even when the suite runs in a Hot Sheet
+        // terminal, so the shim never routes to that terminal's own server.
+        .env_remove("HOTSHEET_SERVER")
+        .env_remove("HOTSHEET_SECRET")
+        .env_remove("HOTSHEET_TERMINAL_ID")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

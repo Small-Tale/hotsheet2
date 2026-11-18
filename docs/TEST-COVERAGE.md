@@ -1339,6 +1339,20 @@ linked-store resolution from a nested checkout directory, and
 `crates/hotsheet-mcp/tests/portable_project_config.rs` exercises the real shim
 with `--path .` and a linked store.
 
+HS2-JFE7JJ covers a launched session's project shim.
+
+- `crates/hotsheet-mcp/tests/launched_session.rs` runs a real `hotsheet-server` anchored on a
+  store and the shipped `hotsheet-mcp --project` with the terminal environment that server
+  gives. A tool call succeeds through the launching server. No machine-host anchor is set up,
+  and the instance records are byte-for-byte unchanged.
+- The same file covers two failures: a route from another machine home, and a launching
+  server that is gone. Each makes the shim fail with a message and start nothing.
+- `crates/hotsheet-mcp/src/main.rs # hs2_jfe7jj` covers the route from the environment, and
+  that a shared host ignores it.
+- `crates/hotsheet-server/tests/http.rs # hs2_jfe7jj` covers hosting: a machine server that
+  also hosts a store another live server is anchored on leaves that server's record and never
+  removes it. A merely hosted record is still taken over.
+
 HS2-PN848F covers GUI-launched clients whose shared MCP config keeps the portable
 command. `crates/hotsheet-plugins/src/mcp_local_layer.rs` unit-tests the Claude
 local-scope edit (new and existing files, unrelated state kept, refresh after the
