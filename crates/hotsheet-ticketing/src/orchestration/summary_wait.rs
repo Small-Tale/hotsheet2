@@ -154,18 +154,23 @@ fn union_ms(mut spans: Vec<(u64, u64)>) -> u64 {
     total + current.map_or(0, |(from, to)| to - from)
 }
 
-/// Wait in `state` over the gates of `kind`, joined per run.
-fn gate_wait(input: &ExternalWaitInput<'_>, kind: GateKind, state: GateState) -> SystemWait {
+/// Wait in `state` over the gates of `kinds`, joined per run. `none` is the reason
+/// when no gate of those kinds stands.
+fn gate_wait(
+    input: &ExternalWaitInput<'_>,
+    kinds: &[GateKind],
+    state: GateState,
+    none: UnknownReason,
+) -> SystemWait {
     let gates: Vec<&Gate> = input
         .gates
         .iter()
-        .filter(|gate| gate.owner_checkout_id == input.owner_checkout_id && gate.kind == kind)
+        .filter(|gate| {
+            gate.owner_checkout_id == input.owner_checkout_id && kinds.contains(&gate.kind)
+        })
         .collect();
     if gates.is_empty() {
-        let reason = match kind {
-            GateKind::Ci => UnknownReason::NoGateLinked,
-            GateKind::Deployment => UnknownReason::NoDeploymentRequested,
-        };
+        let reason = none;
         return SystemWait {
             wait_ms: Metric::Unknown { reason },
             waited: 0,
@@ -256,9 +261,26 @@ pub fn summarize_external_wait(input: &ExternalWaitInput<'_>) -> ExternalWait {
         }
     };
     ExternalWait {
-        ci: gate_wait(input, GateKind::Ci, GateState::Pending),
-        deployments: gate_wait(input, GateKind::Deployment, GateState::Pending),
-        reviews: gate_wait(input, GateKind::Deployment, GateState::AwaitingApproval),
+        ci: gate_wait(
+            input,
+            &[GateKind::Ci],
+            GateState::Pending,
+            UnknownReason::NoGateLinked,
+        ),
+        deployments: gate_wait(
+            input,
+            &[GateKind::Deployment],
+            GateState::Pending,
+            UnknownReason::NoDeploymentRequested,
+        ),
+        // HS2-GD3NNK: requested code reviews, alongside deployments that wait for a
+        // person's approval.
+        reviews: gate_wait(
+            input,
+            &[GateKind::Deployment, GateKind::Review],
+            GateState::AwaitingApproval,
+            UnknownReason::NoReviewRequested,
+        ),
         provider_limits: SystemWait {
             wait_ms: journal(limited_ms),
             waited: limited_steps.len() as u64,

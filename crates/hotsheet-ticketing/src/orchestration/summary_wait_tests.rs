@@ -93,7 +93,7 @@ fn hs2_9fxase_absent_gates_are_unknown_and_an_empty_journal_is_zero() {
     );
     assert_eq!(
         summary.reviews,
-        wait(unknown(UnknownReason::NoDeploymentRequested), 0)
+        wait(unknown(UnknownReason::NoReviewRequested), 0)
     );
     assert_eq!(summary.provider_limits, wait(known(0), 0));
     assert_eq!(summary.idle_waiting_ms, known(0));
@@ -280,4 +280,64 @@ fn hs2_9fxase_the_wire_carries_numbers_and_codes_only() {
     let back: ExternalWait = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(back).unwrap(), wire);
     assert!(!wire.to_string().contains("github_actions"));
+}
+
+/// HS2-GD3NNK: requested code reviews count in `reviews` alongside deployments that
+/// wait for a person, joined per run; neither counts in `deployments`. Without either
+/// the wait is unknown with `no_review_requested`.
+#[test]
+fn hs2_gd3nnk_requested_reviews_join_approvals_in_the_review_wait() {
+    use GateKind::{Deployment, Review};
+    use GateState::{AwaitingApproval, Failed, Passed, Pending, Superseded};
+    let mut world = World::new();
+    // Run 1: a review requested 100..300 that had changes requested, then a new review
+    // requested 400..700 and approved; a deployment approval wait overlaps 600..800.
+    world.gates.push(gate(
+        "r1",
+        "run-1",
+        Review,
+        &[(100, AwaitingApproval), (300, Failed), (400, Superseded)],
+        false,
+    ));
+    world.gates.push(gate(
+        "r2",
+        "run-1",
+        Review,
+        &[(400, AwaitingApproval), (700, Passed)],
+        false,
+    ));
+    world.gates.push(gate(
+        "d1",
+        "run-1",
+        Deployment,
+        &[(600, AwaitingApproval), (800, Pending), (900, Passed)],
+        false,
+    ));
+    // Run 2: a review still requested since 1_500, measured to now.
+    world.gates.push(gate(
+        "r3",
+        "run-2",
+        Review,
+        &[(1_500, AwaitingApproval)],
+        false,
+    ));
+    let summary = world.at(2_000);
+    assert_eq!(summary.reviews, wait(known(200 + 400 + 500), 2));
+    assert_eq!(summary.deployments, wait(known(100), 1));
+    // Reviews alone, with no deployment: still measured; no deployment is unknown.
+    let reviews_only = World {
+        gates: world
+            .gates
+            .iter()
+            .filter(|gate| gate.kind == Review)
+            .cloned()
+            .collect(),
+        ..World::new()
+    }
+    .at(2_000);
+    assert_eq!(reviews_only.reviews, wait(known(200 + 300 + 500), 2));
+    assert_eq!(
+        reviews_only.deployments,
+        wait(unknown(UnknownReason::NoDeploymentRequested), 0)
+    );
 }

@@ -171,7 +171,11 @@ export function OrchestrationInspectorDemo() {
           details={{
             loading: false,
             ci: 'pending',
-            gates: [{ kind: 'ci', state: 'pending', provider: 'github-actions', commit: '3f9c2a1d00' }],
+            gates: [
+              { kind: 'ci', state: 'pending', provider: 'github-actions', commit: '3f9c2a1d00' },
+              // HS2-GD3NNK: a requested code review, in the review's own words.
+              { kind: 'review', state: 'requested', provider: 'review', commit: '3f9c2a1d00' },
+            ],
             validations: [
               {
                 step_id: 'contract-check',

@@ -1918,6 +1918,33 @@ its repository root, and an operation id.
   with a deployment in progress refuses a second with `gate_deployment_active`.
 - **Result.** Only a deployment adapter's typed evidence settles the gate.
 
+### Code review gates (HS2-GD3NNK)
+
+The maintainer chose this on 2026-11-18: "A review gate kind on a plan step, which a
+person or AI marks requested and approved, like a deployment gate." A review gate is
+the one gate kind no provider reports; a person or an AI marks it. It is modeled on
+the deployment gate and recorded on the step's run.
+
+- **Marks.** `gate review <run> --review requested --commit <sha>` (CLI),
+  `POST .../runs/{run}/reviews` with `review` and `commit` (HTTP), or MCP
+  `gate_review`.
+  - `requested` links a review gate, kind `review` with provider `review`, in
+    `awaiting_approval` (reason `review_requested`).
+  - `approved` moves it to `passed` (`review_approved`).
+  - `changes_requested` moves it to `failed` (`changes_requested`).
+- **Idempotent.** The same request for the same commit returns the same gate. A
+  request after an answer, or for another commit, supersedes the review that stood.
+  An answer marks the review that stands for the run; one that names another commit
+  is refused. The same answer again changes nothing.
+- **Authority.** Marking records bookkeeping, so it passes the gate as
+  `gates_observe`, never asks a person, and works while the run is paused.
+- **Record.** Each change is a gate run event. The run's gate summary carries
+  `review`. The record holds identifiers and times only.
+- **Shown.** The run's Gates section shows the gate as Review · `<commit>` with
+  Requested, Approved or Changes Requested.
+- **Readiness.** A prerequisite with `gates: review` (§26.15) needs it approved.
+- **Waiting.** Its wait counts in the summary's `external_wait.reviews` (§26.21).
+
 ### The target's own deploy script (HS2-G3VAK4)
 
 The `target-script` provider runs the target's checked-in deploy script on the
@@ -2528,6 +2555,13 @@ stable code, the prerequisite, and for a provisional one the commits it rests on
   prerequisite names that commit. Nothing builds ahead on it, at any speculation depth
   and under any cross-target provisional policy (§26.22, HS2-JSF985). A deployment
   changes a shared environment, which makes it the riskiest thing to speculate on.
+  Reviews (HS2-GD3NNK), for a prerequisite with `gates: review`:
+  - A review still requested blocks (`review_pending`), whatever CI says, so it is
+    never provisional.
+  - A review with changes requested blocks (`review_changes_requested`).
+  - With no review it is `review_not_requested`, and an unknown review is
+    `review_unknown` (stale).
+  - An approved review with CI pending is provisional, as for CI alone.
 - **Provisional.** A CI gate that is `pending` on a linked commit means the
   prerequisite is integrated and awaiting its gate (`gate_pending`); a gate that
   passed while the ticket is not yet confirmed finished is the same level
@@ -3852,25 +3886,26 @@ Every measure is `{"status":"known","value":…}` or
 parts separately and lists the reasons, so a total never silently leaves something
 out. The reason codes:
 
-| Code                       | Meaning                                                                 |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `run_unfinished`           | The run has not finished, so it has no lead time yet                    |
-| `never_dispatched`         | The run was never claimed on its target                                 |
-| `history_truncated`        | The run's bounded history no longer holds the entries the measure needs |
-| `events_trimmed`           | Retention removed run events older than the oldest one kept             |
-| `clock_inconsistent`       | Recorded times run backwards                                            |
-| `no_gate_linked`           | No CI gate stands for the run                                           |
-| `no_deployment_requested`  | No deployment was requested for the run                                 |
-| `gate_unverified`          | A gate stands with no trustworthy verdict                               |
-| `target_unbound`           | The target has no reviewed destination on this machine                  |
-| `target_remote`            | The target's remote server does not offer the hosted cost read          |
-| `target_unreachable`       | The remote target's server could not be asked for the cost              |
-| `usage_source_unsupported` | The target ticket's source is not a Git store                           |
-| `usage_store_unavailable`  | The usage records could not be opened or read                           |
-| `no_usage_recorded`        | The usage records hold nothing for the target ticket                    |
-| `cost_not_read`            | No cost reading was taken for the work item                             |
-| `decisions_trimmed`        | Retention removed scheduler decisions the measure needs (HS2-XK7TJS)    |
-| `cap_not_configured`       | The policy sets no session cap for the tool or machine (HS2-XK7TJS)     |
+| Code                       | Meaning                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `run_unfinished`           | The run has not finished, so it has no lead time yet                         |
+| `never_dispatched`         | The run was never claimed on its target                                      |
+| `history_truncated`        | The run's bounded history no longer holds the entries the measure needs      |
+| `events_trimmed`           | Retention removed run events older than the oldest one kept                  |
+| `clock_inconsistent`       | Recorded times run backwards                                                 |
+| `no_gate_linked`           | No CI gate stands for the run                                                |
+| `no_deployment_requested`  | No deployment was requested for the run                                      |
+| `no_review_requested`      | Nothing awaited a code review or a person's deployment approval (HS2-GD3NNK) |
+| `gate_unverified`          | A gate stands with no trustworthy verdict                                    |
+| `target_unbound`           | The target has no reviewed destination on this machine                       |
+| `target_remote`            | The target's remote server does not offer the hosted cost read               |
+| `target_unreachable`       | The remote target's server could not be asked for the cost                   |
+| `usage_source_unsupported` | The target ticket's source is not a Git store                                |
+| `usage_store_unavailable`  | The usage records could not be opened or read                                |
+| `no_usage_recorded`        | The usage records hold nothing for the target ticket                         |
+| `cost_not_read`            | No cost reading was taken for the work item                                  |
+| `decisions_trimmed`        | Retention removed scheduler decisions the measure needs (HS2-XK7TJS)         |
+| `cap_not_configured`       | The policy sets no session cap for the tool or machine (HS2-XK7TJS)          |
 
 ### Measures of a run
 
@@ -3984,9 +4019,9 @@ or plan steps (for provider limits) that waited at all.
   count the same wait twice. With no gate of that kind the wait is
   `no_gate_linked` or `no_deployment_requested`. A gate whose bounded history (32
   entries) no longer holds its first transition makes the wait `history_truncated`.
-- **Reviews** (`reviews`): the time deployment gates were `awaiting_approval`, waiting
-  for a person to approve the deployment, joined the same way. Code review is not
-  recorded by the orchestrator, so it is not measured.
+- **Reviews** (`reviews`): the time code review gates were requested (HS2-GD3NNK, §26.13)
+  and deployment gates were `awaiting_approval`, waiting for a person, joined per run
+  the same way. With neither recorded the wait is `no_review_requested`.
 - **Provider limits** (`provider_limits`): the time a plan step stayed unplaced
   because every tool account it could use was rate- or quota-limited
   (`no_tool_available` with detail `limited`, §26.11), until its next other decision.

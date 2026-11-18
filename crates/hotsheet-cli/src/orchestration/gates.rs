@@ -310,6 +310,19 @@ pub struct RequestDeployment {
     pub artifact: Option<ArtifactRef>,
 }
 
+/// HS2-GD3NNK: mark the code review of a run's commit: requested, approved or changes
+/// requested.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MarkReview {
+    pub review: hotsheet_ticketing::orchestration::ReviewMark,
+    /// The commit under review: all 40 hex characters. Required to request a review;
+    /// an answer marks the review that stands for the run and, when given, must name
+    /// its commit.
+    #[serde(default)]
+    pub commit: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyncGates {
@@ -738,6 +751,110 @@ impl OrchestrationRuntime {
                     .map(|gate| gate.gate_id)
                     .collect(),
                 watching,
+                request_id: None,
+            })
+        })();
+        self.finish(&target, &authorized, &outcome, tx)?;
+        outcome
+    }
+
+    /// HS2-GD3NNK: mark the code review of a run's commit, as a person or an AI does.
+    /// Requesting links a review gate in `awaiting_approval`; the same request again
+    /// returns it, and a request after an answer or for another commit supersedes the
+    /// review that stood. Approved (`passed`) and changes requested (`failed`) answer
+    /// the requested review that stands for the run. It records bookkeeping only, so it
+    /// passes the gate as `gates_observe`, never asks and works while the run is paused.
+    /// Each change is a gate run event; identifiers and times only.
+    pub fn gate_review(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        request: MarkReview,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<GateView, OrchestrationError> {
+        use hotsheet_ticketing::orchestration::{REVIEW_PROVIDER, REVIEW_REQUESTED, ReviewMark};
+        let commit = request.commit.as_deref().map(str::to_ascii_lowercase);
+        if let Some(commit) = &commit {
+            valid_commit(commit)?;
+        }
+        let run = self.run(owner_id, run_id)?;
+        let target = Self::target_ref(owner_id, &run.target.target_id)?;
+        let authorized = self.authorize(
+            &target,
+            actor,
+            ActionRequest::new(TargetAction::GatesObserve),
+            tx,
+        )?;
+        let registry = self.gate_registry();
+        let outcome = (|| {
+            if request.review == ReviewMark::Requested {
+                let commit = commit.clone().ok_or(OrchestrationError::Invalid(
+                    "a review request names the commit under review",
+                ))?;
+                let linked = registry.link(
+                    owner_id,
+                    NewGate {
+                        run_id: run.run_id.clone(),
+                        target_id: run.target.target_id.clone(),
+                        kind: GateKind::Review,
+                        provider: REVIEW_PROVIDER.into(),
+                        commit,
+                        ci: None,
+                        deployment: None,
+                        state: GateState::AwaitingApproval,
+                        reason: Some(REVIEW_REQUESTED.into()),
+                        linked_by: Some(authorized.actor_id.clone()),
+                    },
+                    tx,
+                )?;
+                for gate in &linked.superseded {
+                    self.gate_event(gate, RunEventSource::Orchestrator);
+                }
+                if linked.created {
+                    self.gate_event(&linked.gate, RunEventSource::Orchestrator);
+                }
+                return Ok(GateView {
+                    gate: linked.gate,
+                    created: linked.created,
+                    superseded: linked
+                        .superseded
+                        .into_iter()
+                        .map(|gate| gate.gate_id)
+                        .collect(),
+                    watching: None,
+                    request_id: None,
+                });
+            }
+            let standing = registry
+                .list(
+                    owner_id,
+                    &GateFilter {
+                        run_id: Some(run.run_id.clone()),
+                        current_only: true,
+                        ..GateFilter::default()
+                    },
+                )?
+                .into_iter()
+                .filter(|gate| gate.kind == GateKind::Review)
+                .max_by_key(|gate| gate.created_at_ms)
+                .ok_or(OrchestrationError::Gate(GateError::NotFound))?;
+            if commit
+                .as_ref()
+                .is_some_and(|commit| *commit != standing.commit)
+            {
+                return Err(OrchestrationError::Gate(GateError::InvalidTransition));
+            }
+            let (gate, changed) =
+                registry.mark_review(owner_id, &standing.gate_id, request.review, tx)?;
+            if changed == GateOutcome::Changed {
+                self.gate_event(&gate, RunEventSource::Orchestrator);
+            }
+            Ok(GateView {
+                gate,
+                created: false,
+                superseded: Vec::new(),
+                watching: None,
                 request_id: None,
             })
         })();

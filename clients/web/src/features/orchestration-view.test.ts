@@ -198,4 +198,41 @@ describe('the selected run’s details (HS2-XM692S)', () => {
     const unread = parseOrchestrationDetails(undefined, undefined, undefined, 'api');
     expect(unread.runRead).toBe(false);
   });
+
+  it('shows a review gate in the review words and leaves other gates alone (HS2-GD3NNK)', () => {
+    const gate = (kind: string, state: string, superseded?: string) => ({
+      kind,
+      state,
+      provider: kind,
+      commit: 'a'.repeat(40),
+      ...(superseded ? { superseded_by: superseded } : {}),
+    });
+    const read = parseOrchestrationDetails(
+      {
+        ci: 'passed',
+        gates: [
+          gate('ci', 'passed'),
+          gate('review', 'awaiting_approval', 'next'),
+          gate('review', 'failed'),
+          gate('deployment', 'awaiting_approval'),
+        ],
+      },
+      undefined,
+      undefined,
+      'api',
+    );
+    expect(read.gates?.map((row) => [row.kind, row.state])).toEqual([
+      ['ci', 'passed'],
+      ['review', 'changes_requested'],
+      ['deployment', 'awaiting_approval'],
+    ]);
+    for (const [state, words] of [
+      ['awaiting_approval', 'requested'],
+      ['passed', 'approved'],
+      ['unknown', 'unknown'],
+    ])
+      expect(
+        parseOrchestrationDetails({ gates: [gate('review', state)] }, undefined, undefined, 'api').gates?.[0].state,
+      ).toBe(words);
+  });
 });

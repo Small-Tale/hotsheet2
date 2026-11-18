@@ -38,6 +38,9 @@ pub enum GateRequirement {
     Ci,
     /// CI passed and the requested deployment passed.
     Deployment,
+    /// HS2-GD3NNK: CI passed and the requested code review was approved. A review that
+    /// is requested or has changes requested blocks, and is never built ahead on.
+    Review,
 }
 
 /// Something that must be true before a step's work is dispatched.
@@ -218,6 +221,8 @@ pub struct GateFacts {
     pub ci: GateState,
     pub ci_reason: Option<String>,
     pub deployment: Option<GateState>,
+    /// HS2-GD3NNK: the review verdict; `None` when no review was requested.
+    pub review: Option<GateState>,
     /// The commits the standing CI gates are about.
     pub commits: Vec<String>,
     /// HS2-JSF985: the standing CI gates themselves, oldest link first.
@@ -237,6 +242,7 @@ impl From<&GateSummary> for GateFacts {
             ci: summary.ci,
             ci_reason: summary.ci_reason.clone(),
             deployment: summary.deployment,
+            review: summary.review,
             commits: summary.commits.clone(),
             gate_ids: summary
                 .gates
@@ -445,6 +451,15 @@ fn ticket_verdict(
         Some(commit) => vec![commit.clone()],
         None => gate.commits.clone(),
     };
+    // HS2-GD3NNK: a review still requested, or with changes requested, blocks before
+    // anything could be built ahead on the commit.
+    if gates == GateRequirement::Review {
+        match gate.review {
+            Some(GateState::AwaitingApproval) => return Verdict::Blocked("review_pending"),
+            Some(GateState::Failed) => return Verdict::Blocked("review_changes_requested"),
+            _ => {}
+        }
+    }
     match gate.ci {
         GateState::Failed => return Verdict::Blocked("gate_failed"),
         GateState::Pending if !base().is_empty() => {
@@ -467,6 +482,17 @@ fn ticket_verdict(
             }
             Some(GateState::Unknown | GateState::Superseded) => {
                 return Verdict::Stale("deployment_unknown");
+            }
+        }
+    }
+    if gates == GateRequirement::Review {
+        match gate.review {
+            None => return Verdict::Blocked("review_not_requested"),
+            Some(GateState::Passed) => {}
+            Some(GateState::AwaitingApproval) => return Verdict::Blocked("review_pending"),
+            Some(GateState::Failed) => return Verdict::Blocked("review_changes_requested"),
+            Some(GateState::Pending | GateState::Unknown | GateState::Superseded) => {
+                return Verdict::Stale("review_unknown");
             }
         }
     }

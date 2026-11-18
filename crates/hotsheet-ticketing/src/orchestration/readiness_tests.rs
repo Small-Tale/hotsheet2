@@ -92,6 +92,7 @@ fn gate(ci: GateState, reason: Option<&str>, deployment: Option<GateState>) -> G
         ci,
         ci_reason: reason.map(Into::into),
         deployment,
+        review: None,
         commits: if reason == Some("no_gate") {
             Vec::new()
         } else {
@@ -390,6 +391,7 @@ fn hs2_42tara_named_commit_is_judged_by_that_commits_gates() {
             ci: GateState::Pending,
             ci_reason: None,
             deployment: None,
+            review: None,
             commits: vec![sha('c')],
             gate_ids: Vec::new(),
         },
@@ -1706,4 +1708,106 @@ fn hs2_qberh6_a_pending_deployment_on_a_recorded_commit_is_never_provisional() {
             }
         }
     }
+}
+
+/// HS2-GD3NNK: a prerequisite that needs its code review approved. A review requested
+/// or with changes requested blocks whatever CI says, so nothing builds ahead on it;
+/// approved with CI pending is provisional as for CI alone; approved and green is
+/// confirmed; no review, or an unknown one, is blocked or stale.
+#[test]
+fn hs2_gd3nnk_a_review_requirement_blocks_until_approved_and_never_speculates() {
+    use GateState as G;
+    use ReadinessLevel as L;
+    let (a, b) = (ticket(1, "a"), ticket(2, "b"));
+    let rows: Vec<(&str, G, Option<G>, L, &str)> = vec![
+        (
+            "completed",
+            G::Passed,
+            None,
+            L::Blocked,
+            "review_not_requested",
+        ),
+        (
+            "completed",
+            G::Passed,
+            Some(G::AwaitingApproval),
+            L::Blocked,
+            "review_pending",
+        ),
+        (
+            "completed",
+            G::Pending,
+            Some(G::AwaitingApproval),
+            L::Blocked,
+            "review_pending",
+        ),
+        (
+            "started",
+            G::Pending,
+            Some(G::AwaitingApproval),
+            L::Blocked,
+            "review_pending",
+        ),
+        (
+            "completed",
+            G::Passed,
+            Some(G::Failed),
+            L::Blocked,
+            "review_changes_requested",
+        ),
+        (
+            "completed",
+            G::Pending,
+            Some(G::Failed),
+            L::Blocked,
+            "review_changes_requested",
+        ),
+        (
+            "completed",
+            G::Passed,
+            Some(G::Unknown),
+            L::Stale,
+            "review_unknown",
+        ),
+        (
+            "completed",
+            G::Pending,
+            Some(G::Passed),
+            L::Provisional,
+            "gate_pending",
+        ),
+        (
+            "started",
+            G::Passed,
+            Some(G::Passed),
+            L::Provisional,
+            "prerequisite_not_finished",
+        ),
+        ("completed", G::Passed, Some(G::Passed), L::Confirmed, ""),
+    ];
+    for (row, (status, ci, review, level, reason)) in rows.into_iter().enumerate() {
+        let mut facts = gate(ci, None, None);
+        facts.review = review;
+        let world = World::default()
+            .status(&a, status)
+            .status(&b, "not_started")
+            .gates(&a, facts);
+        let answers = evaluate_plan(
+            &[step(2, &b, vec![requires(&a, GateRequirement::Review)])],
+            &world.0,
+        );
+        assert_eq!(answers[0].level, level, "row {row}");
+        assert_eq!(
+            codes(&answers[0]).first().copied().unwrap_or(""),
+            reason,
+            "row {row}"
+        );
+        if level != L::Provisional {
+            assert!(answers[0].base_commits.is_empty(), "row {row}");
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(GateRequirement::Review).unwrap(),
+        "review"
+    );
 }

@@ -22,6 +22,38 @@ const MAX_GATE_BYTES: usize = 8 * 1024 * 1024;
 pub enum GateKind {
     Ci,
     Deployment,
+    /// HS2-GD3NNK: a code review of the run's commit, marked by a person or an AI:
+    /// requested (`awaiting_approval`), approved (`passed`) or changes requested
+    /// (`failed`). No provider reports it.
+    Review,
+}
+
+/// HS2-GD3NNK: the provider name every review gate records; nothing watches it.
+pub const REVIEW_PROVIDER: &str = "review";
+
+/// HS2-GD3NNK: the reason codes of a review gate's states.
+pub const REVIEW_REQUESTED: &str = "review_requested";
+pub const REVIEW_APPROVED: &str = "review_approved";
+pub const REVIEW_CHANGES_REQUESTED: &str = "changes_requested";
+
+/// HS2-GD3NNK: what a person or an AI marks a review as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewMark {
+    Requested,
+    Approved,
+    ChangesRequested,
+}
+
+impl ReviewMark {
+    /// The gate state and reason this mark records.
+    pub fn state(self) -> (GateState, &'static str) {
+        match self {
+            Self::Requested => (GateState::AwaitingApproval, REVIEW_REQUESTED),
+            Self::Approved => (GateState::Passed, REVIEW_APPROVED),
+            Self::ChangesRequested => (GateState::Failed, REVIEW_CHANGES_REQUESTED),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -30,7 +62,7 @@ pub enum GateState {
     /// Nothing trustworthy is known: not watched, the watch was lost or stopped, or a
     /// verdict arrived without evidence that covers the commit.
     Unknown,
-    /// A deployment waits for a person's answer.
+    /// A deployment waits for a person's answer, or a review was requested.
     AwaitingApproval,
     /// Watched or started; no verdict yet.
     Pending,
@@ -77,6 +109,8 @@ impl GateState {
                 Unknown,
                 AwaitingApproval | Pending | Passed | Failed | Superseded
             ) | (AwaitingApproval, Pending | Unknown | Failed | Superseded)
+                // HS2-GD3NNK: a requested review is approved.
+                | (AwaitingApproval, Passed)
                 | (Pending, Passed | Failed | Unknown | Superseded)
                 // A failed gate can be watched again, and a later attempt can pass.
                 | (Failed, Pending | Passed | Superseded)
@@ -487,6 +521,9 @@ pub struct GateSummary {
     /// Absent when no deployment was requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deployment: Option<GateState>,
+    /// HS2-GD3NNK: the review verdict; absent when no review was requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<GateState>,
     /// The commits the standing CI gates are about, oldest link first.
     pub commits: Vec<String>,
     pub gates: Vec<Gate>,
@@ -529,6 +566,7 @@ pub fn summarize(gates: Vec<Gate>) -> GateSummary {
         ci,
         ci_reason,
         deployment: rollup(of(GateKind::Deployment)).map(|(state, _)| state),
+        review: rollup(of(GateKind::Review)).map(|(state, _)| state),
         commits,
         superseded: total - gates.len(),
         gates,
@@ -673,6 +711,7 @@ impl GateRegistry {
             GateKind::Deployment => {
                 matches!(gate.state, GateState::Unknown | GateState::AwaitingApproval)
             }
+            GateKind::Review => gate.state == GateState::AwaitingApproval,
         };
         if !first {
             return Err(OrchestrationError::Invalid(
@@ -732,6 +771,18 @@ impl GateRegistry {
                     .any(|other| other.state == GateState::Pending)
                 {
                     return Err(OrchestrationError::Gate(GateError::DeploymentActive));
+                }
+            }
+            // HS2-GD3NNK: a review already requested for this commit is the same request.
+            GateKind::Review => {
+                if let Some(existing) = file.gates.iter().filter(standing).find(|other| {
+                    other.commit == gate.commit && other.state == GateState::AwaitingApproval
+                }) {
+                    return Ok(Linked {
+                        gate: existing.clone(),
+                        created: false,
+                        superseded: Vec::new(),
+                    });
                 }
             }
         }
@@ -876,6 +927,39 @@ impl GateRegistry {
     }
 }
 
+impl GateRegistry {
+    /// HS2-GD3NNK: a requested review is approved or has changes requested. The same
+    /// mark again changes nothing; any other edge is refused. A new request for a
+    /// review that was answered is a new review gate, linked in its place.
+    pub fn mark_review(
+        &self,
+        owner_checkout_id: &str,
+        gate_id: &str,
+        mark: ReviewMark,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(Gate, GateOutcome), OrchestrationError> {
+        let (to, reason) = mark.state();
+        self.change(
+            owner_checkout_id,
+            gate_id,
+            |gate, now_ms| {
+                if gate.kind != GateKind::Review {
+                    return Err(OrchestrationError::Gate(GateError::InvalidTransition));
+                }
+                if gate.state == to && gate.reason.as_deref() == Some(reason) {
+                    return Ok(GateOutcome::Unchanged);
+                }
+                if gate.state != GateState::AwaitingApproval || mark == ReviewMark::Requested {
+                    return Err(OrchestrationError::Gate(GateError::InvalidTransition));
+                }
+                gate.enter(to, Some(reason.into()), now_ms);
+                Ok(GateOutcome::Changed)
+            },
+            tx,
+        )
+    }
+}
+
 /// At capacity, forget the oldest superseded gate, then the oldest settled one. A gate
 /// that still waits for a verdict or a person stays.
 fn prune(file: &mut GateFile) {
@@ -964,6 +1048,7 @@ fn validate_fields(gate: &Gate) -> Result<(), OrchestrationError> {
                 valid_identifier(artifact)?;
             }
         }
+        (GateKind::Review, None, None) => {}
         (GateKind::Deployment, None, Some(scope)) => {
             valid_identifier(&scope.environment)?;
             valid_script(&scope.script)?;

@@ -1835,3 +1835,100 @@ fn hs2_4f1sws_a_paused_run_refuses_deployments_and_still_records_gate_links() {
             .created
     );
 }
+
+fn review_mark(mark: &str, commit: Option<&str>) -> crate::orchestration::gates::MarkReview {
+    serde_json::from_value(json!({"review": mark, "commit": commit})).unwrap()
+}
+
+/// HS2-GD3NNK: a person or an AI marks the code review of a run's commit through the
+/// shared runtime: requested links a review gate awaiting approval (the same request
+/// again is the same gate), approved and changes requested answer it, a request after
+/// an answer supersedes it, and each change is one gate run event. It never asks, works
+/// while the run is paused, and the run's gate summary carries the review verdict.
+#[test]
+fn hs2_gd3nnk_a_review_is_requested_answered_and_requested_again_on_a_run() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let mark = |m: &Machine, body, tx: &mut Transaction<'_>| {
+        m.runtime
+            .gate_review(&owner, &run, body, Some(&worker()), tx)
+    };
+    // Answering before anything was requested, or requesting without a commit, refused.
+    assert_eq!(
+        gate_error(mark(&m, review_mark("approved", None), &mut tx)),
+        GateError::NotFound
+    );
+    assert!(matches!(
+        mark(&m, review_mark("requested", None), &mut tx),
+        Err(OrchestrationError::Invalid(_))
+    ));
+    // A paused run still records its review.
+    m.runtime
+        .run_pause(
+            &owner,
+            &run,
+            crate::orchestration::PauseRun::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let requested = mark(&m, review_mark("requested", Some(&a)), &mut tx).unwrap();
+    assert!(requested.created);
+    assert_eq!(requested.gate.kind, GateKind::Review);
+    assert_eq!(requested.gate.state, GateState::AwaitingApproval);
+    assert_eq!(requested.gate.reason.as_deref(), Some("review_requested"));
+    assert_eq!(requested.request_id, None, "nobody is asked");
+    let again = mark(&m, review_mark("requested", Some(&a)), &mut tx).unwrap();
+    assert!(!again.created);
+    assert_eq!(again.gate.gate_id, requested.gate.gate_id);
+    assert!(
+        m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+    // Changes requested; an answer naming another commit is refused.
+    assert!(mark(&m, review_mark("approved", Some(&sha('b'))), &mut tx).is_err());
+    let sent_back = mark(&m, review_mark("changes_requested", None), &mut tx).unwrap();
+    assert_eq!(sent_back.gate.state, GateState::Failed);
+    assert_eq!(sent_back.gate.reason.as_deref(), Some("changes_requested"));
+    assert_eq!(
+        m.runtime.run_gate_state(&owner, &run).unwrap().review,
+        Some(GateState::Failed)
+    );
+    // Requested again, then approved.
+    let second = mark(&m, review_mark("requested", Some(&a)), &mut tx).unwrap();
+    assert!(second.created);
+    assert_eq!(
+        second.superseded,
+        std::slice::from_ref(&requested.gate.gate_id)
+    );
+    let approved = mark(&m, review_mark("approved", Some(&a)), &mut tx).unwrap();
+    assert_eq!(approved.gate.state, GateState::Passed);
+    let repeat = mark(&m, review_mark("approved", None), &mut tx).unwrap();
+    assert_eq!(repeat.gate, approved.gate);
+    let state = m.runtime.run_gate_state(&owner, &run).unwrap();
+    assert_eq!(state.review, Some(GateState::Passed));
+    assert_eq!(state.deployment, None);
+    // One event per change: requested, sent back, superseded, requested, approved.
+    let events: Vec<_> = gate_events(&m, &run)
+        .into_iter()
+        .map(|(state, _, reason)| (state, reason))
+        .collect();
+    assert_eq!(
+        events,
+        [
+            (GateState::AwaitingApproval, Some("review_requested".into())),
+            (GateState::Failed, Some("changes_requested".into())),
+            (GateState::Superseded, Some("newer_gate_linked".into())),
+            (GateState::AwaitingApproval, Some("review_requested".into())),
+            (GateState::Passed, Some("review_approved".into())),
+        ]
+    );
+}

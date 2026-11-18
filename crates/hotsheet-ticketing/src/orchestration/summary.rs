@@ -43,6 +43,9 @@ pub enum UnknownReason {
     NoGateLinked,
     /// No deployment was requested for the run.
     NoDeploymentRequested,
+    /// HS2-GD3NNK: nothing awaited a review or an approval: no review gate and no
+    /// deployment that waits for a person was recorded.
+    NoReviewRequested,
     /// A gate stands, with no trustworthy verdict.
     GateUnverified,
     /// The target has no reviewed destination on this machine.
@@ -68,7 +71,7 @@ pub enum UnknownReason {
 }
 
 impl UnknownReason {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::RunUnfinished,
         Self::NeverDispatched,
         Self::HistoryTruncated,
@@ -76,6 +79,7 @@ impl UnknownReason {
         Self::ClockInconsistent,
         Self::NoGateLinked,
         Self::NoDeploymentRequested,
+        Self::NoReviewRequested,
         Self::GateUnverified,
         Self::TargetUnbound,
         Self::TargetRemote,
@@ -97,6 +101,7 @@ impl UnknownReason {
             Self::ClockInconsistent => "clock_inconsistent",
             Self::NoGateLinked => "no_gate_linked",
             Self::NoDeploymentRequested => "no_deployment_requested",
+            Self::NoReviewRequested => "no_review_requested",
             Self::GateUnverified => "gate_unverified",
             Self::TargetUnbound => "target_unbound",
             Self::TargetRemote => "target_remote",

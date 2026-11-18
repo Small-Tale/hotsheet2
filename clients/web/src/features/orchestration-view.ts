@@ -166,6 +166,16 @@ export interface OrchestrationViewDependencies {
 const message = (reason: unknown) => (reason instanceof Error ? reason.message : String(reason));
 
 /** The selected run's records as the inspector shows them; an unread record leaves its part absent. */
+/** HS2-GD3NNK: a review gate's state in the review's own words; other gates keep theirs. */
+const REVIEW_STATES: Record<string, string> = {
+  awaiting_approval: 'requested',
+  passed: 'approved',
+  failed: 'changes_requested',
+};
+function gateState(kind: string | undefined, state: string): string {
+  return kind === 'review' ? (REVIEW_STATES[state] ?? state) : state;
+}
+
 export function parseOrchestrationDetails(
   gates: Record<string, unknown> | undefined,
   events: Record<string, unknown> | undefined,
@@ -188,7 +198,7 @@ export function parseOrchestrationDetails(
       .filter((gate) => gate.superseded_by === undefined)
       .map((gate) => ({
         kind: text(gate.kind) ?? 'gate',
-        state: text(gate.state) ?? 'unknown',
+        state: gateState(text(gate.kind), text(gate.state) ?? 'unknown'),
         provider: text(gate.provider),
         commit: text(gate.commit),
       })),

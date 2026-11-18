@@ -50,7 +50,7 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "runs", _, _]
             | ["checkouts", _, "orchestration", "run-events"]
             // HS2-5JBYPV: gates of runs. Linking, syncing and deployment requests are
-            // `runs/{run}/{gates,gate-sync,deployments}` above.
+            // `runs/{run}/{gates,gate-sync,deployments,reviews}` above.
             | ["checkouts", _, "orchestration", "gates"]
             | ["checkouts", _, "orchestration", "gates", _]
             // HS2-WBREDM: reconcile every unfinished run of the owner.
@@ -1027,6 +1027,10 @@ impl OrchestrationRuntime {
                     }
                     "deployments" => {
                         value(self.gate_deploy(owner, run, decode(body)?, actor.as_ref(), tx)?)
+                    }
+                    // HS2-GD3NNK: a code review requested, approved or sent back.
+                    "reviews" => {
+                        value(self.gate_review(owner, run, decode(body)?, actor.as_ref(), tx)?)
                     }
                     // HS2-WBREDM: recovery and the control actions.
                     "reconcile" => value(self.run_reconcile(owner, run, actor.as_ref(), tx)?),

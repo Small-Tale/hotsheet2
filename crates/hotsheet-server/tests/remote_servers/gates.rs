@@ -150,6 +150,7 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
         ("POST", format!("{base}/runs/{run_id}/gates")),
         ("POST", format!("{base}/runs/{run_id}/gate-sync")),
         ("POST", format!("{base}/runs/{run_id}/deployments")),
+        ("POST", format!("{base}/runs/{run_id}/reviews")),
     ] {
         assert_eq!(
             api(router.clone(), method, &path, json!({}), false).await.0,
@@ -405,6 +406,47 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     ] {
         mcp_rejected(&home, &backend, "hotsheet_targets", arguments);
     }
+    // HS2-GD3NNK: an AI requests a code review over MCP and a person approves it over
+    // HTTP; nobody is asked, and the run's summary carries the verdict.
+    let review = call(
+        json!({"action":"gate_review","run_id":run_id,"review":"requested",
+        "commit":a}),
+    );
+    assert_eq!(
+        (&review["gate"]["kind"], &review["gate"]["state"]),
+        (&json!("review"), &json!("awaiting_approval"))
+    );
+    assert_eq!(review["gate"]["provider"], "review");
+    let (status, approved) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/runs/{run_id}/reviews"),
+        json!({"review":"approved","actor":human}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{approved}");
+    assert_eq!(approved["gate"]["state"], "passed");
+    assert_eq!(approved["gate"]["gate_id"], review["gate"]["gate_id"]);
+    assert_eq!(
+        call(json!({"action":"gate_list","run_id":run_id}))["review"],
+        "passed"
+    );
+    mcp_rejected(
+        &home,
+        &backend,
+        "hotsheet_targets",
+        json!({"action":"gate_review","checkout":checkout.id,"run_id":run_id,
+            "review":"maybe","actor_role":"ai","actor_id":"scheduler-1"}),
+    );
+    assert_eq!(
+        call(json!({"action":"permission_list"}))["requests"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "a review asks nobody"
+    );
     let _ = stop.send(());
     tokio::time::timeout(std::time::Duration::from_secs(10), task)
         .await
@@ -428,7 +470,8 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
         &["list", "--project", &checkout.id, "--run", &run_id],
     );
     assert_eq!(listed["ci"], "passed");
-    assert_eq!(listed["gates"].as_array().unwrap().len(), 2);
+    assert_eq!(listed["review"], "passed");
+    assert_eq!(listed["gates"].as_array().unwrap().len(), 3);
     assert_eq!(
         cli_named(
             &home,
@@ -500,6 +543,46 @@ async fn hs2_5jbypv_http_stdio_mcp_and_cli_link_follow_and_deploy_on_one_runtime
     );
     assert_eq!(red["ci"], "failed");
     assert_eq!(red["changed"].as_array().unwrap().len(), 1);
+    // HS2-GD3NNK: the CLI requests a review of the new commit, which supersedes the
+    // approved one, and sends it back.
+    let requested = cli_named(
+        &home,
+        &worker,
+        &[
+            "review",
+            &run_id,
+            "--project",
+            &checkout.id,
+            "--review",
+            "requested",
+            "--commit",
+            &b,
+        ],
+    );
+    assert_eq!(requested["gate"]["state"], "awaiting_approval");
+    assert_eq!(requested["superseded"].as_array().unwrap().len(), 1);
+    let sent_back = cli_named(
+        &home,
+        &worker,
+        &[
+            "review",
+            &run_id,
+            "--project",
+            &checkout.id,
+            "--review",
+            "changes-requested",
+        ],
+    );
+    assert_eq!(sent_back["gate"]["state"], "failed");
+    assert_eq!(sent_back["gate"]["reason"], "changes_requested");
+    assert_eq!(
+        cli_named(
+            &home,
+            &worker,
+            &["list", "--project", &checkout.id, "--run", &run_id],
+        )["review"],
+        "failed"
+    );
     // Records hold identifiers and codes only.
     let record = std::fs::read_to_string(home.join("orchestration-gates.json")).unwrap();
     for forbidden in [SECRET, "Work whose commit is gated", "Coordinate the gated"] {

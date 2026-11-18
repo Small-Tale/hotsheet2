@@ -75,6 +75,7 @@ fn gate(state: GateState, commits: &[char]) -> GateFacts {
         ci: state,
         ci_reason: None,
         deployment: None,
+        review: None,
         commits: commits.iter().map(|digit| sha(*digit)).collect(),
         gate_ids: commits
             .iter()

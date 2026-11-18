@@ -94,6 +94,8 @@ pub(super) fn hosted_on(destination: &TargetDestination, gate: &Gate) -> bool {
         GateKind::Deployment => {
             gate.provider == super::gates::TARGET_SCRIPT_PROVIDER && gate.deployment.is_some()
         }
+        // HS2-GD3NNK: a review is marked on this machine; no host reports it.
+        GateKind::Review => false,
     }
 }
 

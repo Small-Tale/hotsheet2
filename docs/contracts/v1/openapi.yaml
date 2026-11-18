@@ -186,9 +186,8 @@ paths:
     get:
       operationId: list_remote_browser_devices
       summary: List paired and pending devices for the trusted host or an admin browser session
-      description:
-        The trusted host authenticates with its machine secret; a browser session needs the admin grant (HS2-DXM0YN).
-        A session without it is refused with 403.
+      description: The trusted host authenticates with its machine secret; a browser session needs the admin grant
+        (HS2-DXM0YN). A session without it is refused with 403.
       security:
         - HotsheetSecret: []
         - RemoteSessionCookie: []
@@ -209,9 +208,8 @@ paths:
     get:
       operationId: watch_remote_browser_devices
       summary: Long poll for the device list
-      description:
-        Answers as soon as the device list's revision differs from after, or with the unchanged list after 25 seconds
-        (HS2-DXM0YN). Authorization is checked before and again after the wait.
+      description: Answers as soon as the device list's revision differs from after, or with the unchanged list after 25
+        seconds (HS2-DXM0YN). Authorization is checked before and again after the wait.
       security:
         - HotsheetSecret: []
         - RemoteSessionCookie: []
@@ -729,9 +727,8 @@ paths:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/targets/{target}/access:
-    description:
-      Machine-local, side-effect-free answer against the cached binding (HS2-XHQ1EH). It files no permission request
-      and is never authority; the action itself confirms the destination freshly.
+    description: Machine-local, side-effect-free answer against the cached binding (HS2-XHQ1EH). It files no permission
+      request and is never authority; the action itself confirms the destination freshly.
     x-hotsheet-machine-local: true
     post:
       operationId: checkTargetAccess
@@ -775,9 +772,8 @@ paths:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/audit:
-    description:
-      Machine-local journal of orchestration authority decisions for one owning checkout (HS2-SBQ3T8). Identifiers,
-      codes and outcomes only.
+    description: Machine-local journal of orchestration authority decisions for one owning checkout (HS2-SBQ3T8).
+      Identifiers, codes and outcomes only.
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationAudit
@@ -874,8 +870,8 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/policy:
     description:
-      The checked-in throughput policy of an orchestration project (HS2-YCJDEB). It holds limits only; acting on a
-      target also needs a person's permission or a remembered rule (HS2-XHQ1EH).
+      The checked-in throughput policy of an orchestration project (HS2-YCJDEB). It holds limits only; acting on
+      a target also needs a person's permission or a remembered rule (HS2-XHQ1EH).
     get:
       operationId: readOrchestrationPolicy
       responses:
@@ -899,8 +895,8 @@ paths:
     put:
       operationId: setOrchestrationPolicy
       description:
-        Replace the policy at the expected revision. Identical content is a no-op; a stale revision is 409; an invalid
-        policy is 400; an `ai` actor is refused with 403 `forbidden`.
+        Replace the policy at the expected revision. Identical content is a no-op; a stale revision is 409; an
+        invalid policy is 400; an `ai` actor is refused with 403 `forbidden`.
       requestBody:
         required: true
         content:
@@ -1123,8 +1119,8 @@ paths:
     post:
       operationId: rememberOrchestrationPermission
       description:
-        A person remembers a rule ahead of any request, for headless setup. The target must be declared. Idempotent by
-        key. An `ai` or `system` actor is refused with 403 `forbidden`.
+        A person remembers a rule ahead of any request, for headless setup. The target must be declared. Idempotent
+        by key. An `ai` or `system` actor is refused with 403 `forbidden`.
       requestBody:
         required: true
         content:
@@ -1238,15 +1234,15 @@ paths:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/tickets/{operation}:
-    description:
-      Machine-local target-ticket operations for an orchestration ticket (HS2-AZ15GA). Every call passes the permission
-      and policy gate (HS2-XHQ1EH); the target's own source stays authoritative and an unsupported operation is never rerouted.
+    description: Machine-local target-ticket operations for an orchestration ticket (HS2-AZ15GA). Every call passes the
+      permission and policy gate (HS2-XHQ1EH); the target's own source stays authoritative and an unsupported operation
+      is never rerouted.
     x-hotsheet-machine-local: true
     post:
       operationId: orchestrateTargetTicket
       description:
-        "`create` (idempotent by a retained `operation_id`), `read`, `update`, `link`, `unlink`, `links` and `list` (one
-        bounded page of the target source's open tickets, HS2-D85G19). Denials are 403 with the denial code; target
+        "`create` (idempotent by a retained `operation_id`), `read`, `update`, `link`, `unlink`, `links` and `list`
+        (one bounded page of the target source's open tickets, HS2-D85G19). Denials are 403 with the denial code; target
         refusals use the `target_*` codes."
       requestBody:
         required: true
@@ -1300,8 +1296,8 @@ paths:
             - list
   /checkouts/{checkout}/target-tickets:
     description:
-      Provider-neutral ticket operations on one source of a hosted checkout, for a local or remote orchestration project
-      (HS2-AZ15GA). Ordinary authenticated project data under the caller's device role.
+      Provider-neutral ticket operations on one source of a hosted checkout, for a local or remote orchestration
+      project (HS2-AZ15GA). Ordinary authenticated project data under the caller's device role.
     get:
       operationId: readHostedTargetTicket
       parameters:
@@ -1408,9 +1404,8 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/runs:
-    description:
-      Machine-local records of work dispatched to exact target tickets (HS2-EBHDSB). The target ticket's own claim is
-      the only lock; a run records what the target answered.
+    description: Machine-local records of work dispatched to exact target tickets (HS2-EBHDSB). The target ticket's own
+      claim is the only lock; a run records what the target answered.
     x-hotsheet-machine-local: true
     get:
       operationId: listOrchestrationRuns
@@ -1444,9 +1439,9 @@ paths:
     post:
       operationId: dispatchOrchestrationRun
       description:
-        "Dispatch work on one exact target ticket. `direct` claims it for the named worker; `dispatcher` marks it Up
-        Next for the target's own dispatcher. The same `operation_id` returns the same run. Refusals: `run_target_active`,
-        `run_worker_busy`, the denial codes, and the `target_*` codes."
+        "Dispatch work on one exact target ticket. `direct` claims it for the named worker; `dispatcher` marks it
+        Up Next for the target's own dispatcher. The same `operation_id` returns the same run. Refusals:
+        `run_target_active`, `run_worker_busy`, the denial codes, and the `target_*` codes."
       requestBody:
         required: true
         content:
@@ -1523,9 +1518,8 @@ paths:
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationRunStatus
-      description:
-        '`status` only (HS2-7QHWHJ): the run with its last confirmed target state and whether that is stale. Contacts
-        nothing.'
+      description: '`status` only (HS2-7QHWHJ): the run with its last confirmed target state and whether that is stale.
+        Contacts nothing.'
       responses:
         '200':
           description: The run with its reachability.
@@ -1546,18 +1540,19 @@ paths:
                 type: string
     post:
       operationId: superviseOrchestrationRun
-      description:
-        "`renew` extends a direct run's lease, `cancel` releases its claim or withdraws its Up Next mark, and `sync`
-        reads the target ticket and brings the run in line with it. A cancel that cannot reach the target records the
-        intent and lists what it could not verify. HS2-5JBYPV adds three operations that answer with gates instead of
-        the run. `gates` links the CI gate of the integrated target `commit` to the run through a provider adapter and
-        starts watching it; it passes the gate as `gates_observe`, a repeat returns the same gate, and another commit
-        supersedes the older link. `gate-sync` brings the run's gates in line with what the adapter recorded, contacts
-        no provider, and with `wait_ms` waits for the adapter's records to change. `deployments` asks for a deployment
-        of the commit the run's CI gate passed through the target's checked-in `script`; it passes the gate as
-        `deployments_run` under `operation_id`, is refused `gate_not_passed` without a passed covering CI gate, and
-        a `production` request asks a person every time (403 `permission_required`, HS2-XHQ1EH).
-        HS2-WBREDM adds `reconcile` (bring the run in line with its target
+      description: "`renew` extends a direct run's lease, `cancel` releases its claim or withdraws its Up Next mark, and
+        `sync` reads the target ticket and brings the run in line with it. A cancel that cannot reach the target records
+        the intent and lists what it could not verify. HS2-5JBYPV adds three operations that answer with gates instead
+        of the run. `gates` links the CI gate of the integrated target `commit` to the run through a provider adapter
+        and starts watching it; it passes the gate as `gates_observe`, a repeat returns the same gate, and another
+        commit supersedes the older link. `gate-sync` brings the run's gates in line with what the adapter recorded,
+        contacts no provider, and with `wait_ms` waits for the adapter's records to change. `deployments` asks for a
+        deployment of the commit the run's CI gate passed through the target's checked-in `script`; it passes the gate
+        as `deployments_run` under `operation_id`, is refused `gate_not_passed` without a passed covering CI gate, and a
+        `production` request asks a person every time (403 `permission_required`, HS2-XHQ1EH). HS2-GD3NNK adds
+        `reviews`, which marks the code review of the run's commit as `review` `requested` (with `commit`; a review gate
+        in `awaiting_approval`), `approved` (`passed`) or `changes_requested` (`failed`). It passes the gate as
+        `gates_observe` and never asks a person. HS2-WBREDM adds `reconcile` (bring the run in line with its target
         after an interruption and record, per external source, what was verified, mismatched or unverifiable; an
         unreachable target is reported in the answer, not as an error), `pause` and `resume` (a paused run is not
         renewed or dispatched again; resume reconciles at once), `handoff` (move the run to `to_worker`, or to a person
@@ -1580,13 +1575,21 @@ paths:
                   minimum: 5
                   maximum: 240
                 commit:
-                  description: '`gates` only. The integrated target commit, all 40 hex characters.'
-                  type: string
-                  pattern: ^[0-9A-Fa-f]{40}$
-                provider:
                   description:
-                    '`gates` (default `github-actions`) and `deployments` (default `target-script`). The provider
-                    adapter.'
+                    '`gates`: the integrated target commit, all 40 hex characters. `reviews`: the commit under review, required
+                    to request one and, when given, the commit of the review an answer marks.'
+                  type:
+                    - string
+                    - 'null'
+                  pattern: ^[0-9A-Fa-f]{40}$
+                review:
+                  description: '`reviews` only (HS2-GD3NNK). What the review is marked as.'
+                  enum:
+                    - requested
+                    - approved
+                    - changes_requested
+                provider:
+                  description: '`gates` (default `github-actions`) and `deployments` (default `target-script`). The provider adapter.'
                   type:
                     - string
                     - 'null'
@@ -1625,8 +1628,8 @@ paths:
                   type: string
                 artifact:
                   description:
-                    '`deployments`: the built artifact, `{name, digest}`. `gates` (HS2-TQG6AT): the name of the
-                    artifact whose digest a passed verdict records, needed when the workflow builds several.'
+                    '`deployments`: the built artifact, `{name, digest}`. `gates` (HS2-TQG6AT): the name of the artifact whose
+                    digest a passed verdict records, needed when the workflow builds several.'
                   oneOf:
                     - $ref: '#/components/schemas/OrchestrationGateArtifact'
                     - type: string
@@ -1710,6 +1713,7 @@ paths:
             - gates
             - gate-sync
             - deployments
+            - reviews
             - status
             - reconcile
             - pause
@@ -1723,8 +1727,8 @@ paths:
     get:
       operationId: readOrchestrationToolCapacity
       description:
-        One row per configured tool account. `unknown` and `degraded` are never the same as `available`. Reads write
-        nothing; a project without a policy answers `enabled` false and no rows.
+        One row per configured tool account. `unknown` and `degraded` are never the same as `available`. Reads
+        write nothing; a project without a policy answers `enabled` false and no rows.
       responses:
         '200':
           description: The capacity state of every configured tool account at `now_ms`.
@@ -1758,10 +1762,10 @@ paths:
     post:
       operationId: reportOrchestrationToolSignal
       description:
-        Idempotent - the identical signal answers `duplicate`, and a signal older than the state it would change answers
-        `stale`; neither changes anything. The tool, and the account when given, must be configured in the policy (400
-        otherwise). `recovered` from an `ai` actor is refused with 403 `forbidden`. Corrupt or newer stored data fails
-        closed and is left untouched.
+        Idempotent - the identical signal answers `duplicate`, and a signal older than the state it would change
+        answers `stale`; neither changes anything. The tool, and the account when given, must be configured in the
+        policy (400 otherwise). `recovered` from an `ai` actor is refused with 403 `forbidden`. Corrupt or newer stored
+        data fails closed and is left untouched.
       requestBody:
         required: true
         content:
@@ -1797,8 +1801,8 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/tool-capacity/select:
     description:
-      The ordered tool accounts a session for one target may start on now (HS2-AHG7HW); machine-local. Reads only and
-      authorizes nothing.
+      The ordered tool accounts a session for one target may start on now (HS2-AHG7HW); machine-local. Reads only
+      and authorizes nothing.
     x-hotsheet-machine-local: true
     post:
       operationId: selectOrchestrationTool
@@ -1933,9 +1937,8 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/run-events:
-    description:
-      Machine-local event stream of an owning checkout's dispatch runs (HS2-7QHWHJ). Cursor replay with an optional
-      bounded wait; a client never polls on a timer.
+    description: Machine-local event stream of an owning checkout's dispatch runs (HS2-7QHWHJ). Cursor replay with an
+      optional bounded wait; a client never polls on a timer.
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationRunEvents
@@ -1997,10 +2000,9 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-events:
-    description:
-      Ticket changes of one hosted checkout after a cursor, for a local or remote orchestration project that follows
-      it (HS2-7QHWHJ), and changes of the sessions an orchestrator started there (HS2-257Q2Z). Ordinary authenticated project data. A host without a change stream answers
-      `target_peer_unsupported`.
+    description: Ticket changes of one hosted checkout after a cursor, for a local or remote orchestration project that
+      follows it (HS2-7QHWHJ), and changes of the sessions an orchestrator started there (HS2-257Q2Z). Ordinary
+      authenticated project data. A host without a change stream answers `target_peer_unsupported`.
     get:
       operationId: readHostedTargetEvents
       parameters:
@@ -2046,9 +2048,9 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-capacity:
     description:
-      What the machine hosting this checkout can take right now (HS2-J8PRTV). Read on request, never on a timer; one
-      reading answers every caller for a few seconds. With `after` and `wait_ms` it is a long poll that samples again
-      only while that subscriber waits (HS2-P5GTSW). Ordinary authenticated project data under the caller's device
+      What the machine hosting this checkout can take right now (HS2-J8PRTV). Read on request, never on a timer;
+      one reading answers every caller for a few seconds. With `after` and `wait_ms` it is a long poll that samples
+      again only while that subscriber waits (HS2-P5GTSW). Ordinary authenticated project data under the caller's device
       role, so a remote orchestration project can reach it. Values are metrics and tool names only.
     get:
       operationId: readHostedTargetCapacity
@@ -2064,8 +2066,8 @@ paths:
         - name: after
           in: query
           description:
-            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version differs,
-            or when the wait ends; a version that is not current answers at once.
+            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version
+            differs, or when the wait ends; a version that is not current answers at once.
           schema:
             type: string
             maxLength: 64
@@ -2106,9 +2108,9 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-admission:
     description:
-      This machine's own answer to "may sessions of this tool start on this checkout now" (HS2-J8PRTV), from its own
-      snapshot, the caller's policy limits and the machine owner's admission file, which can only be stricter. Starts
-      nothing. Ordinary authenticated project data; a read-only device role cannot ask.
+      This machine's own answer to "may sessions of this tool start on this checkout now" (HS2-J8PRTV), from its
+      own snapshot, the caller's policy limits and the machine owner's admission file, which can only be stricter.
+      Starts nothing. Ordinary authenticated project data; a read-only device role cannot ask.
     post:
       operationId: decideHostedTargetAdmission
       requestBody:
@@ -2146,9 +2148,9 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/targets/{target}/capacity:
     description:
-      Machine-local read of the capacity of the machine that hosts a bound target (HS2-J8PRTV). Observation needs no
-      permission (HS2-XHQ1EH); passes the policy gate as `gates_observe`, then reaches the target's `target-capacity` in process or over the reviewed
-      transport.
+      Machine-local read of the capacity of the machine that hosts a bound target (HS2-J8PRTV). Observation needs
+      no permission (HS2-XHQ1EH); passes the policy gate as `gates_observe`, then reaches the target's `target-capacity`
+      in process or over the reviewed transport.
     x-hotsheet-machine-local: true
     get:
       operationId: readTargetCapacity
@@ -2181,8 +2183,8 @@ paths:
         - name: after
           in: query
           description:
-            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version differs,
-            or when the wait ends; a version that is not current answers at once.
+            The snapshot `version` already seen (HS2-P5GTSW). With `wait_ms`, the answer comes when the version
+            differs, or when the wait ends; a version that is not current answers at once.
           schema:
             type: string
             maxLength: 64
@@ -2302,16 +2304,15 @@ paths:
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/validations/{operation}:
     description:
-      Machine-local validation steps of an orchestration ticket (HS2-WN0MXZ). A step names a target, a command or a test
-      profile the target project defines, prerequisites, expected evidence, a timeout and a retry policy. Results hold
-      digests, sizes, an exit code and timings only; a step's output is never returned or stored.
+      Machine-local validation steps of an orchestration ticket (HS2-WN0MXZ). A step names a target, a command or
+      a test profile the target project defines, prerequisites, expected evidence, a timeout and a retry policy. Results
+      hold digests, sizes, an exit code and timings only; a step's output is never returned or stored.
     x-hotsheet-machine-local: true
     post:
       operationId: orchestrateValidation
-      description:
-        "`define` attaches or changes a step, `list` and `evidence` read the latest evidence, `run` starts or continues
-        the request a retained `operation_id` names, and `remove` deletes a step. `run` passes the permission gate as
-        `validation_run`, and a `command` step (not a target profile) asks a person every time (403
+      description: "`define` attaches or changes a step, `list` and `evidence` read the latest evidence, `run` starts or
+        continues the request a retained `operation_id` names, and `remove` deletes a step. `run` passes the permission
+        gate as `validation_run`, and a `command` step (not a target profile) asks a person every time (403
         `permission_required`). `cancel` stops a running attempt (HS2-17ABM2): it only lowers activity, so it never asks
         and the policy never refuses it; the attempt ends `cancelled`, unless the step ended by itself first, and while
         the host has not confirmed the stop it stays `running` with `unverified: [target_execution]`. `define` and
@@ -2378,9 +2379,8 @@ paths:
       project data under the caller's device role; a read-only device cannot start an execution.
     get:
       operationId: readHostedValidation
-      description:
-        The state of an execution this server process started, waiting at most `wait_ms` for it to finish. `unknown`
-        means this process has no such execution.
+      description: The state of an execution this server process started, waiting at most `wait_ms` for it to finish.
+        `unknown` means this process has no such execution.
       parameters:
         - name: execution_id
           in: query
@@ -2578,10 +2578,10 @@ paths:
     post:
       operationId: reconcileOrchestrationRuns
       description:
-        Reads each unfinished run's target ticket, brings the run in line with it, repeats a cancel the target was never
-        told about, and records per external source what was verified, mismatched or unverifiable. Starts no work. A
-        target that cannot be confirmed is named in that run's `unverified`, not returned as an error. Without an actor
-        each run is reconciled as whoever dispatched it.
+        Reads each unfinished run's target ticket, brings the run in line with it, repeats a cancel the target was
+        never told about, and records per external source what was verified, mismatched or unverifiable. Starts no work.
+        A target that cannot be confirmed is named in that run's `unverified`, not returned as an error. Without an
+        actor each run is reconciled as whoever dispatched it.
       requestBody:
         required: true
         content:
@@ -2620,11 +2620,10 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/readiness/{operation}:
-    description:
-      Machine-local plan of prerequisites between orchestration steps and qualified target tickets, and the readiness
-      computed from it (HS2-42TARA). A step is one orchestration ticket's work on one exact target ticket. Readiness is
-      computed from this machine's confirmed target reads, gates and validation evidence; nothing is written to a
-      target or to a provider's own dependency fields.
+    description: Machine-local plan of prerequisites between orchestration steps and qualified target tickets, and the
+      readiness computed from it (HS2-42TARA). A step is one orchestration ticket's work on one exact target ticket.
+      Readiness is computed from this machine's confirmed target reads, gates and validation evidence; nothing is
+      written to a target or to a provider's own dependency fields.
     x-hotsheet-machine-local: true
     post:
       operationId: orchestrateReadiness
@@ -2632,13 +2631,14 @@ paths:
         "`define` plans or changes a step and `refresh` reads the named tickets again; both read the target, which
         never asks (HS2-XHQ1EH). `show`, `plan` and `ready` answer from the records of this machine and contact nothing.
         `remove` withdraws a step. An unknown step is 404 `readiness_step_not_found`. The step definitions are checked
-        in beside the manifest in `.hotsheet2/orchestration-plan.json` and merged by step id; ticket reads, levels,
-        runs and gates stay on this machine (HS2-YDY5HJ). A `define` with a stale `expected_revision`, or a
-        machine-local definition that differs from the checked-in one, is 409 `plan_conflict`; `migrate` moves the
-        definitions this machine kept before the plan was checked in, and `discard_local` drops conflicting ones. `health` answers the plan's state where every plan read fails, with the step ids of a conflict or the damaged file (HS2-F1BKQ0). `speculation` lists the work
-        that was started ahead of a pending gate, with each gate and its result, and `reopen` records that the fix of
-        a failed prerequisite invalidated a step's provisional work (HS2-JSF985); a step without such work is 409
-        `readiness_not_provisional`."
+        in beside the manifest in `.hotsheet2/orchestration-plan.json` and merged by step id; ticket reads, levels, runs
+        and gates stay on this machine (HS2-YDY5HJ). A `define` with a stale `expected_revision`, or a machine-local
+        definition that differs from the checked-in one, is 409 `plan_conflict`; `migrate` moves the definitions this
+        machine kept before the plan was checked in, and `discard_local` drops conflicting ones. `health` answers the
+        plan's state where every plan read fails, with the step ids of a conflict or the damaged file (HS2-F1BKQ0).
+        `speculation` lists the work that was started ahead of a pending gate, with each gate and its result, and
+        `reopen` records that the fix of a failed prerequisite invalidated a step's provisional work (HS2-JSF985); a
+        step without such work is 409 `readiness_not_provisional`."
       requestBody:
         required: true
         content:
@@ -2649,8 +2649,8 @@ paths:
         '200':
           description:
             The step's readiness (`define`, `show`), the plan (`plan`, `refresh`), the work that could start now
-            (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`), the reopened
-            work (`reopen`), what moved into the checked-in plan (`migrate`) or the plan's state (`health`).
+            (`ready`), the removed step (`remove`), the provisional work of the owner (`speculation`), the reopened work
+            (`reopen`), what moved into the checked-in plan (`migrate`) or the plan's state (`health`).
           content:
             application/json:
               schema:
@@ -2734,13 +2734,12 @@ paths:
                 type: string
     post:
       operationId: startOrchestrationSession
-      description:
-        Starts an AI session on the server that hosts the target, through that server's ordinary AI terminal launch.
-        Passes the permission and policy gate as `sessions_manage` with the load counted from this machine's records. The
-        target's own machine may still refuse. The same `operation_id` returns the same session and never launches
-        twice, including a session that already failed. A refusal by the target's admission is `session_admission_refused`
-        with the reason in the failed session's history. A start for a run another live session still holds is
-        `session_run_held` (HS2-DG0YPA).
+      description: Starts an AI session on the server that hosts the target, through that server's ordinary AI terminal
+        launch. Passes the permission and policy gate as `sessions_manage` with the load counted from this machine's
+        records. The target's own machine may still refuse. The same `operation_id` returns the same session and never
+        launches twice, including a session that already failed. A refusal by the target's admission is
+        `session_admission_refused` with the reason in the failed session's history. A start for a run another live
+        session still holds is `session_run_held` (HS2-DG0YPA).
       requestBody:
         required: true
         content:
@@ -2819,10 +2818,9 @@ paths:
     x-hotsheet-machine-local: true
     post:
       operationId: superviseOrchestrationSession
-      description:
-        "`sync` reads the session from its host and brings the record up to date, so a session the host lost becomes
-        `lost` and one a person took over there becomes theirs. `safe-point` adds the host's answer to whether the
-        session may be wound down, with every blocker. `stop` winds the session down only at a safe point the host
+      description: "`sync` reads the session from its host and brings the record up to date, so a session the host lost
+        becomes `lost` and one a person took over there becomes theirs. `safe-point` adds the host's answer to whether
+        the session may be wound down, with every blocker. `stop` winds the session down only at a safe point the host
         confirms and is refused `session_not_safe` otherwise; `force` stops it regardless and is a person's request
         (`session_force_not_permitted` for any other actor). `takeover` hands the session to a person, with `pause` to
         also pause it; it is a person's act, changes this machine's record first, and lists `target_session` in
@@ -2832,8 +2830,8 @@ paths:
         paused to the orchestrator (HS2-KR28FS): a person's act that needs what a session start needs (the policy and
         the `session_start` permission request, `permission_required` until answered), only while the tool is idle
         between turns (`session_mid_turn`, or `session_not_safe` when the host cannot tell), and only once the host
-        confirms. `operation_id` names the permission request; repeat it to continue one, or send a new one to ask
-        again after a denial. A session the orchestrator already owns is answered unchanged."
+        confirms. `operation_id` names the permission request; repeat it to continue one, or send a new one to ask again
+        after a denial. A session the orchestrator already owns is answered unchanged."
       requestBody:
         required: true
         content:
@@ -2964,8 +2962,8 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-sessions:
     description:
-      The hosted half of orchestrator-owned sessions (HS2-GDJXGZ). This machine reserves a terminal per operation id,
-      asks its own admission, launches through its ordinary AI terminal path, labels the terminal with the
+      The hosted half of orchestrator-owned sessions (HS2-GDJXGZ). This machine reserves a terminal per operation
+      id, asks its own admission, launches through its ordinary AI terminal path, labels the terminal with the
       orchestration project and run, and alone decides whether a session is at a safe point. Ordinary authenticated
       project data; a read-only device role can list and cannot start, stop or take over.
     get:
@@ -2987,7 +2985,9 @@ paths:
             type: boolean
       responses:
         '200':
-          description: The sessions orchestrators started on this checkout, and whether its pool has a live integrator or dispatcher.
+          description:
+            The sessions orchestrators started on this checkout, and whether its pool has a live integrator or
+            dispatcher.
           content:
             application/json:
               schema:
@@ -3006,8 +3006,8 @@ paths:
     post:
       operationId: startHostedTargetSession
       description:
-        The same `operation_id` never launches twice. A refusal (admission, a role already held, no terminal host) is
-        a `refused` outcome with a reason code, and forgets the reservation so the request can be repeated later. An
+        The same `operation_id` never launches twice. A refusal (admission, a role already held, no terminal host)
+        is a `refused` outcome with a reason code, and forgets the reservation so the request can be repeated later. An
         operation a stop withdrew is refused `session_withdrawn` and launches nothing (HS2-WHR4GS).
       requestBody:
         required: true
@@ -3053,9 +3053,9 @@ paths:
     put:
       operationId: requestHostedTargetSession
       description:
-        Tell a running session this machine hosts which exact ticket it now works (HS2-R7QH35). `assigned` asks it to
-        request the ticket from the target's dispatcher; `claimed` says the ticket is claimed under its own worker id.
-        The request is recorded and pushed once through the session push; a tool that is not ready gets it on its
+        Tell a running session this machine hosts which exact ticket it now works (HS2-R7QH35). `assigned` asks it
+        to request the ticket from the target's dispatcher; `claimed` says the ticket is claimed under its own worker
+        id. The request is recorded and pushed once through the session push; a tool that is not ready gets it on its
         readiness events, like its role prompt, and the same request again is not pushed twice. A person's session is
         refused `session_human_owned`, an ended one `session_not_active`, an unknown operation `session_not_found`.
       requestBody:
@@ -3115,8 +3115,8 @@ paths:
         (HS2-KR28FS) the session returns to its orchestrator instead. From the orchestrator (an identified AI actor,
         gated where it orchestrates), this machine decides from the tool's turn and answers a refusal as `refused`
         (`session_mid_turn`, `session_not_safe`, `session_not_active`, `session_not_found`). From a person here, the
-        request is passed to the orchestrating checkout when this machine holds it, so the same permission applies;
-        one orchestrated elsewhere is refused `session_owner_remote`.
+        request is passed to the orchestrating checkout when this machine holds it, so the same permission applies; one
+        orchestrated elsewhere is refused `session_owner_remote`.
       requestBody:
         required: true
         content:
@@ -3237,16 +3237,16 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/scheduler/{operation}:
     description:
-      Machine-local throughput scheduler (HS2-ECWG50). It decides where and how many AI sessions run, per target, tool
-      and model, from the confirmed ready work, the policy, each target's capacity, tool capacity, held resources and
-      what earlier passes remember. Starting and stopping a session is the session executor's act (HS2-GDJXGZ).
+      Machine-local throughput scheduler (HS2-ECWG50). It decides where and how many AI sessions run, per target,
+      tool and model, from the confirmed ready work, the policy, each target's capacity, tool capacity, held resources
+      and what earlier passes remember. Starting and stopping a session is the session executor's act (HS2-GDJXGZ).
     x-hotsheet-machine-local: true
     post:
       operationId: orchestrateScheduler
       description:
-        '`plan` computes the schedule and changes and logs nothing. `explain` says why one piece of work is not running,
-        by `step_id` or by `target_id`, `connection_id` and `native_id`. `decisions` reads the decision log after a
-        cursor. `tick` runs one pass and logs every decision; it applies them only when the policy sets
+        '`plan` computes the schedule and changes and logs nothing. `explain` says why one piece of work is not
+        running, by `step_id` or by `target_id`, `connection_id` and `native_id`. `decisions` reads the decision log
+        after a cursor. `tick` runs one pass and logs every decision; it applies them only when the policy sets
         `placement.automatic`, the body does not ask for `dry_run`, and an identified actor is given. With an actor,
         `plan`, `explain` and `tick` read the capacity of each involved target through the gate as `gates_observe`.'
       requestBody:
@@ -3298,10 +3298,9 @@ paths:
             - decisions
             - tick
   /checkouts/{owner}/orchestration/summary:
-    description:
-      Machine-local progress and cost summary of an owning checkout's dispatch runs across its targets (HS2-S13719).
-      Identifiers and metrics only. Answers from this machine's records and the usage records of local target stores;
-      contacts no target and writes nothing.
+    description: Machine-local progress and cost summary of an owning checkout's dispatch runs across its targets
+      (HS2-S13719). Identifiers and metrics only. Answers from this machine's records and the usage records of local
+      target stores; contacts no target and writes nothing.
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationSummary
@@ -3348,18 +3347,18 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/planning/{operation}:
-    description:
-      Machine-local Propose Plan (HS2-HCW7MD). The orchestration project's planning AI session runs in that project
-      itself, through this machine's ordinary AI terminal launch, and proposes the dry-run plan from the open goal
-      tickets with the existing ticket and readiness operations. Nothing is placed until the policy places sessions.
+    description: Machine-local Propose Plan (HS2-HCW7MD). The orchestration project's planning AI session runs in that
+      project itself, through this machine's ordinary AI terminal launch, and proposes the dry-run plan from the open
+      goal tickets with the existing ticket and readiness operations. Nothing is placed until the policy places
+      sessions.
     x-hotsheet-machine-local: true
     post:
       operationId: orchestratePlanning
       description:
-        '`propose` starts the planner, or answers with the live one (outcome `existing`); the same `operation_id` never
-        launches twice. It needs an identified actor, is audited as `plan_propose`, and is refused with
-        `plan_no_targets`, `plan_no_goals` or `plan_goal_not_open` before anything launches. `show` reads where
-        planning stands and starts nothing.'
+        '`propose` starts the planner, or answers with the live one (outcome `existing`); the same `operation_id`
+        never launches twice. It needs an identified actor, is audited as `plan_propose`, and is refused with
+        `plan_no_targets`, `plan_no_goals` or `plan_goal_not_open` before anything launches. `show` reads where planning
+        stands and starts nothing.'
       requestBody:
         required: true
         content:
@@ -3405,10 +3404,10 @@ paths:
             - show
   /checkouts/{owner}/orchestration/timeline:
     description:
-      Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with where
-      each piece of work runs and what it waits on. Answers from this machine's records and local ticket stores;
-      contacts no target and writes nothing. With `after` equal to the current version and `wait_ms`, waits for the
-      next change.
+      Machine-local orchestration timeline of an owning checkout (HS2-J89JC7). The plan as dependency waves with
+      where each piece of work runs and what it waits on. Answers from this machine's records and local ticket stores;
+      contacts no target and writes nothing. With `after` equal to the current version and `wait_ms`, waits for the next
+      change.
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationTimeline
@@ -3482,9 +3481,9 @@ paths:
     put:
       operationId: setProjectType
       description:
-        Switch the type. Orchestration creates the empty target declaration on first use. Software while projects are
-        added is refused with 400 unless `keep_projects` is true; the projects, bindings and policy are then kept for a
-        later switch back. A repeated request changes nothing and reports `changed` false. Clients following the
+        Switch the type. Orchestration creates the empty target declaration on first use. Software while projects
+        are added is refused with 400 unless `keep_projects` is true; the projects, bindings and policy are then kept
+        for a later switch back. A repeated request changes nothing and reports `changed` false. Clients following the
         owner receive an `orchestration_changed` change event.
       requestBody:
         required: true
@@ -3521,11 +3520,11 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/projects:
     description:
-      Add an open project to an orchestration project in one step (HS2-W27N1D) - declare a target and bind it to the
-      checkout on this machine or on a reviewed remote registration. Adding is a person's consent to read and follow
+      Add an open project to an orchestration project in one step (HS2-W27N1D) - declare a target and bind it to
+      the checkout on this machine or on a reviewed remote registration. Adding is a person's consent to read and follow
       it; an `ai` actor is refused with 403 `forbidden`. The project type must be orchestration. Idempotent - a project
-      already bound to the same checkout is returned with `added` false, and a retained `target_id` binds that
-      declared target after a failed attempt.
+      already bound to the same checkout is returned with `added` false, and a retained `target_id` binds that declared
+      target after a failed attempt.
     x-hotsheet-machine-local: true
     post:
       operationId: addOrchestrationProject
@@ -3563,9 +3562,9 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/projects/{target}:
-    description:
-      Stop orchestrating one project (HS2-W27N1D) - remove this machine's binding, then tombstone the declaration. Its
-      id is never reused. Sessions already running there keep running until stopped. Repeating it changes nothing.
+    description: Stop orchestrating one project (HS2-W27N1D) - remove this machine's binding, then tombstone the
+      declaration. Its id is never reused. Sessions already running there keep running until stopped. Repeating it
+      changes nothing.
     x-hotsheet-machine-local: true
     delete:
       operationId: removeOrchestrationProject
@@ -3683,10 +3682,10 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-deployments:
     description:
-      The hosted half of a `target-script` deployment gate (HS2-G3VAK4). The machine that hosts the target runs its
-      own deploy script, tracked as an executable file at the gate's commit, in a private worktree of that commit,
-      with the step environment and no output kept. The same execution id never runs twice. A script the commit does
-      not track is refused with `gate_deployment_script_untracked` (409). Ordinary authenticated project data; the
+      The hosted half of a `target-script` deployment gate (HS2-G3VAK4). The machine that hosts the target runs
+      its own deploy script, tracked as an executable file at the gate's commit, in a private worktree of that commit,
+      with the step environment and no output kept. The same execution id never runs twice. A script the commit does not
+      track is refused with `gate_deployment_script_untracked` (409). Ordinary authenticated project data; the
       orchestrating machine passed `deployments_run` first.
     post:
       operationId: startHostedTargetDeployment
@@ -3757,10 +3756,10 @@ paths:
           minLength: 1
   /checkouts/{checkout}/target-gates:
     description:
-      The hosted half of a remote target's CI gate (HS2-WDQZ37). The machine that hosts the target watches the gate's
-      commit with its own provider credentials and Job monitor; a remote orchestrator starts the watch and follows it
-      with a cursor. Observing only; ordinary authenticated project data under the caller's device role. A watch
-      of a repository the hosted checkout's own Git remotes do not name is refused with `gate_repository_mismatch`
+      The hosted half of a remote target's CI gate (HS2-WDQZ37). The machine that hosts the target watches the
+      gate's commit with its own provider credentials and Job monitor; a remote orchestrator starts the watch and
+      follows it with a cursor. Observing only; ordinary authenticated project data under the caller's device role. A
+      watch of a repository the hosted checkout's own Git remotes do not name is refused with `gate_repository_mismatch`
       (409) and audited on the host (HS2-K2YE6A).
     post:
       operationId: watchHostedTargetGate
@@ -3791,8 +3790,8 @@ paths:
     get:
       operationId: readHostedTargetGate
       description:
-        A long poll. With `after` equal to the current cursor, parks until this machine's watch records change or the
-        wait ends, at most 8 seconds; an older cursor is answered at once. Starts no watch.
+        A long poll. With `after` equal to the current cursor, parks until this machine's watch records change or
+        the wait ends, at most 8 seconds; an older cursor is answered at once. Starts no watch.
       parameters:
         - name: commit
           in: query
@@ -3869,8 +3868,8 @@ paths:
           minLength: 1
   /checkouts/{checkout}/target-resource-wait:
     description:
-      A long poll on this machine's own claim backend for a remote orchestrator's scheduling loop (HS2-G1PKK2). Parks
-      until the resource is free (released or lapsed) or the wait ends, at most 8 seconds. Ordinary authenticated
+      A long poll on this machine's own claim backend for a remote orchestrator's scheduling loop (HS2-G1PKK2).
+      Parks until the resource is free (released or lapsed) or the wait ends, at most 8 seconds. Ordinary authenticated
       project data under the caller's device role.
     get:
       operationId: waitHostedTargetResource
@@ -4005,9 +4004,8 @@ paths:
                 type: string
     delete:
       operationId: removeOrchestrationRetiredPermissions
-      description:
-        A person removes the retired files and gets the counts removed. Idempotent. An ai or system actor is refused
-        with 403 forbidden.
+      description: A person removes the retired files and gets the counts removed. Idempotent. An ai or system actor is
+        refused with 403 forbidden.
       requestBody:
         required: true
         content:
@@ -4064,8 +4062,9 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     put:
       operationId: put_speculation_policy
-      description: Change the policy through the same validated write as `coordination speculation-policy`; the same
-        change again writes nothing.
+      description:
+        Change the policy through the same validated write as `coordination speculation-policy`; the same change
+        again writes nothing.
       requestBody:
         required: true
         content:
@@ -4125,9 +4124,10 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       operationId: request_speculation
-      description: '`result` {gate_commit, result, run?}, `sync` {wait_ms (at most 25000)}, `rebase` {assignment,
-        replaces, gate_commit, base?} or `reopen` {assignment, reason}, with optional `connection_id` and `actor_id`.
-        The same requests as the `coordination speculation-*` commands (HS2-7J2ZSE).'
+      description:
+        '`result` {gate_commit, result, run?}, `sync` {wait_ms (at most 25000)}, `rebase` {assignment, replaces,
+        gate_commit, base?} or `reopen` {assignment, reason}, with optional `connection_id` and `actor_id`. The same
+        requests as the `coordination speculation-*` commands (HS2-7J2ZSE).'
       requestBody:
         required: true
         content:
@@ -4167,15 +4167,15 @@ paths:
             - rebase
             - reopen
   /checkouts/{checkout}/target-validation-profiles:
-    description:
-      The test profiles a checkout this machine hosts offers in its checked-in `.hotsheet2/validation-profiles.json`,
-      checked as a validator would (HS2-YYNW9F). Reads the file only; runs and writes nothing. Ordinary authenticated
-      project data under the caller's device role, so a remote orchestrator can read it.
+    description: The test profiles a checkout this machine hosts offers in its checked-in
+      `.hotsheet2/validation-profiles.json`, checked as a validator would (HS2-YYNW9F). Reads the file only; runs and
+      writes nothing. Ordinary authenticated project data under the caller's device role, so a remote orchestrator can
+      read it.
     get:
       operationId: readHostedValidationProfiles
       description:
-        Every profile and every problem. An absent file is valid and offers nothing. Problems are stable codes with the
-        profile's position; a name is echoed only when it is itself valid.
+        Every profile and every problem. An absent file is valid and offers nothing. Problems are stable codes with
+        the profile's position; a name is echoed only when it is itself valid.
       responses:
         '200':
           description: The profiles and their problems.
@@ -4206,8 +4206,8 @@ paths:
   /checkouts/{checkout}/target-tickets/cost:
     description:
       What one ticket of a hosted checkout cost, from that checkout's own usage records (HS2-B6236S). Identifiers
-      and metrics only. A remote orchestration project's progress summary reads it through the reviewed transport as
-      an observation. Ordinary authenticated project data under the caller's device role.
+      and metrics only. A remote orchestration project's progress summary reads it through the reviewed transport as an
+      observation. Ordinary authenticated project data under the caller's device role.
     get:
       operationId: readHostedTargetTicketCost
       parameters:
@@ -4251,9 +4251,8 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{checkout}/target-validation-output/{digest}:
-    description:
-      A kept copy of one validation step output stream on the machine that ran the step, by its SHA-256 (HS2-ZCR3Y7).
-      Machine-local; there is no remote read.
+    description: A kept copy of one validation step output stream on the machine that ran the step, by its SHA-256
+      (HS2-ZCR3Y7). Machine-local; there is no remote read.
     x-hotsheet-machine-local: true
     get:
       operationId: readValidationOutput
@@ -4325,11 +4324,11 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /remotes/{id}/checkouts/{checkout}/orchestration/target-lines:
     description:
-      Machine-local orchestration lines of a checkout on a reviewed remote server (HS2-3D8D6V). The timeline item of
-      each of its tickets that an orchestration project on this machine plans through a reviewed remote binding, one
+      Machine-local orchestration lines of a checkout on a reviewed remote server (HS2-3D8D6V). The timeline item
+      of each of its tickets that an orchestration project on this machine plans through a reviewed remote binding, one
       per ticket, answered from this machine's records. Never contacts the remote server and writes nothing. An unknown
-      registration or checkout reads as not orchestrated. With `after` equal to the current version and `wait_ms`,
-      waits for the next change.
+      registration or checkout reads as not orchestrated. With `after` equal to the current version and `wait_ms`, waits
+      for the next change.
     x-hotsheet-machine-local: true
     get:
       operationId: readOrchestrationRemoteTargetLines
@@ -4386,10 +4385,9 @@ paths:
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/target-lines/push:
-    description:
-      Machine-local push pass (HS2-KB2Y51). Sends this machine's orchestration lines once now to the remote servers
-      that host the orchestration project's targets, as display-only, expiring observations. The server already does
-      this on every change; this is the headless re-assert.
+    description: Machine-local push pass (HS2-KB2Y51). Sends this machine's orchestration lines once now to the remote
+      servers that host the orchestration project's targets, as display-only, expiring observations. The server already
+      does this on every change; this is the headless re-assert.
     x-hotsheet-machine-local: true
     post:
       operationId: pushOrchestrationTargetLines
@@ -4429,10 +4427,10 @@ paths:
           pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/target-line-observations:
     description:
-      Hosted, display-only orchestration lines another machine pushes for a checkout served here (HS2-KB2Y51). Kept
-      machine-local and expiring, never in git or a ticket store; merged into this checkout's target-lines read.
-      Requires a caller that may write project data (a read-write paired device or certificate). Each push replaces
-      the pushing machine's lines; empty lines withdraw them.
+      Hosted, display-only orchestration lines another machine pushes for a checkout served here (HS2-KB2Y51).
+      Kept machine-local and expiring, never in git or a ticket store; merged into this checkout's target-lines read.
+      Requires a caller that may write project data (a read-write paired device or certificate). Each push replaces the
+      pushing machine's lines; empty lines withdraw them.
     put:
       operationId: putTargetLineObservations
       requestBody:
@@ -4475,8 +4473,8 @@ paths:
       project (HS2-92FJXM). Open means registered, present and resolving, as /remote-checkouts reports available; the
       orchestration project itself is left out. Not machine-local - a paired read-write device may add; a read-only
       device is refused by the write fence. Adding is the same workflow as /orchestration/projects with a local
-      destination on this server, so a repeat returns the same project with added false; a checkout this server does
-      not have open is refused with 403 forbidden, and nothing new is opened.
+      destination on this server, so a repeat returns the same project with added false; a checkout this server does not
+      have open is refused with 403 forbidden, and nothing new is opened.
     get:
       operationId: listHostedOrchestrationProjects
       responses:
@@ -5220,7 +5218,10 @@ paths:
             type: boolean
         - name: group
           in: query
-          description: Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN, HS2-9KZSD4).
+          description:
+            Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a
+            name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN,
+            HS2-9KZSD4).
           schema:
             type: string
         - name: has_group
@@ -10090,9 +10091,10 @@ paths:
           type: string
     get:
       operationId: store_live_tokens
-      description: One hosted store's recorded tokens (in plus out) inside a window, the minute containing since_ms
-        included (HS2-ZTRF4Q). until_ms defaults to now. complete is false when the window starts before the retained
-        two-day series. Read once when standby exits.
+      description:
+        One hosted store's recorded tokens (in plus out) inside a window, the minute containing since_ms included
+        (HS2-ZTRF4Q). until_ms defaults to now. complete is false when the window starts before the retained two-day
+        series. Read once when standby exits.
       parameters:
         - name: since_ms
           in: query
@@ -10272,7 +10274,10 @@ paths:
             type: boolean
         - name: group
           in: query
-          description: Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN, HS2-9KZSD4).
+          description:
+            Only tickets in this group, by id or by name (letter case and spacing do not matter). A checkout resolves a
+            name through its group registry; a store matches names only on unmigrated legacy values (HS2-PDSHNN,
+            HS2-9KZSD4).
           schema:
             type: string
         - name: has_group
@@ -12142,10 +12147,9 @@ paths:
       parameters:
         - name: source
           in: query
-          description: >-
-            HS2-4K43DK. orchestrator lists only the orchestrator's remembered rules, which
-            are stored outside the AI permission vault and stay listed while it is locked or
-            loading.
+          description:
+            HS2-4K43DK. orchestrator lists only the orchestrator's remembered rules, which are stored outside the AI
+            permission vault and stay listed while it is locked or loading.
           schema:
             type: string
             enum:
@@ -12767,9 +12771,10 @@ paths:
           type: string
     get:
       operationId: store_ticket_flow_summary
-      description: The ticket-flow summary of one store this host serves (HS2-82A7A7). A store that a registered
-        checkout links is hosted again on demand; any other id is 404. The CLI reads a project through this route
-        because the machine host's own store is its empty bootstrap anchor.
+      description:
+        The ticket-flow summary of one store this host serves (HS2-82A7A7). A store that a registered checkout
+        links is hosted again on demand; any other id is 404. The CLI reads a project through this route because the
+        machine host's own store is its empty bootstrap anchor.
       responses:
         '200':
           description: Server-owned response.
@@ -12798,8 +12803,8 @@ paths:
           type: string
     get:
       operationId: list_store_activity
-      description: The filtered activity window of one store this host serves (HS2-82A7A7), with the same filters as
-        GET /activity. A store that a registered checkout links is hosted again on demand; any other id is 404.
+      description: The filtered activity window of one store this host serves (HS2-82A7A7), with the same filters as GET
+        /activity. A store that a registered checkout links is hosted again on demand; any other id is 404.
       parameters:
         - name: ticket
           in: query
@@ -14158,8 +14163,8 @@ paths:
       operationId: clear_terminal
       summary: Clear a terminal for every viewer
       description:
-        The replay keeps only the cursor's line and starts a new output stream, and every attached viewer receives a
-        replacement; the shell is not told (HS2-HA0Z3A). A detached broker that predates the operation answers 501 and
+        The replay keeps only the cursor's line and starts a new output stream, and every attached viewer receives
+        a replacement; the shell is not told (HS2-HA0Z3A). A detached broker that predates the operation answers 501 and
         its terminal is unchanged.
       responses:
         '204':
@@ -14964,7 +14969,10 @@ paths:
   /host-health/cpu:
     get:
       operationId: get_live_cpu
-      description: The live CPU long poll (HS2-CPFBWP). Answers as soon as the server holds a frame newer than after; with none, waits up to timeout_ms (default 10000, at most 25000) and returns the current frame. A missing after, or one ahead of the server's, returns the current frame at once.
+      description:
+        The live CPU long poll (HS2-CPFBWP). Answers as soon as the server holds a frame newer than after; with
+        none, waits up to timeout_ms (default 10000, at most 25000) and returns the current frame. A missing after, or
+        one ahead of the server's, returns the current frame at once.
       parameters:
         - name: after
           in: query
@@ -15000,7 +15008,10 @@ paths:
   /host-health/disks:
     put:
       operationId: put_host_health_disk
-      description: Include or ignore one known volume in host health (HS2-NHK8V8). Saved machine-wide by volume id; answers with the updated snapshot and pushes a host_health disks event. The store's volume is always monitored (409); an id neither present nor saved is 404.
+      description:
+        Include or ignore one known volume in host health (HS2-NHK8V8). Saved machine-wide by volume id; answers
+        with the updated snapshot and pushes a host_health disks event. The store's volume is always monitored (409); an
+        id neither present nor saved is 404.
       requestBody:
         required: true
         content:
@@ -15043,7 +15054,9 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       operationId: post_host_health_disk
-      description: Monitor the volume holding a path on the server's machine (HS2-KBVZV1), the same workflow as hotsheet-cli host-disks add. A path on no volume is 404; the store's own volume is 409.
+      description:
+        Monitor the volume holding a path on the server's machine (HS2-KBVZV1), the same workflow as hotsheet-cli
+        host-disks add. A path on no volume is 404; the store's own volume is 409.
       requestBody:
         required: true
         content:
@@ -15083,7 +15096,9 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     delete:
       operationId: delete_host_health_disk
-      description: Forget a saved disk choice (HS2-KBVZV1); a still-connected detected disk asks again. An unknown id changes nothing.
+      description:
+        Forget a saved disk choice (HS2-KBVZV1); a still-connected detected disk asks again. An unknown id changes
+        nothing.
       parameters:
         - name: id
           in: query
@@ -15316,11 +15331,10 @@ paths:
   /sync/kick:
     post:
       operationId: post_sync_kick
-      description: >-
-        Ask the host's background sync loop for one prompt sync of a ticket store a headless
-        write committed to (HS2-D9ZGAE, docs/02 §2.12). Accepted only for a hosted store or a
-        Git store linked to a registered checkout; the sync runs asynchronously, coalesced with
-        other kicks and the regular pass.
+      description:
+        Ask the host's background sync loop for one prompt sync of a ticket store a headless write committed to
+        (HS2-D9ZGAE, docs/02 §2.12). Accepted only for a hosted store or a Git store linked to a registered checkout;
+        the sync runs asynchronously, coalesced with other kicks and the regular pass.
       requestBody:
         required: true
         content:
@@ -17726,9 +17740,9 @@ paths:
     post:
       operationId: rename_group
       description:
-        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
-        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
-        allowed. A store or connection has no registry and refuses with `group_registry_required`.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes,
+        except that a legacy name group is given an id and its members are rewritten. Changing only letter case or
+        spacing is allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -17756,8 +17770,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
-            several groups; use an id.'
+          description:
+            '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches several groups;
+            use an id.'
           content:
             application/json:
               schema:
@@ -17800,8 +17815,9 @@ paths:
   /groups/merge:
     post:
       operationId: merge_groups
-      description: Move every member of one group into another, as after two clones each created a group with the same
-        name (HS2-9KZSD4). Neither registry entry is deleted.
+      description:
+        Move every member of one group into another, as after two clones each created a group with the same name
+        (HS2-9KZSD4). Neither registry entry is deleted.
       requestBody:
         required: true
         content:
@@ -17870,9 +17886,9 @@ paths:
     post:
       operationId: rename_store_group
       description:
-        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
-        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
-        allowed. A store or connection has no registry and refuses with `group_registry_required`.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes,
+        except that a legacy name group is given an id and its members are rewritten. Changing only letter case or
+        spacing is allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -17900,8 +17916,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
-            several groups; use an id.'
+          description:
+            '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches several groups;
+            use an id.'
           content:
             application/json:
               schema:
@@ -17946,8 +17963,9 @@ paths:
     parameters: *a1
     post:
       operationId: merge_store_groups
-      description: Move every member of one group into another, as after two clones each created a group with the same
-        name (HS2-9KZSD4). Neither registry entry is deleted.
+      description:
+        Move every member of one group into another, as after two clones each created a group with the same name
+        (HS2-9KZSD4). Neither registry entry is deleted.
       requestBody:
         required: true
         content:
@@ -18016,9 +18034,9 @@ paths:
     post:
       operationId: rename_provider_group
       description:
-        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
-        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
-        allowed. A store or connection has no registry and refuses with `group_registry_required`.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes,
+        except that a legacy name group is given an id and its members are rewritten. Changing only letter case or
+        spacing is allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -18098,8 +18116,9 @@ paths:
     parameters: *a2
     post:
       operationId: merge_provider_groups
-      description: Move every member of one group into another, as after two clones each created a group with the same
-        name (HS2-9KZSD4). Neither registry entry is deleted.
+      description:
+        Move every member of one group into another, as after two clones each created a group with the same name
+        (HS2-9KZSD4). Neither registry entry is deleted.
       requestBody:
         required: true
         content:
@@ -18126,7 +18145,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: "`group_ambiguous`: a name matches several groups; use an id. Also: A connection without the `groups` capability: provider connection '<id>' does not support 'groups'."
+          description:
+            "`group_ambiguous`: a name matches several groups; use an id. Also: A connection without the `groups`
+            capability: provider connection '<id>' does not support 'groups'."
           content:
             application/json:
               schema:
@@ -18141,8 +18162,9 @@ paths:
     parameters: *a3
     get:
       operationId: list_checkout_groups
-      description: "Ticket groups of the project: one namespace, counts merged by id across every connection with the
-        `groups` capability (HS2-PDSHNN), named by the checkout's group registry (HS2-9KZSD4)."
+      description:
+        "Ticket groups of the project: one namespace, counts merged by id across every connection with the `groups`
+        capability (HS2-PDSHNN), named by the checkout's group registry (HS2-9KZSD4)."
       responses:
         '200':
           description: Server-owned response.
@@ -18164,8 +18186,9 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       operationId: create_checkout_group
-      description: Create a group in the checkout's group registry without assigning tickets, or return the group that
-        already has the name (HS2-9KZSD4).
+      description:
+        Create a group in the checkout's group registry without assigning tickets, or return the group that already
+        has the name (HS2-9KZSD4).
       requestBody:
         required: true
         content:
@@ -18202,9 +18225,9 @@ paths:
     post:
       operationId: rename_checkout_group
       description:
-        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes, except
-        that a legacy name group is given an id and its members are rewritten. Changing only letter case or spacing is
-        allowed. A store or connection has no registry and refuses with `group_registry_required`.
+        Rename a group (HS2-8CDFKR, HS2-9KZSD4) as one edit of the checkout's group registry; no ticket changes,
+        except that a legacy name group is given an id and its members are rewritten. Changing only letter case or
+        spacing is allowed. A store or connection has no registry and refuses with `group_registry_required`.
       requestBody:
         required: true
         content:
@@ -18232,8 +18255,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches
-            several groups; use an id.'
+          description:
+            '`group_name_taken`: `to` is a different listed group. `group_ambiguous`: the name matches several groups;
+            use an id.'
           content:
             application/json:
               schema:
@@ -18278,8 +18302,9 @@ paths:
     parameters: *a3
     post:
       operationId: merge_checkout_groups
-      description: Move every member of one group into another, as after two clones each created a group with the same
-        name (HS2-9KZSD4). Neither registry entry is deleted.
+      description:
+        Move every member of one group into another, as after two clones each created a group with the same name
+        (HS2-9KZSD4). Neither registry entry is deleted.
       requestBody:
         required: true
         content:
@@ -18321,9 +18346,10 @@ paths:
     parameters: *a3
     post:
       operationId: migrate_checkout_groups
-      description: "The explicit, idempotent group migration (HS2-9KZSD4): every ticket of the project's Git sources
-        that still stores a group name is rewritten to a registry id, with one registry entry per distinct name key
-        (an existing entry with that key is reused). The same workflow as `hotsheet-cli group migrate`. The body is
+      description:
+        "The explicit, idempotent group migration (HS2-9KZSD4): every ticket of the project's Git sources that
+        still stores a group name is rewritten to a registry id, with one registry entry per distinct name key (an
+        existing entry with that key is reused). The same workflow as `hotsheet-cli group migrate`. The body is
         optional."
       requestBody:
         required: false
@@ -19475,8 +19501,8 @@ components:
                 maxLength: 160
               permission_id:
                 description:
-                  The permission request or remembered rule behind the entry (HS2-XHQ1EH); older entries carried a
-                  retired grant id here.
+                  The permission request or remembered rule behind the entry (HS2-XHQ1EH); older entries carried a retired
+                  grant id here.
                 type: string
                 pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
               requested_by:
@@ -19497,9 +19523,8 @@ components:
           type: boolean
       additionalProperties: false
     HostedSessionAuditPage:
-      description:
-        A page of the hosting machine's session journal (HS2-CRBR8X). An entry records a start this machine launched
-        or refused, a stop it carried out or refused, or a session it found ended without a stop.
+      description: A page of the hosting machine's session journal (HS2-CRBR8X). An entry records a start this machine
+        launched or refused, a stop it carried out or refused, or a session it found ended without a stop.
       type: object
       required:
         - entries
@@ -19555,8 +19580,8 @@ components:
                 maxLength: 160
               requester:
                 description:
-                  Who sent the request, `cert-<sha256 fingerprint>` for a device certificate, `browser-<device id>` for
-                  a paired browser or `local` for this machine. Absent for an end nobody requested.
+                  Who sent the request, `cert-<sha256 fingerprint>` for a device certificate, `browser-<device id>` for a
+                  paired browser or `local` for this machine. Absent for an end nobody requested.
                 type: string
                 maxLength: 160
               actor_role:
@@ -19600,9 +19625,7 @@ components:
           default: 5120
       additionalProperties: false
     OrchestrationPolicy:
-      description:
-        The checked-in throughput policy body (HS2-YCJDEB); every omitted section takes its default. Integer units
-        only.
+      description: The checked-in throughput policy body (HS2-YCJDEB); every omitted section takes its default. Integer units only.
       type: object
       properties:
         machine:
@@ -19666,8 +19689,8 @@ components:
                 default: true
               actions:
                 description:
-                  Retired by HS2-XHQ1EH. Read, ignored and reported by validate; a stored policy drops it. Permission
-                  to act comes from a person's answer or a remembered rule.
+                  Retired by HS2-XHQ1EH. Read, ignored and reported by validate; a stored policy drops it. Permission to act
+                  comes from a person's answer or a remembered rule.
                 deprecated: true
               tools:
                 type: array
@@ -19738,10 +19761,10 @@ components:
               default: speculate:never
             redo_reopened:
               description:
-                HS2-NCMATS. When provisional work is reopened while its run is active, the orchestrator cancels that
-                run itself as an AI cancel, which does not hold the step, so it is dispatched again once its
-                prerequisites are confirmed. The cancel asks the permission a replacement start needs; a denial falls
-                back to asking on the orchestration ticket. Off by default.
+                HS2-NCMATS. When provisional work is reopened while its run is active, the orchestrator cancels that run
+                itself as an AI cancel, which does not hold the step, so it is dispatched again once its prerequisites
+                are confirmed. The cancel asks the permission a replacement start needs; a denial falls back to asking
+                on the orchestration ticket. Off by default.
               type: boolean
               default: false
           additionalProperties: false
@@ -19770,8 +19793,8 @@ components:
               default: 5
             join_minutes:
               description:
-                How long a session the scheduler placed has to join its role in the target's pool before it is wound
-                down at its safe point and its step placed again (HS2-NPTKS8).
+                How long a session the scheduler placed has to join its role in the target's pool before it is wound down
+                at its safe point and its step placed again (HS2-NPTKS8).
               type: integer
               minimum: 1
               maximum: 1440
@@ -19786,8 +19809,8 @@ components:
               default: 2
             resources:
               description:
-                Resources every piece of work on a target must hold (HS2-2FG91X). The scheduler reads their claims on
-                the machine that hosts the target and never claims; the session does.
+                Resources every piece of work on a target must hold (HS2-2FG91X). The scheduler reads their claims on the
+                machine that hosts the target and never claims; the session does.
               type: array
               maxItems: 256
               items:
@@ -19808,8 +19831,8 @@ components:
                 additionalProperties: false
             role_sessions:
               description:
-                Targets whose dispatcher or integrator the scheduler starts by itself (HS2-TK9ADC), when the target
-                needs one and its pool shows none live. Empty or absent leaves role sessions to a person.
+                Targets whose dispatcher or integrator the scheduler starts by itself (HS2-TK9ADC), when the target needs
+                one and its pool shows none live. Empty or absent leaves role sessions to a person.
               type: array
               maxItems: 256
               items:
@@ -19995,8 +20018,8 @@ components:
                       type: string
                     permission:
                       description:
-                        '`not_needed` for reading and observing, `remembered` when a rule allows it, `asks` when a
-                        person is asked for each operation (HS2-XHQ1EH).'
+                        '`not_needed` for reading and observing, `remembered` when a rule allows it, `asks` when a person is asked
+                        for each operation (HS2-XHQ1EH).'
                       enum:
                         - not_needed
                         - remembered
@@ -20556,8 +20579,8 @@ components:
         override_readiness:
           description:
             HS2-42TARA. Start this exact operation although its plan step is not ready. A person's own override goes
-            ahead; an AI or system override answers 403 `decision_required` with the `note_id` of a decision note on
-            the orchestration ticket until a person answers it (HS2-XHQ1EH).
+            ahead; an AI or system override answers 403 `decision_required` with the `note_id` of a decision note on the
+            orchestration ticket until a person answers it (HS2-XHQ1EH).
           type: boolean
       additionalProperties: false
     OrchestrationRun:
@@ -20888,9 +20911,9 @@ components:
       additionalProperties: false
     HostedSpeculation:
       description:
-        A hosted project's own committed speculation setting, alone (HS2-FJ6MDW). `speculation` is null when the project
-        does not opt in. The change feed carries it with every answer, so a follower learns a change without a capacity
-        read.
+        A hosted project's own committed speculation setting, alone (HS2-FJ6MDW). `speculation` is null when the
+        project does not opt in. The change feed carries it with every answer, so a follower learns a change without a
+        capacity read.
       type: object
       required:
         - speculation
@@ -21726,10 +21749,9 @@ components:
           additionalProperties: false
       additionalProperties: false
     ValidationOperation:
-      description:
-        The body of a validation operation. `define` needs `ticket` and `step`; `evidence` and `remove` need `ticket`
-        and `step_id`; `run` also needs `operation_id`; `cancel` takes an optional `operation_id` (omit for the running
-        attempt) and `wait_ms`; `list` takes an optional `ticket`; `profiles` needs only `target_id`.
+      description: The body of a validation operation. `define` needs `ticket` and `step`; `evidence` and `remove` need
+        `ticket` and `step_id`; `run` also needs `operation_id`; `cancel` takes an optional `operation_id` (omit for the
+        running attempt) and `wait_ms`; `list` takes an optional `ticket`; `profiles` needs only `target_id`.
       type: object
       properties:
         actor:
@@ -21893,8 +21915,8 @@ components:
       additionalProperties: false
     ValidationEvidence:
       description:
-        The latest evidence for one step. `state` is what it amounts to now; it is `unverified` when the step never ran
-        (`not_run`), its definition changed since (`step_changed`), or a running attempt outlived its deadline
+        The latest evidence for one step. `state` is what it amounts to now; it is `unverified` when the step never
+        ran (`not_run`), its definition changed since (`step_changed`), or a running attempt outlived its deadline
         (`deadline_passed`).
       type: object
       required:
@@ -22028,9 +22050,8 @@ components:
           $ref: '#/components/schemas/ValidationExecutionOutcome'
       additionalProperties: false
     OrchestrationGateState:
-      description:
-        The state of a gate (HS2-5JBYPV). Only typed provider evidence that covers the gate's commit makes it `passed`
-        or `failed`; `unknown` is never the same as passed.
+      description: The state of a gate (HS2-5JBYPV). Only typed provider evidence that covers the gate's commit makes it
+        `passed` or `failed`; `unknown` is never the same as passed.
       enum:
         - unknown
         - awaiting_approval
@@ -22080,9 +22101,11 @@ components:
           type: string
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
         kind:
+          description: HS2-GD3NNK adds `review`, a code review marked by a person or an AI (provider `review`).
           enum:
             - ci
             - deployment
+            - review
         provider:
           type: string
         commit:
@@ -22265,6 +22288,9 @@ components:
           type: string
         deployment:
           $ref: '#/components/schemas/OrchestrationGateState'
+        review:
+          description: HS2-GD3NNK. The review verdict; absent when no review was requested.
+          $ref: '#/components/schemas/OrchestrationGateState'
         commits:
           description: The commits the standing CI gates are about.
           type: array
@@ -22291,14 +22317,13 @@ components:
             pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
         watching:
           description:
-            '`gate-sync` only (HS2-VVHVF0). Whether a Job monitor observes the provider a gate of the run still
-            waits on, after the call made sure of it; absent when no gate waits.'
+            '`gate-sync` only (HS2-VVHVF0). Whether a Job monitor observes the provider a gate of the run still waits
+            on, after the call made sure of it; absent when no gate waits.'
           type: boolean
       additionalProperties: false
     OrchestrationRunReconciliation:
-      description:
-        The outcome of the last reconciliation of an unfinished run that found something new (HS2-WBREDM). A finished
-        run keeps none.
+      description: The outcome of the last reconciliation of an unfinished run that found something new (HS2-WBREDM). A
+        finished run keeps none.
       type: object
       required:
         - at_ms
@@ -22346,9 +22371,10 @@ components:
                   - mismatched
                   - unverifiable
               reason:
-                description: Why the source is mismatched or unverifiable, or what a verified answer rests on (such as
-                  `no_gate`, `deployment_not_executed`, `execution_lost`). A stable code, never free text;
-                  `source_not_wired` marks a source nothing reports yet.
+                description:
+                  Why the source is mismatched or unverifiable, or what a verified answer rests on (such as `no_gate`,
+                  `deployment_not_executed`, `execution_lost`). A stable code, never free text; `source_not_wired` marks
+                  a source nothing reports yet.
                 type: string
             additionalProperties: false
       additionalProperties: false
@@ -22391,11 +22417,10 @@ components:
           maxLength: 256
       additionalProperties: false
     ReadinessOperation:
-      description:
-        Body of a readiness operation (HS2-42TARA). `define` takes `ticket`, `target_id`, `connection_id`, `native_id`
-        and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`; `plan`, `ready`
-        and `speculation` take nothing; `reopen` takes `step_id` and `reason` (HS2-JSF985); `migrate` takes an
-        optional `discard_local` (HS2-YDY5HJ).
+      description: Body of a readiness operation (HS2-42TARA). `define` takes `ticket`, `target_id`, `connection_id`,
+        `native_id` and `prerequisites`; `show` and `remove` take `step_id`; `refresh` takes an optional `step_id`;
+        `plan`, `ready` and `speculation` take nothing; `reopen` takes `step_id` and `reason` (HS2-JSF985); `migrate`
+        takes an optional `discard_local` (HS2-YDY5HJ).
       type: object
       properties:
         actor:
@@ -22468,8 +22493,8 @@ components:
     PlanPrerequisite:
       description:
         Something that must hold before a step is dispatched (HS2-42TARA). `ticket` names a qualified target ticket
-        that must be confirmed finished with the required gates green, judged by the gates of the latest run on it or
-        of `commit` when named. `validation` names a validation step whose latest evidence must be `passed`.
+        that must be confirmed finished with the required gates green, judged by the gates of the latest run on it or of
+        `commit` when named. `validation` names a validation step whose latest evidence must be `passed`.
       oneOf:
         - type: object
           required:
@@ -22490,11 +22515,14 @@ components:
               type: string
               maxLength: 256
             gates:
-              description: Defaults to `ci`.
+              description:
+                Defaults to `ci`. `review` (HS2-GD3NNK) needs CI passed and the requested review approved; a review
+                requested or with changes requested blocks and is never built ahead on.
               enum:
                 - none
                 - ci
                 - deployment
+                - review
             commit:
               type:
                 - string
@@ -22580,9 +22608,9 @@ components:
       additionalProperties: false
     ReadinessLevel:
       description:
-        '`confirmed` is the only level work is dispatched on. `provisional` rests on an integrated commit whose gate is
-        still pending or whose ticket is not yet confirmed finished. `blocked`, `stale` and `cyclic` are not ready;
-        `in_progress` and `finished` have nothing to start (HS2-42TARA).'
+        '`confirmed` is the only level work is dispatched on. `provisional` rests on an integrated commit whose
+        gate is still pending or whose ticket is not yet confirmed finished. `blocked`, `stale` and `cyclic` are not
+        ready; `in_progress` and `finished` have nothing to start (HS2-42TARA).'
       enum:
         - confirmed
         - provisional
@@ -22755,9 +22783,8 @@ components:
           type: string
       additionalProperties: false
     OrchestrationSessionRole:
-      description:
-        The part a started session plays in its target's existing role model (HS2-GDJXGZ). `planner` is the planning
-        session of an orchestration project, which runs only in that project (HS2-HCW7MD).
+      description: The part a started session plays in its target's existing role model (HS2-GDJXGZ). `planner` is the
+        planning session of an orchestration project, which runs only in that project (HS2-HCW7MD).
       enum:
         - worker
         - dispatcher
@@ -22769,9 +22796,8 @@ components:
         - orchestrator
         - human
     OrchestrationSessionRolePrompt:
-      description:
-        How the session was asked to run its role skill (HS2-2DPGDY). pending is tried again on the tool's readiness
-        events and reads as failed once its tries or its window are spent.
+      description: How the session was asked to run its role skill (HS2-2DPGDY). pending is tried again on the tool's
+        readiness events and reads as failed once its tries or its window are spent.
       enum:
         - delivered
         - at_launch
@@ -22780,8 +22806,8 @@ components:
         - failed
     OrchestrationSessionSafePoint:
       description:
-        Whether a session may be wound down now, as its own host established it (HS2-GDJXGZ). Anything unknown counts
-        against it.
+        Whether a session may be wound down now, as its own host established it (HS2-GDJXGZ). Anything unknown
+        counts against it.
       type: object
       required:
         - safe
@@ -22897,8 +22923,8 @@ components:
       additionalProperties: false
     OrchestrationSession:
       description:
-        This machine's record of one AI session it started on a target's server (HS2-GDJXGZ). Identifiers, states and
-        codes only.
+        This machine's record of one AI session it started on a target's server (HS2-GDJXGZ). Identifiers, states
+        and codes only.
       type: object
       required:
         - session_id
@@ -23063,7 +23089,9 @@ components:
             origin:
               $ref: '#/components/schemas/HostedTargetSessionOrigin'
             account:
-              description: The tool account the session is started for, so its limit signals are attributed to it (HS2-PFHRS9); absent when none.
+              description:
+                The tool account the session is started for, so its limit signals are attributed to it (HS2-PFHRS9); absent
+                when none.
               type: string
               maxLength: 160
               pattern: ^[A-Za-z0-9._-]+$
@@ -23253,10 +23281,9 @@ components:
           additionalProperties: false
       additionalProperties: false
     SchedulerOperation:
-      description:
-        Body of a scheduler operation (HS2-ECWG50). `plan` takes nothing; `explain` takes `step_id`, or `target_id`,
-        `connection_id` and `native_id`; `decisions` takes `after` and `limit`, or `newest` with an optional `before`
-        for the latest decisions newest first (HS2-77SRHC); `tick` takes `dry_run`.
+      description: Body of a scheduler operation (HS2-ECWG50). `plan` takes nothing; `explain` takes `step_id`, or
+        `target_id`, `connection_id` and `native_id`; `decisions` takes `after` and `limit`, or `newest` with an
+        optional `before` for the latest decisions newest first (HS2-77SRHC); `tick` takes `dry_run`.
       type: object
       properties:
         actor:
@@ -23293,8 +23320,8 @@ components:
       additionalProperties: false
     SchedulerScore:
       description:
-        Why a piece of work ranks where it does (HS2-ECWG50), in points. One priority band is 1000; waiting adds one
-        band per `placement.aging_minutes` without a ceiling.
+        Why a piece of work ranks where it does (HS2-ECWG50), in points. One priority band is 1000; waiting adds
+        one band per `placement.aging_minutes` without a ceiling.
       type: object
       required:
         - priority
@@ -23375,8 +23402,8 @@ components:
       additionalProperties: false
     SchedulerPlacement:
       description:
-        One decision about one session (HS2-ECWG50). A `start` names the tool, account and model a new session would
-        use; `keep` and `wind_down` name a running session.
+        One decision about one session (HS2-ECWG50). A `start` names the tool, account and model a new session
+        would use; `keep` and `wind_down` name a running session.
       type: object
       required:
         - action
@@ -23763,8 +23790,8 @@ components:
       additionalProperties: false
     SchedulerDecision:
       description:
-        One record of the decision log (HS2-ECWG50), namely a pass (`tick`) or one decision of it. Identifiers, codes and
-        numbers only.
+        One record of the decision log (HS2-ECWG50), namely a pass (`tick`) or one decision of it. Identifiers,
+        codes and numbers only.
       type: object
       required:
         - seq
@@ -23864,8 +23891,8 @@ components:
       additionalProperties: false
     WorkerSpeculation:
       description:
-        Provisional assignments (HS2-2SJPCH), work started on a prerequisite that is pushed and waiting on remote CI.
-        Absent when the pool never reserved provisional work.
+        Provisional assignments (HS2-2SJPCH), work started on a prerequisite that is pushed and waiting on remote
+        CI. Absent when the pool never reserved provisional work.
       type: object
       required:
         - records
@@ -24057,6 +24084,7 @@ components:
         - clock_inconsistent
         - no_gate_linked
         - no_deployment_requested
+        - no_review_requested
         - gate_unverified
         - target_unbound
         - target_remote
@@ -24100,8 +24128,8 @@ components:
       additionalProperties: false
     OrchestrationBlockedMetric:
       description:
-        Time a run could not advance. `total_ms` counts overlapping causes once, so it can be less than the sum of the
-        parts.
+        Time a run could not advance. `total_ms` counts overlapping causes once, so it can be less than the sum of
+        the parts.
       type: object
       required:
         - status
@@ -24426,9 +24454,8 @@ components:
           $ref: '#/components/schemas/OrchestrationCostMetric'
       additionalProperties: false
     OrchestrationProgressSummary:
-      description:
-        Progress and cost of an owning checkout's runs (HS2-S13719). Every measure is `known` with a value or `unknown`
-        with a reason; an aggregate says how many of its parts were unknown.
+      description: Progress and cost of an owning checkout's runs (HS2-S13719). Every measure is `known` with a value or
+        `unknown` with a reason; an aggregate says how many of its parts were unknown.
       type: object
       required:
         - owner_checkout_id
@@ -24474,9 +24501,10 @@ components:
           $ref: '#/components/schemas/OrchestrationExternalWait'
     OrchestrationExternalWait:
       description: What the whole owning checkout's work waited on outside the orchestrator, not narrowed by `ticket`
-        (HS2-9FXASE). Gate waits are unknown with `no_gate_linked` or `no_deployment_requested` when no gate of that
-        kind exists and `history_truncated` when a gate's bounded history lost its start; journal measures are
-        `decisions_trimmed` after retention; provisional counts are `history_truncated` when the ledger is at its bound.
+        (HS2-9FXASE). Gate waits are unknown with `no_gate_linked`, `no_deployment_requested` or `no_review_requested`
+        when no gate of that kind exists and `history_truncated` when a gate's bounded history lost its start; journal
+        measures are `decisions_trimmed` after retention; provisional counts are `history_truncated` when the ledger is
+        at its bound.
       type: object
       required:
         - ci
@@ -24493,7 +24521,9 @@ components:
           description: Time deployment gates were `pending`, joined per run.
           $ref: '#/components/schemas/OrchestrationSystemWait'
         reviews:
-          description: Time deployment gates were `awaiting_approval` by a person, joined per run.
+          description:
+            Time review gates were requested and deployment gates were `awaiting_approval` by a person, joined per run
+            (HS2-GD3NNK). Unknown with `no_review_requested` when neither was recorded.
           $ref: '#/components/schemas/OrchestrationSystemWait'
         provider_limits:
           description: Time plan steps stayed unplaced because every usable tool account was limited.
@@ -24553,9 +24583,9 @@ components:
       additionalProperties: false
     OrchestrationUtilization:
       description:
-        Throughput and utilization of the whole owning checkout, not narrowed by `ticket` (HS2-XK7TJS). Session time
-        comes from the session records, each session counted once across targets; idle and limited time come from the
-        scheduler's decision journal and are unknown with `decisions_trimmed` when retention removed decisions.
+        Throughput and utilization of the whole owning checkout, not narrowed by `ticket` (HS2-XK7TJS). Session
+        time comes from the session records, each session counted once across targets; idle and limited time come from
+        the scheduler's decision journal and are unknown with `decisions_trimmed` when retention removed decisions.
       type: object
       required:
         - tools
@@ -24808,8 +24838,8 @@ components:
             - parked
         held:
           description:
-            The work must stay off the target's shipping branch now (parked and not yet green, at risk, or reopened). The
-            target's own workflow integrates it; the orchestrator reports the rule.
+            The work must stay off the target's shipping branch now (parked and not yet green, at risk, or reopened).
+            The target's own workflow integrates it; the orchestrator reports the rule.
           type: boolean
       additionalProperties: false
     ProvisionalStatus:
@@ -24934,10 +24964,10 @@ components:
       additionalProperties: false
     OrchestrationSessionRequestKind:
       description:
-        Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's run;
-        `claimed` - no dispatcher is live, so the ticket is claimed under its worker id; `cancelled` - a person
-        cancelled the ticket's run (HS2-HV9ED3); `rebase` - the base gate of its provisional work failed, and
-        `commit` is the fix to rebase onto (HS2-2K0DM8).
+        Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's
+        run; `claimed` - no dispatcher is live, so the ticket is claimed under its worker id; `cancelled` - a person
+        cancelled the ticket's run (HS2-HV9ED3); `rebase` - the base gate of its provisional work failed, and `commit`
+        is the fix to rebase onto (HS2-2K0DM8).
       enum:
         - assigned
         - claimed
@@ -24945,8 +24975,8 @@ components:
         - rebase
     PlanningOperation:
       description:
-        Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one `goal`
-        and a retained `operation_id`; `show` takes nothing.
+        Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one
+        `goal` and a retained `operation_id`; `show` takes nothing.
       type: object
       properties:
         actor:
@@ -25071,8 +25101,8 @@ components:
       additionalProperties: false
     OrchestrationTimeline:
       description:
-        The plan of an owning checkout as dependency waves (HS2-J89JC7). `version` changes exactly when what it shows
-        changes; estimates that move with the clock alone do not change it.
+        The plan of an owning checkout as dependency waves (HS2-J89JC7). `version` changes exactly when what it
+        shows changes; estimates that move with the clock alone do not change it.
       type: object
       required:
         - version
@@ -25574,8 +25604,8 @@ components:
           type: string
     OrchestrationTargetLines:
       description:
-        The orchestration lines of a target checkout's tickets (HS2-S3FKJ7). `version` changes exactly when the lines
-        change; `orchestrated` says whether an orchestration project on this machine binds the checkout at all.
+        The orchestration lines of a target checkout's tickets (HS2-S3FKJ7). `version` changes exactly when the
+        lines change; `orchestrated` says whether an orchestration project on this machine binds the checkout at all.
       type: object
       required:
         - version
@@ -25592,8 +25622,8 @@ components:
             $ref: '#/components/schemas/OrchestrationTargetLine'
     OrchestrationTargetLine:
       description:
-        One target ticket's line. When several plan steps work the ticket, the most pressing one, with the others counted
-        in `also_planned`.
+        One target ticket's line. When several plan steps work the ticket, the most pressing one, with the others
+        counted in `also_planned`.
       type: object
       required:
         - owner_checkout_id
@@ -25620,7 +25650,7 @@ components:
         item:
           $ref: '#/components/schemas/OrchestrationTimelineItem'
     OrchestrationDecision:
-      description: >-
+      description:
         HS2-0RAZ1J. A judgment call the orchestrator asked as a FEEDBACK NEEDED note with CHOICE options on a goal
         ticket, by identifiers only. answered is present once a person's response chose an option.
       type: object
@@ -25913,8 +25943,9 @@ components:
       additionalProperties: false
     OrchestrationObservedLines:
       description:
-        HS2-KB2Y51. One machine's lines for a checkout. At most 256 lines and 256 KiB; ttl_ms is clamped to 30 seconds
-        to 15 minutes (default 10 minutes); at most 30 pushes per machine per minute and 8 machines per checkout.
+        HS2-KB2Y51. One machine's lines for a checkout. At most 256 lines and 256 KiB; ttl_ms is clamped to 30
+        seconds to 15 minutes (default 10 minutes); at most 30 pushes per machine per minute and 8 machines per
+        checkout.
       type: object
       additionalProperties: false
       required:
@@ -25998,10 +26029,10 @@ components:
           minimum: 0
     ClaimProvisional:
       type: object
-      description: >-
-        HS2-XYF4YT. Present on a claim, claim-next or renew answer only under an enabled
-        speculation policy, when a blocked_by prerequisite awaits CI or its gate first reads
-        red for this claim. Inform only; it never changes which ticket is claimed.
+      description:
+        HS2-XYF4YT. Present on a claim, claim-next or renew answer only under an enabled speculation policy, when a
+        blocked_by prerequisite awaits CI or its gate first reads red for this claim. Inform only; it never changes
+        which ticket is claimed.
       required:
         - integration
       properties:
@@ -26081,8 +26112,8 @@ components:
               $ref: '#/components/schemas/ClaimProvisional'
     PlanMigration:
       description:
-        HS2-YDY5HJ. What moving this machine's pre-sharing plan definitions into the checked-in plan did. Repeating it
-        changes nothing.
+        HS2-YDY5HJ. What moving this machine's pre-sharing plan definitions into the checked-in plan did. Repeating
+        it changes nothing.
       type: object
       required:
         - migrated
@@ -26349,7 +26380,9 @@ components:
             $ref: '#/components/schemas/RemoteCheckout'
         host_name:
           type: string
-          description: The peer's self-reported machine name from this live discovery (HS2-HGG426); absent on failure or from older peers.
+          description:
+            The peer's self-reported machine name from this live discovery (HS2-HGG426); absent on failure or from
+            older peers.
       additionalProperties: true
     RemoteCredentials:
       type: object
@@ -26591,10 +26624,9 @@ components:
             - type: string
             - type: 'null'
         claim_origin:
-          description: >-
-            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
-            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
-            before hosts were recorded.
+          description:
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen through the synced
+            store (HS2-DQJPW0); absent without a claim or for a claim written before hosts were recorded.
           enum:
             - local
             - remote
@@ -26728,10 +26760,12 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: &a4
+          anyOf: &a7
             - type: string
             - type: 'null'
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -26797,10 +26831,9 @@ components:
             - type: string
             - type: 'null'
         claim_origin:
-          description: >-
-            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
-            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
-            before hosts were recorded.
+          description:
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen through the synced
+            store (HS2-DQJPW0); absent without a claim or for a claim written before hosts were recorded.
           enum:
             - local
             - remote
@@ -26952,8 +26985,10 @@ components:
         actor:
           $ref: '#/components/schemas/Actor'
         group:
-          anyOf: *a4
-          description: Group to create the ticket in (HS2-PDSHNN). An id, or on a checkout route a name resolved through the group registry (HS2-9KZSD4).
+          anyOf: *a7
+          description:
+            Group to create the ticket in (HS2-PDSHNN). An id, or on a checkout route a name resolved through the group
+            registry (HS2-9KZSD4).
       additionalProperties: false
     Actor:
       type: object
@@ -27019,8 +27054,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         note:
           type: string
         ai_feedback:
@@ -27367,8 +27404,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -27434,10 +27473,9 @@ components:
             - type: string
             - type: 'null'
         claim_origin:
-          description: >-
-            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
-            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
-            before hosts were recorded.
+          description:
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen through the synced
+            store (HS2-DQJPW0); absent without a claim or for a claim written before hosts were recorded.
           enum:
             - local
             - remote
@@ -27569,8 +27607,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -27636,10 +27676,9 @@ components:
             - type: string
             - type: 'null'
         claim_origin:
-          description: >-
-            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
-            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
-            before hosts were recorded.
+          description:
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen through the synced
+            store (HS2-DQJPW0); absent without a claim or for a claim written before hosts were recorded.
           enum:
             - local
             - remote
@@ -27730,8 +27769,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         note:
           type: string
         ai_feedback:
@@ -27878,8 +27919,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         created_at:
           type: string
         updated_at:
@@ -27945,10 +27988,9 @@ components:
             - type: string
             - type: 'null'
         claim_origin:
-          description: >-
-            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen
-            through the synced store (HS2-DQJPW0); absent without a claim or for a claim written
-            before hosts were recorded.
+          description:
+            Whether the live claim's worker belongs to this Hot Sheet host or a separate one seen through the synced
+            store (HS2-DQJPW0); absent without a claim or for a claim written before hosts were recorded.
           enum:
             - local
             - remote
@@ -28041,8 +28083,11 @@ components:
                   - type: string
                   - type: 'null'
               group:
-                anyOf: *a4
-                description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+                anyOf: *a7
+                description:
+                  Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+                  on a checkout route a name (resolved through the group registry, created when new); JSON null clears
+                  it.
               note:
                 type: string
               ai_feedback:
@@ -29368,8 +29413,8 @@ components:
                 type: boolean
               provisional:
                 description:
-                  HS2-J77XJA. Ready only provisionally, on a prerequisite awaiting CI under the project's speculation
-                  opt-in. Absent otherwise.
+                  HS2-J77XJA. Ready only provisionally, on a prerequisite awaiting CI under the project's speculation opt-in.
+                  Absent otherwise.
                 type: boolean
             additionalProperties: false
         idle_reason:
@@ -30007,7 +30052,9 @@ components:
         note_response_link:
           type: boolean
           default: false
-          description: Link an existing note as a feedback response (HS2-J4G9GB). Git supports it; remote providers refuse before mutation.
+          description:
+            Link an existing note as a feedback response (HS2-J4G9GB). Git supports it; remote providers refuse before
+            mutation.
         groups:
           type: boolean
           description: Tickets carry a `group` id and the connection lists, ungroups, and merges groups (HS2-PDSHNN, HS2-9KZSD4).
@@ -30502,8 +30549,9 @@ components:
           type: number
       additionalProperties: false
     HistoryState:
-      description: A store's state on the Stats overnight timeline (HS2-9AN4DN) - a live word, or waiting_on_ci while
-        every live claim is in its final remote-CI phase.
+      description:
+        A store's state on the Stats overnight timeline (HS2-9AN4DN) - a live word, or waiting_on_ci while every
+        live claim is in its final remote-CI phase.
       enum:
         - active
         - waiting_on_ci
@@ -30709,7 +30757,7 @@ components:
           type:
             - string
             - 'null'
-          pattern: '^[0-9A-Fa-f]{7,64}$'
+          pattern: ^[0-9A-Fa-f]{7,64}$
         run_url:
           description: An http or https link to the run.
           type:
@@ -31009,8 +31057,8 @@ components:
                   type: number
                 hours:
                   description:
-                    Tokens per whole UTC hour for the last 12 hours, the current hour last, zeros kept (HS2-TRZGT3).
-                    An older server omits it.
+                    Tokens per whole UTC hour for the last 12 hours, the current hour last, zeros kept (HS2-TRZGT3). An older
+                    server omits it.
                   type: array
                   items:
                     type: object
@@ -31666,8 +31714,8 @@ components:
       additionalProperties: false
     StandbySettingsView:
       type: object
-      description: The machine-wide standby settings (HS2-EQVZTZ). Every change pushes a standby_settings change
-        event (HS2-A5BTTK), and clients re-read this on each one and on resync.
+      description: The machine-wide standby settings (HS2-EQVZTZ). Every change pushes a standby_settings change event
+        (HS2-A5BTTK), and clients re-read this on each one and on resync.
       required:
         - defaults
         - configured
@@ -31696,7 +31744,8 @@ components:
         - unavailable
     HostHealthDisk:
       type: object
-      description: Free space on the primary store's volume with a time-to-full projection from a robust six-hour trend (HS2-Y2HGY9).
+      description: Free space on the primary store's volume with a time-to-full projection from a robust six-hour trend
+        (HS2-Y2HGY9).
       required:
         - status
         - reason
@@ -31748,7 +31797,9 @@ components:
       additionalProperties: false
     HostHealthDiskVolume:
       type: object
-      description: One volume host health knows about (HS2-NHK8V8) - the store's (id store), a detected or added one, or a saved one that is absent. A pending volume awaits the user's choice and never calls out.
+      description:
+        One volume host health knows about (HS2-NHK8V8) - the store's (id store), a detected or added one, or a
+        saved one that is absent. A pending volume awaits the user's choice and never calls out.
       required:
         - id
         - label
@@ -31890,7 +31941,9 @@ components:
       additionalProperties: false
     HostHealthCpuHistory:
       type: object
-      description: The last hour of CPU (HS2-RBFR94) as twelve dense, epoch-aligned five-minute averages, oldest first, ending with the bucket that holds the newest sample. A bucket with no sample is null.
+      description:
+        The last hour of CPU (HS2-RBFR94) as twelve dense, epoch-aligned five-minute averages, oldest first, ending
+        with the bucket that holds the newest sample. A bucket with no sample is null.
       required:
         - bucket_seconds
         - ends_at
@@ -32021,7 +32074,9 @@ components:
       additionalProperties: false
     HostCpuFrame:
       type: object
-      description: One live CPU frame (HS2-CPFBWP). live carries values; starting waits for a second reading; unavailable means the reader failed (no values); unsupported means there is no per-core reader and the client stops asking.
+      description:
+        One live CPU frame (HS2-CPFBWP). live carries values; starting waits for a second reading; unavailable
+        means the reader failed (no values); unsupported means there is no per-core reader and the client stops asking.
       required:
         - seq
         - status
@@ -32198,9 +32253,9 @@ components:
         at:
           type: string
         agent:
-          description: >-
-            `codex` for a question read from a Codex rollout, answered by queueing session input
-            (HS2-D0QTGB); absent for Claude hook questions.
+          description:
+            '`codex` for a question read from a Codex rollout, answered by queueing session input (HS2-D0QTGB); absent
+            for Claude hook questions.'
           type: string
       additionalProperties: false
     TerminalAiConnection:
@@ -32264,14 +32319,13 @@ components:
         mcp_connected:
           type: boolean
         feedback_primary:
-          description: >-
-            This live terminal's AI session is its project's primary session for proactive
-            feedback delivery (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
+          description: This live terminal's AI session is its project's primary session for proactive feedback delivery
+            (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
         orchestrator:
-          description: >-
-            HS2-6MNMVB. An orchestrator started this terminal's session on this machine; names the hosted
-            operation a person takes over, pauses or stops through target-sessions. Absent otherwise.
+          description:
+            HS2-6MNMVB. An orchestrator started this terminal's session on this machine; names the hosted operation a
+            person takes over, pauses or stops through target-sessions. Absent otherwise.
           type: object
           required:
             - checkout_id
@@ -32335,9 +32389,8 @@ components:
         mcp_connected:
           type: boolean
         feedback_primary:
-          description: >-
-            This live terminal's AI session is its project's primary session for proactive
-            feedback delivery (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
+          description: This live terminal's AI session is its project's primary session for proactive feedback delivery
+            (HS2-DB2FQ2, shown by HS2-YHQM67); absent otherwise.
           type: boolean
         scrollback:
           type: string
@@ -32447,7 +32500,9 @@ components:
             - type: 'null'
       additionalProperties: false
     ClaudeActivityRequest:
-      description: One hook of an interactive Claude terminal session, reduced by the hook to the fields activity mapping reads (HS2-5YCGH5).
+      description:
+        One hook of an interactive Claude terminal session, reduced by the hook to the fields activity mapping
+        reads (HS2-5YCGH5).
       type: object
       required:
         - session_id
@@ -34795,8 +34850,10 @@ components:
             - type: string
             - type: 'null'
         group:
-          anyOf: *a4
-          description: Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
+          anyOf: *a7
+          description:
+            Ticket group id (HS2-9KZSD4), or a legacy name not yet migrated; null when ungrouped. On write, an id, or
+            on a checkout route a name (resolved through the group registry, created when new); JSON null clears it.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
@@ -35641,7 +35698,7 @@ components:
       properties:
         name:
           type: string
-          description: 'At most 120 characters and no control characters.'
+          description: At most 120 characters and no control characters.
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false

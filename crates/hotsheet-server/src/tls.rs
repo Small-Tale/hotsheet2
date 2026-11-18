@@ -417,6 +417,8 @@ mod tests {
             "/checkouts/owner/orchestration/runs/id/gates",
             "/checkouts/owner/orchestration/runs/id/gate-sync",
             "/checkouts/owner/orchestration/runs/id/deployments",
+            // HS2-GD3NNK: review marks are this machine's records.
+            "/checkouts/owner/orchestration/runs/id/reviews",
             "/checkouts/owner/orchestration/gates",
             "/checkouts/owner/orchestration/gates/id",
             // HS2-WBREDM: reconciliation and run control act on this machine's records.

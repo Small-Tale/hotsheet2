@@ -157,6 +157,7 @@ fn hs2_5jbypv_every_gate_edge_is_allowed_or_refused_exactly() {
         (AwaitingApproval, Unknown),
         (AwaitingApproval, Failed),
         (AwaitingApproval, Superseded),
+        (AwaitingApproval, Passed),
         (Pending, Passed),
         (Pending, Failed),
         (Pending, Unknown),
@@ -972,4 +973,106 @@ fn hs2_5jbypv_only_open_gates_fill_the_registry_to_a_capacity_error() {
         registry.get(OWNER, &id(100_000)),
         Err(OrchestrationError::Gate(GateError::NotFound))
     ));
+}
+
+fn review(run: u128, commit: &str) -> NewGate {
+    NewGate {
+        run_id: id(run),
+        target_id: id(1),
+        kind: GateKind::Review,
+        provider: REVIEW_PROVIDER.into(),
+        commit: commit.into(),
+        ci: None,
+        deployment: None,
+        state: GateState::AwaitingApproval,
+        reason: Some(REVIEW_REQUESTED.into()),
+        linked_by: Some("worker-1".into()),
+    }
+}
+
+/// HS2-GD3NNK: a review gate starts requested; requesting it again for the same commit
+/// is the same gate; approval and changes requested are each one edge from requested,
+/// repeated without change, and refused from anywhere else. A new request after an
+/// answer, or for another commit, supersedes the old review. Only the review roll-up
+/// carries it; CI and deployment are untouched.
+#[test]
+fn hs2_gd3nnk_a_review_gate_is_requested_then_approved_or_sent_back() {
+    let mut f = Fixture::new();
+    let mark = |f: &mut Fixture, gate_id: &str, mark: ReviewMark| {
+        f.clock.0.set(f.clock.0.get() + 1);
+        f.registry.mark_review(
+            OWNER,
+            gate_id,
+            mark,
+            &mut Transaction {
+                clock: &f.clock,
+                rng: &mut f.rng,
+            },
+        )
+    };
+    // It starts requested and nowhere else.
+    let mut approved_first = review(7, &sha('a'));
+    approved_first.state = GateState::Passed;
+    assert!(f.link(approved_first).is_err());
+    let mut scoped = review(7, &sha('a'));
+    scoped.deployment = deployment(7, &sha('a'), "op", &id(9)).deployment;
+    assert!(f.link(scoped).is_err());
+    let first = f.link(review(7, &sha('a'))).unwrap();
+    assert!(first.created);
+    let again = f.link(review(7, &sha('a'))).unwrap();
+    assert!(!again.created);
+    assert_eq!(again.gate.gate_id, first.gate.gate_id);
+    let id_1 = first.gate.gate_id.clone();
+    // Changes requested, the same mark again unchanged, and no way back to requested.
+    let (sent_back, outcome) = mark(&mut f, &id_1, ReviewMark::ChangesRequested).unwrap();
+    assert_eq!(outcome, GateOutcome::Changed);
+    assert_eq!(
+        (sent_back.state, sent_back.reason.as_deref()),
+        (GateState::Failed, Some(REVIEW_CHANGES_REQUESTED))
+    );
+    assert_eq!(
+        mark(&mut f, &id_1, ReviewMark::ChangesRequested).unwrap().1,
+        GateOutcome::Unchanged
+    );
+    for refused in [ReviewMark::Approved, ReviewMark::Requested] {
+        assert!(matches!(
+            mark(&mut f, &id_1, refused),
+            Err(OrchestrationError::Gate(GateError::InvalidTransition))
+        ));
+    }
+    // A new request for the same commit after the answer is a new review.
+    let second = f.link(review(7, &sha('a'))).unwrap();
+    assert!(second.created);
+    assert_eq!(second.superseded.len(), 1);
+    assert_eq!(f.state(&id_1), GateState::Superseded);
+    let id_2 = second.gate.gate_id.clone();
+    let (approved, _) = mark(&mut f, &id_2, ReviewMark::Approved).unwrap();
+    assert_eq!(
+        (approved.state, approved.reason.as_deref()),
+        (GateState::Passed, Some(REVIEW_APPROVED))
+    );
+    assert_eq!(
+        approved
+            .history
+            .iter()
+            .map(|entry| entry.to)
+            .collect::<Vec<_>>(),
+        [GateState::AwaitingApproval, GateState::Passed]
+    );
+    // A CI gate cannot be marked as a review.
+    let ci_gate = f.link(ci(7, &sha('a'))).unwrap().gate.gate_id;
+    assert!(mark(&mut f, &ci_gate, ReviewMark::Approved).is_err());
+    let summary = summarize(f.registry.list(OWNER, &GateFilter::default()).unwrap());
+    assert_eq!(summary.review, Some(GateState::Passed));
+    assert_eq!(summary.deployment, None);
+    assert_eq!(summary.commits, [sha('a')]);
+    // Another commit's request supersedes the approved review.
+    let third = f.link(review(7, &sha('b'))).unwrap();
+    assert_eq!(third.superseded.len(), 1);
+    let summary = summarize(f.registry.list(OWNER, &GateFilter::default()).unwrap());
+    assert_eq!(summary.review, Some(GateState::AwaitingApproval));
+    assert_eq!(
+        ReviewMark::Requested.state(),
+        (GateState::AwaitingApproval, REVIEW_REQUESTED)
+    );
 }

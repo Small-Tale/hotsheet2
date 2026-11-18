@@ -249,6 +249,24 @@ enum GateCmd {
         #[arg(long, requires = "artifact_name")]
         artifact_digest: Option<String>,
     },
+    /// HS2-GD3NNK: mark the code review of the run's commit. `requested` (with
+    /// --commit) links a review gate awaiting approval; `approved` and
+    /// `changes-requested` answer the review that stands for the run. Bookkeeping only:
+    /// it never asks a person.
+    Review {
+        run_id: String,
+        #[arg(long, value_enum)]
+        review: ReviewArg,
+        /// The commit under review: all 40 hex characters. Required for `requested`.
+        #[arg(long)]
+        commit: Option<String>,
+    },
+}
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ReviewArg {
+    Requested,
+    Approved,
+    ChangesRequested,
 }
 /// The request of a gate command, and whether the Job monitor should run afterwards.
 fn gate_route(project: &str, command: GateCmd) -> ((&'static str, String, Value), bool) {
@@ -302,6 +320,22 @@ fn gate_route(project: &str, command: GateCmd) -> ((&'static str, String, Value)
                 "POST",
                 format!("{base}/runs/{run_id}/gate-sync"),
                 json!({"wait_ms":wait_seconds.saturating_mul(1000)}),
+            ),
+            false,
+        ),
+        GateCmd::Review {
+            run_id,
+            review,
+            commit,
+        } => (
+            (
+                "POST",
+                format!("{base}/runs/{run_id}/reviews"),
+                json!({"review": match review {
+                    ReviewArg::Requested => "requested",
+                    ReviewArg::Approved => "approved",
+                    ReviewArg::ChangesRequested => "changes_requested",
+                }, "commit": commit}),
             ),
             false,
         ),
