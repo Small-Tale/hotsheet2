@@ -133,26 +133,33 @@ once more when loaded tickets name an id it has no name for; it never polls.
   in one bulk update.
 - **Automatic** (HS2-4C32A0, Lucide `sparkles`) follows New Group… in the submenu. It asks
   the project's default AI tool (`ai.defaults`, see
-  [05-ai-tool-plugins.md](05-ai-tool-plugins.md)) to choose a group for the selected tickets.
+  [05-ai-tool-plugins.md](05-ai-tool-plugins.md)) to choose a group for **each** selected ticket
+  on its own (HS2-4H6XJ1): the tickets need not end up together.
   - **Request.** The client opens a private one-shot drive connection
     (`POST /drive/connections` with a `hotsheet-automatic-group-` id). It sends one turn carrying
-    the loaded tickets' slugs, titles, and categories and the project's groups as JSON, and asks
-    for JSON only: `{"group_id": "<id>"}` or `{"new_group": "<name>"}`. Nothing opens. The turn's
-    events never join a conversation, and the client closes the connection afterwards.
-  - **Busy state.** While the AI works, the app's corner status reads "Asking <tool> to choose a
-    group…", and Automatic is disabled until the request ends.
-  - **Result.** The reply is validated:
+    the loaded tickets' slugs, titles, and categories and the project's groups as JSON (a selection
+    over 40 tickets is asked about in several turns), and asks for JSON only, one assignment per
+    ticket: `{"assignments": [{"slug": …, "group_id": "<id>"} | {"slug": …, "new_group": "<name>"}]}`,
+    leaving out a ticket that fits no group. Nothing opens. The turn's events never join a
+    conversation, and the client closes the connection afterwards. The server's automatic grouping
+    of new tickets (§35.8) uses the same reply.
+  - **Busy state.** While the AI works, the app's corner status reads "Asking <tool> to choose
+    groups…", and Automatic is disabled until the request ends.
+  - **Result.** Each assignment is validated on its own, and an unusable one is skipped:
     - an id must name a listed group;
     - a new name must be a valid group name;
-    - a new name that matches an existing group joins that group.
+    - a new name that matches an existing group joins that group;
+    - an assignment for a ticket that was not asked about, or a repeat, is ignored.
 
-    The choice is applied like a menu choice, through the ordinary bulk update (after creating the
-    group in the registry for a new name). It is therefore optimistic and undoable, and a toast names
-    the group.
+    The tickets for each resulting group are applied together, like a menu choice, through the
+    ordinary bulk update (after creating the group in the registry for a new name; tickets given the
+    same new name share it). It is therefore optimistic and undoable, one undo step per group. A toast
+    names each group and its ticket count, and how many tickets fit no group. When no ticket fits,
+    nothing is written and the toast says so.
 
   - **Failures.** Each of these shows a toast saying no group was changed, and nothing is written:
     no available AI tool, a failed or interrupted turn, no answer within three minutes (the turn is
-    interrupted), and an answer that is not the expected JSON.
+    interrupted), and an answer that is not the expected JSON or has no assignments list.
   - **Headless path.** No separate command is needed: an agent reads `hotsheet-cli groups --json`
     and runs `hotsheet-cli edit <slug> --group <name>`, which creates the group when the name is new
     (§35.2).

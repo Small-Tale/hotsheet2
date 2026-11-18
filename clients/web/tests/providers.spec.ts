@@ -2818,13 +2818,17 @@ async function mockProject(
         // answers like a real tool, or fails, depending on the synthetic ticket titles.
         const prompt = body.content as string,
           context = JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2)) as {
-            tickets: { title: string }[];
+            tickets: { slug: string; title: string }[];
             groups: { id: string; name: string }[];
           },
           titles = context.tickets.map((ticket) => ticket.title).join(' '),
-          board = titles.includes('board polish')
-            ? context.groups.find((group) => group.name === 'Synthetic board')
-            : undefined,
+          board = context.groups.find((group) => group.name === 'Synthetic board'),
+          // HS2-4H6XJ1: one assignment per ticket, judged on its own title.
+          assignments = context.tickets.map((ticket) =>
+            ticket.title.includes('board polish') && board
+              ? { slug: ticket.slug, group_id: board.id }
+              : { slug: ticket.slug, new_group: 'Synthetic release' },
+          ),
           events: Record<string, unknown>[] = titles.includes('Synthetic failing')
             ? [{ type: 'done', reason: 'failed', message: 'Selected model is at capacity.' }]
             : [
@@ -2832,7 +2836,7 @@ async function mockProject(
                   type: 'output',
                   content: titles.includes('Synthetic unparseable')
                     ? 'These belong together in the release work.'
-                    : JSON.stringify(board ? { group_id: board.id } : { new_group: 'Synthetic release' }),
+                    : JSON.stringify({ assignments }),
                   truncated: false,
                 },
                 { type: 'done', reason: 'completed' },
@@ -39596,7 +39600,7 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
       if (width === 760) await page.keyboard.press('Escape');
     }
     await automatic.click();
-    await expect(corner).toContainText('Asking Codex to choose a group…');
+    await expect(corner).toContainText('Asking Codex to choose groups…');
     await page.screenshot({ path: 'target/visual-captures/hs2-4c32a0-automatic-busy-1440.png' });
     // While it runs, a second request waits.
     await openAutomatic(polishB);
@@ -39624,8 +39628,20 @@ test('HS2-4C32A0 groups tickets automatically through a private AI turn and the 
     await rowFor(release).click();
     await openAutomatic(release);
     await automatic.click();
-    await expect(toast).toContainText('Created “Synthetic release” and added 1 ticket.');
+    await expect(toast).toContainText('Added 1 ticket to new “Synthetic release”.');
     await expect.poll(() => groupNameOf(release.id)).toBe('Synthetic release');
+
+    // HS2-4H6XJ1: a mixed selection is grouped per ticket, not forced into one group: the board
+    // ticket joins Synthetic board and the release ticket stays in (rejoins) Synthetic release.
+    await rowFor(polishA).click();
+    await rowFor(release).click({ modifiers: ['ControlOrMeta'] });
+    await openAutomatic(release);
+    await automatic.click();
+    await expect(toast).toContainText('1 ticket to “Synthetic board”');
+    await expect(toast).toContainText('1 ticket to “Synthetic release”');
+    await expect.poll(() => groupNameOf(polishA.id)).toBe('Synthetic board');
+    await expect.poll(() => groupNameOf(release.id)).toBe('Synthetic release');
+    await page.screenshot({ path: 'target/visual-captures/hs2-4h6xj1-automatic-per-ticket-1440.png' });
 
     // A failed turn and an unusable answer each say so and change nothing.
     await rowFor(failing).click();

@@ -48,7 +48,7 @@ function wireAppLoadingIndicatorDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'click', '[data-app-loading-demo]', (_event, target) => {
       const state = (target as HTMLElement).dataset.appLoadingDemo;
-      appLoadingDemoTask.value = state === 'ai-task' ? 'Asking Claude to choose a group…' : undefined;
+      appLoadingDemoTask.value = state === 'ai-task' ? 'Asking Claude to choose groups…' : undefined;
       appLoadingDemoProgress.value =
         state === 'start'
           ? { completed: 0, total: 2 }

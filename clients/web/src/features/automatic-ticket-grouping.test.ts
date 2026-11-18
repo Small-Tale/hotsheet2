@@ -26,6 +26,7 @@ function harness(
     assignNew?: (name: string) => Promise<{ id: string; name: string }>;
     disabledReason?: string;
     timeoutMs?: number;
+    rows?: TicketRow[];
   } = {},
 ) {
   let ids = 0;
@@ -75,7 +76,7 @@ function harness(
       ('tool' in options ? options.tool : 'claude') ? { tool: options.tool ?? 'claude', model: 'opus' } : undefined,
     toolLabel: (tool) => (tool === 'claude' ? 'Claude' : tool),
     groups: () => GROUPS,
-    rowsFor: (slugs) => ROWS.filter((row) => slugs.includes(row.slug)),
+    rowsFor: (slugs) => (options.rows ?? ROWS).filter((row) => slugs.includes(row.slug)),
     disabledReason: () => options.disabledReason,
     assignExisting,
     assignNew,
@@ -87,6 +88,9 @@ function harness(
   return { grouping, calls, toasts, busy, busyLabels, assignExisting, assignNew, prompts };
 }
 
+/** A per-ticket reply (HS2-4H6XJ1): each slug's `group_id` or `new_group`. */
+const assign = (...items: Array<{ slug: string; group_id?: string; new_group?: string }>) =>
+  JSON.stringify({ assignments: items });
 const answer = (content: string): ClientTurnEvent[] => [
   { type: 'output', content: content.slice(0, 5), truncated: false },
   { type: 'output', content: content.slice(5), truncated: false },
@@ -97,7 +101,8 @@ const SLUGS = ['HS2-AAAAAA', 'HS2-BBBBBB'];
 describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
   it('asks the default tool in a private connection and applies an existing group', async () => {
     const { grouping, calls, toasts, busyLabels, assignExisting, prompts } = harness({
-      reply: () => answer('{"group_id":"7K3M9P2QXA"}'),
+      reply: () =>
+        answer(assign({ slug: 'HS2-AAAAAA', group_id: '7K3M9P2QXA' }, { slug: 'HS2-BBBBBB', group_id: '7K3M9P2QXA' })),
     });
     expect(await grouping.run(SLUGS)).toBe(true);
     const connection = `${AUTOMATIC_GROUP_CONNECTION_PREFIX}id1`;
@@ -105,17 +110,69 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
     expect(prompts[0]).toContain('"slug":"HS2-AAAAAA","title":"Fix drag","category":"bug"');
     expect(assignExisting).toHaveBeenCalledWith(SLUGS, '7K3M9P2QXA');
     expect(toasts).toEqual(['Added 2 tickets to “Board polish”.']);
-    expect(busyLabels).toEqual([undefined, 'Asking Claude to choose a group…', undefined]);
+    expect(busyLabels).toEqual([undefined, 'Asking Claude to choose groups…', undefined]);
   });
 
   it('creates a proposed new group and moves the tickets into it', async () => {
     const { grouping, toasts, assignNew, assignExisting } = harness({
-      reply: () => answer('{"new_group":"Release prep"}'),
+      reply: () => answer(assign({ slug: 'HS2-AAAAAA', new_group: 'Release prep' })),
     });
     expect(await grouping.run(['HS2-AAAAAA'])).toBe(true);
     expect(assignNew).toHaveBeenCalledWith('Release prep', ['HS2-AAAAAA']);
     expect(assignExisting).not.toHaveBeenCalled();
-    expect(toasts).toEqual(['Created “Release prep” and added 1 ticket.']);
+    expect(toasts).toEqual(['Added 1 ticket to new “Release prep”.']);
+  });
+
+  it('groups each ticket on its own and says which fit no group (HS2-4H6XJ1)', async () => {
+    const rows = [...ROWS, { slug: 'HS2-CCCCCC', title: 'Changelog', category: 'task' }] as TicketRow[],
+      { grouping, toasts, assignExisting, assignNew, prompts } = harness({
+        rows,
+        reply: () =>
+          answer(
+            assign(
+              { slug: 'HS2-AAAAAA', group_id: '7K3M9P2QXA' },
+              { slug: 'HS2-BBBBBB', new_group: 'Release prep' },
+              { slug: 'HS2-ZZZZZZ', group_id: '7K3M9P2QXA' },
+            ),
+          ),
+      });
+    expect(await grouping.run(['HS2-AAAAAA', 'HS2-BBBBBB', 'HS2-CCCCCC'])).toBe(true);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('judging each ticket on its own');
+    expect(assignExisting).toHaveBeenCalledTimes(1);
+    expect(assignExisting).toHaveBeenCalledWith(['HS2-AAAAAA'], '7K3M9P2QXA');
+    expect(assignNew).toHaveBeenCalledWith('Release prep', ['HS2-BBBBBB']);
+    expect(toasts).toEqual([
+      'Added 1 ticket to “Board polish”, 1 ticket to new “Release prep”. 1 ticket fit no group.',
+    ]);
+  });
+
+  it('writes nothing when no ticket fits a group (HS2-4H6XJ1)', async () => {
+    const { grouping, toasts, assignExisting, assignNew } = harness({ reply: () => answer(assign()) });
+    expect(await grouping.run(SLUGS)).toBe(false);
+    expect(assignExisting).not.toHaveBeenCalled();
+    expect(assignNew).not.toHaveBeenCalled();
+    expect(toasts).toEqual(['Claude found no fitting group for 2 tickets; no group was changed.']);
+  });
+
+  it('asks about a large selection in chunks and shares a new name across them (HS2-4H6XJ1)', async () => {
+    const rows = Array.from({ length: 45 }, (_, index) => ({
+        slug: `HS2-T${String(index).padStart(5, '0')}`,
+        title: `Ticket ${index}`,
+        category: 'task',
+      })) as TicketRow[],
+      { grouping, prompts, assignNew, toasts } = harness({
+        rows,
+        reply: (prompt) => {
+          const context = JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2)) as { tickets: { slug: string }[] };
+          return answer(assign(...context.tickets.map((ticket) => ({ slug: ticket.slug, new_group: 'Batch' }))));
+        },
+      });
+    expect(await grouping.run(rows.map((row) => row.slug))).toBe(true);
+    expect(prompts).toHaveLength(2);
+    expect(assignNew).toHaveBeenCalledTimes(1);
+    expect((assignNew.mock.calls[0] as unknown as [string, string[]])[1]).toHaveLength(45);
+    expect(toasts).toEqual(['Added 45 tickets to new “Batch”.']);
   });
 
   it('changes nothing and says so when no AI tool is configured', async () => {
@@ -149,7 +206,7 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
       const { grouping, calls, toasts, busy } = harness({ reply: () => undefined, timeoutMs: 5_000 }),
         running = grouping.run(SLUGS);
       await vi.advanceTimersByTimeAsync(4_999);
-      expect(busy.value).toBe('Asking Claude to choose a group…');
+      expect(busy.value).toBe('Asking Claude to choose groups…');
       await vi.advanceTimersByTimeAsync(1);
       expect(await running).toBe(false);
       const connection = `${AUTOMATIC_GROUP_CONNECTION_PREFIX}id1`;
@@ -184,7 +241,7 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
 
   it('reports a failed create of the proposed group', async () => {
     const { grouping, toasts } = harness({
-      reply: () => answer('{"new_group":"Release prep"}'),
+      reply: () => answer(assign({ slug: 'HS2-AAAAAA', new_group: 'Release prep' })),
       assignNew: () => Promise.reject(new Error('group_registry_required')),
     });
     expect(await grouping.run(SLUGS)).toBe(false);
@@ -193,7 +250,7 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
 
   it('stays silent when the ordinary group write already reported its failure', async () => {
     const { grouping, toasts } = harness({
-      reply: () => answer('{"group_id":"7K3M9P2QXA"}'),
+      reply: () => answer(assign({ slug: 'HS2-AAAAAA', group_id: '7K3M9P2QXA' })),
       assignExisting: () => Promise.resolve(false),
     });
     expect(await grouping.run(SLUGS)).toBe(false);
@@ -207,7 +264,7 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
     const idle = harness({ project: () => undefined });
     expect(await idle.grouping.run(SLUGS)).toBe(false);
     expect(await idle.grouping.run([])).toBe(false);
-    const busy = harness({ reply: () => answer('{"group_id":"7K3M9P2QXA"}') }),
+    const busy = harness({ reply: () => answer(assign({ slug: 'HS2-AAAAAA', group_id: '7K3M9P2QXA' })) }),
       first = busy.grouping.run(SLUGS);
     expect(await busy.grouping.run(SLUGS)).toBe(false);
     expect(await first).toBe(true);
@@ -220,7 +277,7 @@ describe('createAutomaticTicketGrouping (HS2-4C32A0)', () => {
       project: () => current,
       reply: () => {
         current = { ...PROJECT, id: 'other' };
-        return answer('{"group_id":"7K3M9P2QXA"}');
+        return answer(assign({ slug: 'HS2-AAAAAA', group_id: '7K3M9P2QXA' }));
       },
     });
     expect(await grouping.run(SLUGS)).toBe(false);

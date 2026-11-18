@@ -2,12 +2,14 @@ import type { Signal } from 'kerfjs';
 
 import type { AiToolDefaults, Api, TicketRow as WireTicketRow, TurnStreamEnvelope } from '../api';
 import {
+  AUTOMATIC_GROUP_TICKET_LIMIT,
+  type AutomaticGroupAssignment,
   AutomaticGroupReplyError,
   buildAutomaticGroupPrompt,
-  parseAutomaticGroupProposal,
+  parseAutomaticGroupAssignments,
 } from '../automatic-ticket-group';
 import type { Project } from '../interactions/types';
-import type { TicketGroupOption } from '../ticket-groups';
+import { ticketGroupNameKey, type TicketGroupOption } from '../ticket-groups';
 
 /** Connection ids of private Automatic turns start with this, so they never join a conversation. */
 export const AUTOMATIC_GROUP_CONNECTION_PREFIX = 'hotsheet-automatic-group-';
@@ -146,42 +148,59 @@ export function createAutomaticTicketGrouping(dependencies: AutomaticTicketGroup
     }
     const label = toolLabel(chosen.tool),
       known = groups(),
-      prompt = buildAutomaticGroupPrompt(
-        rowsFor(targets).map((row) => ({ slug: row.slug, title: row.title, category: row.category })),
-        known,
-      );
-    busy.value = `Asking ${label} to choose a group…`;
+      rows = rowsFor(targets).map((row) => ({ slug: row.slug, title: row.title, category: row.category }));
+    busy.value = `Asking ${label} to choose groups…`;
     try {
-      let reply: string;
-      try {
-        reply = await ask(driveClient(current), current, chosen, prompt);
-      } catch (failure) {
-        showToast(`Automatic grouping failed: ${failureMessage(failure)} No group was changed.`);
-        return false;
-      }
-      let proposal;
-      try {
-        proposal = parseAutomaticGroupProposal(reply, known);
-      } catch (failure) {
-        const detail = failure instanceof AutomaticGroupReplyError ? failure.message : failureMessage(failure);
-        showToast(`Automatic grouping could not use ${label}’s answer: ${detail} No group was changed.`);
-        return false;
+      // HS2-4H6XJ1: each ticket gets its own group; a large selection is asked about in chunks.
+      const assignments: AutomaticGroupAssignment[] = [];
+      for (let start = 0; start < rows.length; start += AUTOMATIC_GROUP_TICKET_LIMIT) {
+        const chunk = rows.slice(start, start + AUTOMATIC_GROUP_TICKET_LIMIT);
+        let reply: string;
+        try {
+          reply = await ask(driveClient(current), current, chosen, buildAutomaticGroupPrompt(chunk, known));
+        } catch (failure) {
+          showToast(`Automatic grouping failed: ${failureMessage(failure)} No group was changed.`);
+          return false;
+        }
+        try {
+          assignments.push(...parseAutomaticGroupAssignments(reply, chunk, known));
+        } catch (failure) {
+          const detail = failure instanceof AutomaticGroupReplyError ? failure.message : failureMessage(failure);
+          showToast(`Automatic grouping could not use ${label}’s answer: ${detail} No group was changed.`);
+          return false;
+        }
       }
       // The project may have changed while the AI was thinking; never write into another one.
       if (project()?.id !== current.id) return false;
-      if (proposal.kind === 'existing') {
-        if (!(await assignExisting(targets, proposal.id))) return false;
-        showToast(`Added ${plural(targets.length)} to “${proposal.name}”.`);
-        return true;
-      }
-      try {
-        const created = await assignNew(proposal.name, targets);
-        showToast(`Created “${created.name}” and added ${plural(targets.length)}.`);
-        return true;
-      } catch (failure) {
-        showToast(`Automatic grouping could not create “${proposal.name}”: ${failureMessage(failure)}`);
+      if (assignments.length === 0) {
+        showToast(`${label} found no fitting group for ${plural(targets.length)}; no group was changed.`);
         return false;
       }
+      // One write per group: existing groups by id, new names created once and shared.
+      const existing = new Map<string, { name: string; slugs: string[] }>(),
+        created = new Map<string, { name: string; slugs: string[] }>();
+      for (const { slug, proposal } of assignments) {
+        const target = proposal.kind === 'existing' ? existing : created,
+          key = proposal.kind === 'existing' ? proposal.id : ticketGroupNameKey(proposal.name),
+          entry = target.get(key) ?? { name: proposal.name, slugs: [] };
+        entry.slugs.push(slug);
+        target.set(key, entry);
+      }
+      const applied: string[] = [];
+      for (const [id, entry] of existing)
+        if (await assignExisting(entry.slugs, id)) applied.push(`${plural(entry.slugs.length)} to “${entry.name}”`);
+      for (const entry of created.values()) {
+        try {
+          const group = await assignNew(entry.name, entry.slugs);
+          applied.push(`${plural(entry.slugs.length)} to new “${group.name}”`);
+        } catch (failure) {
+          showToast(`Automatic grouping could not create “${entry.name}”: ${failureMessage(failure)}`);
+        }
+      }
+      if (applied.length === 0) return false;
+      const unmatched = targets.length - assignments.length;
+      showToast(`Added ${applied.join(', ')}.${unmatched > 0 ? ` ${plural(unmatched)} fit no group.` : ''}`);
+      return true;
     } finally {
       busy.value = undefined;
     }
