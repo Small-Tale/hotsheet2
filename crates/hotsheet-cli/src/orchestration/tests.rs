@@ -41,13 +41,18 @@ mod sessions;
 mod shared_plan;
 #[cfg(unix)]
 mod step_process;
+// HS2-2R32SD: Windows resolution rules, tested on every platform.
+mod step_program;
 mod summary;
 mod ticket_list;
 mod tickets;
 mod timeline;
 mod tool_capacity;
+// The step suites below script their steps in POSIX sh; `validation_portable` runs
+// the process-control essentials on every platform (HS2-2R32SD).
 #[cfg(unix)]
 mod validation;
+mod validation_portable;
 #[cfg(unix)]
 mod validation_runner;
 mod watch;

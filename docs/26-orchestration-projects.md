@@ -1529,8 +1529,41 @@ in the shared runtime, over `ValidationRegistry::evidence` in the core.
 The step runs on the machine that hosts the target, in the target checkout, reached
 like every hosted half: in process for a local destination and over the reviewed
 remote registration for a remote one. On Unix the step gets its own process group
-and the whole group is stopped at the timeout. Windows process handling is
-HS2-2R32SD.
+and the whole group is stopped at the timeout or a cancel.
+
+On Windows (HS2-2R32SD) the step runs in its own job object. It is created
+suspended, put in the job, and only then resumed, so nothing it starts escapes the
+job. A timeout or a cancel terminates the job, which ends the whole tree. The job is
+kill-on-close: when the step ends, anything it left running ends with it, and so does
+the step if the process holding the job (the server, or a detached validation
+runner) dies. Where a job cannot be created or assigned (for example a host job that
+forbids nesting), the step still runs and only its own process is stopped. The
+orphan stop by recorded process group (HS2-HTS89S) is Unix only; on Windows the job
+does that work.
+
+**Program resolution.** On Unix a relative program with a directory part is joined
+to the checkout root, and a bare name is the first executable file of that name on
+the step's own `PATH`.
+
+On Windows (HS2-2R32SD):
+
+- An absolute program (`C:\tools\gate.exe`, a UNC path, or `\tools\gate.exe`) is
+  used as is.
+- A relative program with a directory part (`scripts\check`, `scripts/check.cmd`,
+  `.\check`) is joined to the checkout root.
+- A bare name is looked up only in the step's `PATH` entries, in order. A relative
+  entry counts from the checkout root. The checkout itself is never searched
+  implicitly.
+- A name whose extension `PATHEXT` lists must exist as named. Any other name is tried
+  with each `PATHEXT` extension in turn, and never as named. The step's own
+  `PATHEXT` applies, compared without case. When it lists nothing usable, the default
+  `.COM;.EXE;.BAT;.CMD` applies.
+- A drive-relative name (`C:gate.exe`) is refused, and a drive-relative `PATH` entry
+  is skipped.
+
+A name nothing matches ends the step `program_not_found`. `.cmd` and `.bat` files run
+under `cmd.exe` through the standard library's own argument escaping. An argument it
+cannot pass safely fails the launch (`launch_failed`).
 
 **Environment (HS2-W02PTA).** A step does not inherit the hosting process's
 environment. It sees an allowlist of that process's variables, enough to find its

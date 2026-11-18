@@ -273,8 +273,15 @@ fn digest(
     Some(StreamRef { sha256, bytes })
 }
 
-/// Stop a step and everything it started.
-fn stop(child: &mut std::process::Child) {
+/// Stop a step and everything it started. On Windows its job holds the whole tree
+/// (HS2-2R32SD); without one only the step's own process is stopped.
+fn stop(child: &mut std::process::Child, job: Option<&StepJobHandle>) {
+    #[cfg(windows)]
+    if let Some(job) = job {
+        job.terminate();
+    }
+    #[cfg(not(windows))]
+    let _ = job;
     #[cfg(unix)]
     if let Ok(group) = libc::pid_t::try_from(child.id()) {
         // SAFETY: `killpg` takes plain integers and touches no memory. The group id is
@@ -398,11 +405,9 @@ pub(super) fn execute_reporting(
     let environment = validation_environment(std::env::vars_os(), execution_id);
     // A relative program with a directory part is the checkout's own script; a bare
     // name is looked up on the step's own PATH. HS2-H1EK8R: resolved here so the step
-    // starts with posix_spawn, never by forking this multi-threaded host.
-    let search = hotsheet_ticketing::git::child_path(environment.iter().map(|(k, v)| (k, v)));
-    let Some(resolved) =
-        hotsheet_ticketing::git::program_path(program, search.as_deref(), Some(root))
-    else {
+    // starts with posix_spawn, never by forking this multi-threaded host. HS2-2R32SD:
+    // Windows resolves by its own rules, PATHEXT included.
+    let Some(resolved) = step_program(program, root, &environment) else {
         return ended(ExecutionEnd::ProgramNotFound, started_at_ms, started);
     };
     let mut command = hotsheet_ticketing::git::launch(&resolved);
@@ -419,12 +424,41 @@ pub(super) fn execute_reporting(
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    // HS2-2R32SD: on Windows the step starts suspended in its own kill-on-close job,
+    // and runs once it is in the job, so nothing it starts escapes a timeout.
+    #[cfg(windows)]
+    let job = super::step_job::StepJob::new();
+    #[cfg(windows)]
+    if job.is_some() {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(super::step_job::StepJob::creation_flags());
+    }
+    #[cfg(not(windows))]
+    let job: Option<StepJobHandle> = None;
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return ended(ExecutionEnd::ProgramNotFound, started_at_ms, started);
         }
         Err(_) => return ended(ExecutionEnd::LaunchFailed, started_at_ms, started),
+    };
+    #[cfg(windows)]
+    let job = job.and_then(|job| {
+        let held = job.assign(&child);
+        if !super::step_job::resume(child.id()) {
+            // A step that cannot be resumed would only wait for its timeout.
+            job.terminate();
+            let _ = child.kill();
+            let _ = child.wait();
+            return Some(Err(()));
+        }
+        held.then_some(Ok(job))
+    });
+    #[cfg(windows)]
+    let job = match job {
+        Some(Err(())) => return ended(ExecutionEnd::LaunchFailed, started_at_ms, started),
+        Some(Ok(job)) => Some(job),
+        None => None,
     };
     launched(child.id());
     let over = Arc::new(AtomicBool::new(false));
@@ -471,9 +505,15 @@ pub(super) fn execute_reporting(
             std::thread::sleep(Duration::from_millis(10));
             continue;
         }
-        stop(&mut child);
+        stop(&mut child, job.as_ref());
         break child.wait().ok();
     };
+    // HS2-2R32SD: the step is over; on Windows whatever it left running ends with it,
+    // so nothing holds its output streams open.
+    #[cfg(windows)]
+    if let Some(job) = &job {
+        job.terminate();
+    }
     let mut outcome = ended(end, started_at_ms, started);
     for _ in 0..readers {
         match receiver.recv_timeout(DRAIN_GRACE) {
@@ -490,6 +530,33 @@ pub(super) fn execute_reporting(
         settle(&mut outcome, status);
     }
     outcome
+}
+
+/// The job that holds a step's process tree: a Windows job object, nothing elsewhere.
+#[cfg(windows)]
+type StepJobHandle = super::step_job::StepJob;
+#[cfg(not(windows))]
+type StepJobHandle = ();
+
+/// HS2-2R32SD: the file a step's program names, from the step's own environment.
+fn step_program(
+    program: &str,
+    root: &Path,
+    environment: &[(OsString, OsString)],
+) -> Option<std::path::PathBuf> {
+    if cfg!(windows) {
+        use super::step_program::{variable, windows_step_program};
+        windows_step_program(
+            program,
+            root,
+            variable(environment, "PATH"),
+            variable(environment, "PATHEXT"),
+            &|path| path.is_file(),
+        )
+    } else {
+        let search = hotsheet_ticketing::git::child_path(environment.iter().map(|(k, v)| (k, v)));
+        hotsheet_ticketing::git::program_path(program, search.as_deref(), Some(root))
+    }
 }
 
 /// HS2-H1EK8R: how a step that ended by itself ended, from the status the operating
