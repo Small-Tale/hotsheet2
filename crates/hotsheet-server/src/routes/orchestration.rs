@@ -619,7 +619,7 @@ fn changed_owner(method: &Method, path: &str) -> Option<String> {
                 "orchestration",
                 "sessions",
                 _,
-                "stop" | "takeover" | "sync",
+                "stop" | "takeover" | "hand-back" | "sync",
             ],
         ) => owner,
         _ => return None,

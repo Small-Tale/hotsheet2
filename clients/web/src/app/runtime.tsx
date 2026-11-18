@@ -2801,6 +2801,7 @@ export async function startHotSheetWebClient() {
     closeTerminalIds,
     closeDrawerAIChat,
     takeOverHostedSession,
+    handBackHostedSession,
   } = terminalDrawer;
   const {
     requestProjectClose,
@@ -6675,6 +6676,7 @@ export async function startHotSheetWebClient() {
     closeTerminalIds,
     closeDrawerAIChat,
     takeOverHostedSession,
+    handBackHostedSession,
     appTabContextMenu,
     terminalGroups,
     terminalRename,

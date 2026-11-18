@@ -750,6 +750,12 @@ describe('application shell components', () => {
     );
     expect(theirs).not.toContain('Take Over');
     expect(theirs).toContain('Rename…');
+    // HS2-KR28FS: once it is a person's, it can be handed back; never while the orchestrator has it.
+    expect(theirs).toContain('data-tab-action="orchestrator-hand-back"');
+    expect(theirs).toContain('Hand Back to Orchestrator');
+    expect(theirs).toContain('hand-helping');
+    expect(orchestrated).not.toContain('Hand Back');
+    for (const tab of [terminal, project, chat]) expect(tab).not.toContain('Hand Back');
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

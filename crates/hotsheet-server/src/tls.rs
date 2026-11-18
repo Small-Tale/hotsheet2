@@ -467,6 +467,8 @@ mod tests {
             "/checkouts/owner/orchestration/sessions/id/safe-point",
             "/checkouts/owner/orchestration/sessions/id/stop",
             "/checkouts/owner/orchestration/sessions/id/takeover",
+            // HS2-KR28FS: a person hands a session back through this machine's gate.
+            "/checkouts/owner/orchestration/sessions/id/hand-back",
             // HS2-R7QH35: telling a session its ticket passes this machine's gate.
             "/checkouts/owner/orchestration/sessions/id/request",
             "/checkouts/owner/orchestration/session-sync",

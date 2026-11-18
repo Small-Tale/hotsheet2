@@ -6,6 +6,9 @@ import { expect, test } from '@playwright/test';
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
 import { openMockedProject } from './open-mocked-project';
+import { orchestrateSelf, scheduler, send, TARGET } from './orchestration-real-fixtures';
+
+const person = { role: 'human', id: 'maintainer' };
 
 const TOOL = 'hs-synthetic-agent';
 const RUN = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
@@ -238,6 +241,133 @@ test("records closing an orchestrator session's tab as a person's stop (HS2-HVKS
         }>(hosted)
       ).sessions.find((item) => item.session.operation_id === 'sched-start-close')?.session;
     await expect.poll(async () => (await ended())?.end_reason).toBe('person_stopped');
+  } finally {
+    await app.stop();
+  }
+});
+
+// HS2-KR28FS: a session a person took over or paused can be handed back to its orchestrator from
+// its drawer tab. Hand Back to Orchestrator is offered only while the session is the person's; it
+// goes through the orchestrating checkout on this machine with the permission a session start
+// needs (remembered here), and the orchestrator owns the session again, unpaused, so the tab offers
+// Take Over again.
+test('hands a taken-over session back to its orchestrator from its drawer tab (HS2-KR28FS)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(180_000);
+  const app = await desktopApp(context, baseURL!, {
+    canonicalRoot: true,
+    seed: async (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!),
+  });
+  try {
+    const server = app.server;
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: TOOL, max_sessions: 4 }],
+        targets: [
+          {
+            target_id: TARGET,
+            actions: ['tickets_read', 'gates_observe', 'sessions_manage'],
+            tools: [{ tool: TOOL }],
+            max_sessions: 4,
+          },
+        ],
+      },
+      actor: person,
+    });
+    await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: TOOL,
+      actor: person,
+    });
+    const started = (await send(server, 'POST', `${base}/sessions`, {
+      target_id: TARGET,
+      operation_id: 'sched-hand-back',
+      tool: TOOL,
+      actor: scheduler,
+    })) as { session_id: string; state: string; hosted?: { session_id: string } };
+    expect(started.state, JSON.stringify(started)).toBe('running');
+    const terminal = started.hosted!.session_id;
+    const record = async () =>
+      (await send(server, 'GET', `${base}/sessions/${started.session_id}`)) as { owner: string; paused: boolean };
+    const hosted = async () =>
+      (await server.request<TerminalInfo[]>('/terminals')).find((row) => row.id === terminal)?.orchestrator;
+
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openMockedProject(page);
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const tab = page
+      .locator('[data-component="terminal-drawer"]')
+      .locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
+    await expect(tab).toBeVisible();
+    const menu = page.locator('[data-context-menu="app-tab"]');
+    const openMenu = async () => {
+      if (await menu.count()) await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await tab.click({ button: 'right' });
+      await expect(menu.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
+    };
+    // The orchestrator's session: no hand-back is offered.
+    await openMenu();
+    await expect(menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' })).toHaveCount(0);
+    await menu.getByRole('menuitem', { name: 'Take Over and Pause' }).click();
+    await expect.poll(hosted).toMatchObject({ owner: 'human', paused: true });
+
+    // The person's session offers Hand Back to Orchestrator, at every width.
+    for (const width of [1440, 1100, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => animation.playState !== 'running'),
+      );
+      await expect(async () => {
+        await openMenu();
+        await expect(menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' })).toBeVisible({
+          timeout: 1_000,
+        });
+      }).toPass();
+      await expect(menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' })).toBeInViewport({ ratio: 1 });
+      await expect(menu.getByRole('menuitem', { name: /Take Over/u })).toHaveCount(0);
+      await page.waitForFunction(() =>
+        document.getAnimations().every((animation) => animation.playState !== 'running'),
+      );
+      await page.screenshot({ path: `target/visual-captures/hs2-kr28fs-menu-${width}.png` });
+      await page.keyboard.press('Escape');
+    }
+
+    // The same menu in the dark scheme.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await openMenu();
+    await expect(menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' })).toBeVisible();
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: `target/visual-captures/hs2-kr28fs-menu-dark-1440.png` });
+    await page.keyboard.press('Escape');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    // Handing it back: the orchestrator owns it again, unpaused, here and in its record.
+    await openMenu();
+    await menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Handed back to the orchestrator.' })).toHaveCount(1);
+    await expect.poll(hosted).toMatchObject({ owner: 'orchestrator', paused: false });
+    expect(await record()).toMatchObject({ owner: 'orchestrator', paused: false });
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: `target/visual-captures/hs2-kr28fs-handed-back-1440.png` });
+    // The tab offers Take Over again, and no hand-back.
+    await expect(async () => {
+      await openMenu();
+      await expect(menu.getByRole('menuitem', { name: 'Take Over from Orchestrator' })).toBeVisible({
+        timeout: 1_000,
+      });
+    }).toPass();
+    await expect(menu.getByRole('menuitem', { name: 'Hand Back to Orchestrator' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
   } finally {
     await app.stop();
   }

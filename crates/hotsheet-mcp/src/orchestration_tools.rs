@@ -2485,6 +2485,8 @@ mod tests {
             json!({"action":"session_sync","session_id":"../x"}),
             json!({"action":"session_takeover","session_id":session}),
             json!({"action":"session_pause","session_id":session}),
+            // HS2-KR28FS: handing a session back is a person's act too.
+            json!({"action":"session_hand_back","session_id":session}),
         ] {
             rejected(&backend, owner, arguments);
         }

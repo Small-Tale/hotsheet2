@@ -2825,11 +2825,12 @@ only guarantees that a wind-down it asks for cannot interrupt work.
 
 A person can stop, pause or take over any orchestrator-owned session. A takeover or a
 pause sets `owner` to `human`, a pause also sets `paused`, and neither is undone by
-the orchestrator. From then on the orchestrator leaves the session alone: a wind-down
+the orchestrator; only the person's hand-back below returns the session. From then on the orchestrator leaves the session alone: a wind-down
 is refused `session_human_owned` on the orchestrating machine and again by the hosting
 machine, which keeps its own record of who owns each session.
 
-- These are a person's acts. An AI actor is refused, and MCP has no action for them.
+- These are a person's acts, the hand-back too. An AI actor is refused, and MCP has no
+  action for them.
 - A person needs no permission to act on a session of their own orchestration project. The
   target is resolved freshly and the act is recorded in the audit journal (§26.7) as
   `session_takeover`, `session_pause` or `session_stop` with its outcome.
@@ -2838,8 +2839,32 @@ machine, which keeps its own record of who owns each session.
 - A takeover made at the hosting machine is learned by the orchestrator when it next
   syncs the session, or from the host's refusal of a wind-down.
 
-Pausing changes ownership only; the tool is not interrupted. Whether a person can hand
-a session back is an open decision (HS2-KR28FS).
+Pausing changes ownership only; the tool is not interrupted, and it is not held between
+turns.
+
+**Handing a session back (HS2-KR28FS).** A person may hand a session they took over or
+paused back to the orchestrator. Afterwards the orchestrator owns it again, it is no
+longer paused, and a later takeover starts the cycle again. The maintainer chose this
+over keeping a taken-over session the person's for good.
+
+- **Permission.** It needs what a session start needs. The session's orchestrator (the
+  actor that started it, as an AI actor) is gated as starting a session of that tool,
+  `sessions_manage` with the policy's limits. The session's own place does not count
+  against the caps. The `session_start` permission request applies through the existing
+  permission card, and the person is recorded as `requested_by`. The answer waits as
+  `permission_required` until the request is answered.
+  - The request has an operation id: the caller's `operation_id`, or one per takeover
+    cycle. Repeating it continues the request.
+  - A denial leaves the session the person's; a new operation id asks again.
+- **Idle between turns.** It goes through only while the tool is idle between turns.
+  The hosting machine decides from the tool's turn: mid-turn is `session_mid_turn`, an
+  unknown turn state is `session_not_safe`, and a tool that is gone is
+  `session_not_active`.
+- **The host confirms.** The record changes only after the hosting machine confirms,
+  so a later sync never turns it back.
+- **Repeats.** A hand-back of a session the orchestrator already owns (after first
+  syncing a takeover made at the host) is answered unchanged.
+- **Audit.** It is recorded as `session_hand_back`, with history control `hand_back`.
 
 **At the hosting machine (HS2-6MNMVB).** A person there acts on a session by its hosted
 operation id, with no orchestration project of their own:
@@ -2848,7 +2873,15 @@ operation id, with no orchestration project of their own:
 `target-sessions` route. `GET /terminals` names the hosted session behind each such
 terminal (`orchestrator`: checkout, operation id, project label, owner, paused), and
 the drawer tab's context menu offers **Take Over from Orchestrator** and **Take Over
-and Pause** while the orchestrator owns it. A takeover, pause or stop writes a token to
+and Pause** while the orchestrator owns it, and **Hand Back to Orchestrator** once a
+person owns it (HS2-KR28FS).
+
+A hand-back at the hosting machine (`session hand-back <operation-id> --checkout`, or
+the drawer) is passed to the orchestrating checkout when this machine holds it, so the
+same permission applies. The drawer keeps the request's operation id until it is
+answered, so choosing Hand Back again after allowing the request continues it. A
+session orchestrated from another machine is refused `session_owner_remote`; hand it
+back from there. A takeover, pause or stop writes a token to
 `${HOTSHEET_HOME}/orchestration-hosted-session-signal/` from whichever process made it
 (this server's hosted route or a headless CLI), and each server, waiting on it with the
 platform file watcher, publishes `terminal_orchestrator`, so every client refetches its
@@ -2882,16 +2915,17 @@ reads the sessions of a run from their hosts and judges them (HS2-75Q254);
 
 `OrchestrationRuntime` in `crates/hotsheet-cli/src/orchestration/sessions.rs`:
 
-| Function                                                          | Purpose                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `session_start(owner, StartSession, actor, tx)`                   | Start, or return the session the operation id already names      |
-| `session_list(owner, active)`                                     | This machine's records; contacts nothing                         |
-| `session_load(owner, target_id, tool, account)`                   | The load the policy's caps count                                 |
-| `session_sync(owner, session_id, actor, tx)` and `sessions_sync`  | Bring one record, or every unfinished one, in line with its host |
-| `session_safe_point(owner, session_id, actor, tx)`                | The host's safe-point answer with every blocker                  |
-| `session_stop(owner, session_id, StopSession, actor, tx)`         | Wind down at a safe point, or a person's stop                    |
-| `session_takeover(owner, session_id, TakeoverSession, actor, tx)` | A person takes it over, optionally pausing it                    |
-| `session_work(owner, run_id)`                                     | `Observed<ExternalWork>` for reconciliation                      |
+| Function                                                           | Purpose                                                          |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `session_start(owner, StartSession, actor, tx)`                    | Start, or return the session the operation id already names      |
+| `session_list(owner, active)`                                      | This machine's records; contacts nothing                         |
+| `session_load(owner, target_id, tool, account)`                    | The load the policy's caps count                                 |
+| `session_sync(owner, session_id, actor, tx)` and `sessions_sync`   | Bring one record, or every unfinished one, in line with its host |
+| `session_safe_point(owner, session_id, actor, tx)`                 | The host's safe-point answer with every blocker                  |
+| `session_stop(owner, session_id, StopSession, actor, tx)`          | Wind down at a safe point, or a person's stop                    |
+| `session_takeover(owner, session_id, TakeoverSession, actor, tx)`  | A person takes it over, optionally pausing it                    |
+| `session_hand_back(owner, session_id, HandBackSession, actor, tx)` | A person hands it back while idle, gated as a start (HS2-KR28FS) |
+| `session_work(owner, run_id)`                                      | `Observed<ExternalWork>` for reconciliation                      |
 
 Reading and syncing pass the gate as `sessions_manage` continuing an existing decision:
 policy limits apply, nothing starts, and nobody is asked.
@@ -2910,20 +2944,22 @@ hotsheet-cli ... orchestration session stop <session-id> --project <owner>
 hotsheet-cli ... orchestration session request <session-id> --project <owner>
 hotsheet-cli --actor-role human ... orchestration session stop <session-id> --project <owner> --force
 hotsheet-cli --actor-role human ... orchestration session takeover|pause <session-id> --project <owner>
+hotsheet-cli --actor-role human ... orchestration session hand-back <session-id> --project <owner> [--operation-id <id>]
 hotsheet-cli ... orchestration session list --checkout <checkout-id> [--safe-point] # this machine
 hotsheet-cli --actor-role human ... orchestration session takeover|pause <operation-id> --checkout <checkout-id>
+hotsheet-cli --actor-role human ... orchestration session hand-back <operation-id> --checkout <checkout-id> [--operation-id <id>]
 hotsheet-cli --actor-role human ... orchestration session stop <operation-id> --checkout <checkout-id> [--force]
 ```
 
-| Route                                                                                 | Methods and purpose                                                                                        |
-| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/sessions`                                           | GET records (`?active=true`); POST start; machine-local                                                    |
-| `/checkouts/{owner}/orchestration/sessions/{session}`                                 | GET one record; machine-local                                                                              |
-| `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover}` | POST supervise; machine-local                                                                              |
-| `/checkouts/{owner}/orchestration/session-sync`                                       | POST sync every unfinished session; machine-local                                                          |
-| `/checkouts/{checkout}/target-sessions`                                               | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover      |
-| `/checkouts/{checkout}/target-sessions` (PUT)                                         | Hosted half: tell a running session its exact ticket (HS2-R7QH35)                                          |
-| `/checkouts/{checkout}/orchestration/hosted-audit`                                    | GET this machine's journal of the sessions it hosted, `?after=<seq>&limit=<n>`; machine-local (HS2-CRBR8X) |
+| Route                                                                                           | Methods and purpose                                                                                                  |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/sessions`                                                     | GET records (`?active=true`); POST start; machine-local                                                              |
+| `/checkouts/{owner}/orchestration/sessions/{session}`                                           | GET one record; machine-local                                                                                        |
+| `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover,hand-back}` | POST supervise; machine-local                                                                                        |
+| `/checkouts/{owner}/orchestration/session-sync`                                                 | POST sync every unfinished session; machine-local                                                                    |
+| `/checkouts/{checkout}/target-sessions`                                                         | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover or `hand_back` |
+| `/checkouts/{checkout}/target-sessions` (PUT)                                                   | Hosted half: tell a running session its exact ticket (HS2-R7QH35)                                                    |
+| `/checkouts/{checkout}/orchestration/hosted-audit`                                              | GET this machine's journal of the sessions it hosted, `?after=<seq>&limit=<n>`; machine-local (HS2-CRBR8X)           |
 
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. A read-only device can list and cannot start,

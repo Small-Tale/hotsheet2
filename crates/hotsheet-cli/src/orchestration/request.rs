@@ -770,6 +770,14 @@ impl OrchestrationRuntime {
                         actor.as_ref(),
                         tx,
                     )?),
+                    // HS2-KR28FS
+                    "hand-back" => value(self.session_hand_back(
+                        owner,
+                        session,
+                        decode(body)?,
+                        actor.as_ref(),
+                        tx,
+                    )?),
                     _ => Err(OrchestrationError::Invalid("unsupported target route")),
                 }
             }

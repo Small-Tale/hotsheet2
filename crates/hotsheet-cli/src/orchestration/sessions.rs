@@ -14,7 +14,8 @@ use hotsheet_ticketing::orchestration::{
     Observed, OrchestratedSession, RunEvent, RunEventKind, RunEventSource, SafePoint,
     SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin, SessionOwner,
     SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
-    TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_safe_point, decide_stop,
+    TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_hand_back,
+    decide_safe_point, decide_stop,
 };
 pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
 use serde::{Deserialize, Serialize};
@@ -607,6 +608,13 @@ pub struct HostedSessionControl {
     pub operation_id: String,
     #[serde(default)]
     pub pause: bool,
+    /// HS2-KR28FS: hand the session back to the orchestrator instead of taking it over.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hand_back: bool,
+    /// HS2-KR28FS: for a person's hand-back here, the permission request's operation id
+    /// ([`HandBackSession::operation_id`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hand_back_operation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<MutationActor>,
 }
@@ -616,7 +624,16 @@ pub struct HostedControlReply {
     /// Absent when the host has no record of the operation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<HostedSessionView>,
+    /// HS2-KR28FS: why a hand-back changed nothing, as a session error code
+    /// (`session_mid_turn`, `session_not_safe`, `session_not_active`,
+    /// `session_not_found`) or `session_owner_remote`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
 }
+
+/// HS2-KR28FS: a person at the hosting machine asked to hand back a session whose
+/// orchestrating checkout is not on this machine: hand it back from there.
+pub const HAND_BACK_OWNER_REMOTE: &str = "session_owner_remote";
 
 /// HS2-DX1PQB: where a hosted session's owner, pause or end changing is signalled.
 pub const HOSTED_SESSION_SIGNAL_DIRECTORY: &str = "orchestration-hosted-session-signal";
@@ -657,6 +674,16 @@ pub struct StopSession {
     /// Stop even when the session is not at a safe point. A person's request only.
     #[serde(default)]
     pub force: bool,
+}
+
+/// HS2-KR28FS: a person hands a session back. `operation_id` names the permission
+/// request the hand-back files; repeating it continues that request, and a new one asks
+/// again (after a denial). Without it, one id per takeover cycle is used.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HandBackSession {
+    #[serde(default)]
+    pub operation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -1545,7 +1572,7 @@ impl OrchestrationRuntime {
     }
 
     /// A person takes a hosted session over. From then on this machine refuses an
-    /// orchestrator's stop for it.
+    /// orchestrator's stop for it. HS2-KR28FS: `hand_back` returns it instead.
     pub fn hosted_session_control(
         &self,
         checkout_id: &str,
@@ -1553,6 +1580,9 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<HostedControlReply, OrchestrationError> {
         identifier(&request.operation_id, "bounded operation id required")?;
+        if request.hand_back {
+            return self.hosted_session_hand_back(checkout_id, request, tx);
+        }
         if !is_human(request.actor.as_ref()) {
             return Err(OrchestrationError::Forbidden(
                 "only a person takes over or pauses an orchestrator-owned session",
@@ -1571,7 +1601,96 @@ impl OrchestrationRuntime {
         Ok(HostedControlReply {
             session: taken
                 .map(|session| self.hosted_view(&checkout, session, live.as_deref(), false, tx)),
+            refused: None,
         })
+    }
+
+    /// HS2-KR28FS: the hosting half of a hand-back.
+    ///
+    /// - From the session's orchestrator (an identified AI actor, already gated where it
+    ///   orchestrates): the tool's turn decides. Mid-turn, unknown or gone is refused
+    ///   with its code; idle hands it back; one the orchestrator owns is answered as is.
+    /// - From a person at this machine (CLI `--checkout`, the drawer): passed to the
+    ///   orchestrating checkout when this machine holds it, so the same permission
+    ///   applies; one orchestrated elsewhere is refused with `session_owner_remote`.
+    fn hosted_session_hand_back(
+        &self,
+        checkout_id: &str,
+        request: HostedSessionControl,
+        tx: &mut Transaction<'_>,
+    ) -> Result<HostedControlReply, OrchestrationError> {
+        let actor = request.actor.as_ref();
+        if actor.and_then(|actor| actor.id.as_ref()).is_none() {
+            return Err(OrchestrationError::Invalid(
+                "an identified actor is required to hand a session back",
+            ));
+        }
+        let checkout = self.owner(checkout_id)?;
+        let registry = self.hosted_sessions_registry();
+        let refused = |code: &str, session| HostedControlReply {
+            session,
+            refused: Some(code.into()),
+        };
+        let Some(recorded) = registry.get(&checkout.id, &request.operation_id)? else {
+            return Ok(refused(SessionError::NotFound.code(), None));
+        };
+        if is_human(actor) {
+            let owner_id = recorded.origin.owner_checkout_id.clone();
+            let owned_here = self.owner(&owner_id).is_ok();
+            let orchestrated = owned_here
+                .then(|| self.session_registry().list(&owner_id, true).ok())
+                .flatten()
+                .and_then(|sessions| {
+                    sessions
+                        .into_iter()
+                        .find(|session| session.operation_id == request.operation_id)
+                });
+            let Some(orchestrated) = orchestrated else {
+                return Ok(refused(HAND_BACK_OWNER_REMOTE, None));
+            };
+            self.session_hand_back(
+                &owner_id,
+                &orchestrated.session_id,
+                HandBackSession {
+                    operation_id: request.hand_back_operation_id.clone(),
+                },
+                actor,
+                tx,
+            )?;
+            let live = self.sessions.sessions(&checkout);
+            let session = registry.get(&checkout.id, &request.operation_id)?;
+            return Ok(HostedControlReply {
+                session: session.map(|session| {
+                    self.hosted_view(&checkout, session, live.as_deref(), false, tx)
+                }),
+                refused: None,
+            });
+        }
+        let live = self.sessions.sessions(&checkout);
+        let session = self.note_lost(recorded, live.as_deref(), tx.clock.now_ms())?;
+        let view = self.hosted_view(&checkout, session.clone(), live.as_deref(), true, tx);
+        let facts = view
+            .safe_point
+            .as_ref()
+            .map(|safe_point| safe_point.facts)
+            .unwrap_or_default();
+        match decide_hand_back(session.owner, &facts) {
+            Err(error) => Ok(refused(error.code(), Some(view))),
+            Ok(false) => Ok(HostedControlReply {
+                session: Some(view),
+                refused: None,
+            }),
+            Ok(true) => {
+                let handed = registry.hand_back(&checkout.id, &request.operation_id)?;
+                self.hosted_session_signal();
+                Ok(HostedControlReply {
+                    session: handed.map(|session| {
+                        self.hosted_view(&checkout, session, live.as_deref(), false, tx)
+                    }),
+                    refused: None,
+                })
+            }
+        }
     }
 
     // ---- Orchestrating half ----
@@ -2711,6 +2830,8 @@ impl OrchestrationRuntime {
                 let body = serde_json::to_value(HostedSessionControl {
                     operation_id: session.operation_id.clone(),
                     pause: request.pause,
+                    hand_back: false,
+                    hand_back_operation_id: None,
                     actor: actor.cloned(),
                 })
                 .map_err(|_| OrchestrationError::Corrupt)?;
@@ -2744,6 +2865,166 @@ impl OrchestrationRuntime {
         )?;
         outcome
     }
+}
+
+impl OrchestrationRuntime {
+    /// HS2-KR28FS: a person hands a session they took over or paused back to the
+    /// orchestrator. It needs what starting a session needs: the session's orchestrator
+    /// is gated as starting one, so the policy and the permission request apply, with
+    /// the person recorded as `requested_by`. Each takeover cycle asks under its own
+    /// operation id, so repeating the request after answering continues it and a later
+    /// takeover asks again. The host decides from the tool's turn: it refuses mid-turn
+    /// (`session_mid_turn`), and only its confirmation changes the record, so a later
+    /// sync never undoes it. A session the orchestrator already owns is answered as it
+    /// is, and a refused or denied hand-back leaves it the person's.
+    pub fn session_hand_back(
+        &self,
+        owner_id: &str,
+        session_id: &str,
+        request: HandBackSession,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<SessionView, OrchestrationError> {
+        if let Some(operation_id) = &request.operation_id {
+            identifier(operation_id, "bounded operation id required")?;
+        }
+        let person =
+            actor
+                .and_then(|actor| actor.id.clone())
+                .ok_or(OrchestrationError::Invalid(
+                    "an identified actor is required to hand a session back",
+                ))?;
+        if !is_human(actor) {
+            return Err(OrchestrationError::Forbidden(
+                "only a person hands a session back to the orchestrator",
+            ));
+        }
+        let mut session = self.session(owner_id, session_id)?;
+        if session.state.is_terminal() {
+            return Err(OrchestrationError::Session(SessionError::NotActive));
+        }
+        if session.owner == SessionOwner::Orchestrator {
+            // A takeover at the host may not be known here yet: ask the host first.
+            if let Ok(synced) = self.session_sync(owner_id, session_id, actor, tx) {
+                session = synced.session;
+            }
+            if session.owner == SessionOwner::Orchestrator || session.state.is_terminal() {
+                return Ok(SessionView::from(session));
+            }
+        }
+        let target = Self::target_ref(owner_id, &session.target_id)?;
+        let orchestrator = MutationActor {
+            role: ActorRole::Ai,
+            id: Some(hand_back_actor(&session)),
+        };
+        // The session already occupies its slot: it does not count against its own caps.
+        let mut load = self.session_load(
+            owner_id,
+            &session.target_id,
+            &session.tool,
+            session.account.as_deref(),
+        )?;
+        load.target_sessions = load.target_sessions.saturating_sub(1);
+        load.machine_sessions = load.machine_sessions.saturating_sub(1);
+        load.tool_sessions = load.tool_sessions.saturating_sub(1);
+        load.account_sessions = load.account_sessions.saturating_sub(1);
+        let authorized = self.authorize(
+            &target,
+            Some(&orchestrator),
+            ActionRequest {
+                session: Some(Self::session_request(&session, true, load.target_sessions)),
+                load: Some(load),
+                role_session: session.role.is_role_session(),
+                requested_by: Some(person.clone()),
+                ..ActionRequest::new(TargetAction::SessionsManage).operation(
+                    request
+                        .operation_id
+                        .as_deref()
+                        .unwrap_or(&hand_back_operation(&session)),
+                )
+            },
+            tx,
+        );
+        let authorized = match authorized {
+            Ok(authorized) => authorized,
+            Err(error) => {
+                let outcome = Err(error);
+                self.session_audit(&session, actor, "session_hand_back", &outcome, tx)?;
+                return outcome;
+            }
+        };
+        let outcome = (|| {
+            let destination = Self::destination(&authorized)?;
+            let body = serde_json::to_value(HostedSessionControl {
+                operation_id: session.operation_id.clone(),
+                pause: false,
+                hand_back: true,
+                hand_back_operation_id: None,
+                actor: Some(orchestrator.clone()),
+            })
+            .map_err(|_| OrchestrationError::Corrupt)?;
+            let reply: HostedControlReply = serde_json::from_value(
+                self.hosted_call_at(
+                    destination,
+                    "/target-sessions",
+                    "PATCH",
+                    "",
+                    Some(&body),
+                    tx,
+                )
+                .map_err(|_| OrchestrationError::Session(SessionError::HostUnavailable))?,
+            )
+            .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))?;
+            if let Some(code) = reply.refused.as_deref() {
+                return Err(OrchestrationError::Session(
+                    SessionError::from_code(code).unwrap_or(SessionError::HostUnavailable),
+                ));
+            }
+            match reply.session {
+                Some(hosted) if hosted.session.owner == SessionOwner::Orchestrator => {}
+                Some(_) => return Err(OrchestrationError::Session(SessionError::HostUnavailable)),
+                None => return Err(OrchestrationError::Session(SessionError::NotFound)),
+            }
+            let handed = self.session_apply(
+                owner_id,
+                session_id,
+                SessionUpdate {
+                    hand_back: true,
+                    control: Some(SessionControl::HandBack),
+                    reason: Some(SessionControl::HandBack.code().into()),
+                    actor_id: Some(person.clone()),
+                    ..SessionUpdate::default()
+                },
+                false,
+                tx,
+            )?;
+            Ok(SessionView::from(handed))
+        })();
+        self.finish(&target, &authorized, &outcome, tx)?;
+        self.session_audit(&session, actor, "session_hand_back", &outcome, tx)?;
+        outcome
+    }
+}
+
+/// HS2-KR28FS: the actor a hand-back is gated as: whoever started the session for its
+/// orchestrator, as an AI actor, since the orchestrator is who takes the session back.
+fn hand_back_actor(session: &OrchestratedSession) -> String {
+    session
+        .history
+        .first()
+        .and_then(|entry| entry.actor_id.clone())
+        .unwrap_or_else(|| "orchestrator".into())
+}
+
+/// HS2-KR28FS: one operation id per takeover cycle of a session, so the permission
+/// request a hand-back files is continued by repeating it and a later cycle asks again.
+fn hand_back_operation(session: &OrchestratedSession) -> String {
+    let cycle = session
+        .history
+        .iter()
+        .filter(|entry| entry.control == Some(SessionControl::HandBack))
+        .count();
+    format!("hand-back-{}-{cycle}", session.session_id)
 }
 
 /// The machine a destination lives on.

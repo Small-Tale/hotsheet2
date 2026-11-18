@@ -1379,6 +1379,8 @@ fn hs2_gdjxgz_a_person_can_take_over_pause_or_stop_any_session() {
                 HostedSessionControl {
                     operation_id: operation.into(),
                     pause: operation == "op-2",
+                    hand_back: false,
+                    hand_back_operation_id: None,
                     actor: Some(human()),
                 },
                 &mut tx,
@@ -1393,6 +1395,8 @@ fn hs2_gdjxgz_a_person_can_take_over_pause_or_stop_any_session() {
             HostedSessionControl {
                 operation_id: "op-2".into(),
                 pause: false,
+                hand_back: false,
+                hand_back_operation_id: None,
                 actor: Some(worker()),
             },
             &mut tx,
@@ -2918,4 +2922,245 @@ fn hs2_crbr8x_an_actor_id_that_is_not_an_identifier_does_not_lose_the_entry() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].actor_role.as_deref(), Some("human"));
     assert_eq!(entries[0].actor_id, None);
+}
+
+/// HS2-KR28FS: a person hands a session they took over or paused back to the
+/// orchestrator, only while the tool is idle between turns, and only with what a
+/// session start needs. Walks takeover → hand back → takeover again, pause → hand
+/// back, a mid-turn refusal, repeats, and a denied permission.
+#[test]
+fn hs2_kr28fs_a_person_hands_a_session_back_only_while_idle_and_permitted() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    let owner = f.m.owner.id.clone();
+    let hosted = HostedSessionRegistry::new(&f.m.home);
+    let taken = f.started("op-1", 1, "codex", &mut tx);
+    let sid = taken.session.session_id.clone();
+    let host_id = taken.session.hosted.as_ref().unwrap().session_id.clone();
+    let hand_back = |sid: &str, actor: &MutationActor, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .session_hand_back(&owner, sid, HandBackSession::default(), Some(actor), tx)
+    };
+    let takeover = |sid: &str, pause: bool, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .session_takeover(&owner, sid, TakeoverSession { pause }, Some(&human()), tx)
+            .unwrap()
+    };
+
+    // The orchestrator's own session: a hand-back changes nothing and asks nothing.
+    let unchanged = hand_back(&sid, &human(), &mut tx).unwrap();
+    assert_eq!(unchanged.session, taken.session);
+    // Only a person hands back.
+    takeover(&sid, false, &mut tx);
+    assert!(matches!(
+        hand_back(&sid, &worker(), &mut tx),
+        Err(OrchestrationError::Forbidden(_))
+    ));
+
+    // Takeover → hand back while idle: the orchestrator owns it again, at the host too.
+    let back = hand_back(&sid, &human(), &mut tx).unwrap();
+    assert_eq!(back.session.owner, SessionOwner::Orchestrator);
+    assert!(!back.session.paused);
+    let entry = back.session.history.last().unwrap();
+    assert_eq!(entry.control, Some(SessionControl::HandBack));
+    assert_eq!(entry.actor_id.as_deref(), Some("maintainer"));
+    assert_eq!(
+        hosted.get(&f.m.target.id, "op-1").unwrap().unwrap().owner,
+        SessionOwner::Orchestrator
+    );
+    assert_eq!(
+        f.m.last_audit(),
+        ("session_hand_back".into(), AuditOutcome::Succeeded, None)
+    );
+    // A later sync keeps it the orchestrator's, and the orchestrator may wind it down
+    // again (it is no longer refused as a person's).
+    let synced =
+        f.m.runtime
+            .session_sync(&owner, &sid, Some(&worker()), &mut tx)
+            .unwrap();
+    assert_eq!(synced.session.owner, SessionOwner::Orchestrator);
+    // Repeating the hand-back changes nothing.
+    assert_eq!(
+        hand_back(&sid, &human(), &mut tx).unwrap().session,
+        synced.session
+    );
+
+    // Takeover again; mid-turn the hand-back is refused with its reason and the session
+    // stays the person's, at both ends.
+    assert_eq!(
+        takeover(&sid, false, &mut tx).session.owner,
+        SessionOwner::Human
+    );
+    f.host.set_busy(&host_id, true);
+    assert_eq!(
+        session_error(hand_back(&sid, &human(), &mut tx)),
+        SessionError::MidTurn
+    );
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "session_hand_back".into(),
+            AuditOutcome::Failed,
+            Some("session_mid_turn".into())
+        )
+    );
+    assert_eq!(
+        f.m.runtime.session(&owner, &sid).unwrap().owner,
+        SessionOwner::Human
+    );
+    assert_eq!(
+        hosted.get(&f.m.target.id, "op-1").unwrap().unwrap().owner,
+        SessionOwner::Human
+    );
+    // The turn ends: the same request succeeds.
+    f.host.set_busy(&host_id, false);
+    assert_eq!(
+        hand_back(&sid, &human(), &mut tx).unwrap().session.owner,
+        SessionOwner::Orchestrator
+    );
+
+    // Pause → hand back: no longer paused, at both ends.
+    assert!(takeover(&sid, true, &mut tx).session.paused);
+    assert!(hosted.get(&f.m.target.id, "op-1").unwrap().unwrap().paused);
+    let resumed = hand_back(&sid, &human(), &mut tx).unwrap();
+    assert!(!resumed.session.paused);
+    assert_eq!(resumed.session.owner, SessionOwner::Orchestrator);
+    assert!(!hosted.get(&f.m.target.id, "op-1").unwrap().unwrap().paused);
+
+    // Target 2 remembers no session start: a hand-back asks a person like a start. A
+    // denial leaves the session the person's; a new request asks again, and allowing it
+    // hands it back.
+    let asked = permission_request(f.start("op-2", 2, "claude", json!({}), &mut tx));
+    answer(
+        &f.m.runtime,
+        &owner,
+        &asked,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    let second = f.started("op-2", 2, "claude", &mut tx).session.session_id;
+    takeover(&second, false, &mut tx);
+    let first_ask = permission_request(hand_back(&second, &human(), &mut tx));
+    let pending =
+        f.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .into_iter()
+            .find(|request| request.request.request_id == first_ask)
+            .unwrap();
+    assert_eq!(pending.request.key.action, PermissionAction::SessionStart);
+    assert_eq!(pending.request.key.tool.as_deref(), Some("claude"));
+    answer(
+        &f.m.runtime,
+        &owner,
+        &first_ask,
+        PermissionAnswer::Deny,
+        &mut tx,
+    );
+    assert!(hand_back(&second, &human(), &mut tx).is_err());
+    assert_eq!(
+        f.m.runtime.session(&owner, &second).unwrap().owner,
+        SessionOwner::Human
+    );
+    assert_eq!(
+        hosted.get(&f.m.target.id, "op-2").unwrap().unwrap().owner,
+        SessionOwner::Human
+    );
+    let again = |tx: &mut Transaction<'_>| {
+        f.m.runtime.session_hand_back(
+            &owner,
+            &second,
+            HandBackSession {
+                operation_id: Some("hand-back-retry".into()),
+            },
+            Some(&human()),
+            tx,
+        )
+    };
+    let second_ask = permission_request(again(&mut tx));
+    assert_ne!(second_ask, first_ask);
+    answer(
+        &f.m.runtime,
+        &owner,
+        &second_ask,
+        PermissionAnswer::AllowOnce,
+        &mut tx,
+    );
+    assert_eq!(
+        again(&mut tx).unwrap().session.owner,
+        SessionOwner::Orchestrator
+    );
+}
+
+/// HS2-KR28FS: the hosting half. A person at the host is passed to the orchestrating
+/// checkout on this machine; the orchestrator's own request is decided by the tool's
+/// turn; an unknown operation is refused with its reason.
+#[test]
+fn hs2_kr28fs_the_hosting_machine_hands_a_session_back_through_its_owner() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1], &mut tx);
+    let owner = f.m.owner.id.clone();
+    let started = f.started("op-1", 1, "codex", &mut tx);
+    let sid = started.session.session_id.clone();
+    let host_id = started.session.hosted.as_ref().unwrap().session_id.clone();
+    let control =
+        |operation: &str, hand_back: bool, actor: MutationActor, tx: &mut Transaction<'_>| {
+            f.m.runtime.hosted_session_control(
+                &f.m.target.id,
+                HostedSessionControl {
+                    operation_id: operation.into(),
+                    pause: false,
+                    hand_back,
+                    hand_back_operation_id: None,
+                    actor: Some(actor),
+                },
+                tx,
+            )
+        };
+    control("op-1", false, human(), &mut tx).unwrap();
+    // Unknown operation.
+    let unknown = control("op-none", true, human(), &mut tx).unwrap();
+    assert_eq!(unknown.refused.as_deref(), Some("session_not_found"));
+    // The orchestrator's request mid-turn is refused with the reason and the view.
+    f.host.set_busy(&host_id, true);
+    let busy = control("op-1", true, worker(), &mut tx).unwrap();
+    assert_eq!(busy.refused.as_deref(), Some("session_mid_turn"));
+    assert_eq!(busy.session.unwrap().session.owner, SessionOwner::Human);
+    f.host.set_busy(&host_id, false);
+    // A person at the host: passed to the owner here, so the record follows.
+    let back = control("op-1", true, human(), &mut tx).unwrap();
+    assert!(back.refused.is_none());
+    assert_eq!(
+        back.session.unwrap().session.owner,
+        SessionOwner::Orchestrator
+    );
+    assert_eq!(
+        f.m.runtime.session(&owner, &sid).unwrap().owner,
+        SessionOwner::Orchestrator
+    );
+    assert_eq!(f.m.last_audit().0, "session_hand_back");
+    // An unidentified actor is refused.
+    assert!(matches!(
+        f.m.runtime.hosted_session_control(
+            &f.m.target.id,
+            HostedSessionControl {
+                operation_id: "op-1".into(),
+                pause: false,
+                hand_back: true,
+                hand_back_operation_id: None,
+                actor: None,
+            },
+            &mut tx,
+        ),
+        Err(OrchestrationError::Invalid(_))
+    ));
 }

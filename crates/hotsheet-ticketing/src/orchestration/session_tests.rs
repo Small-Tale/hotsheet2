@@ -378,7 +378,7 @@ fn hs2_gdjxgz_ownership_moves_to_a_person_once_and_never_returns() {
                 .unwrap(),
             taken
         );
-        // Handing it back is not a thing: the owner stays a person.
+        // Setting the owner back does nothing: only a hand-back returns it (HS2-KR28FS).
         let back = registry
             .update(
                 OWNER,
@@ -1579,4 +1579,104 @@ fn hs2_pfhrs9_a_hosted_session_keeps_the_account_it_was_started_for() {
     let stored =
         std::fs::read_to_string(home.path().join("orchestration-hosted-sessions.json")).unwrap();
     assert_eq!(stored.matches("team-a").count(), 1);
+}
+
+/// HS2-KR28FS: a hand-back is decided by who owns the session and the tool's turn, and
+/// only a hand-back returns a person's session to the orchestrator, at both ends.
+#[test]
+fn hs2_kr28fs_a_hand_back_returns_a_persons_idle_session_to_the_orchestrator() {
+    let facts = |alive: Option<bool>, busy: Option<bool>| SafePointFacts {
+        alive,
+        busy,
+        ..SafePointFacts::default()
+    };
+    use SessionOwner::{Human, Orchestrator};
+    for (owner, alive, busy, expected) in [
+        (Orchestrator, Some(true), Some(true), Ok(false)),
+        (Orchestrator, None, None, Ok(false)),
+        (Human, Some(true), Some(false), Ok(true)),
+        (Human, Some(true), Some(true), Err(SessionError::MidTurn)),
+        (Human, Some(false), None, Err(SessionError::NotActive)),
+        (Human, Some(true), None, Err(SessionError::NotSafe)),
+        (Human, None, Some(false), Err(SessionError::NotSafe)),
+    ] {
+        assert_eq!(
+            decide_hand_back(owner, &facts(alive, busy)),
+            expected,
+            "{owner:?} {alive:?} {busy:?}"
+        );
+    }
+    assert_eq!(SessionError::MidTurn.code(), "session_mid_turn");
+    assert_eq!(SessionControl::HandBack.code(), "hand_back");
+
+    with_registry(|registry, clock, rng, home| {
+        let mut tx = Transaction { clock, rng };
+        let (session, _) = registry
+            .begin(OWNER, new("op-1", "codex"), None, &mut tx)
+            .unwrap();
+        let sid = session.session_id.clone();
+        registry
+            .update(OWNER, &sid, to(SessionState::Running, "started"), &mut tx)
+            .unwrap();
+        let hand_back = SessionUpdate {
+            hand_back: true,
+            control: Some(SessionControl::HandBack),
+            reason: Some("hand_back".into()),
+            actor_id: Some("maintainer".into()),
+            ..SessionUpdate::default()
+        };
+        // The orchestrator's own session: nothing changes and nothing is recorded.
+        let own = registry
+            .update(OWNER, &sid, hand_back.clone(), &mut tx)
+            .unwrap();
+        assert_eq!(own.history.len(), 2);
+        // Paused takeover → hand back: the orchestrator's again, unpaused, one entry.
+        clock.0.set(2_000);
+        registry
+            .update(OWNER, &sid, takeover(true), &mut tx)
+            .unwrap();
+        let back = registry
+            .update(OWNER, &sid, hand_back.clone(), &mut tx)
+            .unwrap();
+        assert_eq!(
+            (back.owner, back.paused),
+            (SessionOwner::Orchestrator, false)
+        );
+        let entry = back.history.last().unwrap();
+        assert_eq!(entry.control, Some(SessionControl::HandBack));
+        assert_eq!(entry.actor_id.as_deref(), Some("maintainer"));
+        // Repeating it writes nothing; a takeover after it is the person's again.
+        assert_eq!(
+            registry
+                .update(OWNER, &sid, hand_back.clone(), &mut tx)
+                .unwrap(),
+            back
+        );
+        assert_eq!(
+            registry
+                .update(OWNER, &sid, takeover(false), &mut tx)
+                .unwrap()
+                .owner,
+            SessionOwner::Human
+        );
+
+        // The host's record: taken over and paused, handed back, and an ended one keeps
+        // what it had.
+        let hosted_registry = HostedSessionRegistry::new(home);
+        hosted_registry
+            .reserve(HOSTED, &hosted("op-h", "codex"), &mut tx)
+            .unwrap();
+        hosted_registry.take_over(HOSTED, "op-h", true).unwrap();
+        let handed = hosted_registry.hand_back(HOSTED, "op-h").unwrap().unwrap();
+        assert_eq!(
+            (handed.owner, handed.paused),
+            (SessionOwner::Orchestrator, false)
+        );
+        assert!(
+            hosted_registry
+                .hand_back(HOSTED, "op-none")
+                .unwrap()
+                .is_none()
+        );
+    });
 }

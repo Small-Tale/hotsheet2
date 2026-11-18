@@ -11,8 +11,8 @@ pub(super) struct SessionArgs {
     #[arg(long, global = true)]
     project: Option<String>,
     /// A checkout this machine hosts: `list` shows the sessions orchestrators started
-    /// on it, as this machine's own terminal host sees them, and `takeover`, `pause`
-    /// and `stop` act on one of them by its hosted operation id (HS2-6MNMVB).
+    /// on it, as this machine's own terminal host sees them, and `takeover`, `pause`,
+    /// `hand-back` and `stop` act on one of them by its hosted operation id (HS2-6MNMVB).
     #[arg(long, global = true, conflicts_with = "project")]
     checkout: Option<String>,
     #[command(subcommand)]
@@ -89,6 +89,19 @@ enum SessionCmd {
     /// Take a session over and pause it: it keeps running and gets nothing new.
     /// With --checkout, the argument is the hosted operation id.
     Pause { session_id: String },
+    /// Hand a session a person took over or paused back to the orchestrator (a
+    /// person's action; pass --actor-role human). Only while the tool is idle between
+    /// turns (`session_mid_turn` otherwise), and it needs the permission a session
+    /// start needs: answer the permission request, then run it again. With --checkout,
+    /// the argument is the hosted operation id, and the orchestrating checkout must be
+    /// on this machine (HS2-KR28FS).
+    #[command(name = "hand-back")]
+    HandBack {
+        session_id: String,
+        /// The permission request to continue; a new one asks again after a denial.
+        #[arg(long)]
+        operation_id: Option<String>,
+    },
 }
 
 /// The owning (or hosted) checkout id and the request for the shared runtime.
@@ -111,12 +124,24 @@ pub(super) fn route(arguments: SessionArgs) -> Result<(String, (&'static str, St
                 path,
                 json!({"operation_id": session_id, "pause": true}),
             ),
+            SessionCmd::HandBack {
+                session_id,
+                operation_id,
+            } => {
+                let mut body = json!({"operation_id": session_id, "hand_back": true});
+                if let Some(operation_id) = operation_id {
+                    body["hand_back_operation_id"] = json!(operation_id);
+                }
+                ("PATCH", path, body)
+            }
             SessionCmd::Stop { session_id, force } => (
                 "DELETE",
                 path,
                 json!({"operation_id": session_id, "force": force}),
             ),
-            _ => bail!("--checkout applies to `session list`, `takeover`, `pause` and `stop` only"),
+            _ => bail!(
+                "--checkout applies to `session list`, `takeover`, `pause`, `hand-back` and `stop` only"
+            ),
         };
         return Ok((checkout, request));
     }
@@ -190,6 +215,17 @@ pub(super) fn route(arguments: SessionArgs) -> Result<(String, (&'static str, St
             format!("{base}/{session_id}/takeover"),
             json!({"pause": true}),
         ),
+        SessionCmd::HandBack {
+            session_id,
+            operation_id,
+        } => (
+            "POST",
+            format!("{base}/{session_id}/hand-back"),
+            match operation_id {
+                Some(operation_id) => json!({"operation_id": operation_id}),
+                None => json!({}),
+            },
+        ),
     };
     Ok((project, request))
 }
@@ -214,7 +250,7 @@ mod tests {
     #[test]
     fn hs2_gdjxgz_every_session_command_is_one_request_to_the_shared_runtime() {
         let base = "/checkouts/owner-1/orchestration";
-        let cases: [(&[&str], &str, String, Value); 11] = [
+        let cases: [(&[&str], &str, String, Value); 12] = [
             (
                 &[
                     "start",
@@ -297,6 +333,13 @@ mod tests {
                 format!("{base}/sessions/{SESSION}/takeover"),
                 json!({"pause": true}),
             ),
+            // HS2-KR28FS
+            (
+                &["hand-back", SESSION],
+                "POST",
+                format!("{base}/sessions/{SESSION}/hand-back"),
+                json!({}),
+            ),
         ];
         for (line, method, path, body) in cases {
             let mut arguments = line.to_vec();
@@ -372,6 +415,12 @@ mod tests {
                 &["pause", "sched-op", "--checkout", "hosted-1"],
                 "PATCH",
                 json!({"operation_id": "sched-op", "pause": true}),
+            ),
+            // HS2-KR28FS: the hosting machine hands a session back by operation id.
+            (
+                &["hand-back", "sched-op", "--checkout", "hosted-1"],
+                "PATCH",
+                json!({"operation_id": "sched-op", "hand_back": true}),
             ),
             (
                 &["stop", "sched-op", "--checkout", "hosted-1"],

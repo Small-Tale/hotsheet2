@@ -166,8 +166,8 @@ pub use sessions::{
     MAX_SESSION_HISTORY, MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession,
     OrchestratedSession, RequestKind, SafePoint, SafePointBlocker, SafePointFacts, SessionControl,
     SessionError, SessionOrigin, SessionOwner, SessionRegistry, SessionRole, SessionState,
-    SessionTransition, SessionUpdate, StopRequest, decide_safe_point, decide_stop, run_holder,
-    session_label,
+    SessionTransition, SessionUpdate, StopRequest, decide_hand_back, decide_safe_point,
+    decide_stop, run_holder, session_label,
 };
 pub use shared_plan::{SHARED_PLAN_PATH, SharedPlan, SharedPlanStore, SharedStep, merge_steps};
 pub use summary::{

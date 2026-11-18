@@ -66,6 +66,7 @@ import {
   parseGuidanceRulePreview,
   parseGuidanceSourceReview,
   parseGuidanceSourceUpdates,
+  parseHostedHandBackReply,
   parseHostedOrchestrationProjectChoice,
   parseHostedStop,
   parseLegacyPermissionDiscardOutcome,
@@ -3181,6 +3182,21 @@ export class Api {
       body: JSON.stringify({
         operation_id: operationId,
         pause,
+        actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR },
+      }),
+    });
+  /**
+   * HS2-KR28FS: a person at the hosting machine hands a session back to its orchestrator. The
+   * orchestrating checkout must be on this machine; `handBackOperationId` names the permission
+   * request to continue (a new one asks again).
+   */
+  handBackHostedSession = (checkout: string, operationId: string, handBackOperationId: string) =>
+    this.parsed(parseHostedHandBackReply, `/checkouts/${encodeURIComponent(checkout)}/target-sessions`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        operation_id: operationId,
+        hand_back: true,
+        hand_back_operation_id: handBackOperationId,
         actor: { role: 'human', id: ORCHESTRATION_APP_ACTOR },
       }),
     });

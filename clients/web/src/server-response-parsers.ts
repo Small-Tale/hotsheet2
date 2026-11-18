@@ -1381,6 +1381,13 @@ export const parsePermissionDecision = shape<{
   { persisted: isBoolean, also_resolved: listOf(isNumber) },
 );
 
+/** HS2-KR28FS: the hosting machine's answer to a hand-back; `refused` names why nothing changed. */
+export const parseHostedHandBackReply = shape<{ refused?: string }>(
+  'hosted hand-back reply',
+  {},
+  { refused: isString, session: isObject },
+);
+
 /** A remembered permission answer (HS2-JNHAYB). */
 export const parsePermissionRule = shape<PermissionRule>(
   'permission rule',

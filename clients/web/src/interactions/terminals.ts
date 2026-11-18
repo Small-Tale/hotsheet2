@@ -159,6 +159,8 @@ export interface TerminalInteractionsDependencies {
   readonly saveTerminalName: (projectId: string, terminalId: string, name: string) => void;
   /** HS2-6MNMVB: a person takes over (and optionally pauses) a terminal's orchestrator session. */
   readonly takeOverHostedSession: (terminalId: string, pause: boolean) => Promise<void>;
+  /** HS2-KR28FS: a person hands a terminal's orchestrator session back. */
+  readonly handBackHostedSession: (terminalId: string) => Promise<void>;
   /** Clear a terminal's saved name so its tab shows the derived default again (HS2-2Q7KTX). */
   readonly resetTerminalName: (projectId: string, terminalId: string) => void;
   /** The terminal drawer's Kerf-managed search field model (HS2-TWZSZF). */
@@ -233,6 +235,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     resetTerminalName,
     terminalSearchModel,
     takeOverHostedSession,
+    handBackHostedSession,
     terminalSearchOpen,
     terminalSearchResults,
     terminalDrawerSelected,
@@ -1009,7 +1012,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         ...(orchestrator ? { orchestrator: { owner: orchestrator.owner } } : {}),
         ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
           width: 256,
-          height: orchestrator?.owner === 'orchestrator' ? 266 : 202,
+          height: orchestrator?.owner === 'orchestrator' ? 266 : orchestrator ? 234 : 202,
         }),
       };
     }),
@@ -1028,6 +1031,11 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         if ((action === 'orchestrator-takeover' || action === 'orchestrator-pause') && menu.kind === 'terminal') {
           appTabContextMenu.value = undefined;
           void takeOverHostedSession(menu.id, action === 'orchestrator-pause');
+          return;
+        }
+        if (action === 'orchestrator-hand-back' && menu.kind === 'terminal') {
+          appTabContextMenu.value = undefined;
+          void handBackHostedSession(menu.id);
           return;
         }
         if (action === 'rename' && menu.kind === 'terminal') {

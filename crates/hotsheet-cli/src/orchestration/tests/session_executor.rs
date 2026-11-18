@@ -839,6 +839,8 @@ fn hs2_95swq4_a_session_a_person_took_over_is_reported_and_never_wound_down() {
             HostedSessionControl {
                 operation_id: there.operation_id.clone(),
                 pause: true,
+                hand_back: false,
+                hand_back_operation_id: None,
                 actor: Some(human()),
             },
             &mut tx,

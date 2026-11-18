@@ -2814,8 +2814,8 @@ paths:
           pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /checkouts/{owner}/orchestration/sessions/{session}/{operation}:
     description:
-      Sync, check, stop, take over or tell one orchestrator-started session its ticket (HS2-GDJXGZ, HS2-R7QH35);
-      machine-local.
+      Sync, check, stop, take over, hand back or tell one orchestrator-started session its ticket (HS2-GDJXGZ,
+      HS2-R7QH35, HS2-KR28FS); machine-local.
     x-hotsheet-machine-local: true
     post:
       operationId: superviseOrchestrationSession
@@ -2828,7 +2828,12 @@ paths:
         also pause it; it is a person's act, changes this machine's record first, and lists `target_session` in
         `unverified` when the host could not be told. A session a person owns is never stopped by the orchestrator
         (`session_human_owned`). `request` tells a running session which exact ticket its run is for through its host's
-        session push (HS2-R7QH35) and answers `request_prompt`."
+        session push (HS2-R7QH35) and answers `request_prompt`. `hand-back` returns a session a person took over or
+        paused to the orchestrator (HS2-KR28FS): a person's act that needs what a session start needs (the policy and
+        the `session_start` permission request, `permission_required` until answered), only while the tool is idle
+        between turns (`session_mid_turn`, or `session_not_safe` when the host cannot tell), and only once the host
+        confirms. `operation_id` names the permission request; repeat it to continue one, or send a new one to ask
+        again after a denial. A session the orchestrator already owns is answered unchanged."
       requestBody:
         required: true
         content:
@@ -2844,6 +2849,11 @@ paths:
                 pause:
                   description: '`takeover` only. Also pause the session.'
                   type: boolean
+                operation_id:
+                  description: '`hand-back` only. The permission request to continue (HS2-KR28FS).'
+                  type: string
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
               additionalProperties: false
       responses:
         '200':
@@ -2887,6 +2897,7 @@ paths:
             - safe-point
             - stop
             - takeover
+            - hand-back
   /checkouts/{owner}/orchestration/session-sync:
     description: Sync every unfinished session of the owner with its host (HS2-GDJXGZ); machine-local.
     x-hotsheet-machine-local: true
@@ -3100,7 +3111,12 @@ paths:
                 type: string
     patch:
       operationId: takeOverHostedTargetSession
-      description: A person takes the session over, optionally pausing it. Refused for any other actor.
+      description: A person takes the session over, optionally pausing it. Refused for any other actor. With `hand_back`
+        (HS2-KR28FS) the session returns to its orchestrator instead. From the orchestrator (an identified AI actor,
+        gated where it orchestrates), this machine decides from the tool's turn and answers a refusal as `refused`
+        (`session_mid_turn`, `session_not_safe`, `session_not_active`, `session_not_found`). From a person here, the
+        request is passed to the orchestrating checkout when this machine holds it, so the same permission applies;
+        one orchestrated elsewhere is refused `session_owner_remote`.
       requestBody:
         required: true
         content:
@@ -3116,6 +3132,14 @@ paths:
                   pattern: ^[A-Za-z0-9._-]+$
                 pause:
                   type: boolean
+                hand_back:
+                  description: Hand the session back to the orchestrator (HS2-KR28FS).
+                  type: boolean
+                hand_back_operation_id:
+                  description: A person's hand-back here only. The permission request to continue.
+                  type: string
+                  maxLength: 160
+                  pattern: ^[A-Za-z0-9._-]+$
                 actor:
                   $ref: '#/components/schemas/OrchestrationActor'
               additionalProperties: false
@@ -3129,6 +3153,9 @@ paths:
                 properties:
                   session:
                     $ref: '#/components/schemas/HostedTargetSession'
+                  refused:
+                    description: Why a hand-back changed nothing, as a stable code (HS2-KR28FS).
+                    type: string
                 additionalProperties: false
         default:
           description:
@@ -22922,6 +22949,7 @@ components:
                   - stop
                   - pause
                   - takeover
+                  - hand_back
             additionalProperties: false
         label:
           description: The name of its tab in the hosting server's drawer, when this answer learned it.

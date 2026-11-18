@@ -1,6 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
-import { ArrowLeft, ArrowRight, CircleX, Hand, type IconNode, Pause, Pencil, Trash2, X } from 'lucide';
+import { ArrowLeft, ArrowRight, CircleX, Hand, HandHelping, type IconNode, Pause, Pencil, Trash2, X } from 'lucide';
 
 import type { TerminalOrchestrator } from '../api';
 import { contextMenuAnchor } from '../context-menu-position';
@@ -43,6 +43,17 @@ export function AppTabContextMenu({
       ? [
           { id: 'orchestrator-takeover', label: 'Take Over from Orchestrator', icon: Hand, iconName: 'hand' },
           { id: 'orchestrator-pause', label: 'Take Over and Pause', icon: Pause, iconName: 'pause' },
+        ]
+      : []),
+    // HS2-KR28FS: a session a person took over or paused can go back to its orchestrator.
+    ...(kind === 'terminal' && orchestrator?.owner === 'human'
+      ? [
+          {
+            id: 'orchestrator-hand-back',
+            label: 'Hand Back to Orchestrator',
+            icon: HandHelping,
+            iconName: 'hand-helping',
+          },
         ]
       : []),
     { id: 'close', label: 'Close Tab', icon: X, iconName: 'x' },

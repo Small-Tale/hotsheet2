@@ -111,6 +111,8 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   let terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
+  /** HS2-KR28FS: the permission request each hand-back waits on, by checkout and operation. */
+  const pendingHandBacks = new Map<string, string>();
   let drawerInputFocusGeneration = 0;
   let pendingTabSequence = 0;
   /**
@@ -520,6 +522,41 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     }
     await refreshTerminalDashboard();
   }
+  /**
+   * HS2-KR28FS: a person hands a session they took over or paused back to its orchestrator. It needs
+   * the permission a session start needs: the first try files that request, and the next try after it
+   * is answered continues it under the same operation id. A denial or a completed hand-back drops the
+   * id, so the next try asks again. The tool must be idle between turns.
+   */
+  async function handBackHostedSession(terminalId: string) {
+    const current = project(),
+      orchestrator = terminalGroups.value
+        .find((group) => group.projectId === current?.id)
+        ?.sessions.find((item) => item.id === terminalId)?.orchestrator;
+    if (!current || orchestrator?.owner !== 'human') return;
+    const key = `${orchestrator.checkout_id}/${orchestrator.operation_id}`,
+      operationId = pendingHandBacks.get(key) ?? `hand-back-${browserRandomId()}`;
+    pendingHandBacks.set(key, operationId);
+    try {
+      const reply = await new Api(current.apiPath).handBackHostedSession(
+        orchestrator.checkout_id,
+        orchestrator.operation_id,
+        operationId,
+      );
+      if (reply.refused === undefined) {
+        pendingHandBacks.delete(key);
+        showToast('Handed back to the orchestrator.');
+      } else showToast(handBackRefusal(reply.refused));
+    } catch (reason) {
+      if (reason instanceof ApiHttpError && reason.code === 'permission_required')
+        showToast('Handing back needs permission to start a session. Answer the request, then hand it back again.');
+      else {
+        pendingHandBacks.delete(key);
+        showToast(handBackError(reason));
+      }
+    }
+    await refreshTerminalDashboard();
+  }
   function closeDrawerAIChat(id: string) {
     void closeDrawerTabIds([id]);
   }
@@ -568,7 +605,36 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     closeDrawerAIChat,
     messageTerminalSession,
     takeOverHostedSession,
+    handBackHostedSession,
   };
+}
+
+/** HS2-KR28FS: what a refused hand-back tells the person. */
+export function handBackRefusal(code: string): string {
+  switch (code) {
+    case 'session_mid_turn':
+      return 'The session is in the middle of a turn. Hand it back when it is idle.';
+    case 'session_not_safe':
+      return 'The host could not tell whether the session is idle. Try again in a moment.';
+    case 'session_owner_remote':
+      return 'Another machine orchestrates this session. Hand it back from there.';
+    case 'session_not_active':
+    case 'session_not_found':
+      return 'The session is no longer running.';
+    default:
+      return `Could not hand the session back (${code}).`;
+  }
+}
+
+/** HS2-KR28FS: a failed hand-back request. A denial leaves the session the person's. */
+export function handBackError(reason: unknown): string {
+  if (reason instanceof ApiHttpError) {
+    if (reason.code === 'permission_denied')
+      return 'Permission to start a session was denied. The session stays yours.';
+    if (reason.code === 'policy_denied') return "The orchestration policy doesn't allow this session. It stays yours.";
+    if (reason.code !== undefined && reason.code.startsWith('session_')) return handBackRefusal(reason.code);
+  }
+  return `Could not hand the session back. ${reason instanceof Error ? reason.message : String(reason)}`;
 }
 
 export function terminalSessionMessageError(reason: unknown): string {

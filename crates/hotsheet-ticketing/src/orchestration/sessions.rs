@@ -137,7 +137,8 @@ impl SessionState {
     }
 }
 
-/// Who decides about a session now. Ownership only ever moves to a person.
+/// Who decides about a session now. Ownership moves to a person by a takeover or pause,
+/// and back to the orchestrator only by a person's hand-back (HS2-KR28FS).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionOwner {
@@ -158,10 +159,18 @@ pub enum SessionControl {
     Pause,
     /// A person took it over.
     Takeover,
+    /// HS2-KR28FS: a person handed it back to the orchestrator while it was idle.
+    HandBack,
 }
 
 impl SessionControl {
-    pub const ALL: [Self; 4] = [Self::WindDown, Self::Stop, Self::Pause, Self::Takeover];
+    pub const ALL: [Self; 5] = [
+        Self::WindDown,
+        Self::Stop,
+        Self::Pause,
+        Self::Takeover,
+        Self::HandBack,
+    ];
 
     pub fn code(self) -> &'static str {
         match self {
@@ -169,6 +178,7 @@ impl SessionControl {
             Self::Stop => "stop",
             Self::Pause => "pause",
             Self::Takeover => "takeover",
+            Self::HandBack => "hand_back",
         }
     }
 }
@@ -200,10 +210,13 @@ pub enum SessionError {
     /// HS2-WHR4GS: the orchestrator withdrew this operation; its host launches nothing
     /// for it.
     Withdrawn,
+    /// HS2-KR28FS: the tool is in the middle of a turn; it is handed back only while it
+    /// is idle between turns.
+    MidTurn,
 }
 
 impl SessionError {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::NotFound,
         Self::NotActive,
         Self::InvalidTransition,
@@ -216,6 +229,7 @@ impl SessionError {
         Self::StartFailed,
         Self::RunHeld,
         Self::Withdrawn,
+        Self::MidTurn,
     ];
 
     pub fn code(self) -> &'static str {
@@ -232,6 +246,7 @@ impl SessionError {
             Self::StartFailed => "session_start_failed",
             Self::RunHeld => "session_run_held",
             Self::Withdrawn => "session_withdrawn",
+            Self::MidTurn => "session_mid_turn",
         }
     }
 
@@ -375,6 +390,22 @@ pub fn decide_stop(
     Ok(())
 }
 
+/// HS2-KR28FS: whether a person may hand a session back to the orchestrator now, from
+/// what its host knows of the tool. `Ok(false)` when the orchestrator already owns it, so
+/// a repeated hand-back changes nothing. A tool whose process is gone is not active; one
+/// in the middle of a turn, or whose turn state is unknown, is not handed back.
+pub fn decide_hand_back(owner: SessionOwner, facts: &SafePointFacts) -> Result<bool, SessionError> {
+    if owner == SessionOwner::Orchestrator {
+        return Ok(false);
+    }
+    match (facts.alive, facts.busy) {
+        (Some(false), _) => Err(SessionError::NotActive),
+        (Some(true), Some(false)) => Ok(true),
+        (Some(true), Some(true)) => Err(SessionError::MidTurn),
+        _ => Err(SessionError::NotSafe),
+    }
+}
+
 /// The drawer label of an orchestrator-started session: the orchestration project and
 /// the run it works for, or its role when it serves no single run.
 pub fn session_label(project: &str, run_id: Option<&str>, role: SessionRole) -> String {
@@ -502,8 +533,12 @@ pub struct SessionUpdate {
     pub reason: Option<String>,
     pub actor_id: Option<String>,
     pub control: Option<SessionControl>,
-    /// Only [`SessionOwner::Human`] changes anything: ownership never returns.
+    /// Only [`SessionOwner::Human`] changes anything; ownership returns to the
+    /// orchestrator only through `hand_back`.
     pub owner: Option<SessionOwner>,
+    /// HS2-KR28FS: a person handed the session back: the orchestrator owns it again and
+    /// it is no longer paused.
+    pub hand_back: bool,
     pub paused: Option<bool>,
     pub hosted: Option<HostedRef>,
     /// HS2-2DPGDY: the role prompt as its host now answers.
@@ -723,6 +758,10 @@ impl SessionRegistry {
         }
         if update.owner == Some(SessionOwner::Human) {
             session.owner = SessionOwner::Human;
+        }
+        if update.hand_back {
+            session.owner = SessionOwner::Orchestrator;
+            session.paused = false;
         }
         if let Some(paused) = update.paused {
             // Only a person's session can be paused, and a pause is never undone by
@@ -1557,7 +1596,23 @@ impl HostedSessionRegistry {
         })
     }
 
-    /// A person took the session over, optionally pausing it. Never undone.
+    /// HS2-KR28FS: a person handed the session back; the orchestrator owns it again and
+    /// it is no longer paused. The caller has checked that the tool is idle. An ended
+    /// session keeps what it had.
+    pub fn hand_back(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_none() {
+                session.owner = SessionOwner::Orchestrator;
+                session.paused = false;
+            }
+        })
+    }
+
+    /// A person took the session over, optionally pausing it. Undone only by a hand-back.
     pub fn take_over(
         &self,
         checkout_id: &str,

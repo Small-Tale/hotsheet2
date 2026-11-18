@@ -221,6 +221,70 @@ describe('terminal drawer owner (HS2-BSSWGV)', () => {
   });
 });
 
+describe('hand back to the orchestrator (HS2-KR28FS)', () => {
+  const orchestrated = (owner: 'orchestrator' | 'human') =>
+    [
+      {
+        projectId: 'a',
+        sessions: [
+          { id: 't1', orchestrator: { checkout_id: 'c1', operation_id: 'op-1', project: 'P', owner, paused: false } },
+        ],
+      },
+    ] as unknown as TerminalDashboardGroup[];
+  const sent = () =>
+    fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Record<string, unknown>,
+    );
+
+  it('continues a permission request once answered, starts a new one after a denial, and explains refusals', async () => {
+    const { drawer, bindings, calls } = owner();
+    // The orchestrator's own session is never handed back.
+    bindings.terminalGroups.value = orchestrated('orchestrator');
+    await drawer.handBackHostedSession('t1');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    bindings.terminalGroups.value = orchestrated('human');
+    const failure = (code: string) =>
+      Promise.resolve(new Response(JSON.stringify({ code, request_id: 'req-1' }), { status: 409 }));
+    fetchMock.mockImplementationOnce(() => failure('permission_required'));
+    await drawer.handBackHostedSession('t1');
+    expect(calls.showToast).toHaveBeenLastCalledWith(
+      'Handing back needs permission to start a session. Answer the request, then hand it back again.',
+    );
+    fetchMock.mockImplementationOnce(() => json({ refused: 'session_mid_turn' }));
+    await drawer.handBackHostedSession('t1');
+    expect(calls.showToast).toHaveBeenLastCalledWith(
+      'The session is in the middle of a turn. Hand it back when it is idle.',
+    );
+    fetchMock.mockImplementationOnce(() => failure('permission_denied'));
+    await drawer.handBackHostedSession('t1');
+    expect(calls.showToast).toHaveBeenLastCalledWith(
+      'Permission to start a session was denied. The session stays yours.',
+    );
+    fetchMock.mockImplementationOnce(() => json({}));
+    await drawer.handBackHostedSession('t1');
+    expect(calls.showToast).toHaveBeenLastCalledWith('Handed back to the orchestrator.');
+    fetchMock.mockImplementationOnce(() => json({ refused: 'session_owner_remote' }));
+    await drawer.handBackHostedSession('t1');
+    expect(calls.showToast).toHaveBeenLastCalledWith(
+      'Another machine orchestrates this session. Hand it back from there.',
+    );
+
+    const bodies = sent();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/a/checkouts/c1/target-sessions');
+    expect(bodies[0]).toMatchObject({ operation_id: 'op-1', hand_back: true, actor: { role: 'human' } });
+    const ids = bodies.map((body) => body.hand_back_operation_id);
+    // Waiting on permission, then mid-turn, then denied: one request; after the denial a new one,
+    // kept through the completed hand-back; after it, a new one again.
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).toBe(ids[0]);
+    expect(ids[3]).not.toBe(ids[0]);
+    expect(ids[4]).not.toBe(ids[3]);
+    for (const id of ids) expect(id).toMatch(/^hand-back-[A-Za-z0-9-]+$/u);
+    expect(calls.refreshTerminalDashboard).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe('drawer add and remove transitions (HS2-AQ40G7)', () => {
   type Bindings = ReturnType<typeof owner>['bindings'];
   const sessions = (...ids: string[]) =>
