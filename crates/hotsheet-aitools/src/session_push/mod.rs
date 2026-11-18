@@ -81,6 +81,10 @@ pub enum PushError {
     /// The session answered with an error status.
     #[error("session rejected the message (HTTP {status}): {body}")]
     Rejected { status: u16, body: String },
+    /// HS2-4R5MNJ: the adapter keeps the message and delivers it itself once the tool can
+    /// take it (a Codex TUI still behind its first-run dialogs). Not delivered yet.
+    #[error("held until the session is ready: {0}")]
+    Held(String),
 }
 
 /// One live session's push adapter. An instance is bound to exactly one launched session;
@@ -93,6 +97,12 @@ pub trait SessionPush: Send + Sync {
     fn session_id(&self) -> Option<String>;
     /// Deliver one message. Blocking: callers on an async runtime use `spawn_blocking`.
     fn message(&self, message: &PushMessage) -> Result<PushReceipt, PushError>;
+    /// HS2-4R5MNJ: the prompt this adapter already delivered on its own (a held prompt it
+    /// pasted once the tool was ready), so the adapter that replaces it answers that same
+    /// prompt as delivered instead of sending it twice.
+    fn delivered_prompt(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Everything an adapter needs to know about the session the host is launching.

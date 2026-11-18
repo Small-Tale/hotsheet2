@@ -1332,25 +1332,31 @@ upgrade:
    confirm its answer's `role_prompt` is `at_launch` and agy shows the role prompt. In
    a folder agy has not trusted yet, accept the trust dialog first.
 
-## Codex bootstrap role prompt (HS2-N1GZFE)
+## Codex bootstrap role prompt (HS2-N1GZFE, HS2-4R5MNJ)
 
 A newly spawned Codex TUI gets the orchestrator's role prompt by a one-shot bracketed
-paste into its terminal right after launch (`codex-pty-bootstrap`), which reports
-`delivered` without confirmation. The maintainer verified with a real, signed-in `codex`
-(0.167.1) that an early paste is always kept (HS2-N1GZFE), so the prompt is not held.
-Repeat this check after a Codex upgrade that changes its start-up screens:
+paste into its terminal (`codex-pty-bootstrap`). A paste typed while Codex still shows a
+first-run dialog (update notice, folder trust, hooks review) can be lost. The HS2-4RVDJC
+rerun lost one, while an earlier trial kept one through the same dialogs. So the paste
+is now held until the TUI shows its composer (HS2-4R5MNJ). While held, `role_prompt`
+reads `pending`, not `delivered`. If the composer never appears within the role prompt
+window, the prompt reads `failed` and nothing is typed into a dialog. Repeat this check
+after a Codex upgrade that changes its start-up screens or its composer placeholder
+("Ask Codex to do anything"):
 
-1. In a scratch project Codex already trusts, open a Codex AI terminal from the drawer
-   and, within a second of it appearing, paste a short prompt ("Reply with the single
-   word READY") and press Return.
-2. Record whether the prompt appears in the composer and is answered, is lost, or lands
-   in a start-up dialog (trust, sign-in or update notice). Repeat three times, and once
-   in a directory Codex does not trust yet.
-3. Start an orchestrated Codex session (HS2-WEFJV8 steps) and confirm the role prompt
-   naming `hotsheet-worker` is shown and acted on.
-4. If an early paste is ever lost or answers a dialog, the bootstrap prompt must wait
-   for the first idle observation or the SessionStart report; record the outcome on
-   HS2-N1GZFE.
+1. In a scratch folder Codex has never opened, start an orchestrated Codex session
+   (Propose Plan or the HS2-WEFJV8 steps). While the update notice, the trust dialog or
+   the hooks review is shown, confirm the session's `role_prompt` is `pending` and the
+   prompt text is not typed into the dialog.
+2. Answer the dialogs as a person would. When the composer appears, confirm the role
+   prompt is pasted once, a turn starts, and `role_prompt` becomes `delivered`.
+3. Repeat in a folder Codex already trusts with no update pending. The prompt is pasted
+   as soon as the composer is drawn.
+4. Leave a dialog open past the role prompt window (10 minutes). Confirm `role_prompt`
+   becomes `failed` and nothing is typed when the dialog is finally answered.
+5. If Codex changes its composer placeholder or dialog titles, the markers in
+   `crates/hotsheet-server/src/routes/session_messages.rs` (`COMPOSER_MARKERS`,
+   `NOT_READY_MARKERS`) must change with it. Record the outcome on HS2-4R5MNJ.
 
 ## Propose Plan with real AI tools (HS2-4RVDJC)
 

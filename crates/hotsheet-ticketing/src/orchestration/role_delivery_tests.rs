@@ -109,3 +109,35 @@ fn hs2_2dpgdy_a_prompt_at_launch_is_settled_and_survives_the_record() {
         "\"at_launch\""
     );
 }
+
+/// HS2-4R5MNJ: a prompt the host holds until the tool can take it (a Codex TUI behind its
+/// first-run dialogs) stays pending without using up a try, however many readiness events
+/// find it still held; the window still bounds it, and the paste settles it delivered.
+#[test]
+fn hs2_4r5mnj_a_held_prompt_waits_without_using_tries_and_settles_when_pasted() {
+    let mut held = RoleDelivery::default();
+    for minute in 0..(u64::from(MAX_ROLE_ATTEMPTS) * 3) {
+        held = held.after(PushAttempt::Held, LAUNCH, LAUNCH + minute * 1_000);
+        assert_eq!(held.prompt, Some(RolePrompt::Pending));
+        assert_eq!(held.attempts, 0);
+        assert!(held.should_retry(LAUNCH, LAUNCH + minute * 1_000));
+    }
+    let delivered = held.after(PushAttempt::Delivered, LAUNCH, LAUNCH + 60_000);
+    assert_eq!(delivered.prompt, Some(RolePrompt::Delivered));
+    assert_eq!(delivered.delivered_at_ms, Some(LAUNCH + 60_000));
+    // Never ready within the window: failed, and nothing more is tried.
+    let late = LAUNCH + ROLE_PROMPT_WINDOW_MS;
+    assert_eq!(held.at(LAUNCH, late), Some(RolePrompt::Failed));
+    assert_eq!(
+        held.after(PushAttempt::Held, LAUNCH, late).prompt,
+        Some(RolePrompt::Failed)
+    );
+    // A held try after real failed tries keeps their count.
+    let tried = RoleDelivery::default()
+        .after(PushAttempt::NotReady, LAUNCH, LAUNCH)
+        .after(PushAttempt::Held, LAUNCH, LAUNCH + 1);
+    assert_eq!(
+        (tried.prompt, tried.attempts),
+        (Some(RolePrompt::Pending), 1)
+    );
+}

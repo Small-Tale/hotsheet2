@@ -456,6 +456,8 @@ impl SessionHost for LocalServerSessions {
                     };
                 }
                 Err(Some(400)) => outcome = PushAttempt::Rejected,
+                // HS2-4R5MNJ: the host keeps the prompt until the tool can take it.
+                Err(Some(409)) => return PushAttempt::Held,
                 // Not listening yet, or not registered yet: maybe later.
                 Err(_) => {}
             }

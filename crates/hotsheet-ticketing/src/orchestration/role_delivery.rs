@@ -71,6 +71,10 @@ pub enum PushAttempt {
     NotReady,
     /// The tool answered and refused the message.
     Rejected,
+    /// HS2-4R5MNJ: the host keeps the prompt and delivers it itself once the tool can take
+    /// it (a Codex TUI behind its first-run dialogs). Still pending, and not a try: waiting
+    /// on a person at a dialog uses up none of the bounded tries, only the window.
+    Held,
 }
 
 /// The role delivery as recorded for one hosted session.
@@ -116,12 +120,16 @@ impl RoleDelivery {
         if self.prompt.is_some_and(RolePrompt::is_settled) {
             return self;
         }
-        let attempts = self.attempts.saturating_add(1);
+        let attempts = if attempt == PushAttempt::Held {
+            self.attempts
+        } else {
+            self.attempts.saturating_add(1)
+        };
         let prompt = match attempt {
             PushAttempt::Delivered => RolePrompt::Delivered,
             PushAttempt::Unsupported => RolePrompt::Unsupported,
             PushAttempt::Rejected => RolePrompt::Failed,
-            PushAttempt::NotReady => RolePrompt::Pending,
+            PushAttempt::NotReady | PushAttempt::Held => RolePrompt::Pending,
         };
         let next = Self {
             prompt: Some(prompt),

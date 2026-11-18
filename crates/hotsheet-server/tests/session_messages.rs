@@ -619,17 +619,63 @@ async fn an_unreachable_session_api_is_a_502() {
     let _ = send(&router, "DELETE", "/terminals/push-down", None).await;
 }
 
+/// HS2-4R5MNJ: a stand-in Codex TUI. It shows the update notice until a person answers
+/// it, then draws the composer's placeholder and echoes whatever is typed.
+fn write_codex_stand_in(root: &std::path::Path, id: &str) {
+    let dir = root.join(id);
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("instructions.md"), "Fake setup marker\n").unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        format!(
+            r#"
+id = "{id}"
+display_name = "Codex"
+product_name = "Codex"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[launch]
+program = "/bin/sh"
+args = ["-c", "printf 'Update available! Press Enter to skip'; read answer; printf '\\033[2J\\033[2mAsk Codex to do anything\\033[0m\\n'; exec cat"]
+[session_push]
+mechanism = "codex-queue"
+"#
+        ),
+    )
+    .unwrap();
+}
+
+/// Wait until terminal `id` has printed `text`.
+async fn wait_for_output(router: &axum::Router, id: &str, text: &str) {
+    for _ in 0..500 {
+        let (_, terminal) = send(router, "GET", &format!("/terminals/{id}"), None).await;
+        if terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(text)
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("terminal {id} never printed {text:?}");
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_brokered_codex_launch_can_bootstrap_only_once() {
     let store_dir = tempfile::tempdir().unwrap();
     let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
-    write_plugin(
-        plugins.path(),
-        "fake-codex",
-        "[session_push]\nmechanism = \"codex-queue\"",
-    );
+    write_codex_stand_in(plugins.path(), "fake-codex");
     let socket_dir = tempfile::tempdir().unwrap();
     let socket = socket_dir.path().join("broker.sock");
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
@@ -643,7 +689,38 @@ async fn a_brokered_codex_launch_can_bootstrap_only_once() {
         .unwrap()
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_terminal_broker_at(broker.clone()));
-    launch(&router, "fake-codex", "broker-codex").await;
+    let (status, launched) = send(
+        &router,
+        "POST",
+        "/terminals",
+        Some(r#"{"connect":"fake-codex","id":"broker-codex"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{launched}");
+    // HS2-4R5MNJ, brokered: held while the stand-in shows its dialog, pasted once its
+    // composer appears, then recorded as delivered.
+    wait_for_output(&router, "broker-codex", "Update available!").await;
+    let (status, held) = send(
+        &router,
+        "POST",
+        "/connections/broker-codex/message",
+        Some(r#"{"text":"first"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{held}");
+    assert_eq!(held["code"], "session_prompt_held");
+    assert!(
+        send(
+            &router,
+            "POST",
+            "/terminals/broker-codex/input",
+            Some(r#"{"data":"\r"}"#)
+        )
+        .await
+        .0
+        .is_success()
+    );
+    wait_for_output(&router, "broker-codex", "first").await;
     let (status, first) = send(
         &router,
         "POST",
@@ -709,7 +786,8 @@ server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--path", "{store}"]
 [launch]
-program = "/bin/cat"
+program = "/bin/sh"
+args = ["-c", "printf 'Update available! Press Enter to skip'; read answer; printf '\\033[2J\\033[2mAsk Codex to do anything\\033[0m\\n'; exec cat"]
 [session_push]
 mechanism = "codex-queue"
 "#,
@@ -738,16 +816,49 @@ mechanism = "codex-queue"
             .to_string()
             .contains("message")
     );
-    let (status, first) = send(
-        &router,
-        "POST",
-        "/connections/fresh/message",
-        Some(r#"{"text":"first line\nsecond line"}"#),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{first}");
-    assert_eq!(first["mechanism"], "codex-pty-bootstrap");
-    assert_eq!(first["confirmed"], false);
+    // HS2-4R5MNJ: the stand-in TUI shows a first-run dialog first. The prompt is held,
+    // not delivered, and nothing is typed into the dialog.
+    let scrollback = |terminal: &serde_json::Value| {
+        terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    for _ in 0..200 {
+        let (_, terminal) = send(&router, "GET", "/terminals/fresh", None).await;
+        if scrollback(&terminal).contains("Update available!") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    for _ in 0..2 {
+        let (status, held) = send(
+            &router,
+            "POST",
+            "/connections/fresh/message",
+            Some(r#"{"text":"first line\nsecond line"}"#),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT, "{held}");
+        assert_eq!(held["code"], "session_prompt_held");
+    }
+    let (_, terminal) = send(&router, "GET", "/terminals/fresh", None).await;
+    assert!(
+        !scrollback(&terminal).contains("first line"),
+        "typed into the dialog"
+    );
+    // A person answers the dialog; the composer appears and the held prompt is pasted.
+    assert!(
+        send(
+            &router,
+            "POST",
+            "/terminals/fresh/input",
+            Some(r#"{"data":"\r"}"#)
+        )
+        .await
+        .0
+        .is_success()
+    );
     let mut seen_prompt = false;
     for _ in 0..100 {
         let (_, terminal) = send(&router, "GET", "/terminals/fresh", None).await;
@@ -762,6 +873,17 @@ mechanism = "codex-queue"
         seen_prompt,
         "the first prompt did not reach the launched PTY"
     );
+    let (status, first) = send(
+        &router,
+        "POST",
+        "/connections/fresh/message",
+        Some(r#"{"text":"first line\nsecond line"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["mechanism"], "codex-pty-bootstrap");
+    assert_eq!(first["confirmed"], false);
+    // Recording the delivery typed nothing more: the unit tests pin the single paste.
     // Reattaching must not refresh the one-shot adapter.
     assert_eq!(
         send(

@@ -2843,8 +2843,22 @@ the pool cannot be read), and this machine's record keeps `role_prompt` and
 `role_prompt` and the join are published to the session's run as `session_role_<code>`
 and `session_joined`, or move the scheduler's wake marker for a session without a
 run. A session the scheduler placed that does not join in time, or whose prompt
-failed, is wound down and replaced (HS2-NPTKS8, §26.24). Whether an early
-bootstrap paste reaches a Codex TUI that is not ready is HS2-N1GZFE.
+failed, is wound down and replaced (HS2-NPTKS8, §26.24).
+
+**Codex bootstrap (HS2-4R5MNJ).** A new Codex TUI fires no hook before its first prompt,
+and a paste typed behind a first-run dialog (update notice, folder trust, hooks review)
+can be lost. The bootstrap adapter therefore pastes the role prompt only once the TUI's
+output shows its composer, read from the terminal's own output stream, never on a timer.
+
+- **While held.** The push answers `held` (HTTP `409 session_prompt_held` on the message
+  route) and the role prompt reads `pending`. A held try uses up none of the bounded
+  tries.
+- **When the composer appears.** The adapter pastes the prompt exactly once, then records
+  it as `delivered` through the same retry as any readiness event. The adapter that
+  replaces it after SessionStart answers that same prompt as delivered instead of sending
+  it twice.
+- **If the composer never appears.** Past the role prompt window the prompt is `failed`,
+  and nothing is typed into whatever the TUI shows.
 
 ### Safe points and winding down
 

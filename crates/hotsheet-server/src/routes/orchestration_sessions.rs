@@ -143,6 +143,8 @@ impl SessionHost for ServerSessions {
         }) {
             Ok(_) => PushAttempt::Delivered,
             Err(PushError::Unreachable(_)) => PushAttempt::NotReady,
+            // HS2-4R5MNJ: kept by the adapter until the tool can take it; not delivered.
+            Err(PushError::Held(_)) => PushAttempt::Held,
             Err(PushError::Unsupported(_)) => PushAttempt::Unsupported,
             Err(PushError::Invalid(_) | PushError::Rejected { .. }) => PushAttempt::Rejected,
         }
