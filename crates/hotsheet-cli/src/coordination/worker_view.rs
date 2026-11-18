@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, RecursiveMode, rescan_event};
+use hotsheet_jobs::watch::{BackgroundWatcher, Delivery, RecursiveMode};
 use hotsheet_model::StartedPhase;
 use hotsheet_ticketing::TicketRef;
 use serde::{Deserialize, Serialize};
@@ -445,6 +445,12 @@ impl WorkerView {
     }
 }
 
+/// What wakes a worker-snapshot wait: a file event, or the stream's own status.
+enum Wake {
+    Event(Delivery),
+    Status,
+}
+
 /// Observable progress of one worker-snapshot wait (HS2-QVWZDP).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WatchStep {
@@ -454,6 +460,10 @@ enum WatchStep {
     IdleSlice,
     /// A relevant filesystem event or lease/deadline expiry re-read the source.
     Rescanned,
+    /// HS2-JE63XJ: the file-event stream went live (or its start was refused and is
+    /// retried), so the source was read once to cover what changed before events could
+    /// be trusted. Not an idle check, and not a change.
+    StreamStatus,
     /// The cancel flag ended the wait; the watcher drops on return.
     Cancelled,
 }
@@ -499,6 +509,8 @@ impl Coordinator {
         // happens at once; going live, or a refused start while it is retried, is a
         // rescan that reads again.
         let status = sender.clone();
+        // HS2-JE63XJ: the stream's own status is told apart from its events, so the read
+        // it calls for is reported as such, never as a change.
         let watcher = BackgroundWatcher::start(
             &[
                 (self.directory.as_path(), RecursiveMode::NonRecursive),
@@ -511,10 +523,10 @@ impl Coordinator {
                 },
             ],
             move |event: Delivery| {
-                let _ = sender.send(event);
+                let _ = sender.send(Wake::Event(event));
             },
             move |_| {
-                let _ = status.send(Ok(rescan_event()));
+                let _ = status.send(Wake::Status);
             },
         );
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
@@ -558,14 +570,16 @@ impl Coordinator {
             // at the re-check interval (local files only).
             let pending = watcher.recheck().filter(|pending| *pending < slice);
             let slice = pending.unwrap_or(slice);
-            let relevant = match receiver.recv_timeout(slice) {
-                Ok(Ok(event)) => {
+            // The step a read is reported as, when this wake calls for one.
+            let read = match receiver.recv_timeout(slice) {
+                Ok(Wake::Status) => Some(WatchStep::StreamStatus),
+                Ok(Wake::Event(Ok(event))) => {
                     let tickets = self.source.join("tickets");
                     let providers = self.source.join("providers.json");
                     let checkouts = self.registry_home.join("checkouts.json");
                     let state = self.directory.join("state.json");
                     let settings = settings_directory.join("settings.json");
-                    event.need_rescan()
+                    let relevant = event.need_rescan()
                         || event.paths.iter().any(|path| {
                             path == &state
                                 || path == &settings
@@ -573,27 +587,30 @@ impl Coordinator {
                                 || path == &providers
                                 || path == &checkouts
                                 || path.starts_with(&tickets)
-                        })
+                        });
+                    relevant.then_some(WatchStep::Rescanned)
                 }
-                Err(mpsc::RecvTimeoutError::Timeout) if pending.is_some() => true,
+                Err(mpsc::RecvTimeoutError::Timeout) if pending.is_some() => {
+                    Some(WatchStep::Rescanned)
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     let expired = slice == wait;
                     if !expired {
                         observe(WatchStep::IdleSlice);
                     }
-                    expired
+                    expired.then_some(WatchStep::Rescanned)
                 }
-                Ok(Err(error)) => anyhow::bail!("worker view watch failed: {error}"),
+                Ok(Wake::Event(Err(error))) => anyhow::bail!("worker view watch failed: {error}"),
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     anyhow::bail!("worker view watch disconnected; reconnect from cursor")
                 }
             };
-            if relevant {
+            if let Some(step) = read {
                 if !settings_directory_watched && settings_directory.is_dir() {
                     watcher.add(&settings_directory, RecursiveMode::NonRecursive);
                     settings_directory_watched = true;
                 }
-                observe(WatchStep::Rescanned);
+                observe(step);
                 snapshot = self.snapshot(time::OffsetDateTime::now_utc().unix_timestamp())?;
                 if WorkerView::worker_state_cursor(&snapshot) != after {
                     return Ok(snapshot);
@@ -1145,9 +1162,19 @@ mod tests {
             Some(cancelled.clone()),
         );
         assert_eq!(waiting.next_step(), WatchStep::Armed);
-        // Cancel only once the armed wait has idled through a check slice, so
-        // the flag interrupts a real wait and the idle slice is shown not to
-        // rescan.
+        // HS2-JE63XJ: the stream goes live on its own thread, at any time after the
+        // wait is armed (within the first slice on a quiet machine, seconds later on a
+        // loaded one), and that one read is reported as `StreamStatus`. Wait for it, then
+        // cancel only once the live wait has idled through a check slice, so the flag
+        // interrupts a real wait and the idle slice is shown not to rescan.
+        let mut before = Vec::new();
+        loop {
+            let step = waiting.next_step();
+            before.push(step);
+            if step == WatchStep::StreamStatus {
+                break;
+            }
+        }
         assert_eq!(waiting.next_step(), WatchStep::IdleSlice);
         cancelled.store(true, Ordering::Relaxed);
         let (resumed, steps) = waiting.finish();
@@ -1155,14 +1182,22 @@ mod tests {
         let (last, idle) = steps.split_last().expect("cancellation step");
         assert_eq!(*last, WatchStep::Cancelled);
         assert!(
-            idle.iter().all(|step| *step == WatchStep::IdleSlice),
-            "idle checks never rescan the source: {steps:?}"
+            before
+                .iter()
+                .chain(idle)
+                .all(|step| matches!(step, WatchStep::IdleSlice | WatchStep::StreamStatus)),
+            "idle checks never rescan the source: {before:?} then {steps:?}"
         );
     }
 
+    /// The wait woke by reading the source: on the change's event, or (HS2-JE63XJ) on
+    /// the stream going live after the change, which reads it too. Never by an idle slice.
     fn assert_woken_by_rescan(steps: &[WatchStep]) {
         assert!(
-            !steps.is_empty() && steps.iter().all(|step| *step == WatchStep::Rescanned),
+            !steps.is_empty()
+                && steps
+                    .iter()
+                    .all(|step| matches!(step, WatchStep::Rescanned | WatchStep::StreamStatus)),
             "an armed wait wakes only by rescanning on the change: {steps:?}"
         );
     }
