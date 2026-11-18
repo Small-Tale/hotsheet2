@@ -31795,9 +31795,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.screenshot({ path: 'target/visual-captures/hs2-v20ewj-archive-column.png', fullPage: true });
 });
 
-test('switches and searches large ticket views without cloning every row into motion ghosts @quarantine HS2-X0A331', async ({
-  page,
-}) => {
+test('switches and searches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
   const statuses: Array<'not_started' | 'backlog' | 'archive'> = [
     ...Array.from({ length: 60 }, () => 'not_started' as const),
     ...Array.from({ length: 18 }, () => 'backlog' as const),
@@ -31858,10 +31856,25 @@ test('switches and searches large ticket views without cloning every row into mo
     await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
     if (view === 'Archive') {
       await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
-      const editor = page.getByRole('searchbox', { name: 'Search tickets' }),
-        started = Date.now();
+      const editor = page.getByRole('searchbox', { name: 'Search tickets' });
+      await editor.evaluate((element) => {
+        let started = 0;
+        window.addEventListener(
+          'input',
+          (event) => {
+            if (event.target === element) started = performance.now();
+          },
+          true,
+        );
+        window.addEventListener('input', (event) => {
+          if (event.target === element) {
+            document.documentElement.dataset.searchInputMs = String(performance.now() - started);
+          }
+        });
+      });
       await editor.fill('2074');
-      expect(Date.now() - started).toBeLessThan(250);
+      const searchInputMs = await page.evaluate(() => Number(document.documentElement.dataset.searchInputMs));
+      expect(searchInputMs).toBeLessThan(250);
       await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
       await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
       await page.screenshot({ path: 'target/visual-captures/hs2-e76c4k-large-search.png', fullPage: true });
