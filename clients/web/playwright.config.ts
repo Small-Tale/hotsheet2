@@ -12,6 +12,7 @@ import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playw
 import {
   isolateAiToolProbes,
   isolateHostHealthSampler,
+  isolateLaunchedSession,
   isolateNativeSecrets,
 } from './scripts/test-ai-tool-isolation.mjs';
 import { playwrightRetries, quarantineGrepInvert } from './src/test-quarantine';
@@ -22,6 +23,9 @@ lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 isolateAiToolProbes();
 isolateHostHealthSampler();
 isolateNativeSecrets();
+// No worker, browser, web server or binary inherits a launched session's live server route
+// or terminal and actor identity (HS2-KDVHN5).
+isolateLaunchedSession();
 // Until a machine-wide browser slot pool exists, refuse repeated local WebKit and warn on any local
 // WebKit run: concurrent WebKit across sessions has aborted WindowServer (HS2-CKHSM5, HS2-M6TZB5).
 const webkitGuard = runnerWebkitGuard();

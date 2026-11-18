@@ -397,7 +397,7 @@ fn live_status(store: &Path, project: &Path) -> Value {
     let Ok(terminals) = hook_get_json(&endpoint, &secret) else {
         return json!({"server":"unreachable", "connection":"unknown"});
     };
-    let terminal_id = std::env::var("HOTSHEET_TERMINAL_ID").ok();
+    let terminal_id = hotsheet_cli::launched_env::value("HOTSHEET_TERMINAL_ID");
     let root = project
         .canonicalize()
         .unwrap_or_else(|_| project.to_path_buf());

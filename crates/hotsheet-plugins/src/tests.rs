@@ -1775,6 +1775,40 @@ fn test_processes_use_the_repository_test_home_not_the_real_machine_home() {
     );
 }
 
+/// HS2-KDVHN5: a test process never sees an inherited launched-session route. A Hot
+/// Sheet-launched agent shell exports its live server's url and secret and its terminal and
+/// actor identity; `.cargo/config.toml` forces each of them empty for every process cargo or
+/// nextest starts, so a spawned shim or hook cannot reach the maintainer's real server.
+/// Removing a guard, or adding a launched-session variable without one, fails this test.
+#[test]
+fn hs2_kdvhn5_test_processes_never_see_an_inherited_launched_session_route() {
+    const LAUNCHED: &[&str] = &[
+        "HOTSHEET_SERVER",
+        "HOTSHEET_SECRET",
+        "HOTSHEET_TERMINAL_ID",
+        "HOTSHEET_PROJECT",
+        "HOTSHEET_PERMISSION_PROJECT",
+        "HOTSHEET_WORKER_ID",
+        "HOTSHEET_ACTOR_ROLE",
+        "HOTSHEET_ACTOR_ID",
+        "HOTSHEET_AGENT",
+    ];
+    for name in LAUNCHED {
+        let value = std::env::var(name).unwrap_or_default();
+        assert!(value.trim().is_empty(), "{name} reached a test process");
+    }
+    let config: toml::Value = include_str!("../../../.cargo/config.toml").parse().unwrap();
+    for name in LAUNCHED {
+        let entry = &config["env"][name];
+        assert_eq!(
+            entry["value"].as_str(),
+            Some(""),
+            "{name} is not forced empty"
+        );
+        assert_eq!(entry["force"].as_bool(), Some(true), "{name} is not forced");
+    }
+}
+
 #[test]
 fn hs2_aebjyn_role_skills_preserve_returned_findings_and_require_the_semantic_fence() {
     for skill in [

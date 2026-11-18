@@ -105,7 +105,7 @@ fn main() -> Result<()> {
             |key| std::env::var(key).ok(),
             presence::INHERITED_IDENTITY
                 .iter()
-                .any(|key| std::env::var_os(key).is_some())
+                .any(|key| hotsheet_cli::launched_env::value(key).is_some())
                 && presence::hosted_by_shared_host(
                     &presence::ancestor_commands(hotsheet_plugins::shared_host::ANCESTOR_DEPTH),
                     &hotsheet_plugins::shared_mcp_hosts(),

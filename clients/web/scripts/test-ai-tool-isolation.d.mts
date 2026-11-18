@@ -15,3 +15,15 @@ export declare const MACHINE_HOME_ENV: Readonly<
 export declare function isolateMachineHome<T extends Record<string, string | undefined>>(root: string, env?: T): T;
 export declare const NATIVE_SECRETS_ENV: 'HOTSHEET_NATIVE_SECRETS';
 export declare function isolateNativeSecrets<T extends Record<string, string | undefined>>(env?: T): T;
+export declare const LAUNCHED_SESSION_ENV: readonly [
+  'HOTSHEET_SERVER',
+  'HOTSHEET_SECRET',
+  'HOTSHEET_TERMINAL_ID',
+  'HOTSHEET_PROJECT',
+  'HOTSHEET_PERMISSION_PROJECT',
+  'HOTSHEET_WORKER_ID',
+  'HOTSHEET_ACTOR_ROLE',
+  'HOTSHEET_ACTOR_ID',
+  'HOTSHEET_AGENT',
+];
+export declare function isolateLaunchedSession<T extends Record<string, string | undefined>>(env?: T): T;

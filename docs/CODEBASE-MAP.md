@@ -1151,6 +1151,7 @@ hotsheet-aitools/test-permission-vault`, then `cargo nextest run -p hotsheet-cli
   `clients/web/vitest.config.ts` forces a per-run temporary machine home (and HS1 home,
   cache, Claude user config, LaunchAgents dir) for every Vitest project (HS2-34QFBQ); see
   [12 §12.7.6](12-code-organization-and-testing.md#1276-fixtures--ci).
+- **Launched-session isolation (HS2-KDVHN5):** `.cargo/config.toml` forces the launched-session route variables empty for every cargo test process, `crates/hotsheet-cli/src/launched_env.rs` reads them with empty as unset, and `clients/web/scripts/test-ai-tool-isolation.mjs` `isolateLaunchedSession` removes them in both JS runners; `scripts/check.sh` unsets them.
 - **Lint (must pass with zero warnings before push):** `cargo fmt --all --check` +
   `cargo lint`; then `npm run lint` in `clients/web`, `migrator`, and
   `spikes/kerf-webawesome`. `.cargo/config.toml` owns the pinned workspace Clippy

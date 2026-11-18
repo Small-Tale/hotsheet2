@@ -879,6 +879,22 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `src/machine-home-isolation.dom.test.ts` fail without it (HS2-34QFBQ). Manual repros that run `target/debug/hotsheet-cli` or the server must export a
   temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
   checkout in the real registry.
+- **Launched-session isolation (HS2-KDVHN5):** a Hot Sheet-launched agent shell exports
+  the route to its live server and its terminal and actor identity: `HOTSHEET_SERVER`,
+  `HOTSHEET_SECRET`, `HOTSHEET_TERMINAL_ID`, `HOTSHEET_PROJECT`,
+  `HOTSHEET_PERMISSION_PROJECT`, `HOTSHEET_WORKER_ID`, `HOTSHEET_ACTOR_ROLE`,
+  `HOTSHEET_ACTOR_ID` and `HOTSHEET_AGENT`. No test run passes them on to what it
+  starts, so a spawned shim or hook cannot reach the maintainer's real server.
+  - `.cargo/config.toml` forces each to the empty string, because `[env]` cannot unset a
+    variable. Every reader treats an empty value as unset (`hotsheet_cli::launched_env`).
+  - `vitest.config.ts` and `playwright.config.ts` delete them before any worker, browser
+    or web server starts (`isolateLaunchedSession`).
+  - `scripts/check.sh` unsets them before the gate starts.
+  - A test that needs one sets it on the command it spawns.
+  - The policy tests are
+    `crates/hotsheet-plugins/src/tests.rs # hs2_kdvhn5`,
+    `crates/hotsheet-cli/src/launched_env.rs # hs2_kdvhn5` and
+    `clients/web/scripts/test-ai-tool-isolation.test.mjs # HS2-KDVHN5`.
 - **Global Git config isolation (HS2-M269HC):** `.cargo/config.toml` forces
   `GIT_CONFIG_GLOBAL=<repo>/.cargo/test-gitconfig` for every process cargo or nextest
   starts. That file gives tests a synthetic identity like CI's, and sets

@@ -721,7 +721,7 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     if let Some(session) = hotsheet_cli::permission_hook::session_hook_event(&input) {
         let terminal = hook_terminal_id(installed_agent).unwrap_or_default();
         if let (false, Some((url, secret))) = (terminal.is_empty(), hook_server_route()) {
-            let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+            let env_agent = hotsheet_cli::launched_env::value("HOTSHEET_AGENT");
             let agent = installed_agent.or(env_agent.as_deref());
             let session_id = input.get("session_id").and_then(serde_json::Value::as_str);
             if agent == Some("claude") {
@@ -767,8 +767,8 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let project = std::env::var("HOTSHEET_PERMISSION_PROJECT")
-        .or_else(|_| std::env::var("HOTSHEET_PROJECT"))
+    let project = hotsheet_cli::launched_env::value("HOTSHEET_PERMISSION_PROJECT")
+        .or_else(|| hotsheet_cli::launched_env::value("HOTSHEET_PROJECT"))
         .unwrap_or_default();
     let route = hook_server_route();
     let terminal_env = hook_terminal_id(installed_agent);
@@ -785,7 +785,7 @@ pub(crate) fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         Some((url, secret)) => {
             let (tool, action) = hook_tool_action(&input);
             let connection = hook_connection(&input);
-            let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+            let env_agent = hotsheet_cli::launched_env::value("HOTSHEET_AGENT");
             let agent = installed_agent.or(env_agent.as_deref());
             let request = serde_json::json!({
                 "project": project, "connection": connection, "tool": tool, "action": action,
@@ -823,10 +823,10 @@ fn hook_terminal_id(installed_agent: Option<&str>) -> Option<String> {
     use hotsheet_plugins::shared_host::{
         ANCESTOR_DEPTH, ancestor_commands, hook_identity_untrusted, shared_hosts_for,
     };
-    let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+    let env_agent = hotsheet_cli::launched_env::value("HOTSHEET_AGENT");
     let agent = installed_agent.or(env_agent.as_deref());
     hotsheet_cli::permission_hook::trusted_terminal_id(
-        std::env::var("HOTSHEET_TERMINAL_ID").ok(),
+        hotsheet_cli::launched_env::value("HOTSHEET_TERMINAL_ID"),
         || {
             hook_identity_untrusted(agent, shared_hosts_for, || {
                 ancestor_commands(ANCESTOR_DEPTH)
@@ -1919,7 +1919,7 @@ ticket this turn, then stop. If nothing is Up Next, say so and stop.";
 /// The running Hot Sheet server a hook should talk to: the project's discovered instance, else
 /// the URL and secret the terminal was launched with.
 pub(crate) fn hook_server_route() -> Option<(String, String)> {
-    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let project = hotsheet_cli::launched_env::value("HOTSHEET_PROJECT").unwrap_or_default();
     let home = hotsheet_plugins::hotsheet_home();
     let is_checkout =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
@@ -1940,8 +1940,8 @@ pub(crate) fn hook_server_route() -> Option<(String, String)> {
         .map(|server| (server.url, server.secret))
         .or_else(|| {
             Some((
-                std::env::var("HOTSHEET_SERVER").ok()?,
-                std::env::var("HOTSHEET_SECRET").ok()?,
+                hotsheet_cli::launched_env::value("HOTSHEET_SERVER")?,
+                hotsheet_cli::launched_env::value("HOTSHEET_SECRET")?,
             ))
         })
 }

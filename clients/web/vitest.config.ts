@@ -7,6 +7,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import {
   isolateAiToolProbes,
   isolateHostHealthSampler,
+  isolateLaunchedSession,
   isolateMachineHome,
   isolateNativeSecrets,
 } from './scripts/test-ai-tool-isolation.mjs';
@@ -16,6 +17,9 @@ import { BINARY_SUITES } from './scripts/vitest-binary-suites.mjs';
 isolateAiToolProbes();
 isolateHostHealthSampler();
 isolateNativeSecrets();
+// No worker, browser, web server or binary inherits a launched session's live server route
+// or terminal and actor identity (HS2-KDVHN5).
+isolateLaunchedSession();
 
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-vitest-vite-'));
 // Every project's workers inherit a per-run machine home, never the real or an inherited

@@ -53,3 +53,25 @@ export function isolateMachineHome(root, env = process.env) {
   for (const [name, relative] of Object.entries(MACHINE_HOME_ENV)) env[name] = join(root, relative);
   return env;
 }
+
+// HS2-KDVHN5: a Hot Sheet-launched agent shell exports the route to its live server and its
+// terminal and actor identity. A browser or Node suite started there would hand them to
+// every fixture server, CLI and MCP shim it spawns, which could then send requests to the
+// maintainer's real server. Each is removed from the runner's environment before any
+// worker, browser or web server starts. Rust tests force them empty in `.cargo/config.toml`.
+export const LAUNCHED_SESSION_ENV = Object.freeze([
+  'HOTSHEET_SERVER',
+  'HOTSHEET_SECRET',
+  'HOTSHEET_TERMINAL_ID',
+  'HOTSHEET_PROJECT',
+  'HOTSHEET_PERMISSION_PROJECT',
+  'HOTSHEET_WORKER_ID',
+  'HOTSHEET_ACTOR_ROLE',
+  'HOTSHEET_ACTOR_ID',
+  'HOTSHEET_AGENT',
+]);
+
+export function isolateLaunchedSession(env = process.env) {
+  for (const name of LAUNCHED_SESSION_ENV) Reflect.deleteProperty(env, name);
+  return env;
+}

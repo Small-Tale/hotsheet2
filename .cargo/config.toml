@@ -61,3 +61,17 @@ HOTSHEET_SYNC_AI_ALLOWED_TOOLS = { value = "repair-fixture", force = true }
 # password prompt. The switch only refuses; tests that need credentials still opt into
 # synthetic ones explicitly.
 HOTSHEET_NATIVE_SECRETS = { value = "deny", force = true }
+# HS2-KDVHN5: a Hot Sheet-launched agent shell exports the route to its live server and its
+# terminal and actor identity. A test process that inherited them could send a spawned
+# shim's or hook's requests to the maintainer's real server. `[env]` cannot unset a
+# variable, so each is forced empty, and every reader treats an empty value as unset
+# (`hotsheet_cli::launched_env`). Tests that need one set it on the command they spawn.
+HOTSHEET_SERVER = { value = "", force = true }
+HOTSHEET_SECRET = { value = "", force = true }
+HOTSHEET_TERMINAL_ID = { value = "", force = true }
+HOTSHEET_PROJECT = { value = "", force = true }
+HOTSHEET_PERMISSION_PROJECT = { value = "", force = true }
+HOTSHEET_WORKER_ID = { value = "", force = true }
+HOTSHEET_ACTOR_ROLE = { value = "", force = true }
+HOTSHEET_ACTOR_ID = { value = "", force = true }
+HOTSHEET_AGENT = { value = "", force = true }

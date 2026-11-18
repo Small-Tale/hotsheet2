@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -8,8 +9,10 @@ import {
   HOST_HEALTH_SAMPLER_ENV,
   isolateAiToolProbes,
   isolateHostHealthSampler,
+  isolateLaunchedSession,
   isolateMachineHome,
   isolateNativeSecrets,
+  LAUNCHED_SESSION_ENV,
   MACHINE_HOME_ENV,
   NATIVE_SECRETS_ENV,
 } from './test-ai-tool-isolation.mjs';
@@ -67,5 +70,30 @@ describe('HS2-XTQHPK native keychain isolation', () => {
   it('only ever sets the refusing value', () => {
     const env = { PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'allow' };
     expect(isolateNativeSecrets(env)).toEqual({ PATH: '/usr/bin', [NATIVE_SECRETS_ENV]: 'deny' });
+  });
+});
+
+describe('HS2-KDVHN5 launched-session isolation', () => {
+  it('runs every worker without an inherited server route or terminal and actor identity', () => {
+    for (const name of LAUNCHED_SESSION_ENV) expect(process.env[name], name).toBeUndefined();
+  });
+
+  it('removes every launched-session variable and leaves the others alone', () => {
+    const env = {
+      PATH: '/usr/bin',
+      HOTSHEET_HOME: '/run/home',
+      ...Object.fromEntries(LAUNCHED_SESSION_ENV.map((name) => [name, 'inherited'])),
+    };
+    expect(isolateLaunchedSession(env)).toEqual({ PATH: '/usr/bin', HOTSHEET_HOME: '/run/home' });
+  });
+
+  it('is applied by both runner configs and the local gate before anything starts', () => {
+    const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+    for (const config of ['../vitest.config.ts', '../playwright.config.ts'])
+      expect(source(config), config).toMatch(/^isolateLaunchedSession\(\);$/m);
+    const gate = source('../../../scripts/check.sh');
+    const unset = gate.match(/^unset ([^]*?)\n(?!\s)/m)?.[1] ?? '';
+    for (const name of LAUNCHED_SESSION_ENV) expect(unset.split(/[\s\\]+/), name).toContain(name);
+    expect(gate.indexOf('unset ')).toBeLessThan(gate.indexOf('exec '));
   });
 });
