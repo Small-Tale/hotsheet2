@@ -199,6 +199,13 @@ pub(super) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
                 status["gitlab_token"] = super::job_gitlab::token_source(&home)
                     .map(|source| source.code())
                     .into();
+                // HS2-17HVNP: whether a Buildkite or CircleCI token is configured.
+                for (key, provider) in [
+                    ("buildkite_token", super::job_ci_rest::BUILDKITE),
+                    ("circleci_token", super::job_ci_rest::CIRCLECI),
+                ] {
+                    status[key] = provider.has_token().then_some(provider.token_env()).into();
+                }
                 print_json(&status)
             }
             JobWatchCmd::Ci {
@@ -538,6 +545,13 @@ fn register_sources(monitor: &mut Monitor, home: &Path) {
     // HS2-TPAHYA: GitLab CI pipelines, through the same REST port.
     monitor.register(Box::new(hotsheet_jobs::GitlabCiSource::new(
         super::job_gitlab::UreqGitlabApi::new(home),
+    )));
+    // HS2-17HVNP: Buildkite builds and CircleCI pipelines, through the same REST port.
+    monitor.register(Box::new(hotsheet_jobs::BuildkiteSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::BUILDKITE),
+    )));
+    monitor.register(Box::new(hotsheet_jobs::CircleciSource::new(
+        super::job_ci_rest::UreqCiRestApi::new(super::job_ci_rest::CIRCLECI),
     )));
     // A file-backed source so process tests can drive a real monitor offline. It is not
     // compiled into release builds.

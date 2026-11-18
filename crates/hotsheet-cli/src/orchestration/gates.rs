@@ -105,7 +105,17 @@ impl GithubActionsGates {
         Self::for_provider(home, CiProvider::GitlabCi)
     }
 
-    fn for_provider(home: &Path, ci: CiProvider) -> Self {
+    /// HS2-17HVNP: the Buildkite adapter.
+    pub fn buildkite(home: &Path) -> Self {
+        Self::for_provider(home, CiProvider::Buildkite)
+    }
+
+    /// HS2-17HVNP: the CircleCI adapter.
+    pub fn circleci(home: &Path) -> Self {
+        Self::for_provider(home, CiProvider::Circleci)
+    }
+
+    pub(crate) fn for_provider(home: &Path, ci: CiProvider) -> Self {
         Self {
             ci,
             home: home.into(),
@@ -136,11 +146,8 @@ impl GithubActionsGates {
 
     fn target(&self, gate: &Gate) -> Result<CiTarget, GateError> {
         let scope = gate.ci.as_ref().ok_or(GateError::ProviderUnsupported)?;
-        let new = match self.ci {
-            CiProvider::GithubActions => CiTarget::new,
-            CiProvider::GitlabCi => CiTarget::gitlab,
-        };
-        new(
+        CiTarget::for_provider(
+            self.ci,
             &scope.repository,
             &gate.commit,
             &scope.workflow,
@@ -611,6 +618,9 @@ impl OrchestrationRuntime {
             .and_then(|identity| match ci {
                 CiProvider::GithubActions => github_repository(&identity),
                 CiProvider::GitlabCi => gitlab_project(&identity),
+                // HS2-17HVNP: a Buildkite pipeline or CircleCI project slug is not a
+                // repository identity; the link names it.
+                CiProvider::Buildkite | CiProvider::Circleci => None,
             });
         match (requested, declared) {
             (Some(requested), Some(declared)) if !requested.eq_ignore_ascii_case(&declared) => {
@@ -659,7 +669,7 @@ impl OrchestrationRuntime {
                 self.gate_repository_for(owner_id, &run.target.target_id, request.repository, ci)?;
             let default_workflow = match ci {
                 CiProvider::GithubActions => "CI",
-                CiProvider::GitlabCi => "*",
+                CiProvider::GitlabCi | CiProvider::Buildkite | CiProvider::Circleci => "*",
             };
             let linked = self.gate_registry().link(
                 owner_id,

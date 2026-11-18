@@ -27,12 +27,21 @@ const MAX_DURATIONS: usize = 10;
 /// HS2-TPAHYA: the Job kind name and the `external.system` of a GitLab CI watch.
 pub const GITLAB_CI_KIND: &str = "gitlab-ci";
 
+/// HS2-17HVNP: the Job kind name and the `external.system` of a Buildkite watch.
+pub const BUILDKITE_KIND: &str = "buildkite";
+/// HS2-17HVNP: the Job kind name and the `external.system` of a CircleCI watch.
+pub const CIRCLECI_KIND: &str = "circleci";
+
 /// HS2-TPAHYA: which CI provider a watch observes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum CiProvider {
     #[default]
     GithubActions,
     GitlabCi,
+    /// HS2-17HVNP: Buildkite builds of one pipeline.
+    Buildkite,
+    /// HS2-17HVNP: CircleCI pipelines and their workflows.
+    Circleci,
 }
 
 impl CiProvider {
@@ -41,13 +50,28 @@ impl CiProvider {
         match self {
             Self::GithubActions => GITHUB_ACTIONS_KIND,
             Self::GitlabCi => GITLAB_CI_KIND,
+            Self::Buildkite => BUILDKITE_KIND,
+            Self::Circleci => CIRCLECI_KIND,
         }
     }
 
+    pub const ALL: [Self; 4] = [
+        Self::GithubActions,
+        Self::GitlabCi,
+        Self::Buildkite,
+        Self::Circleci,
+    ];
+
     pub fn from_kind(kind: &str) -> Option<Self> {
-        [Self::GithubActions, Self::GitlabCi]
+        Self::ALL
             .into_iter()
             .find(|provider| provider.kind() == kind)
+    }
+
+    /// HS2-17HVNP: whether the provider's API can tell that a build of a later commit
+    /// contains the watched one. Without it a gate attests exact coverage only.
+    pub fn attests_ancestors(self) -> bool {
+        matches!(self, Self::GithubActions | Self::GitlabCi)
     }
 }
 
@@ -56,7 +80,9 @@ impl CiProvider {
 pub struct CiTarget {
     /// HS2-TPAHYA: the provider that runs the CI.
     pub provider: CiProvider,
-    /// `owner/name`; for GitLab the project's full path, `group/[subgroup/…]project`.
+    /// `owner/name`; for GitLab the project's full path, `group/[subgroup/…]project`;
+    /// for Buildkite `organization/pipeline` (slugs); for CircleCI the project slug
+    /// `vcs/organization/project`, for example `gh/acme/widgets` (HS2-17HVNP).
     pub repo: String,
     /// Full 40-character commit SHA, lowercase.
     pub sha: String,
@@ -124,6 +150,59 @@ impl CiTarget {
             return Err(crate::JobError::Invalid("ci.repo"));
         }
         Self::checked(CiProvider::GitlabCi, project, sha, workflow, branch)
+    }
+
+    /// HS2-17HVNP: a Buildkite target: `pipeline` is `organization-slug/pipeline-slug`.
+    /// Buildkite builds have no workflow of their own, so `workflow` must be `*`.
+    pub fn buildkite(
+        pipeline: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        match pipeline.split_once('/') {
+            Some((organization, slug)) if slug_part(organization) && slug_part(slug) => {}
+            _ => return Err(crate::JobError::Invalid("ci.repo")),
+        }
+        if workflow != "*" {
+            return Err(crate::JobError::Invalid("ci.workflow"));
+        }
+        Self::checked(CiProvider::Buildkite, pipeline, sha, workflow, branch)
+    }
+
+    /// HS2-17HVNP: a CircleCI target: `project` is the API v2 project slug,
+    /// `vcs/organization/project`. `workflow` is a workflow name, or `*` for every
+    /// workflow of the pipeline.
+    pub fn circleci(
+        project: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        let segments: Vec<&str> = project.split('/').collect();
+        let valid = segments.len() == 3
+            && ["gh", "github", "bb", "bitbucket", "circleci"].contains(&segments[0])
+            && segments[1..].iter().all(|s| part(s));
+        if !valid {
+            return Err(crate::JobError::Invalid("ci.repo"));
+        }
+        Self::checked(CiProvider::Circleci, project, sha, workflow, branch)
+    }
+
+    /// HS2-17HVNP: the target of any provider, as its own constructor validates it.
+    pub fn for_provider(
+        provider: CiProvider,
+        repo: &str,
+        sha: &str,
+        workflow: &str,
+        branch: &str,
+    ) -> Result<Self, crate::JobError> {
+        match provider {
+            CiProvider::GithubActions => Self::new(repo, sha, workflow, branch),
+            CiProvider::GitlabCi => Self::gitlab(repo, sha, workflow, branch),
+            CiProvider::Buildkite => Self::buildkite(repo, sha, workflow, branch),
+            CiProvider::Circleci => Self::circleci(repo, sha, workflow, branch),
+        }
     }
 
     fn checked(
@@ -237,19 +316,25 @@ impl CiTarget {
                 })
             }
         };
-        let target = match provider {
-            CiProvider::GithubActions => Self::new(repo, sha, workflow, branch),
-            CiProvider::GitlabCi => Self::gitlab(repo, sha, workflow, branch),
-        }
-        .ok()?
-        .with_artifact(artifact)
-        .ok()?;
+        let target = Self::for_provider(provider, repo, sha, workflow, branch)
+            .ok()?
+            .with_artifact(artifact)
+            .ok()?;
         Some((target, floor))
     }
 
     pub(crate) fn short_sha(&self) -> &str {
         &self.sha[..7]
     }
+}
+
+/// HS2-17HVNP: a Buildkite slug: lowercase letters, digits and `-`.
+fn slug_part(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// One segment of a repository or project path.
@@ -275,6 +360,8 @@ fn unescape(part: &str) -> String {
 pub enum ApiMethod {
     Get,
     Post,
+    /// HS2-17HVNP: Buildkite cancels a build with `PUT`.
+    Put,
 }
 
 /// One REST request. `path` is relative to the API root, for example

@@ -185,6 +185,7 @@ impl GithubApi for UreqGitlabApi {
         let method = match request.method {
             ApiMethod::Get => "GET",
             ApiMethod::Post => "POST",
+            ApiMethod::Put => "PUT",
         };
         let url = format!("{base}/{}", request.path);
         let response = self

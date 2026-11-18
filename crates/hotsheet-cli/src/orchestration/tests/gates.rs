@@ -1633,6 +1633,88 @@ fn hs2_tpahya_a_gitlab_ci_gate_is_watched_and_read_like_github() {
     );
 }
 
+/// HS2-17HVNP: Buildkite and CircleCI gates are linked, watched by the one machine
+/// monitor and read with the same typed evidence. Neither provider exposes ancestry, so
+/// their evidence is exact coverage.
+#[test]
+fn hs2_17hvnp_buildkite_and_circleci_gates_are_watched_and_read_like_github() {
+    for (provider, repository, default_workflow, commit_char, run_number) in [
+        ("buildkite", "acme/widgets", "*", 'c', 41u64),
+        ("circleci", "gh/acme/widgets", "*", 'd', 42),
+    ] {
+        let mut rng = Rng(100);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        let (m, run) = with_run(&[TargetAction::GatesObserve], &mut tx);
+        let (commit, owner) = (sha(commit_char), m.owner.id.clone());
+        let linked = m
+            .runtime
+            .gate_link(
+                &owner,
+                &run,
+                serde_json::from_value(json!({"commit": commit, "provider": provider,
+                    "repository": repository}))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(linked.gate.provider, provider);
+        let scope = linked.gate.ci.clone().unwrap();
+        assert_eq!(
+            (scope.repository.as_str(), scope.workflow.as_str()),
+            (repository, default_workflow)
+        );
+        let jobs = JobStore::at(&m.home).list(&owner).unwrap().jobs;
+        assert_eq!(jobs.len(), 1, "{provider}");
+        assert_eq!(jobs[0].kind.name, provider);
+        assert_eq!(jobs[0].external.as_ref().unwrap().system, provider);
+        judge(
+            &m.home,
+            &owner,
+            linked.gate.watch_ref.as_deref().unwrap(),
+            "green",
+            &commit,
+            run_number,
+        );
+        let green = m
+            .runtime
+            .gate_sync(
+                &owner,
+                &run,
+                &SyncGates { wait_ms: 0 },
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+        assert_eq!(green.summary.ci, GateState::Passed, "{provider}");
+        let evidence = green.summary.gates[0].evidence.clone().unwrap();
+        assert_eq!(
+            (
+                evidence.provider.as_str(),
+                evidence.reference.as_str(),
+                evidence.coverage
+            ),
+            (provider, run_number.to_string().as_str(), Coverage::Exact)
+        );
+        // A pipeline or project slug the provider cannot address is refused, and no
+        // declared repository identity names one: the link must.
+        let odd: LinkGate = serde_json::from_value(
+            json!({"commit": sha('e'), "provider": provider, "repository": "widgets"}),
+        )
+        .unwrap();
+        assert_eq!(
+            gate_error(
+                m.runtime
+                    .gate_link(&owner, &run, odd, Some(&worker()), &mut tx)
+            ),
+            GateError::ProviderUnsupported
+        );
+    }
+}
+
 fn paused_error<T>(result: Result<T, OrchestrationError>) {
     match result {
         Err(OrchestrationError::Run(hotsheet_ticketing::orchestration::RunError::Paused)) => {}

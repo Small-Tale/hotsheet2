@@ -24,7 +24,9 @@
 //! Nothing in the Job core reads the wall clock or a random source except through [`Clock`] and
 //! [`IdSource`].
 
+mod buildkite;
 mod ci;
+mod circleci;
 mod clock;
 mod error;
 mod feed;
@@ -42,10 +44,12 @@ mod steps;
 mod store;
 pub mod watch;
 
+pub use buildkite::BuildkiteSource;
 pub use ci::{
     CiArtifact, CiOutcome, CiRun, CiWatchOptions, GateReading, GateState, ci_outcome,
     ensure_ci_watch, find_ci_watch, gate_of, gate_state, rewatch_ci, wait_for_gate_change,
 };
+pub use circleci::CircleciSource;
 pub use clock::{Clock, IdSource, ManualClock, SequenceIds, SystemClock, UlidSource};
 pub use error::JobError;
 pub use feed::{
@@ -53,8 +57,9 @@ pub use feed::{
 };
 pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
-    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiProvider, CiTarget, GITHUB_ACTIONS_KIND,
-    GITLAB_CI_KIND, GithubActionsSource, GithubApi, RunFloor, repo_from_remote,
+    ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider,
+    CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, RunFloor,
+    repo_from_remote,
 };
 pub use gitlab::GitlabCiSource;
 pub use model::{

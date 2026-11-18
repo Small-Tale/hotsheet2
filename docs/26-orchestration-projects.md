@@ -1747,7 +1747,16 @@ the same coverage rules apply. GitLab's API exposes no artifact digest, so a Git
 verdict records no artifact. A GitLab gate of a target on another machine is watched
 on that machine like a GitHub one (HS2-2222QP): the hosted `target-gates` route takes
 `provider` (absent means `github-actions`), and the host's repository check compares
-the full project path with its checkout's remotes. Other providers are HS2-17HVNP.
+the full project path with its checkout's remotes. HS2-17HVNP adds `buildkite`
+(`repository` is the `organization/pipeline` slugs, workflow `*`) and `circleci`
+(`repository` is the `vcs/organization/project` slug, workflow a name or `*`), both
+§33.11a. They are watched and read the same way, but their APIs expose no ancestry, so
+their evidence is always exact coverage. No declared identity names their slugs, so
+the link must give `repository`. Because a slug names no Git remote, the hosted
+repository check refuses a Buildkite or CircleCI watch of a target on another machine
+(`gate_repository_mismatch`); HS2-56MTYN covers that case and ancestor coverage.
+Jenkins (HS2-7H0S8R), Azure Pipelines (HS2-JZ1DD2) and Bitbucket Pipelines
+(HS2-BWF72S) are follow-ups.
 
 ### Coverage
 

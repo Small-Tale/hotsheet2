@@ -237,6 +237,9 @@ impl OrchestrationRuntime {
                 Arc::new(GithubActionsGates::new(&home)),
                 // HS2-TPAHYA: GitLab CI pipelines, through the same watch Jobs.
                 Arc::new(GithubActionsGates::gitlab(&home)),
+                // HS2-17HVNP: Buildkite builds and CircleCI pipelines, likewise.
+                Arc::new(GithubActionsGates::buildkite(&home)),
+                Arc::new(GithubActionsGates::circleci(&home)),
             ],
             sessions: Arc::new(NoSessionHost),
             session_executor: Arc::new(ExecutorUnavailable),

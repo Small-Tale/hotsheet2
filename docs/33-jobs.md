@@ -361,6 +361,42 @@ Job kind and external system are `gitlab-ci`.
   `HOTSHEET_GITLAB_API_URL` (default `https://gitlab.com/api/v4`), HTTPS except
   loopback HTTP for tests.
 
+## 33.11a Buildkite and CircleCI watches as shipped (HS2-17HVNP)
+
+`buildkite` and `circleci` watch Jobs follow one commit's CI gate like §33.9 and §33.11,
+through the same machine monitor, CI gate API and REST port. Neither provider's API
+exposes repository ancestry, so these gates attest **exact coverage only**: a build or
+pipeline counts only when it was built from the watched commit itself on the target
+branch. A later commit's green never covers it, and the gate is never superseded; it
+stays pending until the commit's own build is judged.
+
+- **Buildkite** ([REST builds API](https://buildkite.com/docs/apis/rest-api/builds)).
+  The target names the pipeline as `organization/pipeline` slugs, and the workflow is
+  always `*`. Each poll lists `organizations/:org/pipelines/:pipeline/builds?branch=&commit=`
+  and ignores pull request builds. A `passed` build of the commit is green; otherwise
+  the newest build decides: `failed` is red, `canceled` is cancelled, and other states
+  wait or run (`running`, `failing`, `canceling`). Non-wait jobs are the steps. Cancel
+  is `PUT .../builds/:number/cancel`, sent only for the commit's own unfinished build.
+  A rebuild is a new build number, so a rewatch ignores a judged build by number.
+- **CircleCI** ([API v2](https://circleci.com/docs/api/v2/index.html)). The target names
+  the project slug `vcs/organization/project` (`gh`, `github`, `bb`, `bitbucket` or
+  `circleci`) and either one workflow name or `*` for every workflow. Each poll reads
+  `project/:slug/pipeline?branch=` and keeps the pipelines whose `vcs.revision` is the
+  commit. It then reads `pipeline/:id/workflow`, where the newest workflow of each name
+  counts, a finished set is cached, and an errored pipeline is red. The counted
+  workflows' jobs (`workflow/:id/job`) are the steps. Every counted workflow succeeding
+  is green; any failure is red, and a cancellation is cancelled. Cancel is
+  `POST workflow/:id/cancel` for the commit's unfinished counted workflows. The run
+  floor is the pipeline number.
+- **Outcome.** Refs have GitHub's keys, with `run_attempt` 1 and `run_head_sha` the
+  commit itself. No artifact digest is recorded.
+- **Credentials.** `BUILDKITE_API_TOKEN` is sent as `Authorization: Bearer`, and
+  `CIRCLECI_TOKEN` as `Circle-Token`. Both are kept in memory only. `job watch status`
+  reports `buildkite_token` and `circleci_token` as the variable name or `null`. The API
+  roots are `HOTSHEET_BUILDKITE_API_URL` (default `https://api.buildkite.com/v2`) and
+  `HOTSHEET_CIRCLECI_API_URL` (default `https://circleci.com/api/v2`), HTTPS except
+  loopback HTTP. A 429 waits for `Retry-After`, or for Buildkite's `RateLimit-Reset`.
+
 ## 33.12 Validation and deployment runners (HS2-BWAPSX)
 
 A hosted validation step or deployment that runs in a detached runner
