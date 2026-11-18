@@ -4983,6 +4983,28 @@ keep going until a person, or `session_stop` and `run_cancel`, winds them down. 
 switch wakes the scheduler, and a switch back to Orchestration starts the loop again
 when the kept policy places automatically.
 
+### Future project types (HS2-3F5Q5Y)
+
+The maintainer decided how project types grow beyond Software and Orchestration:
+
+- **One value that expands to capabilities.** A project's type stays the one value a
+  person picks in General → Project Type. Each type expands to a set of capabilities, and
+  the client and the server check capabilities, not type names. Stored data stays the
+  one value, so a later override needs no migration, and an unknown stored type is still
+  refused.
+- **No new type for now.** Software and Orchestration are the only types. Candidates
+  considered were General (non-code work), Writing, Research, Operations and Design.
+- **Defaults only.** A future type may change defaults: which settings categories and
+  views show, the default ticket categories and AI roles. It adds no new server gate;
+  Orchestration's existing gate (a Software project orchestrates nothing, HS2-J3ZF27)
+  stays as it is.
+
+Software and Orchestration do not expand to capability sets yet. The server already
+checks one seam (`ProjectType::orchestrates`), and the web client compares the type with
+`orchestration` where it adds the category and the view; a one-member capability set
+would add indirection without simplifying either. The expansion is introduced when a
+third type is chosen (HS2-2EEQBK).
+
 ### Adding and removing a project
 
 Adding a project declares a target (§26.2) and binds it to an open checkout on this
