@@ -41,6 +41,7 @@ mod strategy_tests;
 #[cfg(test)]
 mod tests;
 mod wait;
+mod watch_paths;
 pub mod worker_view;
 
 use std::fs::{self, OpenOptions};

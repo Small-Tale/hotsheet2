@@ -530,14 +530,17 @@ pub fn watch_rollout(
                 None => (Target::Home, home.clone(), RecursiveMode::NonRecursive),
             };
         if current.as_ref() != Some(&next) {
+            // One stream restart for the swap, not one per unwatch and watch (HS2-P0EHD4).
+            let mut batch = watcher.paths_mut();
             if let Some(previous) = current.take() {
-                let _ = watcher.unwatch(match &previous {
+                let _ = batch.remove(match &previous {
                     Target::Home => &home,
                     Target::Sessions => &sessions,
                     Target::Rollout(path) => path,
                 });
             }
-            watcher.watch(&path, mode).map_err(io::Error::other)?;
+            batch.add(&path, mode).map_err(io::Error::other)?;
+            batch.commit().map_err(io::Error::other)?;
             *current = Some(next);
             return io::Result::Ok(true);
         }

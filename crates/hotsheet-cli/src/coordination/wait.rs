@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use hotsheet_ticketing::FileLock;
-use notify::{Event, RecursiveMode, Watcher};
+use notify::{Event, RecursiveMode};
 use sha2::{Digest, Sha256};
 
 use super::{Coordinator, RequestRefusal, Role, Snapshot, WaitRequest};
@@ -38,17 +38,21 @@ impl Coordinator {
         })?;
         // Subscribe before reading/registering: a producer may arrive at any startup
         // point, and durable state closes the watch/reconnect race.
-        watcher.watch(&self.directory, RecursiveMode::NonRecursive)?;
-        watcher.watch(&self.source, RecursiveMode::NonRecursive)?;
         let registry_home = self.registry_home.clone();
         std::fs::create_dir_all(&registry_home)?;
-        watcher.watch(&registry_home, RecursiveMode::NonRecursive)?;
         let registry_file = registry_home.join("checkouts.json");
         let providers_file = self.source.join("providers.json");
         let tickets = self.source.join("tickets");
+        // One stream start for every path (HS2-P0EHD4).
+        let mut paths = vec![
+            (self.directory.as_path(), RecursiveMode::NonRecursive),
+            (self.source.as_path(), RecursiveMode::NonRecursive),
+            (registry_home.as_path(), RecursiveMode::NonRecursive),
+        ];
         if tickets.is_dir() {
-            watcher.watch(&tickets, RecursiveMode::Recursive)?;
+            paths.push((tickets.as_path(), RecursiveMode::Recursive));
         }
+        super::watch_paths::watch_all(&mut watcher, &paths)?;
         let mut renew_at = now() + request.lease_seconds / 2;
         // HS2-TWZW7X: a dispatcher may start before dispatcher authority exists. It then
         // waits on genuine state events without registering, and says why.

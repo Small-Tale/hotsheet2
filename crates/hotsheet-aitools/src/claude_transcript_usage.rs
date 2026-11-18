@@ -469,13 +469,21 @@ pub fn watch_transcript(
     })
     .map_err(io::Error::other)?;
     std::thread::spawn(move || {
-        // Starting a native stream can take seconds under load; do it off the caller.
-        if watcher.watch(&dir, RecursiveMode::NonRecursive).is_err() {
+        // Starting a native stream can take seconds under load; do it off the caller, and
+        // register the session directory in the same start when it already exists (HS2-P0EHD4).
+        let mut session_watched = session.is_dir();
+        let mut batch = watcher.paths_mut();
+        if batch.add(&dir, RecursiveMode::NonRecursive).is_err() {
+            return;
+        }
+        if session_watched && batch.add(&session, RecursiveMode::Recursive).is_err() {
+            session_watched = false;
+        }
+        if batch.commit().is_err() {
             return;
         }
         // Claude creates the session directory on first use; its creation wakes the
         // transcript directory's watch, and the next wake starts watching it.
-        let mut session_watched = false;
         let mut watch_session = |watcher: &mut notify::RecommendedWatcher| {
             if !session_watched && session.is_dir() {
                 session_watched = watcher.watch(&session, RecursiveMode::Recursive).is_ok();

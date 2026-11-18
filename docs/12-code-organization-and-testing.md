@@ -948,6 +948,21 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   still requires a clean checkout, reservation, fast-forward push, remote confirmation,
   and covering main CI; record the reason in the ticket. Integrator and staged pushes
   cannot use this override.
+
+**macOS file watching under load (HS2-P0EHD4, HS2-T1M4VA).** Each FSEvents stream start is a
+blocking registration RPC to `fseventsd`. When `syspolicyd` is busy assessing newly written
+executables, that RPC can wait seconds in a freshly started process (sampled stack:
+`FSEventStreamStart → register_with_server → f2d_register_rpc`), while FSEvents itself stays
+fast for an idle client. Two rules follow:
+
+- Register all of a wait's paths with one stream start: `notify` 8's `paths_mut()` adds every
+  path and commits once (`hotsheet-cli` `coordination::watch_paths::watch_all`, the Codex rollout
+  watch's target swap, and the Claude transcript watch). Calling `watch()` per path stops and
+  restarts the stream each time, multiplying the stall.
+- Do not rewrite an unchanged executable. The local host keeps the stable hook CLI
+  (`~/.hotsheet2/bin/hotsheet-cli`, launched by every AI tool call's hook) when its recorded
+  source digest (`hotsheet-cli.source-sha256`) matches, so macOS does not assess a fresh copy at
+  every host start.
   Every signalled gate names who stopped it (HS2-RY0ZMX). One message covers each source:
   - the heartbeat: `… was stopped by SIGTERM from this window because the heartbeat failed: …`;
   - a SIGINT or SIGTERM sent to the push itself: `Main integration push received SIGTERM and stopped its gate`;

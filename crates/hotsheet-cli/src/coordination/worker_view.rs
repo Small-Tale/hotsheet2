@@ -489,17 +489,23 @@ impl Coordinator {
         let mut watcher = notify::recommended_watcher(move |event| {
             let _ = sender.send(event);
         })?;
-        watcher.watch(&self.directory, RecursiveMode::NonRecursive)?;
-        watcher.watch(&self.source, RecursiveMode::Recursive)?;
         std::fs::create_dir_all(&self.registry_home)?;
-        watcher.watch(&self.registry_home, RecursiveMode::NonRecursive)?;
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
-        if settings_directory_watched {
-            watcher.watch(&settings_directory, RecursiveMode::NonRecursive)?;
-        } else {
-            watcher.watch(&self.project, RecursiveMode::NonRecursive)?;
-        }
+        // One stream start for every path (HS2-P0EHD4).
+        super::watch_paths::watch_all(
+            &mut watcher,
+            &[
+                (&self.directory, RecursiveMode::NonRecursive),
+                (&self.source, RecursiveMode::Recursive),
+                (&self.registry_home, RecursiveMode::NonRecursive),
+                if settings_directory_watched {
+                    (&settings_directory, RecursiveMode::NonRecursive)
+                } else {
+                    (&self.project, RecursiveMode::NonRecursive)
+                },
+            ],
+        )?;
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let mut snapshot = self.snapshot(now)?;
         if WorkerView::worker_state_cursor(&snapshot) != after || max_wait.is_zero() {
