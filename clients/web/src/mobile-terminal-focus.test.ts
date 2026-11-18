@@ -74,6 +74,42 @@ describe('mobile terminal focus mode', () => {
     expect(transitionMobileTerminalFocus(invalid, { type: 'context-invalid' })).toBe(invalid);
     expect(transitionMobileTerminalFocus(invalid, { type: 'exit' })).toBe(invalid);
   });
+
+  it('HS2-7HPXCY opens, keeps, and ends the full-screen search bar through every focus transition', () => {
+    const focus = (terminalId: string, search?: boolean) =>
+      ({ type: 'terminal-focus', mobile: true, terminalId, viewport: viewport(844), search }) as const;
+    // Search opens nothing outside full screen.
+    expect(transitionMobileTerminalFocus(INACTIVE_MOBILE_TERMINAL_FOCUS, { type: 'search', open: true })).toBe(
+      INACTIVE_MOBILE_TERMINAL_FOCUS,
+    );
+    // Search from the rail enters full screen with the bar open.
+    let state = transitionMobileTerminalFocus(INACTIVE_MOBILE_TERMINAL_FOCUS, focus('one', true));
+    expect(state).toEqual({ active: true, terminalId: 'one', viewport: viewport(844), search: true });
+    // Tapping into the same terminal keeps the bar; a keyboard resize keeps it too.
+    state = transitionMobileTerminalFocus(state, focus('one'));
+    expect(state.search).toBe(true);
+    state = transitionMobileTerminalFocus(state, { type: 'viewport-change', viewport: viewport(492, 18) });
+    expect(state.search).toBe(true);
+    // Repeating an open is idempotent.
+    expect(transitionMobileTerminalFocus(state, { type: 'search', open: true })).toBe(state);
+    // Closing the bar stays in full screen; closing again is idempotent.
+    state = transitionMobileTerminalFocus(state, { type: 'search', open: false });
+    expect(state).toEqual({ active: true, terminalId: 'one', viewport: viewport(492, 18) });
+    expect(transitionMobileTerminalFocus(state, { type: 'search', open: false })).toBe(state);
+    // The focus-mode Search button reopens it.
+    state = transitionMobileTerminalFocus(state, { type: 'search', open: true });
+    expect(state.search).toBe(true);
+    // Another terminal starts without the bar.
+    expect(transitionMobileTerminalFocus(state, focus('two')).search).toBeUndefined();
+    // Exit ends it, and the next tap-to-focus starts without it.
+    state = transitionMobileTerminalFocus(state, { type: 'exit' });
+    expect(state).toBe(INACTIVE_MOBILE_TERMINAL_FOCUS);
+    expect(transitionMobileTerminalFocus(state, focus('one')).search).toBeUndefined();
+    // A desktop-width focus never opens it.
+    expect(
+      transitionMobileTerminalFocus(INACTIVE_MOBILE_TERMINAL_FOCUS, { ...focus('one', true), mobile: false }),
+    ).toBe(INACTIVE_MOBILE_TERMINAL_FOCUS);
+  });
 });
 
 describe('mobile virtual keyboard detection (HS2-WMN626)', () => {

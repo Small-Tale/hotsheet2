@@ -439,6 +439,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-touch-selection.ts # Touch text selection: point→buffer cell, word bounds, anchored drag range, and the controller the long-press drives (HS2-EYR96N)
     src/terminal-keys.ts     #   Phone key-bar special keys and sticky modifiers encoded as xterm sequences (HS2-CKS78M)
     src/components/terminal-key-bar.tsx # Phone terminal accessory bar above the soft keyboard (HS2-CKS78M)
+    src/components/terminal-focus-search.tsx # Phone full-screen terminal search bar: field and Exit, then count with Previous/Next once there is a query (HS2-7HPXCY)
     src/terminal-clipboard.ts # Phone terminal copy/paste: buffer-text snapshot, viewport events, clipboard read/write fallbacks (HS2-FRB545)
     src/components/terminal-clipboard-dialogs.tsx # Phone terminal Copy sheet and Paste-fallback sheet (HS2-FRB545), and the long-press TerminalEditMenu (HS2-KKP8YJ)
     tests/terminal-theme.spec.ts # Terminals switch between light and dark xterm themes with the app/system scheme (HS2-QNSS9C)

@@ -1,3 +1,4 @@
+import { placeSearchFieldCaret } from '@kerfjs/ui/search-field';
 import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -26,6 +27,7 @@ import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../cont
 import { copyWithSelection } from '../copy-text';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
+import { type MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
 import { clearTerminalEverywhere, terminalClearKeyTarget, terminalViewportIdentity } from '../terminal-clear';
@@ -105,8 +107,12 @@ export interface TerminalInteractionsDependencies {
   readonly terminalDrawerVisible: Signal<boolean>;
   readonly toggleTerminalDrawerMaximized: () => void;
   readonly selectDrawerItem: (id: string) => void;
-  readonly enterMobileTerminalFocus: (terminalId: string) => void;
+  readonly enterMobileTerminalFocus: (terminalId: string, search?: boolean) => void;
   readonly exitMobileTerminalFocus: () => void;
+  /** Open or close the full-screen terminal's search bar (HS2-7HPXCY). */
+  readonly setMobileTerminalSearch: (open: boolean) => void;
+  /** The phone full-screen terminal state, whose `search` says the search bar is open (HS2-7HPXCY). */
+  readonly mobileTerminalFocus: Signal<MobileTerminalFocusState>;
   readonly cycleMobileTerminalColumns: () => void;
   /** Phone key-bar sticky modifiers and Fn-row state (HS2-CKS78M). */
   readonly terminalModifiers: Signal<TerminalModifiers>;
@@ -204,6 +210,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     selectDrawerItem,
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
+    setMobileTerminalSearch,
+    mobileTerminalFocus,
     cycleMobileTerminalColumns,
     terminalModifiers,
     terminalFunctionRow,
@@ -257,8 +265,22 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       const current = project(),
         drawer = document.querySelector<HTMLElement>('[data-component="terminal-drawer"]'),
         terminalId = drawer?.querySelector<HTMLElement>('.terminal-session:not([hidden]) [data-terminal-id]')?.dataset
-          .terminalId;
+          .terminalId,
+        searching = mobileTerminalFocus.peek().search === true;
       exitMobileTerminalFocus();
+      if (searching) {
+        // Exit leaves full screen, not the search (HS2-7HPXCY): a query keeps its highlights in the
+        // drawer, an empty one closes, and focus returns to the rail's Search.
+        if (!terminalSearchModel.state.peek().query) terminalSearchOpen.value = false;
+        requestAnimationFrame(() => {
+          document
+            .querySelector<HTMLElement>(
+              `[data-component="terminal-drawer"] ${TERMINALS_ACTIONS.openTerminalFocusSearch.selector}`,
+            )
+            ?.focus();
+        });
+        return;
+      }
       if (current && drawer?.dataset.mode === 'dedicated' && terminalId) focusDrawerTab(current.id, terminalId);
     }),
   );
@@ -588,6 +610,36 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
       terminalSearch.step((event as MouseEvent).shiftKey ? 'previous' : 'next');
+    }),
+  );
+  // The phone search bar's Previous Match keeps the keyboard in the field the same way (HS2-7HPXCY).
+  lifetime.add(
+    delegate(document.body, 'mousedown', TERMINALS_ACTIONS.previousTerminalSearchMatch.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.previousTerminalSearchMatch.selector, () => {
+      terminalSearch.step('previous');
+    }),
+  );
+  // Phone Search (HS2-7HPXCY): from the drawer rail it opens the selected terminal full screen with its
+  // search bar; from the full-screen controls it opens the bar there. The field takes focus once the
+  // bar renders, keeping any query the search already has.
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalFocusSearch.selector, () => {
+      const terminalId = searchViewport()?.closest<HTMLElement>('[data-terminal-id]')?.dataset.terminalId;
+      if (!terminalId) return;
+      terminalSearchOpen.value = true;
+      if (mobileTerminalFocus.peek().active) setMobileTerminalSearch(true);
+      else enterMobileTerminalFocus(terminalId, true);
+      requestAnimationFrame(() => {
+        const editor = document.querySelector<HTMLElement>(
+          `[data-component="terminal-focus-search"] ${TERMINALS_TARGETS.terminalSearchEditor.selector}`,
+        );
+        // A kept query continues where it ends.
+        if (editor) placeSearchFieldCaret(editor);
+      });
     }),
   );
   // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard

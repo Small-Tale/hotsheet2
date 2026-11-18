@@ -351,6 +351,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       message: terminalDashboardMessage.value,
       maximized: terminalDrawerMaximized.value,
       focusMode,
+      // The full-screen terminal's search bar (HS2-7HPXCY).
+      focusSearch: focusMode && focused.search === true,
       focusViewport: focused.viewport,
       // The phone focus-mode text-size control uses the same mobile geometry + columns as the
       // magnified terminal; undefined off phones so the control never renders there (HS2-ZSFAHF).

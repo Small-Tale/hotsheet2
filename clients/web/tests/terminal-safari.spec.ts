@@ -69,6 +69,8 @@ for (const width of [390, 1280]) {
       }),
       page = await context.newPage(),
       errors: string[] = [],
+      // WebKit's stackless native next-frame deferral, kept apart from real exceptions (HS2-13P30P).
+      resizeDeferrals: string[] = [],
       connections: Array<{ viewers: Set<string>; close(): Promise<void> }> = [];
     let binaryBytes = 0;
     try {
@@ -118,7 +120,19 @@ for (const width of [390, 1280]) {
       await page.routeWebSocket(/\/ws\/sync(?:\?.*)?$/, (route) => {
         route.connectToServer();
       });
-      page.on('pageerror', (error) => errors.push(error.message));
+      page.on('pageerror', (error) => {
+        // WebKit documents this stackless native event as next-frame deferral
+        // (https://webkit.org/blog/9997/resizeobserver-in-webkit/). Kerf's drawer TabBar settles its
+        // snap insets once whenever its strip changes, as at a phone/desktop resize (HS2-G4D6JC), so a
+        // settle may report one; a recurring loop still fails below. Real exceptions stay fatal.
+        if (
+          error.message === 'ResizeObserver loop completed with undelivered notifications.' &&
+          !error.name &&
+          !error.stack
+        )
+          resizeDeferrals.push(error.message);
+        else errors.push(error.message);
+      });
       await page.goto(remoteOrigin);
       expect(
         await page.evaluate(() => ({
@@ -198,6 +212,26 @@ for (const width of [390, 1280]) {
       expect(binaryBytes).toBeGreaterThan(0);
       expect(new Set(connections.flatMap((connection) => [...connection.viewers])).size).toBeGreaterThanOrEqual(3);
       expect(errors).toEqual([]);
+      // Settled: no further deferral over ten frames, so no ResizeObserver loop persists (HS2-13P30P).
+      const settled = resizeDeferrals.length;
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            const step = (left: number) => {
+              if (left === 0) resolve();
+              else
+                requestAnimationFrame(() => {
+                  step(left - 1);
+                });
+            };
+            step(10);
+          }),
+      );
+      await testInfo.attach('native-resize-deferrals', {
+        body: JSON.stringify(resizeDeferrals),
+        contentType: 'application/json',
+      });
+      expect(resizeDeferrals).toHaveLength(settled);
     } finally {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
       await context.close();

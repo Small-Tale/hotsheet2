@@ -3504,6 +3504,14 @@ text-size control, and the magnified terminal toolbar adds the same two buttons.
 `TerminalPasteDialog` (the denied/unavailable fallback with an editable native field) are cataloged
 as `terminal-copy-dialog` and `terminal-paste-dialog`, with both paste reasons exposed in the demo.
 
+HS2-7HPXCY adds `TerminalFocusSearch` (cataloged as `terminal-focus-search`, composing Kerf `toolbar`,
+`toolbar-control-group`, and `toolbar-text`): the phone full-screen terminal's two-line search bar.
+Line 1 is a compact `Toolbar` whose stretched center holds a grown, expanded search group with a
+non-collapsible `SearchField`, and whose trailing zone holds Exit. Line 2, rendered only while the
+field has a query, holds the count as small `ToolbarText` and a borderless icon group with Previous
+Match and Next Match. The app owns no CSS for it. Its demo shares the drawer search fixtures and
+steps the reported match; the drawer demo's Phone Search example shows the rail's Search button.
+
 HS2-KKP8YJ adds `TerminalEditMenu` (cataloged as `terminal-edit-menu`, composing Kerf
 `popup-menu`). It is an app-owned, zero-size fixed anchor (`terminal-edit-menu`) around a
 context-mode `PopupMenu` (`data-context-menu="terminal-edit"`). The menu opens where a touch

@@ -109,13 +109,19 @@ export function createTerminalDrawerGeometryController(dependencies: TerminalDra
   function currentMobileTerminalViewport() {
     return mobileTerminalViewport(window.visualViewport, window);
   }
-  function enterMobileTerminalFocus(terminalId: string) {
+  /** Full screen for the terminal; `search` opens its search bar with it (HS2-7HPXCY). */
+  function enterMobileTerminalFocus(terminalId: string, search?: boolean) {
     mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
       type: 'terminal-focus',
       mobile: viewportMobile(),
       terminalId,
       viewport: currentMobileTerminalViewport(),
+      ...(search === undefined ? {} : { search }),
     });
+  }
+  /** Open or close the full-screen terminal's search bar (HS2-7HPXCY). */
+  function setMobileTerminalSearch(open: boolean) {
+    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, { type: 'search', open });
   }
   function syncMobileTerminalViewport() {
     mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
@@ -162,6 +168,7 @@ export function createTerminalDrawerGeometryController(dependencies: TerminalDra
     enterMobileTerminalFocus,
     syncMobileTerminalViewport,
     exitMobileTerminalFocus,
+    setMobileTerminalSearch,
     syncMobileViewportGeometry,
     cycleMobileTerminalColumns,
     mobileMagnifiedTerminal,

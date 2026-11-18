@@ -3878,7 +3878,23 @@ rail's end would still push Hide past the drawer's edge, the count control leave
 field, Clear, and Hide fit (HS2-HPDX81). The count stays available to screen readers as a visually
 hidden polite status, and Enter and Shift-Enter still step through the matches. The count control
 returns once the rail is wide enough again; `terminal-search-count-fit.ts` decides this from the
-app-owned rail wrapper and Hide button, with width hysteresis. A long query still wraps the field
+app-owned rail wrapper and Hide button, with width hysteresis.
+
+**Phone search (HS2-7HPXCY).** On a phone (the mobile layout with a drawer at most 600px wide) the rail
+holds no search field. Its borderless Search button opens the selected terminal full screen (focus
+mode, HS2-JQPRXV) with a two-line search bar (`TerminalFocusSearch`) in place of the floating
+controls, the Exit pill, and the key bar. The first line is a compact Kerf `Toolbar` whose stretched
+center is a non-collapsible `SearchField` on the same model as the rail field, with Exit (the
+minimize icon) at its end. Once the field has a query, a second compact `Toolbar` shows the count
+(`ToolbarText`) with Previous Match and Next Match (chevron up and down, disabled with no matches) at
+its end; the steps keep typing in the field. A visually hidden polite status announces the count
+until Kerf's `SearchField resultText` (`KF-8CDT8B`) is installed. Exit leaves full screen, not the
+search: a query keeps its highlights and active match in the drawer, the rail's Search shows pressed
+and takes focus, and Search reopens the bar with the query. Exit with an empty field ends the search.
+The tap-to-focus full screen also offers Search in its floating controls, which opens the bar there.
+Tapping the terminal while the bar is open keeps it; another terminal starts without it. Widening to
+the desktop layout ends full screen, and a search typed in the bar continues in the rail's field with
+the focus. Tablets and desktops keep the rail field. A long query still wraps the field
 and widens Kerf's end zone beyond the field's width (Kerf gap `KF-X9A8X9`). Whenever the drawer tab strip's fit changes (a resize, or the extra rail controls), the selected drawer tab is scrolled back into view through Kerf's `onFitChange` report. Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps

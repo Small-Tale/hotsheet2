@@ -8136,6 +8136,74 @@
       }
     },
     {
+      "key": "hotsheet-web:terminal-focus-search",
+      "package": "hotsheet-web",
+      "id": "terminal-focus-search",
+      "name": "TerminalFocusSearch",
+      "kind": "component",
+      "purpose": "Phone full-screen terminal search bar: the search field fills the first line with Exit at its end; once there is a query a second line shows the match count with Previous and Next.",
+      "publicExports": [
+        {
+          "name": "TerminalFocusSearch"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-focus-search.tsx"
+      ],
+      "source": "src/components/terminal-focus-search.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-focus-search"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-focus-search"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-focus-search.tsx",
+        "composition": "src/components/terminal-focus-search.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:terminal-key-bar",
       "package": "hotsheet-web",
       "id": "terminal-key-bar",

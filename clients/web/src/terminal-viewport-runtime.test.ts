@@ -633,6 +633,73 @@ describe('terminal search (HS2-TWZSZF)', () => {
   });
 });
 
+describe('terminal search re-applied to a resumed terminal (HS2-7HPXCY)', () => {
+  it('keeps the remembered match when the unchanged query is applied again, and steps only on an edit or a step', () => {
+    searchAddons.length = 0;
+    const { viewport, listeners } = element();
+    const dispatched = (viewport as unknown as { dispatchEvent: ReturnType<typeof vi.fn> }).dispatchEvent;
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const search = listeners.mock.calls.find(([name]) => name === TERMINAL_SEARCH_EVENT)?.[1] as (event: Event) => void;
+    const ask = (query: string, direction: 'next' | 'previous' = 'next', incremental = true) => {
+      const detail: TerminalSearchDetail = { query, direction, incremental };
+      search(new CustomEvent(TERMINAL_SEARCH_EVENT, { detail }));
+      return detail.found;
+    };
+    const terminal = allocated.terminals.at(-1) as unknown as { clearSelection: ReturnType<typeof vi.fn> };
+    const published = () =>
+      dispatched.mock.calls
+        .map(([event]) => event as CustomEvent<{ resultIndex: number; resultCount: number }>)
+        .filter((event) => event.type === TERMINAL_SEARCH_RESULTS_EVENT)
+        .map((event) => event.detail.resultIndex);
+    // A fake addon over three matches that steps from the terminal's selection, as xterm's does.
+    let selected = -1;
+    const report = (resultIndex: number) => {
+      for (const listener of searchAddons[0].resultsListeners) listener({ resultIndex, resultCount: 3 });
+    };
+    expect(ask('File')).toBe(true);
+    const addon = searchAddons[0];
+    addon.findNext.mockImplementation(() => {
+      selected = (selected + 1) % 3;
+      report(selected);
+      return true;
+    });
+    terminal.clearSelection.mockImplementation(() => {
+      selected = -1;
+    });
+    ask('File', 'next', false);
+    ask('File', 'next', false);
+    expect(published()).toEqual([0, 1]);
+
+    // The terminal resumes into full screen with its selection gone; the open search is applied again.
+    // Without the remembered match, the addon would step from the top to another match.
+    dispatched.mockClear();
+    selected = 2;
+    addon.clearDecorations.mockClear();
+    expect(ask('File')).toBe(true);
+    expect(addon.clearDecorations).toHaveBeenCalledTimes(1);
+    expect(selected).toBe(1);
+    expect(published()).toEqual([1]);
+    // Applying it once more is idempotent.
+    expect(ask('File')).toBe(true);
+    expect(published()).toEqual([1, 1]);
+
+    // An explicit step still moves on, and an edit searches incrementally as typed.
+    ask('File', 'next', false);
+    expect(published()).toEqual([1, 1, 2]);
+    addon.findNext.mockClear();
+    expect(ask('Files')).toBe(true);
+    expect(addon.findNext).toHaveBeenCalledTimes(1);
+    expect(addon.findNext).toHaveBeenCalledWith('Files', expect.objectContaining({ incremental: true }));
+
+    // With no remembered match (an emptied field), the same query searches afresh.
+    expect(ask('')).toBe(false);
+    addon.findNext.mockClear();
+    expect(ask('Files')).toBe(true);
+    expect(addon.findNext).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+});
+
 describe('terminal search after a resize (HS2-X96PS0)', () => {
   it('reveals the re-anchored active match only when the reader was looking at it before the resize', async () => {
     searchAddons.length = 0;

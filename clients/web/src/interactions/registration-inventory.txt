@@ -107,6 +107,9 @@ terminals	delegate	document.body	TERMINAL_SEARCH_READY_EVENT	'[data-component="t
 terminals	delegateCapture	document.body	'keydown'	'[data-search-field-editor="terminal-search"]'
 terminals	delegate	document.body	'mousedown'	'[data-action="next-terminal-search-match"]'
 terminals	delegate	document.body	'click'	'[data-action="next-terminal-search-match"]'
+terminals	delegate	document.body	'mousedown'	'[data-action="previous-terminal-search-match"]'
+terminals	delegate	document.body	'click'	'[data-action="previous-terminal-search-match"]'
+terminals	delegate	document.body	'click'	'[data-action="open-terminal-focus-search"]'
 terminals	wireTerminalClipboardActions	document.body
 terminals	wireTerminalClipboardSheets	document.body
 terminals	delegateCapture	document.body	'close'	'[data-dialog-component="terminal-paste-dialog"]'

@@ -255,6 +255,7 @@ describe('terminal drawer search prop (HS2-174S6X)', () => {
       count: undefined,
       hasMatches: false,
       countCompact: false,
+      hasQuery: false,
     });
     expect(terminalDrawerSearch(model, true, { resultIndex: 2, resultCount: 12 })).toMatchObject({
       open: true,
@@ -265,6 +266,13 @@ describe('terminal drawer search prop (HS2-174S6X)', () => {
       count: 'No matches',
       hasMatches: false,
     });
+    // HS2-7HPXCY: the phone search bar's results line shows only while an open search has a query.
+    expect(terminalDrawerSearch(model, true, undefined).hasQuery).toBe(false);
+    model.replace({ query: 'warn', tokens: [] });
+    expect(terminalDrawerSearch(model, true, undefined).hasQuery).toBe(true);
+    expect(terminalDrawerSearch(model, false, undefined).hasQuery).toBe(false);
+    model.clear();
+    expect(terminalDrawerSearch(model, true, undefined).hasQuery).toBe(false);
     // HS2-HPDX81: the measured narrow-rail state passes through unchanged.
     expect(terminalDrawerSearch(model, true, { resultIndex: 0, resultCount: 2 }, true)).toMatchObject({
       count: '1 of 2',

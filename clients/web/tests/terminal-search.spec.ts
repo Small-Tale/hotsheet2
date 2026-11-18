@@ -270,22 +270,34 @@ test('HS2-HPDX81 the open search, its count, and Hide stay inside a phone-width 
   await expect(status).toHaveCount(0);
   await expectInsideDrawer(group, count, clear, hide);
 
-  // Narrow: the count yields its room; screen readers still hear it through a polite status.
+  // Phone: the rail keeps only a pressed Search button beside Clear and Hide (HS2-7HPXCY); the field,
+  // the count, and its status leave the rail, and the kept search goes on highlighting.
   await page.setViewportSize({ width: 390, height: 844 });
+  const phoneSearch = drawer.getByRole('button', { name: 'Search Terminal' }),
+    bar = page.locator('[data-component="terminal-focus-search"]'),
+    barEditor = bar.locator('[data-search-field-editor="terminal-search"]'),
+    barStatus = bar.locator('[data-terminal-focus-search-status]');
+  await expect(group).toHaveCount(0);
   await expect(count).toHaveCount(0);
-  await expect(status).toHaveText(`1 of ${total}`);
-  await expect(status).toHaveAttribute('role', 'status');
-  await expect(editor).toBeFocused();
-  await expectInsideDrawer(group, clear, hide);
+  await expect(status).toHaveCount(0);
+  await expect(phoneSearch).toHaveAttribute('aria-pressed', 'true');
+  await expectInsideDrawer(phoneSearch, clear, hide);
   await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-count-390.png') });
-  // No matches, the state that pushed Clear and Hide out of the drawer before the fix.
+  // No matches, the state that pushed Clear and Hide out of the drawer before the fix: typed in the
+  // full-screen search bar, whose count line says so.
+  await phoneSearch.click();
+  await expect(barEditor).toBeFocused();
+  await expect(barStatus).toHaveText(`1 of ${total}`);
   await page.keyboard.type('-absent');
-  await expect(status).toHaveText('No matches');
-  await expectInsideDrawer(group, clear, hide);
+  await expect(barStatus).toHaveText('No matches');
+  await bar.getByRole('button', { name: 'Exit terminal focus' }).click();
+  await expect(phoneSearch).toBeFocused();
+  await expectInsideDrawer(phoneSearch, clear, hide);
   await page.screenshot({ path: test.info().outputPath('hs2-hpdx81-none-390.png') });
 
-  // Medium: the full count control returns beside the field, still inside the drawer.
+  // Medium: the field returns to the rail with the kept query, and the full count control beside it.
   await page.setViewportSize({ width: 768, height: 900 });
+  await expect(editor).toHaveText('File-absent');
   await expect(count).toHaveText('No matches');
   await expect(status).toHaveCount(0);
   await expectInsideDrawer(group, count, clear, hide);
@@ -310,8 +322,13 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
   const { drawer } = await openDrawerTerminal(page);
   const group = drawer.locator('.kui-toolbar-control-group[data-content="search"]'),
     editor = group.locator('[data-search-field-editor="terminal-search"]'),
-    // The full count control, or its screen-reader status when a narrow rail hides it (HS2-HPDX81).
-    count = drawer.locator('[data-terminal-search-count], [data-terminal-search-count-status]');
+    // The full count control, its screen-reader status when a narrow rail hides it (HS2-HPDX81), or the
+    // phone search bar's status (HS2-7HPXCY).
+    count = page.locator(
+      '[data-component="terminal-drawer"] :is([data-terminal-search-count], [data-terminal-search-count-status], [data-terminal-focus-search-status])',
+    ),
+    // The rail's field, or the phone search bar's field while it is open.
+    activeEditor = page.locator('[data-search-field-editor="terminal-search"]');
   // Record every results report the viewport publishes, so a resize is judged by what it reported.
   await page.evaluate(() => {
     const reports: SearchReport[] = [];
@@ -332,9 +349,11 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
 
   // Resize, wait for the terminal to re-search its reflowed buffer and the shell to settle, and require
   // that no report since the resize moved the active match.
-  const resizeKeeping = async (width: number, height: number, index: number) => {
+  const resizeKeeping = async (width: number, height: number, index: number, phone = false) => {
     const before = (await reports()).length;
     await page.setViewportSize({ width, height });
+    // A phone rail has no field (HS2-7HPXCY): its Search opens the search bar, which keeps the query.
+    if (phone) await drawer.getByRole('button', { name: 'Search Terminal' }).click();
     await expect
       .poll(async () => (await reports()).length, { message: `re-search at ${width}px` })
       .toBeGreaterThan(before);
@@ -349,7 +368,7 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
     const since = (await reports()).slice(before);
     expect(since.map((report) => report.resultIndex + 1)).toEqual(since.map(() => index));
     await active(index);
-    await expect(editor).toBeFocused();
+    await expect(activeEditor).toBeFocused();
     expect(await total()).toBeGreaterThanOrEqual(2);
     // The active match was on screen before the resize, so it is brought back on screen after it; xterm
     // draws the selection only for visible rows (HS2-X96PS0).
@@ -358,7 +377,7 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
   };
 
   // Narrow: the first match stays active; Enter steps to the second and Shift-Enter back.
-  await resizeKeeping(390, 844, 1);
+  await resizeKeeping(390, 844, 1, true);
   await page.keyboard.press('Enter');
   await active(2);
   await page.keyboard.press('Shift+Enter');
@@ -366,15 +385,18 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
   await page.keyboard.press('Enter');
   await active(2);
 
-  // Medium: the second match stays active and the steps go on from it.
+  // Medium: the second match stays active and the steps go on from it, still in the full-screen bar
+  // (full screen lasts below the desktop breakpoint).
   await resizeKeeping(768, 900, 2);
   await page.keyboard.press('Shift+Enter');
   await active(1);
   await page.keyboard.press('Enter');
   await active(2);
 
-  // Wide again: still the second match; Enter moves past it (wrapping after the last) and Shift-Enter returns.
+  // Wide again: full screen ends and the rail's field takes over the search and the focus; still the second
+  // match; Enter moves past it (wrapping after the last) and Shift-Enter returns.
   await resizeKeeping(1280, 800, 2);
+  await expect(editor).toBeFocused();
   const wideTotal = await total();
   await page.keyboard.press('Enter');
   await active(wideTotal > 2 ? 3 : 1);
@@ -386,9 +408,123 @@ test('HS2-SWY5DQ the active terminal search match survives wide-narrow-wide resi
   await page.keyboard.press('Shift+Enter');
   await active(1);
   const before = (await reports()).length;
-  await page.setViewportSize({ width: 390, height: 844 });
+  // A tablet width keeps the rail's field (only a phone rail moves search to the full-screen bar).
+  await page.setViewportSize({ width: 768, height: 900 });
   await page.keyboard.press('Enter');
   await active(2);
   await expect.poll(async () => (await reports()).length).toBeGreaterThan(before + 1);
   await active(2);
+});
+
+test('HS2-7HPXCY phone Search opens the full-screen search bar, steps through matches, and Exit keeps the search', async ({
+  page,
+}) => {
+  const { drawer, viewport } = await openDrawerTerminal(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const railSearch = drawer.getByRole('button', { name: 'Search Terminal' }),
+    bar = page.locator('[data-component="terminal-focus-search"]'),
+    editor = bar.locator('[data-search-field-editor="terminal-search"]'),
+    results = bar
+      .getByRole('toolbar', { name: 'Terminal Search Results' })
+      .or(bar.locator('[aria-label="Terminal Search Results"]')),
+    status = bar.locator('[data-terminal-focus-search-status]'),
+    previous = bar.getByRole('button', { name: 'Previous Match' }),
+    next = bar.getByRole('button', { name: 'Next Match' }),
+    exit = bar.getByRole('button', { name: 'Exit terminal focus' }),
+    highlights = viewport.locator('.xterm-find-result-decoration'),
+    inViewport = async (...controls: ReturnType<typeof page.locator>[]) => {
+      const width = page.viewportSize()!.width;
+      for (const control of controls) {
+        const box = (await control.boundingBox())!;
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+      }
+    };
+  // The phone rail offers a Search button, not the field, inside the drawer's bounds (HS2-HPDX81).
+  await expect(drawer.locator('.kui-toolbar-control-group[data-content="search"]')).toHaveCount(0);
+  await expect(railSearch).toHaveAttribute('aria-pressed', 'false');
+  await inViewport(railSearch, drawer.getByRole('button', { name: 'Hide Terminal Drawer' }));
+
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    // Search opens the terminal full screen with the field focused; nothing typed, no results line.
+    await railSearch.click();
+    await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+    await expect(editor).toBeFocused();
+    await expect(results).toHaveCount(0);
+    await expect(page.locator('.terminal-drawer__focus-controls')).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Terminal Focus Exit' })).toHaveCount(0);
+    await inViewport(editor, exit);
+    await page.screenshot({ path: test.info().outputPath(`hs2-7hpxcy-empty-390-${scheme}.png`) });
+
+    // Typing shows the count line; Next and Previous step and keep typing in the field.
+    await page.keyboard.type('File');
+    await expect(status).toHaveText(/^1 of \d+$/);
+    const total = Number((await status.textContent())!.split(' of ')[1]);
+    expect(total).toBeGreaterThanOrEqual(2);
+    await expect(results).toContainText(/1 of \d+/);
+    const counted = async () => Number((await status.textContent())!.split(' of ')[1]);
+    // xterm draws highlights only on the rows on screen, and the full-screen reflow can move a match into
+    // scrollback, so count the matches on screen: one decoration each, plus one over the active match.
+    const onScreen = async () =>
+      (await viewport.locator('.xterm-rows > div').allTextContents()).join('\n').split('File').length - 1;
+    await expect.poll(async () => (await highlights.count()) - (await onScreen())).toBe(1);
+    // The fake PTY redraws at the full-screen size, so the total may change; the steps may not.
+    await next.click();
+    await expect(status).toHaveText(/^2 of \d+$/);
+    await expect(editor).toBeFocused();
+    await previous.click();
+    await expect(status).toHaveText(/^1 of \d+$/);
+    await next.click();
+    await expect(status).toHaveText(/^2 of \d+$/);
+    await inViewport(editor, exit, previous, next);
+    await page.screenshot({ path: test.info().outputPath(`hs2-7hpxcy-matches-390-${scheme}.png`) });
+
+    // No matches: the line says so and the steps are disabled.
+    await page.keyboard.type('-absent');
+    await expect(status).toHaveText('No matches');
+    await expect(previous).toBeDisabled();
+    await expect(next).toBeDisabled();
+    await page.screenshot({ path: test.info().outputPath(`hs2-7hpxcy-none-390-${scheme}.png`) });
+    for (let index = 0; index < '-absent'.length; index += 1) await page.keyboard.press('Backspace');
+    await expect(status).toHaveText(/^1 of \d+$/);
+    expect(await counted()).toBeGreaterThanOrEqual(2);
+
+    // Exit leaves full screen but not the search: the drawer keeps the highlights, and the rail's
+    // Search is pressed and focused.
+    await exit.click();
+    await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
+    await expect(bar).toHaveCount(0);
+    await expect(railSearch).toBeFocused();
+    await expect(railSearch).toHaveAttribute('aria-pressed', 'true');
+    await expect(highlights).not.toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`hs2-7hpxcy-exited-390-${scheme}.png`) });
+
+    // Search again reopens the bar with the kept query.
+    await railSearch.click();
+    await expect(editor).toHaveText('File');
+    await expect(status).toHaveText(/^\d+ of \d+$/);
+    // Emptying the field hides the results line; Exit then ends the search.
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
+    await expect(results).toHaveCount(0);
+    await expect(highlights).toHaveCount(0);
+    await exit.click();
+    await expect(railSearch).toHaveAttribute('aria-pressed', 'false');
+  }
+
+  // Tap-to-focus full screen offers Search in its floating controls (answer 4), which opens the bar there.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await viewport.locator('.xterm-helper-textarea').focus();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  const focusSearch = page.locator('.terminal-drawer__focus-controls').getByRole('button', { name: 'Search Terminal' });
+  await expect(focusSearch).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-7hpxcy-focus-search-button-390.png') });
+  await focusSearch.click();
+  await expect(editor).toBeFocused();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  await expect(page.locator('.terminal-drawer__focus-controls')).toHaveCount(0);
+  await exit.click();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
 });

@@ -1704,6 +1704,7 @@ function initializeTerminalViewport(
       // A step or an edit after a resize starts from the remembered match, not from the reflowed buffer's edge.
       if (!detail.query) anchorAfterResize = false;
       else if (anchorAfterResize) reanchorSearch();
+      const previousQuery = searchQuery;
       searchQuery = detail.query;
       if (!detail.query) {
         activeIndex = -1;
@@ -1765,6 +1766,16 @@ function initializeTerminalViewport(
           resizeListener.dispose();
           scrollListener.dispose();
         });
+      }
+      // Re-applying the unchanged query (a terminal resumed into the drawer or full screen after its
+      // selection was dropped) keeps the remembered match rather than stepping from the buffer's edge
+      // (HS2-7HPXCY); only an edit or an explicit step moves it.
+      if (detail.incremental && detail.query === previousQuery && activeIndex >= 0 && activeIndex < resultCount) {
+        searchSelf(() => {
+          reanchorSearch();
+        });
+        detail.found = true;
+        return;
       }
       const addon = searchAddon,
         options = searchOptions(detail.incremental),

@@ -302,6 +302,7 @@ export const demoCatalog: DemoCategory[] = [
       ]),
       cataloged('fixed-aspect-terminal-card', ['terminal-key-bar']),
       cataloged('terminal-key-bar', ['toolbar-control-group']),
+      cataloged('terminal-focus-search', ['toolbar', 'toolbar-control-group', 'toolbar-text']),
       cataloged('terminal-visibility-dialog', ['list-item']),
       cataloged('terminal-copy-dialog'),
       cataloged('terminal-paste-dialog'),

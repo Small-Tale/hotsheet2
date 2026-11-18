@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
+import { placeSearchFieldCaret } from '@kerfjs/ui/search-field';
 import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { wireDialogStack } from '@kerfjs/ui/surface-scaffold';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
@@ -726,6 +727,7 @@ export async function startHotSheetWebClient() {
     enterMobileTerminalFocus,
     syncMobileTerminalViewport,
     exitMobileTerminalFocus,
+    setMobileTerminalSearch,
     syncMobileViewportGeometry,
     cycleMobileTerminalColumns,
     mobileMagnifiedTerminal,
@@ -3575,7 +3577,16 @@ export async function startHotSheetWebClient() {
         sidebarCollapsed.value = true;
         inspectorCollapsed.value = true;
       } else {
+        // A search typed in the phone search bar continues in the rail's field (HS2-7HPXCY).
+        const searching = document.activeElement?.closest('[data-component="terminal-focus-search"]');
         exitMobileTerminalFocus();
+        if (searching)
+          requestAnimationFrame(() => {
+            const editor = document.querySelector<HTMLElement>(
+              '[data-component="terminal-drawer"] [data-search-field-editor="terminal-search"]',
+            );
+            if (editor) placeSearchFieldCaret(editor);
+          });
         // Restore the desktop preferences once the rails render inline again: while a rail still
         // presents as an overlay, Kerf's exclusive-overlay rule would close the other one.
         requestAnimationFrame(() => {
@@ -6720,6 +6731,8 @@ export async function startHotSheetWebClient() {
     selectDrawerItem,
     enterMobileTerminalFocus,
     exitMobileTerminalFocus,
+    setMobileTerminalSearch,
+    mobileTerminalFocus,
     cycleMobileTerminalColumns,
     terminalModifiers,
     terminalFunctionRow,

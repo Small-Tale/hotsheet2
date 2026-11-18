@@ -27,6 +27,7 @@ import {
   Minimize2,
   PanelBottomClose,
   Plus,
+  Search,
   ShieldAlert,
   ShieldCheck,
   SquareTerminal,
@@ -44,7 +45,7 @@ import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-a
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionIcon, aiConnectionLabel } from '../terminal-ai-connection';
-import { terminalGridContentSize } from '../terminal-grid-layout';
+import { TERMINAL_GRID_PHONE_BREAKPOINT, terminalGridContentSize } from '../terminal-grid-layout';
 import { TERMINAL_SEARCH_FIELD_ID } from '../terminal-search';
 import {
   type MobileMagnifiedTerminal,
@@ -53,6 +54,7 @@ import {
   type TerminalDashboardSession,
   TerminalSession,
 } from './terminal-dashboard';
+import { TerminalFocusSearch } from './terminal-focus-search';
 import { TerminalKeyBar } from './terminal-key-bar';
 
 export interface TerminalDrawerChatTab {
@@ -98,6 +100,11 @@ export interface TerminalDrawerProps {
   message?: string;
   maximized?: boolean;
   focusMode?: boolean;
+  /**
+   * The full-screen terminal shows its search bar in place of its floating controls (HS2-7HPXCY);
+   * meaningful only with `focusMode` and `search`.
+   */
+  focusSearch?: boolean;
   focusViewport?: MobileTerminalViewport;
   /** Phone focus-mode text-size control state (columns + keyboard visibility); undefined off phones (HS2-ZSFAHF). */
   focusTextSize?: MobileMagnifiedTerminal;
@@ -135,6 +142,8 @@ export interface TerminalDrawerSearch {
    * available as a visually hidden polite status. `wireTerminalSearchCountFit` measures it.
    */
   countCompact?: boolean;
+  /** The open search has a query: the phone search bar shows its results line, and the phone rail's Search is pressed (HS2-7HPXCY). */
+  hasQuery?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -207,6 +216,7 @@ export function TerminalDrawer({
   message = '',
   maximized = false,
   focusMode = false,
+  focusSearch = false,
   focusViewport,
   focusTextSize,
   contextMenu,
@@ -226,6 +236,10 @@ export function TerminalDrawer({
     selectedChat = chatTabs.find((chat) => chat.id === selected),
     // HS2-5DHHPV: a touch-first desktop gets rail Copy/Paste for the selected terminal (phones use focus mode).
     railClipboard = touchClipboard && Boolean(selectedSession) && !focusMode,
+    // HS2-7HPXCY: a phone rail has no room for the field (HS2-HPDX81), so its Search opens the terminal
+    // full screen with the search bar instead; tablets and desktops keep the field in the rail.
+    phoneSearch = mobile && width <= TERMINAL_GRID_PHONE_BREAKPOINT,
+    searchBar = focusMode && focusSearch && Boolean(search) && Boolean(selectedSession),
     gridSize = terminalGridContentSize(width, height),
     sessionsById = new Map(sessions.map((session) => [session.id, session])),
     chatsById = new Map(chatTabs.map((chat) => [chat.id, chat])),
@@ -475,7 +489,22 @@ export function TerminalDrawer({
               end={
                 <>
                   {selectedChat?.toolbar}
-                  {selectedSession && search && (
+                  {selectedSession && search && phoneSearch && (
+                    // Phone Search (HS2-7HPXCY): full screen with the search bar. Pressed while a search
+                    // with a query keeps its highlights in the terminal after Exit.
+                    <ToolbarControlGroup appearance="borderless" buttonAppearance="push" single content="icon">
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.openTerminalFocusSearch.attrs}
+                        aria-label="Search Terminal"
+                        aria-pressed={search.hasQuery ? 'true' : 'false'}
+                        title="Search terminal"
+                      >
+                        <LucideIcon icon={Search} name="search" />
+                      </button>
+                    </ToolbarControlGroup>
+                  )}
+                  {selectedSession && search && !phoneSearch && (
                     // Search the selected terminal (HS2-TWZSZF): an iconic, borderless trigger until it is
                     // activated, then Kerf's expanded field; Kerf collapses it again when it empties and blurs.
                     <ToolbarControlGroup
@@ -499,7 +528,7 @@ export function TerminalDrawer({
                       />
                     </ToolbarControlGroup>
                   )}
-                  {selectedSession && search?.open && search.count && !search.countCompact && (
+                  {selectedSession && search?.open && search.count && !search.countCompact && !phoneSearch && (
                     // The match count beside the open field (HS2-M5QPED), as a borderless text control that
                     // steps to the next match (Enter does the same in the field). SearchField has no in-field
                     // result readout and the rail's end zone holds only controls (KF-8CDT8B).
@@ -568,7 +597,7 @@ export function TerminalDrawer({
               {tabs}
             </TabBar>
           </div>
-          {selectedSession && search?.open && search.countCompact && (
+          {selectedSession && search?.open && search.countCompact && !phoneSearch && (
             // A narrow rail gives the count's room to the field, Clear, and Hide (HS2-HPDX81); screen
             // readers still hear it. The TabBar's end zone holds only control groups, so it sits beside.
             <span class="wa-visually-hidden" role="status" data-terminal-search-count-status="">
@@ -576,6 +605,14 @@ export function TerminalDrawer({
             </span>
           )}
         </header>
+      )}
+      {searchBar && search && (
+        <TerminalFocusSearch
+          model={search.model}
+          count={search.count}
+          hasMatches={search.hasMatches}
+          hasQuery={search.hasQuery}
+        />
       )}
       <div class="terminal-drawer__content">
         {selectedChat ? (
@@ -603,10 +640,10 @@ export function TerminalDrawer({
           />
         )}
       </div>
-      {focusMode && focusTextSize?.keyboardVisible && focusTextSize.keyBar && (
+      {focusMode && !searchBar && focusTextSize?.keyboardVisible && focusTextSize.keyBar && (
         <TerminalKeyBar {...focusTextSize.keyBar} />
       )}
-      {focusMode && focusTextSize && !focusTextSize.keyboardVisible && (
+      {focusMode && !searchBar && focusTextSize && !focusTextSize.keyboardVisible && (
         // Phone focus-mode text-size and Copy/Paste controls (HS2-ZSFAHF, HS2-FRB545) float over the
         // terminal in Kerf's forced-dark toolbar; with the keyboard up the key bar's Fn row carries them.
         <FloatingToolbar
@@ -626,6 +663,19 @@ export function TerminalDrawer({
               <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
             </button>
           </ToolbarControlGroup>
+          {search && selectedSession && (
+            // The tap-to-focus full screen gets Search too (HS2-7HPXCY, answer 4).
+            <ToolbarControlGroup single content="icon" shape="pill">
+              <button
+                type="button"
+                {...TERMINALS_ACTIONS.openTerminalFocusSearch.attrs}
+                aria-label="Search Terminal"
+                title="Search terminal"
+              >
+                <LucideIcon size="s" icon={Search} name="search" />
+              </button>
+            </ToolbarControlGroup>
+          )}
           <ToolbarControlGroup content="icon" shape="pill" label="Clipboard">
             <button
               type="button"
@@ -641,7 +691,7 @@ export function TerminalDrawer({
           </ToolbarControlGroup>
         </FloatingToolbar>
       )}
-      {focusMode && (
+      {focusMode && !searchBar && (
         <FloatingToolbar label="Terminal Focus Exit" position="top-end" safeAreaInsets>
           <ToolbarControlGroup single content="mixed" shape="pill">
             <button

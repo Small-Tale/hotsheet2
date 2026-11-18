@@ -627,6 +627,114 @@ describe('TerminalDrawer', () => {
     expect(keyboardUp).not.toContain('terminal-drawer__focus-controls');
     expect(keyboardUp).toContain('aria-label="Exit terminal focus"');
   });
+  it('HS2-7HPXCY gives a phone rail a Search button that opens the full-screen search bar', () => {
+    const drawer = (props: {
+      width?: number;
+      mobile?: boolean;
+      open?: boolean;
+      hasQuery?: boolean;
+      selectedId?: string;
+    }) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: props.width ?? 390,
+          height: 320,
+          fitAcross: 1,
+          fitHigh: 1,
+          selectedId: props.selectedId ?? 'one',
+          mobile: props.mobile ?? true,
+          search: {
+            model: createSearchFieldModel(),
+            open: props.open ?? false,
+            count: '3 of 12',
+            hasMatches: true,
+            countCompact: true,
+            hasQuery: props.hasQuery ?? false,
+          },
+        }),
+      );
+    const phone = drawer({});
+    // A borderless push button with the Search icon, not the collapsible field (HS2-HPDX81's clipping).
+    expect(phone).toMatch(
+      /data-appearance="borderless"[^>]*data-content="icon"[\s\S]*data-action="open-terminal-focus-search" aria-label="Search Terminal" aria-pressed="false"[\s\S]*data-lucide="search"[\s\S]*terminal-drawer__actions/,
+    );
+    expect(phone).not.toContain('data-search-field-id="terminal-search"');
+    // A search kept after Exit leaves the button pressed, the field still off the rail, and no rail count.
+    const kept = drawer({ open: true, hasQuery: true });
+    expect(kept).toContain('aria-pressed="true"');
+    expect(kept).not.toContain('data-search-field-editor="terminal-search"');
+    expect(kept).not.toContain('data-terminal-search-count');
+    // Tablets, desktops, and the grid keep their own presentation.
+    expect(drawer({ width: 768 })).toContain('data-search-field-id="terminal-search"');
+    expect(drawer({ mobile: false })).toContain('data-search-field-id="terminal-search"');
+    expect(drawer({ selectedId: 'grid' })).not.toContain('open-terminal-focus-search');
+  });
+  it('HS2-7HPXCY replaces the full-screen controls with the two-line search bar', () => {
+    const viewport = { left: 0, top: 0, width: 390, height: 844 };
+    const drawer = (focusSearch: boolean, hasQuery: boolean, hasMatches = true, keyboardVisible = false) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 390,
+          height: 844,
+          fitAcross: 1,
+          fitHigh: 1,
+          selectedId: 'one',
+          mobile: true,
+          focusMode: true,
+          focusSearch,
+          focusViewport: viewport,
+          focusTextSize: {
+            viewport,
+            keyboardVisible,
+            columns: 60,
+            keyBar: { modifiers: { ctrl: 'off', alt: 'off', shift: 'off' }, functionRow: false },
+          },
+          search: {
+            model: createSearchFieldModel(),
+            open: true,
+            count: hasMatches ? '3 of 12' : 'No matches',
+            hasMatches,
+            hasQuery,
+          },
+        }),
+      );
+    // Tap-to-focus full screen: a Search button joins the floating controls (answer 4).
+    const plain = drawer(false, false);
+    expect(plain).toMatch(
+      /terminal-drawer__focus-controls[\s\S]*data-action="open-terminal-focus-search" aria-label="Search Terminal"[\s\S]*aria-label="Clipboard"/,
+    );
+    expect(plain).not.toContain('data-component="terminal-focus-search"');
+    // Search open, nothing typed: line 1 holds a non-collapsible field and Exit; no results line (answer 5).
+    const empty = drawer(true, false);
+    expect(empty).toMatch(
+      /data-component="terminal-focus-search"[\s\S]*aria-label="Terminal Search"[\s\S]*data-content="search"[\s\S]*data-search-field-editor="terminal-search"[\s\S]*data-action="exit-terminal-focus-mode"[\s\S]*data-lucide="minimize-2"[\s\S]*<span>Exit<\/span>/,
+    );
+    expect(empty).not.toContain('data-collapsible="true"');
+    expect(empty).not.toContain('Terminal Search Results');
+    expect(empty).toContain('data-terminal-focus-search-status=""></span>');
+    // The search bar replaces the floating controls, the Exit pill, and the key bar.
+    expect(empty).not.toContain('terminal-drawer__focus-controls');
+    expect(empty).not.toContain('Terminal Focus Exit');
+    expect(drawer(true, false, true, true)).not.toContain('terminal-key-bar');
+    // With a query: the count and Previous and Next (variant A), announced politely.
+    const matches = drawer(true, true);
+    expect(matches).toMatch(
+      /aria-label="Terminal Search Results"[\s\S]*3 of 12[\s\S]*data-action="previous-terminal-search-match"[^>]*aria-label="Previous Match"[\s\S]*data-lucide="chevron-up"[\s\S]*data-action="next-terminal-search-match"[^>]*aria-label="Next Match"[\s\S]*data-lucide="chevron-down"/,
+    );
+    expect(matches).not.toMatch(/-terminal-search-match"[^>]*disabled/);
+    expect(matches).toContain('data-terminal-focus-search-status="">3 of 12</span>');
+    // No matches: the steps are disabled.
+    const none = drawer(true, true, false);
+    expect(none).toContain('No matches');
+    expect(none).toMatch(/data-action="previous-terminal-search-match"[^>]*disabled/);
+    expect(none).toMatch(/data-action="next-terminal-search-match"[^>]*disabled/);
+  });
   it('keeps project-drawer visibility local and offers no grouping controls', () => {
     const markup = render();
     expect(markup).not.toContain('aria-label="Manage workspace visibility"');

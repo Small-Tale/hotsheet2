@@ -9,11 +9,24 @@ export interface MobileTerminalFocusState {
   active: boolean;
   terminalId?: string;
   viewport: MobileTerminalViewport;
+  /**
+   * The full-screen terminal shows its search bar in place of its floating controls (HS2-7HPXCY). Any
+   * exit from full screen ends it; the query itself lives in the terminal search model and survives.
+   */
+  search?: boolean;
 }
 
 export type MobileTerminalFocusEvent =
-  | { type: 'terminal-focus'; mobile: boolean; terminalId: string; viewport: MobileTerminalViewport }
+  | {
+      type: 'terminal-focus';
+      mobile: boolean;
+      terminalId: string;
+      viewport: MobileTerminalViewport;
+      /** Open the search bar with full screen; omitted keeps an open search bar on the same terminal. */
+      search?: boolean;
+    }
   | { type: 'viewport-change'; viewport: MobileTerminalViewport }
+  | { type: 'search'; open: boolean }
   | { type: 'exit' }
   | { type: 'context-invalid' };
 
@@ -43,11 +56,18 @@ export function transitionMobileTerminalFocus(
   state: MobileTerminalFocusState,
   event: MobileTerminalFocusEvent,
 ): MobileTerminalFocusState {
-  if (event.type === 'terminal-focus')
-    return event.mobile
-      ? { active: true, terminalId: event.terminalId, viewport: event.viewport }
-      : INACTIVE_MOBILE_TERMINAL_FOCUS;
+  if (event.type === 'terminal-focus') {
+    if (!event.mobile) return INACTIVE_MOBILE_TERMINAL_FOCUS;
+    // Tapping into the searched terminal keeps its search bar; another terminal starts without one.
+    const search = event.search ?? (state.active && state.terminalId === event.terminalId && state.search === true);
+    return { active: true, terminalId: event.terminalId, viewport: event.viewport, ...(search ? { search } : {}) };
+  }
   if (event.type === 'viewport-change') return state.active ? { ...state, viewport: event.viewport } : state;
+  if (event.type === 'search') {
+    if (!state.active || (state.search === true) === event.open) return state;
+    if (event.open) return { ...state, search: true };
+    return { active: state.active, terminalId: state.terminalId, viewport: state.viewport };
+  }
   return state.active ? INACTIVE_MOBILE_TERMINAL_FOCUS : state;
 }
 

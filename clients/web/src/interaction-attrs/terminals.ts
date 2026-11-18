@@ -23,6 +23,10 @@ export const TERMINALS_ACTIONS = {
   clearTerminal: action('clear-terminal'),
   /** The drawer's terminal search match count, which steps to the next match (HS2-M5QPED). */
   nextTerminalSearchMatch: action('next-terminal-search-match'),
+  /** The phone search bar's Previous Match (HS2-7HPXCY). */
+  previousTerminalSearchMatch: action('previous-terminal-search-match'),
+  /** Phone Search (rail and full-screen controls): the full-screen terminal with its search bar (HS2-7HPXCY). */
+  openTerminalFocusSearch: action('open-terminal-focus-search'),
   confirmTerminalCopy: action('confirm-terminal-copy'),
   closeTerminalCopy: action('close-terminal-copy'),
   submitTerminalPaste: action('submit-terminal-paste'),

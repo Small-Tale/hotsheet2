@@ -2690,6 +2690,29 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "terminal-focus-search",
+      "name": "TerminalFocusSearch",
+      "kind": "component",
+      "purpose": "Phone full-screen terminal search bar: the search field fills the first line with Exit at its end; once there is a query a second line shows the match count with Previous and Next.",
+      "useWhen": [
+        "Hot Sheet needs phone full-screen terminal search bar: the search field fills the first line with Exit at its end; once there is a query a second line shows the match count with Previous and Next."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalFocusSearch behavior."
+      ],
+      "publicClasses": [
+        "terminal-focus-search"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-focus-search.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",

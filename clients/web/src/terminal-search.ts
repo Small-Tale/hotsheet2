@@ -86,6 +86,8 @@ export function terminalDrawerSearch(
     count: terminalSearchCountText(results),
     hasMatches: (results?.resultCount ?? 0) > 0,
     countCompact,
+    // Read through the model's signal, so a presentation that maps it re-renders as the query changes.
+    hasQuery: open && model.state.value.query !== '',
   };
 }
 

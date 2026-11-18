@@ -6412,6 +6412,71 @@
       }
     },
     {
+      "id": "terminal-focus-search",
+      "name": "TerminalFocusSearch",
+      "kind": "component",
+      "purpose": "Phone full-screen terminal search bar: the search field fills the first line with Exit at its end; once there is a query a second line shows the match count with Previous and Next.",
+      "source": "src/components/terminal-focus-search.tsx",
+      "publicExports": [
+        {
+          "name": "TerminalFocusSearch"
+        }
+      ],
+      "sourceLinks": ["src/components/terminal-focus-search.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["terminal-focus-search"],
+        "publicTokens": [],
+        "placeableClasses": ["terminal-focus-search"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-focus-search.tsx",
+        "composition": "src/components/terminal-focus-search.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs phone full-screen terminal search bar: the search field fills the first line with Exit at its end; once there is a query a second line shows the match count with Previous and Next."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalFocusSearch behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",

@@ -26,6 +26,7 @@ import {
 } from '../components/terminal-component-interactions';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
+import { TerminalFocusSearch } from '../components/terminal-focus-search';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
@@ -134,6 +135,51 @@ export function resetTerminalDrawerDemo(root?: ParentNode): void {
   if (root) syncSettingsControls(root, 'terminal-drawer', { values: { 'search-state': 'collapsed' } });
 }
 
+export function resetTerminalFocusSearchDemo(root?: ParentNode): void {
+  applyTerminalSearchDemoState('count');
+  if (root) syncSettingsControls(root, 'terminal-focus-search', { values: { 'search-state': 'count' } });
+}
+
+/** The phone search bar's states share the rail demo's fixtures (HS2-7HPXCY); Collapsed shows the bar before typing. */
+export function TerminalFocusSearchSettings() {
+  return (
+    <DemoSettingsForm settings="terminal-focus-search">
+      <Select
+        name="search-state"
+        label="Terminal Search"
+        value={terminalSearchDemoState.value}
+        choices={TERMINAL_SEARCH_DEMO_CHOICES}
+      />
+      <Button type="button" action={'reset-settings'}>
+        Reset
+      </Button>
+    </DemoSettingsForm>
+  );
+}
+
+/** The phone full-screen search bar (HS2-7HPXCY) over the shared demo model, with production's drawer mapping. */
+export function TerminalFocusSearchDemo() {
+  const search = terminalDrawerSearch(
+    terminalSearchDemoModel,
+    true,
+    terminalSearchDemoModel.state.value.query ? terminalSearchDemoResults.value : undefined,
+  );
+  return (
+    <CatalogExample
+      label="Phone Search Bar"
+      note="Choose a search state in Settings. Previous and Next step the reported match; the results line shows once there is a query."
+      viewport={{ width: 'compact', frame: 'solid', overflow: 'hidden' }}
+    >
+      <TerminalFocusSearch
+        model={search.model}
+        count={search.count}
+        hasMatches={search.hasMatches}
+        hasQuery={search.hasQuery}
+      />
+    </CatalogExample>
+  );
+}
+
 export function TerminalDrawerSettings() {
   return (
     <DemoSettingsForm settings="terminal-drawer">
@@ -230,6 +276,26 @@ export function TerminalDrawerDemo() {
               ? terminalSearchDemoResults.value
               : undefined,
             terminalSearchDemoCountCompact.value,
+          )}
+        />
+      </CatalogExample>
+      {/* A phone rail's Search opens the terminal full screen with its search bar (HS2-7HPXCY); it is pressed
+          while a kept search has a query. */}
+      <CatalogExample label="Phone Search" viewport={{ width: 'compact', frame: 'solid', overflow: 'hidden' }}>
+        <TerminalDrawer
+          projectId="demo-phone-search"
+          projectName="Demo project"
+          sessions={[{ ...shell, projectId: 'demo-phone-search' }]}
+          width={390}
+          height={96}
+          fitAcross={1}
+          fitHigh={1}
+          selectedId="shell"
+          mobile
+          search={terminalDrawerSearch(
+            terminalSearchDemoModel,
+            terminalSearchDemoOpen.value,
+            terminalSearchDemoResults.value,
           )}
         />
       </CatalogExample>
@@ -804,6 +870,24 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
+    delegate(root, 'change', '[data-settings="terminal-focus-search"] [name="search-state"]', (_event, target) => {
+      const state = (target as FormControl).value;
+      if (Object.hasOwn(TERMINAL_SEARCH_DEMO_STATES, state))
+        applyTerminalSearchDemoState(state as TerminalSearchDemoState);
+    }),
+  );
+  // The phone search bar's Previous Match (HS2-7HPXCY) steps back and keeps the keyboard in the field.
+  demoListeners.add(
+    delegate(root, 'mousedown', TERMINALS_ACTIONS.previousTerminalSearchMatch.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.previousTerminalSearchMatch.selector, () => {
+      stepTerminalSearchDemo('previous');
+    }),
+  );
+  demoListeners.add(
     delegate(root, 'mousedown', TERMINALS_ACTIONS.nextTerminalSearchMatch.selector, (event) => {
       event.preventDefault();
     }),
@@ -921,6 +1005,12 @@ export const demoModule: DemoModule = {
     },
     'terminal-dashboard': { catalogExamples: true, Demo: TerminalDashboardDemo },
     'terminal-key-bar': { catalogExamples: true, Demo: TerminalKeyBarDemo },
+    'terminal-focus-search': {
+      catalogExamples: true,
+      Demo: TerminalFocusSearchDemo,
+      Settings: TerminalFocusSearchSettings,
+      reset: resetTerminalFocusSearchDemo,
+    },
     'fixed-aspect-terminal-card': { catalogExamples: true, Demo: FixedAspectTerminalCardDemo },
     'terminal-edit-menu': { catalogExamples: true, Demo: TerminalEditMenuDemo },
     'terminal-copy-dialog': { catalogExamples: true, Demo: () => terminalClipboardDemo(true) },
