@@ -537,19 +537,36 @@ pub(crate) fn system_memory() -> Option<MemoryAmount> {
         .and_then(|text| linux::parse_meminfo_memory(&text))
 }
 
+/// Windows (HS2-4A5AV7): `GlobalMemoryStatusEx` available and total physical memory.
+#[cfg(windows)]
+pub(crate) fn system_memory() -> Option<MemoryAmount> {
+    windows::physical_memory()
+}
+
 /// No free-memory reader on this platform: the value stays unknown.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 pub(crate) fn system_memory() -> Option<MemoryAmount> {
     None
 }
 
 /// Whole-machine busy percent between two per-core tick readings `window` apart. `None`
 /// where the platform has no tick reader or a reading failed.
+#[cfg(not(windows))]
 pub(crate) fn system_cpu_percent(window: std::time::Duration) -> Option<f64> {
     let before = platform_core_ticks()?;
     std::thread::sleep(window);
     let after = platform_core_ticks()?;
     super::live_cpu::frame_values(&before, &after).map(|(busy, _)| busy)
+}
+
+/// Windows (HS2-4A5AV7): whole-machine busy percent between two `GetSystemTimes`
+/// readings `window` apart.
+#[cfg(windows)]
+pub(crate) fn system_cpu_percent(window: std::time::Duration) -> Option<f64> {
+    let before = windows::system_times()?;
+    std::thread::sleep(window);
+    let after = windows::system_times()?;
+    windows::cpu_delta(before, after)
 }
 
 /// Free and total bytes of the volume holding `path`.
@@ -572,20 +589,33 @@ pub(crate) fn system_disk(path: &std::path::Path) -> Option<DiskReading> {
 /// Resident bytes of each process tree rooted at one of `roots`, from one `ps` listing of
 /// ids and sizes only. A root that is not running, or a platform without this `ps`, has no
 /// entry.
+/// On Windows (HS2-4A5AV7) the tree comes from a Toolhelp process snapshot and each
+/// member's working set from `K32GetProcessMemoryInfo`.
 pub(crate) fn system_resident_bytes(roots: &[u32]) -> std::collections::HashMap<u32, u64> {
-    if roots.is_empty() || !cfg!(any(target_os = "macos", target_os = "linux")) {
+    if roots.is_empty() {
         return std::collections::HashMap::new();
     }
-    run("ps", &["-A", "-o", "pid=,ppid=,rss="])
-        .map(|text| parse_ps_resident(&text, roots))
-        .unwrap_or_default()
+    #[cfg(windows)]
+    {
+        windows::resident_bytes(roots)
+    }
+    #[cfg(not(windows))]
+    {
+        if !cfg!(any(target_os = "macos", target_os = "linux")) {
+            return std::collections::HashMap::new();
+        }
+        run("ps", &["-A", "-o", "pid=,ppid=,rss="])
+            .map(|text| parse_ps_resident(&text, roots))
+            .unwrap_or_default()
+    }
 }
 
 /// `ps -A -o pid=,ppid=,rss=`: each root's resident kilobytes summed over the root and
 /// every descendant, in bytes.
+#[cfg_attr(windows, allow(dead_code))] // HS2-4A5AV7: Windows reads the tree from Toolhelp.
 pub(crate) fn parse_ps_resident(text: &str, roots: &[u32]) -> std::collections::HashMap<u32, u64> {
-    let mut rows = std::collections::HashMap::new();
-    let mut children: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+    let mut edges = Vec::new();
+    let mut sizes = std::collections::HashMap::new();
     for line in text.lines() {
         let mut fields = line.split_whitespace().map(str::parse::<u64>);
         let (Some(Ok(pid)), Some(Ok(parent)), Some(Ok(rss_kib))) =
@@ -596,27 +626,62 @@ pub(crate) fn parse_ps_resident(text: &str, roots: &[u32]) -> std::collections::
         let (Ok(pid), Ok(parent)) = (u32::try_from(pid), u32::try_from(parent)) else {
             continue;
         };
-        rows.insert(pid, rss_kib.saturating_mul(1024));
-        children.entry(parent).or_default().push(pid);
+        sizes.insert(pid, rss_kib.saturating_mul(1024));
+        edges.push((pid, parent));
     }
-    let mut resident = std::collections::HashMap::new();
+    sum_trees(&process_trees(&edges, roots), &sizes)
+}
+
+/// HS2-4A5AV7: the members of each process tree rooted at one of `roots`, from
+/// `(pid, parent)` rows. A root that is not listed has no entry. Each pid is a member
+/// once even when the rows are inconsistent: a process listed as its own parent (the
+/// Windows System Idle process) or a cycle through a reused pid ends the walk.
+pub(crate) fn process_trees(
+    edges: &[(u32, u32)],
+    roots: &[u32],
+) -> std::collections::HashMap<u32, Vec<u32>> {
+    let mut listed = std::collections::HashSet::new();
+    let mut children: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+    for &(pid, parent) in edges {
+        listed.insert(pid);
+        if pid != parent {
+            children.entry(parent).or_default().push(pid);
+        }
+    }
+    let mut trees = std::collections::HashMap::new();
     for root in roots {
-        if !rows.contains_key(root) {
+        if !listed.contains(root) {
             continue;
         }
-        let (mut total, mut pending) = (0_u64, vec![*root]);
+        let (mut members, mut pending) = (Vec::new(), vec![*root]);
         let mut seen = std::collections::HashSet::new();
         while let Some(pid) = pending.pop() {
-            // A pid is counted once even if the listing is inconsistent.
             if !seen.insert(pid) {
                 continue;
             }
-            total = total.saturating_add(rows.get(&pid).copied().unwrap_or(0));
+            members.push(pid);
             pending.extend(children.get(&pid).into_iter().flatten());
         }
-        resident.insert(*root, total);
+        trees.insert(*root, members);
     }
-    resident
+    trees
+}
+
+/// HS2-4A5AV7: each tree's bytes, summed over its members. A member without a size (it
+/// exited, or could not be read) counts as 0 and does not drop its tree.
+pub(crate) fn sum_trees(
+    trees: &std::collections::HashMap<u32, Vec<u32>>,
+    sizes: &std::collections::HashMap<u32, u64>,
+) -> std::collections::HashMap<u32, u64> {
+    trees
+        .iter()
+        .map(|(root, members)| {
+            let total = members.iter().fold(0_u64, |total, pid| {
+                total.saturating_add(sizes.get(pid).copied().unwrap_or(0))
+            });
+            (*root, total)
+        })
+        .collect()
 }
 
 #[cfg_attr(not(windows), allow(dead_code))] // HS2-MEQ46T: pure Windows parsers run in every host's unit suite.
@@ -642,6 +707,116 @@ pub(crate) mod windows {
     use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     #[cfg(windows)]
     use windows_sys::Win32::System::Threading::GetSystemTimes;
+
+    /// HS2-4A5AV7: free and total physical memory, from the two `MEMORYSTATUSEX` fields.
+    /// Zero total or more available than installed is not a reading.
+    pub(crate) fn memory_amount(available: u64, total: u64) -> Option<super::MemoryAmount> {
+        (total > 0 && available <= total).then_some(super::MemoryAmount {
+            free_bytes: available,
+            total_bytes: total,
+        })
+    }
+
+    #[cfg(windows)]
+    pub(super) fn physical_memory() -> Option<super::MemoryAmount> {
+        let mut status = MEMORYSTATUSEX {
+            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: dwLength names the complete writable status structure.
+        if unsafe { GlobalMemoryStatusEx(&mut status) } == 0 {
+            return None;
+        }
+        memory_amount(status.ullAvailPhys, status.ullTotalPhys)
+    }
+
+    /// HS2-4A5AV7: idle, kernel and user 100 ns ticks since boot.
+    #[cfg(windows)]
+    pub(super) fn system_times() -> Option<(u64, u64, u64)> {
+        let (mut idle, mut kernel, mut user) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        // SAFETY: all three FILETIME buffers are writable.
+        if unsafe { GetSystemTimes(&mut idle, &mut kernel, &mut user) } == 0 {
+            return None;
+        }
+        Some((ticks(idle), ticks(kernel), ticks(user)))
+    }
+
+    /// HS2-4A5AV7: `(pid, parent)` of every process, from one Toolhelp snapshot. Ids only:
+    /// the executable name the entry also carries is not read.
+    #[cfg(windows)]
+    fn process_edges() -> Option<Vec<(u32, u32)>> {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+            TH32CS_SNAPPROCESS,
+        };
+        // SAFETY: a process snapshot takes no pointers; the handle is closed below.
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE || snapshot.is_null() {
+            return None;
+        }
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut edges = Vec::new();
+        // SAFETY: the snapshot is open and dwSize names the writable entry.
+        let mut more = unsafe { Process32FirstW(snapshot, &mut entry) } != 0;
+        while more {
+            edges.push((entry.th32ProcessID, entry.th32ParentProcessID));
+            // SAFETY: as above.
+            more = unsafe { Process32NextW(snapshot, &mut entry) } != 0;
+        }
+        // SAFETY: the snapshot handle is owned here and closed once.
+        unsafe { CloseHandle(snapshot) };
+        Some(edges)
+    }
+
+    /// HS2-4A5AV7: one process's working set in bytes, `None` when it cannot be opened.
+    #[cfg(windows)]
+    fn working_set(pid: u32) -> Option<u64> {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::ProcessStatus::{
+            K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+        };
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY: OpenProcess takes no pointers; a null handle is checked.
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if process.is_null() {
+            return None;
+        }
+        let mut counters = PROCESS_MEMORY_COUNTERS {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: the handle is open and cb names the writable counters structure.
+        let ok = unsafe { K32GetProcessMemoryInfo(process, &mut counters, counters.cb) } != 0;
+        // SAFETY: the process handle is owned here and closed once.
+        unsafe { CloseHandle(process) };
+        ok.then(|| u64::try_from(counters.WorkingSetSize).unwrap_or(u64::MAX))
+    }
+
+    /// HS2-4A5AV7: the working set of each process tree rooted at one of `roots`. Only the
+    /// trees' members are opened.
+    #[cfg(windows)]
+    pub(super) fn resident_bytes(roots: &[u32]) -> std::collections::HashMap<u32, u64> {
+        let Some(edges) = process_edges() else {
+            return std::collections::HashMap::new();
+        };
+        let trees = super::process_trees(&edges, roots);
+        let sizes = trees
+            .values()
+            .flatten()
+            .filter_map(|pid| working_set(*pid).map(|bytes| (*pid, bytes)))
+            .collect();
+        super::sum_trees(&trees, &sizes)
+    }
 
     #[cfg(windows)]
     pub(super) fn disk(path: &std::path::Path) -> Option<DiskReading> {
@@ -691,16 +866,7 @@ pub(crate) mod windows {
 
     #[cfg(windows)]
     pub(super) fn cpu(previous: &mut Option<(u64, u64, u64)>) -> Option<CpuReading> {
-        let (mut idle, mut kernel, mut user) = (
-            FILETIME::default(),
-            FILETIME::default(),
-            FILETIME::default(),
-        );
-        // SAFETY: all three FILETIME buffers are writable.
-        if unsafe { GetSystemTimes(&mut idle, &mut kernel, &mut user) } == 0 {
-            return None;
-        }
-        let now = (ticks(idle), ticks(kernel), ticks(user));
+        let now = system_times()?;
         let before = previous.replace(now)?;
         cpu_delta(before, now).map(|busy_percent| CpuReading {
             busy_percent,

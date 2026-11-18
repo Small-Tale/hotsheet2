@@ -126,7 +126,65 @@ fn host_health_capacity_parsers_read_memory_and_process_trees_or_report_unknown(
     assert!(parse_ps_resident("", &[1]).is_empty());
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+/// HS2-4A5AV7: the Windows readings' pure halves, on every host.
+#[test]
+fn hs2_4a5av7_windows_memory_and_process_tree_readings_are_pure_and_bounded() {
+    use super::source::{process_trees, sum_trees, windows};
+    // MEMORYSTATUSEX ullAvailPhys and ullTotalPhys.
+    let memory = windows::memory_amount(6 << 30, 16 << 30).unwrap();
+    assert_eq!((memory.free_bytes, memory.total_bytes), (6 << 30, 16 << 30));
+    assert_eq!(windows::memory_amount(0, 16 << 30).unwrap().free_bytes, 0);
+    // No installed memory, or more available than installed, is not a reading.
+    assert_eq!(windows::memory_amount(0, 0), None);
+    assert_eq!(windows::memory_amount(17 << 30, 16 << 30), None);
+
+    // GetSystemTimes deltas: kernel time includes idle time.
+    assert_eq!(
+        windows::cpu_delta((100, 1000, 500), (150, 1100, 500)),
+        Some(50.0)
+    );
+    assert_eq!(windows::cpu_delta((0, 0, 0), (0, 0, 0)), None);
+    assert_eq!(windows::cpu_delta((10, 10, 10), (5, 20, 20)), None);
+
+    // Toolhelp (pid, parent) rows: 0 is the System Idle process, its own parent; 4 is
+    // System. 100 has children 101 and 102; 102 has 103; 200 is a separate session.
+    let edges = [
+        (0, 0),
+        (4, 0),
+        (100, 4),
+        (101, 100),
+        (102, 100),
+        (103, 102),
+        (200, 4),
+    ];
+    let trees = process_trees(&edges, &[100, 200, 999]);
+    let mut members = trees[&100].clone();
+    members.sort_unstable();
+    assert_eq!(members, [100, 101, 102, 103]);
+    assert_eq!(trees[&200], [200]);
+    // A root that is not running has no tree: unknown, never zero.
+    assert!(!trees.contains_key(&999));
+    // The self-parented idle process does not make every process its own descendant.
+    assert_eq!(process_trees(&edges, &[0])[&0].len(), 7);
+    let idle_only = process_trees(&[(0, 0)], &[0]);
+    assert_eq!(idle_only[&0], [0]);
+    // A parent loop through a reused pid ends and lists each pid once.
+    let mut looped = process_trees(&[(10, 11), (11, 10)], &[10])[&10].clone();
+    looped.sort_unstable();
+    assert_eq!(looped, [10, 11]);
+
+    // Working sets: a member that could not be opened counts 0 and keeps its tree.
+    let sizes = [(100, 1000), (101, 200), (103, 4), (200, 500)].into();
+    let totals = sum_trees(&trees, &sizes);
+    assert_eq!(totals[&100], 1204);
+    assert_eq!(totals[&200], 500);
+    assert_eq!(totals.len(), 2);
+    let unreadable = sum_trees(&process_trees(&[(7, 1)], &[7]), &HashMap::new());
+    assert_eq!(unreadable[&7], 0);
+    assert!(sum_trees(&HashMap::new(), &sizes).is_empty());
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 #[test]
 fn host_health_capacity_reads_this_machines_memory_cpu_disk_and_own_process() {
     let mut system = SystemCapacity;

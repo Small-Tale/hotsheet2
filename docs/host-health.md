@@ -258,13 +258,17 @@ does not measure: free and total RAM, and the resident memory of each AI session
 - **Free and total RAM.** macOS reads `vm_stat` and counts free, speculative and inactive pages
   at the page size its header states; total memory comes from `sysconf`. Linux reads
   `MemAvailable` and `MemTotal` from `/proc/meminfo`; a kernel without `MemAvailable` is unknown,
-  and `MemFree` is not used in its place. Windows has no reader yet (HS2-4A5AV7).
-- **CPU.** Two per-core tick readings 250 ms apart, with the live CPU feed's readers. Platforms
-  without one report unknown.
+  and `MemFree` is not used in its place. Windows reads `GlobalMemoryStatusEx`: `ullAvailPhys` as
+  free and `ullTotalPhys` as total (HS2-4A5AV7).
+- **CPU.** Two per-core tick readings 250 ms apart, with the live CPU feed's readers. Windows
+  takes two `GetSystemTimes` readings 250 ms apart instead (HS2-4A5AV7). Platforms without a
+  reader report unknown.
 - **Disk.** The volume holding the checkout the request names, not the store's.
 - **Session memory.** One `ps -A -o pid=,ppid=,rss=` listing, summed over the process tree of each
   AI terminal's journalled process id. Only ids and sizes are read. A process that is not listed
-  has no value.
+  has no value. Windows (HS2-4A5AV7) takes the tree from one Toolhelp process snapshot (process
+  and parent ids only) and sums each member's working set from `K32GetProcessMemoryInfo`. A
+  member that cannot be opened counts as zero; the root itself must be listed.
 
 A value that cannot be read is unknown and is never estimated.
 

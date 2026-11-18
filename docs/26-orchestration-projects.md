@@ -1020,9 +1020,12 @@ estimated in its place.
 - **Privacy** follows HS2-SW5ZK3. A process is a session id, a tool name and numbers.
   No process path, command line, working directory, user name or claim metadata is in
   a snapshot, for a local or a remote reader.
-- **Platforms.** macOS and Linux report every value ([host-health](host-health.md)).
-  On Windows free and total memory, CPU load and `resident_mb` are `null` until
-  HS2-4A5AV7; disk, tools and sessions are reported.
+- **Platforms.** macOS, Linux and Windows report every value
+  ([host-health](host-health.md)). Windows reads memory with `GlobalMemoryStatusEx`,
+  CPU load from `GetSystemTimes`, and `resident_mb` as the working set of the session's
+  process tree (HS2-4A5AV7). Until a Windows target of the Platforms workflow runs the
+  readers, they are verified only by cross-target type checks and tests of their pure
+  parts.
 
 ### Sampling only on demand
 

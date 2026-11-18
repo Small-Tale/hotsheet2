@@ -4122,8 +4122,13 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `remote_servers/capacity.rs # hs2_p5gtsw` waits by version on a live service. The
   CLI (`dispatch/orchestration_capacity.rs`) and MCP (`capacity` with `version`) carry
   the wait.
-- Not verified: the Linux readers on a Linux host (HS2-24PQ1R) and any Windows
-  reading (HS2-4A5AV7).
+- `capacity_tests.rs # hs2_4a5av7` checks the Windows readers' pure parts on every
+  host: memory bounds, `GetSystemTimes` deltas, process trees with the self-parented
+  idle process, reused-pid loops and absent roots, and working-set sums with
+  unreadable members. The host-reading test also runs on Windows.
+- Not verified: the Linux readers on a Linux host (HS2-24PQ1R). The Windows API
+  calls are type-checked for `x86_64-pc-windows-msvc` but have not run until a Windows
+  target of the Platforms workflow passes (HS2-4A5AV7).
 
 ### Orchestration validation steps (HS2-WN0MXZ)
 
