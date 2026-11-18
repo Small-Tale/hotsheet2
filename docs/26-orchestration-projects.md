@@ -2474,8 +2474,12 @@ stable code, the prerequisite, and for a provisional one the commits it rests on
   ticket (`gate_not_linked`), and an `unknown` gate makes it stale (`gate_unknown`).
   An unfinished ticket with nothing integrated is `prerequisite_not_finished`.
   Deployments: `deployment_not_requested`, `deployment_pending`, `deployment_failed`
-  block and `deployment_unknown` is stale. Whether a pending deployment should be
-  provisional is HS2-QBERH6.
+  block and `deployment_unknown` is stale. HS2-QBERH6 (decided 2026-11-18): a
+  deployment that is pending or awaiting approval on a recorded commit stays blocked
+  (`deployment_pending`) until it finishes, even when the commit's CI passed or the
+  prerequisite names that commit. Nothing builds ahead on it, at any speculation depth
+  and under any cross-target provisional policy (§26.22, HS2-JSF985). A deployment
+  changes a shared environment, which makes it the riskiest thing to speculate on.
 - **Provisional.** A CI gate that is `pending` on a linked commit means the
   prerequisite is integrated and awaiting its gate (`gate_pending`); a gate that
   passed while the ticket is not yet confirmed finished is the same level
@@ -3929,7 +3933,10 @@ What the rule cannot know is decided first, and an unknown is a refusal:
   record carries one gate per commit, and the work is confirmed only when all are
   green. A commit whose own gates are unknown is still `gate_commit_ambiguous`.
 - **Not speculated on.** A prerequisite that needs a `deployment` while its CI gate
-  pends (`deployment_gate_pending`, HS2-QBERH6).
+  pends (`deployment_gate_pending`), or whose deployment of a recorded commit is
+  pending or awaiting approval. The second is blocked as `deployment_pending` before
+  this rule is reached (HS2-QBERH6, decided 2026-11-18: no build-ahead on a
+  deployment).
 
 Refusal codes are the ones above, `policy_speculation_not_allowed`,
 `prerequisite_speculation_not_allowed`, `target_speculation_disabled`, and the rule's

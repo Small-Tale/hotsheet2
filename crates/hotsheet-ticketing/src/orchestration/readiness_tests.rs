@@ -1670,3 +1670,40 @@ fn hs2_g052rv_a_concurrent_reader_never_sees_a_step_before_its_reads() {
         "a step was visible before its reads"
     );
 }
+
+/// HS2-QBERH6 (maintainer's choice A): a deployment that is pending or awaiting
+/// approval on a recorded commit keeps dependent work blocked (`deployment_pending`)
+/// until it finishes. Nothing builds ahead on it: not when the CI gate passed, not when
+/// the prerequisite is finished or still started, and not when the prerequisite names
+/// the commit itself.
+#[test]
+fn hs2_qberh6_a_pending_deployment_on_a_recorded_commit_is_never_provisional() {
+    let (a, b) = (ticket(1, "a"), ticket(2, "b"));
+    let named = Prerequisite::Ticket {
+        target_id: a.target_id.clone(),
+        connection_id: a.connection_id.clone(),
+        native_id: a.native_id.clone(),
+        gates: GateRequirement::Deployment,
+        commit: Some(sha('a')),
+    };
+    for deployment in [GateState::Pending, GateState::AwaitingApproval] {
+        for status in ["completed", "verified", "started"] {
+            for prerequisite in [requires(&a, GateRequirement::Deployment), named.clone()] {
+                let facts = gate(GateState::Passed, None, Some(deployment));
+                let mut world = World::default()
+                    .status(&a, status)
+                    .status(&b, "not_started")
+                    .gates(&a, facts.clone());
+                world
+                    .0
+                    .commit_gates
+                    .insert((a.target_id.clone(), sha('a')), facts);
+                let answers = evaluate_plan(&[step(2, &b, vec![prerequisite])], &world.0);
+                let case = format!("{deployment:?} on a {status} prerequisite");
+                assert_eq!(answers[0].level, ReadinessLevel::Blocked, "{case}");
+                assert_eq!(codes(&answers[0]), ["deployment_pending"], "{case}");
+                assert!(answers[0].base_commits.is_empty(), "{case}");
+            }
+        }
+    }
+}
