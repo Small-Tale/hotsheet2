@@ -7,6 +7,7 @@
  * `npm run dev`. The development-only surfaces, the `/ux-demo` catalog and its
  * modification feed, are not served; the production bundle already omits their client code.
  */
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
   copyFileSync,
@@ -14,6 +15,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   statSync,
@@ -178,6 +180,27 @@ export function mcpBinaryEnvironment(
   return {};
 }
 
+/** The SHA-256 of a file's bytes. */
+function fileSha256(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+/**
+ * Whether the stable hook CLI at `stable` was already made from `source`'s exact bytes (HS2-T1M4VA).
+ * Every launch of a newly written executable makes macOS `syspolicyd` assess it, and the hook CLI is
+ * launched on every AI tool call. Rewriting an identical copy at each host start therefore pays that
+ * assessment again across every session and, under load, delays process starts and FSEvents
+ * registration machine-wide. The copy may be re-signed, so its own bytes differ from the source;
+ * the source's digest is recorded beside it instead.
+ */
+function stableHookCliCurrent(stable: string, sourceDigest: string): boolean {
+  try {
+    return existsSync(stable) && readFileSync(`${stable}.source-sha256`, 'utf8').trim() === sourceDigest;
+  } catch {
+    return false;
+  }
+}
+
 /** Keep a production host on the artifacts it selected at launch while working builds replace dist/ and target/. */
 export function snapshotLocalHostArtifacts(
   distRoot: string,
@@ -227,21 +250,26 @@ export function snapshotLocalHostArtifacts(
       if (variable === 'HOTSHEET_CLI_BIN') {
         const stableDir = resolve(machineHome, 'bin');
         mkdirSync(stableDir, { recursive: true });
-        const staging = mkdtempSync(resolve(stableDir, '.hook-cli-'));
-        try {
-          const staged = resolve(staging, executableName(name, platform)),
-            stable = resolve(stableDir, executableName(name, platform));
-          copyFileSync(source, staged);
-          chmodSync(staged, statSync(source).mode & 0o777);
-          signSnapshot(source, staged, 'hotsheet-cli', machineHome);
-          renameSync(staged, stable);
-          environment.HOTSHEET_HOOK_CLI_BIN = stable;
-          // A detached server may refresh setup independently of the host's environment.
-          // Let either snapshotted binary recover the durable path from its own directory.
-          writeFileSync(resolve(snapshotRoot, 'bin/.stable-hook-cli'), stable);
-        } finally {
-          rmSync(staging, { recursive: true, force: true });
+        const stable = resolve(stableDir, executableName(name, platform)),
+          sourceDigest = fileSha256(source);
+        // An unchanged CLI keeps its file, so macOS does not assess a fresh executable (HS2-T1M4VA).
+        if (!stableHookCliCurrent(stable, sourceDigest)) {
+          const staging = mkdtempSync(resolve(stableDir, '.hook-cli-'));
+          try {
+            const staged = resolve(staging, executableName(name, platform));
+            copyFileSync(source, staged);
+            chmodSync(staged, statSync(source).mode & 0o777);
+            signSnapshot(source, staged, 'hotsheet-cli', machineHome);
+            renameSync(staged, stable);
+            writeFileSync(`${stable}.source-sha256`, `${sourceDigest}\n`);
+          } finally {
+            rmSync(staging, { recursive: true, force: true });
+          }
         }
+        environment.HOTSHEET_HOOK_CLI_BIN = stable;
+        // A detached server may refresh setup independently of the host's environment.
+        // Let either snapshotted binary recover the durable path from its own directory.
+        writeFileSync(resolve(snapshotRoot, 'bin/.stable-hook-cli'), stable);
       }
       environment[variable] = pinned;
     }
