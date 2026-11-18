@@ -166,7 +166,13 @@ fn start_and_stop_are_idempotent() {
     let fx = Fixture::new();
     assert_eq!(
         fx.json(&["job", "watch", "status"]),
-        json!({"running": false, "monitor": null, "gitlab_token": null})
+        json!({
+            "running": false,
+            "monitor": null,
+            "gitlab_token": null,
+            "buildkite_token": null,
+            "circleci_token": null
+        })
     );
     // Stopping when nothing runs is a successful no-op and creates no monitor.
     assert_eq!(
