@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TimelineItem } from './orchestration-timeline';
 import {
@@ -24,6 +24,15 @@ import { provisionalLine } from './worker-provisional';
 
 const item = (step: string, phase: Parameters<typeof demoTimeline>[0] = 'running') =>
   findTimelineItem(demoTimeline(phase), step)!.item;
+
+// The fixtures' clock prints UTC (`demoClock`), while "About" or "Tomorrow" compares local calendar
+// days, so the test pins the local zone to UTC; otherwise it depends on the host's zone (HS2-SVA8HP).
+beforeAll(() => {
+  vi.stubEnv('TZ', 'UTC');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
   it('puts the newest wave leftmost and Done rightmost, with estimated starts in the titles', () => {
