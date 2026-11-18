@@ -2144,6 +2144,12 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/audit",
             get(routes::orchestration::read),
         )
+        // HS2-CRBR8X: this machine's journal of the sessions orchestrators started and
+        // stopped on it. Machine-local.
+        .route(
+            "/checkouts/{owner}/orchestration/hosted-audit",
+            get(routes::orchestration::read),
+        )
         .route(
             "/checkouts/{owner}/orchestration/policy",
             get(routes::orchestration::read).put(routes::orchestration::write),

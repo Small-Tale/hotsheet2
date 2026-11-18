@@ -8,6 +8,7 @@ mod capacity;
 mod capacity_watch;
 mod decisions;
 mod gates;
+mod hosted_audit;
 mod hosted_deployments;
 mod hosted_gates;
 mod job_monitor;
@@ -196,6 +197,10 @@ pub struct OrchestrationRuntime {
     timer_sleep: Arc<dyn Fn(std::time::Duration) + Send + Sync>,
     /// HS2-M7EV18: hosted validation steps run in detached runner processes.
     detached_validation: bool,
+    /// HS2-CRBR8X: who sent the request this runtime serves (a device certificate, a
+    /// paired browser), for the hosting machine's session journal. `None` is this
+    /// machine itself.
+    requester: Option<String>,
 }
 
 impl OrchestrationRuntime {
@@ -237,6 +242,7 @@ impl OrchestrationRuntime {
             capacity_resample: std::time::Duration::from_millis(capacity::CAPACITY_RESAMPLE_MS),
             timer_sleep: Arc::new(std::thread::sleep),
             detached_validation: false,
+            requester: None,
             home,
             checkouts,
             providers,

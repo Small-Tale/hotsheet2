@@ -85,6 +85,18 @@ enum OrchestrationCmd {
         #[arg(long, default_value_t = 100)]
         limit: u64,
     },
+    /// HS2-CRBR8X: read this machine's journal of the sessions orchestrators started and
+    /// stopped on one checkout it hosts: who asked, which tool, and what this machine did.
+    HostedAudit {
+        /// Registered checkout id on this machine (the hosted project).
+        #[arg(long)]
+        checkout: String,
+        /// Return entries after this sequence number.
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+        #[arg(long, default_value_t = 100)]
+        limit: u64,
+    },
     /// HS2-S13719: lead time, blocked time, retries, CI and deployment outcomes and known
     /// AI cost of this project's runs, per run, work item and target. Identifiers and
     /// metrics only; a measure that cannot be computed says why instead of reading zero.
@@ -1424,6 +1436,16 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             let path =
                 format!("/checkouts/{owner_id}/orchestration/audit?after={after}&limit={limit}");
             (owner_id, ("GET", path, Value::Null))
+        }
+        OrchestrationCmd::HostedAudit {
+            checkout,
+            after,
+            limit,
+        } => {
+            let path = format!(
+                "/checkouts/{checkout}/orchestration/hosted-audit?after={after}&limit={limit}"
+            );
+            (checkout, ("GET", path, Value::Null))
         }
         OrchestrationCmd::Summary {
             project,

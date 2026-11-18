@@ -1020,7 +1020,7 @@ impl OrchestrationRuntime {
         if !gone {
             return Ok(session);
         }
-        Ok(self
+        let ended = self
             .hosted_sessions_registry()
             .end(
                 &session.checkout_id,
@@ -1028,7 +1028,10 @@ impl OrchestrationRuntime {
                 "host_lost",
                 now_ms,
             )?
-            .unwrap_or(session))
+            .unwrap_or(session);
+        // HS2-CRBR8X: the host's journal records the end once, whoever noticed it.
+        self.journal_hosted_end(&ended);
+        Ok(ended)
     }
 
     /// The sessions orchestrators started on one checkout this machine hosts, with
@@ -1068,7 +1071,8 @@ impl OrchestrationRuntime {
 
     /// Start a session on this machine for an orchestration project. The same
     /// operation id never launches twice. This machine's own admission decides.
-    pub fn hosted_session_start(
+    /// [`Self::hosted_session_start`] journals the answer (HS2-CRBR8X).
+    pub(super) fn hosted_session_start_unjournaled(
         &self,
         checkout_id: &str,
         request: HostedSessionStart,
@@ -1430,7 +1434,8 @@ impl OrchestrationRuntime {
 
     /// Stop a hosted session. This machine checks the safe point itself: the
     /// orchestrator's word that a session is idle is never enough.
-    pub fn hosted_session_stop(
+    /// [`Self::hosted_session_stop`] journals the answer (HS2-CRBR8X).
+    pub(super) fn hosted_session_stop_unjournaled(
         &self,
         checkout_id: &str,
         request: HostedSessionStop,

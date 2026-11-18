@@ -823,6 +823,55 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/hosted-audit:
+    description:
+      Machine-local journal of the sessions orchestrators started and stopped on one checkout this machine hosts
+      (HS2-CRBR8X). Identifiers, codes and timestamps only. `owner` is the hosted checkout's id.
+    x-hotsheet-machine-local: true
+    get:
+      operationId: readHostedSessionAudit
+      parameters:
+        - name: after
+          in: query
+          description: Return entries with a greater sequence number.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Entries after the cursor, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedSessionAuditPage'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/policy:
     description:
       The checked-in throughput policy of an orchestration project (HS2-YCJDEB). It holds limits only; acting on a
@@ -19295,6 +19344,86 @@ components:
                 description:
                   HS2-ZYM6ZT. The person whose request the actor carried out, such as the browser's person behind a Run
                   Validation the orchestrator performs. Attribution only.
+                type: string
+                maxLength: 160
+            additionalProperties: false
+        cursor:
+          description: Pass as `after` to continue.
+          type: integer
+          minimum: 0
+        gap:
+          description: Retention removed entries between the request cursor and the first one returned.
+          type: boolean
+        more:
+          type: boolean
+      additionalProperties: false
+    HostedSessionAuditPage:
+      description:
+        A page of the hosting machine's session journal (HS2-CRBR8X). An entry records a start this machine launched
+        or refused, a stop it carried out or refused, or a session it found ended without a stop.
+      type: object
+      required:
+        - entries
+        - cursor
+        - gap
+        - more
+      properties:
+        entries:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required:
+              - seq
+              - at_ms
+              - event
+              - outcome
+              - operation_id
+            properties:
+              seq:
+                type: integer
+                minimum: 1
+              at_ms:
+                type: integer
+                minimum: 0
+              event:
+                enum:
+                  - start
+                  - stop
+                  - end
+              outcome:
+                description: '`succeeded` when it launched or stopped; `denied` when this machine refused.'
+                enum:
+                  - succeeded
+                  - denied
+              reason:
+                description: The refusal code, or how the session ended. Never free text.
+                type: string
+                maxLength: 160
+              operation_id:
+                type: string
+                maxLength: 160
+              session_id:
+                description: This machine's terminal id.
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              tool:
+                type: string
+                maxLength: 160
+              origin_checkout_id:
+                description: The orchestration project's checkout id on its own machine.
+                type: string
+                maxLength: 160
+              requester:
+                description:
+                  Who sent the request, `cert-<sha256 fingerprint>` for a device certificate, `browser-<device id>` for
+                  a paired browser or `local` for this machine. Absent for an end nobody requested.
+                type: string
+                maxLength: 160
+              actor_role:
+                type: string
+                maxLength: 160
+              actor_id:
                 type: string
                 maxLength: 160
             additionalProperties: false

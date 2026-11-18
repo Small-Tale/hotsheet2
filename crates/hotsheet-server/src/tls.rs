@@ -23,6 +23,11 @@ use hotsheet_tls::Paths;
 #[derive(Clone, Copy)]
 pub struct CertificateAuthenticated;
 
+/// HS2-CRBR8X: the verified device certificate's SHA-256 fingerprint (lowercase hex),
+/// so a hosting machine's session journal can name the device that asked.
+#[derive(Clone)]
+pub struct CertificateFingerprint(pub String);
+
 /// Build a mutual-TLS `ServerConfig`: the server presents its leaf, and every client must
 /// present a cert that chains to the project CA and isn't revoked. Errors if the store's TLS
 /// material isn't initialized (`cert init`).
@@ -131,8 +136,9 @@ pub async fn serve_tls_with_acl(
                         .layer(axum::middleware::from_fn(enforce_client_access))
                         .layer(axum::Extension(access))
                         .layer(axum::Extension(axum::extract::ConnectInfo(peer)));
-                    let app = if fingerprint.is_some() {
+                    let app = if let Some(fingerprint) = fingerprint {
                         app.layer(axum::Extension(CertificateAuthenticated))
+                            .layer(axum::Extension(CertificateFingerprint(fingerprint)))
                     } else {
                         app
                     };
@@ -386,6 +392,8 @@ mod tests {
             // HS2-SBQ3T8: the access check and the journal never leave the machine.
             "/checkouts/owner/orchestration/targets/id/access",
             "/checkouts/owner/orchestration/audit",
+            // HS2-CRBR8X: so is the journal of the sessions this machine hosted.
+            "/checkouts/owner/orchestration/hosted-audit",
             // HS2-YCJDEB: a dry run reads this machine's bindings and rules.
             "/checkouts/owner/orchestration/policy/dry-run",
             // HS2-XHQ1EH: permission requests and remembered rules are this machine's.

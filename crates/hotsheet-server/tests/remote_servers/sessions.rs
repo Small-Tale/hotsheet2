@@ -1308,3 +1308,292 @@ async fn hs2_twsxk7_a_takeover_recorded_while_the_follower_starts_is_announced()
     }
     host.begin_stopping();
 }
+
+/// HS2-CRBR8X: the hosting machine keeps its own journal of what orchestrators started
+/// and stopped on it, readable headlessly by its owner. A remote orchestrator starts and
+/// winds down a session over authenticated TLS; the host's owner turns hosting off with
+/// `max_sessions: 0` and the next start is refused. The host's CLI and its machine-local
+/// route both show the start, the stop and the refusal with the requesting device's
+/// certificate, and the journal survives a restart of the host's server.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_crbr8x_the_host_journals_a_remote_orchestrators_start_stop_and_refusal() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::at(root.path().join("tls"));
+    init_ca(&paths, &[]).unwrap();
+    let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
+    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
+    let peer_home = root.path().join("peer-home");
+    let peer_source = root.path().join("peer-store");
+    let peer_state = |source: &Path, home: &Path| {
+        state(source, home)
+            .with_capacity_source(Box::new(Roomy))
+            .with_capacity_cache(std::time::Duration::ZERO)
+            .with_plugin_dirs(vec![fake_plugins(root.path())])
+    };
+    let first = peer_state(&peer_source, &peer_home);
+    let peer_router = app(first.clone());
+    let project = root.path().join("peer-project");
+    git_project(&project);
+    let hosted = CheckoutRegistry::new(peer_home.join("checkouts.json"))
+        .register(&project, None, None, vec![peer_source.clone()])
+        .unwrap();
+    let expected = identity(&peer_home);
+    let peer = serve(first, &paths, None).await;
+
+    let home = root.path().join("controller-home");
+    std::fs::create_dir(&home).unwrap();
+    let source = root.path().join("controller-store");
+    FsStore::init_git(&source, &StoreMetadata::new("OWN")).unwrap();
+    let owner_project = root.path().join("release-train");
+    std::fs::create_dir(&owner_project).unwrap();
+    let owner = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&owner_project, None, None, vec![source.clone()])
+        .unwrap();
+    let input = home.join("supplied-credentials.json");
+    write_credentials(&input, &credentials(&device));
+    cli(
+        &home,
+        &[
+            "register",
+            "--id",
+            ID,
+            "--label",
+            "Synthetic",
+            "--origin",
+            &peer.origin,
+            "--expected-server-id",
+            &expected.server_id,
+            "--credentials-file",
+            input.to_str().unwrap(),
+        ],
+    );
+    let store_arg = source.to_str().unwrap();
+    let targets = [
+        "-C",
+        store_arg,
+        "orchestration",
+        "target",
+        "--project",
+        &owner.id,
+    ];
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let scheduler = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "scheduler-1",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let inspected = cli_named(
+        &home,
+        &targets,
+        &["inspect", &hosted.id, "--registration-id", ID],
+    );
+    let added = cli_named(
+        &home,
+        &targets,
+        &["add", "--target-id", TARGET_A, "--label", "Remote target"],
+    );
+    cli_named(
+        &home,
+        &targets,
+        &[
+            "bind",
+            TARGET_A,
+            "--expected-manifest-revision",
+            added["revision"].as_str().unwrap(),
+            "--expected-binding-revision",
+            "0",
+            "--destination",
+            &inspected["destination"].to_string(),
+        ],
+    );
+    cli_named(
+        &home,
+        &human,
+        &[
+            "permission",
+            "remember",
+            TARGET_A,
+            "--project",
+            &owner.id,
+            "--action",
+            "session_start",
+            "--tool",
+            IDLE_TOOL,
+        ],
+    );
+    let policy_file = home.join("policy.json");
+    let one_target = json!({"machine":{"max_sessions":4},
+        "tools":[{"tool":IDLE_TOOL,"max_sessions":4}],
+        "targets":[{"target_id":TARGET_A,"tools":[{"tool":IDLE_TOOL}],"max_sessions":2}]});
+    std::fs::write(&policy_file, one_target.to_string()).unwrap();
+    cli_named(
+        &home,
+        &human,
+        &[
+            "policy",
+            "set",
+            "--project",
+            &owner.id,
+            "--file",
+            policy_file.to_str().unwrap(),
+        ],
+    );
+    let start = |operation: &str| {
+        let arguments = [
+            "session",
+            "start",
+            "--target",
+            TARGET_A,
+            "--operation-id",
+            operation,
+            "--tool",
+            IDLE_TOOL,
+            "--project",
+            owner.id.as_str(),
+        ];
+        cli_named(&home, &scheduler, &arguments)
+    };
+
+    // The remote orchestrator starts a session; it runs in the host's drawer.
+    let started = start("op-journal");
+    assert_eq!(started["state"], "running", "{started}");
+    let terminal = started["hosted"]["session_id"].as_str().unwrap().to_owned();
+    // The first start set the checkout up for its tool; a person commits that, so the
+    // idle session is at a safe point, and the orchestrator winds it down.
+    super::session_work::commit_all(Path::new(&hosted.root));
+    let session_id = started["session_id"].as_str().unwrap();
+    let stopped = cli_named(
+        &home,
+        &scheduler,
+        &["session", "stop", session_id, "--project", &owner.id],
+    );
+    assert_eq!(stopped["state"], "stopped", "{stopped}");
+
+    // The host's owner turns hosting off; the next start is refused by the host.
+    std::fs::write(
+        peer_home.join("orchestration-admission.json"),
+        br#"{"schema_version":1,"admission":{"max_sessions":0}}"#,
+    )
+    .unwrap();
+    let refused = super::support::cli_outcome(
+        &home,
+        &scheduler,
+        &[
+            "session",
+            "start",
+            "--target",
+            TARGET_A,
+            "--operation-id",
+            "op-off",
+            "--tool",
+            IDLE_TOOL,
+            "--project",
+            &owner.id,
+        ],
+    );
+    assert!(
+        refused.contains("session_admission_refused"),
+        "the host's admission refusal reaches the orchestrator: {refused}"
+    );
+    assert!(drawer(&peer_router).await.is_empty());
+
+    // The host's owner reads the journal headlessly, with no orchestration side.
+    let peer_store_arg = peer_source.to_str().unwrap();
+    let read = cli_named(
+        &peer_home,
+        &["-C", peer_store_arg, "orchestration"],
+        &["hosted-audit", "--checkout", &hosted.id],
+    );
+    let device_id = format!("cert-{}", device.fingerprint);
+    let peer_origin = peer.origin.clone();
+    let check = |page: &Value| {
+        let entries = page["entries"].as_array().unwrap();
+        let codes: Vec<_> = entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry["event"].as_str().unwrap().to_owned(),
+                    entry["outcome"].as_str().unwrap().to_owned(),
+                    entry["reason"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            codes,
+            [
+                ("start".into(), "succeeded".into(), Value::Null),
+                ("stop".into(), "succeeded".into(), json!("wound_down")),
+                (
+                    "start".into(),
+                    "denied".into(),
+                    json!("session_cap_reached")
+                ),
+            ],
+            "{page}"
+        );
+        for entry in entries {
+            assert_eq!(entry["requester"], device_id.as_str(), "{entry}");
+            assert_eq!(entry["tool"], IDLE_TOOL, "{entry}");
+            assert_eq!(entry["origin_checkout_id"], owner.id.as_str(), "{entry}");
+            assert_eq!(entry["actor_id"], "scheduler-1", "{entry}");
+        }
+        assert_eq!(entries[0]["session_id"], terminal.as_str());
+        assert_eq!(entries[1]["session_id"], terminal.as_str());
+        assert_eq!(entries[0]["operation_id"], entries[1]["operation_id"]);
+        // Identifiers and codes only: no label, prompt, path or origin. (A checkout id
+        // is a readable path identity, `folder-shortpathhash`, by design.)
+        let wire = page.to_string();
+        for private in [
+            "Synthetic",
+            "Remote target",
+            peer_origin.as_str(),
+            project.to_str().unwrap(),
+        ] {
+            assert!(!wire.contains(private), "{private} in {wire}");
+        }
+    };
+    check(&read);
+
+    // The journal outlives the host's server: a restarted server answers it on its
+    // machine-local route, and the cursor replays from where a reader stopped.
+    peer.stop().await;
+    let restarted = app(peer_state(&peer_source, &peer_home));
+    let (status, page) = api(
+        restarted.clone(),
+        "GET",
+        &format!("/checkouts/{}/orchestration/hosted-audit", hosted.id),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    check(&page);
+    let (status, rest) = api(
+        restarted,
+        "GET",
+        &format!(
+            "/checkouts/{}/orchestration/hosted-audit?after=2",
+            hosted.id
+        ),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{rest}");
+    assert_eq!(rest["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(rest["entries"][0]["seq"], 3);
+}

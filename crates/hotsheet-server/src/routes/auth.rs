@@ -55,6 +55,12 @@ pub(crate) enum Caller {
     BrowserSession { local: bool },
 }
 
+/// HS2-CRBR8X: who sent a request, as the hosting machine's session journal names it:
+/// `cert-<fingerprint>` for a device certificate, `browser-<device id>` for a paired
+/// browser, `local` for the machine secret. Inserted beside [`Caller`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Requester(pub(crate) String);
+
 impl Caller {
     /// Whether this caller may act on the host machine itself: launch a host application
     /// (difftool, open, reveal) or name an arbitrary host path. A request that never passed
@@ -142,18 +148,26 @@ pub(crate) async fn require_secret(
         .extensions()
         .get::<crate::tls::CertificateAuthenticated>()
         .is_some();
-    let caller = if certificate {
-        Caller::Certificate
+    let (caller, requester) = if certificate {
+        let device = req
+            .extensions()
+            .get::<crate::tls::CertificateFingerprint>()
+            .map_or_else(|| "cert".to_owned(), |device| format!("cert-{}", device.0));
+        (Caller::Certificate, device)
     } else if presented == Some(state.secret.as_str()) && state.local_bearer_allowed(peer) {
-        Caller::LocalBearer
+        (Caller::LocalBearer, "local".to_owned())
     } else {
         let device =
             crate::routes::remote_auth::session(&state, req.headers(), is_mutation, false)?;
-        Caller::BrowserSession {
-            local: device.local,
-        }
+        (
+            Caller::BrowserSession {
+                local: device.local,
+            },
+            format!("browser-{}", device.id),
+        )
     };
     req.extensions_mut().insert(caller);
+    req.extensions_mut().insert(Requester(requester));
     if primary_store_route(req.uri().path()) {
         state.require_primary_store_identity()?;
     }

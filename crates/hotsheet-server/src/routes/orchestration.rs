@@ -661,6 +661,7 @@ async fn execute(
     method: Method,
     path: String,
     body: Value,
+    requester: Option<String>,
 ) -> Result<Json<Value>, ApiError> {
     // HS2-7QHWHJ: a subscriber gets followers before it starts waiting.
     let watched = watched_owner(&method, &path);
@@ -679,7 +680,7 @@ async fn execute(
     if let Some((state, owner)) = &changed {
         super::orchestration_settings_watch::begin_change(state, owner);
     }
-    let result = execute_blocking(state, method, path, body).await;
+    let result = execute_blocking(state, method, path, body, requester).await;
     if let (Err(_), Some((state, owner))) = (&result, &changed) {
         super::orchestration_settings_watch::change_failed(state, owner);
     }
@@ -839,6 +840,7 @@ async fn execute_blocking(
     method: Method,
     path: String,
     body: Value,
+    requester: Option<String>,
 ) -> Result<Json<Value>, ApiError> {
     let handle = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
@@ -849,7 +851,13 @@ async fn execute_blocking(
         {
             return result;
         }
-        runtime(&state, handle)?.request_now(method.as_str(), &path, &body)
+        let runtime = runtime(&state, handle)?;
+        match requester {
+            Some(requester) => OrchestrationRuntime::clone(&runtime)
+                .with_requester(requester)
+                .request_now(method.as_str(), &path, &body),
+            None => runtime.request_now(method.as_str(), &path, &body),
+        }
     })
     .await
     .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "target task failed"))?
@@ -864,13 +872,16 @@ pub(crate) async fn read(
     let path = uri
         .path_and_query()
         .map_or_else(|| uri.path().to_owned(), |path| path.as_str().to_owned());
-    execute(state, Method::GET, path, Value::Null).await
+    execute(state, Method::GET, path, Value::Null, None).await
 }
 pub(crate) async fn write(
     State(state): State<AppState>,
     OriginalUri(uri): OriginalUri,
     method: Method,
+    requester: Option<axum::Extension<super::auth::Requester>>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    execute(state, method, uri.path().into(), body).await
+    // HS2-CRBR8X: the hosting machine's session journal names who asked.
+    let requester = requester.map(|axum::Extension(requester)| requester.0);
+    execute(state, method, uri.path().into(), body, requester).await
 }

@@ -13,6 +13,8 @@ pub fn is_path(path: &str) -> bool {
         parts.as_slice(),
         ["checkouts", _, "orchestration", "targets", ..]
             | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            // HS2-CRBR8X: this machine's journal of the sessions it hosted.
+            | ["checkouts", _, "orchestration", "hosted-audit"]
             | ["checkouts", _, "orchestration", "policy"]
             // HS2-W27N1D: the project type and the projects an orchestration project adds.
             | ["checkouts", _, "orchestration", "project-type" | "projects"]
@@ -119,6 +121,8 @@ pub fn is_machine_path(path: &str) -> bool {
             // ordinary authenticated data so a remote orchestrator can reach them.
             "binding" | "resolve" | "access" | "capacity" | "admission"
         ] | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            // HS2-CRBR8X: only this machine's owner reads what it hosted.
+            | ["checkouts", _, "orchestration", "hosted-audit"]
             // HS2-W27N1D: adding binds on this machine and removing unbinds here. The
             // project type is a checked-in setting and stays ordinary project data.
             | ["checkouts", _, "orchestration", "projects"]
@@ -1230,6 +1234,13 @@ impl OrchestrationRuntime {
             }
             ("DELETE", ["checkouts", owner, "orchestration", "permission-rules", id]) => {
                 value(self.permission_forget(owner, id, actor(body)?.as_ref(), tx)?)
+            }
+            ("GET", ["checkouts", checkout, "orchestration", "hosted-audit"]) => {
+                value(self.hosted_audit(
+                    checkout,
+                    query_number(path, "after", 0)?,
+                    usize::try_from(query_number(path, "limit", 100)?).unwrap_or(usize::MAX),
+                )?)
             }
             ("GET", ["checkouts", owner, "orchestration", "audit"]) => value(self.audit(
                 owner,

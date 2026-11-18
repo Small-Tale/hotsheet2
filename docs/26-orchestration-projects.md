@@ -554,6 +554,9 @@ ticket content, credentials and origins are rejected at the journal boundary. Ev
 forgotten rule (`permission_remember`, `permission_forget`), and the reported result
 of an authorized action are recorded under the same operation id.
 
+The machine that hosts a checkout keeps a separate journal of the sessions
+orchestrators start and stop there, in the same format (§26.16, HS2-CRBR8X).
+
 **Who asked (HS2-ZYM6ZT).** An action can be carried out by one identity for another:
 a browser's Run Validation acts as the orchestrator so that a command step still asks
 (§26.31). Its request names the person in `requested_by` (`validation run
@@ -2912,20 +2915,61 @@ hotsheet-cli --actor-role human ... orchestration session takeover|pause <operat
 hotsheet-cli --actor-role human ... orchestration session stop <operation-id> --checkout <checkout-id> [--force]
 ```
 
-| Route                                                                                 | Methods and purpose                                                                                   |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/sessions`                                           | GET records (`?active=true`); POST start; machine-local                                               |
-| `/checkouts/{owner}/orchestration/sessions/{session}`                                 | GET one record; machine-local                                                                         |
-| `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover}` | POST supervise; machine-local                                                                         |
-| `/checkouts/{owner}/orchestration/session-sync`                                       | POST sync every unfinished session; machine-local                                                     |
-| `/checkouts/{checkout}/target-sessions`                                               | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover |
-| `/checkouts/{checkout}/target-sessions` (PUT)                                         | Hosted half: tell a running session its exact ticket (HS2-R7QH35)                                     |
+| Route                                                                                 | Methods and purpose                                                                                        |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/sessions`                                           | GET records (`?active=true`); POST start; machine-local                                                    |
+| `/checkouts/{owner}/orchestration/sessions/{session}`                                 | GET one record; machine-local                                                                              |
+| `/checkouts/{owner}/orchestration/sessions/{session}/{sync,safe-point,stop,takeover}` | POST supervise; machine-local                                                                              |
+| `/checkouts/{owner}/orchestration/session-sync`                                       | POST sync every unfinished session; machine-local                                                          |
+| `/checkouts/{checkout}/target-sessions`                                               | Hosted half: GET list (`?operation_id=`, `?safe_point=true`), POST start, DELETE stop, PATCH takeover      |
+| `/checkouts/{checkout}/target-sessions` (PUT)                                         | Hosted half: tell a running session its exact ticket (HS2-R7QH35)                                          |
+| `/checkouts/{checkout}/orchestration/hosted-audit`                                    | GET this machine's journal of the sessions it hosted, `?after=<seq>&limit=<n>`; machine-local (HS2-CRBR8X) |
 
 The hosted route is ordinary authenticated project data under the caller's device
 role, like the hosted ticket route. A read-only device can list and cannot start,
 stop or take over. A read-write device can start a session within the machine's
-admission limits (§26.10); whether hosting should need an explicit opt-in is an open
-decision (HS2-CRBR8X). Hosted refusals are answers with a reason code, not HTTP
+admission limits (§26.10).
+
+**Hosting needs no opt-in (HS2-CRBR8X).** A machine has no separate switch that allows
+orchestrators to start sessions on it. The permission each session start passes on the
+orchestrating side (Allow Once, Always Allow or Deny, §26.7) is the consent. The hosting
+machine's owner turns hosting off by setting `max_sessions` to 0 in
+`${HOTSHEET_HOME}/orchestration-admission.json` (§26.10); every start is then refused
+with `session_cap_reached`. A machine without that file applies the default limits, so
+hosting is on.
+
+**The hosting machine's session journal (HS2-CRBR8X).** The machine that hosts a
+checkout keeps its own journal of the sessions orchestrators start and stop there, so
+its owner can see what ran without asking the orchestration side. It is the bounded
+audit journal format of §26.7 with its own record type: one JSON-lines file per hosted
+checkout at `${HOTSHEET_HOME}/hosted-session-audit/<checkout-id>.jsonl`. A segment holds
+up to 1 MiB, and one predecessor is kept when it rotates. `seq` never restarts, and the
+file survives a restart of the server. Each entry holds identifiers, codes and
+timestamps only:
+
+| Field                        | Meaning                                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `seq`, `at_ms`               | Order and time                                                                                                                     |
+| `event`                      | `start` (a `POST target-sessions`), `stop` (a `DELETE`) or `end` (the session's terminal went away without a stop)                 |
+| `outcome`                    | `succeeded` (launched or stopped) or `denied` (this machine refused)                                                               |
+| `reason`                     | The refusal code (for example `session_cap_reached`, `session_not_safe`, `session_not_found`), or how the session ended            |
+| `operation_id`, `session_id` | The orchestrator's operation and this machine's terminal                                                                           |
+| `tool`, `origin_checkout_id` | The AI tool, and the orchestration project's checkout id on its own machine                                                        |
+| `requester`                  | Who sent the request: `cert-<sha256 fingerprint>` for a device certificate, `browser-<device id>` for a paired browser, or `local` |
+| `actor_role`, `actor_id`     | The actor the request named, for attribution only                                                                                  |
+
+A repeated start of the same operation launched nothing and is not recorded again;
+neither is a stop of a session that had already ended. An end is recorded once,
+however many readers notice it. The answer to the orchestrator is decided before the
+entry is written, so a journal that cannot be written never changes it. The journal
+is machine-local: only the host's owner reads it.
+
+```sh
+hotsheet-cli -C <store> orchestration hosted-audit --checkout <checkout-id> [--after <seq>] [--limit <n>]
+```
+
+MCP `hotsheet_targets` reads it with `hosted_audit` (with `checkout`, `after`,
+`limit`), on a machine-local backend. Hosted refusals are answers with a reason code, not HTTP
 errors, so the code survives the reviewed transport. A peer that predates the route answers
 `target_peer_unsupported`. MCP `hotsheet_targets` adds `session_start`,
 `session_list`, `session_show`, `session_sync`, `session_safe_point`,

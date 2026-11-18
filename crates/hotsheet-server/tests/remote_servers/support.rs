@@ -206,6 +206,24 @@ pub(super) fn cli_failure(home: &Path, prefix: &[&str], arguments: &[&str]) -> S
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
+/// HS2-CRBR8X: what an owned CLI invocation printed, stdout then stderr, whether or not
+/// it succeeded.
+pub(super) fn cli_outcome(home: &Path, prefix: &[&str], arguments: &[&str]) -> String {
+    let binary = workspace_bin::path("hotsheet-server")
+        .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+    let output = isolated_command(&binary, home)
+        .arg("--test-fixture-credentials")
+        .args(prefix)
+        .args(arguments)
+        .output()
+        .unwrap();
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
 pub(super) fn write_credentials(path: &Path, credentials: &RemoteCredentials) {
     use std::io::Write;
     let mut options = std::fs::OpenOptions::new();

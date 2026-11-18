@@ -6,10 +6,10 @@ use hotsheet_model::Ticket;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AuditOutcome, CpuCapacity, DenialReason, DiskCapacity, ExternalWork, HostObservation,
-    HostedSessionRegistry, MachineLimits, MemoryCapacity, Observed, PermissionAction,
-    PermissionAnswer, PermissionState, PolicyBody, RunEventKind, SafePointBlocker, SessionControl,
-    SessionError, SessionOwner, SessionRole, SessionState, SetPolicy, TargetAction, TargetPolicy,
-    ToolAvailability, ToolPolicy, ToolScope,
+    HostedSessionEvent, HostedSessionRegistry, MachineLimits, MemoryCapacity, Observed,
+    PermissionAction, PermissionAnswer, PermissionState, PolicyBody, RunEventKind,
+    SafePointBlocker, SessionControl, SessionError, SessionOwner, SessionRole, SessionState,
+    SetPolicy, TargetAction, TargetPolicy, ToolAvailability, ToolPolicy, ToolScope,
 };
 use hotsheet_ticketing::{NewTicket, ops};
 use serde_json::{Value, json};
@@ -2697,4 +2697,225 @@ fn hs2_trp2mj_each_session_is_held_only_by_its_own_worktrees() {
     std::fs::remove_file(tree_b.join("draft.txt")).unwrap();
     std::fs::remove_file(Path::new(&f.m.target.root).join("person.txt")).unwrap();
     assert_eq!(points(&mut tx), [false, false, false, false]);
+}
+
+/// HS2-CRBR8X: the hosting machine's journal of one checkout, as (event, outcome,
+/// reason) codes in order.
+fn host_journal(f: &Fixture) -> Vec<hotsheet_ticketing::orchestration::HostedSessionAuditRecord> {
+    f.m.runtime
+        .hosted_audit(&f.m.target.id, 0, 100)
+        .unwrap()
+        .entries
+        .into_iter()
+        .map(|entry| entry.record)
+        .collect()
+}
+
+fn journal_codes(f: &Fixture) -> Vec<(String, AuditOutcome, Option<String>)> {
+    host_journal(f)
+        .into_iter()
+        .map(|record| {
+            (
+                serde_json::to_value(record.event)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                record.outcome,
+                record.reason,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn hs2_crbr8x_the_host_journals_starts_stops_refusals_and_ends_once_each() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let device = format!("cert-{}", "c0".repeat(32));
+    let remote = f.m.runtime.clone().with_requester(device.clone());
+    let start = |operation: &str, tx: &mut Transaction<'_>| {
+        remote
+            .hosted_session_start(
+                &f.m.target.id,
+                HostedSessionStart {
+                    session: late_start(&f, operation),
+                    limits: None,
+                    actor: Some(MutationActor::parse("ai", Some("scheduler-1".into())).unwrap()),
+                    resources: Vec::new(),
+                },
+                tx,
+            )
+            .unwrap()
+    };
+    // Nothing hosted yet: an empty journal, and no file is created by reading it.
+    assert!(host_journal(&f).is_empty());
+    assert!(!f.m.home.join("hosted-session-audit").exists());
+
+    // A remote orchestrator's start is journaled with who asked and what launched.
+    let started = start("op-1", &mut tx);
+    assert_eq!(started.outcome, HostedStartOutcome::Started);
+    let terminal = started.session.as_ref().unwrap().session.session_id.clone();
+    let entries = host_journal(&f);
+    assert_eq!(entries.len(), 1);
+    let entry = &entries[0];
+    assert_eq!(entry.event, HostedSessionEvent::Start);
+    assert_eq!(entry.outcome, AuditOutcome::Succeeded);
+    assert_eq!(entry.operation_id, "op-1");
+    assert_eq!(entry.session_id.as_deref(), Some(terminal.as_str()));
+    assert_eq!(entry.tool.as_deref(), Some("codex"));
+    assert_eq!(
+        entry.origin_checkout_id.as_deref(),
+        Some(f.m.owner.id.as_str())
+    );
+    assert_eq!(entry.requester.as_deref(), Some(device.as_str()));
+    assert_eq!(entry.actor_role.as_deref(), Some("ai"));
+    assert_eq!(entry.actor_id.as_deref(), Some("scheduler-1"));
+    assert!(entry.at_ms > 0);
+    // The same operation again launched nothing new and is not journaled again.
+    for _ in 0..2 {
+        assert_eq!(start("op-1", &mut tx).outcome, HostedStartOutcome::Existing);
+    }
+    assert_eq!(host_journal(&f).len(), 1);
+
+    // The owner turns hosting off: `max_sessions: 0` refuses, and the refusal is
+    // journaled with its reason. Nothing launched.
+    let admission = f.m.home.join("orchestration-admission.json");
+    std::fs::write(
+        &admission,
+        br#"{"schema_version":1,"admission":{"max_sessions":0}}"#,
+    )
+    .unwrap();
+    let refused = start("op-2", &mut tx);
+    assert_eq!(refused.outcome, HostedStartOutcome::Refused);
+    let reason = refused.reason.clone().unwrap();
+    // The admission's own code for a machine that allows no session.
+    assert_eq!(reason, "session_cap_reached");
+    assert_eq!(f.host.launches().len(), 1);
+    std::fs::remove_file(&admission).unwrap();
+
+    // A stop the host cannot confirm as safe (its worktrees are unknown) is refused,
+    // and the refusal is journaled.
+    let unsafe_stop = hosted_stop(&f, "op-1", &mut tx);
+    assert_eq!(unsafe_stop.reason.as_deref(), Some("session_not_safe"));
+    // The orchestrator winds the first session down at a safe point.
+    f.git(&["init", "-q"]);
+    let stopped = hosted_stop(&f, "op-1", &mut tx);
+    assert!(stopped.stopped, "{stopped:?}");
+    // Stopping an ended session again stops nothing and is not journaled again.
+    assert!(hosted_stop(&f, "op-1", &mut tx).stopped);
+    // A stop of an operation the host never saw is refused and journaled.
+    assert!(!hosted_stop(&f, "op-unknown", &mut tx).stopped);
+
+    // A session whose terminal went away is journaled as ended once, however many
+    // readers notice it.
+    let lost = start("op-3", &mut tx);
+    let lost_terminal = lost.session.unwrap().session.session_id;
+    f.host.crash(&lost_terminal);
+    for _ in 0..3 {
+        f.m.runtime
+            .hosted_sessions(&f.m.target.id, None, false, &mut tx)
+            .unwrap();
+    }
+
+    assert_eq!(
+        journal_codes(&f),
+        [
+            ("start".into(), AuditOutcome::Succeeded, None),
+            ("start".into(), AuditOutcome::Denied, Some(reason)),
+            (
+                "stop".into(),
+                AuditOutcome::Denied,
+                Some("session_not_safe".into())
+            ),
+            (
+                "stop".into(),
+                AuditOutcome::Succeeded,
+                Some("wound_down".into())
+            ),
+            (
+                "stop".into(),
+                AuditOutcome::Denied,
+                Some("session_not_found".into())
+            ),
+            ("start".into(), AuditOutcome::Succeeded, None),
+            (
+                "end".into(),
+                AuditOutcome::Succeeded,
+                Some("host_lost".into())
+            ),
+        ]
+    );
+    let entries = host_journal(&f);
+    // This machine's own requests are `local`; an end nobody requested names nobody.
+    assert_eq!(entries[3].requester.as_deref(), Some("local"));
+    assert_eq!(entries[3].session_id.as_deref(), Some(terminal.as_str()));
+    assert_eq!(entries[3].actor_id.as_deref(), Some("worker-1"));
+    assert_eq!(entries[4].requester.as_deref(), Some("local"));
+    assert_eq!(entries[5].requester.as_deref(), Some(device.as_str()));
+    assert_eq!(entries[6].requester, None);
+    assert_eq!(
+        entries[6].session_id.as_deref(),
+        Some(lost_terminal.as_str())
+    );
+
+    // The journal outlives the process: a new runtime on the same home reads the same
+    // history through the machine-local route, and the cursor replays without loss.
+    let restarted = f.m.runtime.clone();
+    let page: Value = restarted
+        .request(
+            "GET",
+            &format!(
+                "/checkouts/{}/orchestration/hosted-audit?after=2&limit=2",
+                f.m.target.id
+            ),
+            &Value::Null,
+            &mut tx,
+        )
+        .unwrap();
+    let seqs: Vec<u64> = page["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["seq"].as_u64().unwrap())
+        .collect();
+    assert_eq!(seqs, [3, 4]);
+    assert_eq!(page["more"], true);
+    assert_eq!(page["cursor"], 4);
+    assert!(crate::orchestration::is_machine_path(&format!(
+        "/checkouts/{}/orchestration/hosted-audit",
+        f.m.target.id
+    )));
+}
+
+#[test]
+fn hs2_crbr8x_an_actor_id_that_is_not_an_identifier_does_not_lose_the_entry() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let reply =
+        f.m.runtime
+            .hosted_session_start(
+                &f.m.target.id,
+                HostedSessionStart {
+                    session: late_start(&f, "op-1"),
+                    limits: None,
+                    actor: Some(MutationActor::parse("human", Some("Pat Example".into())).unwrap()),
+                    resources: Vec::new(),
+                },
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(reply.outcome, HostedStartOutcome::Started);
+    let entries = host_journal(&f);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].actor_role.as_deref(), Some("human"));
+    assert_eq!(entries[0].actor_id, None);
 }

@@ -8,6 +8,7 @@ mod bindings;
 mod capacity;
 pub(crate) mod contract;
 mod gates;
+mod hosted_audit;
 mod hosted_validations;
 mod joining;
 mod manifest;
@@ -68,6 +69,10 @@ pub use gates::{
     ArtifactRef, CiScope, Coverage, DeploymentScope, Gate, GateError, GateEvidence, GateFilter,
     GateKind, GateOutcome, GateReading, GateRegistry, GateState, GateSummary, GateTransition,
     Linked, MAX_GATE_HISTORY, MAX_GATES, NewGate, summarize, valid_commit, valid_script,
+};
+pub use hosted_audit::{
+    HostedSessionAuditEntry, HostedSessionAuditJournal, HostedSessionAuditPage,
+    HostedSessionAuditRecord, HostedSessionEvent,
 };
 pub use hosted_validations::{
     HostedValidationKnown, HostedValidationRecord, HostedValidationRegistry,
@@ -387,6 +392,8 @@ mod binding_tests;
 mod capacity_tests;
 #[cfg(test)]
 mod gate_tests;
+#[cfg(test)]
+mod hosted_audit_tests;
 #[cfg(test)]
 mod hosted_validation_tests;
 #[cfg(test)]
