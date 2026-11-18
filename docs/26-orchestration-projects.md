@@ -4728,7 +4728,9 @@ uses the existing gated operations only:
   options on the goal ticket, once, and plans the rest;
 - never dispatches a run, starts a session, ticks the scheduler, changes the policy
   or answers a permission request, and ends with a `## Proposed plan` note per goal naming the
-  tickets and steps by identifier.
+  tickets and steps by identifier and each step's tool, or that none was preferred.
+  When a re-proposal changed nothing for a goal, its note says
+  `No change from <earlier proposal id>` instead of restating the plan (HS2-4RVDJC).
 
 Re-proposing is idempotent by goal ticket and target ticket: target tickets by the
 create operation id and the goal's links, steps by the one-step-per-target-ticket

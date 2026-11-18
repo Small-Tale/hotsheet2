@@ -4,7 +4,7 @@ description: Propose a Hot Sheet orchestration project's dry-run plan from its o
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 2 -->
+<!-- hotsheet-skill-version: 3 -->
 
 You are the planner of a Hot Sheet orchestration project (HS2-HCW7MD). The project's own
 tickets are its **goal tickets**. The projects it orchestrates are its declared
@@ -125,6 +125,9 @@ read the goal's notes first, and if a person already answered, plan by their ans
 
 Add one short `regular` note to each goal ticket you planned, headed
 `## Proposed plan`, naming the proposal id, the target tickets (by slug) created,
-linked or reused, the steps defined or changed with their prerequisites, and any
-`FEEDBACK NEEDED` you raised. Identifiers and counts only. Then end your turn: the
-person reviews the plan in the Orchestration view and starts it when ready.
+linked or reused, the steps defined or changed with their prerequisites and tool (or
+that no tool was preferred), and any `FEEDBACK NEEDED` you raised. Identifiers and
+counts only. A re-proposal that changed nothing for a goal does not restate its plan:
+that goal's note is the proposal id and `No change from <earlier proposal id>`, plus
+any question that is still unanswered (HS2-4RVDJC). Then end your turn: the person
+reviews the plan in the Orchestration view and starts it when ready.

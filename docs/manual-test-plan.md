@@ -1350,6 +1350,52 @@ Repeat this check after a Codex upgrade that changes its start-up screens:
    for the first idle observation or the SessionStart report; record the outcome on
    HS2-N1GZFE.
 
+## Propose Plan with real AI tools (HS2-4RVDJC)
+
+Automated tests run the planner as a fake agent that only reports its launch and
+prompt (HS2-HCW7MD). This check runs the `hotsheet-planner` skill with real, signed-in
+`claude` and `codex`. A real run spends the tool's quota: two proposals per tool are
+enough. Use a throwaway `HOTSHEET_HOME`, a server started with `--no-terminal-broker`,
+and synthetic projects only.
+
+1. Create three git projects with their own standalone stores (`hotsheet-cli init
+--standalone --at <store> --prefix <P>`): the orchestration project and targets Alpha
+   and Beta. Register all three (`POST /checkouts`), declare and bind Alpha and Beta as
+   targets of the orchestration project, and remember `tickets_write` for both (§26.2,
+   §26.7). In Alpha, create one open ticket that already describes a goal's work.
+2. Create three goal tickets: one spanning both targets in order (Beta after Alpha),
+   one spanning both with no order, and one whose owning target is deliberately left
+   undecided.
+3. Press Propose Plan (`orchestration plan propose --project <owner> --tool claude`, or
+   `POST .../planning/propose`). In the drawer tab, answer the tool's first-run dialogs
+   as a person would (Claude: workspace trust, then use the `hotsheet` MCP server;
+   Codex: skip the update notice, trust the folder, trust the hooks). Let the planner
+   finish its turn.
+4. Check, with identifiers only:
+   - the existing Alpha ticket is linked `observed`, not created again, and every other
+     piece of work has one created target ticket with operation id
+     `plan-<goal-slug>-<work-key>`;
+   - one step per target ticket, the ordered goal's Beta step requiring the Alpha
+     ticket (`gates: ci`), and each step's tool or the note saying none was preferred;
+   - the undecided goal has exactly one `FEEDBACK NEEDED` note with `CHOICE` options and
+     no step;
+   - `run list` and `session list` are empty, the audit journal has no `run_dispatch`,
+     session or scheduler entry, and `plan show` has `placement_automatic: false`;
+   - each goal has a `## Proposed plan` note naming the proposal id.
+5. Close the planner's drawer tab (a press while it is open answers `existing`,
+   HS2-FDS95D), press again with a new operation id, and confirm that target ticket,
+   link and step counts are unchanged, step revisions did not move, no question was
+   asked again, and the new notes say `No change from <earlier proposal id>`.
+6. Repeat steps 3 to 5 with `codex`. Stop every planner terminal, server and broker
+   (including a machine host `hotsheet-mcp` may have started, HS2-JFE7JJ) and remove
+   the temporary directories.
+
+Last run (HS2-4RVDJC, 2026-11-17, orchestration stage build): Claude 2.1.311 passed
+every check over two proposals, using `hotsheet-cli` because its MCP connection timed
+out (HS2-JFE7JJ). Codex 0.167.1 started and read through the MCP tools, but each Hot
+Sheet MCP call waited on its own permission request (HS2-MYDER8), so it planned
+nothing; its run is open until that is fixed.
+
 ## Orchestration end to end with real tools and hosts (HS2-2EY9DP)
 
 The end-to-end scenarios (§26.23) run fake AI tools, a loopback GitHub Actions

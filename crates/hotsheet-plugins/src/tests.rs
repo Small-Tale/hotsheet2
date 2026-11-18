@@ -792,6 +792,10 @@ fn hs2_hcw7md_planner_skill_proposes_a_dry_run_plan_only() {
         "until a person presses **Start Orchestration**",
         "Never poll on a timer.",
         "Identifiers and counts only.",
+        // HS2-4RVDJC: the real-tool trial. The note says when no tool was preferred,
+        // and a re-proposal that changed nothing does not restate the plan.
+        "and tool (or that no tool was preferred)",
+        "`No change from <earlier proposal id>`",
     ] {
         assert!(planner.contains(phrase), "planner missing {phrase}");
     }

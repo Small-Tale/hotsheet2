@@ -3659,7 +3659,12 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   fake agent: its working directory, configuration files, role environment and
   prompt; one drawer tab labelled as the planner; the same planner answering the
   route, the CLI process and the stdio MCP tool; and the audit trail.
-- Not automated: a real AI tool following the skill (HS2-4RVDJC).
+- Not automated: a real AI tool following the skill. The manual check is "Propose Plan
+  with real AI tools (HS2-4RVDJC)" in `manual-test-plan.md`: Claude passed it on a
+  synthetic project; Codex waits on HS2-MYDER8.
+- `hotsheet-plugins/src/tests.rs # hs2_hcw7md` also pins the trial's skill change: the
+  note names each step's tool or that none was preferred, and a re-proposal that
+  changed nothing says so instead of restating the plan (HS2-4RVDJC).
 
 ### Dispatching the steps the scheduler places (HS2-YC2P7K)
 
