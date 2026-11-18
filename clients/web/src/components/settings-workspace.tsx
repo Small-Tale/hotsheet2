@@ -78,7 +78,8 @@ export interface SettingsWorkspaceProps {
      */
     pendingRequest?: SafeHtml;
   };
-  columns: { hideVerified: boolean };
+  /** Project Settings › General (HS2-FN018Q): automatic grouping and the board's Verified column. */
+  columns: { hideVerified: boolean; autoGroupNewTickets?: boolean; autoGroupMessage?: string };
   developmentStrategy?: DevelopmentStrategySettingsProps;
   /** App Settings → General: the browser's theme (HS2-EFTHS6); `standby` is the machine-wide standby
    *  section (HS2-EQVZTZ); `hostDisks` the server host's monitored disks (HS2-KBVZV1). */
@@ -198,12 +199,25 @@ export function SettingsWorkspace({
             </List>
           )}
           {category === 'columns' && (
-            <Checkbox
-              action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
-              checked={columns.hideVerified}
-              hint="Verified tickets appear in Completed."
-              label="Hide Verified column"
-            />
+            <List gap="m">
+              <Checkbox
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
+                checked={columns.autoGroupNewTickets ?? true}
+                hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
+                label="Group new tickets automatically"
+              />
+              {columns.autoGroupMessage ? (
+                <Text tone="danger" role="alert">
+                  {columns.autoGroupMessage}
+                </Text>
+              ) : null}
+              <Checkbox
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
+                checked={columns.hideVerified}
+                hint="Verified tickets appear in Completed."
+                label="Hide Verified column"
+              />
+            </List>
           )}
           {category === 'general' && (
             <>

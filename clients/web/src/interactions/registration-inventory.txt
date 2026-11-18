@@ -357,6 +357,7 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="confirm-de
 notifications-and-links	delegateCapture	document.body	'kui-request-close'	'[data-dialog-component="permission-rules-dialog"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="dismiss-app-error"]'
 notifications-and-links	delegate	document.body	'change'	'[data-action="toggle-verified-column"]'
+notifications-and-links	delegate	document.body	'change'	'[data-action="toggle-auto-group-new-tickets"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="open-linked-ticket"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-ticket-link-match"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-ticket-link-choice"]'

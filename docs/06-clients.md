@@ -1077,7 +1077,7 @@ same explanation (HS2-CGXGWY).
   (HS2-C7GMQN). It is there for phones, whose project picker has no tab close button; it
   shows at every width. It closes the project in this window only. Forgetting a registered
   project is App Settings → Projects below, or headless `hotsheet-cli checkout remove`.
-  Ticket sources, Commands, Lifecycle, Permissions, Column view, and Development strategy each render as a
+  General, Ticket sources, Commands, Lifecycle, Permissions, and Development strategy each render as a
   separate workspace so unrelated controls do not become one long settings page.
   Ticket sources are never global (HS2-SM9PM8, see
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
@@ -1161,23 +1161,23 @@ same explanation (HS2-CGXGWY).
   `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting
   filed under the wrong group fails the build:
 
-  | Group   | Category             | Stored in                                                                                                | Scope                   |
-  | ------- | -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------- |
-  | Project | Ticket sources       | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source`         | this project, machine   |
-  | Project | AI tools             | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                             | this project, machine   |
-  | Project | Commands             | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                           | this project, machine   |
-  | Project | Lifecycle            | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                                       | this project, committed |
-  | Project | Terminals            | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                                     | this project, machine   |
-  | Project | Permissions          | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                 | this project, machine   |
-  | Project | Column view          | `localStorage hotsheet.project.{id}.hide-verified-column`                                                | this project, browser   |
-  | Project | Development strategy | `/checkouts/{id}/development-strategy` (`development_strategy`, `Scope::Shared`)                         | this project, committed |
-  | App     | General              | `localStorage hotsheet.theme` (HS2-EFTHS6), `localStorage hotsheet.show-loading-activity`                | every project, browser  |
-  | App     | Accounts             | `/accounts` (credential names from `providers.json` + `keys.json`)                                       | every project, machine  |
-  | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                        | every project, machine  |
-  | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1) | every project, machine  |
-  | App     | Devices              | `/remote-auth/owner` (the server's remote-auth catalog, docs/04 §4.6.1)                                  | this host, machine      |
-  | App     | Projects             | `/checkouts` (the machine checkout registry, `HOTSHEET_HOME/checkouts.json`; docs/04 §4.4)               | this host, machine      |
-  | App     | Keyboard             | `localStorage hotsheet.keyboard-shortcuts`                                                               | every project, browser  |
+  | Group   | Category             | Stored in                                                                                                                                                     | Scope                             |
+  | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+  | Project | Ticket sources       | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source`                                                              | this project, machine             |
+  | Project | AI tools             | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                                                                                  | this project, machine             |
+  | Project | Commands             | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                                                                                | this project, machine             |
+  | Project | Lifecycle            | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                                                                                            | this project, committed           |
+  | Project | Terminals            | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                                                                                          | this project, machine             |
+  | Project | Permissions          | `/checkouts/{id}/permission-automation` (`Scope::Local`)                                                                                                      | this project, machine             |
+  | Project | General              | `/checkouts/{id}/ticket-creation-settings` (`auto_group_new_tickets`, `Scope::Shared`, HS2-FN018Q), `localStorage hotsheet.project.{id}.hide-verified-column` | this project, committed / browser |
+  | Project | Development strategy | `/checkouts/{id}/development-strategy` (`development_strategy`, `Scope::Shared`)                                                                              | this project, committed           |
+  | App     | General              | `localStorage hotsheet.theme` (HS2-EFTHS6), `localStorage hotsheet.show-loading-activity`                                                                     | every project, browser            |
+  | App     | Accounts             | `/accounts` (credential names from `providers.json` + `keys.json`)                                                                                            | every project, machine            |
+  | App     | Terminal memory      | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                                                                             | every project, machine            |
+  | App     | Notifications        | `/notification-config`, `/notifiers`, `/notification-deliveries` (`notifications.json`, docs/32 §32.9.1)                                                      | every project, machine            |
+  | App     | Devices              | `/remote-auth/owner` (the server's remote-auth catalog, docs/04 §4.6.1)                                                                                       | this host, machine                |
+  | App     | Projects             | `/checkouts` (the machine checkout registry, `HOTSHEET_HOME/checkouts.json`; docs/04 §4.4)                                                                    | this host, machine                |
+  | App     | Keyboard             | `localStorage hotsheet.keyboard-shortcuts`                                                                                                                    | every project, browser            |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,

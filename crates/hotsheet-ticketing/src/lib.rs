@@ -102,8 +102,8 @@ pub use secrets::{
     SecretError, SecretStore, key_metadata_cache_observation, resolve_setting_secret,
 };
 pub use settings::{
-    DEFAULT_TRASH_CLEANUP_DAYS, Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING,
-    parse_trash_cleanup_days,
+    AUTO_GROUP_NEW_TICKETS_SETTING, DEFAULT_AUTO_GROUP_NEW_TICKETS, DEFAULT_TRASH_CLEANUP_DAYS,
+    Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING, parse_trash_cleanup_days,
 };
 pub use store::{
     AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,

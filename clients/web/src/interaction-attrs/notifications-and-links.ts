@@ -47,6 +47,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   answerTerminalQuestion: action('answer-terminal-question'),
   returnTerminalQuestion: action('return-terminal-question'),
   toggleVerifiedColumn: action('toggle-verified-column'),
+  toggleAutoGroupNewTickets: action('toggle-auto-group-new-tickets'),
   openLinkedTicket: action('open-linked-ticket'),
   selectTicketLinkMatch: action('select-ticket-link-match'),
   cancelTicketLinkChoice: action('cancel-ticket-link-choice'),

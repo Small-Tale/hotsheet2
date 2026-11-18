@@ -8409,6 +8409,47 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
             .status(),
         StatusCode::BAD_REQUEST
     );
+    // HS2-FN018Q: automatic grouping of new tickets defaults on and is a shared project setting.
+    let creation_path = format!("/checkouts/{checkout_id}/ticket-creation-settings");
+    let creation_default = body_json(
+        application
+            .clone()
+            .oneshot(authed("GET", &creation_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(creation_default["auto_group_new_tickets"], true);
+    let creation_saved = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &creation_path,
+                Some(r#"{"auto_group_new_tickets":false}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(creation_saved["auto_group_new_tickets"], false);
+    let shared_after: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(checkout.join(".hotsheet2/settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(shared_after["auto_group_new_tickets"], false);
+    assert!(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &creation_path,
+                Some(r#"{"auto_group_new_tickets":"no"}"#),
+            ))
+            .await
+            .unwrap()
+            .status()
+            .is_client_error()
+    );
     let commands = application
         .clone()
         .oneshot(command_replace(

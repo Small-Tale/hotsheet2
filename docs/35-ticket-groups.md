@@ -216,6 +216,34 @@ context menu exposes the same commands.
   notification rules match the same tickets.
 - Saved views accept the same terms.
 
+## 35.8 Grouping new tickets automatically (HS2-FN018Q)
+
+Project Settings › **General** (the first project category; formerly Column view) has
+**Group new tickets automatically**, checked by default. It is the shared, committed project
+setting `auto_group_new_tickets`; headless, `hotsheet-cli settings set auto_group_new_tickets
+false` turns it off, and `GET`/`PUT /checkouts/{reference}/ticket-creation-settings` reads and
+writes it.
+
+- **Which tickets.** Every new ungrouped ticket in one of the project's Git stores, however it was
+  created: in the app, by the CLI or MCP, by an agent, in another window, or by a clone. The
+  server's `auto_group` subscriber treats a server write's `created` event, and an external write
+  the watcher reports for a ticket created in the last 10 minutes, as new. A ticket created with
+  a group, a trashed or moved ticket, and an older ticket that is merely edited are never offered.
+- **One turn per burst.** New tickets are coalesced per store for 3 seconds and described together
+  (at most 40 per turn) in one private turn of the project's default AI tool, so an agent fan-out
+  spends one turn. The turn is never shown as a conversation and is interrupted after 3 minutes.
+- **The reply.** The prompt asks for JSON only, one assignment per ticket:
+  `{"assignments":[{"slug":…,"group_id":…} | {"slug":…,"new_group":…}]}`, leaving out a ticket
+  that fits no group. The rules match Add to Group › Automatic (§35.4): an id must name a listed
+  group, a new name must be a valid group name, and a new name that already exists joins that
+  group. Each usable assignment is written only if the ticket is still ungrouped, as an ordinary
+  group change by the system actor `hotsheet-auto-group`; a new name is created in the registry
+  first.
+- **Failures.** No drivable default AI tool, a failed or timed-out turn, or an unusable reply
+  writes nothing and is logged. A ticket is considered at most once per server run; tickets
+  created while no server runs are grouped only if the server sees them within the 10-minute
+  window after it starts.
+
 ## 35.7 Publishing the registry (HS2-9EGWC4)
 
 The registry lives in the code checkout, so Hot Sheet commits and publishes it the way the

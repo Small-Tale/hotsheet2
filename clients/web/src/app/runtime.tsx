@@ -665,6 +665,9 @@ export async function startHotSheetWebClient() {
   const inheritGlobalShellHistory = signal(false),
     terminalSettingsMessage = signal(''),
     trashCleanupDaysByProject = signal<Record<string, number>>({}),
+    // Project Settings › General: group new tickets automatically (HS2-FN018Q).
+    autoGroupNewTicketsByProject = signal<Record<string, boolean>>({}),
+    autoGroupMessagesByProject = signal<Record<string, string>>({}),
     trashSettingsMessagesByProject = signal<Record<string, string>>({}),
     trashRetentionDraftsByProject = signal<Record<string, TrashRetentionDraft>>({});
   const terminalDashboardSize = signal({ width: 1200, height: 601 }),
@@ -3189,7 +3192,9 @@ export async function startHotSheetWebClient() {
               ? refreshTerminalSettings(current, settingsQuiet)
               : category === 'lifecycle'
                 ? refreshTrashSettings(current, settingsQuiet)
-                : Promise.resolve(),
+                : category === 'columns'
+                  ? refreshTicketCreationSettings(current, settingsQuiet)
+                  : Promise.resolve(),
       // A warm project restores its cached AI tool inventory at activation; only a cold project (or the
       // open AI settings page, which wants an authoritative answer) loads it here (HS2-AZZ9TF).
       aiRefresh =
@@ -4315,6 +4320,47 @@ export async function startHotSheetWebClient() {
         terminalSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
+  async function refreshTicketCreationSettings(current = project(), quiet = false) {
+    if (!current) return;
+    try {
+      const value = await new Api(current.apiPath, '', { trackBusy: !quiet }).ticketCreationSettings(current.id);
+      if (project()?.id !== current.id) return;
+      autoGroupNewTicketsByProject.value = {
+        ...autoGroupNewTicketsByProject.value,
+        [current.id]: value.auto_group_new_tickets,
+      };
+      autoGroupMessagesByProject.value = { ...autoGroupMessagesByProject.value, [current.id]: '' };
+    } catch (reason) {
+      if (project()?.id === current.id)
+        autoGroupMessagesByProject.value = {
+          ...autoGroupMessagesByProject.value,
+          [current.id]: reason instanceof Error ? reason.message : String(reason),
+        };
+    }
+  }
+  /** Save the project's automatic grouping choice; the checkbox reverts with a message on failure. */
+  async function saveAutoGroupNewTickets(checked: boolean) {
+    const current = project();
+    if (!current) return;
+    const previous = autoGroupNewTicketsByProject.value[current.id] ?? true;
+    autoGroupNewTicketsByProject.value = { ...autoGroupNewTicketsByProject.value, [current.id]: checked };
+    autoGroupMessagesByProject.value = { ...autoGroupMessagesByProject.value, [current.id]: '' };
+    try {
+      const saved = await new Api(current.apiPath, '').saveTicketCreationSettings(current.id, {
+        auto_group_new_tickets: checked,
+      });
+      autoGroupNewTicketsByProject.value = {
+        ...autoGroupNewTicketsByProject.value,
+        [current.id]: saved.auto_group_new_tickets,
+      };
+    } catch (reason) {
+      autoGroupNewTicketsByProject.value = { ...autoGroupNewTicketsByProject.value, [current.id]: previous };
+      autoGroupMessagesByProject.value = {
+        ...autoGroupMessagesByProject.value,
+        [current.id]: reason instanceof Error ? reason.message : String(reason),
+      };
+    }
+  }
   async function refreshTrashSettings(current = project(), quiet = false) {
     if (!current) return;
     trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [current.id]: 'Loading…' };
@@ -5176,6 +5222,8 @@ export async function startHotSheetWebClient() {
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
     trashRetentionDraftsByProject,
+    autoGroupNewTicketsByProject,
+    autoGroupMessagesByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     terminalLimits: terminalLimitsSettings.limits,
@@ -6648,6 +6696,7 @@ export async function startHotSheetWebClient() {
     remoteDevices,
     registeredProjects,
     refreshTrashSettings,
+    refreshTicketCreationSettings,
     capturingShortcutId,
     saveAiDefaults,
     selectDefaultModel,
@@ -6711,6 +6760,7 @@ export async function startHotSheetWebClient() {
     applySelectedPermissionRules,
     selectedProjectId,
     hideVerifiedByProject,
+    saveAutoGroupNewTickets,
     selectLinkedTicket,
     ticketLinkChoice,
     openTicketLinkMatch,

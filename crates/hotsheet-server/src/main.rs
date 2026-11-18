@@ -403,6 +403,9 @@ async fn main() -> Result<()> {
     // Deliver matching bus events to configured notifier channels (HS2-R5HTZN).
     let _notify =
         hotsheet_server::notification_router::spawn_notification_router(state.clone()).await;
+    // Group each new ungrouped ticket with the project's default AI tool when the project's
+    // `auto_group_new_tickets` setting is on (HS2-FN018Q). Held for the run.
+    let _auto_group = hotsheet_server::auto_group::spawn_auto_grouper(state.clone());
 
     // Commit group registry writes in the background, one commit per burst (HS2-9EGWC4).
     hotsheet_ticketing::groups::git_sync::enable_background();

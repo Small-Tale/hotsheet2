@@ -1090,6 +1090,54 @@ test('shows the sync strip AI repair state with a working repair-ticket link in 
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01 in demo' })).toBeVisible();
 });
 
+test('puts General first in Project Settings and saves Group new tickets automatically (HS2-FN018Q)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const writes: unknown[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && request.url().endsWith('/ticket-creation-settings'))
+      writes.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await openMockedProject(page);
+  for (const [pass, width] of [1280, 390, 1280].entries()) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.getByLabel('Settings View').click();
+    const sidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
+    if (width === 390 && (await sidebar.isVisible())) await sidebar.click();
+    const projectNav = page.getByRole('navigation', { name: 'Project Settings' });
+    // General is the first project category, ahead of Ticket sources.
+    await expect(projectNav.getByRole('button').first()).toHaveText('General');
+    await projectNav.getByRole('button', { name: 'General' }).click();
+    if (width === 390) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+    const region = page.getByRole('region', { name: 'General Settings' }),
+      autoGroup = region.getByRole('checkbox', { name: 'Group New Tickets Automatically' });
+    await expect(region).toBeVisible();
+    await expect(region.getByRole('checkbox', { name: 'Hide Verified Column' })).toBeVisible();
+    if (pass === 0) {
+      // Checked by default; unchecking saves the shared project setting.
+      await expect(autoGroup).toBeChecked();
+      await autoGroup.uncheck();
+      await expect.poll(() => writes).toEqual([{ auto_group_new_tickets: false }]);
+    }
+    if (pass === 1) await expect(autoGroup).not.toBeChecked();
+    if (pass === 2) {
+      // The server's value survives a reload, and checking it again saves.
+      await page.reload();
+      await page.getByLabel('Settings View').click();
+      await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
+      const reloaded = page
+        .getByRole('region', { name: 'General Settings' })
+        .getByRole('checkbox', { name: 'Group New Tickets Automatically' });
+      await expect(reloaded).not.toBeChecked();
+      await reloaded.check();
+      await expect.poll(() => writes).toEqual([{ auto_group_new_tickets: false }, { auto_group_new_tickets: true }]);
+    }
+    await page.screenshot({ path: `target/visual-captures/hs2-fn018q-general-${pass}-${width}.png` });
+  }
+});
+
 test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0ECV)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>
@@ -2179,6 +2227,7 @@ async function mockProject(
   let commandGroups: string[] = [];
   let terminalSettings = { inherit_global_shell_history: false };
   let trashSettings = { trash_cleanup_days: 30 };
+  let ticketCreationSettings = { auto_group_new_tickets: true };
   let aiSettings = { tool: 'codex', model: 'gpt-6-astra', effort: 'medium' };
   let commandRuns: Array<{
     id: string;
@@ -3079,6 +3128,16 @@ async function mockProject(
     if (path.endsWith('/terminal-settings') && request.method() === 'PUT') {
       terminalSettings = request.postDataJSON();
       return route.fulfill({ json: terminalSettings });
+    }
+    // HS2-FN018Q: the project's shared automatic-grouping setting, with the server's boolean validation.
+    if (path.endsWith('/ticket-creation-settings') && request.method() === 'GET')
+      return route.fulfill({ json: ticketCreationSettings });
+    if (path.endsWith('/ticket-creation-settings') && request.method() === 'PUT') {
+      const next = request.postDataJSON();
+      if (typeof next.auto_group_new_tickets !== 'boolean')
+        return route.fulfill({ status: 400, json: { error: 'auto_group_new_tickets must be a boolean' } });
+      ticketCreationSettings = next;
+      return route.fulfill({ json: ticketCreationSettings });
     }
     if (path.endsWith('/trash-settings') && request.method() === 'GET') return route.fulfill({ json: trashSettings });
     if (path.endsWith('/trash-settings') && request.method() === 'PUT') {
@@ -18051,12 +18110,16 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await expect(page.getByRole('region', { name: 'Permissions Settings' })).toBeVisible();
   await expect(page.locator('[name="permission-automation-action"]')).toBeVisible();
   await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(0);
-  await navigation.getByRole('button', { name: 'Column view' }).click();
-  await expect(page.getByRole('region', { name: 'Column view Settings' })).toBeVisible();
+  // HS2-FN018Q: the project's General category (formerly Column view).
+  await navigation
+    .getByRole('navigation', { name: 'Project Settings' })
+    .getByRole('button', { name: 'General' })
+    .click();
+  await expect(page.getByRole('region', { name: 'General Settings' })).toBeVisible();
   await expect(page.getByText('Hide Verified Column')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-wsmx7c-settings-sidebar-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(page.getByRole('region', { name: 'Column view Settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'General Settings' })).toBeVisible();
   await expect(placeholderToolbar).toHaveCSS(
     'box-shadow',
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
@@ -26396,7 +26459,11 @@ test('App Settings manages the disks host health monitors, by switch, path, and 
   await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await page
+    // HS2-FN018Q: App Settings and Project Settings each have a General category.
+    .getByRole('navigation', { name: 'App Settings' })
+    .getByRole('button', { name: 'General', exact: true })
+    .click();
   const section = page.locator('[data-component="host-disk-settings"]');
   await expect(section.getByRole('heading', { name: 'Host health disks' })).toBeVisible();
   await expect(section).toContainText('on studio');
@@ -31650,7 +31717,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('[data-column-id="verified"]')).toContainText('Verified ticket');
 
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'Column view' }).click();
+  await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
   await page.getByRole('checkbox', { name: 'Hide Verified Column' }).check();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column')))
@@ -31661,7 +31728,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('[data-column-id="completed"]')).toContainText('Verified ticket');
 
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'Column view' }).click();
+  await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
   await page.getByRole('checkbox', { name: 'Hide Verified Column' }).uncheck();
   await page.getByLabel('Columns View').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText([

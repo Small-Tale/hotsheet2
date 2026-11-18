@@ -41,6 +41,9 @@ export interface SettingsSurfaceDependencies {
   commandSettingsLoadError: (projectId: string) => Props['commands']['loadError'];
   trashCleanupDaysByProject: Readable<Record<string, number>>;
   trashSettingsMessagesByProject: Readable<Record<string, string>>;
+  /** Project Settings › General: automatic grouping of new tickets (HS2-FN018Q). */
+  autoGroupNewTicketsByProject: Readable<Record<string, boolean>>;
+  autoGroupMessagesByProject: Readable<Record<string, string>>;
   trashRetentionDraftsByProject: Readable<Record<string, TrashRetentionDraft>>;
   inheritGlobalShellHistory: Readable<boolean>;
   terminalSettingsMessage: Readable<string>;
@@ -113,6 +116,8 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     commandSettingsLoadError,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
+    autoGroupNewTicketsByProject,
+    autoGroupMessagesByProject,
     trashRetentionDraftsByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
@@ -242,7 +247,11 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
             review: permissionLegacyDiscardFor(current.id),
           },
         }}
-        columns={{ hideVerified: hideVerifiedColumn() }}
+        columns={{
+          hideVerified: hideVerifiedColumn(),
+          autoGroupNewTickets: autoGroupNewTicketsByProject.value[current.id] ?? true,
+          autoGroupMessage: autoGroupMessagesByProject.value[current.id] ?? '',
+        }}
         general={{
           showLoadingActivity: showLoadingActivity.value,
           theme: themePreference.value,

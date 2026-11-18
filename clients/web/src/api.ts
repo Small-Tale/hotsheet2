@@ -95,6 +95,7 @@ import {
   parseTerminalName,
   parseTerminalRead,
   parseTerminalSettings,
+  parseTicketCreationSettings,
   parseTicketPrefix,
   parseTicketRow,
   parseTicketStoreSyncReport,
@@ -1378,6 +1379,10 @@ export interface NotificationChannelRemoval {
 export interface TrashSettings {
   trash_cleanup_days: number;
 }
+/** Project Settings › General: group each new ticket with the default AI tool (HS2-FN018Q). */
+export interface TicketCreationSettings {
+  auto_group_new_tickets: boolean;
+}
 /** How many Trash tickets a retention of `trash_cleanup_days` would purge right now (HS2-KPD942). */
 export interface TrashPurgePreview {
   trash_cleanup_days: number;
@@ -2619,6 +2624,13 @@ export class Api {
       parseTrashPurgePreview,
       `/checkouts/${encodeURIComponent(checkoutId)}/trash/purge-preview?days=${encodeURIComponent(days)}`,
     );
+  ticketCreationSettings = (checkoutId: string) =>
+    this.parsed(parseTicketCreationSettings, `/checkouts/${encodeURIComponent(checkoutId)}/ticket-creation-settings`);
+  saveTicketCreationSettings = (checkoutId: string, value: TicketCreationSettings) =>
+    this.parsed(parseTicketCreationSettings, `/checkouts/${encodeURIComponent(checkoutId)}/ticket-creation-settings`, {
+      method: 'PUT',
+      body: JSON.stringify(value),
+    });
   saveTrashSettings = (checkoutId: string, value: TrashSettings) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`, {
       method: 'PUT',

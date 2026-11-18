@@ -3792,7 +3792,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     ['lifecycle', 'Lifecycle'],
     ['terminals', 'Terminals'],
     ['permissions', 'Permissions'],
-    ['columns', 'Column view'],
+    ['columns', 'General'],
     ['general', 'General'],
     ['accounts', 'Accounts'],
     ['terminal-memory', 'Terminal memory'],

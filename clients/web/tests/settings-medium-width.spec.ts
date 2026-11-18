@@ -54,7 +54,11 @@ test('keeps App Settings content inside its column at 600 px and back (HS2-21E07
     await page.setViewportSize({ width: 1280, height: 900 });
     await openMockedProject(page);
     await page.getByLabel('Settings View').click();
-    await page.getByRole('button', { name: 'General', exact: true }).click();
+    await page
+      // HS2-FN018Q: App Settings and Project Settings each have a General category.
+      .getByRole('navigation', { name: 'App Settings' })
+      .getByRole('button', { name: 'General', exact: true })
+      .click();
     const workspace = page.locator('[data-component="settings-workspace"]');
     await expect(workspace).toHaveAttribute('data-settings-category', 'general');
     for (const [label, width] of [

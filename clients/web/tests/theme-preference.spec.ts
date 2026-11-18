@@ -35,7 +35,11 @@ async function activeThemeColor(page: Page) {
 
 async function openGeneral(page: Page) {
   await page.getByLabel('Settings View').click();
-  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await page
+    // HS2-FN018Q: App Settings and Project Settings each have a General category.
+    .getByRole('navigation', { name: 'App Settings' })
+    .getByRole('button', { name: 'General', exact: true })
+    .click();
   const picker = page.locator('[data-component="theme-picker"]');
   await expect(picker.getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
   return picker;

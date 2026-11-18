@@ -13,7 +13,6 @@ import {
   BookOpen,
   Bot,
   CircleUserRound,
-  Columns3,
   Database,
   Folders,
   GitBranch,
@@ -49,6 +48,8 @@ export type SettingsCategory =
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
 const projectCategories = [
+  // HS2-FN018Q: the project's General settings (formerly Column view) come first.
+  { id: 'columns', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
   { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
   { id: 'guidance', label: 'Project guidance', icon: BookOpen, iconName: 'book-open' },
@@ -56,7 +57,6 @@ const projectCategories = [
   { id: 'lifecycle', label: 'Lifecycle', icon: ArchiveRestore, iconName: 'archive-restore' },
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },
-  { id: 'columns', label: 'Column view', icon: Columns3, iconName: 'columns-3' },
   { id: 'development-strategy', label: 'Development strategy', icon: GitBranch, iconName: 'git-branch' },
 ] as const;
 
@@ -108,7 +108,10 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   lifecycle: [{ control: 'Trash retention', server: '/checkouts/{project}/trash-settings' }],
   terminals: [{ control: 'Use global shell history', server: '/terminal-settings' }],
   permissions: [{ control: 'Automatic decision and delay', server: '/permission-automation' }],
-  columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
+  columns: [
+    { control: 'Group new tickets automatically', server: '/checkouts/{project}/ticket-creation-settings' },
+    { control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' },
+  ],
   'development-strategy': [
     {
       control: 'Project development strategy and green main goal',
