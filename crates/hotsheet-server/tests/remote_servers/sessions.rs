@@ -1705,3 +1705,332 @@ async fn hs2_8by9y1_input_to_an_orchestrator_owned_session_leaves_its_ownership_
     assert_eq!(status, StatusCode::OK, "{stopped}");
     host.begin_stopping();
 }
+
+/// HS2-ENPG5G: a hand-back (HS2-KR28FS) across the wire. The orchestrator is one server and
+/// the session runs on another, reached over mTLS. A person takes the session over at the
+/// host; the orchestrator's hand-back learns that, passes its gate as a session start, and
+/// the host hands the idle session back. Mid-turn the host refuses it with
+/// `session_mid_turn`, and a person's hand-back at the host itself, whose orchestrator is
+/// elsewhere, is refused `session_owner_remote`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_enpg5g_a_hand_back_crosses_mtls_and_is_refused_mid_turn() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::at(root.path().join("tls"));
+    init_ca(&paths, &[]).unwrap();
+    let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
+    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
+    let peer_home = root.path().join("peer-home");
+    let peer_source = root.path().join("peer-store");
+    let peer_state = state(&peer_source, &peer_home)
+        .with_capacity_source(Box::new(Roomy))
+        .with_capacity_cache(std::time::Duration::ZERO)
+        .with_plugin_dirs(vec![fake_plugins(root.path())]);
+    let peer_router = app(peer_state.clone());
+    let registry = CheckoutRegistry::new(peer_home.join("checkouts.json"));
+    let mut peer_checkouts = Vec::new();
+    for name in ["peer-project-a", "peer-project-b"] {
+        let project = root.path().join(name);
+        git_project(&project);
+        peer_checkouts.push(
+            registry
+                .register(&project, None, None, vec![peer_source.clone()])
+                .unwrap(),
+        );
+    }
+    let expected = identity(&peer_home);
+    let peer = serve(peer_state, &paths, None).await;
+    let home = root.path().join("controller-home");
+    std::fs::create_dir(&home).unwrap();
+    let source = root.path().join("controller-store");
+    FsStore::init_git(&source, &StoreMetadata::new("OWN")).unwrap();
+    let project = root.path().join("release-train");
+    std::fs::create_dir(&project).unwrap();
+    let owner = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let input = home.join("supplied-credentials.json");
+    write_credentials(&input, &credentials(&device));
+    cli(
+        &home,
+        &[
+            "register",
+            "--id",
+            ID,
+            "--label",
+            "Synthetic",
+            "--origin",
+            &peer.origin,
+            "--expected-server-id",
+            &expected.server_id,
+            "--credentials-file",
+            input.to_str().unwrap(),
+        ],
+    );
+    let store_arg = source.to_str().unwrap();
+    let targets = [
+        "-C",
+        store_arg,
+        "orchestration",
+        "target",
+        "--project",
+        &owner.id,
+    ];
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let scheduler = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "scheduler-1",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let mut revision: Option<String> = None;
+    for (target, checkout, tool) in [
+        (TARGET_A, &peer_checkouts[0], IDLE_TOOL),
+        (TARGET_B, &peer_checkouts[1], BUSY_TOOL),
+    ] {
+        let inspected = cli_named(
+            &home,
+            &targets,
+            &["inspect", &checkout.id, "--registration-id", ID],
+        );
+        let mut add = vec!["add", "--target-id", target, "--label", "Remote target"];
+        if let Some(revision) = &revision {
+            add.extend(["--expected-revision", revision.as_str()]);
+        }
+        let added = cli_named(&home, &targets, &add);
+        revision = added["revision"].as_str().map(str::to_owned);
+        cli_named(
+            &home,
+            &targets,
+            &[
+                "bind",
+                target,
+                "--expected-manifest-revision",
+                revision.as_deref().unwrap(),
+                "--expected-binding-revision",
+                "0",
+                "--destination",
+                &inspected["destination"].to_string(),
+            ],
+        );
+        // A remembered session start of the target's tool: a hand-back passes the same gate.
+        cli_named(
+            &home,
+            &human,
+            &[
+                "permission",
+                "remember",
+                target,
+                "--project",
+                &owner.id,
+                "--action",
+                "session_start",
+                "--tool",
+                tool,
+            ],
+        );
+    }
+    let policy_file = home.join("policy.json");
+    std::fs::write(&policy_file, policy().to_string()).unwrap();
+    cli_named(
+        &home,
+        &human,
+        &[
+            "policy",
+            "set",
+            "--project",
+            &owner.id,
+            "--file",
+            policy_file.to_str().unwrap(),
+        ],
+    );
+    let session = |prefix: &[&str], arguments: &[&str]| {
+        let mut all = vec!["session"];
+        all.extend_from_slice(arguments);
+        all.extend(["--project", owner.id.as_str()]);
+        cli_named(&home, prefix, &all)
+    };
+    let refused = |prefix: &[&str], arguments: &[&str]| {
+        let mut all = vec!["session"];
+        all.extend_from_slice(arguments);
+        all.extend(["--project", owner.id.as_str()]);
+        cli_failure(&home, prefix, &all)
+    };
+    // A person at the peer: takes a session over, or tries to hand it back, by operation id.
+    let at_peer = |checkout: &str, body: Value| {
+        let router = peer_router.clone();
+        let path = format!("/checkouts/{checkout}/target-sessions");
+        async move { api(router, "PATCH", &path, body, true).await }
+    };
+    let peer_owner = |checkout: &str, operation: &'static str| {
+        let router = peer_router.clone();
+        let path = format!("/checkouts/{checkout}/target-sessions");
+        async move {
+            let (_, listed) = api(router, "GET", &path, Value::Null, true).await;
+            listed["sessions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["session"]["operation_id"] == operation)
+                .map(|row| row["session"]["owner"].clone())
+                .unwrap()
+        }
+    };
+    let person = json!({"role":"human","id":"maintainer"});
+
+    // The idle session: taken over at the peer, then handed back by the orchestrator.
+    let a = session(
+        &scheduler,
+        &[
+            "start",
+            "--target",
+            TARGET_A,
+            "--operation-id",
+            "op-a",
+            "--tool",
+            IDLE_TOOL,
+        ],
+    );
+    assert_eq!(a["state"], "running", "{a}");
+    let a_id = a["session_id"].as_str().unwrap();
+    let (status, taken) = at_peer(
+        &peer_checkouts[0].id,
+        json!({"operation_id":"op-a","pause":true,"actor":person}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{taken}");
+    assert_eq!(peer_owner(&peer_checkouts[0].id, "op-a").await, "human");
+    // The orchestrator itself cannot hand a session back; a person can, from its machine.
+    let ai_hand_back = refused(&scheduler, &["hand-back", a_id]);
+    assert!(ai_hand_back.contains("forbidden"), "{ai_hand_back}");
+    let back = session(&human, &["hand-back", a_id]);
+    assert_eq!(back["owner"], "orchestrator", "{back}");
+    assert_eq!(back["paused"], false, "{back}");
+    assert_eq!(
+        back["history"].as_array().unwrap().last().unwrap()["control"],
+        "hand_back"
+    );
+    assert_eq!(
+        peer_owner(&peer_checkouts[0].id, "op-a").await,
+        "orchestrator"
+    );
+    // A later sync keeps it the orchestrator's; repeating the hand-back changes nothing.
+    assert_eq!(
+        session(&scheduler, &["sync", a_id])["owner"],
+        "orchestrator"
+    );
+    assert_eq!(
+        session(&human, &["hand-back", a_id])["owner"],
+        "orchestrator"
+    );
+
+    // The busy session: mid-turn, the peer refuses the hand-back and it stays the person's.
+    let b = session(
+        &scheduler,
+        &[
+            "start",
+            "--target",
+            TARGET_B,
+            "--operation-id",
+            "op-b",
+            "--tool",
+            BUSY_TOOL,
+        ],
+    );
+    assert_eq!(b["state"], "running", "{b}");
+    let b_id = b["session_id"].as_str().unwrap();
+    let mut busy = Value::Null;
+    for _ in 0..500 {
+        busy = session(&scheduler, &["safe-point", b_id])["safe_point"].clone();
+        if busy["blockers"] == json!(["mid_turn"]) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(busy["blockers"], json!(["mid_turn"]), "{busy}");
+    let (status, taken) = at_peer(
+        &peer_checkouts[1].id,
+        json!({"operation_id":"op-b","pause":false,"actor":person}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{taken}");
+    let mid_turn = refused(&human, &["hand-back", b_id]);
+    assert!(mid_turn.contains("session_mid_turn"), "{mid_turn}");
+    assert_eq!(peer_owner(&peer_checkouts[1].id, "op-b").await, "human");
+    assert_eq!(session(&scheduler, &["show", b_id])["owner"], "human");
+
+    // A person's hand-back at the peer: its orchestrator is on another machine.
+    let (status, remote) = at_peer(
+        &peer_checkouts[1].id,
+        json!({"operation_id":"op-b","hand_back":true,"actor":person}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{remote}");
+    assert_eq!(remote["refused"], "session_owner_remote", "{remote}");
+    assert_eq!(peer_owner(&peer_checkouts[1].id, "op-b").await, "human");
+
+    // The journal names each hand-back and its outcome, by code only. Every safe-point read
+    // above is journaled too, so the whole journal is read page by page.
+    let mut entries: Vec<Value> = Vec::new();
+    loop {
+        let after = entries
+            .last()
+            .map_or(0, |entry| entry["seq"].as_u64().unwrap());
+        let page = cli_named(
+            &home,
+            &human,
+            &[
+                "audit",
+                "--project",
+                &owner.id,
+                "--after",
+                &after.to_string(),
+            ],
+        );
+        let page = page["entries"].as_array().unwrap().clone();
+        if page.is_empty() {
+            break;
+        }
+        entries.extend(page);
+    }
+    let has = |outcome: &str, reason: Value| {
+        entries.iter().any(|entry| {
+            entry["action"] == "session_hand_back"
+                && entry["outcome"] == outcome
+                && entry["reason"] == reason
+        })
+    };
+    let hand_backs: Vec<&Value> = entries
+        .iter()
+        .filter(|entry| entry["action"] == "session_hand_back")
+        .collect();
+    assert!(has("succeeded", Value::Null), "{hand_backs:?}");
+    assert!(has("failed", json!("session_mid_turn")), "{hand_backs:?}");
+    for (checkout, operation) in [
+        (&peer_checkouts[0].id, "op-a"),
+        (&peer_checkouts[1].id, "op-b"),
+    ] {
+        let (status, _) = api(
+            peer_router.clone(),
+            "DELETE",
+            &format!("/checkouts/{checkout}/target-sessions"),
+            json!({"operation_id":operation,"force":true,"actor":person}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    peer.stop().await;
+}
