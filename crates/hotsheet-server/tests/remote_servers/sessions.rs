@@ -1597,3 +1597,111 @@ async fn hs2_crbr8x_the_host_journals_a_remote_orchestrators_start_stop_and_refu
     assert_eq!(rest["entries"].as_array().unwrap().len(), 1);
     assert_eq!(rest["entries"][0]["seq"], 3);
 }
+
+/// HS2-8BY9Y1: typing into an orchestrator's terminal never changes who owns the session;
+/// only the explicit Take Over actions do (the maintainer's choice A). Input reaches the
+/// tool, the host's record still names the orchestrator, nothing is announced as a
+/// takeover, and an orchestrator's wind-down is not refused as a person's.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_8by9y1_input_to_an_orchestrator_owned_session_leaves_its_ownership_unchanged() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home)
+        .with_capacity_source(Box::new(Roomy))
+        .with_capacity_cache(std::time::Duration::ZERO)
+        .with_plugin_dirs(vec![fake_plugins(root.path())]);
+    let project = root.path().join("project");
+    git_project(&project);
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let router = app(host.clone());
+    let mut events = host.subscribe();
+    host.spawn_hosted_session_follower();
+    let hosted = format!("/checkouts/{}/target-sessions", checkout.id);
+    let (status, started) = api(
+        router.clone(),
+        "POST",
+        &hosted,
+        json!({
+            "session": {
+                "operation_id": "op-8by9y1",
+                "tool": IDLE_TOOL,
+                "origin": {"owner_checkout_id": "owner-0123456789ab", "project": "Synthetic"}
+            },
+            "actor": {"role":"ai","id":"scheduler-1"},
+        }),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["outcome"], "started", "{started}");
+    let terminal = started["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(terminal_orchestrator_within(&mut events, std::time::Duration::from_secs(15)).await);
+    let owner = |router: axum::Router| {
+        let hosted = hosted.clone();
+        async move {
+            let (_, listed) = api(router, "GET", &hosted, Value::Null, true).await;
+            listed["sessions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["session"]["operation_id"] == "op-8by9y1")
+                .map(|row| row["session"]["owner"].clone())
+                .unwrap()
+        }
+    };
+    assert_eq!(owner(router.clone()).await, "orchestrator");
+
+    // A person types into the terminal, more than once: the input reaches the tool.
+    for line in ["a quick answer\n", "y\n"] {
+        let (status, body) = api(
+            router.clone(),
+            "POST",
+            &format!("/terminals/{terminal}/input"),
+            json!({"data": line}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    }
+    // Nothing is announced as a takeover, and the host still names the orchestrator, in
+    // its record and in the drawer's listing.
+    assert!(
+        !terminal_orchestrator_within(&mut events, std::time::Duration::from_millis(1_500)).await
+    );
+    assert_eq!(owner(router.clone()).await, "orchestrator");
+    let listed = drawer(&router).await;
+    assert_eq!(
+        tab(&listed, &json!(terminal))["orchestrator"]["owner"],
+        "orchestrator"
+    );
+    // The orchestrator's own stop is still decided by the safe point, never refused as a
+    // person's session.
+    let (status, stop) = api(
+        router.clone(),
+        "DELETE",
+        &hosted,
+        json!({"operation_id":"op-8by9y1","force":false,"actor":{"role":"ai","id":"scheduler-1"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{stop}");
+    assert_ne!(stop["reason"], "session_human_owned", "{stop}");
+    let (status, stopped) = api(
+        router.clone(),
+        "DELETE",
+        &hosted,
+        json!({"operation_id":"op-8by9y1","force":true,"actor":{"role":"human","id":"maintainer"}}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{stopped}");
+    host.begin_stopping();
+}

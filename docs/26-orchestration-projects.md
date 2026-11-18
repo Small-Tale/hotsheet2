@@ -2891,8 +2891,17 @@ still starting is announced too (HS2-TWSXK7). A start that launches a terminal w
 hosting machine's clients lists the new session at once, before its tool connects to Hot
 Sheet; a repeated start (`existing`) or a refused one launched nothing and announces
 nothing (HS2-R0HSNK). The orchestrator learns of it on its next sync or from
-the host's refusal of a wind-down. Typing into the terminal does not take it over;
-whether it should is HS2-8BY9Y1. Closing the tab is a person's stop (HS2-HVKS7M): the drawer sends it through the hosted stop with `force`, which records `person_stopped`, so the orchestrator never reads it as a crash (`host_lost`).
+the host's refusal of a wind-down.
+
+**Typing is not a takeover (HS2-8BY9Y1).** Typing into an orchestrator's terminal never
+changes who owns the session; only the explicit Take Over actions do. Input, whether
+from the drawer or the terminal input route, reaches the tool and nothing else: the
+host's record and the drawer still name the orchestrator, no takeover is announced, and
+the orchestrator may still wind the session down at its next safe point. The maintainer
+chose this because a keystroke is often a quick answer to the session (a question, a
+permission prompt), not a decision to take it away.
+
+Closing the tab is a person's stop (HS2-HVKS7M): the drawer sends it through the hosted stop with `force`, which records `person_stopped`, so the orchestrator never reads it as a crash (`host_lost`).
 
 ### Crashes
 
