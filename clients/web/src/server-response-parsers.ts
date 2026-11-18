@@ -1402,7 +1402,7 @@ export const parsePermissionRule = shape<PermissionRule>(
     connection: isString,
     description: isString,
     exact_action: isString,
-    match_type: (field) => field === 'exact' || field === 'template' || field === 'regex',
+    match_type: (field) => field === 'exact' || field === 'template' || field === 'regex' || field === 'tool',
     pattern: (field) =>
       typeof field === 'object' &&
       field !== null &&

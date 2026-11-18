@@ -35036,6 +35036,9 @@ components:
         exact_action:
           type: string
         match_type:
+          description:
+            '`exact`, `template`, `regex`, or `tool`: a chat or session answer to an MCP tool that covers the tool for
+            any arguments (HS2-MYDER8).'
           type: string
         pattern:
           $ref: '#/components/schemas/PermissionPattern'

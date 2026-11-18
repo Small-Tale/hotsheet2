@@ -485,7 +485,7 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
 
   it('omits exact-match row metadata and preserves reviewed pattern labels and editor options (HS2-2TNY72)', () => {
     for (const dialog of [undefined, { query: '', visibleCount: 100 }]) {
-      for (const match_type of [undefined, 'exact', 'template', 'regex'] as const) {
+      for (const match_type of [undefined, 'exact', 'template', 'regex', 'tool'] as const) {
         const pattern =
           match_type === 'template' || match_type === 'regex'
             ? {
@@ -500,6 +500,11 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
         expect(markup).toContain('data-action="open-permission-rule-editor"');
         if (match_type === 'template') expect(markup).toContain('>Placeholder match<');
         if (match_type === 'regex') expect(markup).toContain('>Regex match<');
+        // HS2-MYDER8: a tool-wide MCP session answer shows its reach and not the first call's arguments.
+        if (match_type === 'tool') {
+          expect(markup).toContain('>Any arguments<');
+          expect(markup).not.toContain('data-action="toggle-permission-rule-action"');
+        } else expect(markup).not.toContain('>Any arguments<');
       }
     }
   });

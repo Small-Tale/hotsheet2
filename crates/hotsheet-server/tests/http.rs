@@ -21256,6 +21256,92 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     );
 }
 
+/// HS2-MYDER8: the Codex planner path. Its hook asks for each Hot Sheet MCP call with the
+/// call's whole arguments as the action; a person answers one "allow for this AI session"
+/// through the server route. Later calls of that tool with other arguments are answered
+/// at once, while another tool still asks.
+#[tokio::test]
+async fn hs2_myder8_a_session_answer_stops_asking_for_that_mcp_tool() {
+    let (_d, st) = state();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let ask = |action: &'static str, tool: &'static str| {
+        let app = app.clone();
+        tokio::spawn(async move {
+            let body = serde_json::json!({
+                "connection": "codex-planner", "tool": tool, "action": action, "agent": "codex",
+            })
+            .to_string();
+            body_json(
+                app.oneshot(authed("POST", "/permissions/ask", Some(&body)))
+                    .await
+                    .unwrap(),
+            )
+            .await
+        })
+    };
+    let targets = "mcp__hotsheet__hotsheet_targets";
+    let first = ask(r#"{"action":"list"}"#, targets);
+    let id = loop {
+        if let Some(request) = bridge.pending().first() {
+            break request.id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let answered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"session"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(answered.status(), StatusCode::OK);
+    assert_eq!(body_json(answered).await["persisted"], false);
+    assert_eq!(first.await.unwrap()["decision"], "allow");
+    // The next reads of the same tool never reach the card.
+    for action in [
+        r#"{"action":"plan_show"}"#,
+        r#"{"action":"ticket_list","target_id":"T"}"#,
+    ] {
+        let reply = tokio::time::timeout(std::time::Duration::from_secs(10), ask(action, targets))
+            .await
+            .expect("a covered call is answered at once")
+            .unwrap();
+        assert_eq!(reply["decision"], "allow", "{action}");
+    }
+    assert!(bridge.pending().is_empty());
+    let rules = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let rules = rules.as_array().unwrap();
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0]["tool"], targets);
+    assert_eq!(rules[0]["match_type"], "tool");
+    assert_eq!(rules[0]["scope"], "session");
+    // Another Hot Sheet MCP tool is its own decision.
+    let query = ask("{}", "mcp__hotsheet__hotsheet_query");
+    let other = loop {
+        if let Some(request) = bridge.pending().first() {
+            break request.id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    bridge
+        .resolve(
+            other,
+            hotsheet_aitools::PermissionDecision::Deny,
+            hotsheet_aitools::PermissionScope::Once,
+        )
+        .unwrap();
+    assert_eq!(query.await.unwrap()["decision"], "deny");
+}
+
 #[tokio::test]
 async fn disconnected_permission_hook_does_not_leave_a_false_pending_popup() {
     let (_d, st) = state();
@@ -22170,6 +22256,7 @@ async fn damaged_vault_after_startup_locks_list_and_disables_durable_auto_answer
         decision: hotsheet_aitools::PermissionDecision::Deny,
         persist: true,
         connection: None,
+        tool_wide: false,
     };
     hotsheet_aitools::append_permission_rule(&rules_path, &replacement).unwrap();
     let replaced = body_json(
@@ -22925,6 +23012,7 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
             decision: hotsheet_aitools::PermissionDecision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         },
     )
     .unwrap();
@@ -22940,6 +23028,7 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
             decision: hotsheet_aitools::PermissionDecision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         },
     )
     .unwrap();
@@ -23419,6 +23508,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             decision: hotsheet_aitools::PermissionDecision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         },
     )
     .unwrap();
@@ -23434,6 +23524,7 @@ async fn checkout_rules_survive_restart_without_crossing_a_shared_ticket_store()
             decision: hotsheet_aitools::PermissionDecision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         },
     )
     .unwrap();

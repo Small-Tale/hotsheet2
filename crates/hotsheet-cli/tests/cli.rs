@@ -1114,6 +1114,7 @@ fn permission_discard_fixture_helper() {
                     decision: hotsheet_aitools::PermissionDecision::Allow,
                     persist: true,
                     connection: None,
+                    tool_wide: false,
                 },
             )
             .unwrap();

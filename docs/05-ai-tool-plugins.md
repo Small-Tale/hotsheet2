@@ -1777,32 +1777,46 @@ action names its target scope (HS2-BTPTWK, HS2-X4ES6Z).
 The new duration appears immediately and survives
 a reload according to its lifetime. Exact-action rows omit the redundant Exact match summary; reviewed placeholder and regex
 labels remain visible, and the editor retains every match type (HS2-2TNY72).
-The preview disclosure uses singular `answer` for one
-remembered rule and plural `answers` for multiple rules (HS2-9QK0V7).
-The full list shows 100 answers initially in a scrolling region,
-loads 100 more on request, and filters by Permanent or Temporary and Allow or Disallow. Temporary
-includes connection-only and until-restart rules, with their exact scope still shown in the row. Search appears above
-two equally sized filter controls, which stack on phone widths. The filters and identity search
-determine the loaded rows; changing a filter resets the loaded window but keeps selections.
-The dialog omits the duplicate result count; per-rule lifetime badges distinguish connection-only
-from until-restart answers within Temporary. In the preview and dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
-Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
-The selected-answer toolbar ellipsis menu enables Allow, Deny, Remember Until Hot Sheet Restarts, Persistent, and Delete
-when at least one answer is selected. Delete requires confirmation. A batch
-reports successes and failures separately, keeps failed answers selected for retry, and
-refreshes the list. Remembering an answer, editing or revoking one, and closing a
-drive connection that held chat rules each publish a replayable `permission_rules_changed`
-change event for the project, so another client's open Settings → Permissions list refetches
-once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
-Preview and dialog rows show chat, session, and persistent lifetimes alongside the exact
-action and project/AI-session reach, including at phone width. The popup reviews the exact action
-before a remembered approval; it does not ask for an optional Bash label. The rule-list API
-returns both the decrypted exact action for authenticated display and an HMAC fingerprint
-for edit/revoke identity. The encrypted file retains the exact action; old fingerprint-only
-files are discarded on upgrade and
-require fresh approval. No migration guesses an action from its fingerprint.
-When loading an encrypted file with repeated exact project/tool/action slots, Hot Sheet
-keeps the newest answer and rewrites the file (HS2-Q40BBV).
+
+**MCP tools answered for a chat or a session (HS2-MYDER8).** An MCP tool's call has no
+command or path field, so its action is the call's whole argument payload. A chat or session
+answer to an MCP tool (`mcp__<server>__<tool>`) therefore covers that tool for any arguments.
+It lasts for the chat or the session, so a Codex planner that reads through
+`hotsheet_targets` is asked once, not on every call, and calls of that tool already waiting
+are answered with it.
+
+- Its row reads `Any arguments`, with `match_type: "tool"` in the rules API, and does not show
+  the first call's arguments.
+- An Always answer stays exact, and so do Bash, file tools, patterns and every non-MCP tool.
+- A remembered exact answer for one call outranks a tool-wide one in the same chat or project.
+- Changing a rule's lifetime keeps only the exact call it was answered for, so a durable
+  exact answer is never widened by turning it into a session one.
+  The preview disclosure uses singular `answer` for one
+  remembered rule and plural `answers` for multiple rules (HS2-9QK0V7).
+  The full list shows 100 answers initially in a scrolling region,
+  loads 100 more on request, and filters by Permanent or Temporary and Allow or Disallow. Temporary
+  includes connection-only and until-restart rules, with their exact scope still shown in the row. Search appears above
+  two equally sized filter controls, which stack on phone widths. The filters and identity search
+  determine the loaded rows; changing a filter resets the loaded window but keeps selections.
+  The dialog omits the duplicate result count; per-rule lifetime badges distinguish connection-only
+  from until-restart answers within Temporary. In the preview and dialog, plain row clicks select one answer, Command/Ctrl-click toggles,
+  Shift-click extends a range, and Command/Ctrl-A selects all loaded rows while the list has focus.
+  The selected-answer toolbar ellipsis menu enables Allow, Deny, Remember Until Hot Sheet Restarts, Persistent, and Delete
+  when at least one answer is selected. Delete requires confirmation. A batch
+  reports successes and failures separately, keeps failed answers selected for retry, and
+  refreshes the list. Remembering an answer, editing or revoking one, and closing a
+  drive connection that held chat rules each publish a replayable `permission_rules_changed`
+  change event for the project, so another client's open Settings → Permissions list refetches
+  once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
+  Preview and dialog rows show chat, session, and persistent lifetimes alongside the exact
+  action and project/AI-session reach, including at phone width. The popup reviews the exact action
+  before a remembered approval; it does not ask for an optional Bash label. The rule-list API
+  returns both the decrypted exact action for authenticated display and an HMAC fingerprint
+  for edit/revoke identity. The encrypted file retains the exact action; old fingerprint-only
+  files are discarded on upgrade and
+  require fresh approval. No migration guesses an action from its fingerprint.
+  When loading an encrypted file with repeated exact project/tool/action slots, Hot Sheet
+  keeps the newest answer and rewrites the file (HS2-Q40BBV).
 
 Remembered answers match the **exact project and tool**, and the exact action unless a
 person explicitly reviews and saves a bounded matcher. For Claude and Codex

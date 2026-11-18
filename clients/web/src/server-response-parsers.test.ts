@@ -31,6 +31,7 @@ import {
   parseOpenedCheckout,
   parsePermissionDecision,
   parsePermissionRequest,
+  parsePermissionRule,
   parsePollResponse,
   parseProviderAccount,
   parseProviderConnection,
@@ -709,5 +710,21 @@ describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth
       ServerResponseShapeError,
     );
     expect(() => parseTicketStoreSyncReport(wire({ ...minimal, syncing: 'no' }))).toThrow(ServerResponseShapeError);
+  });
+});
+
+describe('HS2-MYDER8 permission rule match types', () => {
+  const rule = (match_type: unknown) => ({
+    project: 'p',
+    tool: 'mcp__hotsheet__hotsheet_targets',
+    action: 'hmac-sha256:v2:k:d',
+    decision: 'allow',
+    scope: 'session',
+    match_type,
+  });
+  it('accepts a tool-wide MCP session answer and refuses an unknown match type', () => {
+    for (const match_type of ['exact', 'template', 'regex', 'tool'])
+      expect(parsePermissionRule(rule(match_type)).match_type).toBe(match_type);
+    expect(() => parsePermissionRule(rule('any'))).toThrow(ServerResponseShapeError);
   });
 });

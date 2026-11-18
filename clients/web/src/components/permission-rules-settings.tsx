@@ -134,6 +134,7 @@ function reachLabel(rule: PermissionRule) {
 }
 
 function matchLabel(rule: PermissionRule) {
+  if (rule.match_type === 'tool') return 'Any arguments'; // HS2-MYDER8: a session answer for an MCP tool.
   return rule.match_type === 'template' ? 'Placeholder match' : rule.match_type === 'regex' ? 'Regex match' : undefined;
 }
 
@@ -267,7 +268,7 @@ export function PermissionRulesSettings({
               <span class="permission-rules-settings__context">{`Applies to: ${reachLabel(rule)}`}</span>
               <span class="permission-rules-settings__context">{ruleOwner(rule, owner)}</span>
               {matchLabel(rule) && <span class="permission-rules-settings__context">{matchLabel(rule)}</span>}
-              {rule.exact_action && !rule.orchestrator && (
+              {rule.exact_action && !rule.orchestrator && rule.match_type !== 'tool' && (
                 <Row gap="xs">
                   <Button
                     emphasis="plain"

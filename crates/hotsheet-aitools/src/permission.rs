@@ -323,6 +323,11 @@ pub struct Rule {
     /// `Some(connection)` for a chat rule (HS2-JNHAYB) that answers only that connection's
     /// requests; `None` for a project-wide rule.
     pub connection: Option<String>,
+    /// HS2-MYDER8: answers every call of this MCP tool, whatever its arguments. Set only
+    /// when a person answers an MCP tool's request for the chat or the session; never for
+    /// an `Always` answer, a pattern, a non-MCP tool, or a rule whose lifetime is changed
+    /// later, so a remembered exact answer is never widened.
+    pub tool_wide: bool,
 }
 
 impl std::fmt::Debug for Rule {
@@ -344,11 +349,29 @@ impl std::fmt::Debug for Rule {
     }
 }
 
+/// Whether `tool` is a tool of an MCP server (`mcp__<server>__<tool>`), whose calls carry
+/// arbitrary arguments as their action.
+fn is_mcp_tool(tool: &str) -> bool {
+    tool.strip_prefix("mcp__")
+        .and_then(|rest| rest.split_once("__"))
+        .is_some_and(|(server, name)| !server.is_empty() && !name.is_empty())
+}
+
 impl Rule {
+    /// HS2-MYDER8: a session or chat answer to an MCP tool covers that tool for any
+    /// arguments. "Allow for this AI session" names the tool, and each MCP call's action is
+    /// its whole argument payload, so an exact rule would ask again on the next read. An
+    /// `Always` rule and every other tool stay exact.
+    fn tool_wide(&self) -> bool {
+        self.tool_wide && self.pattern.is_none() && is_mcp_tool(&self.tool)
+    }
+
     fn matches(&self, project: &str, tool: &str, action: &str, key: &ActionKey) -> bool {
         self.project == project
             && self.tool == tool
-            && if let Some(pattern) = &self.pattern {
+            && if self.tool_wide() {
+                true
+            } else if let Some(pattern) = &self.pattern {
                 pattern.matches(action)
             } else if is_action_fingerprint(&self.action, key) {
                 self.action == action_fingerprint(key, action)
@@ -365,7 +388,7 @@ impl Rule {
     fn same_key(&self, other: &Rule) -> bool {
         self.project == other.project
             && self.tool == other.tool
-            && self.action == other.action
+            && (self.action == other.action || (self.tool_wide() && other.tool_wide()))
             && self.connection == other.connection
     }
 }
@@ -380,12 +403,19 @@ fn effective_rule<'a>(
     action: &str,
     key: &ActionKey,
 ) -> Option<&'a Rule> {
+    // Within a scope, an exact rule wins over a pattern, and both over a tool-wide MCP
+    // session rule (HS2-MYDER8), so a remembered answer for one call is never overridden.
+    let tier = |rule: &Rule| match (rule.tool_wide(), rule.pattern.is_some()) {
+        (true, _) => 2,
+        (false, true) => 1,
+        (false, false) => 0,
+    };
     for chat in [true, false] {
-        for exact in [true, false] {
+        for wanted in 0..3 {
             if let Some(rule) = rules.iter().rev().find(|rule| {
                 (rule.connection.as_deref() == Some(connection) && chat
                     || rule.connection.is_none() && !chat)
-                    && rule.pattern.is_none() == exact
+                    && tier(rule) == wanted
                     && rule.matches(project, tool, action, key)
             }) {
                 return Some(rule);
@@ -459,6 +489,7 @@ impl From<&Rule> for RuleInfo {
             action: rule.action.clone(),
             exact_action: rule.exact_action.clone(),
             match_type: match rule.pattern.as_ref().map(|pattern| pattern.kind) {
+                _ if rule.tool_wide() => "tool",
                 Some(PatternKind::Template) => "template",
                 Some(PatternKind::Regex) => "regex",
                 None => "exact",
@@ -849,6 +880,7 @@ impl PermissionBridge {
         description: Option<&str>,
         pattern: Option<PatternSpec>,
     ) -> Rule {
+        let tool_wide = scope != Scope::Always && pattern.is_none() && is_mcp_tool(&request.tool);
         Rule {
             project: request.project.clone(),
             tool: request.tool.clone(),
@@ -869,6 +901,7 @@ impl PermissionBridge {
             decision,
             persist: scope == Scope::Always,
             connection: (scope == Scope::Chat).then(|| request.connection.clone()),
+            tool_wide,
         }
     }
 
@@ -1729,6 +1762,8 @@ impl SharedPermissionBridge {
             ));
         }
         bridge.rules[index].persist = persist;
+        // HS2-MYDER8: a changed lifetime keeps only the exact call it was answered for.
+        bridge.rules[index].tool_wide = false;
         let updated = bridge.rules[index].clone();
         if mirror_legacy {
             bridge.rules.retain(|rule| {
@@ -1904,6 +1939,7 @@ impl StoredRule {
             decision: self.decision,
             persist: true,
             connection: None,
+            tool_wide: false,
         }
     }
 }
@@ -2083,6 +2119,7 @@ mod tests {
             decision: Decision::Allow,
             persist: false,
             connection: None,
+            tool_wide: false,
         }]);
         let raise = |id: &str| {
             shared.enqueue_orchestrator(
@@ -2170,6 +2207,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         assert_eq!(
             discard_legacy_rules(&source, &first_project.display().to_string())
@@ -2246,6 +2284,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         ensure_rules_file(&legacy_path).unwrap();
         ensure_rules_file(&first_path).unwrap();
@@ -2505,6 +2544,225 @@ mod tests {
         assert_eq!(load_rules(&path)[0].description, None);
     }
 
+    /// HS2-MYDER8: "Allow for this AI session" on one Hot Sheet MCP call (a Codex planner's
+    /// `hotsheet_targets`) covers that tool's later calls with other arguments, answers its
+    /// queued calls at once, and nothing else: another tool, another project, a Bash
+    /// command and an Always answer keep asking per exact action.
+    #[test]
+    fn hs2_myder8_a_session_answer_covers_one_mcp_tool_for_any_arguments() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut bridge = PermissionBridge::new();
+        bridge.set_action_key_and_rules(
+            action_key_for(&dir.path().join("permissions.json")).unwrap(),
+            Vec::new(),
+        );
+        let targets = "mcp__hotsheet__hotsheet_targets";
+        let first =
+            pending(bridge.request_for_project("p", "codex-1", targets, r#"{"action":"list"}"#));
+        // A second call of the same tool, already waiting when the person answers.
+        let queued = pending(bridge.request_for_project(
+            "p",
+            "codex-1",
+            targets,
+            r#"{"action":"ticket_list","target_id":"T1"}"#,
+        ));
+        let other_tool = pending(bridge.request_for_project(
+            "p",
+            "codex-1",
+            "mcp__hotsheet__hotsheet_query",
+            "{}",
+        ));
+        let resolved = bridge
+            .resolve(first, Decision::Allow, Scope::Session)
+            .unwrap();
+        assert!(
+            resolved.persisted_rule.is_none(),
+            "a session answer is never persisted"
+        );
+        let cascaded: Vec<u64> = resolved
+            .cascaded
+            .iter()
+            .map(|answered| answered.id)
+            .collect();
+        assert_eq!(cascaded, [queued]);
+        // Later calls with new arguments, from the same or another chat of the project.
+        for (connection, arguments) in [
+            ("codex-1", r#"{"action":"plan_show"}"#),
+            (
+                "codex-1",
+                r#"{"action":"readiness_define","step":{"id":"s1"}}"#,
+            ),
+            ("codex-2", "{}"),
+        ] {
+            assert!(
+                matches!(
+                    bridge.request_for_project("p", connection, targets, arguments),
+                    Outcome::Auto(Decision::Allow)
+                ),
+                "{connection} {arguments}"
+            );
+        }
+        // The other tool's request is still waiting, and new calls of it still ask.
+        assert!(bridge.queue.iter().any(|request| request.id == other_tool));
+        pending(bridge.request_for_project(
+            "p",
+            "codex-1",
+            "mcp__hotsheet__hotsheet_query",
+            r#"{"x":1}"#,
+        ));
+        // Another project, and a tool whose name is not an MCP tool, are not covered.
+        pending(bridge.request_for_project("other", "codex-1", targets, "{}"));
+        let bash = pending(bridge.request_for_project("p", "codex-1", "Bash", "ls"));
+        bridge
+            .resolve(bash, Decision::Allow, Scope::Session)
+            .unwrap();
+        pending(bridge.request_for_project("p", "codex-1", "Bash", "ls -la"));
+        for not_mcp in ["mcp__", "mcp__hotsheet", "mcp____x", "Mcp__hotsheet__x"] {
+            let id = pending(bridge.request_for_project("p", "codex-1", not_mcp, "{}"));
+            bridge.resolve(id, Decision::Allow, Scope::Session).unwrap();
+            pending(bridge.request_for_project("p", "codex-1", not_mcp, r#"{"y":2}"#));
+        }
+        // The listing says the rule covers the tool; one slot per tool, newest answer kept.
+        let tool_rules: Vec<_> = bridge
+            .rules()
+            .iter()
+            .filter(|rule| rule.tool == targets)
+            .map(RuleInfo::from)
+            .collect();
+        assert_eq!(tool_rules.len(), 1);
+        assert_eq!(tool_rules[0].match_type, "tool");
+        let again = pending(bridge.request_for_project(
+            "p",
+            "codex-3",
+            "mcp__hotsheet__hotsheet_claim",
+            r#"{"id":"A"}"#,
+        ));
+        bridge
+            .resolve(again, Decision::Allow, Scope::Session)
+            .unwrap();
+        let again = pending(bridge.request_for_project("other", "codex-3", targets, r#"{"z":3}"#));
+        bridge
+            .resolve(again, Decision::Deny, Scope::Session)
+            .unwrap();
+        assert!(matches!(
+            bridge.request_for_project("other", "codex-3", targets, r#"{"z":4}"#),
+            Outcome::Auto(Decision::Deny)
+        ));
+        assert!(matches!(
+            bridge.request_for_project("p", "codex-3", targets, r#"{"z":4}"#),
+            Outcome::Auto(Decision::Allow)
+        ));
+    }
+
+    /// HS2-MYDER8: changing a rule's lifetime keeps only the exact call it was answered
+    /// for. A durable exact MCP answer turned into a session one is never widened, and a
+    /// tool-wide session answer made durable remembers its first call only.
+    #[test]
+    fn hs2_myder8_a_lifetime_change_never_widens_an_mcp_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        let key = action_key_for(&path).unwrap();
+        let tool = "mcp__hotsheet__hotsheet_targets";
+        let first = r#"{"action":"list"}"#;
+        let rule = |tool_wide: bool, persist: bool| Rule {
+            project: "p".into(),
+            tool: tool.into(),
+            action: action_fingerprint(&key, first),
+            exact_action: Some(first.into()),
+            pattern: None,
+            description: None,
+            decision: Decision::Allow,
+            persist,
+            connection: None,
+            tool_wide,
+        };
+        let asks = |bridge: &SharedPermissionBridge, action: &str| {
+            bridge.request_blocking_timeout_for_project(
+                "p",
+                "codex-1",
+                tool,
+                action,
+                Duration::ZERO,
+                Decision::Deny,
+            )
+        };
+        let other = r#"{"action":"plan_show"}"#;
+
+        // A tool-wide session answer covers new arguments until it is made durable.
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        bridge.reseed_rules_with_key(key, vec![rule(true, false)]);
+        assert_eq!(bridge.rules()[0].match_type, "tool");
+        assert_eq!(asks(&bridge, other), Decision::Allow);
+        let action = action_fingerprint(&key, first);
+        bridge
+            .update_scope("p", None, tool, &action, true, Some((&path, false)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(bridge.rules()[0].match_type, "exact");
+        assert_eq!(asks(&bridge, first), Decision::Allow);
+        assert_eq!(asks(&bridge, other), Decision::Deny);
+
+        // A durable exact answer made a session one stays exact.
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        append_rule(&path, &rule(false, true)).unwrap();
+        bridge.reseed_rules_with_key(key, vec![rule(false, true)]);
+        bridge
+            .update_scope("p", None, tool, &action, false, Some((&path, false)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(bridge.rules()[0].scope, Scope::Session);
+        assert_eq!(bridge.rules()[0].match_type, "exact");
+        assert_eq!(asks(&bridge, other), Decision::Deny);
+    }
+
+    /// HS2-MYDER8: a chat answer covers the MCP tool for that chat only; an Always answer
+    /// stays exact; an exact remembered answer for one call wins over a tool-wide one.
+    #[test]
+    fn hs2_myder8_chat_always_and_exact_answers_keep_their_reach() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut bridge = PermissionBridge::new();
+        bridge.set_action_key_and_rules(
+            action_key_for(&dir.path().join("permissions.json")).unwrap(),
+            Vec::new(),
+        );
+        let tool = "mcp__github__create_issue";
+        let chat = pending(bridge.request_for_project("p", "chat-a", tool, r#"{"title":"one"}"#));
+        bridge.resolve(chat, Decision::Allow, Scope::Chat).unwrap();
+        assert!(matches!(
+            bridge.request_for_project("p", "chat-a", tool, r#"{"title":"two"}"#),
+            Outcome::Auto(Decision::Allow)
+        ));
+        pending(bridge.request_for_project("p", "chat-b", tool, r#"{"title":"two"}"#));
+
+        let tool2 = "mcp__github__delete_repo";
+        let always = pending(bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"a"}"#));
+        let resolved = bridge
+            .resolve(always, Decision::Allow, Scope::Always)
+            .unwrap();
+        assert!(resolved.persisted_rule.is_some());
+        assert!(matches!(
+            bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"a"}"#),
+            Outcome::Auto(Decision::Allow)
+        ));
+        let other = pending(bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"b"}"#));
+        // A session allow for the tool, then the remembered exact deny for one call still wins.
+        bridge
+            .resolve(other, Decision::Deny, Scope::Always)
+            .unwrap();
+        let broad = pending(bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"c"}"#));
+        bridge
+            .resolve(broad, Decision::Allow, Scope::Session)
+            .unwrap();
+        assert!(matches!(
+            bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"b"}"#),
+            Outcome::Auto(Decision::Deny)
+        ));
+        assert!(matches!(
+            bridge.request_for_project("p", "chat-a", tool2, r#"{"repo":"d"}"#),
+            Outcome::Auto(Decision::Allow)
+        ));
+    }
+
     #[test]
     fn bash_descriptions_follow_out_of_order_rules_and_scrub_untrusted_storage() {
         let dir = tempfile::tempdir().unwrap();
@@ -2642,6 +2900,7 @@ mod tests {
             decision: Decision::Deny,
             persist: false,
             connection: None,
+            tool_wide: false,
         };
         let bridge = SharedPermissionBridge::new(PermissionBridge::new());
         bridge.reseed_rules_with_key(key, vec![rule.clone()]);
@@ -2733,6 +2992,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         append_rule(&path, &rule).unwrap();
         let bridge = SharedPermissionBridge::new(PermissionBridge::new());
@@ -2792,6 +3052,7 @@ mod tests {
                     decision: Decision::Allow,
                     persist: true,
                     connection: None,
+                    tool_wide: false,
                 },
             )
             .unwrap();
@@ -2864,6 +3125,7 @@ mod tests {
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
+                tool_wide: false,
             }],
         )));
         assert_eq!(b.request_blocking("c", "Bash", "ls"), Decision::Allow);
@@ -3050,6 +3312,7 @@ mod tests {
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
+                tool_wide: false,
             }],
         )));
         // A rule answers immediately — the (tiny) timeout is never reached.
@@ -3072,6 +3335,7 @@ mod tests {
                 decision: Decision::Allow,
                 persist: true,
                 connection: None,
+                tool_wide: false,
             }],
         )));
         let seen = Arc::new(Mutex::new(Vec::<(u64, String, String)>::new()));
@@ -3116,6 +3380,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         append_rule(&path, &allow).unwrap();
         // A later answer for the SAME (tool, action) replaces the earlier one.
@@ -3162,6 +3427,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         append_rule(&path, &first).unwrap();
         append_rule(
@@ -3344,6 +3610,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         let first_path = first.path().join("rules.json");
         let second_path = second.path().join("rules.json");
@@ -3414,6 +3681,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         append_rule(&path, &rule).unwrap();
         let old = load_rules(&path).pop().unwrap();
@@ -3572,6 +3840,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         }]);
         assert_eq!(
             b.request("c", "Bash", "git status"),
@@ -3771,6 +4040,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         append_rule(&path, &rule).unwrap();
         append_rule(
@@ -3815,6 +4085,7 @@ mod tests {
             decision: Decision::Allow,
             persist: true,
             connection: None,
+            tool_wide: false,
         };
         bridge.restore_durable_rules(fresh_action_key().unwrap(), vec![durable]);
         assert_eq!(
@@ -3918,6 +4189,7 @@ mod tests {
             decision: Decision::Allow,
             persist: false,
             connection: None,
+            tool_wide: false,
         }]));
         let decision = ruled
             .request_timeout_with_pending_async(

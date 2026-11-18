@@ -93,7 +93,7 @@ export interface PermissionRule {
   action: string;
   /** Decrypted command/action, confined to the authenticated response and local view. */
   exact_action?: string;
-  match_type?: 'exact' | 'template' | 'regex';
+  match_type?: 'exact' | 'template' | 'regex' | 'tool';
   pattern?: PermissionPattern;
   /** Legacy label retained for older clients, never used as the rule identity. */
   description?: string;

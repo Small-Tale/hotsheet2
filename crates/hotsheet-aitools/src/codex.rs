@@ -1705,6 +1705,7 @@ mod approval_tests {
                     decision: Decision::Allow,
                     persist: true,
                     connection: None,
+                    tool_wide: false,
                 },
                 Rule {
                     project: String::new(),
@@ -1716,6 +1717,7 @@ mod approval_tests {
                     decision: Decision::Deny,
                     persist: true,
                     connection: None,
+                    tool_wide: false,
                 },
             ],
             Decision::Deny,
