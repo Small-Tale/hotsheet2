@@ -103,6 +103,9 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     );
     propose.mockResolvedValueOnce({ outcome: 'existing' });
     expect(await planner.propose(project)).toMatch(/already working/);
+    // HS2-FDS95D: a planner that finished its turn was given the new proposal.
+    propose.mockResolvedValueOnce({ outcome: 'replanned' });
+    expect(await planner.propose(project)).toMatch(/planning again/);
     propose.mockRejectedValueOnce(new ApiHttpError('no goals', 409, 'plan_no_goals'));
     await expect(planner.propose(project)).rejects.toThrow(/open goal ticket/);
     propose.mockRejectedValueOnce(new ApiHttpError('boom', 500, 'internal'));
@@ -141,6 +144,14 @@ describe('where planning stands (HS2-5RYXNN)', () => {
     // An ended planner is not waiting, whatever its last reading said.
     expect(planningPhase(view('ended', false))).toBe('ended');
     expect(planningPhase(view(7, false))).toBeUndefined();
+  });
+
+  it('reads a planner that finished its turn as replannable, unless it waits on its tool (HS2-FDS95D)', () => {
+    expect(planningPhase({ state: 'planning', replannable: true, session: { tool_ready: true } })).toBe('replannable');
+    expect(planningPhase({ state: 'planning', replannable: true, session: {} })).toBe('replannable');
+    expect(planningPhase({ state: 'planning', replannable: false, session: {} })).toBe('planning');
+    expect(planningPhase({ state: 'planning', replannable: true, session: { tool_ready: false } })).toBe('waiting');
+    expect(planningPhase({ state: 'ended', replannable: true })).toBe('ended');
   });
 });
 

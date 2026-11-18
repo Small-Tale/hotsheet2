@@ -18,8 +18,8 @@ use hotsheet_ticketing::orchestration::{
 use serde::{Deserialize, Serialize};
 
 use super::sessions::{
-    HostedSessionStart, HostedSessionView, HostedStartOutcome, RolePrompt, TOOL_SETUP_FAILED,
-    ToolSetup, project_name,
+    HostedSessionStart, HostedSessionView, HostedStartOutcome, PushAttempt, RolePrompt,
+    TOOL_SETUP_FAILED, ToolSetup, planner_prompt_text, project_name,
 };
 use super::tickets::identifier;
 use super::*;
@@ -64,6 +64,9 @@ pub enum ProposeOutcome {
     Started,
     /// The planner this operation id, or the live planner, names answers instead.
     Existing,
+    /// HS2-FDS95D: the live planner had finished its turn, and the new proposal was
+    /// pushed into it. No second planner was launched.
+    Replanned,
 }
 
 /// What a press of Propose Plan did.
@@ -98,6 +101,10 @@ pub struct PlanningView {
     pub steps: u32,
     /// Whether the policy places sessions. While false the plan is a dry run.
     pub placement_automatic: bool,
+    /// HS2-FDS95D: the live planner finished its turn, so a press gives it a new
+    /// proposal rather than answering with it.
+    #[serde(default)]
+    pub replannable: bool,
 }
 
 fn count(value: usize) -> u32 {
@@ -209,6 +216,8 @@ impl OrchestrationRuntime {
                 ended: view.session.ended_at_ms.is_some(),
                 alive: view.alive,
                 created_at_ms: view.session.created_at_ms,
+                proposals: view.session.proposals.clone(),
+                finished_turn: finished_turn(view),
             })
             .collect()
     }
@@ -227,6 +236,7 @@ impl OrchestrationRuntime {
                 Some(match proposal.outcome {
                     ProposeOutcome::Started => "plan_started",
                     ProposeOutcome::Existing => "plan_existing",
+                    ProposeOutcome::Replanned => "plan_replanned",
                 }),
             ),
             Err(error) => (AuditOutcome::Failed, Some(error.code())),
@@ -294,11 +304,52 @@ impl OrchestrationRuntime {
             return Err(OrchestrationError::Readiness(ReadinessError::NoGoals));
         }
         let planners = self.planners(owner, tx)?;
-        let decision = decide_propose(
-            &Self::planner_facts(&planners),
-            request.operation_id.as_deref(),
-            || hotsheet_ticketing::mint_ulid(tx.clock, &mut *tx.rng).to_string(),
-        );
+        let facts = Self::planner_facts(&planners);
+        let decision = decide_propose(&facts, request.operation_id.as_deref(), || {
+            hotsheet_ticketing::mint_ulid(tx.clock, &mut *tx.rng).to_string()
+        });
+        // The proposal a reused planner answers for: the retained id when it names one
+        // of its proposals, else the one it works on now.
+        let answered = |planner: &str| {
+            facts
+                .iter()
+                .find(|known| known.operation_id == planner)
+                .map(|known| {
+                    request
+                        .operation_id
+                        .as_deref()
+                        .filter(|requested| known.answers_for(requested))
+                        .unwrap_or_else(|| known.latest_proposal())
+                        .to_owned()
+                })
+        };
+        if let ProposeDecision::Replan { planner, proposal } = &decision {
+            *operation_id = Some(proposal.clone());
+            let view = planners
+                .iter()
+                .find(|view| &view.session.operation_id == planner)
+                .ok_or(OrchestrationError::Corrupt)?;
+            if let Some(replanned) = self.plan_replan(owner, view, proposal, request, &goals, tx)? {
+                return Ok(PlanProposal {
+                    goals,
+                    goal_count,
+                    targets,
+                    ..replanned
+                });
+            }
+            // Not delivered: nothing was recorded, and the planner answers as it is.
+            *operation_id = answered(planner);
+            return Ok(PlanProposal {
+                outcome: ProposeOutcome::Existing,
+                proposal_id: answered(planner).unwrap_or_else(|| planner.clone()),
+                goals,
+                goal_count,
+                targets,
+                role_prompt: view.role_prompt,
+                tool_setup: None,
+                session: view.clone(),
+            });
+        }
         let session = match &decision {
             // The press answers with that planner as it was asked for, so the start
             // is repeated with its own fields and never conflicts with them.
@@ -315,6 +366,7 @@ impl OrchestrationRuntime {
                     origin: view.session.origin.clone(),
                 })
                 .ok_or(OrchestrationError::Corrupt)?,
+            ProposeDecision::Replan { .. } => return Err(OrchestrationError::Corrupt),
             ProposeDecision::Start(started) => NewHostedSession {
                 account: None,
                 operation_id: started.clone(),
@@ -361,12 +413,20 @@ impl OrchestrationRuntime {
                 }),
             ));
         };
+        let proposal_id = match &decision {
+            ProposeDecision::Reuse(planner) => answered(planner),
+            _ => None,
+        }
+        .unwrap_or_else(|| view.session.operation_id.clone());
+        if let ProposeDecision::Reuse(_) = &decision {
+            *operation_id = Some(proposal_id.clone());
+        }
         Ok(PlanProposal {
             outcome: match reply.outcome {
                 HostedStartOutcome::Started => ProposeOutcome::Started,
                 _ => ProposeOutcome::Existing,
             },
-            proposal_id: view.session.operation_id.clone(),
+            proposal_id,
             goals,
             goal_count,
             targets,
@@ -387,13 +447,15 @@ impl OrchestrationRuntime {
         let owner = self.owner(owner_id)?;
         let planners = self.planners(&owner, tx)?;
         let facts = Self::planner_facts(&planners);
-        let current = current_planner(&facts).map(|facts| facts.operation_id.clone());
-        let session = current.as_ref().and_then(|operation_id| {
+        let current = current_planner(&facts);
+        let session = current.and_then(|current| {
             planners
                 .iter()
-                .find(|view| &view.session.operation_id == operation_id)
+                .find(|view| view.session.operation_id == current.operation_id)
                 .cloned()
         });
+        let replannable = current.is_some_and(PlannerFacts::replannable);
+        let current = current.map(|current| current.latest_proposal().to_owned());
         let (goals, goal_count) = self.plan_goals(&owner, None)?;
         let placement_automatic = self
             .policy(owner_id)?
@@ -407,6 +469,68 @@ impl OrchestrationRuntime {
             goal_count,
             steps: count(self.plan().records(&owner.id)?.len()),
             placement_automatic,
+            replannable,
         })
     }
+
+    /// HS2-FDS95D: push a new proposal into a planner that finished its turn. Only a
+    /// delivered push is recorded, so an undelivered one can be pressed again. `None`
+    /// when it was not delivered.
+    fn plan_replan(
+        &self,
+        owner: &Checkout,
+        view: &HostedSessionView,
+        proposal: &str,
+        request: &ProposePlan,
+        goals: &[GoalTicket],
+        tx: &mut Transaction<'_>,
+    ) -> Result<Option<PlanProposal>, OrchestrationError> {
+        // One named goal is the goal this proposal plans, by its slug.
+        let goal = request
+            .goal
+            .as_ref()
+            .and_then(|_| goals.first())
+            .map(|goal| goal.slug.as_str());
+        let text = planner_prompt_text(&owner.id, &view.worker_id, proposal, goal);
+        let attempt = self
+            .sessions
+            .join_role(owner, &view.session.session_id, &text);
+        if attempt != PushAttempt::Delivered {
+            return Ok(None);
+        }
+        self.hosted_sessions_registry().add_proposal(
+            &owner.id,
+            &view.session.operation_id,
+            proposal,
+        )?;
+        let session = self
+            .planners(owner, tx)?
+            .into_iter()
+            .find(|planner| planner.session.operation_id == view.session.operation_id)
+            .ok_or(OrchestrationError::Corrupt)?;
+        Ok(Some(PlanProposal {
+            outcome: ProposeOutcome::Replanned,
+            proposal_id: proposal.to_owned(),
+            goals: Vec::new(),
+            goal_count: 0,
+            targets: 0,
+            role_prompt: Some(RolePrompt::Delivered),
+            tool_setup: None,
+            session,
+        }))
+    }
+}
+
+/// HS2-FDS95D: a planner finished its turn: its terminal runs, its prompt reached it,
+/// its tool is past any first-run question (HS2-5RYXNN), and its host says it is not
+/// busy. A tool that reports no busy state reads as not busy, so a press may reach a
+/// planner still at work; it then gets one more prompt, and the plan is idempotent.
+fn finished_turn(view: &HostedSessionView) -> bool {
+    view.alive == Some(true)
+        && view.busy == Some(false)
+        && view.tool_ready != Some(false)
+        && matches!(
+            view.role_prompt,
+            Some(RolePrompt::Delivered | RolePrompt::AtLaunch)
+        )
 }

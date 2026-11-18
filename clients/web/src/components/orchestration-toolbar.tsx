@@ -18,7 +18,7 @@ export interface OrchestrationToolbarProps {
   busy?: boolean;
   /**
    * HS2-HCW7MD: `planning` while the planning session works on the plan; HS2-5RYXNN: `waiting` while it
-   * waits on a first-run question in its terminal tab.
+   * waits on a first-run question in its terminal tab; HS2-FDS95D: `replannable` once it finished its turn.
    */
   planning?: string;
   clock?: ClockFormat;
@@ -27,6 +27,8 @@ export interface OrchestrationToolbarProps {
 /** What the header adds for a planning session. */
 const PLANNING_STATUS: Record<string, string> = {
   planning: ' · Planning',
+  // HS2-FDS95D: it finished its turn; Propose Plan gives it a new proposal.
+  replannable: ' · Planning',
   waiting: ' · Planner waiting in its terminal',
 };
 

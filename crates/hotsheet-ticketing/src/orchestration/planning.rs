@@ -18,6 +18,13 @@ pub struct PlannerFacts {
     /// What the terminal host says now: `None` when it could not be asked.
     pub alive: Option<bool>,
     pub created_at_ms: u64,
+    /// HS2-FDS95D: the later proposals pushed into this planner after it finished a
+    /// turn, oldest first. Each is an operation id a press retained.
+    pub proposals: Vec<String>,
+    /// HS2-FDS95D: the planner finished its turn: it runs, its prompt reached it, its
+    /// tool is past any first-run question and the host says it is not busy. Only then
+    /// does a press give it a new proposal.
+    pub finished_turn: bool,
 }
 
 impl PlannerFacts {
@@ -32,7 +39,34 @@ impl PlannerFacts {
     pub fn pending(&self) -> bool {
         !self.started && !self.ended
     }
+
+    /// HS2-FDS95D: this planner answers for `operation_id`: its own start, or a later
+    /// proposal pushed into it.
+    pub fn answers_for(&self, operation_id: &str) -> bool {
+        self.operation_id == operation_id
+            || self
+                .proposals
+                .iter()
+                .any(|proposal| proposal == operation_id)
+    }
+
+    /// HS2-FDS95D: the proposal this planner works on now: its latest pushed proposal,
+    /// else its own start.
+    pub fn latest_proposal(&self) -> &str {
+        self.proposals
+            .last()
+            .map_or(self.operation_id.as_str(), String::as_str)
+    }
+
+    /// HS2-FDS95D: a press may give it a new proposal.
+    pub fn replannable(&self) -> bool {
+        self.live() && self.finished_turn
+    }
 }
+
+/// HS2-FDS95D: how many later proposals one planner keeps. The oldest is forgotten
+/// first; a press repeating a forgotten id is answered as a new press.
+pub const MAX_PLANNER_PROPOSALS: usize = 64;
 
 /// Where planning stands for an orchestration project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +100,9 @@ pub enum ProposeDecision {
     /// Answer with, or repeat the start of, the planner this operation id names. No
     /// second planner is launched.
     Reuse(String),
+    /// HS2-FDS95D: push a new proposal, under `proposal`, into the planner `planner`
+    /// names, which finished its turn. No second planner is launched.
+    Replan { planner: String, proposal: String },
 }
 
 /// The newest planner first; equal times by operation id, so the order is total.
@@ -107,9 +144,13 @@ pub fn current_planner(planners: &[PlannerFacts]) -> Option<&PlannerFacts> {
 /// Decide a press of Propose Plan. One planner per orchestration project at a time:
 ///
 /// 1. An operation id the caller retained and this machine knows is that planner,
-///    whatever became of it (a repeated request never launches twice).
-/// 2. Otherwise a live planner, or one reserved and never launched, answers the press.
-/// 3. Otherwise a new planner starts under the caller's id, or under `fresh`.
+///    whatever became of it: its start or a proposal pushed into it (a repeated request
+///    never launches or pushes twice).
+/// 2. Otherwise a live planner that finished its turn is given a new proposal under the
+///    caller's id, or under `fresh` (HS2-FDS95D).
+/// 3. Otherwise a live planner still working, or one reserved and never launched,
+///    answers the press.
+/// 4. Otherwise a new planner starts under the caller's id, or under `fresh`.
 ///
 /// Re-proposing after a planner ended starts a new one; the plan itself is idempotent
 /// by goal ticket and target ticket, so the new planner updates what is there.
@@ -119,16 +160,22 @@ pub fn decide_propose(
     fresh: impl FnOnce() -> String,
 ) -> ProposeDecision {
     if let Some(requested) = requested
-        && planners
+        && let Some(known) = planners
             .iter()
-            .any(|planner| planner.operation_id == requested)
+            .find(|planner| planner.answers_for(requested))
     {
-        return ProposeDecision::Reuse(requested.to_owned());
+        return ProposeDecision::Reuse(known.operation_id.clone());
     }
     if let Some(current) = newest(planners)
         .into_iter()
         .find(|planner| planner.live() || planner.pending())
     {
+        if current.replannable() {
+            return ProposeDecision::Replan {
+                planner: current.operation_id.clone(),
+                proposal: requested.map_or_else(fresh, str::to_owned),
+            };
+        }
         return ProposeDecision::Reuse(current.operation_id.clone());
     }
     ProposeDecision::Start(requested.map_or_else(fresh, str::to_owned))

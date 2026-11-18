@@ -23,7 +23,7 @@ export const orchestrationDemoSettings = {
   phase: signal<TimelinePhase>('running'),
   selected: signal('step-3'),
   proposeAvailable: signal(true),
-  /** HS2-5RYXNN: the planning session's state: none, working, or waiting in its terminal. */
+  /** HS2-5RYXNN, HS2-FDS95D: the planning session's state: none, working, finished its turn, or waiting. */
   planning: signal(''),
   busy: signal(false),
   collapsed: signal<string[]>([]),
@@ -40,6 +40,7 @@ const PHASES: ReadonlyArray<{ value: TimelinePhase; label: string }> = [
 const PLANNING = [
   { value: '', label: 'None' },
   { value: 'planning', label: 'Working' },
+  { value: 'replannable', label: 'Finished Its Turn' },
   { value: 'waiting', label: 'Waiting in Its Terminal' },
 ];
 

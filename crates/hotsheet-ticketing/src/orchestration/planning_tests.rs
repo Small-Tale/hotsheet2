@@ -9,6 +9,8 @@ fn planner(op: &str, started: bool, ended: bool, alive: Option<bool>, at: u64) -
         ended,
         alive,
         created_at_ms: at,
+        proposals: Vec::new(),
+        finished_turn: false,
     }
 }
 
@@ -312,5 +314,152 @@ fn hs2_hcw7md_the_planner_role_is_not_a_target_role() {
     assert_eq!(
         session_label("Launch", None, SessionRole::Planner),
         "Launch: planner"
+    );
+}
+
+/// HS2-FDS95D: a planner that finished its turn, in every state one planner can have,
+/// with and without a retained id: only a live one is given a new proposal.
+#[test]
+fn hs2_fds95d_only_a_live_planner_that_finished_its_turn_is_replanned() {
+    let shapes = [
+        (false, false, None),
+        (false, false, Some(false)),
+        (false, true, None),
+        (true, false, Some(true)),
+        (true, false, None),
+        (true, false, Some(false)),
+        (true, true, Some(false)),
+        (true, true, Some(true)),
+        (true, true, None),
+    ];
+    for (started, ended, alive) in shapes {
+        for finished_turn in [false, true] {
+            let mut facts = planner("op-a", started, ended, alive, 10);
+            facts.finished_turn = finished_turn;
+            let case = format!("{started} {ended} {alive:?} {finished_turn}");
+            let replans = finished_turn && facts.live();
+            assert_eq!(facts.replannable(), replans, "{case}");
+            let expected = if replans {
+                ProposeDecision::Replan {
+                    planner: "op-a".into(),
+                    proposal: "fresh".into(),
+                }
+            } else if facts.live() || facts.pending() {
+                ProposeDecision::Reuse("op-a".into())
+            } else {
+                ProposeDecision::Start("fresh".into())
+            };
+            let one = std::slice::from_ref(&facts);
+            assert_eq!(decide_propose(one, None, fresh), expected, "{case}");
+            // The planner's own id is that planner, whatever it is doing.
+            assert_eq!(
+                decide_propose(one, Some("op-a"), || unreachable!()),
+                ProposeDecision::Reuse("op-a".into()),
+                "{case}"
+            );
+            // A new retained id is the new proposal's id.
+            if replans {
+                assert_eq!(
+                    decide_propose(one, Some("press-2"), || unreachable!()),
+                    ProposeDecision::Replan {
+                        planner: "op-a".into(),
+                        proposal: "press-2".into()
+                    },
+                    "{case}"
+                );
+            }
+            // Finishing a turn never changes where planning stands.
+            assert_eq!(
+                planning_state(one),
+                planning_state(&[planner("op-a", started, ended, alive, 10)]),
+                "{case}"
+            );
+        }
+    }
+}
+
+/// HS2-FDS95D: presses across a planner that finishes turns: started, working,
+/// finished, re-planned, repeated, working again, finished again, re-planned with a
+/// fresh id, ended, and the next planner. A proposal id is never pushed twice and an
+/// old one keeps naming its planner.
+#[test]
+fn hs2_fds95d_presses_across_turns_of_one_planner() {
+    let mut planners = vec![planner("op-1", true, false, Some(true), 1)];
+    let press = |planners: &mut Vec<PlannerFacts>, requested: Option<&str>, at: u64| {
+        let decision = decide_propose(planners, requested, || format!("fresh-{at}"));
+        match &decision {
+            ProposeDecision::Start(op) => planners.push(planner(op, true, false, Some(true), at)),
+            ProposeDecision::Replan { planner, proposal } => {
+                let known = planners
+                    .iter_mut()
+                    .find(|known| &known.operation_id == planner)
+                    .unwrap();
+                known.proposals.push(proposal.clone());
+                // The pushed prompt starts a turn.
+                known.finished_turn = false;
+            }
+            ProposeDecision::Reuse(_) => {}
+        }
+        decision
+    };
+    // Working: a press answers with it.
+    assert_eq!(
+        press(&mut planners, Some("press-1"), 2),
+        ProposeDecision::Reuse("op-1".into())
+    );
+    assert_eq!(planners[0].latest_proposal(), "op-1");
+    // It finished its turn: the press re-plans under the caller's id.
+    planners[0].finished_turn = true;
+    assert_eq!(
+        press(&mut planners, Some("press-2"), 3),
+        ProposeDecision::Replan {
+            planner: "op-1".into(),
+            proposal: "press-2".into()
+        }
+    );
+    assert_eq!(planners[0].latest_proposal(), "press-2");
+    // The same request repeated, even after the planner finished again, pushes nothing.
+    planners[0].finished_turn = true;
+    assert_eq!(
+        press(&mut planners, Some("press-2"), 4),
+        ProposeDecision::Reuse("op-1".into())
+    );
+    assert_eq!(planners[0].proposals, ["press-2"]);
+    // A press with no id re-plans under a fresh one.
+    assert_eq!(
+        press(&mut planners, None, 5),
+        ProposeDecision::Replan {
+            planner: "op-1".into(),
+            proposal: "fresh-5".into()
+        }
+    );
+    // Working on it: the next press waits.
+    assert_eq!(
+        press(&mut planners, None, 6),
+        ProposeDecision::Reuse("op-1".into())
+    );
+    assert!(planners[0].answers_for("press-2") && planners[0].answers_for("fresh-5"));
+    assert!(!planners[0].answers_for("fresh-6"));
+    // It ended: an old proposal id still names it, and a new press starts the next.
+    planners[0].ended = true;
+    planners[0].alive = Some(false);
+    assert_eq!(
+        press(&mut planners, Some("press-2"), 7),
+        ProposeDecision::Reuse("op-1".into())
+    );
+    assert_eq!(
+        press(&mut planners, None, 8),
+        ProposeDecision::Start("fresh-8".into())
+    );
+    assert_eq!(planning_state(&planners), PlanningState::Planning);
+    assert_eq!(
+        current_planner(&planners).map(PlannerFacts::latest_proposal),
+        Some("fresh-8")
+    );
+    // An id one planner was given is never a reason to re-plan another.
+    planners[1].finished_turn = true;
+    assert_eq!(
+        press(&mut planners, Some("fresh-5"), 9),
+        ProposeDecision::Reuse("op-1".into())
     );
 }

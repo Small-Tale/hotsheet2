@@ -2,7 +2,9 @@
 //! workspace fake agent in the orchestration project itself; no AI tool is launched
 //! and nothing leaves loopback.
 use super::orchestration::api;
-use super::session_work::{REPORT_TOOL, World, launch_report, received_prompt};
+use super::session_work::{
+    PUSH_AGENT, PUSH_PLUGIN, REPORT_TOOL, World, launch_report, received_prompt,
+};
 use super::sessions::drawer;
 use super::support::{cli_failure, cli_named, mcp_named, mcp_rejected};
 use super::*;
@@ -273,4 +275,80 @@ command = "hotsheet-cli permission-hook --agent synthetic""#,
     .await;
     assert_eq!(status, StatusCode::OK, "{listed}");
     assert_eq!(listed["sessions"][0]["tool_ready"], true, "{listed}");
+}
+
+/// HS2-FDS95D: on a real server with the push-capable fake agent, a press while the
+/// planner that proposed the plan sits idle in its open tab pushes the new proposal
+/// into it: no second planner, the prompt names the new proposal, a repeat pushes
+/// nothing, and `plan show` names the latest proposal.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_fds95d_a_press_replans_the_idle_planner_in_its_open_tab() {
+    let world = World::new(
+        &["tickets_read", "sessions_manage"],
+        PUSH_AGENT,
+        PUSH_PLUGIN,
+    )
+    .await;
+    world.ticket("Ship the launch");
+    let person = json!({"role":"human","id":"maintainer"});
+    let press = |operation: &'static str| {
+        let world = &world;
+        let person = person.clone();
+        async move {
+            let (status, answer) = world
+                .call(
+                    "POST",
+                    "/planning/propose",
+                    json!({"tool":REPORT_TOOL,"operation_id":operation,"actor":person}),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{answer}");
+            answer
+        }
+    };
+    let first = press("press-1").await;
+    assert_eq!(first["outcome"], "started", "{first}");
+    let terminal = first["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The tool comes up and ends a turn; its role prompt reaches it then.
+    let prompt = received_prompt(&world.reports, &terminal, "`hotsheet-planner`");
+    assert!(prompt.contains("press-1"), "{prompt}");
+    // It planned and sits idle in its open tab.
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["state"], "planning", "{shown}");
+    assert_eq!(shown["replannable"], true, "{shown}");
+
+    let again = press("press-2").await;
+    assert_eq!(again["outcome"], "replanned", "{again}");
+    assert_eq!(again["proposal_id"], "press-2", "{again}");
+    assert_eq!(again["session"]["session"]["session_id"], terminal.as_str());
+    let prompt = received_prompt(&world.reports, &terminal, "press-2");
+    assert!(prompt.contains("`hotsheet-planner`"), "{prompt}");
+    assert_eq!(drawer(&world.router).await.len(), 1, "no second planner");
+
+    // The same press again pushes nothing more.
+    let repeated = press("press-2").await;
+    assert_eq!(repeated["outcome"], "existing", "{repeated}");
+    assert_eq!(repeated["proposal_id"], "press-2", "{repeated}");
+    let prompts =
+        std::fs::read_to_string(world.reports.join(format!("{terminal}.prompts"))).unwrap();
+    assert_eq!(prompts.lines().count(), 2, "{prompts}");
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["proposal_id"], "press-2", "{shown}");
+
+    let (_, audit) = world.call("GET", "/audit", Value::Null).await;
+    let reasons: Vec<&str> = audit["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["action"] == "plan_propose")
+        .map(|entry| entry["reason"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        reasons,
+        ["plan_started", "plan_replanned", "plan_existing"],
+        "{audit}"
+    );
 }

@@ -1046,6 +1046,10 @@ pub struct HostedSession {
     /// HS2-PFHRS9: the tool account it was started for, if the orchestrator named one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// HS2-FDS95D: a planner's later proposals, pushed into it after it finished a
+    /// turn, oldest first, at most `MAX_PLANNER_PROPOSALS`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposals: Vec<String>,
 }
 
 /// HS2-R7QH35: why a running session is told about one exact ticket.
@@ -1407,6 +1411,7 @@ impl HostedSessionRegistry {
             request: None,
             resources: resources.to_vec(),
             account: new.account.clone(),
+            proposals: Vec::new(),
         };
         validate_hosted(&session)?;
         file.sessions.push(session.clone());
@@ -1537,6 +1542,33 @@ impl HostedSessionRegistry {
         })
     }
 
+    /// HS2-FDS95D: record a later proposal pushed into a running planner. The same
+    /// proposal again changes nothing; past the bound the oldest is forgotten. `Ok(None)`
+    /// when no session has the operation id; an ended session keeps what it had.
+    pub fn add_proposal(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+        proposal: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        valid_identifier(proposal)?;
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_some()
+                || session.role != SessionRole::Planner
+                || session.operation_id == proposal
+                || session.proposals.iter().any(|known| known == proposal)
+            {
+                return;
+            }
+            session.proposals.push(proposal.to_owned());
+            let excess = session
+                .proposals
+                .len()
+                .saturating_sub(super::planning::MAX_PLANNER_PROPOSALS);
+            session.proposals.drain(..excess);
+        })
+    }
+
     /// HS2-R7QH35: record a request naming `ticket`. The same ticket and kind again
     /// keep the request as it is, so a repeat is never pushed twice; another ticket or
     /// kind replaces it. `Ok(None)` when no session has the operation id; an ended
@@ -1646,6 +1678,15 @@ fn validate_hosted(session: &HostedSession) -> Result<(), OrchestrationError> {
     }
     if let Some(request) = &session.request {
         valid_identifier(&request.ticket)?;
+    }
+    // HS2-FDS95D: only a planner is given later proposals, each a bounded id.
+    if !session.proposals.is_empty() && session.role != SessionRole::Planner
+        || session.proposals.len() > super::planning::MAX_PLANNER_PROPOSALS
+    {
+        return Err(OrchestrationError::Corrupt);
+    }
+    for proposal in &session.proposals {
+        valid_identifier(proposal)?;
     }
     if session.paused && session.owner != SessionOwner::Human {
         return Err(OrchestrationError::Invalid(

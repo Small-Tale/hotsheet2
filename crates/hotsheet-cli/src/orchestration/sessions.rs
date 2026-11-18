@@ -1002,7 +1002,7 @@ impl OrchestrationRuntime {
 
     // ---- Hosted half ----
 
-    fn hosted_sessions_registry(&self) -> HostedSessionRegistry {
+    pub(super) fn hosted_sessions_registry(&self) -> HostedSessionRegistry {
         HostedSessionRegistry::new(&self.home)
     }
 

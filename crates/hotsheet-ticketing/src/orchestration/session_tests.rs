@@ -1680,3 +1680,69 @@ fn hs2_kr28fs_a_hand_back_returns_a_persons_idle_session_to_the_orchestrator() {
         );
     });
 }
+
+/// HS2-FDS95D: a planner's later proposals: recorded once each, in order, bounded with
+/// the oldest forgotten first, kept after the planner ends, never on another role, and
+/// read back only when valid.
+#[test]
+fn hs2_fds95d_a_planner_records_each_later_proposal_once_within_its_bound() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let mut planner = hosted("plan-1", "claude");
+    planner.role = SessionRole::Planner;
+    planner.origin.run_id = None;
+    planner.origin.owner_checkout_id = HOSTED.into();
+    registry.reserve(HOSTED, &planner, &mut tx).unwrap();
+    registry.mark_started(HOSTED, "plan-1").unwrap();
+    let add = |proposal: &str| {
+        registry
+            .add_proposal(HOSTED, "plan-1", proposal)
+            .unwrap()
+            .unwrap()
+            .proposals
+    };
+    assert_eq!(add("press-2"), ["press-2"]);
+    // The same proposal again, or the planner's own id, changes nothing.
+    assert_eq!(add("press-2"), ["press-2"]);
+    assert_eq!(add("plan-1"), ["press-2"]);
+    assert_eq!(add("press-3"), ["press-2", "press-3"]);
+    // An unbounded id is refused and leaves the record as it was.
+    assert!(registry.add_proposal(HOSTED, "plan-1", "bad id").is_err());
+    // An unknown operation records nothing.
+    assert_eq!(
+        registry.add_proposal(HOSTED, "nobody", "press-4").unwrap(),
+        None
+    );
+    // Past the bound the oldest is forgotten first.
+    for n in 0..MAX_PLANNER_PROPOSALS {
+        add(&format!("p-{n}"));
+    }
+    let kept = add("last");
+    assert_eq!(kept.len(), MAX_PLANNER_PROPOSALS);
+    assert_eq!(kept.first().map(String::as_str), Some("p-1"));
+    assert_eq!(kept.last().map(String::as_str), Some("last"));
+    // It survives a read from disk.
+    let read = registry.list(HOSTED).unwrap();
+    assert_eq!(read[0].proposals, kept);
+    // An ended planner keeps what it had and takes nothing more.
+    registry
+        .end(HOSTED, "plan-1", "person_stopped", 20)
+        .unwrap();
+    assert_eq!(add("after-end"), kept);
+
+    // Another role never takes a proposal.
+    registry
+        .reserve(HOSTED, &hosted("op-w", "codex"), &mut tx)
+        .unwrap();
+    let worker = registry
+        .add_proposal(HOSTED, "op-w", "press-9")
+        .unwrap()
+        .unwrap();
+    assert!(worker.proposals.is_empty());
+}

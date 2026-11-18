@@ -4829,7 +4829,7 @@ checkout it runs in as its orchestration project.
 
 | Request                                                                   | What it does                                                                                     |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `propose` with `tool`, optional `model`, `effort`, `goal`, `operation_id` | Starts the planner, or answers with the one already there                                        |
+| `propose` with `tool`, optional `model`, `effort`, `goal`, `operation_id` | Starts the planner, gives an idle one a new proposal, or answers with the one already there      |
 | `show`                                                                    | Where planning stands: `idle`, `planning` or `ended`, the live or latest planner, the open goals |
 
 A press is decided by `decide_propose`, a pure function of this machine's planner
@@ -4837,13 +4837,36 @@ records and what the terminal host says now
 (`crates/hotsheet-ticketing/src/orchestration/planning.rs`):
 
 1. A retained `operation_id` this machine knows is that planner, whatever became of
-   it. The same id never launches twice.
-2. Otherwise a live planner, or one reserved and never launched, answers the press
-   (`outcome: existing`). A planner whose host cannot be asked counts as live, so
-   it is never doubled. One planner per orchestration project runs at a time; a press
-   naming another goal while one works answers with that one.
-3. Otherwise a new planner starts (`outcome: started`) under the caller's id or a
+   it: its start or a proposal pushed into it. The same id never launches or pushes
+   twice.
+2. Otherwise a live planner that **finished its turn** is given a new proposal
+   (`outcome: replanned`, HS2-FDS95D) under the caller's id or a fresh one. Its terminal
+   runs, its prompt reached it (`delivered` or `at_launch`), its tool is past any
+   first-run question (`tool_ready` is not `false`, §26.16) and its host says it is not
+   busy.
+3. Otherwise a live planner still at work, or one reserved and never launched, answers
+   the press (`outcome: existing`). A planner whose host cannot be asked counts as
+   live, so it is never doubled. One planner per orchestration project runs at a time; a
+   press naming another goal while one works answers with that one.
+4. Otherwise a new planner starts (`outcome: started`) under the caller's id or a
    fresh one, which is the `proposal_id` its prompt names.
+
+**Re-planning with the open planner (HS2-FDS95D).** A planner that proposed its plan
+ends its turn but keeps its terminal open. A person who then adds a goal or answers a
+`FEEDBACK NEEDED` question expects Propose Plan to plan again, so the press pushes the
+planner prompt, naming the new proposal id, into that planner through its session push
+(the role prompt's path, §26.16). It does not stop the planner and start a fresh one.
+The busy state both would rest on is inferred from OSC 133 markers, which Claude and
+Codex do not emit, so those tools always read as not busy. Winding the planner down
+could then stop one that is still at work, while a push only gives it one more prompt.
+The push also keeps the planner's terminal and context for the person, and planning is
+idempotent by goal and target ticket. Only a delivered push is recorded: the hosted
+record keeps the planner's later `proposals`, oldest first, at most 64. A push the
+tool did not take (not ready, unsupported or rejected) records nothing and answers
+`existing`, so the same press can be repeated. A tool with no session push therefore
+re-plans only after its tab is closed. `show` names the latest proposal as
+`proposal_id` and says `replannable: true` while a press would re-plan. The
+Orchestration view then keeps Propose Plan enabled while it shows `Planning`.
 
 Before anything launches the press is refused with `plan_no_targets` (the project
 declares no target), `plan_no_goals` (no open goal ticket) or `plan_goal_not_open`
@@ -4851,7 +4874,7 @@ declares no target), `plan_no_goals` (no open goal ticket) or `plan_goal_not_ope
 session start does (`session_host_unavailable`, `session_start_failed`,
 `session_admission_refused`) and leaves nothing reserved, so the same press can be
 repeated. A press needs an identified actor and is audited as `plan_propose` with its
-operation id and `plan_started`, `plan_existing` or the refusal code.
+operation id and `plan_started`, `plan_replanned`, `plan_existing` or the refusal code.
 
 `goal` names one goal ticket (slug or id, with its `connection_id` when the project
 has several git sources); without it every open goal ticket is planned. The answer

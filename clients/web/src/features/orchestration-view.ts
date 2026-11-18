@@ -74,12 +74,14 @@ export function orchestrationPersonId(storage: Pick<Storage, 'getItem' | 'setIte
  * HS2-5RYXNN: where planning stands, as the view shows it. `waiting` is a planner whose terminal runs
  * while its tool has not reported its session start: it may be waiting on a first-run question (trust,
  * an MCP or hook approval, an update notice) that only a person answers in its terminal tab.
+ * HS2-FDS95D: `replannable` is a planner that finished its turn, so Propose Plan gives it a new proposal.
  */
 export function planningPhase(view: Record<string, unknown> | undefined): string | undefined {
   const state = typeof view?.state === 'string' ? view.state : undefined;
   if (state !== 'planning') return state;
   const session = view?.session as Record<string, unknown> | undefined;
-  return session?.tool_ready === false ? 'waiting' : state;
+  if (session?.tool_ready === false) return 'waiting';
+  return view?.replannable === true ? 'replannable' : state;
 }
 
 const PLANNING_REFUSALS: Record<string, string> = {
@@ -110,9 +112,10 @@ export function createServerPlanner(options: {
             { ...choice, operation_id: `propose-${crypto.randomUUID().replaceAll('-', '')}` },
             options.personId(),
           );
-        return proposal.outcome === 'existing'
-          ? 'A planning session is already working on the plan.'
-          : 'Planning started. The planning session is in the drawer.';
+        if (proposal.outcome === 'existing') return 'A planning session is already working on the plan.';
+        // HS2-FDS95D: the planner that finished its turn was given the new proposal.
+        if (proposal.outcome === 'replanned') return 'The planning session is planning again. It is in the drawer.';
+        return 'Planning started. The planning session is in the drawer.';
       } catch (reason) {
         const code = (reason as { code?: string } | undefined)?.code;
         const known = code ? PLANNING_REFUSALS[code] : undefined;

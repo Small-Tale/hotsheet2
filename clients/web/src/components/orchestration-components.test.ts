@@ -112,6 +112,8 @@ describe('OrchestrationToolbar (HS2-J89JC7)', () => {
     // HS2-5RYXNN: a planner stopped on a first-run question says where a person answers it.
     expect(toolbar('no_plan', { planning: 'waiting' })).toContain('No Plan Yet · Planner waiting in its terminal');
     expect(toolbar('no_plan', { planning: 'ended' })).not.toContain(' · ');
+    // HS2-FDS95D: a planner that finished its turn still reads as planning.
+    expect(toolbar('no_plan', { planning: 'replannable' })).toContain('No Plan Yet · Planning');
     expect(toolbar('no_projects')).not.toContain('data-action=');
     const blocked = String(
       OrchestrationToolbar({

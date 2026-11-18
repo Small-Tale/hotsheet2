@@ -97,7 +97,8 @@ pub use permissions::{
     remove_retired_authority, retired_authority,
 };
 pub use planning::{
-    PlannerFacts, PlanningState, ProposeDecision, current_planner, decide_propose, planning_state,
+    MAX_PLANNER_PROPOSALS, PlannerFacts, PlanningState, ProposeDecision, current_planner,
+    decide_propose, planning_state,
 };
 pub use policy::{
     AccountPolicy, IgnoredField, MAX_POLICY_ACCOUNTS, MAX_POLICY_MODELS, MAX_POLICY_SESSIONS,

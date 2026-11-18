@@ -151,6 +151,8 @@ fn hs2_hcw7md_a_press_starts_one_planner_in_the_orchestration_project() {
         )
     );
 
+    // HS2-FDS95D: it works on its turn now.
+    f.host.set_busy(&launch.session_id, true);
     // Pressed again, with no id, a new id, or the same id: the same planner answers
     // and nothing launches twice.
     for body in [
@@ -463,4 +465,132 @@ fn hs2_5ryxnn_a_planner_waiting_on_its_tool_says_so_until_the_tool_reports() {
     // A host that cannot be asked cannot say either.
     f.host.down.store(true, std::sync::atomic::Ordering::SeqCst);
     assert_eq!(ready(&mut tx), None);
+}
+
+/// HS2-FDS95D: a press gives a planner that finished its turn a new proposal through
+/// its session push, never a second planner; a planner still working, waiting on its
+/// tool, or not yet prompted answers as before; a retained proposal id never pushes
+/// twice; an undelivered push records nothing.
+#[test]
+fn hs2_fds95d_a_press_replans_a_planner_that_finished_its_turn() {
+    let mut rng = Rng(400);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    let owner = f.m.owner.id.clone();
+    f.goal("Ship the release");
+    let first = f
+        .propose(json!({"operation_id": "press-1"}), &mut tx)
+        .unwrap();
+    assert_eq!(first.outcome, ProposeOutcome::Started);
+    let terminal = first.session.session.session_id.clone();
+    let worker = first.session.worker_id.clone();
+    assert_eq!(f.host.pushes().len(), 1, "the role prompt");
+
+    // Working on its turn: a press answers with it and pushes nothing.
+    f.host.set_busy(&terminal, true);
+    assert!(!f.status(&mut tx).replannable);
+    let working = f
+        .propose(json!({"operation_id": "press-2"}), &mut tx)
+        .unwrap();
+    assert_eq!(working.outcome, ProposeOutcome::Existing);
+    assert_eq!(working.proposal_id, "press-1");
+    assert_eq!(f.host.pushes().len(), 1);
+
+    // It finished its turn: the press pushes the new proposal into it.
+    f.host.set_busy(&terminal, false);
+    let idle = f.status(&mut tx);
+    assert!(idle.replannable);
+    assert_eq!(idle.state, PlanningState::Planning);
+    let replanned = f
+        .propose(json!({"operation_id": "press-2"}), &mut tx)
+        .unwrap();
+    assert_eq!(replanned.outcome, ProposeOutcome::Replanned);
+    assert_eq!(replanned.proposal_id, "press-2");
+    assert_eq!(replanned.role_prompt, Some(RolePrompt::Delivered));
+    assert_eq!(replanned.goal_count, 1);
+    assert_eq!(replanned.targets, 1);
+    assert_eq!(replanned.session.session.proposals, ["press-2"]);
+    assert_eq!(replanned.session.session.operation_id, "press-1");
+    assert_eq!(f.host.launches().len(), 1, "no second planner");
+    assert_eq!(
+        f.host.pushes().last().cloned(),
+        Some((
+            terminal.clone(),
+            planner_prompt_text(&owner, &worker, "press-2", None)
+        ))
+    );
+    assert_eq!(
+        f.m.last_audit(),
+        (
+            "plan_propose".into(),
+            AuditOutcome::Succeeded,
+            Some("plan_replanned".into())
+        )
+    );
+    assert_eq!(f.status(&mut tx).proposal_id.as_deref(), Some("press-2"));
+
+    // The same press repeated pushes nothing, and each id still names its proposal.
+    for (id, answered) in [("press-2", "press-2"), ("press-1", "press-1")] {
+        let again = f.propose(json!({"operation_id": id}), &mut tx).unwrap();
+        assert_eq!(again.outcome, ProposeOutcome::Existing, "{id}");
+        assert_eq!(again.proposal_id, answered, "{id}");
+    }
+    assert_eq!(f.host.pushes().len(), 2);
+
+    // Its tool waits on a question in its terminal: nothing is pushed.
+    f.host.report(&terminal, Some(false));
+    assert!(!f.status(&mut tx).replannable);
+    let waiting = f
+        .propose(json!({"operation_id": "press-3"}), &mut tx)
+        .unwrap();
+    assert_eq!(waiting.outcome, ProposeOutcome::Existing);
+    assert_eq!(waiting.proposal_id, "press-2");
+    assert_eq!(f.host.pushes().len(), 2);
+    f.host.report(&terminal, Some(true));
+
+    // A push that is not delivered records nothing; the same press later goes through.
+    for answer in [
+        PushAttempt::NotReady,
+        PushAttempt::Unsupported,
+        PushAttempt::Rejected,
+    ] {
+        f.host
+            .push_answers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push_back(answer);
+        let refused = f
+            .propose(json!({"operation_id": "press-3"}), &mut tx)
+            .unwrap();
+        assert_eq!(refused.outcome, ProposeOutcome::Existing, "{answer:?}");
+        assert_eq!(refused.proposal_id, "press-2", "{answer:?}");
+        assert_eq!(refused.session.session.proposals, ["press-2"], "{answer:?}");
+    }
+    let third = f.propose(json!({}), &mut tx).unwrap();
+    assert_eq!(third.outcome, ProposeOutcome::Replanned);
+    assert_ne!(third.proposal_id, "press-3");
+    assert_eq!(
+        third.session.session.proposals,
+        ["press-2".to_owned(), third.proposal_id.clone()]
+    );
+
+    // It ended: the next press starts a new planner, whose prompt has not reached it
+    // yet, so a press answers with it rather than pushing a proposal.
+    f.host.crash(&terminal);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push_back(PushAttempt::NotReady);
+    let next = f.propose(json!({}), &mut tx).unwrap();
+    assert_eq!(next.outcome, ProposeOutcome::Started);
+    assert_eq!(next.role_prompt, Some(RolePrompt::Pending));
+    assert!(!f.status(&mut tx).replannable);
+    let pending = f.propose(json!({}), &mut tx).unwrap();
+    assert_eq!(pending.outcome, ProposeOutcome::Existing);
+    assert_eq!(pending.proposal_id, next.proposal_id);
+    assert_eq!(f.host.launches().len(), 2);
 }
