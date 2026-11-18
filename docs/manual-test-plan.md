@@ -1311,24 +1311,26 @@ sync <session-id> --project <owner>` and confirm `role_prompt` is `delivered`, a
 
 ## Antigravity launch prompt (HS2-KK3CCE)
 
-Antigravity (`agy`) declares no `[launch] prompt_args` yet, so its orchestrated sessions
-carry only `HOTSHEET_SESSION_ROLE` and `HOTSHEET_ROLE_SKILL` and report `role_prompt:
-unsupported`. Third-party guides for agy 1.2.4 say `agy "<prompt>"` and
-`agy -i "<prompt>"` (`--prompt-interactive`) open the interactive session with a first
-prompt; that is unverified. With a real, signed-in install:
+Antigravity (`agy`) declares `[launch] prompt_args = ["-i", "{prompt}"]`, so an
+orchestrated session gets its role prompt on the command line and reports
+`role_prompt: at_launch`. Automated: the plugin test pins the declaration, and
+`remote_servers` `hs2_kk3cce_*` starts a stand-in under that declaration and checks its
+argv and `at_launch`. Verified on a real, signed-in agy 1.5.10 (2026-11-18, synthetic
+prompts only): `agy --help` lists `-i` / `--prompt-interactive` and no positional
+prompt; `agy -i "Reply with the single word READY"` answered `READY` and stayed
+interactive; a two-line prompt arrived as one prompt; in an untrusted folder agy shows
+its trust dialog first and runs the prompt after it is accepted. Repeat after an agy
+upgrade:
 
-1. Run `agy --version` and `agy --help`; record the version and whether a positional
-   prompt or `-i`/`--prompt-interactive` is listed for the interactive session.
-2. In a scratch project, run `agy -i "Reply with the single word READY"` in a terminal.
-   Confirm agy answers READY and then stays open for another prompt (it must not exit
-   like `--print`). Repeat with `agy "Reply with the single word READY"`.
-3. Repeat step 2 with a two-line prompt (a line break inside the quotes) and confirm
-   both lines reach agy as one prompt.
-4. If a form passes, add it to `plugins/antigravity/manifest.toml` under `[launch]`
-   (for example `prompt_args = ["-i", "{prompt}"]`), rebuild, start an orchestrated
-   session for `antigravity` as in the HS2-WEFJV8 steps and confirm its answer's
-   `role_prompt` is `at_launch` and the tool shows the role prompt. If none passes,
-   record the version and keep `prompt_args` undeclared.
+1. Run `agy --version` and `agy --help`; record the version and confirm `-i` /
+   `--prompt-interactive` is still listed.
+2. In a trusted scratch project, run `agy -i "Reply with the single word READY"`.
+   Confirm agy answers READY and stays open for another prompt (it must not exit like
+   `--print`).
+3. Repeat step 2 with a two-line prompt and confirm both lines reach agy as one prompt.
+4. Start an orchestrated session for `antigravity` as in the HS2-WEFJV8 steps and
+   confirm its answer's `role_prompt` is `at_launch` and agy shows the role prompt. In
+   a folder agy has not trusted yet, accept the trust dialog first.
 
 ## Codex bootstrap role prompt (HS2-N1GZFE)
 

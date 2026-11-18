@@ -2732,8 +2732,8 @@ the tool one of two ways:
 
 - **At launch.** A plugin that declares `[launch] prompt_args` (for example
   `["{prompt}"]`) receives it as its first prompt on the command line. Nothing has to
-  be ready, and the answer is `at_launch`. No built-in plugin declares it yet
-  (Antigravity is HS2-KK3CCE).
+  be ready, and the answer is `at_launch`. Antigravity declares `["-i", "{prompt}"]`
+  (HS2-KK3CCE).
 - **By session push** ([13](13-drive-transport-interface.md) §13.12). A tool is rarely
   ready the instant its terminal starts: Claude and Codex have no push address until
   their SessionStart hook reports one, and OpenCode's server may not listen yet. A

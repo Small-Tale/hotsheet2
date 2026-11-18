@@ -946,7 +946,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     shared/role-skills/      #   canonical role instructions: dispatcher, integrator, worker (HS2-7E5R4A) and the orchestration planner (HS2-HCW7MD); scripts/sync-role-skills.mjs generates both provider skill mirrors and bundled plugin sources
     claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + worklist and three role skills; claude-json MCP; [drive] claude-channel (async); [session_push] claude-inbox (hook-reported inbox socket)
     codex/                   #   AGENTS.md instructions + project-local worklist and three role skills; codex-toml MCP; [drive] app-server (persistent)
-    antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume; no [session_push] (messaging its sessions is unsupported)
+    antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume; [launch] prompt_args -i (HS2-KK3CCE); no [session_push] (messaging its sessions is unsupported)
     opencode/                #   AGENTS.md instructions; opencode.json MCP; [drive] acp; [launch] opencode --model; [session_push] opencode-http (--port + OPENCODE_SERVER_PASSWORD)
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)

@@ -1288,6 +1288,15 @@ fn antigravity_is_a_spawn_resume_plugin() {
     assert_eq!(drive.model_flag.as_deref(), Some("--model"));
     assert_eq!(drive.effort_flag.as_deref(), Some("--effort"));
     assert_eq!(drive.runtime_effort_levels, ["low", "medium", "high"]);
+    // HS2-KK3CCE: the interactive launch takes a first prompt with `-i`.
+    assert_eq!(
+        p.prompt_args("Run the worker skill\nas worker-1"),
+        Some(vec![
+            "-i".to_string(),
+            "Run the worker skill\nas worker-1".to_string()
+        ])
+    );
+    assert!(p.manifest.session_push.is_none());
 }
 
 #[test]

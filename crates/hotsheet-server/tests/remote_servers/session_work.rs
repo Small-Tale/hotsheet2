@@ -449,6 +449,45 @@ async fn hs2_2dpgdy_a_tool_without_session_push_gets_its_role_at_launch() {
     );
 }
 
+/// HS2-KK3CCE: Antigravity's own `[launch] prompt_args` (`agy -i <prompt>`, verified on agy
+/// 1.5.10) drives a stand-in that reads `-i` the way agy does: the role prompt is on its
+/// command line and the start reports `at_launch`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_kk3cce_antigravity_takes_its_role_prompt_with_dash_i_at_launch() {
+    let antigravity = hotsheet_plugins::find_in("antigravity", &[]).expect("antigravity plugin");
+    let declared = &antigravity.manifest.launch.as_ref().unwrap().prompt_args;
+    assert_eq!(declared, &["-i", "{prompt}"]);
+    assert!(antigravity.manifest.session_push.is_none());
+    let world = World::new(
+        &["sessions_manage"],
+        "",
+        &format!("prompt_args = {declared:?}"),
+    )
+    .await;
+    world.allow(&["sessions_manage"], json!({})).await;
+    let (status, started) = world.start("op-agy").await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["role_prompt"], "at_launch", "{started}");
+    let terminal = started["hosted"]["session_id"].as_str().unwrap();
+    let prompt = received_prompt(&world.reports, terminal, "`hotsheet-worker`");
+    assert!(
+        prompt.contains(started["hosted"]["worker_id"].as_str().unwrap()),
+        "{prompt}"
+    );
+    let report = launch_report(&world.reports, terminal);
+    let argv: Vec<&str> = report["args"]
+        .as_array()
+        .expect("the stand-in reports its argv")
+        .iter()
+        .map(|arg| arg.as_str().unwrap())
+        .collect();
+    let at = argv
+        .iter()
+        .position(|arg| *arg == "-i")
+        .expect("-i on the command line");
+    assert_eq!(argv[at + 1], prompt, "{argv:?}");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_wefjv8_a_session_in_another_checkout_starts_with_that_checkouts_configuration() {
     let world = World::new(&["sessions_manage"], "", "").await;

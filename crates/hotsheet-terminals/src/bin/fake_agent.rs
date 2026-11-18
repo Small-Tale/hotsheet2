@@ -22,6 +22,7 @@
 //!   --report-dir /tmp/r   # the same, to <dir>/<HOTSHEET_TERMINAL_ID>.json
 //!   --serve-opencode 1500 # after this many ms, answer as an OpenCode session API (HS2-2DPGDY)
 //!   --prompt "text"       # a first prompt given at launch, recorded like a pushed one
+//!   -i "text"             # the same, spelled as Antigravity's `agy -i` (HS2-KK3CCE)
 //! ```
 //!
 //! `--serve-opencode` makes the agent push-capable the way the `opencode-http` mechanism
@@ -50,7 +51,11 @@ fn main() {
         std::path::PathBuf::from(dir).join(format!("{id}.prompts"))
     });
     // HS2-2DPGDY: a first prompt its host put on the command line.
-    if let (Some(text), Some(path)) = (flag_value("--prompt"), &prompts) {
+    // HS2-KK3CCE: `-i` is how Antigravity's `agy` takes it.
+    if let (Some(text), Some(path)) = (
+        flag_value("--prompt").or_else(|| flag_value("-i")),
+        &prompts,
+    ) {
         record_prompt(path, &text);
     }
 
@@ -123,7 +128,7 @@ fn main() {
                 }
                 i += 1;
             }
-            "--port" | "--prompt" => i += 1,
+            "--port" | "--prompt" | "-i" => i += 1,
             "--serve-opencode" => {
                 let delay = val(i).parse::<u64>().unwrap_or(0);
                 let port = flag_value("--port").and_then(|port| port.parse::<u16>().ok());
@@ -152,7 +157,8 @@ fn main() {
 }
 
 /// HS2-WEFJV8: what a launched tool sees at its start: its working directory, the
-/// `HOTSHEET_*` environment its host gave it, and whether each probed file exists there.
+/// `HOTSHEET_*` environment its host gave it, whether each probed file exists there, and
+/// its command line (HS2-KK3CCE).
 fn report(probes: &[String]) -> String {
     let cwd = std::env::current_dir().unwrap_or_default();
     let env: serde_json::Map<String, serde_json::Value> = std::env::vars()
@@ -171,7 +177,8 @@ fn report(probes: &[String]) -> String {
         .iter()
         .map(|probe| (probe.clone(), cwd.join(probe).is_file().into()))
         .collect();
-    serde_json::json!({ "cwd": cwd, "env": env, "files": files }).to_string()
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    serde_json::json!({ "cwd": cwd, "env": env, "files": files, "args": args }).to_string()
 }
 
 /// Append one received prompt as a JSON line.

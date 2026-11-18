@@ -60,6 +60,10 @@ session_options = ["model", "effort"]
 [launch]
 program = "agy"
 args = []
+# HS2-KK3CCE: `agy -i "<prompt>"` (`--prompt-interactive`) runs a first prompt and stays
+# interactive; verified on agy 1.5.10, a multi-line prompt arrives as one. An orchestrated
+# session's role prompt goes here, so it reports `role_prompt: at_launch`.
+prompt_args = ["-i", "{prompt}"]
 
 [capacity]
 # Limit signals the host observes from Antigravity (docs/05 §5.3, docs/26 §26.11,

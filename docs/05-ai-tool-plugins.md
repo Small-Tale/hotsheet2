@@ -1193,8 +1193,10 @@ prompt, with `{prompt}` substituted, for example `["{prompt}"]`. The host uses i
 only for an orchestrator-started session's role prompt, so a tool without session
 push still receives its role; `POST /terminals` carries the prompt as
 `initial_prompt` and the role as `session_role`, which also puts
-`HOTSHEET_SESSION_ROLE` and `HOTSHEET_ROLE_SKILL` in the tool's environment. No
-built-in plugin declares it yet ([26](26-orchestration-projects.md) §26.16).
+`HOTSHEET_SESSION_ROLE` and `HOTSHEET_ROLE_SKILL` in the tool's environment.
+Antigravity declares `["-i", "{prompt}"]` (`agy --prompt-interactive`, verified on agy
+1.5.10, HS2-KK3CCE), so its orchestrated sessions report `at_launch`
+([26](26-orchestration-projects.md) §26.16).
 
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
