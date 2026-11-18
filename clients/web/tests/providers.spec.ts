@@ -13500,8 +13500,11 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
 });
 
 test('shows animated active state only for the lifetime of a ticket claim lease', async ({ page }) => {
+  // HS2-VEGJWR: keep startup and the lease transition on one controlled browser clock.
+  const start = new Date('2026-11-18T00:00:00.000Z');
+  await page.clock.install({ time: start });
   await mockProject(page);
-  const expires = new Date(Date.now() + 12_000).toISOString(),
+  const expires = new Date(start.getTime() + 10 * 60_000).toISOString(),
     active = {
       ...row,
       claimed_by: 'codex-worker',
@@ -13541,9 +13544,10 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
     });
   });
   await page.goto('/');
+  // Advance farther than the old 12 s lease before the project has opened.
+  await page.clock.fastForward(20_000);
   await openMockedProject(page);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  await page.waitForTimeout(500);
   const activeRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     idleRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     indicator = activeRow.locator('.ticket-list-row__claim');
@@ -13564,7 +13568,8 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(indicator).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-s3stys-claimed-narrow.png', fullPage: true });
-  await expect(indicator).toHaveCount(0, { timeout: 13_000 });
+  await page.clock.fastForward(10 * 60_000);
+  await expect(indicator).toHaveCount(0);
 });
 
 test('shows the compact confidence pill on completed list rows and board cards and follows a re-score (HS2-A0Q6G6)', async ({
