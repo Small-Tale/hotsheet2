@@ -3128,6 +3128,13 @@ export class Api {
       `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
       { method: 'POST', body: JSON.stringify({ ...request, actor: { role: 'human' } }) },
     );
+  /** HS2-0G80WD: stop orchestrating one project from another machine; a person only. */
+  removeHostedOrchestrationProject = (owner: string, target: string) =>
+    this.parsed(
+      parseRemovedOrchestrationProject,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects/${encodeURIComponent(target)}`,
+      { method: 'DELETE', body: JSON.stringify({ actor: { role: 'human' } }) },
+    );
   removeOrchestrationProject = (owner: string, target: string) =>
     this.parsed(
       parseRemovedOrchestrationProject,

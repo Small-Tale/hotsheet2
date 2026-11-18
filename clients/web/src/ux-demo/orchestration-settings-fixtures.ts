@@ -271,6 +271,7 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
         label: request.label,
         target_id: request.target_id,
       }),
+    removeHostedOrchestrationProject: (owner, target) => api.removeOrchestrationProject(owner, target),
     removeOrchestrationProject: (_owner, target) => {
       manifest = {
         ...manifest,

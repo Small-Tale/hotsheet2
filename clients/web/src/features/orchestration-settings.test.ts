@@ -626,3 +626,25 @@ describe("adding a remote server's open projects (HS2-92FJXM)", () => {
     expect(remote().busy).not.toContain('add');
   });
 });
+
+describe('removing a project from another machine (HS2-0G80WD)', () => {
+  it('asks first, then removes through the hosted route; a project served here keeps the local one', async () => {
+    const remoteOwner = `remote:${DEMO_REMOTE}:launch-0000000000ab`;
+    const t = setup({ answers: [false, true, true] });
+    await t.settings.loadSettings(remoteOwner);
+    // Cancelled: nothing is asked of the server.
+    await t.settings.removeProject(remoteOwner, DEMO_TARGETS.web);
+    expect(t.asked[0].title).toBe('Stop orchestrating Web?');
+    expect(t.api.removeHostedOrchestrationProject).not.toHaveBeenCalled();
+    // Confirmed: the hosted route, never the loopback-only one.
+    await t.settings.removeProject(remoteOwner, DEMO_TARGETS.web);
+    expect(t.api.removeHostedOrchestrationProject).toHaveBeenCalledWith(remoteOwner, DEMO_TARGETS.web);
+    expect(t.api.removeOrchestrationProject).not.toHaveBeenCalled();
+    expect(t.settings.settings.value[remoteOwner]?.status).toBe('Web removed.');
+    // A project served here removes through its own route.
+    await t.settings.loadSettings(DEMO_OWNER);
+    await t.settings.removeProject(DEMO_OWNER, DEMO_TARGETS.docs);
+    expect(t.api.removeOrchestrationProject).toHaveBeenCalledWith(DEMO_OWNER, DEMO_TARGETS.docs);
+    expect(t.api.removeHostedOrchestrationProject).toHaveBeenCalledTimes(1);
+  });
+});

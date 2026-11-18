@@ -564,6 +564,9 @@ mod tests {
         // checkouts with the read-write role; read-only lists only, deny nothing.
         let hosted = "/checkouts/owner/orchestration/hosted-projects";
         assert!(!hotsheet_cli::orchestration::is_machine_path(hosted));
+        assert!(!hotsheet_cli::orchestration::is_machine_path(&format!(
+            "{hosted}/target"
+        )));
         for (role, get, post) in [
             (
                 hotsheet_tls::DeviceRole::ReadWrite,
@@ -587,19 +590,28 @@ mod tests {
                     axum::routing::get(|| async { StatusCode::OK })
                         .post(|| async { StatusCode::OK }),
                 )
+                .route(
+                    "/checkouts/owner/orchestration/hosted-projects/{target}",
+                    axum::routing::delete(|| async { StatusCode::OK }),
+                )
                 .layer(axum::middleware::from_fn(enforce_client_access))
                 .layer(axum::Extension(ClientAccess {
                     role,
                     loopback: false,
                 }));
-            for (method, expected) in [("GET", get), ("POST", post)] {
+            for (method, path, expected) in [
+                ("GET", hosted.to_owned(), get),
+                ("POST", hosted.to_owned(), post),
+                // HS2-0G80WD: removing from another machine is fenced like adding.
+                ("DELETE", format!("{hosted}/target"), post),
+            ] {
                 assert_eq!(
                     router
                         .clone()
                         .oneshot(
                             Request::builder()
                                 .method(method)
-                                .uri(hosted)
+                                .uri(&path)
                                 .body(Body::empty())
                                 .unwrap()
                         )

@@ -5082,10 +5082,18 @@ through `/checkouts/{owner}/orchestration/hosted-projects`:
 - The route is not machine-local, so a paired device reaches it; a read-only device may
   list but its `POST` is refused by the write fence, like any other write. The
   machine-local `projects` routes (any destination, and removal) stay loopback-only.
+- **Removing (HS2-0G80WD).** The maintainer chose that removal mirrors adding: `DELETE
+/checkouts/{owner}/orchestration/hosted-projects/{target}` in the same non-machine-local
+  family is the local remove workflow (this server's binding removed, the declaration
+  tombstoned, audited `project_remove`), but a person only: an AI actor is refused here,
+  while the loopback route still lets any actor reduce reach. A repeat changes nothing,
+  an unknown project is 404 `target_not_found`, and a read-only device is refused by the
+  write fence. For a project opened from another server, a row's and the detail's Stop
+  Orchestrating… ask with the same shared confirmation and then use this route.
 - If the list cannot be read, + Add Project is disabled and the category says why.
 - Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
 --project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
---project <owner>`, through the same route.
+--project <owner>`, and `project remove-hosted <target> --project <owner>` (HS2-0G80WD), through the same route.
 
 ### Live updates
 

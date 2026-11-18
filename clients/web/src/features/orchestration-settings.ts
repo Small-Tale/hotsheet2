@@ -46,6 +46,7 @@ export type OrchestrationApi = Pick<
   | 'removeOrchestrationProject'
   | 'hostedOrchestrationProjects'
   | 'addHostedOrchestrationProject'
+  | 'removeHostedOrchestrationProject'
   | 'orchestrationCapacity'
   | 'orchestrationAdmission'
   | 'orchestrationToolCapacity'
@@ -401,7 +402,11 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     busy(projectId, targetId, true);
     put(projectId, { message: '', status: '' });
     try {
-      await api.removeOrchestrationProject(projectId, targetId);
+      // HS2-0G80WD: a project open from another server removes through that server's
+      // hosted route; the loopback-only one is the serving machine's.
+      await (isRemoteProjectId(projectId)
+        ? api.removeHostedOrchestrationProject(projectId, targetId)
+        : api.removeOrchestrationProject(projectId, targetId));
       put(projectId, { status: `${label} removed.` });
       if (selected.value[projectId] === targetId) closeDetail(projectId);
       await loadSettings(projectId);

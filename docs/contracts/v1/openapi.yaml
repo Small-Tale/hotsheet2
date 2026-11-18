@@ -4532,6 +4532,55 @@ paths:
         schema:
           type: string
           minLength: 1
+  /checkouts/{owner}/orchestration/hosted-projects/{target}:
+    description: Stop orchestrating one project from another machine (HS2-0G80WD), mirroring adding through
+      /orchestration/hosted-projects - the same workflow as the machine-local DELETE /orchestration/projects/{target}
+      (unbind on this server, tombstone the declaration), but a person only - an ai actor is refused with 403
+      forbidden. Not machine-local - a paired read-write device may remove; a read-only device is refused by the write
+      fence. A repeat changes nothing (unbound and removed false); an unknown project is 404 target_not_found.
+    delete:
+      operationId: removeHostedOrchestrationProject
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actor:
+                  $ref: '#/components/schemas/OrchestrationActor'
+              additionalProperties: false
+      responses:
+        '200':
+          description: What this request changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovedOrchestrationProject'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.

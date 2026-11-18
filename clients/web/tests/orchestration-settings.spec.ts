@@ -730,6 +730,7 @@ async function openRemoteOrchestration(page: Page) {
       .slice(remotePath.length)
       .replace(`/checkouts/${encoded}`, `/checkouts/${server.checkoutId}`);
     if (route.request().method() === 'POST') posted.push(path);
+    if (route.request().method() === 'DELETE') posted.push(`DELETE ${path}`);
     try {
       const response = await proxyFetch(route, {
         url: `${server.url}${path}${incoming.search}`,
@@ -806,6 +807,70 @@ test('HS2-92FJXM a remote orchestration project adds the projects open on its se
     await page.emulateMedia({ colorScheme: 'dark' });
     await add.click();
     await capture('menu-1440-dark');
+  } finally {
+    await server.stop(page);
+  }
+});
+
+test('HS2-0G80WD a remote orchestration project stops orchestrating a project after the shared confirmation', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const { server, others, posted } = await openRemoteOrchestration(page);
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const added = await server.request<{ target_id: string }>(`${base}/hosted-projects`, 'POST', {
+      checkout_id: others[0].id,
+      label: 'Web',
+      actor: { role: 'human' },
+    });
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await expect(
+      page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }),
+    ).toBeVisible();
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const webRow = settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' });
+    await expect(webRow).toBeVisible();
+    await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+    await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Stop orchestrating Web?');
+    const directory = join('target', 'visual-captures', 'hs2-0g80wd');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-0g80wd-${name}-${browserName}.png`), animations: 'disabled' });
+    await capture('confirm-1440');
+    // Cancelled: nothing is sent.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(posted.filter((path) => path.includes(added.target_id))).toEqual([]);
+    for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+      }
+      await webRow.getByRole('button', { name: /Actions for Web/ }).click();
+      await page.getByRole('menuitem', { name: 'Stop Orchestrating…' }).click();
+      await expect(dialog).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`confirm-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
+      if (index < 2) await dialog.getByRole('button', { name: 'Cancel' }).click();
+    }
+    // Confirmed: removed through the hosted route on the serving machine.
+    await page.getByRole('button', { name: 'Stop Orchestrating', exact: true }).click();
+    await expect(webRow).toHaveCount(0);
+    await expect(settings.getByText('Web removed.')).toBeVisible();
+    expect(posted).toContain(`DELETE ${base}/hosted-projects/${added.target_id}`);
+    const declared = await server.request<{ targets: { label: string; state: string }[] }>(`${base}/targets`);
+    expect(declared.targets.map((target) => `${target.label}:${target.state}`)).toEqual(['Web:removed']);
+    await capture('removed-1440');
   } finally {
     await server.stop(page);
   }

@@ -21,6 +21,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "projects", _]
             // HS2-92FJXM: this server's open checkouts, which another machine may add.
             | ["checkouts", _, "orchestration", "hosted-projects"]
+            // HS2-0G80WD: and remove one from there.
+            | ["checkouts", _, "orchestration", "hosted-projects", _]
             | [
                 "checkouts",
                 _,
@@ -1210,6 +1212,10 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", owner, "orchestration", "hosted-projects"]) => {
                 let actor = actor(body)?;
                 value(self.add_hosted_project(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            ("DELETE", ["checkouts", owner, "orchestration", "hosted-projects", id]) => {
+                let actor = actor(body)?;
+                value(self.remove_hosted_project(&reference(owner, id)?, actor.as_ref(), tx)?)
             }
             ("DELETE", ["checkouts", owner, "orchestration", "projects", id]) => {
                 let actor = actor(body)?;

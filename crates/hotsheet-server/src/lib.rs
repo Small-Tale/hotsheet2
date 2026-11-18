@@ -2174,6 +2174,11 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/hosted-projects",
             get(routes::orchestration::read).post(routes::orchestration::write),
         )
+        // HS2-0G80WD: and stop orchestrating one, the same way.
+        .route(
+            "/checkouts/{owner}/orchestration/hosted-projects/{target}",
+            axum::routing::delete(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/policy/validate",
             post(routes::orchestration::write),

@@ -476,6 +476,20 @@ impl OrchestrationRuntime {
     /// the declaration (its id is never reused). Removing only reduces what the
     /// orchestrator can reach, so any identified or anonymous actor may do it; sessions
     /// already running there are not stopped by this. Repeating it changes nothing.
+    /// HS2-0G80WD: stop orchestrating one project from another machine, mirroring
+    /// [`Self::add_hosted_project`]: a person only (an AI actor is refused), reached by a
+    /// read-write device through the write fence, and the same workflow as the local
+    /// remove, so a repeat changes nothing and an unknown project is `target_not_found`.
+    pub fn remove_hosted_project(
+        &self,
+        target: &TargetRef,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<RemovedProject, OrchestrationError> {
+        access::person(actor)?;
+        self.remove_project(target, RemoveProject::default(), actor, tx)
+    }
+
     pub fn remove_project(
         &self,
         target: &TargetRef,

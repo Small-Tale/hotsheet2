@@ -62,6 +62,9 @@ enum ProjectCmd {
         #[arg(long)]
         target_id: Option<String>,
     },
+    /// HS2-0G80WD: stop orchestrating one project the way a read-write client on
+    /// another machine does: a person only; a repeat changes nothing.
+    RemoveHosted { target_id: String },
 }
 
 pub(super) fn project_type_route(
@@ -126,6 +129,11 @@ pub(super) fn project_route(
             "POST",
             format!("/checkouts/{owner}/orchestration/hosted-projects"),
             json!({"checkout_id": checkout_id, "label": label, "target_id": target_id}),
+        ),
+        ProjectCmd::RemoveHosted { target_id } => (
+            "DELETE",
+            format!("/checkouts/{owner}/orchestration/hosted-projects/{target_id}"),
+            json!({}),
         ),
     };
     Ok((owner, request))

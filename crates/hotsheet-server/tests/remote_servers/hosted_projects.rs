@@ -33,7 +33,7 @@ async fn call(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn hs2_92fjxm_a_read_write_device_adds_an_open_checkout_over_mtls() {
+async fn hs2_92fjxm_hs2_0g80wd_a_read_write_device_adds_and_removes_projects_over_mtls() {
     assert!(hotsheet_aitools::test_permission_vault_available());
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
@@ -266,5 +266,150 @@ async fn hs2_92fjxm_a_read_write_device_adds_an_open_checkout_over_mtls() {
         ],
     );
     assert!(unopened.contains("forbidden"), "{unopened}");
+
+    // HS2-0G80WD: removing mirrors adding. An AI actor is refused, and so is a
+    // read-only device; nothing changes.
+    let remove = |target: &str| format!("/checkouts/{}{hosted}/{target}", owner.id);
+    let active = |declared: &Value| {
+        declared["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["state"] == "active")
+            .count()
+    };
+    let (status, ai) = call(
+        &served.origin,
+        &credentials,
+        "DELETE",
+        remove(&target),
+        Some(json!({"actor":{"role":"ai","id":"worker-1"}})),
+    )
+    .await;
+    assert_eq!(status, 403, "{ai}");
+    set_device_role(&paths, "synthetic-client", DeviceRole::ReadOnly).unwrap();
+    let (status, _) = call(
+        &served.origin,
+        &credentials,
+        "DELETE",
+        remove(&target),
+        Some(json!({"actor":person})),
+    )
+    .await;
+    assert_eq!(status, 403);
+    set_device_role(&paths, "synthetic-client", DeviceRole::ReadWrite).unwrap();
+    let declared = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/targets"),
+        Value::Null,
+        true,
+    )
+    .await
+    .1;
+    assert_eq!(active(&declared), 2);
+    // A read-write device removes it: unbound here and tombstoned.
+    let (status, removed) = call(
+        &served.origin,
+        &credentials,
+        "DELETE",
+        remove(&target),
+        Some(json!({"actor":person})),
+    )
+    .await;
+    assert_eq!(status, 200, "{removed}");
+    assert_eq!(
+        (&removed["unbound"], &removed["removed"]),
+        (&json!(true), &json!(true))
+    );
+    let (_, binding) = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/targets/{target}/binding"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert!(binding["destination"].is_null(), "{binding}");
+    // Repeated: nothing changes.
+    let (status, again) = call(
+        &served.origin,
+        &credentials,
+        "DELETE",
+        remove(&target),
+        Some(json!({"actor":person})),
+    )
+    .await;
+    assert_eq!(status, 200, "{again}");
+    assert_eq!(
+        (&again["unbound"], &again["removed"]),
+        (&json!(false), &json!(false))
+    );
+    // An unknown project is not found.
+    let (status, unknown) = call(
+        &served.origin,
+        &credentials,
+        "DELETE",
+        remove("01ARZ3NDEKTSV4RRFFQ69G5FZZ"),
+        Some(json!({"actor":person})),
+    )
+    .await;
+    assert_eq!(status, 404, "{unknown}");
+    assert_eq!(unknown["code"], "target_not_found", "{unknown}");
+    // The list offers API again, and Docs is still added.
+    let (_, listed) = call(
+        &served.origin,
+        &credentials,
+        "GET",
+        format!("/checkouts/{}{hosted}", owner.id),
+        None,
+    )
+    .await;
+    let added = |id: &str| {
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|choice| choice["checkout_id"] == id)
+            .unwrap()["added"]
+            .clone()
+    };
+    assert_eq!(added(&api_project.id), false);
+    assert_eq!(added(&docs_project.id), true);
+    // Headless, the same: an AI actor refused, then a person removes Docs.
+    let docs_target = docs["target_id"].as_str().unwrap().to_owned();
+    let ai_cli = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "worker-1",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let refused = cli_failure(
+        &home,
+        &ai_cli,
+        &[
+            "project",
+            "remove-hosted",
+            &docs_target,
+            "--project",
+            &owner.id,
+        ],
+    );
+    assert!(refused.contains("forbidden"), "{refused}");
+    let gone = cli_named(
+        &home,
+        &human,
+        &[
+            "project",
+            "remove-hosted",
+            &docs_target,
+            "--project",
+            &owner.id,
+        ],
+    );
+    assert_eq!(gone["removed"], true, "{gone}");
     served.stop().await;
 }
