@@ -19736,6 +19736,14 @@ components:
               type: string
               maxLength: 64
               default: speculate:never
+            redo_reopened:
+              description:
+                HS2-NCMATS. When provisional work is reopened while its run is active, the orchestrator cancels that
+                run itself as an AI cancel, which does not hold the step, so it is dispatched again once its
+                prerequisites are confirmed. The cancel asks the permission a replacement start needs; a denial falls
+                back to asking on the orchestration ticket. Off by default.
+              type: boolean
+              default: false
           additionalProperties: false
         placement:
           description:

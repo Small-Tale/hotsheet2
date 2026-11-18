@@ -266,6 +266,8 @@ export interface PolicyDraft {
   idle_minutes: string;
   keep_warm: string;
   build_ahead: boolean;
+  /** HS2-NCMATS: `speculation.redo_reopened`. */
+  redo_reopened: boolean;
 }
 
 export const MACHINE_FIELDS = ['max_sessions', 'min_free_ram_mb', 'max_cpu_percent', 'min_free_disk_mb'] as const;
@@ -304,6 +306,7 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
     idle_minutes: String(body.wind_down?.idle_minutes ?? POLICY_DEFAULTS.wind_down.idle_minutes),
     keep_warm: String(body.wind_down?.keep_warm ?? POLICY_DEFAULTS.wind_down.keep_warm),
     build_ahead: body.speculation?.allowed ?? false,
+    redo_reopened: body.speculation?.redo_reopened ?? false,
   };
 }
 
@@ -311,6 +314,7 @@ export function policyDraftFrom(view: OrchestrationPolicyView | undefined, known
 export function changePolicyDraft(draft: PolicyDraft, field: string, value: string | boolean): PolicyDraft {
   if (field === 'automatic' && typeof value === 'boolean') return { ...draft, automatic: value };
   if (field === 'build_ahead' && typeof value === 'boolean') return { ...draft, build_ahead: value };
+  if (field === 'redo_reopened' && typeof value === 'boolean') return { ...draft, redo_reopened: value };
   if (typeof value !== 'string') return draft;
   if (field === 'idle_minutes' || field === 'keep_warm') return { ...draft, [field]: value };
   const machineField = /^machine\.(.+)$/u.exec(field)?.[1];
@@ -478,7 +482,7 @@ export function policyFromDraft(
   body.machine = { ...body.machine, ...machine };
   body.tools = tools;
   body.wind_down = { ...body.wind_down, idle_minutes: idle, keep_warm: warm };
-  body.speculation = { ...body.speculation, allowed: draft.build_ahead };
+  body.speculation = { ...body.speculation, allowed: draft.build_ahead, redo_reopened: draft.redo_reopened };
   body.placement = { ...body.placement, automatic: draft.automatic };
   return { policy: body };
 }

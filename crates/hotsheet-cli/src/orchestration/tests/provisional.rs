@@ -89,6 +89,8 @@ struct Opt {
     overrides: [Option<bool>; 2],
     /// `targets[].max_sessions` for target 2.
     cap: u32,
+    /// HS2-NCMATS: `speculation.redo_reopened`.
+    redo: bool,
 }
 impl Opt {
     fn on() -> Self {
@@ -123,6 +125,7 @@ impl Opt {
             speculation: Speculation {
                 allowed: self.allowed,
                 max_depth: self.max_depth.max(1),
+                redo_reopened: self.redo,
                 ..Speculation::default()
             },
             placement: PlacementPolicy {
@@ -2133,4 +2136,202 @@ fn hs2_2k0dm8_reopened_work_with_a_live_run_asks_on_the_goal_ticket() {
         )
         .unwrap();
     assert_eq!(asked(&t).len(), 1);
+}
+
+/// The `FEEDBACK NEEDED` asks on the orchestration ticket.
+fn redo_asks(t: &Two) -> Vec<String> {
+    t.m.owner_store
+        .read_ticket(&t.orchestration.id)
+        .unwrap()
+        .notes
+        .into_iter()
+        .filter(|note| {
+            note.kind == NoteKind::FeedbackNeeded && note.text.starts_with("FEEDBACK NEEDED")
+        })
+        .map(|note| note.text)
+        .collect()
+}
+
+/// Work B built ahead on A's pending gate, A's gate failed, and a person reopens B.
+fn reopen_b(t: &Two, tx: &mut Transaction<'_>) -> Result<ProvisionalWork, OrchestrationError> {
+    t.m.runtime.readiness_reopen(
+        &t.owner(),
+        &ReopenProvisional {
+            step_id: t.step_b.clone(),
+            reason: "fix_invalidates".into(),
+        },
+        Some(&human()),
+        tx,
+    )
+}
+
+fn run_of(t: &Two, run_id: &str) -> hotsheet_ticketing::orchestration::Run {
+    t.m.runtime.run_status(&t.owner(), run_id).unwrap().run
+}
+
+/// HS2-NCMATS (maintainer's choice C): with `speculation.redo_reopened` off (the
+/// default), reopening work whose run is active still only asks; with it on and the
+/// permission a replacement start needs remembered, the orchestrator cancels the run
+/// itself as an AI cancel, which does not hold the step, asks nothing, and says so on
+/// the goal ticket. Reopening again changes nothing more, and the step is dispatched
+/// again from confirmed state.
+#[test]
+fn hs2_ncmats_the_switch_lets_the_orchestrator_redo_reopened_work_without_holding_it() {
+    // Off: the HS2-2K0DM8 ask, and the run is left alone.
+    {
+        tx!(tx);
+        let t = two(Some(&Opt::on()), &mut tx);
+        let run_b = t.dispatch_b(&mut tx).unwrap().run.run_id;
+        t.ci_says(&t.run_a, &sha('a'), GateState::Failed, 1, &mut tx);
+        reopen_b(&t, &mut tx).unwrap();
+        assert_eq!(redo_asks(&t).len(), 1);
+        assert!(!run_of(&t, &run_b).state.is_terminal());
+        // Reconciliation does not redo it either.
+        t.m.runtime
+            .provisional_reconcile(&t.owner(), &mut tx)
+            .unwrap();
+        assert!(!run_of(&t, &run_b).state.is_terminal());
+        assert_eq!(redo_asks(&t).len(), 1);
+    }
+    // On, with the permission remembered: cancelled at once, as an AI cancel.
+    tx!(tx);
+    let t = two(
+        Some(&Opt {
+            redo: true,
+            ..Opt::on()
+        }),
+        &mut tx,
+    );
+    let owner = t.owner();
+    let run_b = t.dispatch_b(&mut tx).unwrap().run.run_id;
+    t.ci_says(&t.run_a, &sha('a'), GateState::Failed, 1, &mut tx);
+    reopen_b(&t, &mut tx).unwrap();
+    let cancelled = run_of(&t, &run_b);
+    assert_eq!(
+        cancelled.state,
+        hotsheet_ticketing::orchestration::RunState::Cancelled
+    );
+    assert_eq!(
+        cancelled.history.last().unwrap().reason.as_deref(),
+        Some(crate::orchestration::provisional::REDO_REASON)
+    );
+    assert!(!crate::orchestration::cancel_hold::person_cancelled(
+        &cancelled
+    ));
+    assert!(redo_asks(&t).is_empty(), "nobody is asked");
+    let said = |t: &Two| {
+        t.m.owner_store
+            .read_ticket(&t.orchestration.id)
+            .unwrap()
+            .notes
+            .into_iter()
+            .filter(|note| note.text.contains("is redone"))
+            .count()
+    };
+    assert_eq!(said(&t), 1);
+    assert!(
+        t.m.runtime
+            .permission_list(&owner, &mut tx)
+            .unwrap()
+            .requests
+            .is_empty(),
+        "a remembered rule answered"
+    );
+    // Reopening again, and reconciling, redo nothing more.
+    reopen_b(&t, &mut tx).unwrap();
+    t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+    assert_eq!(said(&t), 1);
+    assert!(redo_asks(&t).is_empty());
+    // The step is not held: the next dispatch of its ticket starts a new run.
+    let again = t.dispatch(2, &t.b.clone(), "op-b-again", &mut tx);
+    assert!(
+        !matches!(again, Err(OrchestrationError::Run(_))),
+        "{again:?}"
+    );
+}
+
+/// HS2-NCMATS: with the switch on and no remembered rule, the permission card asks
+/// under one operation for the reopen and nothing is done meanwhile, however often it
+/// is reconciled. Allowing it cancels the run at the next reconciliation; denying it
+/// falls back to the HS2-2K0DM8 ask, once. A person's own cancel still holds the step.
+#[test]
+fn hs2_ncmats_the_redo_asks_permission_and_a_denial_falls_back_to_the_ask() {
+    for answer in [PermissionAnswer::AllowOnce, PermissionAnswer::Deny] {
+        tx!(tx);
+        let t = two(
+            Some(&Opt {
+                redo: true,
+                ..Opt::on()
+            }),
+            &mut tx,
+        );
+        let owner = t.owner();
+        let run_b = t.dispatch_b(&mut tx).unwrap().run.run_id;
+        // The redo of a run no session works asks `work_start` on target 2.
+        let rules = t.m.runtime.permission_list(&owner, &mut tx).unwrap().rules;
+        for rule in rules.iter().filter(|rule| {
+            rule.rule.key.target.target_id == id(2)
+                && rule.rule.key.action == PermissionAction::WorkStart
+        }) {
+            t.m.runtime
+                .permission_forget(&owner, &rule.rule.rule_id, Some(&human()), &mut tx)
+                .unwrap();
+        }
+        t.ci_says(&t.run_a, &sha('a'), GateState::Failed, 1, &mut tx);
+        reopen_b(&t, &mut tx).unwrap();
+        let pending = |t: &Two, tx: &mut Transaction<'_>| {
+            t.m.runtime
+                .permission_list(&owner, tx)
+                .unwrap()
+                .requests
+                .into_iter()
+                .filter(|request| request.request.state == PermissionState::Pending)
+                .map(|request| request.request)
+                .collect::<Vec<_>>()
+        };
+        let asked = pending(&t, &mut tx);
+        assert_eq!(asked.len(), 1, "{asked:#?}");
+        assert_eq!(asked[0].key.action, PermissionAction::WorkStart);
+        assert!(asked[0].operation_id.starts_with("redo-"));
+        // Unanswered: nothing is done, and repeating asks under the same request.
+        for _ in 0..2 {
+            t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+            assert!(!run_of(&t, &run_b).state.is_terminal());
+            assert_eq!(pending(&t, &mut tx).len(), 1);
+            assert!(redo_asks(&t).is_empty());
+        }
+        t.m.runtime
+            .permission_answer(
+                &owner,
+                &asked[0].request_id,
+                answer,
+                Some(&human()),
+                &mut tx,
+            )
+            .unwrap();
+        for _ in 0..2 {
+            t.m.runtime.provisional_reconcile(&owner, &mut tx).unwrap();
+        }
+        let run = run_of(&t, &run_b);
+        if answer == PermissionAnswer::Deny {
+            assert!(!run.state.is_terminal(), "a denial does nothing to the run");
+            assert_eq!(redo_asks(&t).len(), 1, "the person is asked once");
+            // A person's cancel, the answer to that ask, holds the step.
+            let cancelled =
+                t.m.runtime
+                    .run_cancel(&owner, &run_b, Some(&human()), &mut tx)
+                    .unwrap()
+                    .run;
+            assert!(crate::orchestration::cancel_hold::person_cancelled(
+                &cancelled
+            ));
+        } else {
+            assert_eq!(
+                run.state,
+                hotsheet_ticketing::orchestration::RunState::Cancelled
+            );
+            assert!(!crate::orchestration::cancel_hold::person_cancelled(&run));
+            assert!(redo_asks(&t).is_empty());
+        }
+    }
 }

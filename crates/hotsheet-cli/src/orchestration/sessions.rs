@@ -1893,7 +1893,7 @@ impl OrchestrationRuntime {
         )
     }
 
-    fn session_request(
+    pub(super) fn session_request(
         session: &OrchestratedSession,
         starting: bool,
         running: u32,

@@ -175,6 +175,12 @@ pub struct Speculation {
     /// A ticket carrying this tag is never dispatched provisionally.
     #[serde(default = "default_opt_out")]
     pub opt_out_tag: String,
+    /// HS2-NCMATS: when provisional work is reopened while its run is active, the
+    /// orchestrator may cancel that run itself (an AI cancel, which does not hold the
+    /// step) so the step is dispatched again from confirmed state. Off by default: the
+    /// orchestration ticket is asked instead.
+    #[serde(default)]
+    pub redo_reopened: bool,
 }
 fn default_depth() -> u32 {
     1
@@ -192,6 +198,7 @@ impl Default for Speculation {
             max_depth: default_depth(),
             risk_weight: default_risk(),
             opt_out_tag: default_opt_out(),
+            redo_reopened: false,
         }
     }
 }

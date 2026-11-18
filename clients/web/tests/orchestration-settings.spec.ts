@@ -158,10 +158,18 @@ test('HS2-W27N1D Project Type adds the Orchestration category, which adds, detai
     await expect(policy).not.toContainText('Ask a Person');
     await policy.getByLabel('Sessions per Machine').fill('3');
     await policy.getByLabel('Sessions per Machine').blur();
+    // HS2-NCMATS: the redo switch is off by default and stored when turned on.
+    const redo = policy.getByRole('switch', { name: 'Redo reopened work on its own' });
+    await expect(redo).not.toBeChecked();
+    await redo.click();
+    await expect(redo).toBeChecked();
     await policy.getByRole('button', { name: 'Apply Policy' }).click();
     await expect(settings.getByRole('status')).toContainText('Policy saved.');
-    const stored = await server.request<{ policy: { machine: { max_sessions: number } } }>(`${base}/policy`);
+    const stored = await server.request<{
+      policy: { machine: { max_sessions: number }; speculation: { redo_reopened: boolean } };
+    }>(`${base}/policy`);
     expect(stored.policy.machine.max_sessions).toBe(3);
+    expect(stored.policy.speculation.redo_reopened).toBe(true);
 
     // Remove from the detail, after the shared confirmation.
     await detail.getByRole('button', { name: 'Stop Orchestrating…' }).click();

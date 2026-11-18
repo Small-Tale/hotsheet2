@@ -675,14 +675,14 @@ its default, a newer version is an explicit unsupported-version error and is nev
 overwritten, and a stored policy that no longer validates is treated as corrupt
 rather than evaluated. All quantities are integers: megabytes, percent and cents.
 
-| Section       | Fields and defaults                                                                                                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                      |
-| `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.      |
-| `targets[]`   | `target_id`, `enabled` true, `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides.                                     |
-| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                          |
-| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`.   |
-| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults. |
+| Section       | Fields and defaults                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `machine`     | Default limits for any machine hosting a target: `max_sessions` 2 (1 to 64), `min_free_ram_mb` 2048, `max_cpu_percent` 90, `min_free_disk_mb` 5120.                                                                |
+| `tools[]`     | `tool`, `max_sessions` (1 to 64), `weight` 50 (1 to 100, relative preference), and optional `accounts[]` with `account`, `max_sessions` and `budget_cents_per_day`.                                                |
+| `targets[]`   | `target_id`, `enabled` true, `tools[]` with optional `models`, `max_sessions` 1, and optional `machine` and `speculation` overrides.                                                                               |
+| `wind_down`   | `idle_minutes` 15 (1 to 1440) and `keep_warm` 0, idle sessions kept per target.                                                                                                                                    |
+| `speculation` | `allowed` false, `max_depth` 1 (1 to 8 unconfirmed gates), `risk_weight` 50 (0 ranks provisional work like confirmed work, 100 last), `opt_out_tag` `speculate:never`, `redo_reopened` false (HS2-NCMATS, §26.22). |
+| `placement`   | HS2-ECWG50, §26.17: `automatic` false, `actor`, `aging_minutes` 60, `cooldown_minutes` 5, and `resources[]` (§26.20). Left out of the file while it holds only defaults.                                           |
 
 **Retired fields.** `targets[].actions` and `approval.required_for` are read and
 ignored. `validate` reports each as `target_actions_ignored` or `approval_ignored`
@@ -4275,10 +4275,28 @@ orchestration ticket, and the person answers with the run's existing controls.
   A person's cancel holds the step as §26.24 describes, so it is dispatched again
   only by that person's next dispatch. Reopened work whose run has ended asks nothing.
 
-### Not built
-
-- Automatic re-dispatch after a reopen: a person's cancel holds the step, and the
-  orchestrator never cancels a reopened run on its own.
+- **Redo on its own (HS2-NCMATS, decided 2026-11-18).** The orchestration policy switch
+  `speculation.redo_reopened` is off by default, and then reopened work is asked about
+  as above. When it is on, the orchestrator redoes reopened work whose run is still
+  active:
+  - It cancels the run itself, as an AI cancel with reason `reopened_redo`. That cancel
+    does not hold the step, so the scheduler dispatches the step again once its
+    prerequisites are confirmed, as it does any ready step.
+  - The cancel needs the permission a replacement start needs. When an
+    orchestrator-owned session works the run, that is `session_start` for the session's
+    tool; otherwise it is `work_start`. The existing permission card and remembered
+    rules answer it, under one operation id per reopen (`redo-<assignment>-<n>`).
+  - Until a person answers, nothing is done to the run. Each reconciliation repeats the
+    same request, and an answer wakes the scheduler, whose pass reconciles.
+  - A denial, or a policy that refuses that start, falls back to the `FEEDBACK NEEDED`
+    ask above, once.
+  - The goal ticket gets one activity note naming the cancelled run.
+  - Reopening the same work again redoes nothing more. A person's own cancel still
+    holds the step.
+  - The switch is set with `orchestration policy set` (CLI), `PUT .../policy` (HTTP) or
+    Redo Reopened Work on Its Own in Settings → Orchestration. MCP reads it with
+    `policy_show`; setting the policy is a person's action there, as for every policy
+    field.
 
 ### Headless surface
 

@@ -37,6 +37,8 @@ use crate::coordination::speculation::{
 };
 
 const MAX_REASON_BYTES: usize = 64;
+/// HS2-NCMATS: the reason the orchestrator's own redo cancels a reopened run with.
+pub(super) const REDO_REASON: &str = "reopened_redo";
 
 /// What the ledger cannot hold about one record: which step and targets it is about.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +53,20 @@ struct WorkRecord {
     /// HS2-2K0DM8: the fix commit the working session was last told to rebase onto.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     told_rebase: Option<String>,
+    /// HS2-NCMATS: the orchestrator's own redo of this reopened work, under the
+    /// `speculation.redo_reopened` switch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    redo: Option<Redo>,
+}
+
+/// HS2-NCMATS: one redo of reopened work: the operation its permission is asked under,
+/// and whether it is settled (the run was cancelled, or a person was asked instead).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Redo {
+    operation_id: String,
+    #[serde(default)]
+    settled: bool,
 }
 
 /// A target's own speculation setting as its machine last reported it.
@@ -406,14 +422,15 @@ impl OrchestrationRuntime {
         &self,
         owner_id: &str,
         ticket: &RunTicket,
-        work: &ProvisionalWork,
+        step_id: &str,
+        operation_id: &str,
         tx: &mut Transaction<'_>,
     ) {
         let Some(run) = self
             .run_list(owner_id, false)
             .unwrap_or_default()
             .into_iter()
-            .find(|run| run.operation_id == work.operation_id && !run.state.is_terminal())
+            .find(|run| run.operation_id == operation_id && !run.state.is_terminal())
         else {
             return;
         };
@@ -435,8 +452,8 @@ impl OrchestrationRuntime {
              - **Hand it off.** `hotsheet-cli orchestration run handoff {run} --project \
              {owner_id}`: a person takes the work over on the target.\n\
              - **Keep it.** Nothing more is done; the work continues on the reopened base.",
-            step = work.step_id,
-            operation = work.operation_id,
+            step = step_id,
+            operation = operation_id,
             run = run.run_id,
             target = run.target.target_id,
         );
@@ -448,6 +465,147 @@ impl OrchestrationRuntime {
             NoteKind::Regular,
             text,
         );
+    }
+
+    /// HS2-NCMATS: whether the policy lets the orchestrator redo reopened work itself.
+    fn redo_reopened(&self, owner_id: &str) -> bool {
+        self.policy(owner_id)
+            .ok()
+            .and_then(|view| view.policy)
+            .is_some_and(|policy| policy.speculation.redo_reopened)
+    }
+
+    /// HS2-NCMATS: with `speculation.redo_reopened` on, reopened work whose run is still
+    /// active is redone by the orchestrator: it cancels the run itself, as an AI cancel,
+    /// which does not hold the step, so the scheduler dispatches the step again once its
+    /// prerequisites are confirmed. The cancel needs the permission a replacement start
+    /// needs: `session_start` for the tool of the orchestrator-owned session working the
+    /// run, or `work_start` when no such session works it. The existing permission card
+    /// and remembered rules answer it, under one operation id per reopen. While a person
+    /// has not answered, nothing is done and the next reconciliation asks again (an
+    /// answer wakes the scheduler, whose pass reconciles). A denial, or a policy that
+    /// refuses the start, falls back to the `FEEDBACK NEEDED` ask of HS2-2K0DM8, once.
+    /// With the switch off, nothing here acts.
+    fn provisional_redo_reopened(&self, owner_id: &str, tx: &mut Transaction<'_>) {
+        if !self.redo_reopened(owner_id) {
+            return;
+        }
+        let Ok(Some(document)) = self.provisional_store().read::<Document>(owner_id) else {
+            return;
+        };
+        let owed: Vec<(String, WorkRecord, String)> = document
+            .work
+            .iter()
+            .filter_map(|(assignment, work)| {
+                let record = document.ledger.records.get(assignment)?;
+                if record.state != SpeculationState::Reopened
+                    || work.redo.as_ref().is_some_and(|redo| redo.settled)
+                {
+                    return None;
+                }
+                let operation = work.redo.as_ref().map_or_else(
+                    || format!("redo-{assignment}-{}", record.events.len()),
+                    |redo| redo.operation_id.clone(),
+                );
+                Some((assignment.clone(), work.clone(), operation))
+            })
+            .collect();
+        if owed.is_empty() {
+            return;
+        }
+        let runs = self.run_list(owner_id, false).unwrap_or_default();
+        let sessions = self.session_list(owner_id, true).unwrap_or_default();
+        for (assignment, work, operation_id) in owed {
+            let Some(run) = runs
+                .iter()
+                .find(|run| run.operation_id == work.operation_id && !run.state.is_terminal())
+            else {
+                // The run ended: nothing to redo, and nobody to ask.
+                self.provisional_redo_settle(owner_id, &assignment, &operation_id, true);
+                continue;
+            };
+            let session = sessions.iter().find(|session| {
+                session.run_id.as_deref() == Some(run.run_id.as_str())
+                    && session.owner != hotsheet_ticketing::orchestration::SessionOwner::Human
+            });
+            let actor = run
+                .history
+                .first()
+                .and_then(|entry| entry.actor_id.clone())
+                .and_then(|id| MutationActor::parse("ai", Some(id)).ok());
+            let request = match session {
+                Some(session) => ActionRequest {
+                    session: Some(Self::session_request(session, true, 0)),
+                    ..ActionRequest::new(TargetAction::SessionsManage)
+                        .operation(operation_id.clone())
+                },
+                None => ActionRequest::new(TargetAction::WorkStart).operation(operation_id.clone()),
+            };
+            let answer = Self::target_ref(owner_id, &run.target.target_id)
+                .and_then(|target| self.authorize(&target, actor.as_ref(), request, tx));
+            match answer {
+                Ok(_) => {
+                    if self
+                        .run_cancel_as(owner_id, &run.run_id, REDO_REASON, actor.as_ref(), tx)
+                        .is_ok()
+                    {
+                        self.provisional_redo_settle(owner_id, &assignment, &operation_id, true);
+                        self.provisional_note(
+                            owner_id,
+                            &work.ticket,
+                            format!(
+                                "Reopened provisional work of plan step `{}` is redone: its run \
+                                 `{}` was cancelled (`{REDO_REASON}`, operation `{operation_id}`), \
+                                 and the step is dispatched again once its prerequisites are \
+                                 confirmed.",
+                                work.step_id, run.run_id
+                            ),
+                            tx,
+                        );
+                    } else {
+                        self.provisional_redo_settle(owner_id, &assignment, &operation_id, false);
+                    }
+                }
+                // A person has not answered yet: the permission card asks.
+                Err(OrchestrationError::PermissionRequired { .. }) => {
+                    self.provisional_redo_settle(owner_id, &assignment, &operation_id, false);
+                }
+                Err(_) => {
+                    self.provisional_redo_settle(owner_id, &assignment, &operation_id, true);
+                    self.provisional_reopen_decision(
+                        owner_id,
+                        &work.ticket,
+                        &work.step_id,
+                        &work.operation_id,
+                        tx,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Record a redo's operation, and whether it is settled.
+    fn provisional_redo_settle(
+        &self,
+        owner_id: &str,
+        assignment: &str,
+        operation_id: &str,
+        settled: bool,
+    ) {
+        let _ = self
+            .provisional_store()
+            .update::<Document, _>(owner_id, |document| {
+                let redo = Redo {
+                    operation_id: operation_id.into(),
+                    settled,
+                };
+                let changed = document.work.get_mut(assignment).is_some_and(|work| {
+                    let fresh = work.redo.as_ref() != Some(&redo);
+                    work.redo = Some(redo);
+                    fresh
+                });
+                Ok(((), changed))
+            });
     }
 
     /// HS2-2K0DM8: tell the session working at-risk work, still on its branch, that its
@@ -765,6 +923,7 @@ impl OrchestrationRuntime {
                             recorded_at_ms: now_ms,
                             bases: standing.bases.clone(),
                             told_rebase: None,
+                            redo: None,
                         },
                     );
                     Ok(((assignment, true), true))
@@ -941,6 +1100,8 @@ impl OrchestrationRuntime {
         self.provisional_notes(owner_id, tx)?;
         // HS2-2K0DM8: sessions on at-risk work learn of the fix.
         self.provisional_tell_rebase(owner_id, tx);
+        // HS2-NCMATS: reopened work is redone where the policy allows it.
+        self.provisional_redo_reopened(owner_id, tx);
         Ok(count)
     }
 
@@ -1417,7 +1578,17 @@ impl OrchestrationRuntime {
                 ),
                 tx,
             );
-            self.provisional_reopen_decision(owner_id, &step.ticket, &row, tx);
+            if self.redo_reopened(owner_id) {
+                self.provisional_redo_reopened(owner_id, tx);
+            } else {
+                self.provisional_reopen_decision(
+                    owner_id,
+                    &step.ticket,
+                    &row.step_id,
+                    &row.operation_id,
+                    tx,
+                );
+            }
         }
         Ok(row)
     }

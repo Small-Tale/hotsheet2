@@ -192,10 +192,12 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
     draft = changePolicyDraft(draft, 'machine.max_cpu_percent', '75');
     draft = changePolicyDraft(draft, 'tool.claude.max_sessions', '1');
     draft = changePolicyDraft(draft, 'build_ahead', true);
+    draft = changePolicyDraft(draft, 'redo_reopened', true);
     draft = changePolicyDraft(draft, 'idle_minutes', '30');
     expect(changePolicyDraft(draft, 'machine.unknown', '1')).toBe(draft);
     expect(changePolicyDraft(draft, 'automatic', 'yes')).toBe(draft);
-    expect(draft).toMatchObject({ automatic: true, build_ahead: true, idle_minutes: '30' });
+    expect(draft).toMatchObject({ automatic: true, build_ahead: true, redo_reopened: true, idle_minutes: '30' });
+    expect(changePolicyDraft(draft, 'redo_reopened', 'yes')).toBe(draft);
     expect(draft.machine.max_cpu_percent).toBe('75');
     expect(draft.tools.find((tool) => tool.tool === 'claude')?.max_sessions).toBe('1');
   });
@@ -214,7 +216,14 @@ describe('limits-only policy draft (HS2-W27N1D, HS2-XHQ1EH)', () => {
       { tool: 'claude', max_sessions: 1, weight: 50 },
     ]);
     expect(built.policy.placement).toEqual({ automatic: true, actor: 'person', aging_minutes: 30 });
-    expect(built.policy.speculation).toEqual({ allowed: false, max_depth: 2 });
+    expect(built.policy.speculation).toEqual({ allowed: false, max_depth: 2, redo_reopened: false });
+    // HS2-NCMATS: the redo switch round-trips through the form.
+    const redo = policyFromDraft(stored, changePolicyDraft(draft, 'redo_reopened', true));
+    expect('policy' in redo && redo.policy.speculation?.redo_reopened).toBe(true);
+    expect(
+      policyDraftFrom({ ...stored, policy: { ...stored.policy, speculation: { redo_reopened: true } } }, [])
+        .redo_reopened,
+    ).toBe(true);
     // An emptied tool leaves the policy; the stored view itself is untouched.
     const removed = policyFromDraft(stored, changePolicyDraft(draft, 'tool.codex.max_sessions', ''));
     expect('policy' in removed && removed.policy.tools?.map((tool) => tool.tool)).toEqual(['claude']);

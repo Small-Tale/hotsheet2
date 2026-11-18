@@ -1233,7 +1233,14 @@ export interface OrchestrationPolicyBody {
   tools?: { tool: string; max_sessions: number; weight?: number; accounts?: unknown[] }[];
   targets?: OrchestrationTargetPolicy[];
   wind_down?: { idle_minutes?: number; keep_warm?: number };
-  speculation?: { allowed?: boolean; max_depth?: number; risk_weight?: number; opt_out_tag?: string };
+  speculation?: {
+    allowed?: boolean;
+    max_depth?: number;
+    risk_weight?: number;
+    opt_out_tag?: string;
+    /** HS2-NCMATS: redo reopened work by cancelling its run, with permission. */
+    redo_reopened?: boolean;
+  };
   placement?: {
     automatic?: boolean;
     actor?: string;

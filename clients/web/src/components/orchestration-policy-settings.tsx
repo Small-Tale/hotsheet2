@@ -230,6 +230,13 @@ export function OrchestrationPolicySettings({
             checked={draft?.build_ahead ?? false}
             disabled={disabled}
           />
+          <Switch
+            name="redo_reopened"
+            label="Redo reopened work on its own"
+            hint="On: when built-ahead work is reopened while it runs, the orchestrator cancels that run, with the same permission as starting a session, and starts the step again once its prerequisites are confirmed. Off: it asks on the goal ticket."
+            checked={draft?.redo_reopened ?? false}
+            disabled={disabled}
+          />
         </List>
         <Row gap="xs">
           <Button emphasis="primary" action={ACTIONS.applyPolicy.value} disabled={disabled} loading={saving}>
