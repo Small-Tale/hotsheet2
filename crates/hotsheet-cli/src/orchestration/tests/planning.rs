@@ -390,3 +390,77 @@ fn hs2_hcw7md_a_step_keeps_the_preferred_tool_and_goals_count_their_steps() {
     assert!(status.goals.is_empty());
     assert_eq!(status.steps, 1);
 }
+
+/// HS2-5RYXNN: whether a hosted session's tool is ready, for every host answer.
+#[test]
+fn hs2_5ryxnn_tool_ready_is_known_only_for_a_running_session_whose_tool_reports() {
+    let state = |reported| HostSessionState {
+        session_id: "t-1".into(),
+        busy: false,
+        idle_since_ms: None,
+        reported,
+    };
+    for alive in [None, Some(false), Some(true)] {
+        for reported in [None, Some(false), Some(true)] {
+            let expected = if alive == Some(true) { reported } else { None };
+            assert_eq!(
+                tool_ready(alive, Some(&state(reported))),
+                expected,
+                "{alive:?} {reported:?}"
+            );
+        }
+        assert_eq!(tool_ready(alive, None), None, "{alive:?}");
+    }
+    // Claude and Codex report their session start through their hooks; a plugin that
+    // is unknown reports nothing.
+    for tool in ["claude", "codex"] {
+        assert!(plugin_reports_start(tool, &[]), "{tool}");
+    }
+    assert!(!plugin_reports_start("no-such-tool", &[]));
+}
+
+/// HS2-5RYXNN: a planner whose tool has not got past its first-run questions says so in
+/// `plan show` and in the press's answer, through every transition: launched and
+/// waiting, answered, waiting again for the next planner, gone, and an unreachable
+/// host that cannot say.
+#[test]
+fn hs2_5ryxnn_a_planner_waiting_on_its_tool_says_so_until_the_tool_reports() {
+    let mut rng = Rng(300);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(1, &mut tx);
+    f.goal("Ship the release");
+    let ready = |tx: &mut Transaction<'_>| f.status(tx).session.and_then(|view| view.tool_ready);
+    assert_eq!(ready(&mut tx), None, "no planner yet");
+    let first = f.propose(json!({}), &mut tx).unwrap();
+    let terminal = first.session.session.session_id.clone();
+    // A host that does not say (the scripted default) says nothing.
+    assert_eq!(first.session.tool_ready, None);
+    // Launched, and its tool has not reported in: it may be on a trust question.
+    f.host.report(&terminal, Some(false));
+    assert_eq!(ready(&mut tx), Some(false));
+    let again = f.propose(json!({}), &mut tx).unwrap();
+    assert_eq!(again.outcome, ProposeOutcome::Existing);
+    assert_eq!(again.session.tool_ready, Some(false));
+    // Still waiting on the next read: nothing changes by itself.
+    assert_eq!(ready(&mut tx), Some(false));
+    // A person answered in its terminal and the tool reported its start.
+    f.host.report(&terminal, Some(true));
+    assert_eq!(ready(&mut tx), Some(true));
+    // Its terminal is gone: nothing is waiting any more.
+    f.host.crash(&terminal);
+    let ended = f.status(&mut tx);
+    assert_eq!(ended.state, PlanningState::Ended);
+    assert_eq!(ended.session.and_then(|view| view.tool_ready), None);
+    // The next planner starts out waiting again.
+    let second = f.propose(json!({}), &mut tx).unwrap();
+    assert_eq!(second.outcome, ProposeOutcome::Started);
+    f.host
+        .report(&second.session.session.session_id, Some(false));
+    assert_eq!(ready(&mut tx), Some(false));
+    // A host that cannot be asked cannot say either.
+    f.host.down.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(ready(&mut tx), None);
+}

@@ -23,7 +23,8 @@ export const orchestrationDemoSettings = {
   phase: signal<TimelinePhase>('running'),
   selected: signal('step-3'),
   proposeAvailable: signal(true),
-  planning: signal(false),
+  /** HS2-5RYXNN: the planning session's state: none, working, or waiting in its terminal. */
+  planning: signal(''),
   busy: signal(false),
   collapsed: signal<string[]>([]),
 };
@@ -34,6 +35,12 @@ const PHASES: ReadonlyArray<{ value: TimelinePhase; label: string }> = [
   { value: 'proposed', label: 'Proposed Plan' },
   { value: 'no_plan', label: 'No Plan Yet' },
   { value: 'no_projects', label: 'No Projects Yet' },
+];
+
+const PLANNING = [
+  { value: '', label: 'None' },
+  { value: 'planning', label: 'Working' },
+  { value: 'waiting', label: 'Waiting in Its Terminal' },
 ];
 
 const SELECTIONS = [
@@ -51,15 +58,14 @@ export function resetOrchestrationDemo(root?: ParentNode): void {
   settings.phase.value = 'running';
   settings.selected.value = 'step-3';
   settings.proposeAvailable.value = true;
-  settings.planning.value = false;
+  settings.planning.value = '';
   settings.busy.value = false;
   settings.collapsed.value = [];
   if (root)
     syncSettingsControls(root, 'orchestration', {
-      values: { phase: settings.phase.value, selected: settings.selected.value },
+      values: { phase: settings.phase.value, selected: settings.selected.value, planning: settings.planning.value },
       checked: {
         'propose-available': settings.proposeAvailable.value,
-        planning: settings.planning.value,
         busy: settings.busy.value,
       },
     });
@@ -147,7 +153,7 @@ export function OrchestrationToolbarDemo() {
             timeline={demoTimeline(value)}
             propose={propose()}
             busy={orchestrationDemoSettings.busy.value}
-            planning={orchestrationDemoSettings.planning.value ? 'planning' : undefined}
+            planning={orchestrationDemoSettings.planning.value || undefined}
             clock={demoClock}
           />
         </CatalogExample>
@@ -278,7 +284,7 @@ export function OrchestrationDemoSettings() {
       <Select name="phase" label="Phase" value={settings.phase.value} choices={PHASES} />
       <Select name="selected" label="Selected Card" value={settings.selected.value} choices={SELECTIONS} />
       <Checkbox name="propose-available" checked={settings.proposeAvailable.value} label="Planner Available" />
-      <Checkbox name="planning" checked={settings.planning.value} label="Planning Session Working" />
+      <Select name="planning" label="Planning Session" value={settings.planning.value} choices={PLANNING} />
       <Checkbox name="busy" checked={settings.busy.value} label="Change in Progress" />
       <Button type="button" action={'reset-settings'}>
         Reset
@@ -298,7 +304,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
       if (name === 'phase') settings.phase.value = control.value as TimelinePhase;
       if (name === 'selected') settings.selected.value = control.value;
       if (name === 'propose-available') settings.proposeAvailable.value = control.checked;
-      if (name === 'planning') settings.planning.value = control.checked;
+      if (name === 'planning') settings.planning.value = control.value;
       if (name === 'busy') settings.busy.value = control.checked;
     }),
   );
@@ -320,7 +326,7 @@ function wireOrchestrationDemo(root: HTMLElement): () => void {
         settings.phase.value = 'paused';
       },
       propose: () => {
-        settings.planning.value = true;
+        settings.planning.value = 'planning';
       },
       chooseProjects: () => undefined,
       runControl: () => undefined,

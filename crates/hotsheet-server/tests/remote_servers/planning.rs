@@ -1,6 +1,7 @@
 //! HS2-HCW7MD: Propose Plan on a real server. The planner is a real PTY running the
 //! workspace fake agent in the orchestration project itself; no AI tool is launched
 //! and nothing leaves loopback.
+use super::orchestration::api;
 use super::session_work::{REPORT_TOOL, World, launch_report, received_prompt};
 use super::sessions::drawer;
 use super::support::{cli_failure, cli_named, mcp_named, mcp_rejected};
@@ -211,4 +212,65 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
         "{audit}"
     );
     assert_eq!(pressed[2]["operation_id"], "press-1");
+}
+
+/// HS2-5RYXNN: on a real server, a planner whose tool reports its session start through
+/// its hooks shows `tool_ready: false` in `plan show` until that report arrives, as it
+/// does while the tool waits on a first-run question in its terminal, then `true`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_5ryxnn_plan_show_says_the_planner_waits_until_its_tool_reports() {
+    let world = World::new(
+        &["tickets_read", "sessions_manage"],
+        "",
+        r#"prompt_args = ["--prompt", "{prompt}"]
+[hooks]
+target = ".synthetic/hooks.json"
+machine_local = true
+event = "PermissionRequest"
+additional_events = ["SessionStart"]
+command = "hotsheet-cli permission-hook --agent synthetic""#,
+    )
+    .await;
+    world.ticket("Ship the launch");
+    let person = json!({"role":"human","id":"maintainer"});
+    let (status, proposed) = world
+        .call(
+            "POST",
+            "/planning/propose",
+            json!({"tool":REPORT_TOOL,"operation_id":"press-1","actor":person}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{proposed}");
+    assert_eq!(proposed["session"]["tool_ready"], false, "{proposed}");
+    let terminal = proposed["session"]["session"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["state"], "planning", "{shown}");
+    assert_eq!(shown["session"]["tool_ready"], false, "{shown}");
+
+    // The tool got past its questions: its SessionStart hook reports in.
+    let (status, _) = api(
+        world.router.clone(),
+        "POST",
+        &format!("/terminals/{terminal}/ai-connection"),
+        json!({"agent":"synthetic"}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    assert_eq!(shown["session"]["tool_ready"], true, "{shown}");
+    // The hosted listing of the checkout says the same.
+    let (status, listed) = api(
+        world.router.clone(),
+        "GET",
+        &format!("/checkouts/{}/target-sessions", world.checkout.id),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    assert_eq!(listed["sessions"][0]["tool_ready"], true, "{listed}");
 }

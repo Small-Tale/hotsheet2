@@ -62,6 +62,36 @@ pub fn plugin_role_paths(tool: &str, plugin_dirs: &[PathBuf]) -> Option<(bool, b
     Some((at_launch, plugin.manifest.session_push.is_some()))
 }
 
+/// HS2-5RYXNN: whether a plugin's hooks report the start of its tool's session
+/// (`SessionStart`). A tool reports it only once it runs past its first-run questions
+/// (workspace or folder trust, hook review), so its absence is what tells a person the
+/// tool may be waiting in its terminal. `false` for an unknown plugin.
+pub fn plugin_reports_start(tool: &str, plugin_dirs: &[PathBuf]) -> bool {
+    hotsheet_plugins::find_in(tool, plugin_dirs)
+        .and_then(|plugin| plugin.manifest.hooks)
+        .is_some_and(|hooks| {
+            hooks.event == SESSION_START_EVENT
+                || hooks
+                    .additional_events
+                    .iter()
+                    .any(|event| event == SESSION_START_EVENT)
+        })
+}
+
+const SESSION_START_EVENT: &str = "SessionStart";
+
+/// HS2-5RYXNN: whether a hosted session's tool is ready, from what its host says.
+/// `Some(false)` while the terminal runs and its tool, which reports its session start,
+/// has not: it may be waiting on a first-run question in its terminal, which only a
+/// person answers. `None` when the session is not running, the host could not be asked
+/// or the tool reports nothing.
+pub fn tool_ready(alive: Option<bool>, state: Option<&HostSessionState>) -> Option<bool> {
+    if alive != Some(true) {
+        return None;
+    }
+    state.and_then(|state| state.reported)
+}
+
 /// One live AI session as its host sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostSessionState {
@@ -70,6 +100,10 @@ pub struct HostSessionState {
     /// HS2-RG91SK: since when the session has been idle (its last turn finished), as the
     /// host measured it; `None` while busy or from a host that does not say.
     pub idle_since_ms: Option<u64>,
+    /// HS2-5RYXNN: whether its tool reported its session start to the host (a
+    /// `SessionStart` hook ran). `None` when its plugin reports no session start or the
+    /// host does not say.
+    pub reported: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -482,10 +516,19 @@ impl SessionHost for LocalServerSessions {
                     continue;
                 }
                 if let Some(id) = field("id").and_then(Value::as_str) {
+                    let reports = field("tool").and_then(Value::as_str).is_some_and(|tool| {
+                        plugin_reports_start(tool, &hotsheet_plugins::default_dirs())
+                    });
                     live.push(HostSessionState {
                         session_id: id.into(),
                         busy: field("busy").and_then(Value::as_bool).unwrap_or(true),
                         idle_since_ms: field("idle_since_ms").and_then(Value::as_u64),
+                        // A hook report since the launch, current or ended.
+                        reported: reports.then(|| {
+                            ["ai_connection", "last_hook_report"]
+                                .iter()
+                                .any(|key| field(key).is_some_and(|report| !report.is_null()))
+                        }),
                     });
                 }
             }
@@ -597,6 +640,12 @@ pub struct HostedSessionView {
     /// HS2-R7QH35: how the latest request naming one ticket stands, as of now.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_prompt: Option<RolePrompt>,
+    /// HS2-5RYXNN: `false` while the session's terminal runs and its tool has not yet
+    /// reported its session start: it may be waiting on a first-run question (trust,
+    /// an MCP or hook approval, an update notice) that a person answers in its
+    /// terminal. Absent when not known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_ready: Option<bool>,
 }
 
 /// HS2-R7QH35: tell a running hosted session which exact ticket it now works.
@@ -1111,6 +1160,7 @@ impl OrchestrationRuntime {
                 .and_then(|request| request.at(now_ms)),
             joined,
             worker_id,
+            tool_ready: tool_ready(alive, state.flatten()),
             alive,
             busy,
             safe_point,

@@ -4616,7 +4616,10 @@ export async function startHotSheetWebClient() {
     claimTurnEvent: (envelope) => automaticTicketGrouping.claimTurnEvent(envelope),
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
-    orchestrationChanged: (target) => orchestrationSurfaceRef.current?.changed(target),
+    orchestrationChanged: (target) => {
+      orchestrationSurfaceRef.current?.changed(target);
+      orchestrationView.sessionsChanged(target.id);
+    },
     reloadTicketGroups: (target) => ticketGroups.reloadGroups(target),
     liveStates,
     hostHealth,

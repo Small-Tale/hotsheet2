@@ -70,6 +70,18 @@ export function orchestrationPersonId(storage: Pick<Storage, 'getItem' | 'setIte
   return id;
 }
 
+/**
+ * HS2-5RYXNN: where planning stands, as the view shows it. `waiting` is a planner whose terminal runs
+ * while its tool has not reported its session start: it may be waiting on a first-run question (trust,
+ * an MCP or hook approval, an update notice) that only a person answers in its terminal tab.
+ */
+export function planningPhase(view: Record<string, unknown> | undefined): string | undefined {
+  const state = typeof view?.state === 'string' ? view.state : undefined;
+  if (state !== 'planning') return state;
+  const session = view?.session as Record<string, unknown> | undefined;
+  return session?.tool_ready === false ? 'waiting' : state;
+}
+
 const PLANNING_REFUSALS: Record<string, string> = {
   plan_no_targets: 'Add projects in Orchestration settings before proposing a plan.',
   plan_no_goals: 'Write an open goal ticket in this project before proposing a plan.',
@@ -283,7 +295,10 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   let decisionsBefore = 0;
   /** HS2-9XJEZC: Run Validation requests waiting on a person, by `<step id>:<validation step id>`. */
   const pendingValidations = signal<Readonly<Record<string, PendingValidation>>>({});
-  /** HS2-HCW7MD: where planning stands (`idle`, `planning`, `ended`), read when the timeline changes. */
+  /**
+   * HS2-HCW7MD: where planning stands (`idle`, `planning`, `ended`, or HS2-5RYXNN `waiting`), read when the
+   * timeline changes or a session an orchestrator started here changes.
+   */
   const planning = signal<string | undefined>(undefined);
   const disposers: Array<() => void> = [];
   let streamKey = '',
@@ -490,7 +505,7 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
   async function refreshPlanning(current: Project, run: number) {
     try {
       const view = await clientFor(current).orchestrationPlanning(current.id);
-      if (run === generation) planning.value = typeof view.state === 'string' ? view.state : undefined;
+      if (run === generation) planning.value = planningPhase(view);
     } catch {
       if (run === generation) planning.value = undefined;
     }
@@ -994,11 +1009,18 @@ export function createOrchestrationViewController(dependencies: OrchestrationVie
     toggleGroup,
     collapsedGroups,
     planning,
+    /** HS2-5RYXNN: a session an orchestrator started changed; the open project's planner is read again. */
+    sessionsChanged: (projectId: string) => {
+      const current = dependencies.project();
+      if (current?.id === projectId && streamKey) void refreshPlanning(current, generation);
+    },
     proposeAvailability: (): OrchestrationProposeAvailability => {
       const current = dependencies.project();
       if (!current) return { available: false };
       if (planning.value === 'planning')
         return { available: false, reason: 'A planning session is working on the plan now' };
+      if (planning.value === 'waiting')
+        return { available: false, reason: 'The planning session is waiting for an answer in its terminal tab' };
       return planner.availability(current);
     },
     start: () => setAutomatic(true),

@@ -771,3 +771,67 @@ test('HS2-AMCSKS an orchestration project shows its Orchestration entries on the
     await server.stop();
   }
 });
+
+test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in the Orchestration header', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server, false);
+    await asOrchestrationProject(server);
+    await server.request('/tickets', 'POST', { title: 'Ship the synthetic sign-on' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    // `plan show` as the server answers it while the planner's terminal runs and its tool has not reported
+    // its session start yet (it stopped on a trust question). Every other request reaches the real server.
+    let toolReady = false;
+    await page.route(/\/orchestration\/planning\/show$/, (route) =>
+      route.fulfill({
+        json: {
+          state: 'planning',
+          proposal_id: 'press-1',
+          session: {
+            session: { session_id: '01M7P8BSGHY0SJ91R2ZG39V8JC', operation_id: 'press-1', role: 'planner' },
+            server_id: '01M7P876C534DEY3F1YTD2QR8Y',
+            worker_id: 'claude-01M7P8BSGHY0SJ91R2ZG39V8JC',
+            label: 'Launch: planner',
+            alive: true,
+            busy: false,
+            role_prompt: 'pending',
+            tool_ready: toolReady,
+          },
+          goals: [],
+          goal_count: 1,
+          steps: 0,
+          placement_automatic: false,
+        },
+      }),
+    );
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const toolbar = page.locator('[data-orchestration-toolbar="no_plan"]');
+    await expect(toolbar).toContainText('No Plan Yet · Planner waiting in its terminal');
+    const propose = toolbar.getByRole('button', { name: 'Propose Plan' });
+    await expect(propose).toBeDisabled();
+    await expect(propose).toHaveAttribute('title', 'The planning session is waiting for an answer in its terminal tab');
+    await capture(page, 'waiting-1440', 'hs2-5ryxnn');
+    await page.setViewportSize({ width: 1100, height: 820 });
+    await expect(toolbar).toContainText('Planner waiting in its terminal');
+    await capture(page, 'waiting-1100', 'hs2-5ryxnn');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(toolbar).toContainText('Planner waiting in its terminal');
+    await capture(page, 'waiting-390', 'hs2-5ryxnn');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await capture(page, 'waiting-1440-after-narrow', 'hs2-5ryxnn');
+
+    // The person answered it; reopening the view reads the planner working.
+    toolReady = true;
+    await page.locator('[data-segment-value="list"]').first().click();
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    await expect(toolbar).toContainText('No Plan Yet · Planning');
+    await expect(toolbar).not.toContainText('waiting');
+    await expect(propose).toHaveAttribute('title', 'A planning session is working on the plan now');
+  } finally {
+    await server.stop(page);
+  }
+});

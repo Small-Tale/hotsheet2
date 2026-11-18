@@ -2860,6 +2860,21 @@ output shows its composer, read from the terminal's own output stream, never on 
 - **If the composer never appears.** Past the role prompt window the prompt is `failed`,
   and nothing is typed into whatever the TUI shows.
 
+**Waiting on a first-run question (HS2-5RYXNN).** In a project a tool has not opened
+before, Claude and Codex stop in their terminal before they start. Claude asks about
+workspace trust and then a new MCP server. Codex shows an update notice, folder
+trust and a hook review. Only a person answers these. Both tools run their
+`SessionStart` hook only after these questions, and the hook's report is what marks the
+terminal connected (HS2-EV1XK3). So the host reports `tool_ready` with every hosted
+session: `false` while its terminal runs, its plugin declares a `SessionStart` hook
+and no report has arrived since the launch; `true` once one has; absent when the
+session does not run, the host cannot be asked or the tool reports no start. The
+server reads its own hook reports. A headless host reads `ai_connection` and
+`last_hook_report` from the server's terminal list. The role prompt alone cannot say
+this: Codex's bootstrap paste reads `delivered` while Codex is still stuck. A hook
+report on a hosted terminal also publishes `orchestration_session`, so views read the
+session again without polling. Answering the question stays a person's act.
+
 ### Safe points and winding down
 
 Only the hosting machine can say whether a session is at a safe point. It establishes
@@ -4843,7 +4858,10 @@ has several git sources); without it every open goal ticket is planned. The answ
 lists the goals oldest first with the plan steps this machine holds for each (at most
 256 listed; `goal_count` counts all), the number of declared targets, the planner's
 hosted session, and how its prompt was delivered. `show` adds the plan's step count
-and `placement_automatic`, so a view can say the plan is a dry run.
+and `placement_automatic`, so a view can say the plan is a dry run. The planner's
+hosted session carries `tool_ready` (§26.16). While it is `false` the Orchestration
+view's header reads `Planner waiting in its terminal`, and Propose Plan
+says the planning session waits for an answer in its terminal tab (HS2-5RYXNN).
 
 ### What the planner does
 

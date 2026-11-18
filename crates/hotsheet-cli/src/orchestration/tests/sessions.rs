@@ -71,6 +71,15 @@ impl ScriptedHost {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+    /// HS2-5RYXNN: what the host says about whether this session's tool reported its
+    /// session start.
+    pub(super) fn report(&self, session_id: &str, reported: Option<bool>) {
+        for state in self.live().iter_mut() {
+            if state.session_id == session_id {
+                state.reported = reported;
+            }
+        }
+    }
     pub(super) fn launches(&self) -> Vec<HostLaunch> {
         self.launches
             .lock()
@@ -146,6 +155,7 @@ impl SessionHost for ScriptedHost {
                 session_id: launch.session_id.clone(),
                 busy: false,
                 idle_since_ms: None,
+                reported: None,
             });
         }
         Ok(Launched {
@@ -879,6 +889,7 @@ fn hs2_gdjxgz_the_targets_machine_may_refuse_and_a_refusal_never_launches() {
             session_id: format!("someone-elses-{n}"),
             busy: false,
             idle_since_ms: None,
+            reported: None,
         });
     }
     assert_eq!(

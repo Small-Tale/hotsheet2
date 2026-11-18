@@ -9,6 +9,7 @@ import {
   createServerPlanner,
   orchestrationPersonId,
   parseOrchestrationDetails,
+  planningPhase,
   startOrchestrationTimelineStream,
 } from './orchestration-view';
 
@@ -121,6 +122,25 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     values.set('hotsheet.orchestrationPersonId', 'bad id with spaces');
     expect(orchestrationPersonId(storage)).toMatch(/^person-/);
     expect(orchestrationPersonId(undefined)).toMatch(/^person-/);
+  });
+});
+
+describe('where planning stands (HS2-5RYXNN)', () => {
+  it('reads a planner whose tool has not reported its start as waiting, and nothing else', () => {
+    const view = (state: unknown, toolReady?: unknown) => ({
+      state,
+      session: toolReady === undefined ? {} : { tool_ready: toolReady },
+    });
+    expect(planningPhase(undefined)).toBeUndefined();
+    expect(planningPhase({})).toBeUndefined();
+    expect(planningPhase(view('idle'))).toBe('idle');
+    expect(planningPhase(view('planning'))).toBe('planning');
+    expect(planningPhase(view('planning', true))).toBe('planning');
+    expect(planningPhase(view('planning', false))).toBe('waiting');
+    expect(planningPhase({ state: 'planning' })).toBe('planning');
+    // An ended planner is not waiting, whatever its last reading said.
+    expect(planningPhase(view('ended', false))).toBe('ended');
+    expect(planningPhase(view(7, false))).toBeUndefined();
   });
 });
 

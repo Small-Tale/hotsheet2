@@ -1271,6 +1271,23 @@ that has never been opened in a client.
    show the Up Next queue. Confirm it answers from the project's own store.
 5. Stop the session with `--force` as a person. Remove the temporary directories.
 
+## A planner waiting on its tool's first-run question (HS2-5RYXNN)
+
+Automated tests stand in for the tool's `SessionStart` hook report. Real first-run
+questions appear only for a real tool in a project it has not opened before. Use a
+throwaway `HOTSHEET_HOME` and an orchestration project with one bound target and one
+open goal ticket, never opened by Claude or Codex.
+
+1. Press Propose Plan with Claude (repeat later with Codex).
+2. Confirm `hotsheet-cli orchestration plan show --project <owner>` reports
+   `session.tool_ready: false` and the Orchestration header reads
+   `Planner waiting in its terminal` while the planner's drawer tab shows the trust
+   question.
+3. Answer the questions in the drawer tab. Confirm the header changes to `Planning`
+   without reloading, and `plan show` reports `session.tool_ready: true`.
+4. Stop the planner and remove the temporary directories. The tools record trust for
+   the directory in their own user configuration.
+
 ## Show in Drawer for a remote orchestrated project (HS2-6E32N4)
 
 Automated tests cover the peer's answers over real TLS and the client's routing with

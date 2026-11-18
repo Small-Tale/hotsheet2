@@ -16,10 +16,19 @@ export interface OrchestrationToolbarProps {
   propose?: OrchestrationProposeAvailability;
   /** A kick-off change is on its way to the server. */
   busy?: boolean;
-  /** HS2-HCW7MD: `planning` while the planning session works on the plan. */
+  /**
+   * HS2-HCW7MD: `planning` while the planning session works on the plan; HS2-5RYXNN: `waiting` while it
+   * waits on a first-run question in its terminal tab.
+   */
   planning?: string;
   clock?: ClockFormat;
 }
+
+/** What the header adds for a planning session. */
+const PLANNING_STATUS: Record<string, string> = {
+  planning: ' · Planning',
+  waiting: ' · Planner waiting in its terminal',
+};
 
 /**
  * HS2-J89JC7: the Orchestration view's page header. It says where orchestration stands and holds the
@@ -34,7 +43,7 @@ export function OrchestrationToolbar({
   planning,
   clock = clockTime,
 }: OrchestrationToolbarProps) {
-  const status = `${timelineStatus(timeline, clock)}${planning === 'planning' ? ' · Planning' : ''}`;
+  const status = `${timelineStatus(timeline, clock)}${PLANNING_STATUS[planning ?? ''] ?? ''}`;
   const blocked = startBlockedReason(timeline);
   const action = (() => {
     switch (timeline.phase) {

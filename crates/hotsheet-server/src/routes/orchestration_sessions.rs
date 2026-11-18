@@ -12,7 +12,7 @@ use axum::extract::{Path, State};
 use hotsheet_aitools::session_push::{PushError, PushMessage};
 use hotsheet_cli::orchestration::{
     HostLaunch, HostSessionState, Launched, PushAttempt, SessionHost, SessionHostError, ToolSetup,
-    plugin_role_paths, target_tool_setup,
+    plugin_reports_start, plugin_role_paths, target_tool_setup,
 };
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::checkouts::Checkout;
@@ -90,11 +90,30 @@ impl SessionHost for ServerSessions {
             .runtime
             .block_on(try_live_terminal_infos(&self.state))
             .ok()?;
+        // HS2-5RYXNN: a hook report since its launch says its tool got past any
+        // first-run question; one whose plugin reports a start and has not may be
+        // waiting on a person in its terminal.
+        let reported = |id: &str| {
+            self.state
+                .terminal_ai_connections
+                .lock_or_recover()
+                .contains_key(id)
+                || self
+                    .state
+                    .terminal_ai_last_reports
+                    .lock_or_recover()
+                    .contains_key(id)
+        };
         Some(
             infos
                 .into_iter()
                 .filter(|info| info.alive && info.kind == hotsheet_terminals::TerminalKind::Ai)
                 .map(|info| HostSessionState {
+                    reported: info
+                        .tool
+                        .as_deref()
+                        .is_some_and(|tool| plugin_reports_start(tool, &self.state.plugin_dirs))
+                        .then(|| reported(&info.id)),
                     session_id: info.id,
                     busy: info.busy,
                     idle_since_ms: info.idle_since_ms,

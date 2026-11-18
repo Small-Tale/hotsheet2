@@ -113,6 +113,12 @@ args = ["--path", "{{store}}"]
 program = {fake_agent:?}
 args = ["--report-dir", {reports:?}, "--print", "ready", "--hold-ms", "600000"]
 prompt_args = ["--prompt", "{{prompt}}"]
+[hooks]
+target = ".synthetic/hooks.json"
+machine_local = true
+event = "PermissionRequest"
+additional_events = ["SessionStart"]
+command = "hotsheet-cli permission-hook --agent synthetic"
 "#
             ),
         )
@@ -349,6 +355,19 @@ fn hs2_ywn8jt_the_first_headless_propose_starts_the_planner_on_a_running_server(
     let shown: Value = serde_json::from_slice(&shown.stdout).unwrap();
     assert_eq!(shown["state"], "planning", "{shown}");
     assert_eq!(shown["proposal_id"], "press-1", "{shown}");
+    // HS2-5RYXNN: the CLI reads the running server's terminals too: the planner's tool
+    // reports its session start and has not yet, so the planner may be waiting on a
+    // first-run question in its terminal. Once its hook reports in, it is ready.
+    assert_eq!(shown["session"]["tool_ready"], false, "{shown}");
+    call(
+        &server,
+        "POST",
+        &format!("/terminals/{terminal}/ai-connection"),
+        json!({"agent": "synthetic"}),
+    );
+    let shown = world.cli(&["orchestration", "plan", "show", "--project", owner.as_str()]);
+    let shown: Value = serde_json::from_slice(&shown.stdout).unwrap();
+    assert_eq!(shown["session"]["tool_ready"], true, "{shown}");
     let again = world.cli(&[
         "orchestration",
         "plan",

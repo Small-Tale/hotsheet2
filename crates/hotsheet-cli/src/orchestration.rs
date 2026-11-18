@@ -123,8 +123,8 @@ pub use sessions::{
     HostedStopReply, LAUNCH_ANSWER, Launched, LocalServerSessions, NoSessionHost, PushAttempt,
     RolePrompt, SessionHost, SessionHostError, SessionSyncFailure, SessionSyncSummary, SessionView,
     StartSession, StopSession, TOOL_SETUP_FAILED, TakeoverSession, ToolSetup, classify_transport,
-    launch_outcome, planner_prompt_text, plugin_role_paths, pool_joined, role_prompt_text,
-    setup_store, target_tool_setup,
+    launch_outcome, planner_prompt_text, plugin_reports_start, plugin_role_paths, pool_joined,
+    role_prompt_text, setup_store, target_tool_setup, tool_ready,
 };
 pub use target_lines::MAX_TARGET_LINE_OWNERS;
 pub use ticket_list::{
