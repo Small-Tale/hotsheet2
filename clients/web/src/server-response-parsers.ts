@@ -88,6 +88,7 @@ import type {
   TerminalRead,
   TerminalSettings,
   Ticket,
+  TicketCreationSettings,
   TicketRow,
   TicketStoreSyncHealth,
   TicketStoreSyncReport,
@@ -1661,6 +1662,9 @@ export const parseNotificationChannelRemoval = shape<NotificationChannelRemoval>
 });
 
 export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
+export const parseTicketCreationSettings = shape<TicketCreationSettings>('ticket creation settings', {
+  auto_group_new_tickets: isBoolean,
+});
 export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge preview', {
   trash_cleanup_days: isNumber,
   purge_count: isNumber,

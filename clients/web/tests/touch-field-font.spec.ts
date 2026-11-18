@@ -345,7 +345,9 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   await page.getByLabel('Settings View').click();
   const workspace = page.locator('[data-component="settings-workspace"]');
   await expect(workspace).toBeVisible();
+  // HS2-FN018Q: Project Settings and App Settings each have a General category, so name the section.
   for (const category of [
+    'Project General',
     'Ticket sources',
     'AI tools',
     'Project guidance',
@@ -353,15 +355,22 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
     'Lifecycle',
     'Terminals',
     'Permissions',
-    'Column view',
-    'General',
+    'App General',
     'Accounts',
     'Keyboard',
   ]) {
     // The phone keeps the settings categories in a sidebar overlay.
     const settingsSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (phone && (await settingsSidebar.isVisible())) await settingsSidebar.click();
-    await page.getByRole('button', { name: category, exact: true }).first().click();
+    const general = category === 'Project General' || category === 'App General',
+      section =
+        category === 'App General' || ['Accounts', 'Keyboard'].includes(category) ? 'App Settings' : 'Project Settings',
+      label = general ? 'General' : category;
+    await page
+      .getByRole('navigation', { name: section })
+      .getByRole('button', { name: label, exact: true })
+      .first()
+      .click();
     if (phone) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
     await audit(`settings ${category}`);
     if (category === 'Ticket sources') {

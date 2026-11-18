@@ -3797,6 +3797,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
 
 test('switches the SettingsWorkspace demo across every category, then resets (HS2-PS9BQV)', async ({ page }) => {
   const categories = [
+    ['project-general', 'General'],
     ['sources', 'Ticket sources'],
     ['ai', 'AI tools'],
     ['development-strategy', 'Development strategy'],
@@ -3805,7 +3806,6 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     ['lifecycle', 'Lifecycle'],
     ['terminals', 'Terminals'],
     ['permissions', 'Permissions'],
-    ['columns', 'Column view'],
     ['general', 'General'],
     ['accounts', 'Accounts'],
     ['terminal-memory', 'Terminal memory'],
@@ -3869,8 +3869,8 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await expect(delay.locator('.kui-select__trigger')).toBeEnabled();
     await shot('permissions-allow');
 
-    await choose(category, 'columns');
-    await shot('columns', workspace.getByRole('checkbox', { name: /Hide Verified column/ }));
+    await choose(category, 'project-general');
+    await shot('project-general', workspace.getByRole('checkbox', { name: /Hide Verified column/ }));
     await choose(category, 'general');
     await shot('general', workspace.getByRole('checkbox', { name: /Show loading activity/ }));
 

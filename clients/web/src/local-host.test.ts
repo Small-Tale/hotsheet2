@@ -594,6 +594,52 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
   });
 });
 
+describe('stable hook CLI reuse (HS2-T1M4VA)', () => {
+  it('keeps an unchanged stable hook CLI file across host starts and replaces a changed one', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-hook-reuse-')),
+      dist = resolve(root, 'dist'),
+      cli = resolve(root, 'hotsheet-cli'),
+      home = resolve(root, 'home'),
+      starts: ReturnType<typeof snapshotLocalHostArtifacts>[] = [];
+    const signed: string[] = [];
+    const sign = (_source: string, snapshot: string) => {
+      signed.push(snapshot);
+    };
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), 'host');
+      await writeFile(cli, 'same cli');
+      await chmod(cli, 0o755);
+      starts.push(snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home, sign));
+      const stable = starts[0].environment.HOTSHEET_HOOK_CLI_BIN,
+        first = statSync(stable);
+      const stagedSignatures = () => signed.filter((path) => path.includes('.hook-cli-')).length;
+      expect(stagedSignatures()).toBe(1);
+      // A second host start with the same CLI bytes leaves the stable file itself untouched.
+      starts.push(snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home, sign));
+      const again = statSync(stable);
+      expect(again.ino).toBe(first.ino);
+      expect(again.mtimeMs).toBe(first.mtimeMs);
+      expect(stagedSignatures()).toBe(1);
+      expect(starts[1].environment.HOTSHEET_HOOK_CLI_BIN).toBe(stable);
+      // A rebuilt CLI replaces it, and a removed digest record forces a fresh copy.
+      await writeFile(cli, 'rebuilt cli');
+      starts.push(snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home, sign));
+      expect(readFileSync(stable, 'utf8')).toBe('rebuilt cli');
+      expect(stagedSignatures()).toBe(2);
+      await rm(`${stable}.source-sha256`);
+      starts.push(snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home, sign));
+      expect(stagedSignatures()).toBe(3);
+    } finally {
+      for (const snapshot of starts) {
+        snapshot.dispose();
+        await rm(resolve(snapshot.distRoot, '..'), { recursive: true, force: true });
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
   const root = resolve(tmpdir(), 'synthetic-repo'),
     release = resolve(root, 'target/release', `hotsheet-mcp${process.platform === 'win32' ? '.exe' : ''}`),

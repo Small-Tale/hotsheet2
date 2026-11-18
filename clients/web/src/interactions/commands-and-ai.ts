@@ -208,6 +208,7 @@ export interface CommandAndAiInteractionsDependencies {
   /** Machine-wide terminal limits (HS2-Y5DYC0); optional so focused harnesses can omit them. */
   readonly terminalLimitsSettings?: Pick<TerminalLimitsSettings, 'refresh' | 'save'>;
   readonly refreshTrashSettings: (current?: Project) => Promise<void>;
+  readonly refreshTicketCreationSettings?: (current?: Project) => Promise<void>;
   readonly capturingShortcutId: Signal<string | undefined>;
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
   readonly appleShortcutPlatform: boolean;
@@ -372,6 +373,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshTerminalSettings,
     terminalLimitsSettings,
     refreshTrashSettings,
+    refreshTicketCreationSettings,
     capturingShortcutId,
     keyboardShortcutOverrides,
     appleShortcutPlatform,
@@ -1132,6 +1134,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminals') void refreshTerminalSettings();
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
+      if (category === 'project-general') void refreshTicketCreationSettings?.();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
     }),
   );

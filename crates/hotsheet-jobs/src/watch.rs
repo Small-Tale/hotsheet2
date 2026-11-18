@@ -43,11 +43,20 @@ impl PathWatcher {
     /// Watch every path in `paths` and deliver their events to `handler`. Each path
     /// must exist. Events are delivered from the moment this returns; nothing is
     /// delivered for a path while a later one is still being registered.
-    pub fn start<F>(paths: &[(&Path, RecursiveMode)], handler: F) -> Result<Self, Error>
+    ///
+    /// HS2-P0EHD4: access events (an open, a read, a close without a write) are never
+    /// delivered. notify 8's inotify backend reports every open of a watched file, so a
+    /// consumer's own reads would otherwise wake it again; writes still arrive as create,
+    /// modify and remove.
+    pub fn start<F>(paths: &[(&Path, RecursiveMode)], mut handler: F) -> Result<Self, Error>
     where
         F: FnMut(Delivery) + Send + 'static,
     {
-        let mut watcher = backend::recommended_watcher(handler)?;
+        let mut watcher = backend::recommended_watcher(move |delivery: Delivery| {
+            if !is_access(&delivery) {
+                handler(delivery);
+            }
+        })?;
         register(&mut watcher, paths)?;
         Ok(Self { watcher, starts: 1 })
     }
@@ -82,6 +91,12 @@ impl PathWatcher {
     pub fn starts(&self) -> usize {
         self.starts
     }
+}
+
+/// HS2-P0EHD4: whether a delivery only reports that a file was accessed, which no
+/// consumer treats as a change.
+pub fn is_access(delivery: &Delivery) -> bool {
+    matches!(delivery, Ok(event) if matches!(event.kind, EventKind::Access(_)))
 }
 
 /// HS2-F6F42W: an event that tells a consumer to read again because some changes may not
@@ -446,6 +461,40 @@ mod tests {
                 Ok(Ok(event)) if event.paths.iter().any(|seen| seen == path) => return true,
                 Ok(_) => {}
                 Err(_) => return false,
+            }
+        }
+    }
+
+    /// HS2-P0EHD4: access events are never delivered: reading a watched file (which
+    /// notify 8's inotify backend reports as an open and a close) wakes nobody, while a
+    /// write still arrives. Ported from main's batched-watch test with the classification.
+    #[test]
+    fn hs2_p0ehd4_reads_of_a_watched_file_are_not_delivered() {
+        use backend::event::{AccessKind, AccessMode, CreateKind};
+        let access = |kind| Ok(Event::new(EventKind::Access(kind)));
+        assert!(is_access(&access(AccessKind::Open(AccessMode::Any))));
+        assert!(is_access(&access(AccessKind::Close(AccessMode::Read))));
+        assert!(!is_access(&Ok(Event::new(EventKind::Create(
+            CreateKind::File
+        )))));
+        assert!(!is_access(&Ok(rescan_event())));
+        let root = tempfile::tempdir().unwrap();
+        let dir = real(root.path());
+        let file = dir.join("watched");
+        fs::write(&file, "x").unwrap();
+        let (_watcher, receiver) = watching(&[(&dir, RecursiveMode::Recursive)]);
+        fs::write(&file, "y").unwrap();
+        assert!(sees(&receiver, &file), "a write is delivered");
+        // Let the write's own events arrive, then read many times.
+        std::thread::sleep(Duration::from_millis(300));
+        while receiver.try_recv().is_ok() {}
+        for _ in 0..20 {
+            assert_eq!(fs::read_to_string(&file).unwrap(), "y");
+        }
+        let deadline = Instant::now() + Duration::from_millis(700);
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            if let Ok(delivery) = receiver.recv_timeout(left) {
+                assert!(!is_access(&delivery), "an access event was delivered");
             }
         }
     }

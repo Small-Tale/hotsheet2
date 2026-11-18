@@ -10,6 +10,7 @@ import {
 describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
   it('offers every settings category, the permission automation states, and a reset', () => {
     expect(SETTINGS_WORKSPACE_DEMO_CATEGORIES).toEqual([
+      'project-general',
       'sources',
       'ai',
       'guidance',
@@ -17,7 +18,6 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
       'lifecycle',
       'terminals',
       'permissions',
-      'columns',
       'development-strategy',
       'general',
       'accounts',

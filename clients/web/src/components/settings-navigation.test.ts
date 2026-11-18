@@ -43,7 +43,10 @@ describe('SettingsNavigation', () => {
     expect(markup).toContain('data-item-id="lifecycle"');
     expect(markup).toContain('data-item-id="terminals"');
     expect(markup).toMatch(/data-item-id="permissions"[^>]*aria-current="page"/);
-    expect(markup).toContain('data-item-id="columns"');
+    expect(markup).toContain('data-item-id="project-general"');
+    expect(markup).not.toContain('data-item-id="columns"');
+    // HS2-FN018Q: the project's General category (which holds the former Column view) comes first.
+    expect(markup.indexOf('data-item-id="project-general"')).toBeLessThan(markup.indexOf('data-item-id="sources"'));
     expect(markup).toContain('aria-label="Hide Settings Sidebar"');
     for (const icon of [
       'database',
@@ -53,7 +56,6 @@ describe('SettingsNavigation', () => {
       'terminal-square',
       'archive-restore',
       'shield-check',
-      'columns-3',
     ])
       expect(markup).toContain(`data-lucide="${icon}"`);
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
@@ -65,7 +67,7 @@ describe('SettingsNavigation', () => {
     expect(markup).toContain('data-lucide="keyboard"');
     // The keyboard heading precedes the project one? No — project first, then app.
     expect(markup.indexOf('Project Settings')).toBeLessThan(markup.indexOf('App Settings'));
-    expect(markup.indexOf('data-item-id="columns"')).toBeLessThan(markup.indexOf('data-item-id="general"'));
+    expect(markup.indexOf('data-item-id="project-general"')).toBeLessThan(markup.indexOf('data-item-id="general"'));
     expect(markup.indexOf('data-item-id="general"')).toBeLessThan(markup.indexOf('data-item-id="keyboard"'));
   });
 
@@ -90,7 +92,7 @@ describe('SettingsNavigation', () => {
     expect(settingsCategoryTitle('lifecycle')).toBe('Lifecycle');
     expect(settingsCategoryTitle('terminals')).toBe('Terminals');
     expect(settingsCategoryTitle('permissions')).toBe('Permissions');
-    expect(settingsCategoryTitle('columns')).toBe('Column view');
+    expect(settingsCategoryTitle('project-general')).toBe('General'); // HS2-W27N1D, HS2-FN018Q
     expect(settingsCategoryTitle('general')).toBe('General');
     expect(settingsCategoryTitle('keyboard')).toBe('Keyboard Shortcuts');
   });

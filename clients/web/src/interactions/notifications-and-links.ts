@@ -115,6 +115,8 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly refreshError: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
+  /** Save Project Settings › General › Group new tickets automatically (HS2-FN018Q). */
+  readonly saveAutoGroupNewTickets?: (checked: boolean) => Promise<void>;
   ticketLinkReturnFocus: HTMLElement | undefined;
   readonly selectLinkedTicket: (slug: string, projectId?: string, preferredProjectId?: string) => Promise<void>;
   readonly ticketLinkChoice: Signal<
@@ -176,6 +178,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     refreshError,
     selectedProjectId,
     hideVerifiedByProject,
+    saveAutoGroupNewTickets,
     selectLinkedTicket,
     ticketLinkChoice,
     openTicketLinkMatch,
@@ -856,6 +859,16 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         const checked = (target as HTMLInputElement).checked;
         hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
         localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.selector,
+      (_event, target) => {
+        void saveAutoGroupNewTickets?.((target as HTMLInputElement).checked);
       },
     ),
   );

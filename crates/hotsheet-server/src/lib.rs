@@ -8,6 +8,7 @@
 mod activity_capture;
 mod ai_tool_discovery;
 mod api_error;
+pub mod auto_group;
 mod blocking_offload;
 pub mod ci_status;
 pub mod client_drive;
@@ -1698,6 +1699,11 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/terminal-settings",
             get(get_checkout_terminal_settings).put(put_checkout_terminal_settings),
+        )
+        .route(
+            "/checkouts/{reference}/ticket-creation-settings",
+            get(routes::ticket_creation_settings::get_checkout_ticket_creation_settings)
+                .put(routes::ticket_creation_settings::put_checkout_ticket_creation_settings),
         )
         .route(
             "/checkouts/{reference}/trash-settings",

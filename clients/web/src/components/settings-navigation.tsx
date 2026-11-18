@@ -13,7 +13,6 @@ import {
   BookOpen,
   Bot,
   CircleUserRound,
-  Columns3,
   Database,
   Folders,
   GitBranch,
@@ -40,7 +39,6 @@ export type SettingsCategory =
   | 'lifecycle'
   | 'terminals'
   | 'permissions'
-  | 'columns'
   | 'development-strategy'
   | 'general'
   | 'accounts'
@@ -52,8 +50,8 @@ export type SettingsCategory =
 
 /**
  * Project-scoped settings, followed by app-scoped (device-local) settings. The project-scoped General
- * comes first and holds Project Type; Orchestration follows it only for an Orchestration project
- * (HS2-W27N1D).
+ * comes first and holds Project Type (HS2-W27N1D) and the former Column view settings with automatic
+ * grouping of new tickets (HS2-FN018Q); Orchestration follows it only for an Orchestration project.
  */
 const projectCategories = [
   { id: 'project-general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
@@ -65,7 +63,6 @@ const projectCategories = [
   { id: 'lifecycle', label: 'Lifecycle', icon: ArchiveRestore, iconName: 'archive-restore' },
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },
-  { id: 'columns', label: 'Column view', icon: Columns3, iconName: 'columns-3' },
   { id: 'development-strategy', label: 'Development strategy', icon: GitBranch, iconName: 'git-branch' },
 ] as const;
 
@@ -102,7 +99,12 @@ export type SettingsStorage =
  * here when you add the control.
  */
 export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage[]> = {
-  'project-general': [{ control: 'Project type', server: '/checkouts/{project}/orchestration/project-type' }],
+  // HS2-FN018Q: General also holds the former Column view settings.
+  'project-general': [
+    { control: 'Project type', server: '/checkouts/{project}/orchestration/project-type' },
+    { control: 'Group new tickets automatically', server: '/checkouts/{project}/ticket-creation-settings' },
+    { control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' },
+  ],
   orchestration: [
     { control: 'Projects this project orchestrates', server: '/checkouts/{project}/orchestration/projects' },
     { control: 'Declared projects', server: '/checkouts/{project}/orchestration/targets' },
@@ -123,7 +125,6 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   lifecycle: [{ control: 'Trash retention', server: '/checkouts/{project}/trash-settings' }],
   terminals: [{ control: 'Use global shell history', server: '/terminal-settings' }],
   permissions: [{ control: 'Automatic decision and delay', server: '/permission-automation' }],
-  columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
   'development-strategy': [
     {
       control: 'Project development strategy and green main goal',

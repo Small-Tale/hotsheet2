@@ -1451,3 +1451,17 @@ GitHub repository; never a customer project.
    set `allow_unknown`.
 6. Stop every session as a person with `--force`, unbind both targets, delete the
    scratch repository's workflow runs and remove the temporary directories.
+
+## Automatic grouping of new tickets with a live AI tool (HS2-FN018Q)
+
+Automated tests drive the grouping turn with a scripted reply; this checks a real default AI tool.
+
+1. In a project with a drivable default AI tool and at least two existing groups, confirm Project
+   Settings › General shows **Group new tickets automatically** checked.
+2. Create three tickets: one in the app, one with `hotsheet-cli new --title "…"`, and one that
+   already has a group (`--group <name>`).
+3. Within about 30 seconds, the two ungrouped tickets gain fitting groups (an existing group, or a
+   new short name), each written by `hotsheet-auto-group`; the pre-grouped ticket is unchanged.
+4. Create ten tickets in quick succession with the CLI. They are grouped by one turn (one usage
+   entry), not ten.
+5. Uncheck the setting, create a ticket, and confirm it stays ungrouped.

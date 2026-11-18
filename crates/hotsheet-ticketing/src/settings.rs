@@ -33,6 +33,10 @@ const LEGACY_LOCAL_FILE: &str = "hotsheet-settings.local.json";
 pub const TRASH_CLEANUP_DAYS_SETTING: &str = "trash_cleanup_days";
 /// Retention used when a project does not override [`TRASH_CLEANUP_DAYS_SETTING`].
 pub const DEFAULT_TRASH_CLEANUP_DAYS: u32 = 30;
+/// Shared project key: ask the default AI tool to group each new ungrouped ticket (HS2-FN018Q).
+pub const AUTO_GROUP_NEW_TICKETS_SETTING: &str = "auto_group_new_tickets";
+/// New tickets are grouped automatically unless a project turns it off (HS2-FN018Q).
+pub const DEFAULT_AUTO_GROUP_NEW_TICKETS: bool = true;
 
 fn invalid_value(key: &str, message: &str) -> SettingsError {
     SettingsError::Invalid {
@@ -55,6 +59,14 @@ pub fn parse_trash_cleanup_days(value: Value) -> Result<u32, SettingsError> {
         ));
     }
     Ok(days)
+}
+
+/// Validate and decode [`AUTO_GROUP_NEW_TICKETS_SETTING`]: a JSON boolean only.
+pub fn parse_auto_group_new_tickets(value: Value) -> Result<bool, SettingsError> {
+    serde_json::from_value::<bool>(value).map_err(|source| SettingsError::Invalid {
+        key: AUTO_GROUP_NEW_TICKETS_SETTING.into(),
+        source,
+    })
 }
 
 /// A settings I/O or parse failure.
@@ -400,6 +412,9 @@ impl Settings {
         if key == TRASH_CLEANUP_DAYS_SETTING {
             parse_trash_cleanup_days(value.clone())?;
         }
+        if key == AUTO_GROUP_NEW_TICKETS_SETTING {
+            parse_auto_group_new_tickets(value.clone())?;
+        }
         if key == crate::sync_ai::ASK_AI_SETTING
             && crate::sync_ai::AskAiMode::parse(value).is_none()
         {
@@ -425,6 +440,14 @@ impl Settings {
             .map(parse_trash_cleanup_days)
             .transpose()
             .map(|value| value.unwrap_or(DEFAULT_TRASH_CLEANUP_DAYS))
+    }
+
+    /// Whether new ungrouped tickets are grouped automatically (HS2-FN018Q); on by default.
+    pub fn auto_group_new_tickets(&self) -> Result<bool, SettingsError> {
+        self.get_effective(AUTO_GROUP_NEW_TICKETS_SETTING)?
+            .map(parse_auto_group_new_tickets)
+            .transpose()
+            .map(|value| value.unwrap_or(DEFAULT_AUTO_GROUP_NEW_TICKETS))
     }
 
     /// Remove a key from a scope; returns whether it was present.
@@ -872,6 +895,34 @@ mod tests {
         assert!(s.map(Scope::Shared).unwrap().is_empty());
         assert!(s.effective().unwrap().is_empty());
         assert_eq!(s.get_effective("x").unwrap(), None);
+    }
+
+    #[test]
+    fn hs2_fn018q_auto_group_new_tickets_defaults_on_and_accepts_only_booleans() {
+        let d = root();
+        let settings = Settings::for_project(d.path());
+        assert!(settings.auto_group_new_tickets().unwrap());
+        settings
+            .set(AUTO_GROUP_NEW_TICKETS_SETTING, json!(false), Scope::Shared)
+            .unwrap();
+        assert!(!settings.auto_group_new_tickets().unwrap());
+        for invalid in [json!("false"), json!(0), json!(null), json!({})] {
+            assert!(
+                settings
+                    .set(
+                        AUTO_GROUP_NEW_TICKETS_SETTING,
+                        invalid.clone(),
+                        Scope::Shared
+                    )
+                    .is_err(),
+                "{invalid}"
+            );
+        }
+        assert!(!settings.auto_group_new_tickets().unwrap());
+        settings
+            .set(AUTO_GROUP_NEW_TICKETS_SETTING, json!(true), Scope::Shared)
+            .unwrap();
+        assert!(settings.auto_group_new_tickets().unwrap());
     }
 
     #[test]

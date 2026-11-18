@@ -1478,26 +1478,28 @@ correction. HS2-J4G9GB: `ops::validate_note_response_link` and
 eligibility rule for the note menu and AI repair preview. External `note_trailer` carries append intent in native comments.
 
 Ticket groups (HS2-3XNTSD, HS2-9KZSD4, [35-ticket-groups.md](35-ticket-groups.md)):
-`crates/hotsheet-model/src/group.rs` owns group ids (`is_group_id`, `new_group_id`), the
-legacy-name reader rule (`GroupValue`), name normalization, and the comparison keys every
-reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the group
-directory and implements name resolution, list, create, rename, ungroup, merge, and the
-explicit migration; `groups/registry.rs` is the project group registry, one committed
-file per group under `<checkout>/.hotsheet2/groups/<id>.json`; `groups/git_sync.rs`
-commits each registry write in the code checkout (`git commit --only`), pushes
-registry-only fast-forwards to the branch's upstream, keeps the upstream overlay
-(`.hotsheet2/groups-remote.json`) and status (`.hotsheet2/groups-sync.json`), and runs a
-background burst committer in the server (HS2-9EGWC4); `on_status_change` listeners hear each recorded state change, which the server announces as `group_registry_sync` change events through `AppState::watch_group_registry_sync` (HS2-1CWD0H); the server sync loop's
-`sync_group_registries` retries and pulls each linked checkout. `saved_views.rs` parses
-`group:` and `has:group`. The index (schema 24) stores `group_name` (the raw value) and
-`group_key` (the id or a legacy key) and filters on `group`, `group_ids`, and `has_group`.
-`crates/hotsheet-server/src/routes/groups.rs` serves `GET …/groups` and
-`POST …/groups/rename|ungroup|merge` for the default store, `/stores/{id}`,
-`/providers/{id}`, and `/checkouts/{ref}`, plus the checkout-only `POST
+
+- Automatic grouping of new tickets (HS2-FN018Q): `crates/hotsheet-ticketing/src/groups/auto.rs` (prompt and reply contract), `crates/hotsheet-server/src/auto_group.rs` (bus subscriber, coalesced default-AI turn), setting `auto_group_new_tickets` in `crates/hotsheet-ticketing/src/settings.rs`, route `routes/ticket_creation_settings.rs`.
+  `crates/hotsheet-model/src/group.rs` owns group ids (`is_group_id`, `new_group_id`), the
+  legacy-name reader rule (`GroupValue`), name normalization, and the comparison keys every
+  reader and writer uses. `crates/hotsheet-ticketing/src/groups.rs` derives the group
+  directory and implements name resolution, list, create, rename, ungroup, merge, and the
+  explicit migration; `groups/registry.rs` is the project group registry, one committed
+  file per group under `<checkout>/.hotsheet2/groups/<id>.json`; `groups/git_sync.rs`
+  commits each registry write in the code checkout (`git commit --only`), pushes
+  registry-only fast-forwards to the branch's upstream, keeps the upstream overlay
+  (`.hotsheet2/groups-remote.json`) and status (`.hotsheet2/groups-sync.json`), and runs a
+  background burst committer in the server (HS2-9EGWC4); `on_status_change` listeners hear each recorded state change, which the server announces as `group_registry_sync` change events through `AppState::watch_group_registry_sync` (HS2-1CWD0H); the server sync loop's
+  `sync_group_registries` retries and pulls each linked checkout. `saved_views.rs` parses
+  `group:` and `has:group`. The index (schema 24) stores `group_name` (the raw value) and
+  `group_key` (the id or a legacy key) and filters on `group`, `group_ids`, and `has_group`.
+  `crates/hotsheet-server/src/routes/groups.rs` serves `GET …/groups` and
+  `POST …/groups/rename|ungroup|merge` for the default store, `/stores/{id}`,
+  `/providers/{id}`, and `/checkouts/{ref}`, plus the checkout-only `POST
 /checkouts/{ref}/groups` (create) and `/groups/migrate` (the checkout routes share one
-namespace across a project's Git stores and alone have a registry).
-`crates/hotsheet-cli/src/dispatch/groups.rs` provides `groups` and `group
+  namespace across a project's Git stores and alone have a registry).
+  `crates/hotsheet-cli/src/dispatch/groups.rs` provides `groups` and `group
 create|rename|ungroup|merge|migrate` and finds the registry from the working directory;
-the MCP tool is `hotsheet_groups`.
-`ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
-coverage is `clients/web/tests/ticket-groups.spec.ts`.
+  the MCP tool is `hotsheet_groups`.
+  `ProviderCapabilities.groups` is true for Markdown/Git only. The web client's real-app
+  coverage is `clients/web/tests/ticket-groups.spec.ts`.

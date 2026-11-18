@@ -10,6 +10,7 @@ import { syncSettingsControls } from './settings-controls';
 
 /** Every SettingsWorkspace category, in navigator order: project categories, then app categories (HS2-PS9BQV). */
 export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
+  'project-general',
   'sources',
   'ai',
   'guidance',
@@ -17,7 +18,6 @@ export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
   'lifecycle',
   'terminals',
   'permissions',
-  'columns',
   'development-strategy',
   'general',
   'accounts',
