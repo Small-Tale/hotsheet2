@@ -3137,6 +3137,17 @@ start fails closed. The start uses the drawer's launch path as it is, including 
 that path runs the tool's setup; the target checkout's own setup runs first
 (HS2-WEFJV8).
 
+The launch may take a while to answer: the server sets the tool up and may wait on a
+shared lock or on a person, for example an OS credential prompt, as the in-process
+route also waits (HS2-YWN8JT). A headless start therefore tells the two failures apart.
+A server that cannot be connected to within 5 seconds is no host
+(`session_host_unavailable`). A launch the server took is awaited for up to 10
+minutes. If its answer is lost, the server's terminal listing decides: a live
+terminal with the reserved id is the launch and is recorded as started, so it is
+never left running untracked. A real-process test proposes a plan with
+`hotsheet-cli` against a running `hotsheet-server` whose permission vault is held
+during the launch, and the planner starts on the first press.
+
 ## 26.17 Throughput scheduler (HS2-ECWG50)
 
 The scheduler decides where and how many AI sessions run: for each target, tool and

@@ -304,12 +304,34 @@ impl LocalServerSessions {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, Option<u16>> {
-        let request = ureq::request(
-            method,
-            &format!("{}{path}", server.url.trim_end_matches('/')),
+        Self::call_within(server, method, path, body, HOST_ANSWER).map_err(
+            |failure| match failure {
+                HostCall::Status(status) => Some(status),
+                HostCall::Unreached | HostCall::Unanswered => None,
+            },
         )
-        .set("X-Hotsheet-Secret", &server.secret)
-        .timeout(std::time::Duration::from_secs(60));
+    }
+
+    /// HS2-YWN8JT: one request with a short connect timeout and its own answer window,
+    /// telling a host that could not be reached from one that took the request and did
+    /// not answer in time.
+    fn call_within(
+        server: &crate::external_launch::ServerInstance,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+        answer: std::time::Duration,
+    ) -> Result<Value, HostCall> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(HOST_CONNECT)
+            .timeout(answer)
+            .build();
+        let request = agent
+            .request(
+                method,
+                &format!("{}{path}", server.url.trim_end_matches('/')),
+            )
+            .set("X-Hotsheet-Secret", &server.secret);
         let response = match body {
             Some(body) => request
                 .set("Content-Type", "application/json")
@@ -320,9 +342,64 @@ impl LocalServerSessions {
             Ok(response) => {
                 Ok(serde_json::from_reader(response.into_reader()).unwrap_or(Value::Null))
             }
-            Err(ureq::Error::Status(status, _)) => Err(Some(status)),
-            Err(_) => Err(None),
+            Err(ureq::Error::Status(status, _)) => Err(HostCall::Status(status)),
+            Err(ureq::Error::Transport(transport)) => Err(classify_transport(transport.kind())),
         }
+    }
+
+    /// HS2-YWN8JT: whether the host lists a live terminal with this id.
+    fn lists_alive(server: &crate::external_launch::ServerInstance, session_id: &str) -> bool {
+        matches!(
+            Self::call(server, "GET", "/terminals", None),
+            Ok(Value::Array(terminals)) if terminals.iter().any(|terminal| {
+                terminal["id"] == session_id && terminal["alive"] == true
+            })
+        )
+    }
+}
+
+/// HS2-YWN8JT: how long a connection to a local server may take before it counts as
+/// not running.
+const HOST_CONNECT: std::time::Duration = std::time::Duration::from_secs(5);
+/// How long an ordinary request to a local server may take to answer.
+const HOST_ANSWER: std::time::Duration = std::time::Duration::from_secs(60);
+/// HS2-YWN8JT: how long a terminal launch may take to answer. The server may be
+/// waiting on a person (an OS credential prompt) or on a shared lock while it sets the
+/// tool up, and the in-process route waits for the same launch without a limit, so
+/// the headless path waits as well, within a bound.
+pub const LAUNCH_ANSWER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// HS2-YWN8JT: why a request to a local server did not succeed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostCall {
+    /// No connection was made: no server listens there.
+    Unreached,
+    /// The request may have reached the server, which did not answer in time or
+    /// dropped the connection. What it did is not known.
+    Unanswered,
+    /// The server answered with this status.
+    Status(u16),
+}
+
+/// HS2-YWN8JT: a transport failure before any connection is a host that is not
+/// there; anything later leaves what the host did unknown.
+pub fn classify_transport(kind: ureq::ErrorKind) -> HostCall {
+    match kind {
+        ureq::ErrorKind::ConnectionFailed | ureq::ErrorKind::Dns | ureq::ErrorKind::InvalidUrl => {
+            HostCall::Unreached
+        }
+        _ => HostCall::Unanswered,
+    }
+}
+
+/// HS2-YWN8JT: what a launch request's failure means for the session. A launch the
+/// host took and did not answer is the session when the host now lists it alive,
+/// so it is recorded as started rather than left running untracked.
+pub fn launch_outcome(failure: HostCall, listed_alive: bool) -> Result<(), SessionHostError> {
+    match failure {
+        HostCall::Unanswered if listed_alive => Ok(()),
+        HostCall::Status(_) => Err(SessionHostError::Refused),
+        HostCall::Unreached | HostCall::Unanswered => Err(SessionHostError::Unavailable),
     }
 }
 impl SessionHost for LocalServerSessions {
@@ -358,8 +435,17 @@ impl SessionHost for LocalServerSessions {
                 "session_role": launch.role.code(),
                 "initial_prompt": launch.role_prompt,
             });
-            match Self::call(&server, "POST", "/terminals", Some(body)) {
-                Ok(_) => {
+            let launched =
+                match Self::call_within(&server, "POST", "/terminals", Some(body), LAUNCH_ANSWER) {
+                    Ok(_) => Ok(()),
+                    Err(failure) => launch_outcome(
+                        failure,
+                        failure == HostCall::Unanswered
+                            && Self::lists_alive(&server, &launch.session_id),
+                    ),
+                };
+            match launched {
+                Ok(()) => {
                     // The label is the saved tab name every client of that server shows.
                     let _ = Self::call(
                         &server,
@@ -369,8 +455,8 @@ impl SessionHost for LocalServerSessions {
                     );
                     return Ok(Launched { prompt_at_launch });
                 }
-                Err(Some(_)) => answered = true,
-                Err(None) => {}
+                Err(SessionHostError::Refused) => answered = true,
+                Err(SessionHostError::Unavailable) => {}
             }
         }
         Err(if answered {

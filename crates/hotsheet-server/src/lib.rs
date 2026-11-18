@@ -87,7 +87,9 @@ pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 pub use api_error::ApiError;
 pub use events::{AssignmentEvent, ChangeEvent};
 pub(crate) use events::{EventLog, emit_change};
-pub use host_health::capacity::{CapacitySource, MachineReading};
+pub use host_health::capacity::{
+    CapacitySource, MachineReading, ROOMY_CAPACITY_ENV, RoomyFixtureCapacity,
+};
 use routes::accounts::{
     GitHubAuthSession, cancel_github_device_auth, identify_github_account,
     list_account_github_repositories, list_accounts_route, list_github_auth_repositories,

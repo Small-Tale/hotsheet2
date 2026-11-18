@@ -58,6 +58,40 @@ pub trait CapacitySource: Send {
 /// The real host.
 struct SystemCapacity;
 
+/// HS2-YWN8JT: the environment switch a real-server test sets so admission does not
+/// depend on how loaded the test machine is. It is honored only by a build with the
+/// test permission vault (`hotsheet_aitools::test_permission_vault_available`), never by
+/// a shipped server.
+pub const ROOMY_CAPACITY_ENV: &str = "HOTSHEET_TEST_ROOMY_CAPACITY";
+
+/// HS2-YWN8JT: a roomy machine for real-server tests: ample memory, an idle CPU and a
+/// large disk, with the real host's tool detection and process sizes.
+pub struct RoomyFixtureCapacity;
+
+impl CapacitySource for RoomyFixtureCapacity {
+    fn machine(&mut self) -> MachineReading {
+        const MIB: u64 = 1024 * 1024;
+        MachineReading {
+            memory_free_bytes: Some(16_384 * MIB),
+            memory_total_bytes: Some(32_768 * MIB),
+            cpu_percent: Some(10.0),
+        }
+    }
+
+    fn disk(&mut self, _: &Path) -> Option<(u64, u64)> {
+        const MIB: u64 = 1024 * 1024;
+        Some((80_000 * MIB, 500_000 * MIB))
+    }
+
+    fn resident_bytes(&mut self, pids: &[u32]) -> HashMap<u32, u64> {
+        SystemCapacity.resident_bytes(pids)
+    }
+
+    fn tools(&mut self, plugin_dirs: &[PathBuf]) -> Option<Vec<(String, bool)>> {
+        SystemCapacity.tools(plugin_dirs)
+    }
+}
+
 impl CapacitySource for SystemCapacity {
     fn machine(&mut self) -> MachineReading {
         let memory = source::system_memory();

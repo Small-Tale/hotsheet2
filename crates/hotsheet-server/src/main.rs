@@ -383,6 +383,13 @@ async fn main() -> Result<()> {
         .join("advisory_claims")
         .join("provisional.sqlite");
     state = state.with_advisory_claim_ledger(claim_ledger_path)?;
+    // HS2-YWN8JT: a real-server test's admission does not depend on the test machine's
+    // load. Only a build with the test vault honors the switch.
+    if isolated_vault
+        && std::env::var(hotsheet_server::ROOMY_CAPACITY_ENV).is_ok_and(|value| value == "1")
+    {
+        state = state.with_capacity_source(Box::new(hotsheet_server::RoomyFixtureCapacity));
+    }
 
     // Detached terminal hosting is the default: normal server stops/restarts disconnect from
     // the broker without killing its PTYs. `--no-terminal-broker` is an explicit diagnostic

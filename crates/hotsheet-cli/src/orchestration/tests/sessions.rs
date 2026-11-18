@@ -3250,3 +3250,44 @@ fn hs2_s0fdkr_a_journal_entry_that_cannot_be_written_is_counted_and_reported() {
         "the page keeps its shape: {wire}"
     );
 }
+
+/// HS2-YWN8JT: a headless launch tells a server that is not there from one that took
+/// the launch and has not answered yet, and a launch whose answer was lost is the
+/// terminal the host now lists.
+#[test]
+fn hs2_ywn8jt_a_launch_the_host_took_is_never_read_as_no_host() {
+    use ureq::ErrorKind;
+    for kind in [
+        ErrorKind::ConnectionFailed,
+        ErrorKind::Dns,
+        ErrorKind::InvalidUrl,
+    ] {
+        assert_eq!(classify_transport(kind), HostCall::Unreached, "{kind:?}");
+    }
+    for kind in [
+        ErrorKind::Io,
+        ErrorKind::BadStatus,
+        ErrorKind::TooManyRedirects,
+    ] {
+        assert_eq!(classify_transport(kind), HostCall::Unanswered, "{kind:?}");
+    }
+    // No server listened: nothing launched, whatever a listing would say.
+    for listed in [false, true] {
+        assert_eq!(
+            launch_outcome(HostCall::Unreached, listed),
+            Err(SessionHostError::Unavailable)
+        );
+        assert_eq!(
+            launch_outcome(HostCall::Status(409), listed),
+            Err(SessionHostError::Refused)
+        );
+    }
+    // Taken and unanswered: the listing decides.
+    assert_eq!(launch_outcome(HostCall::Unanswered, true), Ok(()));
+    assert_eq!(
+        launch_outcome(HostCall::Unanswered, false),
+        Err(SessionHostError::Unavailable)
+    );
+    // The launch waits as long as a person may need for a prompt the host shows.
+    assert!(LAUNCH_ANSWER >= std::time::Duration::from_secs(5 * 60));
+}
