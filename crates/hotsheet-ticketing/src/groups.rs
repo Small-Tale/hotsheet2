@@ -154,12 +154,30 @@ impl GroupDirectory {
     /// project registry snapshot; `None` for a store with no project). Sorted by the
     /// display name's key, then by id.
     pub fn summaries(&self, names: Option<&GroupNames>) -> Vec<GroupSummary> {
+        self.summaries_with(names, false)
+    }
+
+    /// [`Self::summaries`] plus every registry entry with no live member, at count 0
+    /// (HS2-GXKX1Q): the project's whole group list, as Project Settings manages it. Ticket
+    /// views keep [`Self::summaries`], which shows a group only while it has members.
+    pub fn all_summaries(&self, names: Option<&GroupNames>) -> Vec<GroupSummary> {
+        self.summaries_with(names, true)
+    }
+
+    fn summaries_with(&self, names: Option<&GroupNames>, include_empty: bool) -> Vec<GroupSummary> {
         let mut groups = BTreeMap::<String, GroupSummary>::new();
         for member in self.members.iter().filter(|member| member.live) {
             groups
                 .entry(group_value_key(&member.value))
                 .or_insert_with(|| summary_of(&member.value, names))
                 .count += 1;
+        }
+        if include_empty {
+            for id in names.into_iter().flat_map(|names| names.keys()) {
+                groups
+                    .entry(group_value_key(id))
+                    .or_insert_with(|| summary_of(id, names));
+            }
         }
         let mut summaries: Vec<_> = groups.into_values().collect();
         let mut by_key = BTreeMap::<String, usize>::new();
@@ -225,10 +243,15 @@ pub fn find_group(
         key: group_value_key(&summary.id),
         summary: summary.clone(),
     };
+    // By id, a registry group with no members can be renamed, merged into, or deleted too
+    // (HS2-GXKX1Q); a name still means a group with members, so it never turns ambiguous.
     if is_group_id(trimmed)
-        && let Some(summary) = summaries.iter().find(|summary| summary.id == trimmed)
+        && let Some(summary) = directory
+            .all_summaries(names)
+            .into_iter()
+            .find(|summary| summary.id == trimmed)
     {
-        return Ok(target(summary));
+        return Ok(target(&summary));
     }
     let unknown = || GroupError::UnknownGroup(trimmed.to_string());
     let key = group_key_of_input(input).ok_or_else(unknown)?;
@@ -399,6 +422,14 @@ pub fn list_groups(
     Ok(directory.summaries(registry_names(registry)?.as_ref()))
 }
 
+/// Every group of a namespace, including registry groups with no members (HS2-GXKX1Q).
+pub fn list_all_groups(
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+) -> Result<Vec<GroupSummary>, GroupError> {
+    Ok(directory.all_summaries(registry_names(registry)?.as_ref()))
+}
+
 /// Create (or find, by name key) the registry group `name` without assigning tickets.
 /// Returns the id, the stored display name, and whether an entry was created.
 pub fn create_group(
@@ -434,7 +465,7 @@ pub fn rename_group(
     let target = find_group(directory, Some(&names), group)?;
     let to_key = group_key(&name);
     if let Some(taken) = directory
-        .summaries(Some(&names))
+        .all_summaries(Some(&names))
         .into_iter()
         .find(|summary| {
             summary.named && summary.id != target.summary.id && group_key(&summary.name) == to_key
@@ -491,7 +522,8 @@ pub fn ungroup(
 }
 
 /// Move every member of `from` into `into` (each an id or a name), as after two clones
-/// created the same name. Neither registry entry is deleted.
+/// created the same name. Neither registry entry is deleted; [`merge_groups_removing`]
+/// also deletes the source's entry.
 ///
 /// # Errors
 /// [`GroupError::InvalidMerge`] when both name one group or `into` is a legacy name
@@ -502,6 +534,29 @@ pub fn merge_groups(
     registry: Option<&GroupRegistry>,
     from: &str,
     into: &str,
+) -> Result<GroupOutcome, GroupError> {
+    merge(stores, directory, registry, from, into, false)
+}
+
+/// [`merge_groups`], then delete the source group's registry entry once every member has
+/// moved (HS2-GXKX1Q): Project Settings' Merge into… leaves one group, not an empty one.
+pub fn merge_groups_removing(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    from: &str,
+    into: &str,
+) -> Result<GroupOutcome, GroupError> {
+    merge(stores, directory, registry, from, into, true)
+}
+
+fn merge(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    from: &str,
+    into: &str,
+    remove_source: bool,
 ) -> Result<GroupOutcome, GroupError> {
     let names = registry_names(registry)?;
     let from = find_group(directory, names.as_ref(), from)?;
@@ -523,12 +578,48 @@ pub fn merge_groups(
         Some(&into.summary.id),
         &format!("Merge ticket group into {}", into.summary.name),
     )?;
+    if remove_source {
+        remove_entry(registry, &from.summary)?;
+    }
     Ok(GroupOutcome {
         id: Some(into.summary.id),
         name: Some(into.summary.name),
         updated,
         writes,
     })
+}
+
+/// Delete the group `group` (an id or a name; HS2-GXKX1Q): unassign every member, as
+/// [`ungroup`] does, then delete its registry entry. The tickets stay in their sources.
+/// A failed member write deletes nothing, so the group can be deleted again.
+pub fn delete_group(
+    stores: &[&FsStore],
+    directory: &GroupDirectory,
+    registry: Option<&GroupRegistry>,
+    group: &str,
+) -> Result<GroupOutcome, GroupError> {
+    let names = registry_names(registry)?;
+    let target = find_group(directory, names.as_ref(), group)?;
+    let (updated, writes) =
+        rewrite_everywhere(stores, directory, &target.key, None, "Delete ticket group")?;
+    remove_entry(registry, &target.summary)?;
+    Ok(GroupOutcome {
+        id: None,
+        name: Some(target.summary.name),
+        updated,
+        writes,
+    })
+}
+
+/// Delete a registry group's entry; a legacy name or an unnamed id has none.
+fn remove_entry(registry: Option<&GroupRegistry>, group: &GroupSummary) -> Result<(), GroupError> {
+    if let Some(registry) = registry
+        && group.named
+        && !group.legacy
+    {
+        registry.remove(&group.id)?;
+    }
+    Ok(())
 }
 
 /// The outcome of the group migration.

@@ -108,6 +108,7 @@ import { type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
+import { wireTicketGroupSettings } from '../components/ticket-group-settings-interactions';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
@@ -193,6 +194,7 @@ import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
 import { createTicketBlockersController } from '../features/ticket-blockers';
+import { createTicketGroupSettingsController } from '../features/ticket-group-settings';
 import { createTicketGroupsController } from '../features/ticket-groups';
 import { createTicketStoreSync } from '../features/ticket-store-sync';
 import { createTicketViewSurface } from '../features/ticket-view-surface';
@@ -3213,7 +3215,9 @@ export async function startHotSheetWebClient() {
                 ? refreshTrashSettings(current, settingsQuiet)
                 : category === 'project-general'
                   ? refreshTicketCreationSettings(current, settingsQuiet)
-                  : Promise.resolve(),
+                  : category === 'groups'
+                    ? ticketGroupSettings.refresh(current)
+                    : Promise.resolve(),
       // A warm project restores its cached AI tool inventory at activation; only a cold project (or the
       // open AI settings page, which wants an authoritative answer) loads it here (HS2-AZZ9TF).
       aiRefresh =
@@ -4677,7 +4681,14 @@ export async function startHotSheetWebClient() {
       orchestrationSurfaceRef.current?.changed(target);
       orchestrationView.sessionsChanged(target.id);
     },
-    reloadTicketGroups: (target) => ticketGroups.reloadGroups(target),
+    reloadTicketGroups: (target) =>
+      Promise.all([
+        ticketGroups.reloadGroups(target),
+        // Project Settings › Ticket groups follows registry changes from any client (HS2-GXKX1Q).
+        viewMode.value === 'settings' && settingsCategory() === 'groups' && project()?.id === target.id
+          ? ticketGroupSettings.refresh()
+          : undefined,
+      ]).then(() => undefined),
     liveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
@@ -5952,6 +5963,32 @@ export async function startHotSheetWebClient() {
     refreshProject: (options) => refreshProject(options),
     showToast,
   });
+  // Project Settings › Ticket groups (HS2-GXKX1Q): every group, with rename, merge, and delete.
+  const ticketGroupSettings = createTicketGroupSettingsController({
+    project,
+    api,
+    confirm: (options) => confirmation.request(options),
+    refreshProject: () => refreshProject({ showLoading: false }),
+    refreshTicketGroups: () => ticketGroups.refreshGroups(),
+    openNewGroup: () => {
+      ticketGroups.openNewGroup([], true);
+    },
+    openRenameGroup: (group, name) => {
+      ticketGroups.openRenameGroup(group, name);
+    },
+    viewGroupTickets: (group) => {
+      // The project's tickets in this group: the ticket view with a group chip, across All Tickets.
+      // A name several groups share is filtered by id.
+      switchWorkspaceView(ticketViewMode.value);
+      replaceTicketSearch(
+        workspaceSearchModel,
+        `group:"${(group.duplicate ? group.id : group.name).replaceAll('"', '')}" `,
+      );
+      searchOpen.value = true;
+      setAllTicketsSearch(true);
+    },
+    showToast,
+  });
   // Add to Group › Automatic asks the project's default AI tool (ai.defaults) in a private one-shot
   // drive connection; the corner status shows it running and the result is an ordinary group write
   // (HS2-4C32A0).
@@ -6428,6 +6465,21 @@ export async function startHotSheetWebClient() {
   });
   const disposeGridSidebarPages = terminalOperationsSurface.wire(appRoot);
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
+  // Project Settings › Ticket groups (HS2-GXKX1Q); its menus and Merge dialog render in the top layer.
+  const disposeTicketGroupSettings = wireTicketGroupSettings(document.body, {
+    newGroup: ticketGroupSettings.newGroup,
+    viewTickets: ticketGroupSettings.viewTickets,
+    rename: ticketGroupSettings.rename,
+    merge: ticketGroupSettings.openMerge,
+    remove: (group) => {
+      void ticketGroupSettings.remove(group);
+    },
+    chooseMergeDestination: ticketGroupSettings.chooseMergeDestination,
+    submitMerge: () => {
+      void ticketGroupSettings.submitMerge();
+    },
+    cancelMerge: ticketGroupSettings.cancelMerge,
+  });
   const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
   const projectTabFit = projectTabActionFit((compact) => {
     projectTabActionCompact.value = compact;
@@ -6954,6 +7006,7 @@ export async function startHotSheetWebClient() {
     registeredProjects,
     refreshTrashSettings,
     refreshTicketCreationSettings,
+    refreshTicketGroupSettings: (current?: Project) => ticketGroupSettings.refresh(current),
     capturingShortcutId,
     saveAiDefaults,
     selectDefaultModel,
@@ -7495,6 +7548,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
+      disposeTicketGroupSettings();
       disposeProjectTabFitReset();
       disposeTerminalSearchCountFit();
       disposeRailToolbarVisibility();

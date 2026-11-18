@@ -19,12 +19,28 @@ export const TICKET_GROUP_ACTIONS = {
   mergeTicketGroups: action('merge-ticket-groups'),
 } as const;
 
+/**
+ * Project Settings › Ticket groups (HS2-GXKX1Q): each row's View tickets and its "…" menu, the Merge
+ * dialog, and the toolbar's New group. Menu items carry the group's id as `data-group-id`.
+ */
+export const TICKET_GROUP_SETTINGS_ACTIONS = {
+  newSettingsGroup: action('new-settings-group'),
+  viewGroupTickets: action('view-group-tickets'),
+  renameSettingsGroup: action('rename-settings-group'),
+  mergeSettingsGroup: action('merge-settings-group'),
+  deleteSettingsGroup: action('delete-settings-group'),
+  submitGroupMerge: action('submit-group-merge'),
+  cancelGroupMerge: action('cancel-group-merge'),
+} as const;
+
 /** Other delegated targets for ticket groups. */
 export const TICKET_GROUP_TARGETS = {
   group: attr('data-component', 'ticket-group'),
   groupNameField: attr('name', 'ticket-group-name'),
   groupNameDialog: attr('data-dialog-component', 'ticket-group-dialog'),
   groupMenu: attr('data-ticket-group-menu', 'true'),
+  groupMergeDialog: attr('data-dialog-component', 'ticket-group-merge-dialog'),
+  groupMergeInto: attr('name', 'ticket-group-merge-into'),
   /** A region where dropping a dragged ticket removes its group (HS2-PRXD39). */
   ungroupDropZone: attr('data-ticket-drop-ungroup', 'true'),
 } as const;

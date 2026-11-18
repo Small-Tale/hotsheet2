@@ -6,6 +6,7 @@ import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
 import { PERMISSION_DELAYS } from '../permission-notifications';
 import type { ThemePreference } from '../theme-preference';
+import { ticketGroupOperation, ticketGroupSettingsByProject } from '../ticket-group-state';
 
 /** A signal as the settings projection reads it. */
 interface Readable<T> {
@@ -203,6 +204,12 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           message: aiSettingsMessage.value,
         }}
         guidance={guidance()}
+        groups={{
+          groups: ticketGroupSettingsByProject.value[current.id]?.groups,
+          error: ticketGroupSettingsByProject.value[current.id]?.error,
+          busyGroup:
+            ticketGroupOperation.value?.projectId === current.id ? ticketGroupOperation.value.groupId : undefined,
+        }}
         commands={{
           commands: commandSettingsDefinitions(current.id),
           extraGroups: commandSettingsExtraGroups(current.id),

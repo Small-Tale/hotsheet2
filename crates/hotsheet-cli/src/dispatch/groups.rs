@@ -1,5 +1,6 @@
 //! Ticket group commands (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4): `groups` and `group
-//! create|rename|ungroup|merge|migrate`, plus the name resolution `new`, `edit`, `batch`,
+//! create|rename|ungroup|merge|delete|migrate` (delete, `merge --remove-source`, and
+//! `groups --all` are Project Settings' group management, HS2-GXKX1Q), plus the name resolution `new`, `edit`, `batch`,
 //! and `ls` share. They call the same `hotsheet_ticketing::groups` workflows as the server
 //! routes.
 //!
@@ -45,6 +46,16 @@ pub(crate) enum GroupCmd {
         from: String,
         /// The group they join.
         into: String,
+        /// Also delete the source group's registry entry once its members moved, as
+        /// Project Settings' Merge into… does.
+        #[arg(long)]
+        remove_source: bool,
+    },
+    /// Delete a group: remove it from every ticket, then delete its registry entry. The
+    /// tickets stay. An empty group is deleted by its id.
+    Delete {
+        /// The group's id, or the name of a group with members.
+        group: String,
     },
     /// Rewrite every ticket that still stores a group *name* (written before group ids)
     /// to a registry id, creating one registry entry per distinct name. Safe to rerun.
@@ -136,10 +147,16 @@ pub(crate) fn display_name(registry: Option<&groups::GroupNames>, value: &str) -
     }
 }
 
-pub(crate) fn cmd_groups(path: &Path, json: bool) -> Result<()> {
+pub(crate) fn cmd_groups(path: &Path, json: bool, all: bool) -> Result<()> {
     let store = FsStore::open(path)?;
     let registry = registry_for(&store);
-    let summaries = groups::list_groups(&GroupDirectory::scan(&store)?, registry.as_ref())?;
+    let directory = GroupDirectory::scan(&store)?;
+    // `--all` adds the registry's groups with no members (HS2-GXKX1Q).
+    let summaries = if all {
+        groups::list_all_groups(&directory, registry.as_ref())?
+    } else {
+        groups::list_groups(&directory, registry.as_ref())?
+    };
     // HS2-9EGWC4: how the project's registry was last committed and published.
     let sync = registry.as_ref().and_then(GroupRegistry::sync_status);
     if json {
@@ -214,9 +231,18 @@ pub(crate) fn cmd_group(path: &Path, cmd: GroupCmd) -> Result<()> {
                 groups::ungroup(&stores, &directory, registry_for(&store).as_ref(), &group)?;
             println!("Ungrouped {} ticket(s).", outcome.updated);
         }
-        GroupCmd::Merge { from, into } => {
+        GroupCmd::Merge {
+            from,
+            into,
+            remove_source,
+        } => {
             let directory = GroupDirectory::scan(&store)?;
-            let merged = groups::merge_groups(
+            let merge = if remove_source {
+                groups::merge_groups_removing
+            } else {
+                groups::merge_groups
+            };
+            let merged = merge(
                 &stores,
                 &directory,
                 registry_for(&store).as_ref(),
@@ -228,6 +254,16 @@ pub(crate) fn cmd_group(path: &Path, cmd: GroupCmd) -> Result<()> {
                 merged.updated,
                 merged.name.unwrap_or_default(),
                 merged.id.unwrap_or_default()
+            );
+        }
+        GroupCmd::Delete { group } => {
+            let directory = GroupDirectory::scan(&store)?;
+            let deleted =
+                groups::delete_group(&stores, &directory, registry_for(&store).as_ref(), &group)?;
+            println!(
+                "Deleted group '{}'; removed it from {} ticket(s).",
+                deleted.name.unwrap_or_default(),
+                deleted.updated
             );
         }
         GroupCmd::Migrate => {

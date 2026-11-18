@@ -266,6 +266,28 @@ impl GroupRegistry {
         Ok(name)
     }
 
+    /// Delete the entry of `id` (HS2-GXKX1Q), returning the name it had. Deleting is
+    /// explicit, after the group's members were moved or unassigned; a missing entry is
+    /// already deleted (`None`). The deletion is committed like any other registry write.
+    pub fn remove(&self, id: &str) -> Result<Option<String>, GroupRegistryError> {
+        if !is_group_id(id) {
+            return Err(GroupRegistryError::InvalidId(id.to_string()));
+        }
+        let path = self.entry_path(id);
+        let removed = self.locked(|| {
+            let name = read_entry_name(&path);
+            match fs::remove_file(&path) {
+                Ok(()) => Ok(Some(name.unwrap_or_else(|| id.to_string()))),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(error) => Err(io_error(&path)(error)),
+            }
+        })?;
+        if let Some(name) = &removed {
+            self.written(&format!("Delete group {name}"));
+        }
+        Ok(removed)
+    }
+
     fn write_entry(&self, id: &str, name: &str) -> Result<(), GroupRegistryError> {
         let path = self.entry_path(id);
         let mut object = fs::read(&path)
@@ -330,6 +352,29 @@ mod tests {
         assert_eq!(registry.names().unwrap().len(), 2);
         assert!(!registry.dir().join("groups.lock").exists());
         assert!(dir.path().join(GROUP_REGISTRY_LOCK).exists());
+    }
+
+    #[test]
+    fn hs2_gxkx1q_remove_deletes_one_entry_and_is_idempotent() {
+        let (_dir, registry) = registry();
+        let (id, _, _) = registry.find_or_create("Sprint").unwrap();
+        let (other, _, _) = registry.find_or_create("Backlog").unwrap();
+        assert_eq!(registry.remove(&id).unwrap().as_deref(), Some("Sprint"));
+        assert!(!registry.entry_path(&id).exists());
+        assert_eq!(registry.name(&id).unwrap(), None);
+        assert_eq!(
+            registry.names().unwrap().into_iter().collect::<Vec<_>>(),
+            vec![(other.clone(), "Backlog".to_string())]
+        );
+        // Deleting again is a no-op; the name can be created afresh under a new id.
+        assert_eq!(registry.remove(&id).unwrap(), None);
+        let (again, _, created) = registry.find_or_create("Sprint").unwrap();
+        assert!(created);
+        assert_ne!(again, id);
+        assert!(matches!(
+            registry.remove("not an id"),
+            Err(GroupRegistryError::InvalidId(_))
+        ));
     }
 
     #[test]

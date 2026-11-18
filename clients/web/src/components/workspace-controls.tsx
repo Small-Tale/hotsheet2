@@ -37,6 +37,7 @@ import {
 } from 'lucide';
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { TICKET_GROUP_SETTINGS_ACTIONS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { type WorkersLive, workersLiveTitle } from '../project-live-summary';
 import { createTicketSearchModel } from '../ticket-search-model';
@@ -174,6 +175,8 @@ export type TicketViewActionSpec =
   | { kind: 'empty-trash' }
   /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
   | { kind: 'add-data-source' }
+  /** Settings → Ticket groups: name a new, empty group (HS2-GXKX1Q). */
+  | { kind: 'new-group' }
   /** Settings → Commands: add a command group, then add a command (HS2-YKB7HS). `compact` (the
    * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. `ready: false`
    * disables both until the project's command settings have loaded (HS2-A6K8D5). */
@@ -218,6 +221,17 @@ export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
           icon={<LucideIcon size="s" icon={Plus} name="plus" />}
         >
           Data Source…
+        </Button>
+      );
+    case 'new-group':
+      return (
+        <Button
+          tone="brand"
+          shape="pill"
+          action={TICKET_GROUP_SETTINGS_ACTIONS.newSettingsGroup.value}
+          icon={<LucideIcon size="s" icon={Plus} name="plus" />}
+        >
+          New Group
         </Button>
       );
     case 'command-settings':

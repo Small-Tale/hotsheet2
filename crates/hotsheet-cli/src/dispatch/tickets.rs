@@ -85,7 +85,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => cmd_assign(path, &id, to, clear, review),
         Cmd::People { cmd } => cmd_people(path, cmd),
         Cmd::Read { id } => cmd_read(path, &id),
-        Cmd::Groups { json } => super::groups::cmd_groups(path, json),
+        Cmd::Groups { json, all } => super::groups::cmd_groups(path, json, all),
         Cmd::TicketGroup { cmd } => super::groups::cmd_group(path, cmd),
         Cmd::ConfidenceReport { json } => cmd_confidence_report(path, json),
         Cmd::PhaseReport { since, until, json } => {

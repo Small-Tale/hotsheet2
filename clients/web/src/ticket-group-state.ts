@@ -1,6 +1,8 @@
 import { signal } from 'kerfjs';
 
 import type { TicketGroupDialogState } from './components/ticket-group-dialog';
+import type { TicketGroupMergeDialogState } from './components/ticket-group-merge-dialog';
+import type { TicketGroupOperation } from './components/ticket-group-operation-banner';
 import type { CheckoutGroupSummary, GroupRegistrySync } from './server-response-parsers';
 import {
   ticketGroupCollapseKey,
@@ -137,8 +139,28 @@ export function ticketGroupSearchNames(tickets: readonly { group?: string | null
   return [...names.values()];
 }
 
+/**
+ * Project Settings › Ticket groups (HS2-GXKX1Q): every registry group per project, empty ones
+ * included, and the last failed read's message. `groups` is undefined until the first read answers.
+ */
+export interface TicketGroupSettingsState {
+  groups?: readonly CheckoutGroupSummary[];
+  error?: string;
+}
+export const ticketGroupSettingsByProject = signal<Readonly<Partial<Record<string, TicketGroupSettingsState>>>>({});
+
+/** The open Merge into… dialog (HS2-GXKX1Q). */
+export interface TicketGroupMergeSession extends TicketGroupMergeDialogState {
+  projectId: string;
+}
+export const ticketGroupMergeDialog = signal<TicketGroupMergeSession | undefined>(undefined);
+
+/** The merge or delete running from Ticket groups, shown as a non-blocking banner (HS2-GXKX1Q). */
+export const ticketGroupOperation = signal<(TicketGroupOperation & { groupId: string }) | undefined>(undefined);
+
 /** Clear every transient group surface, as when the project or view changes. */
 export function resetTicketGroupSurfaces(): void {
   ticketGroupDropTarget.value = undefined;
   ticketGroupDialog.value = undefined;
+  if (!ticketGroupMergeDialog.value?.busy) ticketGroupMergeDialog.value = undefined;
 }

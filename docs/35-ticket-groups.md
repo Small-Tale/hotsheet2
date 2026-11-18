@@ -62,16 +62,25 @@ through that checkout's registry; elsewhere it takes ids.
 | ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Set or clear a ticket's group | `hotsheet-cli edit <slug> --group <id or name>` / `--clear-group`   | `hotsheet_update` with `group` (an id or name, or `null` to clear) |
 | Create a ticket in a group    | `hotsheet-cli new --group <id or name>`                             | `hotsheet_create` with `group`                                     |
-| List groups with counts       | `hotsheet-cli groups [--json]`                                      | `hotsheet_groups` with `action: "list"`                            |
+| List groups with counts       | `hotsheet-cli groups [--json] [--all]`                              | `hotsheet_groups` with `action: "list"`                            |
 | Filter tickets by group       | `hotsheet-cli ls --group <id or name>`, `--has-group`, `--no-group` | `hotsheet_query` with `group` or `has_group`                       |
 | Create a group                | `hotsheet-cli group create <name>`                                  | `hotsheet_groups` with `action: "create"`                          |
 | Rename a group                | `hotsheet-cli group rename <id or name> <to>`                       | `hotsheet_groups` with `action: "rename"`                          |
 | Ungroup every member          | `hotsheet-cli group ungroup <id or name>`                           | `hotsheet_groups` with `action: "ungroup"`                         |
-| Merge two groups              | `hotsheet-cli group merge <from> <into>`                            | `hotsheet_groups` with `action: "merge"`                           |
+| Merge two groups              | `hotsheet-cli group merge <from> <into> [--remove-source]`          | `hotsheet_groups` with `action: "merge"`                           |
+| Delete a group                | `hotsheet-cli group delete <id or name>`                            | not yet (`HS2-GXKX1Q` follow-up)                                   |
 | Migrate legacy names to ids   | `hotsheet-cli group migrate`                                        | `hotsheet_groups` with `action: "migrate"`                         |
 
-Rename is one registry edit and changes no ticket. Ungroup and merge update every member
-in one atomic write per store. Renaming to the name of a different listed group is
+Rename is one registry edit and changes no ticket. Ungroup, merge, and delete update every
+member in one atomic write per store. `--all` (`GET /checkouts/{reference}/groups?all=true`)
+also lists the registry's groups with no live member at count 0 (HS2-GXKX1Q); ticket views
+list only groups with members. By id, rename, merge, and delete reach such an empty group;
+a name always means a group with members. A rename onto the name of any group, empty ones
+included, is refused, so the whole list never gains a duplicate. **Delete** unassigns every member, Trash
+included, then deletes the group's registry entry (the deletion is committed like any
+registry write, §35.7); the tickets stay in their sources. **Merge with
+`--remove-source`** (`remove_source: true`) also deletes the source's entry once its members
+moved; a plain merge keeps both entries, as when folding duplicates. Renaming to the name of a different listed group is
 refused; changing only the casing of a group's own name is allowed.
 
 **Migration (HS2-9KZSD4).** `hotsheet-cli group migrate` (and `POST
@@ -210,6 +219,39 @@ The overflow button is Kerf's `ListHeader` `overflowAction` (shipped as
 `KF-X2MRCT`), following Kerf's Lists and selection convention: a collapsible
 section's own commands open from one trailing overflow button, and the row's
 context menu exposes the same commands.
+
+## 35.5.1 Project Settings › Ticket groups (HS2-GXKX1Q)
+
+Project Settings has a **Ticket groups** category (Lucide `folder-kanban`) after Ticket
+sources. It lists every group of the project, including empty groups, which ticket views
+leave out, sorted by name. A quiet line above the list says so; a quiet line below says
+that deleting keeps the tickets and merging moves members. Each row is a Kerf
+`ListActionRow`: the folder icon, the name, the live ticket count as a chip after the
+name (0 for an empty group), and, for a name several groups share, each group's 7-character
+short id. Selecting a row opens its tickets; its trailing **…** menu offers **View
+tickets**, **Rename…**, **Merge into…** (disabled with a reason when there is no other
+group), and **Delete group…** (danger). The workspace toolbar's **New group** pill, on the
+project tab row like "+ Data Source…", opens the New Group dialog for no tickets and creates
+an empty group.
+
+- **View tickets** leaves Settings for the ticket view with a `group:` chip across All
+  Tickets; a shared name filters by id.
+- **Rename…** uses the Rename Group dialog of §35.5 with the group's listed name.
+- **Merge into…** opens a small dialog: "Move _n_ tickets from **name** into another
+  group. The source group will be removed.", a **Destination Group** Select of every
+  other non-legacy group (a shared name shows its short id), Cancel, and **Merge groups**.
+- **Delete group…** asks first in the shared confirmation: "Delete "_name_"?", with "_n_
+  tickets will stay in their sources without a group." (or "No tickets are in this group.").
+
+While a merge or delete runs, the merge dialog has closed, the group's row is busy, and a
+non-blocking info banner in the project shell (`ShellBanner` with an indeterminate Kerf
+`ProgressRing`) says "Merging _a_ into _b_…" or "Deleting _name_…"; the person can keep
+working or leave the page. One operation runs at a time. Afterwards a toast reports the
+result or the failure, and the settings list, the ticket views' group summaries, and the
+tickets are read again. The page also rereads when another client changes the registry.
+The server rewrites each source's members in one write and reports no progress while it
+runs, so the ring is indeterminate; a durable job with counted progress and per-source
+retry is a follow-up.
 
 ## 35.6 Search (HS2-44W3TP)
 

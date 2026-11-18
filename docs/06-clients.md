@@ -1077,14 +1077,17 @@ same explanation (HS2-CGXGWY).
   (HS2-C7GMQN). It is there for phones, whose project picker has no tab close button; it
   shows at every width. It closes the project in this window only. Forgetting a registered
   project is App Settings → Projects below, or headless `hotsheet-cli checkout remove`.
-  General, Ticket sources, Commands, Lifecycle, Permissions, and Development strategy each render as a
-  separate workspace so unrelated controls do not become one long settings page.
+  General, Ticket sources, Ticket groups, Commands, Lifecycle, Permissions, and Development strategy each
+  render as a separate workspace so unrelated controls do not become one long settings page.
   The project-scoped **General** category comes first and holds **Project Type**
   (Software or Orchestration), then the former Column view settings: **Group new tickets
   automatically** (HS2-FN018Q) and **Hide Verified column**. For an Orchestration project, **Orchestration** follows it
   with the projects it orchestrates, + Add Project, each project's detail in the inspector
   and the limits-only policy; it is absent for a Software project (HS2-W27N1D, see
   [26-orchestration-projects.md](26-orchestration-projects.md) §26.27).
+  **Project Settings → Ticket groups** lists every group of the project, including empty ones, with
+  View tickets, Rename…, Merge into…, and Delete group…, and a New group pill on the project tab row
+  (HS2-GXKX1Q; [35-ticket-groups.md](35-ticket-groups.md) §35.5.1).
   Ticket sources are never global (HS2-SM9PM8, see
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
   **Project Settings → Ticket sources** shows only the sources this project owns, with its

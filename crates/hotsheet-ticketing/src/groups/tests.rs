@@ -438,12 +438,10 @@ fn hs2_9kzsd4_rename_is_a_registry_edit_that_touches_no_ticket() {
         rename(&old, "NEW NAME").unwrap().name.as_deref(),
         Some("NEW NAME")
     );
-    // Renaming to the name of an unlisted (memberless) entry is allowed.
+    // HS2-GXKX1Q: Project Settings lists memberless groups too, so their names are taken; a
+    // rename onto one would create a visible duplicate.
     registry.find_or_create("Unused").unwrap();
-    assert_eq!(
-        rename(&old, "unused").unwrap().name.as_deref(),
-        Some("unused")
-    );
+    assert!(matches!(rename(&old, "unused"), Err(GroupError::NameTaken(n)) if n == "Unused"));
 }
 
 #[test]
@@ -583,6 +581,138 @@ fn hs2_9kzsd4_merge_moves_duplicate_members_onto_one_id() {
     let merged = merge("legacy", &keep).unwrap();
     assert_eq!(merged.updated, 1);
     assert_eq!(listing(&[&store], Some(&registry)).len(), 1);
+}
+
+#[test]
+fn hs2_gxkx1q_the_whole_list_includes_empty_registry_groups() {
+    let (_dir, store) = store();
+    let (_reg, registry) = registry();
+    let sprint = registry.find_or_create("Sprint").unwrap().0;
+    let empty = registry.find_or_create("Future work").unwrap().0;
+    let twin = registry.find_or_create("Backlog").unwrap().0;
+    registry.set_name("0000000001", "backlog").unwrap();
+    create(&store, "a", Some(&sprint));
+    let gone = create(&store, "b", Some(&twin));
+    trash(&store, &gone.id);
+    let directory = GroupDirectory::scan(&store).unwrap();
+    // Ticket views list groups with live members only.
+    let live: Vec<_> = list_groups(&directory, Some(&registry))
+        .unwrap()
+        .into_iter()
+        .map(|g| g.id)
+        .collect();
+    assert_eq!(live, vec![sprint.clone()]);
+    // Settings lists every registry group at its live count, flags same-named entries, and
+    // sorts by name.
+    let all: Vec<_> = list_all_groups(&directory, Some(&registry))
+        .unwrap()
+        .into_iter()
+        .map(|g| (g.name, g.count, g.named, g.duplicate))
+        .collect();
+    assert_eq!(
+        all,
+        vec![
+            ("Backlog".to_string(), 0, true, true),
+            ("backlog".to_string(), 0, true, true),
+            ("Future work".to_string(), 0, true, false),
+            ("Sprint".to_string(), 1, true, false),
+        ]
+    );
+    // Without a registry there is nothing beyond the live groups.
+    assert_eq!(list_all_groups(&directory, None).unwrap().len(), 1);
+    // An empty group is found by id, never by name (a name means a group with members).
+    assert_eq!(
+        find_group(&directory, Some(&registry.names().unwrap()), &empty)
+            .unwrap()
+            .summary
+            .count,
+        0
+    );
+    assert!(matches!(
+        find_group(&directory, Some(&registry.names().unwrap()), "future work"),
+        Err(GroupError::UnknownGroup(_))
+    ));
+    // A name an empty group holds is taken for a rename.
+    assert!(matches!(
+        rename_group(
+            &[&store],
+            &directory,
+            Some(&registry),
+            &sprint,
+            "FUTURE WORK"
+        ),
+        Err(GroupError::NameTaken(_))
+    ));
+}
+
+#[test]
+fn hs2_gxkx1q_delete_unassigns_every_member_then_deletes_the_entry() {
+    let (_dir, store) = store();
+    let (_reg, registry) = registry();
+    let sprint = registry.find_or_create("Sprint").unwrap().0;
+    let empty = registry.find_or_create("Future work").unwrap().0;
+    let a = create(&store, "a", Some(&sprint));
+    let b = create(&store, "b", Some(&sprint));
+    trash(&store, &b.id);
+    let keep = create(&store, "keep", Some(&empty));
+    set_group(&store, &keep.id, None).unwrap();
+    let delete = |group: &str| {
+        let directory = GroupDirectory::scan(&store).unwrap();
+        delete_group(&[&store], &directory, Some(&registry), group)
+    };
+    let outcome = delete(&sprint).unwrap();
+    assert_eq!(outcome.updated, 1);
+    assert_eq!(outcome.name.as_deref(), Some("Sprint"));
+    assert_eq!(outcome.writes[0].tickets.len(), 2, "the trashed member too");
+    assert_eq!(group_of(&store, &a.id), None);
+    assert_eq!(group_of(&store, &b.id), None);
+    assert_eq!(registry.name(&sprint).unwrap(), None);
+    // Deleting it again finds nothing; the name creates a new group.
+    assert!(matches!(delete(&sprint), Err(GroupError::UnknownGroup(_))));
+    assert_ne!(registry.find_or_create("Sprint").unwrap().0, sprint);
+    // An empty group is deleted by id without touching a ticket.
+    let outcome = delete(&empty).unwrap();
+    assert_eq!(outcome.updated, 0);
+    assert_eq!(registry.name(&empty).unwrap(), None);
+    // A legacy group has no entry: its members are unassigned.
+    let legacy = create(&store, "legacy", Some("Old name"));
+    assert_eq!(delete("old name").unwrap().updated, 1);
+    assert_eq!(group_of(&store, &legacy.id), None);
+}
+
+#[test]
+fn hs2_gxkx1q_merge_into_removes_the_source_group_after_moving_its_members() {
+    let (_dir, store) = store();
+    let (_reg, registry) = registry();
+    let from = registry.find_or_create("Launch").unwrap().0;
+    let into = registry.find_or_create("Design").unwrap().0;
+    let empty = registry.find_or_create("Future work").unwrap().0;
+    let a = create(&store, "a", Some(&from));
+    let b = create(&store, "b", Some(&into));
+    let merge = |from: &str, into: &str| {
+        let directory = GroupDirectory::scan(&store).unwrap();
+        merge_groups_removing(&[&store], &directory, Some(&registry), from, into)
+    };
+    let merged = merge(&from, &into).unwrap();
+    assert_eq!(merged.updated, 1);
+    assert_eq!(group_of(&store, &a.id), Some(into.clone()));
+    assert_eq!(group_of(&store, &b.id), Some(into.clone()));
+    assert_eq!(registry.name(&from).unwrap(), None);
+    // An empty group merges into another by id and leaves no entry.
+    let merged = merge(&empty, &into).unwrap();
+    assert_eq!(merged.updated, 0);
+    assert_eq!(registry.name(&empty).unwrap(), None);
+    // A group merges into an empty one by id.
+    let target = registry.find_or_create("Later").unwrap().0;
+    assert_eq!(merge(&into, &target).unwrap().updated, 2);
+    assert_eq!(group_of(&store, &a.id), Some(target.clone()));
+    assert_eq!(registry.name(&into).unwrap(), None);
+    // A refused merge removes nothing.
+    assert!(matches!(
+        merge(&target, &target),
+        Err(GroupError::InvalidMerge(_))
+    ));
+    assert!(registry.name(&target).unwrap().is_some());
 }
 
 #[test]

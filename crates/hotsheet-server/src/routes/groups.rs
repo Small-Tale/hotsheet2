@@ -1,5 +1,5 @@
 //! Ticket group routes (HS2-PDSHNN, HS2-8CDFKR, HS2-9KZSD4): list, create, rename,
-//! ungroup, merge, and migrate, for the default store, one hosted store, one provider
+//! ungroup, merge, delete (HS2-GXKX1Q), and migrate, for the default store, one hosted store, one provider
 //! connection, and a whole checkout.
 //!
 //! A checkout is one project: its groups are merged across every connection with the
@@ -15,7 +15,7 @@ use crate::multistore::StoreEntry;
 use crate::routes::checkouts::{checkout_entries, checkout_lookup_error};
 use crate::routes::providers::{provider_for, provider_transfer_error};
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::FsStore;
@@ -225,8 +225,35 @@ pub(crate) struct UngroupResponse {
 pub(crate) struct MergeGroupsReq {
     from: String,
     into: String,
+    /// Also delete the source group's registry entry once its members moved (HS2-GXKX1Q).
+    #[serde(default)]
+    remove_source: bool,
     #[serde(default)]
     actor: Option<ActorReq>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeleteGroupReq {
+    /// The group's id, or the name of a group with members.
+    group: String,
+    #[serde(default)]
+    actor: Option<ActorReq>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct DeleteGroupResponse {
+    /// The deleted group's display name.
+    name: String,
+    /// Live member tickets unassigned.
+    updated: usize,
+}
+
+/// `?all=true` lists a checkout's registry groups with no members too (HS2-GXKX1Q).
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ListGroupsQuery {
+    #[serde(default)]
+    all: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -268,10 +295,19 @@ fn change_response(outcome: GroupOutcome) -> Json<GroupChangeResponse> {
 }
 
 fn do_list(scope: &Scope) -> Result<Json<GroupsResponse>, ApiError> {
+    do_list_with(scope, false)
+}
+
+fn do_list_with(scope: &Scope, all: bool) -> Result<Json<GroupsResponse>, ApiError> {
+    let directory = directory(&scope.entries)?;
+    let list = if all {
+        groups::list_all_groups
+    } else {
+        groups::list_groups
+    };
     Ok(Json(GroupsResponse {
         registry: scope.registry.is_some(),
-        groups: groups::list_groups(&directory(&scope.entries)?, scope.registry.as_ref())
-            .map_err(group_error)?,
+        groups: list(&directory, scope.registry.as_ref()).map_err(group_error)?,
         registry_sync: scope.registry.as_ref().and_then(GroupRegistry::sync_status),
     }))
 }
@@ -328,7 +364,12 @@ fn do_merge(
     req: MergeGroupsReq,
 ) -> Result<Json<GroupChangeResponse>, ApiError> {
     parse_actor(req.actor.as_ref())?;
-    let outcome = groups::merge_groups(
+    let merge = if req.remove_source {
+        groups::merge_groups_removing
+    } else {
+        groups::merge_groups
+    };
+    let outcome = merge(
         &scope.stores(),
         &directory(&scope.entries)?,
         scope.registry.as_ref(),
@@ -339,6 +380,27 @@ fn do_merge(
     publish(state, scope, &outcome.writes);
     announce_registry(state, scope);
     Ok(change_response(outcome))
+}
+
+fn do_delete(
+    state: &AppState,
+    scope: &Scope,
+    req: DeleteGroupReq,
+) -> Result<Json<DeleteGroupResponse>, ApiError> {
+    parse_actor(req.actor.as_ref())?;
+    let outcome = groups::delete_group(
+        &scope.stores(),
+        &directory(&scope.entries)?,
+        scope.registry.as_ref(),
+        &req.group,
+    )
+    .map_err(group_error)?;
+    publish(state, scope, &outcome.writes);
+    announce_registry(state, scope);
+    Ok(Json(DeleteGroupResponse {
+        name: outcome.name.unwrap_or_default(),
+        updated: outcome.updated,
+    }))
 }
 
 fn do_migrate(
@@ -461,12 +523,23 @@ fn checkout_scope(state: &AppState, reference: &str) -> Result<Scope, ApiError> 
 }
 
 /// `GET /checkouts/{reference}/groups` — the project's groups across its Git sources,
-/// named by the checkout's registry.
+/// named by the checkout's registry; `?all=true` adds registry groups with no members.
 pub(crate) async fn list_checkout_groups(
     State(state): State<AppState>,
     Path(reference): Path<String>,
+    Query(query): Query<ListGroupsQuery>,
 ) -> Result<Json<GroupsResponse>, ApiError> {
-    do_list(&checkout_scope(&state, &reference)?)
+    do_list_with(&checkout_scope(&state, &reference)?, query.all)
+}
+
+/// `POST /checkouts/{reference}/groups/delete` — unassign every member, then delete the
+/// group's registry entry (HS2-GXKX1Q).
+pub(crate) async fn delete_checkout_group(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(req): Json<DeleteGroupReq>,
+) -> Result<Json<DeleteGroupResponse>, ApiError> {
+    do_delete(&state, &checkout_scope(&state, &reference)?, req)
 }
 
 /// `POST /checkouts/{reference}/groups` — create (or find by name) a registry group.

@@ -224,9 +224,14 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
       field?.select?.();
     });
   }
-  function openNewGroup(slugs: string[]): void {
+  /**
+   * Open New Group for these tickets; `empty` opens it for none, as Project Settings › Ticket groups'
+   * New group does (HS2-GXKX1Q).
+   */
+  function openNewGroup(slugs: string[], empty = false): void {
     const current = project();
-    if (!current || slugs.length === 0 || disabledReason(slugs)) return;
+    // An empty new group moves no ticket, so no provider capability applies to it (HS2-GXKX1Q).
+    if (!current || (slugs.length === 0 ? !empty : disabledReason(slugs))) return;
     ticketGroupDialog.value = {
       mode: 'new',
       name: '',
@@ -238,12 +243,15 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     void refreshGroups();
     focusNameField();
   }
-  function openRenameGroup(group: string): void {
-    const current = project();
-    if (!current || ticketGroupDisabledReason(membersOf(group), capabilitiesFor)) return;
+  /** Open Rename Group; `name` is the group's name where this view lists no member (HS2-GXKX1Q). */
+  function openRenameGroup(group: string, name?: string): void {
+    const current = project(),
+      members = membersOf(group);
+    // An empty group (Project Settings, HS2-GXKX1Q) has no member whose provider could refuse a rename.
+    if (!current || (members.length > 0 && ticketGroupDisabledReason(members, capabilitiesFor))) return;
     ticketGroupDialog.value = {
       mode: 'rename',
-      name: displayName(group),
+      name: name ?? displayName(group),
       group,
       groups: dialogNames(group),
       session: ++session,
@@ -290,7 +298,8 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
         ...listed,
         { id: created.id, name: created.name, count: 0, named: true, legacy: false, duplicate: false },
       ]);
-    const moved = await setGroup(slugs, created.id);
+    // An empty group from Project Settings has no tickets to move (HS2-GXKX1Q).
+    const moved = slugs.length === 0 || (await setGroup(slugs, created.id));
     await refreshGroups();
     return moved;
   }

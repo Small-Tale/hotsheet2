@@ -35,6 +35,7 @@ import { type SettingsCategory, settingsCategoryTitle } from './settings-navigat
 import { StandbySettings, type StandbySettingsProps } from './standby-settings';
 import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
 import { ThemePicker } from './theme-picker';
+import { TicketGroupSettings, type TicketGroupSettingsProps } from './ticket-group-settings';
 import {
   AccountsSettings,
   type AccountsSettingsProps,
@@ -50,6 +51,8 @@ export interface SettingsWorkspaceProps {
   /** Project Settings → Orchestration, for an Orchestration project (HS2-W27N1D). */
   orchestration?: OrchestrationSettingsProps;
   sources: TicketSourcesSettingsProps;
+  /** Project Settings › Ticket groups (HS2-GXKX1Q). */
+  groups?: TicketGroupSettingsProps;
   accounts: AccountsSettingsProps;
   ai: { tools: readonly AiToolDescriptor[]; selection: AiToolDefaults; loading: boolean; message: string };
   guidance?: GuidanceSettingsProps;
@@ -103,6 +106,7 @@ export function SettingsWorkspace({
   projectGeneral = {},
   orchestration = {},
   sources,
+  groups = {},
   accounts,
   ai,
   guidance,
@@ -133,6 +137,7 @@ export function SettingsWorkspace({
           {category === 'project-general' && <ProjectGeneralSettings {...projectGeneral} />}
           {category === 'orchestration' && <OrchestrationSettings {...orchestration} />}
           {category === 'sources' && <TicketSourcesSettings {...sources} />}
+          {category === 'groups' && <TicketGroupSettings {...groups} />}
           {category === 'accounts' && <AccountsSettings {...accounts} />}
           {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
           {category === 'notifications' && <NotificationSettings {...notifications} />}

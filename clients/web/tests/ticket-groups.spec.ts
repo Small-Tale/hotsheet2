@@ -1041,3 +1041,100 @@ test('HS2-VFYSQK HS2-1CWD0H warns in the project shell while the group registry 
     await server.stop();
   }
 });
+
+test('HS2-GXKX1Q manages every group from Project Settings: new, rename, view, merge into, and delete', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await withServer(async (server) => {
+    await open(page, server);
+    const checkout = `/checkouts/${server.checkoutId}`,
+      boardId = (await groupIdOf(server, BOARD))!,
+      searchId = (await groupIdOf(server, SEARCH))!;
+    await page.getByLabel('Settings View').click();
+    await page
+      .getByRole('navigation', { name: 'Project Settings' })
+      .getByRole('button', { name: 'Ticket groups' })
+      .click();
+    const settings = page.locator('[data-component="ticket-group-settings"]'),
+      row = (name: string) => settings.locator('[data-group-row]').filter({ hasText: name }),
+      count = (name: string) => row(name).locator('[data-group-count]');
+    await expect(row(BOARD)).toBeVisible();
+    await expect(count(BOARD)).toHaveText('3');
+    await expect(count(SEARCH)).toHaveText('2');
+    await capture(page, 'hs2-gxkx1q-list-light-1440');
+
+    // New group, in the toolbar, names an empty group, which only this page lists.
+    await page.getByRole('button', { name: 'New Group' }).click();
+    const nameDialog = page.locator('[data-dialog-component="ticket-group-dialog"]');
+    await nameDialog.getByRole('textbox', { name: 'Group Name' }).fill('Future work');
+    await nameDialog.getByRole('button', { name: 'Create Group' }).click();
+    await expect(count('Future work')).toHaveText('0');
+    const all = await server.request<{ groups: { id: string; name: string }[] }>(`${checkout}/groups?all=true`);
+    const futureId = all.groups.find((group) => group.name === 'Future work')!.id;
+
+    // Rename the empty group through its row menu.
+    const menu = async (name: string, item: string) => {
+      await row(name)
+        .getByRole('button', { name: `${name} Group Actions` })
+        .click();
+      await page.getByRole('menuitem', { name: item }).click();
+    };
+    await menu('Future work', 'Rename…');
+    await nameDialog.getByRole('textbox', { name: 'Group Name' }).fill('Later');
+    await nameDialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(row('Later')).toBeVisible();
+    await expect(row('Future work')).toHaveCount(0);
+
+    // View tickets leaves Settings for the group's tickets.
+    await row(SEARCH)
+      .getByRole('button', { name: `View tickets in ${SEARCH}` })
+      .click();
+    await expect(page.locator('[data-component="ticket-group-settings"]')).toHaveCount(0);
+    await expect(group(list(page), SEARCH).locator('[data-ticket-slug]')).toHaveCount(2);
+    await expect(group(list(page), BOARD)).toHaveCount(0);
+    await page.getByLabel('Settings View').click();
+
+    // Merge into…: the source's tickets move and the source group is removed.
+    await menu(SEARCH, 'Merge into…');
+    const mergeDialog = page.locator('[data-dialog-component="ticket-group-merge-dialog"]');
+    await expect(mergeDialog).toContainText(`Move 2 tickets from ${SEARCH} into another group.`);
+    await mergeDialog.getByRole('combobox', { name: 'Destination Group' }).click();
+    await page.getByRole('option', { name: BOARD }).click();
+    await capture(page, 'hs2-gxkx1q-merge-light-1440');
+    await mergeDialog.getByRole('button', { name: 'Merge Groups' }).click();
+    await expect(mergeDialog).toHaveCount(0);
+    await expect(row(SEARCH)).toHaveCount(0);
+    await expect(count(BOARD)).toHaveText('5');
+    expect(
+      (await server.request<{ groups: { id: string }[] }>(`${checkout}/groups?all=true`)).groups.map((g) => g.id),
+    ).not.toContain(searchId);
+
+    // Delete group… asks first; its tickets stay without a group and the registry entry goes.
+    await menu('Later', 'Delete group…');
+    const confirm = page.locator('[data-confirmation-dialog="true"]');
+    await expect(confirm).toContainText('Delete “Later”?');
+    await expect(confirm).toContainText('No tickets are in this group.');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(row('Later')).toBeVisible();
+    await menu(BOARD, 'Delete group…');
+    await expect(confirm).toContainText('5 tickets will stay in their sources without a group.');
+    await capture(page, 'hs2-gxkx1q-delete-light-1440');
+    await confirm.getByRole('button', { name: 'Delete group' }).click();
+    await expect(row(BOARD)).toHaveCount(0);
+    const remaining = await server.request<{ groups: { id: string }[] }>(`${checkout}/groups?all=true`);
+    expect(remaining.groups.map((g) => g.id)).toEqual([futureId]);
+    expect(remaining.groups.map((g) => g.id)).not.toContain(boardId);
+
+    // Wide, narrow, and wide again in the dark scheme: the rows and their menus stay inside the page.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    for (const width of [1440, 600, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await settle(page);
+      const box = (await row('Later').boundingBox())!;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      await capture(page, `hs2-gxkx1q-list-dark-${width}`);
+    }
+  }, page);
+});

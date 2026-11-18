@@ -1594,6 +1594,10 @@ pub fn app(state: AppState) -> Router {
             post(routes::groups::merge_checkout_groups),
         )
         .route(
+            "/checkouts/{reference}/groups/delete",
+            post(routes::groups::delete_checkout_group),
+        )
+        .route(
             "/checkouts/{reference}/groups/migrate",
             post(routes::groups::migrate_checkout_groups),
         )

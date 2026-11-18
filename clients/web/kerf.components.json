@@ -4647,6 +4647,71 @@
       }
     },
     {
+      "id": "ticket-group-merge-dialog",
+      "name": "TicketGroupMergeDialog",
+      "kind": "component",
+      "purpose": "Merge into… dialog for Project Settings › Ticket groups: the tickets that move, a destination Select, and Merge groups.",
+      "source": "src/components/ticket-group-merge-dialog.tsx",
+      "publicExports": [
+        {
+          "name": "TicketGroupMergeDialog"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-group-merge-dialog.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-group-merge-dialog"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-group-merge-dialog"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-merge-dialog.tsx",
+        "composition": "src/components/ticket-group-merge-dialog.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs merge into… dialog for Project Settings › Ticket groups: the tickets that move, a destination Select, and Merge groups."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroupMergeDialog behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "saved-view-dialog",
       "name": "SavedViewDialog",
       "kind": "component",
@@ -7947,6 +8012,69 @@
       }
     },
     {
+      "id": "ticket-group-operation-banner",
+      "name": "TicketGroupOperationBanner",
+      "kind": "component",
+      "purpose": "Non-blocking shell banner with a progress ring while a Ticket groups merge or delete runs.",
+      "source": "src/components/ticket-group-operation-banner.tsx",
+      "publicExports": [
+        {
+          "name": "TicketGroupOperationBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-group-operation-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-operation-banner.tsx",
+        "composition": "src/components/ticket-group-operation-banner.tsx"
+      },
+      "selection": {
+        "useWhen": ["The group list for the open project reports a registry_sync state of blocked or failed."],
+        "avoidWhen": ["A linked ticket store is not publishing; TicketStoreSyncBanner owns that warning."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "notifications-paused-banner",
       "name": "NotificationsPausedBanner",
       "kind": "component",
@@ -8266,6 +8394,71 @@
           "Hot Sheet needs one project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "ticket-group-settings",
+      "name": "TicketGroupSettings",
+      "kind": "component",
+      "purpose": "Project Settings › Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions.",
+      "source": "src/components/ticket-group-settings.tsx",
+      "publicExports": [
+        {
+          "name": "TicketGroupSettings"
+        }
+      ],
+      "sourceLinks": ["src/components/ticket-group-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["ticket-group-settings"],
+        "publicTokens": [],
+        "placeableClasses": ["ticket-group-settings"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-settings.tsx",
+        "composition": "src/components/ticket-group-settings.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs project Settings › Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketGroupSettings behavior."],
         "documentation": "../../docs/ux-components.md"
       }
     },

@@ -550,6 +550,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-groups.ts     #   Ticket group ids and names, clustering, and list/column segments (HS2-3XNTSD, HS2-9KZSD4); requirements in docs/35-ticket-groups.md
     src/ticket-group-state.ts #  Device-local group state: persisted collapse preference, drag target, open name dialog, server-reported names
     src/features/ticket-groups.ts # Group controller shared by the menu, dialog, header, and drag and drop
+    src/features/ticket-group-settings.ts # Project Settings › Ticket groups: every group, rename, merge into (removing the source), delete, and the running-operation banner (HS2-GXKX1Q)
+    src/components/ticket-group-settings.tsx # Ticket groups settings list; ticket-group-merge-dialog.tsx and ticket-group-operation-banner.tsx beside it (HS2-GXKX1Q)
     src/features/ticket-store-sync.ts # Per-project ticket-store sync health (HS2-ADHFKZ): one load per project on first show, reloads on `ticket_store_sync` events, stale-response and reset safe
     src/components/ticket-group{,-dialog,-context-menu,-interactions}.ts(x) # Shared group container (SunkenPanel + ListHeader), New/Rename dialog, header menu, `wireTicketGroups`
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry

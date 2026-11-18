@@ -209,6 +209,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly terminalLimitsSettings?: Pick<TerminalLimitsSettings, 'refresh' | 'save'>;
   readonly refreshTrashSettings: (current?: Project) => Promise<void>;
   readonly refreshTicketCreationSettings?: (current?: Project) => Promise<void>;
+  /** Project Settings › Ticket groups reads every registry group (HS2-GXKX1Q). */
+  readonly refreshTicketGroupSettings?: (current?: Project) => Promise<void>;
   readonly capturingShortcutId: Signal<string | undefined>;
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
   readonly appleShortcutPlatform: boolean;
@@ -374,6 +376,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     terminalLimitsSettings,
     refreshTrashSettings,
     refreshTicketCreationSettings,
+    refreshTicketGroupSettings,
     capturingShortcutId,
     keyboardShortcutOverrides,
     appleShortcutPlatform,
@@ -1135,6 +1138,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'project-general') void refreshTicketCreationSettings?.();
+      if (category === 'groups') void refreshTicketGroupSettings?.();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
     }),
   );

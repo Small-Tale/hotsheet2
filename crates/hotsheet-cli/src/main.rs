@@ -664,8 +664,12 @@ enum Cmd {
         /// instead of the table.
         #[arg(long)]
         json: bool,
+        /// Also list the project's registry groups with no members (HS2-GXKX1Q).
+        #[arg(long)]
+        all: bool,
     },
-    /// Create, rename, ungroup, merge, or migrate ticket groups (HS2-8CDFKR, HS2-9KZSD4).
+    /// Create, rename, ungroup, merge, delete, or migrate ticket groups (HS2-8CDFKR,
+    /// HS2-9KZSD4, HS2-GXKX1Q).
     #[command(name = "group")]
     TicketGroup {
         #[command(subcommand)]

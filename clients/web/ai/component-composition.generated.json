@@ -9520,6 +9520,206 @@
       }
     },
     {
+      "key": "hotsheet-web:ticket-group-merge-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-group-merge-dialog",
+      "name": "TicketGroupMergeDialog",
+      "kind": "component",
+      "purpose": "Merge into… dialog for Project Settings › Ticket groups: the tickets that move, a destination Select, and Merge groups.",
+      "publicExports": [
+        {
+          "name": "TicketGroupMergeDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-group-merge-dialog.tsx"
+      ],
+      "source": "src/components/ticket-group-merge-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-group-merge-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-group-merge-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-merge-dialog.tsx",
+        "composition": "src/components/ticket-group-merge-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-group-operation-banner",
+      "package": "hotsheet-web",
+      "id": "ticket-group-operation-banner",
+      "name": "TicketGroupOperationBanner",
+      "kind": "component",
+      "purpose": "Non-blocking shell banner with a progress ring while a Ticket groups merge or delete runs.",
+      "publicExports": [
+        {
+          "name": "TicketGroupOperationBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-group-operation-banner.tsx"
+      ],
+      "source": "src/components/ticket-group-operation-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-operation-banner.tsx",
+        "composition": "src/components/ticket-group-operation-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-group-settings",
+      "package": "hotsheet-web",
+      "id": "ticket-group-settings",
+      "name": "TicketGroupSettings",
+      "kind": "component",
+      "purpose": "Project Settings › Ticket groups: every project group, empty ones included, with its ticket count and View tickets, Rename, Merge into, and Delete group actions.",
+      "publicExports": [
+        {
+          "name": "TicketGroupSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-group-settings.tsx"
+      ],
+      "source": "src/components/ticket-group-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-group-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-group-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-group-settings.tsx",
+        "composition": "src/components/ticket-group-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-info-panel",
       "package": "hotsheet-web",
       "id": "ticket-info-panel",

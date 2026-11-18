@@ -56,6 +56,7 @@ import {
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
   parseGroupCreate,
+  parseGroupDelete,
   parseGroupList,
   parseGroupRename,
   parseGroupUngroup,
@@ -2794,6 +2795,15 @@ export class Api {
   // changes, so it never drives the server-busy indicator (HS2-AZZ9TF).
   checkoutGroups = (checkout: string) =>
     this.parsed(parseGroupList, `/checkouts/${encodeURIComponent(checkout)}/groups`, {}, false);
+  /** Every registry group, empty ones included, for Project Settings › Ticket groups (HS2-GXKX1Q). */
+  allCheckoutGroups = (checkout: string) =>
+    this.parsed(parseGroupList, `/checkouts/${encodeURIComponent(checkout)}/groups?all=true`, {}, false);
+  /** Unassign every member of a group, then delete its registry entry (HS2-GXKX1Q). */
+  deleteCheckoutGroup = (checkout: string, group: string) =>
+    this.parsed(parseGroupDelete, `/checkouts/${encodeURIComponent(checkout)}/groups/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ group }),
+    });
   /** The registry id for a group name, created when no group has that name yet (HS2-9KZSD4). */
   createCheckoutGroup = (checkout: string, name: string) =>
     this.parsed(parseGroupCreate, `/checkouts/${encodeURIComponent(checkout)}/groups`, {
@@ -2813,10 +2823,11 @@ export class Api {
       body: JSON.stringify({ group }),
     });
   /** Move every member of `from` into `into`, as when merging duplicate groups (HS2-9KZSD4). */
-  mergeCheckoutGroups = (checkout: string, from: string, into: string) =>
+  mergeCheckoutGroups = (checkout: string, from: string, into: string, removeSource = false) =>
     this.parsed(parseGroupRename, `/checkouts/${encodeURIComponent(checkout)}/groups/merge`, {
       method: 'POST',
-      body: JSON.stringify({ from, into }),
+      // Merge into… also deletes the source group's registry entry (HS2-GXKX1Q).
+      body: JSON.stringify(removeSource ? { from, into, remove_source: true } : { from, into }),
     });
   deleteCheckoutNote = (checkout: string, id: string, noteId: string) =>
     this.parsed(

@@ -665,6 +665,13 @@ export const parseGroupUngroup: ResponseParser<{ updated: number }> = (value) =>
   return body as { updated: number };
 };
 
+/** `POST /checkouts/{reference}/groups/delete` (HS2-GXKX1Q): the deleted group's name and unassigned members. */
+export const parseGroupDelete: ResponseParser<{ name: string; updated: number }> = (value) => {
+  const body = record(value, 'group delete');
+  if (typeof body.name !== 'string' || typeof body.updated !== 'number') invalid('group delete');
+  return body as { name: string; updated: number };
+};
+
 /* ---- Declarative DTO shapes (HS2-E0AG5E) -------------------------------------------------
  * Each shape names the fields callers rely on. Required fields must have the stated type;
  * optional fields may be absent or `null` (the Rust DTOs serialize `Option::None` as `null`

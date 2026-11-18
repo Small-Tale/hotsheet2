@@ -66,6 +66,7 @@ import {
   type TicketFollowUpLinkDialogState,
 } from '../components/ticket-follow-up-link-dialog';
 import { TicketGroupDialog } from '../components/ticket-group-dialog';
+import { TicketGroupMergeDialog } from '../components/ticket-group-merge-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { type WorkspaceViewMode } from '../components/workspace-header';
@@ -78,7 +79,7 @@ import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer 
 import type { RenderMetrics } from '../render-metrics';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE, type TerminalVisibilityState } from '../terminal-visibility';
 import { isTicketDropTarget, NEW_TICKET_COMPOSER_DROP_KEY } from '../ticket-drop-target';
-import { ticketGroupDialog } from '../ticket-group-state';
+import { ticketGroupDialog, ticketGroupMergeDialog } from '../ticket-group-state';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
 import {
@@ -591,6 +592,7 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         {changeEvidenceSurface()}
         <BulkTicketDialog state={bulkTicketDialog.value} />
         <TicketGroupDialog state={ticketGroupDialog.value} />
+        <TicketGroupMergeDialog state={ticketGroupMergeDialog.value} />
         <TicketCloseDialog state={ticketCloseDialog.value} />
         {/* A dialog opened from the modal reader renders inside that reader instead (HS2-NXSMC7). */}
         <TicketFollowUpLinkDialog

@@ -46,6 +46,7 @@ import type { SidebarPanelParts } from '../components/sidebar-panel';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
+import { TicketGroupOperationBanner } from '../components/ticket-group-operation-banner';
 import type { TicketInspectorProps } from '../components/ticket-inspector';
 import {
   corruptInspectorPanel,
@@ -97,7 +98,7 @@ import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import { canBulkUpdate } from '../ticket-bulk-operations';
-import { projectGroupRegistrySync } from '../ticket-group-state';
+import { projectGroupRegistrySync, ticketGroupOperation } from '../ticket-group-state';
 import {
   ALL_TICKETS_SCOPE,
   canCreateTicketInView,
@@ -543,13 +544,15 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         ? undefined
         : settingsCategory() === 'sources'
           ? { kind: 'add-data-source' }
-          : settingsCategory() === 'commands'
-            ? {
-                kind: 'command-settings',
-                size: viewportMobile.value ? 'compact' : 'default',
-                ready: commandSettingsReady(current.id),
-              }
-            : undefined;
+          : settingsCategory() === 'groups'
+            ? { kind: 'new-group' }
+            : settingsCategory() === 'commands'
+              ? {
+                  kind: 'command-settings',
+                  size: viewportMobile.value ? 'compact' : 'default',
+                  ready: commandSettingsReady(current.id),
+                }
+              : undefined;
     const headingAction = !['settings', 'notifications', 'workers', 'orchestration'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
       : settingsAction;
@@ -706,6 +709,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             })}
             {TicketStoreSyncBanner({ report: ticketStoreSyncReport(current.id) })}
             {GroupRegistrySyncBanner({ status: projectGroupRegistrySync.value[current.id] })}
+            {TicketGroupOperationBanner({
+              operation: ticketGroupOperation.value?.projectId === current.id ? ticketGroupOperation.value : undefined,
+            })}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

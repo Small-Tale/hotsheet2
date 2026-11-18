@@ -717,6 +717,136 @@ async fn hs2_9kzsd4_a_checkout_names_groups_through_its_registry_across_git_sour
 }
 
 #[tokio::test]
+async fn hs2_gxkx1q_a_checkout_lists_every_group_deletes_and_merges_removing_the_source() {
+    let project = project();
+    let router = &project.router;
+    let base = format!("/checkouts/{}", project.checkout);
+    let create_in = |source: usize, title: &'static str, group: Option<&'static str>| {
+        let uri = format!("{base}/tickets?source={}", project.git[source]);
+        let router = router.clone();
+        async move { create(&router, &uri, title, group).await }
+    };
+    let a = create_in(0, "launch one", Some("Launch")).await;
+    let launch = ticket(&a)["group"].as_str().unwrap().to_owned();
+    create_in(1, "launch two", Some("Launch")).await;
+    let d = create_in(1, "design", Some("Design")).await;
+    let design = ticket(&d)["group"].as_str().unwrap().to_owned();
+    let future = ok(
+        router,
+        "POST",
+        &format!("{base}/groups"),
+        Some(json!({ "name": "Future work" })),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let names = |listing: &Value| -> Vec<(String, u64)> {
+        listing["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                (
+                    g["name"].as_str().unwrap().to_owned(),
+                    g["count"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    // Ticket views list groups with members; Settings asks for every registry group.
+    let live = ok(router, "GET", &format!("{base}/groups"), None).await;
+    assert_eq!(names(&live), [("Design".into(), 1), ("Launch".into(), 2)]);
+    let all = ok(router, "GET", &format!("{base}/groups?all=true"), None).await;
+    assert_eq!(
+        names(&all),
+        [
+            ("Design".into(), 1),
+            ("Future work".into(), 0),
+            ("Launch".into(), 2)
+        ]
+    );
+
+    // Merge into…, removing the source: members move across both sources, the entry goes.
+    let merged = ok(
+        router,
+        "POST",
+        &format!("{base}/groups/merge"),
+        Some(json!({ "from": launch, "into": design, "remove_source": true })),
+    )
+    .await;
+    assert_eq!(merged["updated"], 2, "{merged}");
+    assert!(
+        !project
+            .root
+            .join(format!(".hotsheet2/groups/{launch}.json"))
+            .exists()
+    );
+    let all = ok(router, "GET", &format!("{base}/groups?all=true"), None).await;
+    assert_eq!(
+        names(&all),
+        [("Design".into(), 3), ("Future work".into(), 0)]
+    );
+
+    // Delete an empty group by id, then a group with members by name.
+    let deleted = ok(
+        router,
+        "POST",
+        &format!("{base}/groups/delete"),
+        Some(json!({ "group": future })),
+    )
+    .await;
+    assert_eq!(deleted, json!({ "name": "Future work", "updated": 0 }));
+    let deleted = ok(
+        router,
+        "POST",
+        &format!("{base}/groups/delete"),
+        Some(json!({ "group": "design" })),
+    )
+    .await;
+    assert_eq!(deleted, json!({ "name": "Design", "updated": 3 }));
+    assert!(
+        !project
+            .root
+            .join(format!(".hotsheet2/groups/{design}.json"))
+            .exists()
+    );
+    let rows = ok(router, "GET", &format!("{base}/tickets"), None).await;
+    let rows = rows
+        .as_array()
+        .or_else(|| rows["items"].as_array())
+        .unwrap()
+        .clone();
+    // The three Git tickets (the GitHub connection's fixture issue has no group either).
+    assert!(rows.len() >= 3, "{rows:?}");
+    assert!(
+        rows.iter().all(|row| ticket(row)["group"].is_null()),
+        "{rows:?}"
+    );
+    let all = ok(router, "GET", &format!("{base}/groups?all=true"), None).await;
+    assert_eq!(names(&all), Vec::<(String, u64)>::new());
+
+    // A deleted group is gone; an unknown field is refused.
+    let (status, error) = send(
+        router,
+        "POST",
+        &format!("{base}/groups/delete"),
+        Some(json!({ "group": design })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+    assert_eq!(error["code"], "group_not_found");
+    let (status, _) = send(
+        router,
+        "POST",
+        &format!("{base}/groups/delete"),
+        Some(json!({ "group": "x", "force": true })),
+    )
+    .await;
+    assert!(status.is_client_error());
+}
+
+#[tokio::test]
 async fn hs2_9kzsd4_the_checkout_migration_is_explicit_and_idempotent() {
     let project = project_with(|stores| {
         // Pre-registry name values, mixed spellings, across both stores and Trash.

@@ -18253,9 +18253,14 @@ paths:
     parameters: *a3
     get:
       operationId: list_checkout_groups
-      description:
-        "Ticket groups of the project: one namespace, counts merged by id across every connection with the `groups`
-        capability (HS2-PDSHNN), named by the checkout's group registry (HS2-9KZSD4)."
+      description: "Ticket groups of the project: one namespace, counts merged by id across every connection with the
+        `groups` capability (HS2-PDSHNN), named by the checkout's group registry (HS2-9KZSD4)."
+      parameters:
+        - name: all
+          in: query
+          description: Also list the registry's groups with no live members, at count 0 (HS2-GXKX1Q).
+          schema:
+            type: boolean
       responses:
         '200':
           description: Server-owned response.
@@ -18417,6 +18422,43 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: '`group_not_found`: no listed group matches `from` or `into`. Also: Unknown checkout.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: '`group_ambiguous`: a name matches several groups; use an id.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /checkouts/{reference}/groups/delete:
+    parameters: *a3
+    post:
+      operationId: delete_checkout_group
+      description: Delete a group (HS2-GXKX1Q). Every member is unassigned, Trash included, in one write per store,
+        then the group's registry entry is deleted. The tickets stay in their sources. An empty group is deleted by id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteTicketGroup'
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedTicketGroup'
+        '404':
+          description: '`group_not_found`: no group matches `group`. Also: Unknown checkout.'
           content:
             application/json:
               schema:
@@ -35888,8 +35930,37 @@ components:
         into:
           type: string
           description: The group they join, by id or name.
+        remove_source:
+          type: boolean
+          description: Also delete the source group's registry entry once its members moved (HS2-GXKX1Q). Only a
+            checkout has a registry.
         actor:
           $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    DeleteTicketGroup:
+      type: object
+      required:
+        - group
+      properties:
+        group:
+          type: string
+          description: The group's id, or the name of a group with members.
+        actor:
+          $ref: '#/components/schemas/Actor'
+      additionalProperties: false
+    DeletedTicketGroup:
+      type: object
+      required:
+        - name
+        - updated
+      properties:
+        name:
+          type: string
+          description: The deleted group's display name.
+        updated:
+          type: integer
+          minimum: 0
+          description: Live member tickets unassigned.
       additionalProperties: false
     MigrateTicketGroups:
       type: object

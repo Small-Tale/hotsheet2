@@ -300,8 +300,8 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
     await page.setViewportSize({ width, height: width === 390 ? 1200 : 844 });
     for (const [component, label, count] of [
       // HS2-W27N1D: the project-scoped General joins; Orchestration shows only for an Orchestration project.
-      // HS2-SVA8HP: main's renamed Columns category merged into that General, so the count is 9.
-      ['settings-navigation', 'Project Settings', 9],
+      // HS2-SVA8HP: main's renamed Columns category merged into that General; HS2-GXKX1Q adds Ticket groups.
+      ['settings-navigation', 'Project Settings', 10],
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
       await page.goto(`/ux-demo?component=${component}`);

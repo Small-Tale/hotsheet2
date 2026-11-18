@@ -67,6 +67,7 @@ import { demoModule as themePicker } from './theme-picker-demo';
 import { demoModule as ticketCollections } from './ticket-collections-demo';
 import { demoModule as ticketGroup } from './ticket-group-demo';
 import { demoModule as ticketGroupDialog } from './ticket-group-dialog-demo';
+import { demoModule as ticketGroupSettings } from './ticket-group-settings-demo';
 import { demoModule as ticketMetadata } from './ticket-metadata-demo';
 import { demoModule as ticketRow } from './ticket-row-demo';
 import { demoModule as ticketSearchField } from './ticket-search-field-demo';
@@ -120,6 +121,7 @@ export const demoModules: readonly DemoModule[] = [
   repositorySize,
   ticketStoreSyncBanner,
   groupRegistrySyncBanner,
+  ticketGroupSettings,
   confidenceBadge,
   toolbarControlGroup,
   contentComponents,

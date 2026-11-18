@@ -223,6 +223,21 @@ describe('ticket groups controller (HS2-3XNTSD)', () => {
     expect(ticketGroupDialog.value).toBeUndefined();
   });
 
+  it('HS2-GXKX1Q opens New Group for no tickets from Project Settings and creates an empty group', async () => {
+    const { controller, executeBulkTicketAction, api } = setup();
+    controller.openNewGroup([], true);
+    expect(ticketGroupDialog.value).toMatchObject({ mode: 'new', name: '', slugs: [] });
+    await settle();
+    await controller.submitDialog('Future work');
+    expect(api.createCheckoutGroup).toHaveBeenCalledWith('p', 'Future work');
+    expect(ticketGroupDialog.value).toBeUndefined();
+    // No ticket moves, so no bulk write runs.
+    expect(executeBulkTicketAction).not.toHaveBeenCalled();
+    // Rename reaches a group with no loaded member, under the name Settings lists.
+    controller.openRenameGroup('01M7P6C000', 'Future work');
+    expect(ticketGroupDialog.value).toMatchObject({ mode: 'rename', name: 'Future work', group: '01M7P6C000' });
+  });
+
   it('opens New Group, validates live, creates the group, then assigns its id to every target', async () => {
     const { controller, executeBulkTicketAction, api } = setup();
     let shownName: string | undefined;

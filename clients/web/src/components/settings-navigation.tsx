@@ -14,6 +14,7 @@ import {
   Bot,
   CircleUserRound,
   Database,
+  FolderKanban,
   Folders,
   GitBranch,
   Keyboard,
@@ -33,6 +34,7 @@ export type SettingsCategory =
   | 'project-general'
   | 'orchestration'
   | 'sources'
+  | 'groups'
   | 'ai'
   | 'guidance'
   | 'commands'
@@ -57,6 +59,8 @@ const projectCategories = [
   { id: 'project-general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
   { id: 'orchestration', label: 'Orchestration', icon: Workflow, iconName: 'workflow' },
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
+  // Every project group, including empty ones, with rename, merge, and delete (HS2-GXKX1Q).
+  { id: 'groups', label: 'Ticket groups', icon: FolderKanban, iconName: 'folder-kanban' },
   { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
   { id: 'guidance', label: 'Project guidance', icon: BookOpen, iconName: 'book-open' },
   { id: 'commands', label: 'Commands', icon: TerminalSquare, iconName: 'terminal-square' },
@@ -115,6 +119,10 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
     { control: 'Own, edit, disable, and remove a source', server: '/provider-connections' },
     { control: 'Remove a source from this project', server: '/checkouts/{project}/sources' },
     { control: 'Default source', server: '/checkouts/{project}/default-source' },
+  ],
+  groups: [
+    { control: 'Ticket groups list', server: '/checkouts/{project}/groups' },
+    { control: 'Rename, merge, and delete a group', server: '/checkouts/{project}/groups' },
   ],
   ai: [{ control: 'Default tool, model, and effort', server: '/ai-settings' }],
   guidance: [{ control: 'Pinned rule sources and selected guidance', server: '/checkouts/{project}/guidance' }],
