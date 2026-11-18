@@ -1124,6 +1124,18 @@ impl OrchestrationRuntime {
         identifier(&request.environment, "bounded environment name required")?;
         valid_script(&request.script)?;
         let run = self.run(owner_id, run_id)?;
+        // HS2-4F1SWS: a paused run asks nothing new of the world. A deployment request
+        // that would ask a person, start or continue a script is refused with
+        // `run_paused`; a repeat of one already answered is still answered from the
+        // record. Resume the run to deploy.
+        let paused = || -> Result<(), OrchestrationError> {
+            if run.paused.is_some() {
+                return Err(OrchestrationError::Run(
+                    hotsheet_ticketing::orchestration::RunError::Paused,
+                ));
+            }
+            Ok(())
+        };
         let target = Self::target_ref(owner_id, &run.target.target_id)?;
         let name = request
             .provider
@@ -1236,6 +1248,7 @@ impl OrchestrationRuntime {
                     Some("deployment_starting" | DEPLOYMENT_START_UNCONFIRMED)
                 );
             if unconfirmed {
+                paused()?;
                 let mut again = ActionRequest {
                     irreversible: request.production,
                     ..ActionRequest::new(TargetAction::DeploymentsRun)
@@ -1258,6 +1271,7 @@ impl OrchestrationRuntime {
                 return Ok(view(gate.clone(), false, None));
             }
         }
+        paused()?;
         let authorized = self.authorize(
             &target,
             actor,

@@ -2273,6 +2273,15 @@ or reversed. An action that changes nothing writes nothing.
   repeated dispatch and a handoff are refused with `run_paused`, and reconciliation
   does not repeat a pending cancel. The target is not told and its claim is left
   alone. The run is still read, so its record stays true.
+  HS2-4F1SWS: the run's deployments and validation steps also stop. A deployment
+  request (`gate_deploy`) that would ask a person, or start or continue a script, is
+  refused with `run_paused`. This includes moving on a deployment that waits for
+  approval. A validation step run that names the run is refused the same way, before
+  anyone is asked or anything runs. A repeat of a deployment or step that has already
+  been answered is still answered from the record. A step run that names no run is not
+  held back. Linking a gate commit (`gate_link`) still works while paused, because it
+  records work already done. A script that started before the pause is not stopped.
+  The CLI, HTTP and MCP refuse alike, because the check is in the shared runtime.
 - **Resume** ends the pause and reconciles at once.
 - **Handoff** moves the run to another worker. Naming a worker that already holds
   the ticket adopts that claim. Otherwise a direct run releases its own claim and

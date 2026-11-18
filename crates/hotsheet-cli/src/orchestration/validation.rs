@@ -1333,9 +1333,10 @@ impl OrchestrationRuntime {
         let evidence = registry.evidence(owner_id, &ticket, &request.step_id, tx.clock.now_ms())?;
         let step = &evidence.step;
         let definition = &step.definition;
-        if let Some(run_id) = &request.run_id {
-            self.run(owner_id, run_id)?;
-        }
+        let named_run = match &request.run_id {
+            Some(run_id) => Some(self.run(owner_id, run_id)?),
+            None => None,
+        };
         let previous = evidence
             .history
             .iter()
@@ -1354,6 +1355,13 @@ impl OrchestrationRuntime {
                     tx,
                 );
             }
+        }
+        // HS2-4F1SWS: a step run for a paused run is refused with `run_paused` before
+        // anyone is asked or anything runs; a finished request is still answered above.
+        if named_run.as_ref().is_some_and(|run| run.paused.is_some()) {
+            return Err(OrchestrationError::Run(
+                hotsheet_ticketing::orchestration::RunError::Paused,
+            ));
         }
         // Another request's attempt is still running: refuse before anyone is asked.
         if evidence.state == ValidationState::Running

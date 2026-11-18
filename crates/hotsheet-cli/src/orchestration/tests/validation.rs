@@ -2737,3 +2737,142 @@ fn hs2_pjynnd_a_dropped_machine_stops_the_steps_it_still_runs() {
         "the dropped machine left its step running"
     );
 }
+
+/// HS2-4F1SWS (maintainer's choice B): a step run that names a paused run is refused
+/// with `run_paused` before anyone is asked or anything runs. A finished request is
+/// still answered from the record, a request that names no run is not held back, and
+/// resuming allows it again, through repeated pause and resume.
+#[test]
+fn hs2_4f1sws_a_paused_run_refuses_validation_steps_that_name_it() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[
+            TargetAction::ValidationRun,
+            TargetAction::WorkStart,
+            TargetAction::TicketsRead,
+        ],
+        &mut tx,
+    );
+    profiles(&m.target.root, &[("smoke", "printf ok; echo x >> runs")]);
+    let ticket = m.orchestration_ticket("Coordinate");
+    let target_ticket = ops::create(
+        &m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "Target work".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let dispatched = m
+        .runtime
+        .run_dispatch(
+            &m.owner.id,
+            serde_json::from_value(json!({
+                "ticket": ticket_ref(&ticket), "target_id": id(1),
+                "connection_id": m.target_connection(), "native_id": target_ticket.id.to_string(),
+                "operation_id": "dispatch-1", "worker_id": "worker-a",
+            }))
+            .unwrap(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run;
+    m.runtime
+        .validation_define(
+            &m.owner.id,
+            profile(&ticket, "smoke", "smoke"),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+    let owner = m.owner.id.clone();
+    let pause = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_pause(
+                &owner,
+                &dispatched.run_id,
+                crate::orchestration::PauseRun::default(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap();
+    };
+    let resume = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_resume(&owner, &dispatched.run_id, Some(&worker()), tx)
+            .unwrap();
+    };
+    let for_run = |operation: &str| {
+        let mut request = run(&ticket, "smoke", operation, MAX_VALIDATION_WAIT_MS);
+        request.run_id = Some(dispatched.run_id.clone());
+        request
+    };
+    let attempt = |request: RunValidation, tx: &mut Transaction<'_>| {
+        m.runtime
+            .validation_run(&owner, request, Some(&worker()), tx)
+    };
+    let refused = |result: Result<ValidationRunView, OrchestrationError>| {
+        assert!(
+            matches!(
+                result,
+                Err(OrchestrationError::Run(
+                    hotsheet_ticketing::orchestration::RunError::Paused
+                ))
+            ),
+            "expected run_paused"
+        );
+    };
+    let runs = || {
+        std::fs::read_to_string(Path::new(&m.target.root).join("runs"))
+            .unwrap_or_default()
+            .lines()
+            .count()
+    };
+
+    // Paused: refused, nothing runs and nothing is recorded.
+    pause(&mut tx);
+    refused(attempt(for_run("op-1"), &mut tx));
+    assert_eq!(runs(), 0);
+    assert!(evidence(&m, &ticket, "smoke", &mut tx).history.is_empty());
+
+    // Resumed: the same request runs to its result.
+    resume(&mut tx);
+    let mut finished = attempt(for_run("op-1"), &mut tx).unwrap();
+    while !finished.result.state.is_final() {
+        finished = attempt(for_run("op-1"), &mut tx).unwrap();
+    }
+    assert_eq!(finished.result.state, ValidationState::Passed);
+    assert_eq!(runs(), 1);
+
+    // Paused again, twice over: the finished request is answered from the record, a
+    // new one naming the run is refused, and one naming no run is not held back.
+    for (round, operation) in [(1, "op-free-1"), (2, "op-free-2")] {
+        pause(&mut tx);
+        let again = attempt(for_run("op-1"), &mut tx).unwrap();
+        assert_eq!(again.result.result_id, finished.result.result_id);
+        refused(attempt(for_run("op-2"), &mut tx));
+        assert_eq!(runs(), round);
+        let free = until_finished(&m, &ticket, "smoke", operation, &mut tx);
+        assert_eq!(free.result.run_id, None);
+        assert_eq!(runs(), round + 1);
+        resume(&mut tx);
+    }
+    // Resumed: the refused request now runs.
+    let mut resumed = attempt(for_run("op-2"), &mut tx).unwrap();
+    while !resumed.result.state.is_final() {
+        resumed = attempt(for_run("op-2"), &mut tx).unwrap();
+    }
+    assert_eq!(resumed.result.state, ValidationState::Passed);
+    assert_eq!(runs(), 4);
+}

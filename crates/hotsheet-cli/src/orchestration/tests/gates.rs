@@ -1632,3 +1632,124 @@ fn hs2_tpahya_a_gitlab_ci_gate_is_watched_and_read_like_github() {
         None
     );
 }
+
+fn paused_error<T>(result: Result<T, OrchestrationError>) {
+    match result {
+        Err(OrchestrationError::Run(hotsheet_ticketing::orchestration::RunError::Paused)) => {}
+        Err(other) => panic!("expected run_paused, got {other}"),
+        Ok(_) => panic!("expected run_paused"),
+    }
+}
+
+/// HS2-4F1SWS (maintainer's choice B): a paused run refuses a deployment request that
+/// would ask a person, start or continue a script, with `run_paused`, and asks nobody.
+/// Recording a gate commit is bookkeeping and still works. A repeat of a deployment
+/// already answered is answered from the record. Resuming allows it again, through
+/// repeated pause and resume.
+#[test]
+fn hs2_4f1sws_a_paused_run_refuses_deployments_and_still_records_gate_links() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let (mut m, run) = with_run(
+        &[TargetAction::GatesObserve, TargetAction::DeploymentsRun],
+        &mut tx,
+    );
+    let ci = Scripted::new(CI, GateKind::Ci);
+    m.runtime = m.runtime.clone().with_gate_provider(ci.clone());
+    let (a, owner) = (sha('a'), m.owner.id.clone());
+    let pause = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_pause(
+                &owner,
+                &run,
+                crate::orchestration::PauseRun::default(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap();
+    };
+    let resume = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_resume(&owner, &run, Some(&worker()), tx)
+            .unwrap();
+    };
+    let request = |m: &Machine, body: RequestDeployment, tx: &mut Transaction<'_>| {
+        m.runtime
+            .gate_deploy(&owner, &run, body, Some(&worker()), tx)
+    };
+    let approvals = |m: &Machine, tx: &mut Transaction<'_>| {
+        m.runtime
+            .permission_list(&owner, tx)
+            .unwrap()
+            .requests
+            .len()
+    };
+
+    // Paused: linking the commit the run's CI gates is still recorded.
+    pause(&m, &mut tx);
+    let linked = m
+        .runtime
+        .gate_link(&owner, &run, link(&a, CI), Some(&worker()), &mut tx)
+        .unwrap();
+    assert!(linked.created);
+    resume(&m, &mut tx);
+    ci.set(&a, verdict(CI, GateState::Passed, 1, &a, Coverage::Exact));
+    m.runtime
+        .gate_sync(
+            &owner,
+            &run,
+            &SyncGates::default(),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap();
+
+    // Paused: a deployment is refused, nothing is recorded and nobody is asked.
+    pause(&m, &mut tx);
+    paused_error(request(&m, deploy("deploy-1", false), &mut tx));
+    paused_error(request(&m, deploy("deploy-p", true), &mut tx));
+    assert_eq!(approvals(&m, &mut tx), 0);
+    let deployments = |m: &Machine| {
+        m.runtime
+            .gate_summary(&owner, &GateFilter::default())
+            .unwrap()
+            .gates
+            .into_iter()
+            .filter(|gate| gate.kind == GateKind::Deployment)
+            .count()
+    };
+    assert_eq!(deployments(&m), 0);
+
+    // Resumed: the same requests go ahead; production waits for a person.
+    resume(&m, &mut tx);
+    let beta = request(&m, deploy("deploy-1", false), &mut tx).unwrap();
+    assert!(beta.created);
+    let production = request(&m, deploy("deploy-p", true), &mut tx).unwrap();
+    assert_eq!(production.gate.state, GateState::AwaitingApproval);
+    assert!(production.request_id.is_some());
+    assert_eq!(deployments(&m), 2);
+
+    // Paused again, twice over: an answered repeat is read from the record, a new
+    // deployment and the waiting one (which would move on) are refused.
+    for _ in 0..2 {
+        pause(&m, &mut tx);
+        let again = request(&m, deploy("deploy-1", false), &mut tx).unwrap();
+        assert!(!again.created);
+        assert_eq!(again.gate.gate_id, beta.gate.gate_id);
+        paused_error(request(&m, deploy("deploy-2", false), &mut tx));
+        paused_error(request(&m, deploy("deploy-p", true), &mut tx));
+        assert_eq!(deployments(&m), 2);
+        resume(&m, &mut tx);
+    }
+    // Resumed: the waiting request is still waiting and a new one goes ahead.
+    let waiting = request(&m, deploy("deploy-p", true), &mut tx).unwrap();
+    assert_eq!(waiting.gate.state, GateState::AwaitingApproval);
+    assert!(
+        request(&m, deploy("deploy-2", false), &mut tx)
+            .unwrap()
+            .created
+    );
+}
