@@ -544,6 +544,8 @@ impl Coordinator {
                 wait
             };
             let relevant = match receiver.recv_timeout(slice) {
+                // notify 8 reports opens on Linux; our own rescan reads would wake us again (HS2-P0EHD4).
+                Ok(Ok(event)) if matches!(event.kind, notify::EventKind::Access(_)) => false,
                 Ok(Ok(event)) => {
                     let tickets = self.source.join("tickets");
                     let providers = self.source.join("providers.json");

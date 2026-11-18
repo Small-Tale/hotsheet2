@@ -207,7 +207,9 @@ pub(crate) fn spawn_watcher_for(
                 }
                 request_resync(&tickets_dir, STARTUP_RESYNC);
                 let mut watcher = match notify::recommended_watcher(move |res| {
-                    tx.send(res);
+                    if !is_access_event(&res) {
+                        tx.send(res);
+                    }
                 }) {
                     Ok(watcher) => watcher,
                     Err(error) => {
@@ -655,7 +657,9 @@ fn run_native_repository_monitor(
     let git_dirs = filter.git_dirs.clone();
     std::thread::spawn(move || {
         let started = notify::recommended_watcher(move |result| {
-            let _ = tx.send(result);
+            if !is_access_event(&result) {
+                let _ = tx.send(result);
+            }
         })
         .and_then(|mut watcher| {
             watcher.watch(&watch_root, RecursiveMode::Recursive)?;
@@ -988,6 +992,15 @@ fn stale_ticket_files_with_reader(
         .filter(|(_, id, hash)| indexed.get(id) != Some(hash))
         .map(|(path, _, _)| path)
         .collect()
+}
+
+/// Whether an event only reports a file being opened or closed without a write (HS2-P0EHD4).
+/// notify 8's inotify backend subscribes to `IN_OPEN`, so on Linux every read of a watched
+/// file reports an access event. Treating one as a change would make a watcher re-read the file
+/// it was told about, which reports another access: a read loop. A write still arrives as
+/// `Modify` (and `Access(Close(Write))` carries no new content), so access events are dropped.
+pub(crate) fn is_access_event(res: &notify::Result<notify::Event>) -> bool {
+    matches!(res, Ok(event) if matches!(event.kind, notify::EventKind::Access(_)))
 }
 
 fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
@@ -1697,5 +1710,35 @@ mod freshness_tests {
         );
         drop(handle);
         wait_for("the watcher to stop", || !entry.freshness.in_sync());
+    }
+}
+
+#[cfg(test)]
+mod access_event_tests {
+    use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, ModifyKind};
+    use notify::{Event, EventKind};
+
+    /// HS2-P0EHD4: opens and read-closes are not changes; creates, writes and errors still are.
+    #[test]
+    fn hs2_p0ehd4_access_events_are_not_changes() {
+        let access = |kind| Ok(Event::new(EventKind::Access(kind)));
+        assert!(super::is_access_event(&access(AccessKind::Open(
+            AccessMode::Any
+        ))));
+        assert!(super::is_access_event(&access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+        assert!(super::is_access_event(&access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(!super::is_access_event(&Ok(Event::new(EventKind::Create(
+            CreateKind::File
+        )))));
+        assert!(!super::is_access_event(&Ok(Event::new(EventKind::Modify(
+            ModifyKind::Data(DataChange::Any)
+        )))));
+        assert!(!super::is_access_event(&Err(notify::Error::generic(
+            "lost"
+        ))));
     }
 }
