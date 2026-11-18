@@ -4442,6 +4442,69 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/hosted-projects:
+    description:
+      The checkouts this server already has open, which a client on another machine may add to an orchestration
+      project (HS2-92FJXM). Open means registered, present and resolving, as /remote-checkouts reports available; the
+      orchestration project itself is left out. Not machine-local - a paired read-write device may add; a read-only
+      device is refused by the write fence. Adding is the same workflow as /orchestration/projects with a local
+      destination on this server, so a repeat returns the same project with added false; a checkout this server does
+      not have open is refused with 403 forbidden, and nothing new is opened.
+    get:
+      operationId: listHostedOrchestrationProjects
+      responses:
+        '200':
+          description: This server's open checkouts, each with whether it is already added.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HostedOrchestrationProjectChoice'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: addHostedOrchestrationProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddHostedOrchestrationProject'
+      responses:
+        '200':
+          description: The added project and the fresh resolution of its binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestrationProjectView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
   /remotes:
     description: Machine-local administration only. TLS peers must originate on literal loopback and retain their device
       role authorization.
@@ -25994,6 +26057,42 @@ components:
         discard_resolves:
           description: A person's `migrate` with `discard_local` would resolve the conflict.
           type: boolean
+      additionalProperties: false
+    HostedOrchestrationProjectChoice:
+      description: One checkout this server has open, as + Add Project lists it for another machine (HS2-92FJXM).
+      type: object
+      required:
+        - checkout_id
+        - name
+        - added
+      properties:
+        checkout_id:
+          type: string
+        name:
+          type: string
+        added:
+          type: boolean
+        target_id:
+          type: string
+      additionalProperties: false
+    AddHostedOrchestrationProject:
+      type: object
+      required:
+        - checkout_id
+      properties:
+        checkout_id:
+          type: string
+          minLength: 1
+        label:
+          type:
+            - string
+            - 'null'
+        target_id:
+          type:
+            - string
+            - 'null'
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
       additionalProperties: false
     RemoteIdentity:
       type: object

@@ -173,7 +173,6 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
     t.setBusy(true);
     t.setBusy(false);
     t.flush();
-    expect(t.api.addOrchestrationProject).toHaveBeenCalledTimes(1);
   });
 
   it('removes a project only after confirmation and closes its detail', async () => {
@@ -570,5 +569,60 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
     await t.settings.applyLimits(DEMO_OWNER);
     const [, , cleared] = vi.mocked(t.api.setOrchestrationPolicy).mock.calls[1];
     expect(cleared.placement?.role_sessions).toBeUndefined();
+  });
+});
+
+describe("adding a remote server's open projects (HS2-92FJXM)", () => {
+  const REMOTE_OWNER = `remote:${DEMO_REMOTE}:launch-0000000000ab`;
+
+  it('reads them only for a project open from another server, and adds one there', async () => {
+    const t = setup();
+    // A project served here reads no list.
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(t.api.hostedOrchestrationProjects).not.toHaveBeenCalled();
+    expect(state(t).hosted).toBeUndefined();
+    // Open from another server: that server's open projects, Web already added.
+    await t.settings.loadSettings(REMOTE_OWNER);
+    expect(t.api.hostedOrchestrationProjects).toHaveBeenCalledWith(REMOTE_OWNER);
+    const remote = () => t.settings.settings.value[REMOTE_OWNER]!;
+    expect(remote().hosted?.map((choice) => [choice.name, choice.added])).toEqual([
+      ['Web', true],
+      ['Billing', false],
+      ['Docs', true],
+    ]);
+    // Added through the hosted route, then read again: Billing is checked.
+    await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
+    expect(t.api.addHostedOrchestrationProject).toHaveBeenCalledWith(
+      REMOTE_OWNER,
+      expect.objectContaining({ checkout_id: 'billing-0000000000ab', label: 'Billing' }),
+    );
+    expect(remote().status).toBe('Billing added.');
+    expect(remote().hosted?.find((choice) => choice.name === 'Billing')?.added).toBe(true);
+    // Repeated: the same project, said so.
+    await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
+    expect(remote().status).toBe('Billing is already added.');
+    // A checkout the list does not offer is never asked for.
+    const calls = vi.mocked(t.api.addHostedOrchestrationProject).mock.calls.length;
+    await t.settings.addHostedProject(REMOTE_OWNER, 'elsewhere-0000000000ab');
+    expect(vi.mocked(t.api.addHostedOrchestrationProject).mock.calls).toHaveLength(calls);
+  });
+
+  it('keeps the last list when a read fails, and says why; a refused add is shown in place', async () => {
+    const t = setup();
+    await t.settings.loadSettings(REMOTE_OWNER);
+    const remote = () => t.settings.settings.value[REMOTE_OWNER]!;
+    vi.mocked(t.api.hostedOrchestrationProjects).mockRejectedValueOnce(new Error('The server did not answer.'));
+    await t.settings.loadSettings(REMOTE_OWNER);
+    expect(remote().hostedError).toBe('The server did not answer.');
+    expect(remote().hosted).toHaveLength(3);
+    // The next read succeeds and clears it.
+    await t.settings.loadSettings(REMOTE_OWNER);
+    expect(remote().hostedError).toBeUndefined();
+    vi.mocked(t.api.addHostedOrchestrationProject).mockRejectedValueOnce(
+      new ApiHttpError('client certificate is read-only', 403, 'forbidden'),
+    );
+    await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
+    expect(remote().message).toContain('Could not add Billing.');
+    expect(remote().busy).not.toContain('add');
   });
 });

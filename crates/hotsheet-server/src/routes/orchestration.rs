@@ -604,7 +604,7 @@ fn changed_owner(method: &Method, path: &str) -> Option<String> {
                 "checkouts",
                 owner,
                 "orchestration",
-                "projects" | "targets" | "sessions",
+                "projects" | "hosted-projects" | "targets" | "sessions",
             ],
         )
         | ("DELETE", ["checkouts", owner, "orchestration", "projects", _])

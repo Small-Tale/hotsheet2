@@ -558,6 +558,57 @@ mod tests {
                 .status(),
             StatusCode::FORBIDDEN
         );
+        // HS2-92FJXM: a client on another machine may list and add this server's open
+        // checkouts with the read-write role; read-only lists only, deny nothing.
+        let hosted = "/checkouts/owner/orchestration/hosted-projects";
+        assert!(!hotsheet_cli::orchestration::is_machine_path(hosted));
+        for (role, get, post) in [
+            (
+                hotsheet_tls::DeviceRole::ReadWrite,
+                StatusCode::OK,
+                StatusCode::OK,
+            ),
+            (
+                hotsheet_tls::DeviceRole::ReadOnly,
+                StatusCode::OK,
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                hotsheet_tls::DeviceRole::Deny,
+                StatusCode::FORBIDDEN,
+                StatusCode::FORBIDDEN,
+            ),
+        ] {
+            let router = axum::Router::new()
+                .route(
+                    hosted,
+                    axum::routing::get(|| async { StatusCode::OK })
+                        .post(|| async { StatusCode::OK }),
+                )
+                .layer(axum::middleware::from_fn(enforce_client_access))
+                .layer(axum::Extension(ClientAccess {
+                    role,
+                    loopback: false,
+                }));
+            for (method, expected) in [("GET", get), ("POST", post)] {
+                assert_eq!(
+                    router
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .method(method)
+                                .uri(hosted)
+                                .body(Body::empty())
+                                .unwrap()
+                        )
+                        .await
+                        .unwrap()
+                        .status(),
+                    expected,
+                    "{role:?} {method}"
+                );
+            }
+        }
     }
 
     /// Decode the first certificate in a PEM to DER (test/verify helper).

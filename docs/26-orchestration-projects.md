@@ -5011,8 +5011,29 @@ the type changes to Software while it shows.
   progress survives a reload from `orchestration_changed`; a saved one follows the
   stored policy again, and admission and held resources are read again.
 
-A project opened from another server cannot add projects here: the add binds on the
-serving machine. The category says so and disables + Add Project (HS2-92FJXM).
+**From another machine (HS2-92FJXM).** The maintainer chose that a client on another
+machine may add projects to an orchestration project, limited to checkouts its serving
+machine already has open, through an authenticated route that needs the read-write
+device role. For a project opened from another server, + Add Project lists that
+server's open projects under _Open on <server>_, checked when already added, and has no
+Open Another Project… entry: nothing new is opened on the server. Choosing one adds it
+through `/checkouts/{owner}/orchestration/hosted-projects`:
+
+- `GET` lists the serving machine's open checkouts (registered, present and resolving,
+  as `/remote-checkouts` reports them available), other than the orchestration project
+  itself, each with `added` and its `target_id` when added.
+- `POST {checkout_id, label?, target_id?}` is the same workflow as adding a project
+  with a local destination on that server: a person's act (an AI actor is refused), a
+  repeat returns the same project with `added: false`, and it is announced as
+  `orchestration_changed`. A checkout the server does not have open is refused with 403
+  `forbidden` before anything is read; no remote destination can be named.
+- The route is not machine-local, so a paired device reaches it; a read-only device may
+  list but its `POST` is refused by the write fence, like any other write. The
+  machine-local `projects` routes (any destination, and removal) stay loopback-only.
+- If the list cannot be read, + Add Project is disabled and the category says why.
+- Headless, on the serving machine: `hotsheet-cli ... orchestration project hosted
+--project <owner>` and `project add-hosted <checkout> [--label] [--target-id]
+--project <owner>`, through the same route.
 
 ### Live updates
 

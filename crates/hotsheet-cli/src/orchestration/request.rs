@@ -19,6 +19,8 @@ pub fn is_path(path: &str) -> bool {
             // HS2-W27N1D: the project type and the projects an orchestration project adds.
             | ["checkouts", _, "orchestration", "project-type" | "projects"]
             | ["checkouts", _, "orchestration", "projects", _]
+            // HS2-92FJXM: this server's open checkouts, which another machine may add.
+            | ["checkouts", _, "orchestration", "hosted-projects"]
             | [
                 "checkouts",
                 _,
@@ -1191,6 +1193,15 @@ impl OrchestrationRuntime {
             ("POST", ["checkouts", owner, "orchestration", "projects"]) => {
                 let actor = actor(body)?;
                 value(self.add_project(owner, decode(body)?, actor.as_ref(), tx)?)
+            }
+            // HS2-92FJXM: not machine-local, so a read-write device on another machine
+            // may add one of this server's open checkouts; nothing else is reachable.
+            ("GET", ["checkouts", owner, "orchestration", "hosted-projects"]) => {
+                value(self.hosted_project_choices(owner)?)
+            }
+            ("POST", ["checkouts", owner, "orchestration", "hosted-projects"]) => {
+                let actor = actor(body)?;
+                value(self.add_hosted_project(owner, decode(body)?, actor.as_ref(), tx)?)
             }
             ("DELETE", ["checkouts", owner, "orchestration", "projects", id]) => {
                 let actor = actor(body)?;

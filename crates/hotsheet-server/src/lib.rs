@@ -2168,6 +2168,12 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{owner}/orchestration/projects/{target}",
             axum::routing::delete(routes::orchestration::write),
         )
+        // HS2-92FJXM: this server's open checkouts, listed for and added by a client on
+        // another machine; ordinary authenticated data behind the write fence.
+        .route(
+            "/checkouts/{owner}/orchestration/hosted-projects",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
         .route(
             "/checkouts/{owner}/orchestration/policy/validate",
             post(routes::orchestration::write),

@@ -680,6 +680,137 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
   }
 });
 
+/**
+ * HS2-92FJXM: the orchestration project is open only as a remote tab of the fixture server, whose
+ * checkout-scoped paths the routed bridge rewrites to the native checkout as the real bridge does.
+ * Web and Docs are registered on that server but not open here.
+ */
+async function openRemoteOrchestration(page: Page) {
+  const server = await realTicketServer();
+  const binding = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  const others: { id: string; name: string }[] = [];
+  for (const name of ['Web', 'Docs']) {
+    const root = join(dirname(server.root), name.toLowerCase());
+    await mkdir(root, { recursive: true });
+    const checkout = await server.request<{ id: string }>('/checkouts', 'POST', {
+      root,
+      stores: [server.store],
+      alias: name,
+    });
+    others.push({ id: checkout.id, name });
+  }
+  const remoteId = `remote:${binding}:${server.checkoutId}`,
+    encoded = encodeURIComponent(remoteId),
+    remotePath = `/__hotsheet/project-api/${encoded}`;
+  await page.addInitScript(
+    (roots) => {
+      localStorage.setItem('hotsheet.open-projects', JSON.stringify(roots));
+    },
+    [remoteId],
+  );
+  await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        id: remoteId,
+        root: remoteId,
+        name: 'Build host · Launch',
+        remoteHost: 'Build host',
+        stores: [],
+        apiPath: remotePath,
+      },
+    }),
+  );
+  await page.route('**/__hotsheet/remotes', (route) => route.fulfill({ json: [] }));
+  const posted: string[] = [];
+  // A context route: a page route's POST here was answered by the dev bridge before the handler did.
+  await page.context().route(`**${remotePath}/**`, async (route) => {
+    const incoming = new URL(route.request().url());
+    const path = incoming.pathname
+      .slice(remotePath.length)
+      .replace(`/checkouts/${encoded}`, `/checkouts/${server.checkoutId}`);
+    if (route.request().method() === 'POST') posted.push(path);
+    try {
+      const response = await proxyFetch(route, {
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        timeout: 60_000,
+      });
+      await route.fulfill({ response });
+    } catch {
+      await route.abort().catch(() => undefined);
+    }
+  });
+  return { server, others, remoteId, posted };
+}
+
+test('HS2-92FJXM a remote orchestration project adds the projects open on its server', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const { server, others, posted } = await openRemoteOrchestration(page);
+  try {
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await page.goto('/');
+    await page.getByRole('tab', { name: /Launch/ }).click();
+    await expect(
+      page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Orchestration View' }),
+    ).toBeVisible();
+    await showProjectSettings(page, 'General');
+    await orchestrationNav(page).click();
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    // No longer the old explanation: + Add Project is enabled and lists that server's open projects.
+    await expect(settings).not.toContainText('Add projects to it on the computer it runs on');
+    const add = settings.getByRole('button', { name: 'Add Project' });
+    await expect(add).toBeEnabled();
+    await add.click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toContainText('Open on Build host');
+    for (const other of others) await expect(menu.getByRole('menuitemcheckbox', { name: other.name })).toBeVisible();
+    await expect(menu).not.toContainText('Open Another Project');
+    const directory = join('target', 'visual-captures', 'hs2-92fjxm');
+    await mkdir(directory, { recursive: true });
+    const capture = (name: string) =>
+      page.screenshot({ path: join(directory, `hs2-92fjxm-${name}-${browserName}.png`), animations: 'disabled' });
+    await capture('menu-1440');
+    // Choosing Web adds it through the hosted route; the server binds it there.
+    await menu.getByRole('menuitemcheckbox', { name: 'Web' }).click();
+    await expect(settings.getByText('Web added.')).toBeVisible();
+    expect(posted).toEqual([`${base}/hosted-projects`]);
+    await expect(settings.locator('[data-orchestration-project]').filter({ hasText: 'Web' })).toBeVisible();
+    const hosted = await server.request<{ checkout_id: string; added: boolean }[]>(`${base}/hosted-projects`);
+    expect(hosted.find((choice) => choice.checkout_id === others[0].id)?.added).toBe(true);
+    // The menu now checks Web; choosing it again is the same project.
+    await add.click();
+    await expect(menu.getByRole('menuitemcheckbox', { name: 'Web' })).toBeChecked();
+    await capture('menu-added-1440');
+    await menu.getByRole('menuitemcheckbox', { name: 'Web' }).click();
+    await expect(settings.getByText('Web is already added.')).toBeVisible();
+    for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+      }
+      await expect(add).toBeVisible();
+      await add.click();
+      await expect(menu.getByRole('menuitemcheckbox', { name: 'Docs' })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`menu-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
+      await page.keyboard.press('Escape');
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await add.click();
+    await capture('menu-1440-dark');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

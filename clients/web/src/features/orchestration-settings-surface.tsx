@@ -9,6 +9,7 @@ import type { SidebarPanelParts } from '../components/sidebar-panel';
 import type { Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
 import { addChoices, projectRows } from '../orchestration-settings-model';
+import { isRemoteProjectId } from '../remote-projects/identity';
 import { createOrchestrationSettings } from './orchestration-settings';
 
 /** Live application bindings Settings → General and Settings → Orchestration read (HS2-W27N1D). */
@@ -153,9 +154,21 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       busy: state?.busy,
       message: state?.message,
       status: state?.status,
-      unavailableReason: current.id.startsWith('remote:')
-        ? 'This project is open from another server. Add projects to it on the computer it runs on.'
-        : undefined,
+      // HS2-92FJXM: a project open from another server adds that server's open projects.
+      ...(isRemoteProjectId(current.id)
+        ? {
+            hostedChoices: (state?.hosted ?? []).map((choice) => ({
+              checkoutId: choice.checkout_id,
+              name: choice.name,
+              added: choice.added,
+            })),
+            hostedServer: current.remoteHost ?? 'the server',
+            unavailableReason:
+              state?.hosted === undefined && state?.hostedError
+                ? `Could not read the projects open on ${current.remoteHost ?? 'the server'}. ${state.hostedError}`
+                : undefined,
+          }
+        : {}),
       policy: { draft: state?.draft, toolLabel: dependencies.toolLabel },
     };
   }

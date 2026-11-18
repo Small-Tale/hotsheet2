@@ -56,6 +56,12 @@ export function wireOrchestrationSettings(
     }),
   );
   lifetime.add(
+    delegate(root, 'click', ACTIONS.addHostedProject.selector, (_event, target) => {
+      const id = attribute(target, 'data-checkout-id');
+      if (id) withProject((projectId) => void settings.addHostedProject(projectId, id));
+    }),
+  );
+  lifetime.add(
     delegate(root, 'click', ACTIONS.openAnotherProject.selector, () => {
       withProject((projectId) => {
         settings.openAnother(projectId);

@@ -33,6 +33,13 @@ export const DEMO_OPEN_PROJECTS = [
   { id: `remote:${DEMO_REMOTE}:mobile-0000000000ab`, name: 'Mobile' },
 ] as const;
 
+/** HS2-92FJXM: checkouts the serving machine has open; web-0000000000ab is already added. */
+export const DEMO_HOSTED_CHECKOUTS = [
+  { checkout_id: 'web-0000000000ab', name: 'Web' },
+  { checkout_id: 'billing-0000000000ab', name: 'Billing' },
+  { checkout_id: 'docs-0000000000ab', name: 'Docs' },
+] as const;
+
 export const DEMO_REMOTE_LABELS = { [DEMO_REMOTE]: 'Build Host' };
 
 export const demoTime = (ms: number) => {
@@ -248,6 +255,22 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
       };
       return Promise.resolve({ target_id: id, label: request.label, added: true, resolution: resolution(id) });
     },
+    // HS2-92FJXM: the serving machine's open checkouts, for an orchestration project open from it.
+    hostedOrchestrationProjects: () =>
+      Promise.resolve(
+        DEMO_HOSTED_CHECKOUTS.map(({ checkout_id, name }) => {
+          const bound = Object.entries(bindings).find(
+            ([, binding]) => binding.destination?.kind === 'local' && binding.destination.checkout_id === checkout_id,
+          );
+          return { checkout_id, name, added: Boolean(bound), ...(bound ? { target_id: bound[0] } : {}) };
+        }),
+      ),
+    addHostedOrchestrationProject: (owner, request) =>
+      api.addOrchestrationProject(owner, {
+        destination: { kind: 'local', checkout_id: request.checkout_id },
+        label: request.label,
+        target_id: request.target_id,
+      }),
     removeOrchestrationProject: (_owner, target) => {
       manifest = {
         ...manifest,

@@ -23,6 +23,13 @@ import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/
 import type { AddChoice, OrchestrationProjectRow } from '../orchestration-settings-model';
 import { OrchestrationPolicySettings, type OrchestrationPolicySettingsProps } from './orchestration-policy-settings';
 
+/** HS2-92FJXM: one checkout the serving machine has open. */
+export interface HostedProjectChoiceView {
+  checkoutId: string;
+  name: string;
+  added: boolean;
+}
+
 export interface OrchestrationSettingsProps {
   rows?: readonly OrchestrationProjectRow[];
   /** The + Add Project menu's open projects. */
@@ -36,8 +43,15 @@ export interface OrchestrationSettingsProps {
   busy?: readonly string[];
   message?: string;
   status?: string;
-  /** Why projects cannot be added here, such as an orchestration project open from a remote server. */
+  /** Why projects cannot be added here now, such as a remote server's list that could not be read. */
   unavailableReason?: string;
+  /**
+   * HS2-92FJXM: for an orchestration project open from another server, the checkouts that server has
+   * open, which + Add Project offers instead of this machine's tabs. Absent for a project served here.
+   */
+  hostedChoices?: readonly HostedProjectChoiceView[];
+  /** The name of that server, for the menu's heading. */
+  hostedServer?: string;
   policy?: OrchestrationPolicySettingsProps;
 }
 
@@ -79,6 +93,23 @@ function addMenuItems(choices: readonly AddChoice[], busy: boolean): PopupMenuEn
   ];
 }
 
+/** HS2-92FJXM: + Add Project for a project open from another server: only that server's open projects. */
+function hostedMenuItems(choices: readonly HostedProjectChoiceView[], server: string, busy: boolean): PopupMenuEntry[] {
+  return [
+    { kind: 'heading', label: `Open on ${server}` },
+    ...(choices.length
+      ? choices.map((choice) => ({
+          label: choice.name,
+          action: ACTIONS.addHostedProject.value,
+          icon: placeIcon('remote'),
+          checked: choice.added,
+          disabled: busy,
+          attributes: { 'data-checkout-id': choice.checkoutId },
+        }))
+      : [{ label: 'No other projects are open there', disabled: true }]),
+  ];
+}
+
 /**
  * Settings → Orchestration (HS2-W27N1D), shown only for an Orchestration project: the projects it
  * orchestrates, added with + Add Project, then the limits-only policy. Adding a project is the consent
@@ -94,6 +125,8 @@ export function OrchestrationSettings({
   message = '',
   status = '',
   unavailableReason,
+  hostedChoices,
+  hostedServer = 'the server',
   policy = {},
 }: OrchestrationSettingsProps) {
   const adding = busy.includes('add');
@@ -117,9 +150,15 @@ export function OrchestrationSettings({
                 icon={<LucideIcon icon={Plus} name="plus" />}
                 emphasis="secondary"
                 disabled={Boolean(unavailableReason) || loading}
-                popupNote="A project you open from here also opens in its own tab."
+                popupNote={
+                  hostedChoices
+                    ? `Projects open on ${hostedServer} can be added. Open others on that computer.`
+                    : 'A project you open from here also opens in its own tab.'
+                }
                 rootAttributes={{ 'data-orchestration-add-project': '' }}
-                items={addMenuItems(choices, adding)}
+                items={
+                  hostedChoices ? hostedMenuItems(hostedChoices, hostedServer, adding) : addMenuItems(choices, adding)
+                }
               />
             </Row>
             {unavailableReason ? (
@@ -148,7 +187,11 @@ export function OrchestrationSettings({
               <EmptyState
                 icon={<LucideIcon icon={Workflow} name="workflow" />}
                 title="No projects yet."
-                detail="Add the projects to orchestrate. Projects open in tabs are listed first."
+                detail={
+                  hostedChoices
+                    ? `Add the projects to orchestrate from those open on ${hostedServer}.`
+                    : 'Add the projects to orchestrate. Projects open in tabs are listed first.'
+                }
                 rootAttributes={{ 'data-orchestration-empty': '' }}
               />
             ) : (

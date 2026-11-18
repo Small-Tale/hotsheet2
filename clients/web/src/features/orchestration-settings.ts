@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 
 import type {
   Api,
+  HostedOrchestrationProjectChoice,
   OrchestrationAdmission,
   OrchestrationBinding,
   OrchestrationCapacity,
@@ -31,6 +32,7 @@ import {
   type TargetLimitsDraft,
   targetLimitsDraftFrom,
 } from '../orchestration-settings-model';
+import { isRemoteProjectId } from '../remote-projects/identity';
 
 /** The orchestration reads and writes the settings use; `Api` satisfies it, and tests fake it. */
 export type OrchestrationApi = Pick<
@@ -42,6 +44,8 @@ export type OrchestrationApi = Pick<
   | 'orchestrationResolve'
   | 'addOrchestrationProject'
   | 'removeOrchestrationProject'
+  | 'hostedOrchestrationProjects'
+  | 'addHostedOrchestrationProject'
   | 'orchestrationCapacity'
   | 'orchestrationAdmission'
   | 'orchestrationToolCapacity'
@@ -80,6 +84,13 @@ export interface OrchestrationSettingsState {
   status: string;
   /** Targets, sessions, `add` or `policy` with a change in flight. */
   busy: readonly string[];
+  /**
+   * HS2-92FJXM: for an orchestration project open from another server, that server's open
+   * checkouts, which + Add Project offers. Absent for a project served here.
+   */
+  hosted?: readonly HostedOrchestrationProjectChoice[];
+  /** Why that list could not be read. */
+  hostedError?: string;
 }
 
 /** A selected project's detail, shown in the inspector. Each part is read on its own. */
@@ -235,9 +246,16 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     const generation = next(`settings:${projectId}`);
     put(projectId, { loading: !stateOf(projectId).manifest });
     try {
-      const [manifest, policy] = await Promise.all([
+      const [manifest, policy, hosted] = await Promise.all([
         api.orchestrationTargets(projectId),
         api.orchestrationPolicy(projectId),
+        // HS2-92FJXM: a remote-served project adds from its server's open checkouts.
+        isRemoteProjectId(projectId)
+          ? api.hostedOrchestrationProjects(projectId).then(
+              (choices) => ({ choices, error: undefined }),
+              (reason: unknown) => ({ choices: undefined, error: messageOf(reason) }),
+            )
+          : Promise.resolve(undefined),
       ]);
       const active = manifest.targets.filter((target) => target.state === 'active');
       const bindings = Object.fromEntries(
@@ -260,6 +278,8 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
         bindings,
         policy,
         draft: clean ? policyDraftFrom(policy, dependencies.knownTools()) : previous.draft,
+        hosted: hosted?.choices ?? (hosted ? previous.hosted : undefined),
+        hostedError: hosted?.error,
         loading: false,
         message: previous.message.startsWith('Could not read') ? '' : previous.message,
       });
@@ -294,6 +314,31 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       put(projectId, { message: `Could not add ${label}. ${messageOf(reason)}` });
     } finally {
       busy(projectId, 'add', false);
+    }
+  }
+
+  /**
+   * HS2-92FJXM: + Add Project → one of the serving machine's open checkouts, for an orchestration
+   * project open from another server. That server binds it; a repeat is the same project.
+   */
+  async function addHostedProject(ownerId: string, checkoutId: string) {
+    const api = dependencies.api(ownerId),
+      choice = stateOf(ownerId).hosted?.find((item) => item.checkout_id === checkoutId);
+    if (!api || !choice || stateOf(ownerId).busy.includes('add')) return;
+    busy(ownerId, 'add', true);
+    put(ownerId, { message: '', status: '' });
+    try {
+      const added = await api.addHostedOrchestrationProject(ownerId, {
+        checkout_id: checkoutId,
+        label: choice.name,
+        target_id: newUlid(),
+      });
+      put(ownerId, { status: added.added ? `${added.label} added.` : `${added.label} is already added.` });
+      await loadSettings(ownerId);
+    } catch (reason) {
+      put(ownerId, { message: `Could not add ${choice.name}. ${messageOf(reason)}` });
+    } finally {
+      busy(ownerId, 'add', false);
     }
   }
 
@@ -668,6 +713,7 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     loadSettings,
     loadRemoteLabels,
     addOpenProject,
+    addHostedProject,
     openAnother,
     noteOpenFlow,
     removeProject,

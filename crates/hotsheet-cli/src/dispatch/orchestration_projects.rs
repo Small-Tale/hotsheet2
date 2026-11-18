@@ -50,6 +50,18 @@ enum ProjectCmd {
     /// Stop orchestrating one project: remove this machine's binding and tombstone its
     /// declaration. Sessions already running there keep running until stopped.
     Remove { target_id: String },
+    /// HS2-92FJXM: the checkouts this server has open, which a client on another
+    /// machine may add, each with whether it is already added.
+    Hosted,
+    /// HS2-92FJXM: add one of this server's open checkouts, the way a read-write client
+    /// on another machine does. A checkout this server does not have open is refused.
+    AddHosted {
+        checkout_id: String,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        target_id: Option<String>,
+    },
 }
 
 pub(super) fn project_type_route(
@@ -101,6 +113,20 @@ pub(super) fn project_route(
             }),
         ),
         ProjectCmd::Remove { target_id } => ("DELETE", format!("{prefix}/{target_id}"), json!({})),
+        ProjectCmd::Hosted => (
+            "GET",
+            format!("/checkouts/{owner}/orchestration/hosted-projects"),
+            Value::Null,
+        ),
+        ProjectCmd::AddHosted {
+            checkout_id,
+            label,
+            target_id,
+        } => (
+            "POST",
+            format!("/checkouts/{owner}/orchestration/hosted-projects"),
+            json!({"checkout_id": checkout_id, "label": label, "target_id": target_id}),
+        ),
     };
     Ok((owner, request))
 }

@@ -33,6 +33,7 @@ import type {
   GuidanceRulePreview,
   GuidanceSourceReview,
   GuidanceSourceUpdate,
+  HostedOrchestrationProjectChoice,
   LiveHistoryList,
   LiveStateList,
   LiveStoreState,
@@ -1750,6 +1751,12 @@ export const parseOrchestrationProjectView = shape<OrchestrationProjectView>('or
   added: isBoolean,
   resolution: parseOrchestrationResolution.check,
 });
+export const parseHostedOrchestrationProjectChoice = shape<HostedOrchestrationProjectChoice>(
+  'hosted project',
+  { checkout_id: isString, name: isString, added: isBoolean },
+  {},
+  { target_id: isString },
+);
 export const parseRemovedOrchestrationProject = shape<RemovedOrchestrationProject>('removed project', {
   target_id: isString,
   unbound: isBoolean,

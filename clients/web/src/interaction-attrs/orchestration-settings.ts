@@ -4,6 +4,8 @@ import { action } from 'kerfjs/actions';
 export const ORCHESTRATION_SETTINGS_ACTIONS = {
   addOpenProject: action('add-orchestration-project'),
   openAnotherProject: action('open-another-orchestration-project'),
+  /** HS2-92FJXM: one of the serving machine's open checkouts, for a project open from another server. */
+  addHostedProject: action('add-hosted-orchestration-project'),
   openProjectDetail: action('open-orchestration-project'),
   showProjectTab: action('show-orchestration-project-tab'),
   removeProject: action('remove-orchestration-project'),

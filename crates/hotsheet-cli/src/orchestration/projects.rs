@@ -37,6 +37,34 @@ pub struct AddProject {
     pub target_id: Option<String>,
 }
 
+/// HS2-92FJXM: add a checkout this server already has open, as a client on another
+/// machine may ask for it. Only the checkout's id on this server is named: no remote
+/// destination, and nothing new is opened.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddHostedProject {
+    pub checkout_id: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub target_id: Option<String>,
+}
+
+/// HS2-92FJXM: one checkout this server has open, as + Add Project lists it for a
+/// client on another machine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HostedProjectChoice {
+    pub checkout_id: String,
+    pub name: String,
+    /// Already added to the orchestration project and bound to this checkout.
+    pub added: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+}
+
+/// HS2-92FJXM: why a checkout cannot be added from another machine.
+pub const CHECKOUT_NOT_OPEN: &str = "only a checkout this server already has open can be added";
+
 /// Remove one project. Nothing else is needed: the current revisions are read under
 /// the same request, and a stale one still conflicts.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -209,6 +237,104 @@ impl OrchestrationRuntime {
     /// person's consent, so an AI actor is refused. Idempotent: a project already added
     /// and bound to the same checkout is returned unchanged, and a retry with the same
     /// `target_id` after a failed bind binds that target.
+    /// HS2-92FJXM: the checkouts this server has open (registered, its directory
+    /// present and its identity unchanged, as `remote-checkouts` reports them
+    /// available), other than the orchestration project itself, each with whether it
+    /// is already added here.
+    pub fn hosted_project_choices(
+        &self,
+        owner_id: &str,
+    ) -> Result<Vec<HostedProjectChoice>, OrchestrationError> {
+        let owner = self.owner(owner_id)?;
+        let flow = self.flow(&owner)?;
+        let manifest = flow.declarations()?;
+        let mut bound = Vec::new();
+        for declaration in manifest
+            .targets
+            .iter()
+            .filter(|target| target.state == DeclarationState::Active)
+        {
+            let reference = TargetRef {
+                owner_checkout_id: owner.id.clone(),
+                target_id: declaration.target_id.clone(),
+            };
+            if let Some(TargetDestination::Local { checkout_id, .. }) =
+                flow.binding(&reference)?.destination
+            {
+                bound.push((checkout_id, declaration.target_id.clone()));
+            }
+        }
+        let mut choices: Vec<HostedProjectChoice> = self
+            .open_checkouts()?
+            .into_iter()
+            .filter(|checkout| checkout.id != owner.id)
+            .map(|checkout| {
+                let target_id = bound
+                    .iter()
+                    .find(|(id, _)| *id == checkout.id)
+                    .map(|(_, target)| target.clone());
+                HostedProjectChoice {
+                    name: checkout.alias.clone(),
+                    added: target_id.is_some(),
+                    target_id,
+                    checkout_id: checkout.id,
+                }
+            })
+            .collect();
+        choices.sort_by(|a, b| (&a.name, &a.checkout_id).cmp(&(&b.name, &b.checkout_id)));
+        Ok(choices)
+    }
+
+    /// The registered checkouts this server can serve now.
+    fn open_checkouts(&self) -> Result<Vec<Checkout>, OrchestrationError> {
+        Ok(self
+            .checkouts
+            .list()
+            .map_err(checkout_error)?
+            .into_iter()
+            .filter(|checkout| {
+                std::path::Path::new(&checkout.root).is_dir()
+                    && self
+                        .checkouts
+                        .resolve(&checkout.id)
+                        .is_ok_and(|resolved| resolved.id == checkout.id)
+            })
+            .collect())
+    }
+
+    /// HS2-92FJXM: add one of this server's open checkouts. It is the same workflow as
+    /// [`Self::add_project`] with a local destination, so a repeat is the same project;
+    /// a checkout this server does not have open is refused before anything is read.
+    /// Reached from another machine only by a read-write device (the write fence).
+    pub fn add_hosted_project(
+        &self,
+        owner_id: &str,
+        request: AddHostedProject,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<ProjectView, OrchestrationError> {
+        access::person(actor)?;
+        if !self
+            .open_checkouts()?
+            .iter()
+            .any(|checkout| checkout.id == request.checkout_id)
+        {
+            return Err(OrchestrationError::Forbidden(CHECKOUT_NOT_OPEN));
+        }
+        self.add_project(
+            owner_id,
+            AddProject {
+                destination: InspectDestination::Local {
+                    checkout_id: request.checkout_id,
+                },
+                label: request.label,
+                target_id: request.target_id,
+            },
+            actor,
+            tx,
+        )
+    }
+
     pub fn add_project(
         &self,
         owner_id: &str,

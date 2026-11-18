@@ -6,6 +6,7 @@ import { addChoices, policyDraftFrom, projectRows } from '../orchestration-setti
 import type { DemoModule } from './demo-module';
 import {
   createDemoOrchestrationSettings,
+  DEMO_HOSTED_CHECKOUTS,
   DEMO_OPEN_PROJECTS,
   DEMO_OWNER,
   DEMO_REMOTE_LABELS,
@@ -47,8 +48,22 @@ export function OrchestrationSettingsDemo() {
         <OrchestrationSettings loading />
       </CatalogExample>
       <CatalogExample label="Open From Another Server" viewport={{ width: 'full' }}>
+        {/* HS2-92FJXM: + Add Project offers the projects open on that server. */}
         <OrchestrationSettings
-          unavailableReason="This project is open from another server. Add projects to it on the computer it runs on."
+          hostedChoices={DEMO_HOSTED_CHECKOUTS.map((choice, index) => ({
+            checkoutId: choice.checkout_id,
+            name: choice.name,
+            added: index === 0,
+          }))}
+          hostedServer="Build Host"
+          policy={{ draft: policyDraftFrom(undefined, ['claude']), toolLabel: demoToolLabel }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Another Server's Projects Unreadable" viewport={{ width: 'full' }}>
+        <OrchestrationSettings
+          hostedChoices={[]}
+          hostedServer="Build Host"
+          unavailableReason="Could not read the projects open on Build Host. The server did not answer."
           policy={{ draft: policyDraftFrom(undefined, ['claude']), toolLabel: demoToolLabel }}
         />
       </CatalogExample>

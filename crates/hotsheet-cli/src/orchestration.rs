@@ -79,7 +79,10 @@ pub use planning::{
     GoalTicket, MAX_LISTED_GOALS, PlanProposal, PlanningView, ProposeOutcome, ProposePlan,
 };
 pub use policy::{DryRun, DryRunAction, DryRunTarget, PolicyProposal, PolicyValidation};
-pub use projects::{AddProject, ProjectView, RemoveProject, RemovedProject};
+pub use projects::{
+    AddHostedProject, AddProject, CHECKOUT_NOT_OPEN, HostedProjectChoice, ProjectView,
+    RemoveProject, RemovedProject,
+};
 pub use provisional::{
     ProvisionalGate, ProvisionalView, ProvisionalWork, ReopenProvisional, RepairFirst,
 };

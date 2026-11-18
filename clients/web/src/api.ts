@@ -66,6 +66,7 @@ import {
   parseGuidanceRulePreview,
   parseGuidanceSourceReview,
   parseGuidanceSourceUpdates,
+  parseHostedOrchestrationProjectChoice,
   parseHostedStop,
   parseLegacyPermissionDiscardOutcome,
   parseLegacyPermissionPreview,
@@ -1144,6 +1145,13 @@ export interface OrchestrationProjectView {
   label: string;
   added: boolean;
   resolution: OrchestrationResolution;
+}
+/** `GET /checkouts/{owner}/orchestration/hosted-projects` (HS2-92FJXM): one checkout the serving machine has open. */
+export interface HostedOrchestrationProjectChoice {
+  checkout_id: string;
+  name: string;
+  added: boolean;
+  target_id?: string;
 }
 /** `DELETE /checkouts/{owner}/orchestration/projects/{target}` (HS2-W27N1D). */
 export interface RemovedOrchestrationProject {
@@ -3106,6 +3114,19 @@ export class Api {
       method: 'POST',
       body: JSON.stringify({ ...request, actor: { role: 'human' } }),
     });
+  /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
+  hostedOrchestrationProjects = (owner: string) =>
+    this.parsed(
+      parseHostedOrchestrationProjectChoice.list,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
+    );
+  /** HS2-92FJXM: add one of them; the serving machine binds it, and a repeat is the same project. */
+  addHostedOrchestrationProject = (owner: string, request: { checkout_id: string; label: string; target_id: string }) =>
+    this.parsed(
+      parseOrchestrationProjectView,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/hosted-projects`,
+      { method: 'POST', body: JSON.stringify({ ...request, actor: { role: 'human' } }) },
+    );
   removeOrchestrationProject = (owner: string, target: string) =>
     this.parsed(
       parseRemovedOrchestrationProject,
