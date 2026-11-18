@@ -1334,8 +1334,9 @@ prompt; that is unverified. With a real, signed-in install:
 
 A newly spawned Codex TUI gets the orchestrator's role prompt by a one-shot bracketed
 paste into its terminal right after launch (`codex-pty-bootstrap`), which reports
-`delivered` without confirmation. Whether Codex keeps a paste that arrives before its
-TUI has drawn its composer is unverified. With a real, signed-in `codex`:
+`delivered` without confirmation. The maintainer verified with a real, signed-in `codex`
+(0.167.1) that an early paste is always kept (HS2-N1GZFE), so the prompt is not held.
+Repeat this check after a Codex upgrade that changes its start-up screens:
 
 1. In a scratch project Codex already trusts, open a Codex AI terminal from the drawer
    and, within a second of it appearing, paste a short prompt ("Reply with the single
