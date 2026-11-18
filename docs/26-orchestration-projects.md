@@ -3090,8 +3090,19 @@ timestamps only:
 A repeated start of the same operation launched nothing and is not recorded again;
 neither is a stop of a session that had already ended. An end is recorded once,
 however many readers notice it. The answer to the orchestrator is decided before the
-entry is written, so a journal that cannot be written never changes it. The journal
-is machine-local: only the host's owner reads it.
+entry is written, so a journal that cannot be written never changes it. Such a lost
+entry is not silent (HS2-S0FDKR):
+
+- **Logged.** The server logs it with the checkout id, the operation id, the event
+  and the error kind only.
+- **Counted.** It is counted beside the journal in
+  `<checkout-id>.write-failures.json`: `count`, `last_at_ms` and `last_error`, a
+  stable code.
+- **Reported.** A journal read carries that count as `write_failures`, absent while
+  nothing was lost, so the host's owner can tell the journal is incomplete.
+- **Kept.** The count stays after the journal can be written again.
+
+The journal is machine-local: only the host's owner reads it.
 
 ```sh
 hotsheet-cli -C <store> orchestration hosted-audit --checkout <checkout-id> [--after <seq>] [--limit <n>]

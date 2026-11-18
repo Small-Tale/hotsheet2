@@ -19600,6 +19600,26 @@ components:
           type: boolean
         more:
           type: boolean
+        write_failures:
+          description:
+            HS2-S0FDKR. Journal entries this machine could not write for the checkout, counted since the journal
+            began; absent while every entry was written.
+          type: object
+          required:
+            - count
+            - last_at_ms
+            - last_error
+          properties:
+            count:
+              type: integer
+              minimum: 1
+            last_at_ms:
+              type: integer
+              minimum: 0
+            last_error:
+              description: The latest failure's error kind, a stable code.
+              type: string
+          additionalProperties: false
       additionalProperties: false
     OrchestrationMachineLimits:
       description: Limits a machine hosting a target must satisfy before a session starts there (HS2-YCJDEB).

@@ -2709,6 +2709,7 @@ fn host_journal(f: &Fixture) -> Vec<hotsheet_ticketing::orchestration::HostedSes
     f.m.runtime
         .hosted_audit(&f.m.target.id, 0, 100)
         .unwrap()
+        .page
         .entries
         .into_iter()
         .map(|entry| entry.record)
@@ -3163,4 +3164,89 @@ fn hs2_kr28fs_the_hosting_machine_hands_a_session_back_through_its_owner() {
         ),
         Err(OrchestrationError::Invalid(_))
     ));
+}
+
+/// HS2-S0FDKR: a hosted session journal entry that cannot be written changes nothing
+/// about the start or stop answer, is counted beside the journal with its error kind,
+/// and the journal read reports the count, so the host's owner can tell the journal is
+/// incomplete. Once the journal can be written again, entries land and the count of
+/// what was lost stays.
+#[test]
+fn hs2_s0fdkr_a_journal_entry_that_cannot_be_written_is_counted_and_reported() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let start = |operation: &str, tx: &mut Transaction<'_>| {
+        f.m.runtime
+            .hosted_session_start(
+                &f.m.target.id,
+                HostedSessionStart {
+                    session: late_start(&f, operation),
+                    limits: None,
+                    actor: Some(MutationActor::parse("ai", Some("scheduler-1".into())).unwrap()),
+                    resources: Vec::new(),
+                },
+                tx,
+            )
+            .unwrap()
+    };
+    // Nothing lost: no count is reported.
+    assert_eq!(
+        f.m.runtime
+            .hosted_audit(&f.m.target.id, 0, 100)
+            .unwrap()
+            .write_failures,
+        None
+    );
+    // The journal's file is a directory: every append fails.
+    let journal = f.m.home.join("hosted-session-audit");
+    let current = journal.join(format!("{}.jsonl", f.m.target.id));
+    std::fs::create_dir_all(&current).unwrap();
+    for operation in ["op-1", "op-2"] {
+        assert_eq!(
+            start(operation, &mut tx).outcome,
+            HostedStartOutcome::Started,
+            "a lost entry does not change the answer"
+        );
+    }
+    let failures =
+        std::fs::read_to_string(journal.join(format!("{}.write-failures.json", f.m.target.id)))
+            .unwrap();
+    let failures: crate::orchestration::HostedJournalFailures =
+        serde_json::from_str(&failures).unwrap();
+    assert_eq!(failures.count, 2);
+    assert!(failures.last_at_ms > 0);
+    assert!(!failures.last_error.is_empty());
+    // Identifiers and a code only: nothing about the request's content.
+    assert!(
+        failures
+            .last_error
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '_'),
+        "{failures:?}"
+    );
+    // Writable again: the next entry lands, and the count of what was lost stays.
+    std::fs::remove_dir(&current).unwrap();
+    // (Two sessions already run here, so this start is refused; a refusal is journaled
+    // as a start is.)
+    assert_ne!(start("op-3", &mut tx).outcome, HostedStartOutcome::Existing);
+    let read = f.m.runtime.hosted_audit(&f.m.target.id, 0, 100).unwrap();
+    assert_eq!(
+        read.page
+            .entries
+            .iter()
+            .map(|entry| entry.record.operation_id.as_str())
+            .collect::<Vec<_>>(),
+        ["op-3"]
+    );
+    assert_eq!(read.write_failures, Some(failures.clone()));
+    let wire = serde_json::to_value(&read).unwrap();
+    assert_eq!(wire["write_failures"]["count"], 2);
+    assert!(
+        wire["entries"].is_array(),
+        "the page keeps its shape: {wire}"
+    );
 }

@@ -1131,6 +1131,7 @@ dependencies = [
  "tempfile",
  "time",
  "toml 0.8.23",
+ "tracing",
  "ulid",
  "ureq",
  "webpki-roots 1.0.9",
