@@ -5,6 +5,7 @@ import type { ToolConnection } from '../api';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { drawerSelectionView, type PendingDrawerTab } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
+import { handBackOperationId } from '../orchestration-hand-back';
 import type { DrawerAIChat } from '../project-drive';
 import { createTerminalDrawerController } from './terminal-drawer';
 
@@ -249,7 +250,7 @@ describe('hand back to the orchestrator (HS2-KR28FS)', () => {
     fetchMock.mockImplementationOnce(() => failure('permission_required'));
     await drawer.handBackHostedSession('t1');
     expect(calls.showToast).toHaveBeenLastCalledWith(
-      'Handing back needs permission to start a session. Answer the request, then hand it back again.',
+      'Handing back needs permission to start a session. It finishes once the request is allowed.',
     );
     fetchMock.mockImplementationOnce(() => json({ refused: 'session_mid_turn' }));
     await drawer.handBackHostedSession('t1');
@@ -282,6 +283,107 @@ describe('hand back to the orchestrator (HS2-KR28FS)', () => {
     expect(ids[4]).not.toBe(ids[3]);
     for (const id of ids) expect(id).toMatch(/^hand-back-[A-Za-z0-9-]+$/u);
     expect(calls.refreshTerminalDashboard).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('a hand-back finishes when its permission is answered (HS2-BPTQ5X)', () => {
+  const groups = [
+    {
+      projectId: 'a',
+      sessions: [
+        {
+          id: 't1',
+          orchestrator: { checkout_id: 'c1', operation_id: 'op-1', project: 'P', owner: 'human', paused: false },
+        },
+      ],
+    },
+  ] as unknown as TerminalDashboardGroup[];
+  const required = () =>
+    Promise.resolve(
+      new Response(JSON.stringify({ code: 'permission_required', request_id: 'req-1' }), { status: 409 }),
+    );
+  const bodies = () =>
+    fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Record<string, unknown>,
+    );
+  const ask = (operation: unknown) => ({
+    request_id: 'req-1',
+    operation_id: String(operation),
+    owner_checkout_id: 'o',
+  });
+
+  it('sends it again under the same id once the request is answered, and reports a denial', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = groups;
+    fetchMock.mockImplementationOnce(required);
+    await drawer.handBackHostedSession('t1');
+    const id = bodies()[0]?.hand_back_operation_id;
+    // Pending: nothing is sent again; seen pending, then answered: sent once more, same id.
+    drawer.continueHandBacks([ask(id)]);
+    drawer.continueHandBacks([ask(id)]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockImplementationOnce(() => json({}));
+    drawer.continueHandBacks([]);
+    await vi.waitFor(() => {
+      expect(calls.showToast).toHaveBeenLastCalledWith('Handed back to the orchestrator.');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bodies()[1]?.hand_back_operation_id).toBe(id);
+    // Done: a later change of the inbox sends nothing.
+    drawer.continueHandBacks([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // A new hand-back asks again under a new id; a Deny is reported and ends it.
+    fetchMock.mockImplementationOnce(required);
+    await drawer.handBackHostedSession('t1');
+    const second = bodies()[2]?.hand_back_operation_id;
+    expect(second).not.toBe(id);
+    drawer.continueHandBacks([ask(second)]);
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: 'permission_denied' }), { status: 403 })),
+    );
+    drawer.continueHandBacks([]);
+    await vi.waitFor(() => {
+      expect(calls.showToast).toHaveBeenLastCalledWith(
+        'Permission to start a session was denied. The session stays yours.',
+      );
+    });
+    drawer.continueHandBacks([]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('finishes a hand-back whose request reached the inbox before its own answer did', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = groups;
+    // The inbox shows the request before the hand-back's own permission_required arrives.
+    fetchMock.mockImplementationOnce(() => {
+      drawer.continueHandBacks([ask('pending')]);
+      return required();
+    });
+    await drawer.handBackHostedSession('t1');
+    fetchMock.mockImplementationOnce(() => json({}));
+    drawer.continueHandBacks([]);
+    await vi.waitFor(() => {
+      expect(calls.showToast).toHaveBeenLastCalledWith('Handed back to the orchestrator.');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a waiting hand-back after a reload and finishes it once on the answer', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = groups;
+    // A fresh drawer remembers nothing; the inbox still holds the request it filed.
+    const id = handBackOperationId('c1', 'op-1', 'beforereload');
+    drawer.continueHandBacks([ask(id)]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockImplementationOnce(() => json({}));
+    drawer.continueHandBacks([]);
+    await vi.waitFor(() => {
+      expect(calls.showToast).toHaveBeenLastCalledWith('Handed back to the orchestrator.');
+    });
+    expect(bodies()[0]).toMatchObject({ operation_id: 'op-1', hand_back: true, hand_back_operation_id: id });
+    drawer.continueHandBacks([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

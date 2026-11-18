@@ -3439,6 +3439,33 @@ export async function startHotSheetWebClient() {
     projectTabActionCompact = signal(false),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
+  /**
+   * The orchestrator permission requests still waiting, each with its operation and project. The inbox is
+   * not a signal; its revision is what changes when a request arrives or is answered. HS2-NY0MRJ: Run
+   * Validation recovers from it after a reload; HS2-BPTQ5X: so does a drawer hand-back.
+   */
+  function pendingOrchestratorAsks() {
+    void permissionRevision.value;
+    return pendingPermissions().flatMap((item) =>
+      item.orchestrator
+        ? [
+            {
+              request_id: item.orchestrator.request_id,
+              operation_id: item.orchestrator.operation_id,
+              owner_checkout_id: item.orchestrator.owner_checkout_id,
+            },
+          ]
+        : [],
+    );
+  }
+  // HS2-BPTQ5X: a drawer hand-back waiting on its permission request finishes once that is answered.
+  effect(() => {
+    const asks = pendingOrchestratorAsks();
+    void terminalGroups.value;
+    queueMicrotask(() => {
+      terminalDrawer.continueHandBacks(asks);
+    });
+  });
   // HS2-J89JC7: the Orchestration view's timeline stream, selection, kick-off and run controls.
   const orchestrationView = createOrchestrationViewController({
     project,
@@ -3449,22 +3476,7 @@ export async function startHotSheetWebClient() {
     showToast,
     openTicket: openTicketLinkMatch,
     showPermissionRequest,
-    // The inbox is not a signal; its revision is what changes when a request arrives or is answered.
-    pendingOrchestratorRequests: () => {
-      void permissionRevision.value;
-      // HS2-NY0MRJ: with each request's operation and project, so Run Validation recovers after a reload.
-      return pendingPermissions().flatMap((item) =>
-        item.orchestrator
-          ? [
-              {
-                request_id: item.orchestrator.request_id,
-                operation_id: item.orchestrator.operation_id,
-                owner_checkout_id: item.orchestrator.owner_checkout_id,
-              },
-            ]
-          : [],
-      );
-    },
+    pendingOrchestratorRequests: pendingOrchestratorAsks,
     // HS2-W27N1D: the project's type decides the tab; Choose Projects… opens its settings category.
     // Unknown until Settings read the type, so the view's own declaration read decides meanwhile.
     orchestrationProject: (id) => orchestrationSurfaceRef.current?.knownOrchestrationProject(id),

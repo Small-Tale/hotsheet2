@@ -15,6 +15,14 @@ import {
 } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
 import { automaticInputFocusAllowed } from '../mobile-layout';
+import {
+  answeredHandBacks,
+  handBackKey,
+  handBackOperationId,
+  type PendingHandBack,
+  recoveredHandBacks,
+} from '../orchestration-hand-back';
+import type { PendingOrchestratorAsk } from '../orchestration-validation-steps';
 import { type DrawerAIChat, projectConnections } from '../project-drive';
 import type { TerminalFocusRequest } from '../terminal-viewport';
 import { hideNewTerminalInNamedGroups, type parseTerminalVisibilityState } from '../terminal-visibility';
@@ -111,8 +119,12 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   let terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
-  /** HS2-KR28FS: the permission request each hand-back waits on, by checkout and operation. */
-  const pendingHandBacks = new Map<string, string>();
+  /** HS2-KR28FS, HS2-BPTQ5X: each hand-back still waiting, by hosted checkout and operation. */
+  const pendingHandBacks = new Map<string, PendingHandBack>();
+  /** HS2-BPTQ5X: the permission requests of waiting hand-backs seen pending. */
+  const seenHandBackRequests = new Set<string>();
+  /** HS2-BPTQ5X: the pending orchestrator requests as last seen. */
+  let lastAsks: readonly PendingOrchestratorAsk[] = [];
   let drawerInputFocusGeneration = 0;
   let pendingTabSequence = 0;
   /**
@@ -524,9 +536,10 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   }
   /**
    * HS2-KR28FS: a person hands a session they took over or paused back to its orchestrator. It needs
-   * the permission a session start needs: the first try files that request, and the next try after it
-   * is answered continues it under the same operation id. A denial or a completed hand-back drops the
-   * id, so the next try asks again. The tool must be idle between turns.
+   * the permission a session start needs: the first try files that request. HS2-BPTQ5X: the drawer then
+   * sends it again by itself under the same operation id once the request is answered
+   * (`continueHandBacks`), so an Allow finishes it and a Deny is reported. A completed hand-back or a
+   * denial drops the id, so the next try asks again. The tool must be idle between turns.
    */
   async function handBackHostedSession(terminalId: string) {
     const current = project(),
@@ -534,28 +547,72 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         .find((group) => group.projectId === current?.id)
         ?.sessions.find((item) => item.id === terminalId)?.orchestrator;
     if (!current || orchestrator?.owner !== 'human') return;
-    const key = `${orchestrator.checkout_id}/${orchestrator.operation_id}`,
-      operationId = pendingHandBacks.get(key) ?? `hand-back-${browserRandomId()}`;
-    pendingHandBacks.set(key, operationId);
+    const key = handBackKey(orchestrator.checkout_id, orchestrator.operation_id),
+      entry = pendingHandBacks.get(key) ?? {
+        checkout_id: orchestrator.checkout_id,
+        operation_id: orchestrator.operation_id,
+        handBackOperationId: handBackOperationId(
+          orchestrator.checkout_id,
+          orchestrator.operation_id,
+          browserRandomId(),
+        ),
+      };
+    pendingHandBacks.set(key, entry);
+    await sendHandBack(current, entry);
+  }
+  async function sendHandBack(current: Project, entry: PendingHandBack) {
+    const key = handBackKey(entry.checkout_id, entry.operation_id);
     try {
       const reply = await new Api(current.apiPath).handBackHostedSession(
-        orchestrator.checkout_id,
-        orchestrator.operation_id,
-        operationId,
+        entry.checkout_id,
+        entry.operation_id,
+        entry.handBackOperationId,
       );
       if (reply.refused === undefined) {
         pendingHandBacks.delete(key);
         showToast('Handed back to the orchestrator.');
-      } else showToast(handBackRefusal(reply.refused));
+      } else {
+        // Not a permission question: the next try may ask again under the same id.
+        pendingHandBacks.set(key, { ...entry, requestId: undefined });
+        showToast(handBackRefusal(reply.refused));
+      }
     } catch (reason) {
-      if (reason instanceof ApiHttpError && reason.code === 'permission_required')
-        showToast('Handing back needs permission to start a session. Answer the request, then hand it back again.');
-      else {
+      if (reason instanceof ApiHttpError && reason.code === 'permission_required') {
+        pendingHandBacks.set(key, { ...entry, requestId: reason.requestId });
+        // The inbox may already show the request this answer names: it is waiting, so its
+        // disappearance is the answer.
+        if (reason.requestId !== undefined && lastAsks.some((ask) => ask.request_id === reason.requestId))
+          seenHandBackRequests.add(reason.requestId);
+        showToast('Handing back needs permission to start a session. It finishes once the request is allowed.');
+      } else {
         pendingHandBacks.delete(key);
         showToast(handBackError(reason));
       }
     }
     await refreshTerminalDashboard();
+  }
+  /**
+   * HS2-BPTQ5X: run on every change of the pending orchestrator permission requests (and of the drawer's
+   * sessions). A hand-back whose request was seen pending and is pending no longer was answered, and is
+   * sent again under the same operation id. After a reload, a pending request for one of this project's
+   * person-owned sessions is recovered by its digest, so the answer still finishes it once.
+   */
+  function continueHandBacks(asks: readonly PendingOrchestratorAsk[]) {
+    lastAsks = asks;
+    const current = project();
+    if (!current) return;
+    const sessions =
+      terminalGroups
+        .peek()
+        .find((group) => group.projectId === current.id)
+        ?.sessions.flatMap((item) => (item.orchestrator?.owner === 'human' ? [item.orchestrator] : [])) ?? [];
+    for (const recovered of recoveredHandBacks(asks, sessions)) {
+      const key = handBackKey(recovered.checkout_id, recovered.operation_id);
+      if (!pendingHandBacks.has(key)) pendingHandBacks.set(key, recovered);
+    }
+    const shown = new Set(asks.map((ask) => ask.request_id));
+    for (const entry of answeredHandBacks([...pendingHandBacks.values()], shown, seenHandBackRequests))
+      void sendHandBack(current, { ...entry, requestId: undefined });
   }
   function closeDrawerAIChat(id: string) {
     void closeDrawerTabIds([id]);
@@ -606,6 +663,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     messageTerminalSession,
     takeOverHostedSession,
     handBackHostedSession,
+    continueHandBacks,
   };
 }
 

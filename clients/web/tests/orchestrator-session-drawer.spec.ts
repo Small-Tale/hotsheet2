@@ -372,3 +372,108 @@ test('hands a taken-over session back to its orchestrator from its drawer tab (H
     await app.stop();
   }
 });
+
+// HS2-BPTQ5X: a hand-back that waits on its session_start permission request finishes by itself once
+// a person allows the request in the ordinary permission prompt, without choosing Hand Back again;
+// a denial is reported in the drawer and leaves the session the person's.
+test('finishes a hand-back once its permission is allowed and reports a denial (HS2-BPTQ5X)', async ({
+  context,
+  baseURL,
+}) => {
+  test.setTimeout(180_000);
+  const app = await desktopApp(context, baseURL!, {
+    canonicalRoot: true,
+    seed: async (fixture) => syntheticTool(fixture.env.HOTSHEET_HOME!),
+  });
+  try {
+    const server = app.server;
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: TOOL, max_sessions: 4 }],
+        targets: [
+          {
+            target_id: TARGET,
+            actions: ['tickets_read', 'gates_observe', 'sessions_manage'],
+            tools: [{ tool: TOOL }],
+            max_sessions: 4,
+          },
+        ],
+      },
+      actor: person,
+    });
+    // The start is allowed by a remembered rule, which is then forgotten: a hand-back asks.
+    const rule = (await send(server, 'POST', `${base}/permission-rules`, {
+      target_id: TARGET,
+      action: 'session_start',
+      tool: TOOL,
+      actor: person,
+    })) as { rule_id: string };
+    const started = (await send(server, 'POST', `${base}/sessions`, {
+      target_id: TARGET,
+      operation_id: 'sched-hand-back-asks',
+      tool: TOOL,
+      actor: scheduler,
+    })) as { session_id: string; state: string; hosted?: { session_id: string } };
+    expect(started.state, JSON.stringify(started)).toBe('running');
+    await send(server, 'DELETE', `${base}/permission-rules/${rule.rule_id}`, { actor: person });
+    const terminal = started.hosted!.session_id;
+    const hosted = async () =>
+      (await server.request<TerminalInfo[]>('/terminals')).find((row) => row.id === terminal)?.orchestrator;
+
+    const page = await app.launch();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openMockedProject(page);
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const tab = page
+      .locator('[data-component="terminal-drawer"]')
+      .locator(`[data-tab-kind="terminal"][data-terminal-id="${terminal}"]`);
+    await expect(tab).toBeVisible();
+    const menu = page.locator('[data-context-menu="app-tab"]');
+    const choose = async (item: string) => {
+      await expect(async () => {
+        if (await menu.count()) await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await tab.click({ button: 'right' });
+        await expect(menu.getByRole('menuitem', { name: item })).toBeVisible({ timeout: 1_000 });
+      }).toPass();
+      await menu.getByRole('menuitem', { name: item }).click();
+    };
+    const toast = (text: string) => page.getByRole('status').filter({ hasText: text });
+    const popup = page.locator('[data-component="permission-request-popup"]');
+
+    await choose('Take Over from Orchestrator');
+    await expect.poll(hosted).toMatchObject({ owner: 'human' });
+    // The hand-back asks through the ordinary permission prompt and waits.
+    await choose('Hand Back to Orchestrator');
+    await expect(popup).toContainText('Orchestrator', { timeout: 30_000 });
+    await expect(toast('It finishes once the request is allowed.')).toHaveCount(1);
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: `target/visual-captures/hs2-bptq5x-asks-1440.png` });
+    expect(await hosted()).toMatchObject({ owner: 'human' });
+    // Allowing it finishes the hand-back by itself.
+    await popup.getByRole('button', { name: 'Allow Once' }).click();
+    await expect(toast('Handed back to the orchestrator.')).toHaveCount(1, { timeout: 30_000 });
+    await expect.poll(hosted).toMatchObject({ owner: 'orchestrator', paused: false });
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: `target/visual-captures/hs2-bptq5x-allowed-1440.png` });
+
+    // Taken over again, a new hand-back asks again; Deny is reported and it stays the person's.
+    await choose('Take Over from Orchestrator');
+    await expect.poll(hosted).toMatchObject({ owner: 'human' });
+    await choose('Hand Back to Orchestrator');
+    await expect(popup).toContainText('Orchestrator', { timeout: 30_000 });
+    await popup.getByRole('button', { name: 'Deny' }).click();
+    await expect(toast('Permission to start a session was denied. The session stays yours.')).toHaveCount(1, {
+      timeout: 30_000,
+    });
+    expect(await hosted()).toMatchObject({ owner: 'human' });
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
+    await page.screenshot({ path: `target/visual-captures/hs2-bptq5x-denied-1440.png` });
+  } finally {
+    await app.stop();
+  }
+});

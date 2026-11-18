@@ -2878,8 +2878,13 @@ person owns it (HS2-KR28FS).
 
 A hand-back at the hosting machine (`session hand-back <operation-id> --checkout`, or
 the drawer) is passed to the orchestrating checkout when this machine holds it, so the
-same permission applies. The drawer keeps the request's operation id until it is
-answered, so choosing Hand Back again after allowing the request continues it. A
+same permission applies. When the hand-back waits on its permission request, the
+drawer finishes it by itself once the request is answered (HS2-BPTQ5X): it watches the
+app's pending orchestrator requests (the existing permission events, no polling) and,
+when the request leaves them, sends the hand-back again under the same operation id.
+An Allow hands the session back; a Deny is reported and leaves it the person's. The
+operation id carries a digest of the hosted session, so after a reload the pending
+request is recovered and its answer still finishes the hand-back once. A
 session orchestrated from another machine is refused `session_owner_remote`; hand it
 back from there. A takeover, pause or stop writes a token to
 `${HOTSHEET_HOME}/orchestration-hosted-session-signal/` from whichever process made it
