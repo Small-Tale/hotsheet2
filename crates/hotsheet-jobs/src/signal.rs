@@ -171,14 +171,22 @@ struct Kept {
 
 /// Which directory a path named when its waiter started. A directory that was removed
 /// and created again is a different one, and a watch of the old one may be dead.
+///
+/// HS2-WCYJH6: Linux file systems hand a freed inode number to the next directory at
+/// once, so device and inode alone call a recreated directory the same one. Its birth
+/// time, where the platform reports it, tells them apart.
 #[derive(Debug, PartialEq, Eq)]
-struct DirIdentity(Option<(u64, u64)>);
+struct DirIdentity(Option<(u64, u64, Option<std::time::SystemTime>)>);
 
 impl DirIdentity {
     #[cfg(unix)]
     fn of(dir: &Path) -> Self {
         use std::os::unix::fs::MetadataExt;
-        Self(fs::metadata(dir).ok().map(|meta| (meta.dev(), meta.ino())))
+        Self(
+            fs::metadata(dir)
+                .ok()
+                .map(|meta| (meta.dev(), meta.ino(), meta.created().ok())),
+        )
     }
 
     /// Without a stable identity to compare, no waiter is kept: every wait starts its
