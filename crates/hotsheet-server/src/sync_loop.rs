@@ -309,16 +309,19 @@ pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncRep
     }
 }
 
-/// Push each pending lost-claim conflict of `store_root` to its losing session. The loop runs on
-/// its own thread, so the async terminal lookup runs on the server's runtime when it has one.
+/// Push each pending lost-claim conflict of `store_root` to its losing session. A pass runs on
+/// the loop thread and from async routes, so the terminal lookup is spawned on the server's
+/// runtime instead of blocking the pass (a `block_on` here panics inside a runtime).
 fn tell_losing_sessions(state: &AppState, store_root: &std::path::Path) {
     let Ok(handle) = tokio::runtime::Handle::try_current() else {
         return;
     };
     let project = crate::sync_ai::project_root(state, store_root);
-    handle.block_on(crate::claim_conflict_push::after_pass(
-        state, &project, store_root,
-    ));
+    let state = state.clone();
+    let store_root = store_root.to_path_buf();
+    handle.spawn(async move {
+        crate::claim_conflict_push::after_pass(&state, &project, &store_root).await;
+    });
 }
 
 /// Spawn the background sync loop. The returned handle keeps it running; a write on the
