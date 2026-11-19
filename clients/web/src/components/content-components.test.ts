@@ -26,8 +26,8 @@ describe('content components', () => {
       ['persisted', 'Edited rating without its old prefix'],
     ]);
     const markup = String(TicketNotes({ notes: [helpful, source, orphan, unhelpful, edited, activity] }));
-    expect(markup).toContain('Show AI Feedback');
-    expect(markup).toContain('Hide AI Feedback');
+    expect(markup).toContain('AI Feedback');
+    expect(markup).toContain('data-note-ai-feedback');
     expect(markup).toContain('class="note-card__ai-feedback-entry"');
     expect(markup).toContain('3 notes');
     expect(nestAiFeedback([orphan])[0].id).toBe('orphan');

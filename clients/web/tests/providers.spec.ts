@@ -22823,53 +22823,65 @@ for (const width of [1280, 390]) {
         }),
       )
       .toBe(true);
-    await expect(parent.locator('.note-card__ai-feedback')).toBeVisible();
+    // HS2-ZGVG8T: a Kerf embedded Disclosure titled "AI Feedback"; its arrow alone shows open or closed.
+    const feedbackDisclosure = (card: typeof parent) => card.locator('[data-note-ai-feedback]');
+    await expect(feedbackDisclosure(parent)).toBeVisible();
     await expect(inspector.locator('.ticket-notes__list > *')).toHaveCount(3);
-    await parent.getByText('Show AI Feedback').click();
+    await feedbackDisclosure(parent).getByText('AI Feedback', { exact: true }).click();
     await expect(parent.getByText('Keep the short status summary.')).toBeVisible();
     await page.reload();
     if (width === 390)
       await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').first().click();
     const reloaded = page.locator('#app-right-rail [data-component="note-card"][data-note-id="N1"]');
-    await expect(reloaded.getByText('Show AI Feedback')).toBeVisible();
+    await expect(feedbackDisclosure(reloaded).getByText('AI Feedback', { exact: true })).toBeVisible();
     await expect(reloaded.getByText('Keep the short status summary.')).toBeHidden();
-    const disclosure = reloaded.locator('.note-card__ai-feedback summary');
+    const disclosure = feedbackDisclosure(reloaded).locator('summary');
+    await expect(feedbackDisclosure(reloaded)).toHaveJSProperty('open', false);
+    await reloaded.screenshot({ path: `target/visual-captures/hs2-zgvg8t-feedback-closed-${width}.png` });
     await disclosure.focus();
     await disclosure.press('Enter');
-    await expect(reloaded.locator('.note-card__ai-feedback')).toHaveAttribute('open', '');
+    await expect(feedbackDisclosure(reloaded)).toHaveJSProperty('open', true);
     await expect(reloaded.getByText('Keep the short status summary.')).toBeVisible();
-    const feedbackLayout = await reloaded.locator('.note-card__ai-feedback').evaluate((details) => {
+    const feedbackLayout = await feedbackDisclosure(reloaded).evaluate((details) => {
       const summary = details.querySelector('summary')!,
+        title = summary.querySelector<HTMLElement>('.kui-disclosure__title')!,
         firstEntry = details.querySelector<HTMLElement>('.note-card__ai-feedback-entry')!,
-        nestedNote = firstEntry.querySelector<HTMLElement>('.note-card')!;
+        nestedNote = firstEntry.querySelector<HTMLElement>('.note-card')!,
+        body = details.closest('.note-card')!.querySelector<HTMLElement>('.note-card__body')!;
       return {
         summaryWidth: summary.getBoundingClientRect().width,
         detailsWidth: details.getBoundingClientRect().width,
-        // HS2-XSBED3: the visible label carries a Kerf DisclosureArrow drawn open; no pseudo chevron remains.
-        arrowOpen: summary.querySelector('.note-card__ai-feedback-hide .kui-disclosure-arrow')?.getBoundingClientRect()
-          .width,
-        closedArrowHidden: summary.querySelector<HTMLElement>('.note-card__ai-feedback-show')!.offsetParent === null,
-        pseudoArrow: getComputedStyle(summary, '::before').content,
-        themeArrow: getComputedStyle(summary, '::after').display,
+        // offsetWidth, not the bounding box, which grows while the arrow's rotation animates.
+        arrowWidth: summary.querySelector<HTMLElement>('.kui-disclosure-arrow')?.offsetWidth ?? 0,
+        titleSize: parseFloat(getComputedStyle(title.firstElementChild ?? title).fontSize),
+        bodySize: parseFloat(getComputedStyle(body).fontSize),
+        titleColor: getComputedStyle(title.firstElementChild ?? title).color,
+        bodyColor: getComputedStyle(body).color,
+        themeArrow: getComputedStyle(summary, '::after').content,
         nativeMarker: getComputedStyle(summary).listStyleType,
         detailsBorder: getComputedStyle(details).borderTopWidth,
-        detailsInset: getComputedStyle(details).paddingLeft,
         firstBorder: getComputedStyle(firstEntry).borderTopWidth,
         noteBorder: getComputedStyle(nestedNote).borderTopWidth,
         noteInset: getComputedStyle(nestedNote).paddingLeft,
       };
     });
-    expect(feedbackLayout.summaryWidth).toBeLessThan(feedbackLayout.detailsWidth * 0.75);
-    expect(feedbackLayout.arrowOpen).toBeGreaterThan(0);
-    expect(feedbackLayout.closedArrowHidden).toBe(true);
-    expect(feedbackLayout.pseudoArrow).toBe('none');
-    expect(feedbackLayout.themeArrow).toBe('none');
+    // Small and gray with a small arrow (HS2-2V52Z6); no outlined or inset feedback notes.
+    expect(feedbackLayout.summaryWidth).toBeLessThanOrEqual(feedbackLayout.detailsWidth);
+    expect(feedbackLayout.arrowWidth).toBeGreaterThan(0);
+    // Kerf's default arrow until KF-ND665K offers a compact Disclosure.
+    expect(feedbackLayout.arrowWidth).toBeLessThanOrEqual(19);
+    expect(feedbackLayout.titleSize).toBeLessThan(feedbackLayout.bodySize + 0.01);
+    expect(feedbackLayout.titleColor).not.toBe(feedbackLayout.bodyColor);
+    expect(['none', 'normal']).toContain(feedbackLayout.themeArrow);
     expect(feedbackLayout.nativeMarker).toBe('none');
     expect(feedbackLayout.detailsBorder).toBe('0px');
-    expect(feedbackLayout.detailsInset).toBe('0px');
     expect(feedbackLayout.firstBorder).toBe('0px');
     expect(feedbackLayout.noteBorder).toBe('0px');
     expect(feedbackLayout.noteInset).toBe('0px');
+    await reloaded.screenshot({ path: `target/visual-captures/hs2-zgvg8t-feedback-open-${width}.png` });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await reloaded.screenshot({ path: `target/visual-captures/hs2-zgvg8t-feedback-open-dark-${width}.png` });
+    await page.emulateMedia({ colorScheme: 'light' });
     await disclosure.blur();
     await expect(reloaded).toContainText('Loaded checkout-scoped tickets.');
     await expect(reloaded.locator('.note-card__body').first()).not.toContainText('activity-distillation');
@@ -22879,14 +22891,14 @@ for (const width of [1280, 390]) {
     await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');
     await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(2);
-    await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
+    await expect(reloaded.locator('[data-note-ai-feedback] [data-component="note-card"]')).toHaveCount(1);
     await reloaded.getByRole('button', { name: 'Not Helpful — Stop Suggestions Like This' }).click();
     await page
       .getByRole('alertdialog', { name: 'Withdraw your rating?' })
       .getByRole('button', { name: 'Withdraw Rating' })
       .click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(3);
-    await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
+    await expect(reloaded.locator('[data-note-ai-feedback] [data-component="note-card"]')).toHaveCount(1);
     await expect(reloaded).toContainText('Withdrawn.');
     await reloaded.getByRole('button', { name: 'Delete Note' }).first().click();
     await expect(page.locator('#app-right-rail [data-note-id="N1"]')).toHaveCount(0);

@@ -620,15 +620,21 @@ describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {
     expect(markup).toContain('>Respond</span>');
   });
 
-  it('draws the AI feedback disclosure arrows with Kerf DisclosureArrow (HS2-XSBED3)', () => {
+  it('shows AI feedback in a closed embedded Kerf Disclosure titled AI Feedback (HS2-ZGVG8T)', () => {
     const feedback = { id: 'fb', kind: 'regular' as const, author: 'Human', time: 'Now', body: 'Helpful' };
     const markup = String(
       NoteCard({ id: 'parent', kind: 'activity', author: 'AI', time: 'Now', body: 'Body', aiFeedback: [feedback] }),
     );
-    expect(markup).toMatch(/note-card__ai-feedback-show">[\s\S]*?kui-disclosure-arrow[\s\S]*?Show AI Feedback/);
-    expect(markup).toMatch(/note-card__ai-feedback-hide">[\s\S]*?kui-disclosure-arrow[\s\S]*?Hide AI Feedback/);
-    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
-    expect(css).not.toMatch(/summary::before/);
+    expect(markup).toContain('data-component="disclosure"');
+    expect(markup).toContain('data-appearance="embedded"');
+    expect(markup).toContain('data-note-ai-feedback');
+    expect(markup).toMatch(/kui-disclosure-arrow[\s\S]*?AI Feedback/);
+    expect(markup).not.toMatch(/(?:Show|Hide) AI Feedback/);
+    expect(markup).not.toMatch(/<details[^>]*\sopen/);
+    expect(markup).toContain('data-note-id="fb"');
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).not.toMatch(/\bsummary\b|::-webkit-details-marker|note-card__ai-feedback-(?:show|hide)/);
+    expect(css).not.toContain('--kui-disclosure-arrow-size');
   });
 
   it('labels a non-response editor action Submit', () => {

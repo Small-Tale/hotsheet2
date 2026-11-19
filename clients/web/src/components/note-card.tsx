@@ -4,8 +4,8 @@ import './note-card.css';
 import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
 import { ContentItem, type ContentItemAppearance } from '@kerfjs/ui/content-item';
-import { rem, uiColor } from '@kerfjs/ui/css-values';
-import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
+import { uiColor } from '@kerfjs/ui/css-values';
+import { Disclosure } from '@kerfjs/ui/disclosure';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
@@ -617,18 +617,17 @@ export function NoteCard({
         )}
       </footer>
       {aiFeedback.length > 0 && (
-        <details class="note-card__ai-feedback">
-          <summary>
-            {/* The native details owns open state, so each label carries its own controlled arrow. */}
-            <span class="note-card__ai-feedback-show">
-              <DisclosureArrow open={false} size={rem(0.875)} />
-              Show AI Feedback
-            </span>
-            <span class="note-card__ai-feedback-hide">
-              <DisclosureArrow open size={rem(0.875)} />
-              Hide AI Feedback
-            </span>
-          </summary>
+        // Kerf Disclosure owns the summary, arrow, and open state; the arrow alone shows open or
+        // closed (HS2-ZGVG8T, maintainer choice: one title, "AI Feedback"). Small and gray per HS2-2V52Z6.
+        <Disclosure
+          appearance="embedded"
+          title={
+            <Text variant="span" size="compact" tone="quiet">
+              AI Feedback
+            </Text>
+          }
+          rootAttributes={{ 'data-note-ai-feedback': '' }}
+        >
           <div class="note-card__ai-feedback-list">
             {aiFeedback.map((feedback) => (
               <div class="note-card__ai-feedback-entry">
@@ -636,7 +635,7 @@ export function NoteCard({
               </div>
             ))}
           </div>
-        </details>
+        </Disclosure>
       )}
     </article>
   );

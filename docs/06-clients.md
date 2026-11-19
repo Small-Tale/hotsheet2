@@ -4986,8 +4986,9 @@ regions. Fixed action targets, choice indicators, and glyphs remain explicit geo
 Thumbs feedback on an AI-authored **note** remains a regular, auditable ticket note with
 a persisted `feedback_for` source-note id and structured rating metadata. Older and external-provider notes use the
 exact `AI feedback for note:<id>:` prefix as a compatibility link. The Notes list groups it under the
-referenced parent, hides it by default, and offers a keyboard-accessible **Show AI
-Feedback / Hide AI Feedback** disclosure only when that parent has ratings. Multiple
+referenced parent, hides it by default, and offers a keyboard-accessible, small and quiet **AI
+Feedback** disclosure (Kerf `Disclosure`, embedded; its arrow alone shows open or closed,
+HS2-ZGVG8T) only when that parent has ratings. Multiple
 ratings are separated below the parent body. A rating with a missing parent, malformed
 prefix, or a non-note target remains visible in the flat list. This works after reload
 and provider sync because the relationship is persisted. Git-backed

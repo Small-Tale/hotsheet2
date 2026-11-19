@@ -355,6 +355,37 @@ describe('web ESLint policy', () => {
     expect(globalIgnores?.match(/'target\/\*\*'/g)).toHaveLength(1);
   });
 
+  it('HS2-ZGVG8T renders disclosures with Kerf Disclosure, never a hand-built native details element', () => {
+    // Kerf's component selection: "Do not hand-build a details element with its own marker CSS"; use
+    // Disclosure (@kerfjs/ui/disclosure). Tests, which may assert on Kerf's rendered <details>, are exempt.
+    const offenders: string[] = [];
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) scan(path);
+        else if (/\.[jt]sx?$/.test(entry.name) && !/\.(?:dom\.)?test\.[jt]sx?$/.test(entry.name)) {
+          const source = readFileSync(path, 'utf8').replace(/^\s*(?:\/\/|\*).*$/gm, '');
+          if (/<details[\s>]|<summary[\s>]|createElement\(\s*['"](?:details|summary)['"]/.test(source))
+            offenders.push(
+              relative(import.meta.dirname, path)
+                .split(sep)
+                .join('/'),
+            );
+        } else if (entry.name.endsWith('.css')) {
+          const css = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+          if (/(?:^|[\s,>+~(])(?:details|summary)(?=[\s,.:[>{)]|$)/m.test(css))
+            offenders.push(
+              relative(import.meta.dirname, path)
+                .split(sep)
+                .join('/'),
+            );
+        }
+      }
+    };
+    scan(import.meta.dirname);
+    expect(offenders).toEqual([]);
+  });
+
   it('HS2-N2HB7G reads the machine homes only through the shared blank-as-unset helper', () => {
     // `??` resolved `HOTSHEET_HOME=""` against the working directory and `||` kept whitespace-only
     // values; `machine-home.ts` applies the Rust `machine_home` rule (HS2-1D4DQF) for every bridge.
