@@ -90,8 +90,11 @@ export interface SidebarSurfaceDependencies {
   liveClock?: Readable<number>;
   /** Whether the Live section shows its detail rows (persisted per viewer). */
   liveSectionExpanded?: Readable<boolean>;
-  /** The server host's health, for the Live section's threshold callouts (HS2-DTAVQA). */
-  hostHealth?: Readable<HostHealthSnapshot | undefined>;
+  /**
+   * The health of the machine a project runs on, for the Live section's threshold callouts
+   * (HS2-DTAVQA): a remote project's own server, never this machine's (HS2-K4DY5G).
+   */
+  hostHealth?: (projectId: string) => HostHealthSnapshot | undefined;
 }
 
 /**
@@ -153,7 +156,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     const summary = liveStates
         ? projectLiveSummary(liveStates.forProject(projectId), liveClock?.value ?? Date.now())
         : undefined,
-      callouts = hostCallouts(hostHealth?.value);
+      callouts = hostCallouts(hostHealth?.(projectId));
     if (!summary && !callouts.length) return undefined;
     return { summary, callouts, expanded: liveSectionExpanded?.value ?? false };
   }

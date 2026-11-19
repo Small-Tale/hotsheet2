@@ -5,7 +5,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { remoteProjectId } from '../src/remote-projects/identity';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
-import { openMockedProject } from './open-mocked-project';
+import { openMockedProject, projectTab } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
@@ -290,6 +290,88 @@ test('keeps 16px between the Live gauges and a host callout in both modes (HS2-0
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await expect(live.locator('button').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: 'target/visual-captures/hs2-0eqmzz-live-compact-callout-1440.png' });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+// HS2-K4DY5G: a remote project's sidebar callouts describe the remote machine, never this one. The local
+// tab's server reports a critical disk and the remote tab's server a battery warning; each tab's sidebar
+// shows only its own server's warning, in both directions.
+test('a remote project tab shows its own server host warnings, not the local machine (HS2-K4DY5G)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const remoteId = remoteProjectId('01M7S5JGSGWFWB3A2WHJ0P2NTC', server.checkoutId);
+    const localPath = `/__hotsheet/project-api/${server.checkoutId}`;
+    const remotePath = `/__hotsheet/project-api/${encodeURIComponent(remoteId)}`;
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.route(/\/__hotsheet\/folders\/choose$/, (route) =>
+      route.fulfill({ json: { path: `${server.root}-remote` } }),
+    );
+    let opened = 0;
+    await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) => {
+      opened += 1;
+      return route.fulfill({
+        status: 201,
+        json:
+          opened === 1
+            ? { id: server.checkoutId, root: server.root, name: 'Launch', stores: [server.store], apiPath: localPath }
+            : { id: remoteId, root: remoteId, name: 'Build host · API', stores: [], apiPath: remotePath },
+      });
+    });
+    // Both tabs reach the fixture server, as the bridge reaches a real remote one; only the host health differs.
+    for (const [prefix, scenario] of [
+      [localPath, 'disk-critical'],
+      [remotePath, 'battery'],
+    ] as const) {
+      await page.route(`**${prefix}/host-health`, (route) => route.fulfill({ json: demoHostHealth(scenario) }));
+      await page.route(`**${prefix}/**`, async (route) => {
+        const incoming = new URL(route.request().url());
+        if (incoming.pathname.endsWith('/host-health')) return route.fallback();
+        let path = incoming.pathname.slice(prefix.length);
+        if (prefix === remotePath)
+          path = path.replace(`/checkouts/${encodeURIComponent(remoteId)}`, `/checkouts/${server.checkoutId}`);
+        try {
+          const response = await proxyFetch(route, {
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await openMockedProject(page);
+    await expect(projectTab(page, 'Launch')).toBeVisible();
+    await page.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('button', { name: 'Local Project' }).click();
+    await expect(projectTab(page, 'Build host · API')).toBeVisible({ timeout: 30_000 });
+
+    const live = page
+      .locator('section[aria-label="Project sidebar"]')
+      .first()
+      .locator('[data-component="project-live-section"]');
+    // The remote tab is selected: its server's battery warning shows and this machine's disk warning does not.
+    await expect(live.locator('[data-host-callout="power"]')).toBeVisible({ timeout: 30_000 });
+    await expect(live.locator('[data-host-callout="disk"]')).toHaveCount(0);
+    for (const width of [1280, 1120, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(live.locator('[data-host-callout="power"]')).toBeVisible({ timeout: 10_000 });
+      await live.screenshot({ path: `target/visual-captures/hs2-k4dy5g-remote-warning-${width}.png`, timeout: 15_000 });
+    }
+    // The local tab keeps its own warning and none of the remote server's.
+    await projectTab(page, 'Launch').click({ timeout: 15_000 });
+    await expect(live.locator('[data-host-callout="disk"]')).toBeVisible({ timeout: 30_000 });
+    await expect(live.locator('[data-host-callout="power"]')).toHaveCount(0);
   } finally {
     await server.stop(page);
   }
