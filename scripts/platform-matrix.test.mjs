@@ -7,6 +7,7 @@ import { CORE_TARGETS, planOutputs, selectTargets, TAURI_TARGETS } from './platf
 const workflow = readFileSync(new URL('../.github/workflows/platforms.yml', import.meta.url), 'utf8');
 const gasPreprocessor = readFileSync(new URL('./install-windows-arm64-gas-preprocessor.ps1', import.meta.url), 'utf8');
 const awsLcCompiler = readFileSync(new URL('./configure-windows-arm64-aws-lc.ps1', import.meta.url), 'utf8');
+const dav1dPort = (file) => readFileSync(new URL(`../.github/vcpkg-ports/dav1d/${file}`, import.meta.url), 'utf8');
 const ids = (entries) => entries.map(({ target }) => target);
 
 test('HS2-31RGRK covers the maintainer platform set with stable target ids and runners', () => {
@@ -98,6 +99,28 @@ test('HS2-MX0N0G patches the pinned converter to resolve tbz and tbnz numeric ta
   assert.equal(branchTarget(oldPattern, 'tbnz x14, #0, 8f'), undefined, 'pinned upstream misses tbnz');
   assert.equal(branchTarget(newPattern, 'tbnz x14, #0, 8f'), '8f');
   assert.equal(branchTarget(newPattern, 'tbz x14, #0, 7f'), '7f');
+});
+
+test('HS2-GY4938 installs dav1d from the pinned overlay port with the MSVC 14.52 header fix', () => {
+  for (const job of [
+    workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
+    workflow.slice(workflow.indexOf('\n  tauri:')),
+  ]) {
+    const avif = job.indexOf('Install the AVIF decoder for the native build (Windows)');
+    const step = job.slice(avif, job.indexOf('- name:', avif + 1));
+    assert.match(step, /\$ports = Join-Path \$env:GITHUB_WORKSPACE '\.github\/vcpkg-ports'/);
+    assert.match(step, /& \$vcpkg install "--overlay-ports=\$ports" "dav1d:\$env:TRIPLET"/);
+  }
+  const manifest = JSON.parse(dav1dPort('vcpkg.json'));
+  assert.equal(manifest.name, 'dav1d');
+  assert.equal(manifest.version, '1.5.4');
+  assert.ok(manifest['port-version'] >= 1);
+  const portfile = dav1dPort('portfile.cmake');
+  assert.match(portfile, /PATCHES msvc-has-include-next\.patch/);
+  assert.doesNotMatch(portfile, /vcpkg_download_distfile/, 'the fix is vendored, not downloaded');
+  const patch = dav1dPort('msvc-has-include-next.patch');
+  assert.match(patch, /^From a34e0685b9111b9eb1d7835ea7bea5b425dced73 /);
+  assert.match(patch, /\+#ifndef __has_include_next\n\+#define __has_include_next\(x\) 0\n\+#endif/);
 });
 
 test('HS2-XW91TJ selects a verified ARM64 assembler for aws-lc-sys', () => {
