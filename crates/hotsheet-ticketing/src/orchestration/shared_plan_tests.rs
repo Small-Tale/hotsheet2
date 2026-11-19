@@ -54,6 +54,7 @@ fn requires(target: &RunTarget) -> Prerequisite {
 }
 fn new(target: &RunTarget, prerequisites: Vec<Prerequisite>) -> NewPlanStep {
     NewPlanStep {
+        requirements: Default::default(),
         ticket: goal(),
         target: target.clone(),
         prerequisites,
@@ -170,6 +171,7 @@ impl Machine {
 
 fn shared(id_number: u128, native: &str, revision: u32) -> SharedStep {
     SharedStep {
+        requirements: Default::default(),
         step_id: id(id_number),
         ticket: goal(),
         target: ticket(native),

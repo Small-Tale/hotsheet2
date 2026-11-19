@@ -19,6 +19,7 @@ import { Bot, CircleStop, Hand, MoreHorizontal, PanelBottomOpen, Trash2 } from '
 import type { OrchestrationAdmission, OrchestrationBinding, OrchestrationSession } from '../api';
 import type { OrchestrationDetailState } from '../features/orchestration-settings';
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
+import { aiToolsLabel, gpuLabel, systemLabel, toolchainsLabel } from '../orchestration-capabilities';
 import {
   type ConnectionStatus,
   connectionStatus,
@@ -151,6 +152,17 @@ export function OrchestrationProjectDetail({
                 label="AI Sessions There"
                 value={capacity.sessions === null ? 'Unknown' : String(capacity.sessions.length)}
               />
+              {capacity.capabilities ? (
+                <>
+                  <ValueTableRow label="System" value={systemLabel(capacity.capabilities)} />
+                  {capacity.capabilities.cpu_model ? (
+                    <ValueTableRow label="Processor" value={capacity.capabilities.cpu_model} />
+                  ) : null}
+                  <ValueTableRow label="GPU" value={gpuLabel(capacity.capabilities)} />
+                  <ValueTableRow label="AI Tools" value={aiToolsLabel(capacity.capabilities, toolLabel)} />
+                  <ValueTableRow label="Toolchains" value={toolchainsLabel(capacity.capabilities)} />
+                </>
+              ) : null}
               {detail.admissions.map((admission) => (
                 <ValueTableRow label={`${toolLabel(admission.tool)} Admission`} value={admissionValue(admission)} />
               ))}

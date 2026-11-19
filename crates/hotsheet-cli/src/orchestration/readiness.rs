@@ -15,8 +15,8 @@ use hotsheet_ticketing::orchestration::{
     NewPlanStep, PlanFacts, PlanRegistry, PlanStep, Prerequisite, ProvisionalStanding,
     ReadinessError, ReadinessLevel, ReadinessReason, ResourceNeed, RunEvent, RunEventJournal,
     RunEventKind, RunEventSource, RunTarget, RunTicket, RunUnreachable, StepReadiness,
-    TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen, TicketUpdate,
-    ValidationRegistry, evaluate_plan, summarize, ticket_key, validate_needs,
+    StepRequirements, TargetAction, TargetOpError, TicketFacts, TicketKey, TicketSeen,
+    TicketUpdate, ValidationRegistry, evaluate_plan, summarize, ticket_key, validate_needs,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -71,6 +71,10 @@ pub struct DefinePlanStep {
     /// HS2-TH53NN: the model preferred for the work. A preference.
     #[serde(default)]
     pub model: Option<String>,
+    /// HS2-ZY4Z4G: what the target's machine must be for the work: `os`, `arch`,
+    /// `tools`, `toolchains`, `min_memory_gb`, `gpu`. A requirement, not a preference.
+    #[serde(default)]
+    pub requirements: StepRequirements,
     /// HS2-YDY5HJ: the revision of the step working this ticket that the caller read
     /// (0 when none was planned). A step that changed since is refused with
     /// `plan_conflict` instead of overwritten. Omitted, the change applies to the
@@ -182,6 +186,9 @@ pub struct ReadyItem {
     pub tool: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// HS2-ZY4Z4G: what the target's machine must be for the work.
+    #[serde(skip_serializing_if = "StepRequirements::is_empty")]
+    pub requirements: StepRequirements,
 }
 
 /// One audit entry of a plan change or an override.
@@ -569,6 +576,7 @@ impl OrchestrationRuntime {
                     step_id: step.step_id,
                     tool: step.tool,
                     model: step.model,
+                    requirements: step.requirements,
                     ticket: step.ticket,
                     resources: step.resources,
                     priority: read.and_then(|seen| seen.priority.clone()),
@@ -632,6 +640,8 @@ impl OrchestrationRuntime {
         if let Some(model) = &request.model {
             hotsheet_ticketing::orchestration::validate_model_name(model)?;
         }
+        // HS2-ZY4Z4G: stored in canonical form, so two spellings are one definition.
+        let requirements = request.requirements.clone().normalized()?;
         let (_, source_id, source_connection) =
             self.orchestration_store(owner_id, &request.ticket)?;
         let ticket = RunTicket {
@@ -755,6 +765,7 @@ impl OrchestrationRuntime {
                     resources: request.resources.clone(),
                     tool: request.tool.clone(),
                     model: request.model.clone(),
+                    requirements: requirements.clone(),
                 },
                 request.expected_revision,
                 observed,

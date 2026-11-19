@@ -16,6 +16,9 @@ struct Script {
     machine_reads: u64,
     disk_reads: Vec<PathBuf>,
     resident_asked: Vec<Vec<u32>>,
+    /// HS2-ZY4Z4G
+    capabilities: Option<HostCapabilities>,
+    toolchains_asked: Vec<Vec<String>>,
 }
 
 #[derive(Clone, Default)]
@@ -67,6 +70,12 @@ impl CapacitySource for Scripted {
     }
     fn tools(&mut self, _: &[PathBuf]) -> Option<Vec<(String, bool)>> {
         self.0.with_lock(|script| script.tools.clone())
+    }
+    fn capabilities(&mut self, _: &[PathBuf], toolchains: &[String]) -> Option<HostCapabilities> {
+        self.0.with_lock(|script| {
+            script.toolchains_asked.push(toolchains.to_vec());
+            script.capabilities.clone()
+        })
     }
 }
 
@@ -728,4 +737,41 @@ mod server {
         let _ = session.kill();
         let _ = shell.kill();
     }
+}
+
+// ---- HS2-ZY4Z4G: capabilities ------------------------------------------------------------
+
+#[test]
+fn hs2_zy4z4g_capabilities_are_detected_once_and_again_after_the_ttl_or_new_toolchains() {
+    use hotsheet_ticketing::orchestration::OsFamily;
+    let scripted = Scripted::roomy();
+    scripted.set(|script| {
+        script.capabilities = Some(HostCapabilities::bare(OsFamily::Linux, "x86_64"));
+    });
+    let capacity = Capacity::with_source(Box::new(scripted.clone()));
+    // Nothing is detected before someone asks.
+    assert_eq!(capacity.detections(), 0);
+    let default: Vec<String> = vec!["cargo".into(), "node".into()];
+    let first = capacity.capabilities(&[], &default);
+    assert_eq!(first.as_ref().map(|caps| caps.os), Some(OsFamily::Linux));
+    // A capacity reading, even an uncached one, does not detect again.
+    capacity.set_cache(Duration::ZERO);
+    let root = tempfile::tempdir().unwrap();
+    observe(&capacity, root.path(), None);
+    assert_eq!(capacity.capabilities(&[], &default), first);
+    assert_eq!(capacity.detections(), 1);
+    // Other declared toolchains are asked about at once.
+    let declared = vec!["bazel".to_owned()];
+    capacity.capabilities(&[], &declared);
+    assert_eq!(capacity.detections(), 2);
+    assert_eq!(
+        scripted
+            .0
+            .with_lock(|script| script.toolchains_asked.clone()),
+        vec![default, declared.clone()]
+    );
+    // A source that cannot tell is remembered too: unknown is not asked again per request.
+    scripted.set(|script| script.capabilities = None);
+    assert!(capacity.capabilities(&[], &declared).is_some());
+    assert_eq!(capacity.detections(), 2);
 }

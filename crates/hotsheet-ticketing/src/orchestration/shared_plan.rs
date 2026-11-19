@@ -43,6 +43,9 @@ pub struct SharedStep {
     pub tool: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// HS2-ZY4Z4G: what the target's machine must be.
+    #[serde(default, skip_serializing_if = "StepRequirements::is_empty")]
+    pub requirements: StepRequirements,
     pub revision: u32,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
@@ -60,6 +63,7 @@ impl SharedStep {
             resources: step.resources.clone(),
             tool: step.tool.clone(),
             model: step.model.clone(),
+            requirements: step.requirements.clone(),
             revision: step.revision,
             created_at_ms: step.created_at_ms,
             updated_at_ms: step.updated_at_ms,
@@ -78,6 +82,7 @@ impl SharedStep {
             resources: self.resources.clone(),
             tool: self.tool.clone(),
             model: self.model.clone(),
+            requirements: self.requirements.clone(),
             revision: self.revision,
             created_at_ms: self.created_at_ms,
             updated_at_ms: self.updated_at_ms,

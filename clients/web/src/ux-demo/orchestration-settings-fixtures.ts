@@ -86,6 +86,24 @@ export const demoCapacity: OrchestrationCapacity = {
   sessions: [{ session_id: 'synthetic-terminal-1', tool: 'claude', busy: true }],
   claims: [{ namespace: 'vm', resource: 'macos-vm', expires_at_ms: DEMO_NOW + 900_000 }],
   claim_namespaces: ['vm'],
+  // HS2-ZY4Z4G: a synthetic machine.
+  capabilities: {
+    os: 'linux',
+    os_version: '24.04',
+    os_distribution: 'ubuntu',
+    arch: 'arm64',
+    cpu_model: 'Synthetic 12-core CPU',
+    gpu: { present: true, vendors: ['nvidia'] },
+    ai_tools: [
+      { tool: 'claude', version: '2.0.14' },
+      { tool: 'codex', version: '0.46.0' },
+    ],
+    toolchains: [
+      { name: 'node', installed: true, version: '22.11.0' },
+      { name: 'cargo', installed: true, version: '1.97.0' },
+      { name: 'docker', installed: false },
+    ],
+  },
 };
 
 export const demoToolCapacity: OrchestrationToolCapacity = {

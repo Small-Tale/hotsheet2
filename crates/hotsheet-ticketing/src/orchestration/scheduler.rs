@@ -24,9 +24,9 @@ use super::storage::{Storage, decode};
 use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
-    OrchestrationError, PolicyBody, PolicyDenial, ResourceContention, ResourceState,
-    RoleSessionKind, SelectionRequest, SessionCount, SessionRole, SignalSupport, UnreadableClaims,
-    decide_admission, select,
+    OrchestrationError, PolicyBody, PolicyDenial, RequirementState, ResourceContention,
+    ResourceState, RoleSessionKind, SelectionRequest, SessionCount, SessionRole, SignalSupport,
+    StepRequirements, UnreadableClaims, decide_admission, requirement_misses, select,
 };
 
 /// One priority band, in points. Every other term is expressed against it.
@@ -130,6 +130,10 @@ pub struct WorkItem {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceNeed>,
+    /// HS2-ZY4Z4G: what the target's machine must be. Work whose target's machine
+    /// misses one is not placed there, not even on a free session.
+    #[serde(default, skip_serializing_if = "StepRequirements::is_empty")]
+    pub requirements: StepRequirements,
     /// HS2-JSF985: the provisional rule's answer for a provisional item. Absent, the
     /// item is ranked and never placed, as before the policy could opt in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -591,6 +595,13 @@ pub enum Blocker {
     Cooldown,
     /// The target refused a start and is not asked again yet.
     RefusalBackoff,
+    /// HS2-ZY4Z4G: the target's machine is not what the work requires; `detail` names
+    /// the first requirement it misses, such as `os:windows`.
+    RequirementUnmet,
+    /// HS2-ZY4Z4G: the target's machine did not report what a requirement asks about
+    /// (an older peer, an unread value, a toolchain its owner did not declare);
+    /// `detail` names the requirement. Nothing starts on a guess.
+    RequirementUnknown,
 }
 
 impl Blocker {
@@ -607,6 +618,8 @@ impl Blocker {
             Self::ResourceUnknown => "resource_unknown",
             Self::Cooldown => "cooldown",
             Self::RefusalBackoff => "refusal_backoff",
+            Self::RequirementUnmet => "requirement_unmet",
+            Self::RequirementUnknown => "requirement_unknown",
         }
     }
 }
@@ -1164,6 +1177,40 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     skip(Blocker::Provisional, None, None);
                     continue;
                 }
+            }
+        }
+        // HS2-ZY4Z4G: work that names requirements goes only where the target's machine
+        // meets them. A machine that misses one gets the work on no session, a free one
+        // included; one that was not read, or did not say, is not trusted with it.
+        if !item.requirements.is_empty() {
+            let snapshot = input
+                .targets
+                .iter()
+                .find(|target| target.target_id == item.target_id)
+                .and_then(|target| target.capacity.as_ref());
+            let misses = snapshot.map(|snapshot| requirement_misses(&item.requirements, snapshot));
+            let first = |state: RequirementState| {
+                misses
+                    .iter()
+                    .flatten()
+                    .find(|miss| miss.state == state)
+                    .map(|miss| miss.requirement.clone())
+            };
+            if let Some(requirement) = first(RequirementState::Unmet) {
+                skip(Blocker::RequirementUnmet, Some(requirement), None);
+                continue;
+            }
+            if let Some(requirement) = first(RequirementState::Unknown) {
+                skip(Blocker::RequirementUnknown, Some(requirement), None);
+                continue;
+            }
+            if snapshot.is_none() {
+                skip(
+                    Blocker::RequirementUnknown,
+                    Some("capacity_not_read".into()),
+                    None,
+                );
+                continue;
             }
         }
         // HS2-2FG91X: a resource means something only on the machine that hosts the

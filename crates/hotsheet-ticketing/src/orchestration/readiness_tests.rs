@@ -55,6 +55,7 @@ fn validated(step: &str) -> Prerequisite {
 }
 fn step(number: u128, target: &RunTarget, prerequisites: Vec<Prerequisite>) -> PlanStep {
     PlanStep {
+        requirements: Default::default(),
         model: None,
         step_id: id(number),
         owner_checkout_id: OWNER.into(),
@@ -977,6 +978,7 @@ impl Fixture {
         self.registry.define(
             owner,
             NewPlanStep {
+                requirements: Default::default(),
                 model: None,
                 ticket: orchestration_ticket(),
                 target: target.clone(),
@@ -1046,6 +1048,7 @@ fn hs2_42tara_define_is_idempotent_revises_on_change_and_validates() {
     let conflict = fixture.registry.define(
         OWNER,
         NewPlanStep {
+            requirements: Default::default(),
             model: None,
             ticket: RunTicket {
                 connection_id: "plan".into(),
@@ -1461,6 +1464,7 @@ fn hs2_e7hr4r_a_definition_and_its_reads_are_one_write() {
         unreachable: Some(None),
     };
     let new = |target: &RunTarget, prerequisites| NewPlanStep {
+        requirements: Default::default(),
         model: None,
         ticket: orchestration_ticket(),
         target: target.clone(),
@@ -1555,6 +1559,7 @@ fn hs2_th53nn_a_plan_step_keeps_its_preferred_tool_and_model() {
         fixture.registry.define(
             OWNER,
             NewPlanStep {
+                requirements: Default::default(),
                 ticket: orchestration_ticket(),
                 target: target.clone(),
                 prerequisites: Vec::new(),
@@ -1643,6 +1648,7 @@ fn hs2_g052rv_a_concurrent_reader_never_sees_a_step_before_its_reads() {
             .define_observed(
                 OWNER,
                 NewPlanStep {
+                    requirements: Default::default(),
                     model: None,
                     ticket: orchestration_ticket(),
                     target: target.clone(),

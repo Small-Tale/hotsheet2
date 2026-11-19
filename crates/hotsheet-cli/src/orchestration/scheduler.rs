@@ -393,6 +393,8 @@ impl OrchestrationRuntime {
                 // HS2-TH53NN: the plan step's preferences, tried first.
                 tool: item.tool,
                 model: item.model,
+                // HS2-ZY4Z4G: placed only where the target's machine meets them.
+                requirements: item.requirements,
                 // HS2-2FG91X: the step's own; the policy's are added per target.
                 resources: item.resources,
                 // HS2-JSF985: decided once the involved targets were read.
@@ -443,6 +445,7 @@ impl OrchestrationRuntime {
                 // HS2-TH53NN: the plan step's preferences, tried first.
                 tool: step.tool,
                 model: step.model,
+                requirements: step.requirements,
                 resources: step.resources,
                 // HS2-JSF985: an orphaned run's step is placed as confirmed work.
                 speculation: None,

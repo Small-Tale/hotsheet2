@@ -17,7 +17,8 @@ use hotsheet_cli::orchestration::CapacityProbe;
 use hotsheet_sync::LockExt;
 use hotsheet_ticketing::checkouts::Checkout;
 use hotsheet_ticketing::orchestration::{
-    CpuCapacity, DiskCapacity, HostObservation, MemoryCapacity, SessionFootprint, ToolAvailability,
+    CpuCapacity, DiskCapacity, HostCapabilities, HostObservation, MemoryCapacity, SessionFootprint,
+    ToolAvailability,
 };
 
 use super::source;
@@ -53,6 +54,18 @@ pub trait CapacitySource: Send {
     /// Every drivable AI tool the plugin registry knows, with whether its program is
     /// installed. Nothing is executed to find out.
     fn tools(&mut self, plugin_dirs: &[PathBuf]) -> Option<Vec<(String, bool)>>;
+
+    /// HS2-ZY4Z4G: what this machine is, with the `toolchains` its owner declared. May
+    /// run one bounded version probe per program; asked at most once per
+    /// [`CAPABILITIES_TTL`](super::capabilities::CAPABILITIES_TTL). A source that cannot
+    /// tell answers `None`.
+    fn capabilities(
+        &mut self,
+        _plugin_dirs: &[PathBuf],
+        _toolchains: &[String],
+    ) -> Option<HostCapabilities> {
+        None
+    }
 }
 
 /// The real host.
@@ -89,6 +102,14 @@ impl CapacitySource for RoomyFixtureCapacity {
 
     fn tools(&mut self, plugin_dirs: &[PathBuf]) -> Option<Vec<(String, bool)>> {
         SystemCapacity.tools(plugin_dirs)
+    }
+
+    fn capabilities(
+        &mut self,
+        plugin_dirs: &[PathBuf],
+        toolchains: &[String],
+    ) -> Option<HostCapabilities> {
+        SystemCapacity.capabilities(plugin_dirs, toolchains)
     }
 }
 
@@ -127,6 +148,18 @@ impl CapacitySource for SystemCapacity {
                 .collect(),
         )
     }
+
+    fn capabilities(
+        &mut self,
+        plugin_dirs: &[PathBuf],
+        toolchains: &[String],
+    ) -> Option<HostCapabilities> {
+        Some(super::capabilities::detect(
+            plugin_dirs,
+            toolchains,
+            hotsheet_aitools::ai_tool_probes_enabled(),
+        ))
+    }
 }
 
 /// One live AI session as the server knows it. The launch directory stays here: it decides
@@ -152,6 +185,14 @@ struct Reading {
 struct Inner {
     source: Box<dyn CapacitySource>,
     reading: Option<Reading>,
+    /// HS2-ZY4Z4G: the last capability detection, for the toolchains it was asked about.
+    capabilities: Option<CapabilityReading>,
+}
+
+struct CapabilityReading {
+    taken: Instant,
+    toolchains: Vec<String>,
+    report: Option<HostCapabilities>,
 }
 
 /// The server's capacity state: its source and the reading currently being shared.
@@ -159,6 +200,7 @@ pub(crate) struct Capacity {
     inner: Mutex<Inner>,
     cache_ms: AtomicU64,
     samples: AtomicU64,
+    detections: AtomicU64,
 }
 
 impl Default for Capacity {
@@ -182,9 +224,11 @@ impl Capacity {
             inner: Mutex::new(Inner {
                 source,
                 reading: None,
+                capabilities: None,
             }),
             cache_ms: AtomicU64::new(CAPACITY_CACHE.as_millis() as u64),
             samples: AtomicU64::new(0),
+            detections: AtomicU64::new(0),
         }
     }
 
@@ -196,6 +240,39 @@ impl Capacity {
     /// How many readings were taken since the server started.
     pub(crate) fn samples(&self) -> u64 {
         self.samples.load(Ordering::SeqCst)
+    }
+
+    /// How many capability detections were run since the server started.
+    pub(crate) fn detections(&self) -> u64 {
+        self.detections.load(Ordering::SeqCst)
+    }
+
+    /// HS2-ZY4Z4G: what this machine is. Detected when first asked, then shared for
+    /// [`CAPABILITIES_TTL`](super::capabilities::CAPABILITIES_TTL), or until the owner
+    /// declares other toolchains. Blocking: call it off the async runtime.
+    pub(crate) fn capabilities(
+        &self,
+        plugin_dirs: &[PathBuf],
+        toolchains: &[String],
+    ) -> Option<HostCapabilities> {
+        let mut inner = self.inner.lock_or_recover();
+        let fresh = inner.capabilities.as_ref().is_some_and(|reading| {
+            reading.toolchains == toolchains
+                && reading.taken.elapsed() < super::capabilities::CAPABILITIES_TTL
+        });
+        if !fresh {
+            self.detections.fetch_add(1, Ordering::SeqCst);
+            let report = inner.source.capabilities(plugin_dirs, toolchains);
+            inner.capabilities = Some(CapabilityReading {
+                taken: Instant::now(),
+                toolchains: toolchains.to_vec(),
+                report,
+            });
+        }
+        inner
+            .capabilities
+            .as_ref()
+            .and_then(|reading| reading.report.clone())
     }
 
     /// The capacity of this machine for the checkout rooted at `root`. Blocking: call it
@@ -247,7 +324,9 @@ impl Capacity {
                 disks: HashMap::new(),
             });
         }
-        let Inner { source, reading } = &mut *inner;
+        let Inner {
+            source, reading, ..
+        } = &mut *inner;
         let Some(reading) = reading.as_mut() else {
             return HostObservation::default();
         };
@@ -258,6 +337,7 @@ impl Capacity {
         // A session started below the checkout's root belongs to it.
         let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         HostObservation {
+            capabilities: None,
             sampled_at_ms: Some(reading.sampled_at_ms),
             memory: MemoryCapacity {
                 free_mb: reading.machine.memory_free_bytes.map(|bytes| bytes / MIB),
@@ -364,7 +444,20 @@ impl CapacityProbe for ServerCapacity {
     fn observe(&self, checkout: &Checkout) -> HostObservation {
         let root = Path::new(&checkout.root);
         let enabled = enabled_tools(root);
-        self.state.capacity.observe(
+        // HS2-ZY4Z4G: the toolchains the machine owner declared, else the default list.
+        let toolchains =
+            hotsheet_ticketing::orchestration::AdmissionStore::new(self.state.machine_home())
+                .read()
+                .map(|view| view.admission.declared_toolchains())
+                .unwrap_or_else(|_| {
+                    hotsheet_ticketing::orchestration::AdmissionConfig::default()
+                        .declared_toolchains()
+                });
+        let capabilities = self
+            .state
+            .capacity
+            .capabilities(&self.state.plugin_dirs, &toolchains);
+        let mut observation = self.state.capacity.observe(
             root,
             &self.state.plugin_dirs,
             || self.runtime.block_on(live_sessions(&self.state)),
@@ -374,7 +467,9 @@ impl CapacityProbe for ServerCapacity {
                     .as_ref()
                     .is_none_or(|enabled| enabled.contains(tool))
             },
-        )
+        );
+        observation.capabilities = capabilities;
+        observation
     }
 }
 
@@ -396,6 +491,11 @@ impl AppState {
     /// How many capacity readings this server has taken.
     pub fn capacity_samples(&self) -> u64 {
         self.capacity.samples()
+    }
+
+    /// HS2-ZY4Z4G: how many capability detections this server has run.
+    pub fn capability_detections(&self) -> u64 {
+        self.capacity.detections()
     }
 }
 

@@ -67,6 +67,14 @@ enum ReadinessCmd {
         /// HS2-TH53NN: the model preferred for this work, a preference like `--tool`.
         #[arg(long)]
         model: Option<String>,
+        /// HS2-ZY4Z4G: what the target's machine must be for this work, as
+        /// `os=<macos|linux|windows>`, `arch=<x86_64|arm64>`, `tool=<plugin id>`,
+        /// `toolchain=<name>`, `min_memory_gb=<n>` or `gpu=<any|vendor>`. Repeatable;
+        /// several `os` or `arch` values are alternatives, several tools or
+        /// toolchains are all needed. The scheduler places the work only where every
+        /// requirement is met.
+        #[arg(long = "require")]
+        require: Vec<String>,
         /// HS2-YDY5HJ: the revision of this ticket's step you read (0 when none is
         /// planned). A step changed since, here or on another machine, is refused
         /// with plan_conflict instead of overwritten.
@@ -149,8 +157,15 @@ pub(super) fn route(
             resources,
             tool,
             model,
+            require,
             expected_revision,
         } => {
+            let mut requirements = hotsheet_ticketing::orchestration::StepRequirements::default();
+            for spec in &require {
+                requirements
+                    .add(spec)
+                    .map_err(|error| anyhow::anyhow!("--require {spec}: {error}"))?;
+            }
             let mut needs = Vec::new();
             for spec in &resources {
                 let Some((namespace, resource)) = spec
@@ -180,7 +195,7 @@ pub(super) fn route(
                 json!({"ticket": {"connection_id": source, "native_id": ticket},
                     "target_id": target, "connection_id": connection, "native_id": id,
                     "prerequisites": all, "resources": needs, "tool": tool, "model": model,
-                    "expected_revision": expected_revision}),
+                    "requirements": requirements, "expected_revision": expected_revision}),
             )
         }
         ReadinessCmd::Show { step_id } => {
@@ -211,4 +226,71 @@ pub(super) fn route(
             json!({"step_id": step_id, "reason": reason}),
         ),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        command: ReadinessCmd,
+    }
+
+    fn define(extra: &[&str]) -> Result<Value> {
+        let base = [
+            "readiness",
+            "define",
+            "--ticket",
+            "OWN-1",
+            "--target",
+            "t1",
+            "--connection",
+            "git",
+            "--id",
+            "TGT-1",
+        ];
+        let parsed = Cli::try_parse_from(base.iter().chain(extra.iter()).copied())
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let (_, _, body) = route(
+            "owner",
+            ReadinessArgs {
+                project: None,
+                command: parsed.command,
+            },
+        )?;
+        Ok(body)
+    }
+
+    /// HS2-ZY4Z4G: `--require` builds the step's requirements; a malformed one is
+    /// refused before any request is made.
+    #[test]
+    fn hs2_zy4z4g_define_requires_what_the_machine_must_be() {
+        let body = define(&[
+            "--require",
+            "os=windows",
+            "--require",
+            "arch=arm64",
+            "--require",
+            "tool=codex",
+            "--require",
+            "toolchain=cargo",
+            "--require",
+            "min_memory_gb=16",
+            "--require",
+            "gpu=any",
+        ])
+        .unwrap();
+        assert_eq!(
+            body["requirements"],
+            json!({"os": ["windows"], "arch": ["arm64"], "tools": ["codex"],
+                "toolchains": ["cargo"], "min_memory_gb": 16, "gpu": "any"})
+        );
+        assert_eq!(define(&[]).unwrap()["requirements"], json!({}));
+        for bad in ["os=beos", "cpu=fast", "min_memory_gb=lots", "os"] {
+            assert!(define(&["--require", bad]).is_err(), "{bad} refused");
+        }
+    }
 }

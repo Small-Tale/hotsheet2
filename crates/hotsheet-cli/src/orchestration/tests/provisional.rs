@@ -40,6 +40,7 @@ impl CapacityProbe for Probe {
     fn observe(&self, _: &Checkout) -> HostObservation {
         self.asked.fetch_add(1, Ordering::SeqCst);
         HostObservation {
+            capabilities: None,
             sampled_at_ms: Some(150),
             memory: MemoryCapacity {
                 free_mb: Some(8192),

@@ -272,6 +272,33 @@ does not measure: free and total RAM, and the resident memory of each AI session
 
 A value that cannot be read is unknown and is never estimated.
 
+## Machine capabilities
+
+What the machine _is_ rides in the capacity snapshot as `capabilities` (HS2-ZY4Z4G,
+[26](26-orchestration-projects.md) §26.10), for plan steps that require an OS, an architecture,
+a GPU, an AI tool or a toolchain. `CapacitySource::capabilities` reads it; the reading is kept for
+ten minutes, or until the machine owner declares other toolchains. It is taken only when a
+capacity request asks, never on a timer and never once per request.
+
+| Value        | macOS                                         | Linux                                                     | Windows                                                                                  |
+| ------------ | --------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| OS version   | `sysctl kern.osproductversion`                | `VERSION_ID` and `ID` of `/etc/os-release`                | `CurrentMajorVersionNumber.CurrentMinorVersionNumber.CurrentBuildNumber` in the registry |
+| Architecture | `hw.optional.arm64`, so Rosetta reads `arm64` | the build's architecture                                  | `IsWow64Process2`, so an emulated x64 server reads `arm64`                               |
+| CPU model    | `sysctl machdep.cpu.brand_string`             | `model name` (or `Model`) in `/proc/cpuinfo`              | `ProcessorNameString` in the registry                                                    |
+| GPU          | Apple silicon: `apple`; an Intel Mac: unknown | PCI vendor of each `/sys/class/drm/cardN`, `/dev/nvidia0` | `ProviderName` and `DriverDesc` of each display-adapter class key                        |
+
+Virtual display adapters (virtio, VMware, QEMU, QXL, VirtualBox, Hyper-V, Parallels, the
+Microsoft basic adapter) are not GPUs. AI tools are the detected drivable plugins; toolchains are
+the machine owner's declared list (§26.10). Each version is one `--version` probe of the program
+found on `PATH` (with `PATHEXT` on Windows), run in parallel, bounded at five seconds, and cut to
+a bare version token such as `1.97.0`: no other output is kept. A toolchain counts as installed
+when its version command succeeds, so a launcher stub that only reports the tool missing (the
+macOS `java` stub, `xcodebuild` without Xcode, the Windows Store `python` alias) does not count.
+With `HOTSHEET_AI_TOOL_PROBES=off` nothing is run: a program on `PATH` is installed with no
+version. The pure parsers (`parse_version`, `parse_os_release`, `parse_cpuinfo_model`,
+`pci_gpu_vendor`, `display_adapter_vendor`, `windows_version`, `find_program`) are tested on every
+host; each platform's readers are tested on that platform.
+
 ## Thresholds
 
 Thresholds are machine-wide settings in `${HOTSHEET_HOME}/settings.json`, and each has a default.
@@ -310,6 +337,8 @@ The next sample applies a change.
 - `crates/hotsheet-server/src/host_health/live_cpu.rs`: the live CPU feed and its long poll (HS2-CPFBWP).
 - `crates/hotsheet-server/src/host_health/capacity.rs`: on-demand capacity readings and their shared
   reading (HS2-J8PRTV); its readers and parsers are in `source.rs`.
+- `crates/hotsheet-server/src/host_health/capabilities.rs`: machine capabilities, their platform
+  readers, version probes and pure parsers (HS2-ZY4Z4G).
 - `clients/web/src/host-health.ts` and `clients/web/src/host-health-resource.ts`: the client
   contract and resource; `clients/web/src/host-cpu-feed.ts`: the live CPU long-poll loop.
 

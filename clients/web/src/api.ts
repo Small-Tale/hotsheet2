@@ -1173,6 +1173,19 @@ export interface OrchestrationCapacity {
   /** Live claims in the namespaces asked for; null when none were asked or they could not be read. */
   claims: { namespace: string; resource: string; expires_at_ms: number }[] | null;
   claim_namespaces: string[];
+  /** HS2-ZY4Z4G: what the machine is; absent from an older host or when it could not tell. */
+  capabilities?: OrchestrationCapabilities;
+}
+/** HS2-ZY4Z4G: a target machine's OS, architecture, CPU, GPU, AI tool versions and toolchains. */
+export interface OrchestrationCapabilities {
+  os: 'macos' | 'linux' | 'windows' | 'other';
+  os_version?: string;
+  os_distribution?: string;
+  arch: string;
+  cpu_model?: string;
+  gpu?: { present: boolean; vendors?: string[] };
+  ai_tools?: { tool: string; version?: string }[];
+  toolchains?: { name: string; installed: boolean; version?: string }[];
 }
 /** `POST .../targets/{target}/admission` (HS2-J8PRTV). */
 export interface OrchestrationAdmission {

@@ -1004,6 +1004,7 @@ estimated in its place.
 | `tools[]`                              | Each drivable AI tool by name, whether it is `installed`, and whether the checkout has it `configured`   |
 | `sessions[]`                           | Each running AI session: `session_id`, `tool`, `busy`, `on_checkout`, `resident_mb`                      |
 | `claims[]`, `claim_namespaces`         | Live resource claims (namespace, resource, expiry) in the named namespaces, or in every one (HS2-YDZAFH) |
+| `capabilities`                         | What the machine is (HS2-ZY4Z4G, below); absent from an older host or when it could not tell             |
 
 - **Tools** come from the plugin registry. A tool is installed when its program is on
   the server's `PATH`; nothing is executed to find out, so
@@ -1032,6 +1033,41 @@ estimated in its place.
   process tree (HS2-4A5AV7). Until a Windows target of the Platforms workflow runs the
   readers, they are verified only by cross-target type checks and tests of their pure
   parts.
+
+### Machine capabilities (HS2-ZY4Z4G)
+
+`capabilities` says what the machine is, so plan steps can require it (§26.15) and the
+scheduler places them only where it fits (§26.17). Every member except `os` and `arch`
+may be absent, which means the host could not tell; nothing is guessed.
+
+| Member                         | Meaning                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `os`                           | `macos`, `linux`, `windows` or `other`                                                                |
+| `os_version`                   | `15.1` on macOS, `10.0.26100` on Windows, `VERSION_ID` on Linux                                       |
+| `os_distribution`              | Linux only: the distribution's `ID`, such as `ubuntu`                                                 |
+| `arch`                         | The machine's native architecture, normalized: `x86_64` or `arm64` (others lowercase)                 |
+| `cpu_model`                    | The processor's name, at most 96 characters                                                           |
+| `gpu.present`, `gpu.vendors[]` | A physical or integrated GPU, and its vendors: `amd`, `apple`, `intel`, `nvidia`, `qualcomm`, `other` |
+| `ai_tools[]`                   | Each installed drivable AI tool: `tool` and `version`                                                 |
+| `toolchains[]`                 | Each declared toolchain: `name`, `installed` and `version`                                            |
+
+Total memory and logical CPUs stay where they are (`memory.total_mb`,
+`cpu.logical_cpus`). A version is a bare token such as `1.97.0`, cut from the program's
+`--version` output, so no free text leaves the machine.
+
+- **Toolchains** are a small, explicit list the machine owner declares in the admission
+  file (`toolchains`, `admission set --toolchain <name>`, `--clear toolchains`). Without
+  one the list is `node`, `cargo`, `git`, `python`, `docker`, `xcode`, `go`, `java`,
+  `dotnet`. A name is lowercase, at most 32 characters, and at most 16 are declared.
+- **Detection** happens when a capacity request first asks, and is kept for ten
+  minutes or until the declared toolchains change: never on a timer, never once per
+  request. One bounded version probe per program runs, in parallel, and only while
+  `HOTSHEET_AI_TOOL_PROBES` allows probing; otherwise a program on `PATH` is installed
+  without a version. The platform readers are in [host-health](host-health.md).
+- **Compatibility** (§26.5). The member is additive and optional: an older peer's
+  snapshot has none and still reads, and an older reader ignores it. The capacity
+  `version` digests it only when it is reported, so a snapshot without it keeps the
+  version it had.
 
 ### Sampling only on demand
 
@@ -2537,6 +2573,29 @@ hotsheet-cli ... orchestration readiness define ... --expected-revision <n>
 A step may also name up to four **resources** its session must hold (§26.20). They
 are not prerequisites: readiness ignores them, and the scheduler waits on them.
 
+A step may also declare **requirements** (HS2-ZY4Z4G): what the target's machine must
+be for its work. Like resources, readiness ignores them; the scheduler places the work
+only where every one is met (§26.17).
+
+| Requirement     | Met when the machine's capabilities (§26.10) show                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `os[]`          | Any listed family: `macos`, `linux`, `windows`                                                    |
+| `arch[]`        | Any listed architecture, normalized (`amd64` is `x86_64`, `aarch64` is `arm64`)                   |
+| `tools[]`       | Every listed AI tool installed and enabled for the checkout (the snapshot's `tools[]`)            |
+| `toolchains[]`  | Every listed toolchain installed. One the machine's owner did not declare is unknown, not missing |
+| `min_memory_gb` | `memory.total_mb` at least fifteen sixteenths of that many GiB, because every OS reserves some    |
+| `gpu`           | `any` GPU, or one of the vendor `amd`, `apple`, `intel`, `nvidia`, `qualcomm`, `other`            |
+
+Each list holds at most eight values. A definition is stored in one canonical form
+(normalized, sorted, without repeats), so two spellings of one requirement are the same
+step revision. Matching is the pure function `requirement_misses`
+(`crates/hotsheet-ticketing/src/orchestration/capabilities.rs`): for each requirement
+the machine does not meet it answers `unmet`, and for one the machine did not report
+(an older peer, an unread value, an undeclared toolchain) `unknown`, each named as
+`<kind>:<value>` (`os:windows`, `arch:arm64`, `tool:codex`, `toolchain:cargo`,
+`min_memory_gb:32`, `gpu:nvidia`). Choosing among several machines for one step is
+HS2-9FKTB3.
+
 ### Levels
 
 Evaluation is a pure function
@@ -2677,7 +2736,8 @@ target and write nothing.
 hotsheet-cli ... orchestration readiness define --project <owner> --ticket <orchestration-ticket> \
   --target <target-id> --connection <source> --id <target-ticket> \
   [--requires <target-id>/<connection>:<ticket>]... [--gates none|ci|deployment] \
-  [--requires-validation <step>]... [--prerequisite '<json>']...
+  [--requires-validation <step>]... [--prerequisite '<json>']... \
+  [--require os=<os>|arch=<arch>|tool=<id>|toolchain=<name>|min_memory_gb=<n>|gpu=<any|vendor>]...
 hotsheet-cli ... orchestration readiness show <step-id> --project <owner>
 hotsheet-cli ... orchestration readiness plan|ready --project <owner>
 hotsheet-cli ... orchestration readiness refresh [<step-id>] --project <owner>
@@ -2692,9 +2752,10 @@ prerequisite as JSON for what the flags do not say, such as a pinned `commit`.
 | ------------------------------------------------------------------------------------ | ------------------------------------------------- |
 | `/checkouts/{owner}/orchestration/readiness/{define,show,plan,ready,refresh,remove}` | POST plan and readiness operations; machine-local |
 
-MCP `hotsheet_targets` adds `readiness_define`, `readiness_show`, `readiness_plan`,
-`readiness_ready`, `readiness_refresh` and `readiness_remove`, and `run_dispatch`
-takes `override_readiness`. Plan steps are the orchestration project's own records: defining, refreshing and
+MCP `hotsheet_targets` adds `readiness_define` (with `requirements`, HS2-ZY4Z4G),
+`readiness_show`, `readiness_plan`, `readiness_ready`, `readiness_refresh` and
+`readiness_remove`, and `run_dispatch` takes `override_readiness`. The route body and
+`ReadyItem` carry `requirements` as the JSON object of the table above. Plan steps are the orchestration project's own records: defining, refreshing and
 removing one reads the target at most and never asks. Removing a step needs an
 identified actor and is audited (`readiness_remove`; HS2-TZT505, settled by
 HS2-XHQ1EH). It cancels the step's unfinished scheduler runs first, as the remover;
@@ -3285,17 +3346,23 @@ Work is placed best first. For each item, in this order:
 1. A provisional item is `provisional_not_dispatched` unless the policy opts in for
    its target; then the provisional rule decides, and a refused item is
    `speculation_refused` with the rule's code (§26.22).
-2. A resource it needs that someone holds, or that better-ranked work took in this
+2. An item whose step declares requirements (§26.15, HS2-ZY4Z4G) that the target's
+   machine misses is `requirement_unmet`, and one whose machine did not report what a
+   requirement asks about (or was not read: detail `capacity_not_read`) is
+   `requirement_unknown`; the detail names the first such requirement, unmet ones
+   first. Neither takes a free session of the target. `scheduler explain` shows the
+   reason and detail.
+3. A resource it needs that someone holds, or that better-ranked work took in this
    pass, is `resource_held`. A held resource is unavailable capacity until its claim
    expires. A resource whose claims could not be read is `resource_unknown` unless
    its backend allows provisional claims (§26.20).
-3. A **free session** of the target takes it (`keep`, `refill`): an idle session
+4. A **free session** of the target takes it (`keep`, `refill`): an idle session
    first, then one whose run waits on a gate. No session starts for it.
-4. `policy_denied` with the policy's own code, then `target_cap`.
-5. `refusal_backoff` while the target is left alone after a refusal, then `cooldown`
+5. `policy_denied` with the policy's own code, then `target_cap`.
+6. `refusal_backoff` while the target is left alone after a refusal, then `cooldown`
    after a recent wind-down there.
-6. `target_unavailable` when the machine was not read.
-7. Tool accounts are tried in the order of `select` (§26.11). A `degraded` account
+7. `target_unavailable` when the machine was not read.
+8. Tool accounts are tried in the order of `select` (§26.11). A `degraded` account
    takes one session at a time (`probe_in_flight`). For each candidate the machine
    check is `decide_admission` (§26.10) with the policy's limits for the target and
    one session more than this pass already placed on that machine. A tool the

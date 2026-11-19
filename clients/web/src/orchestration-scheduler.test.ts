@@ -39,6 +39,18 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
     ]);
     expect(explanationRows({ standing: 'new_standing', reason: 'x' }, clock)[0].value).toBe('New standing');
     expect(schedulerReasonText('brand_new')).toBe('brand new');
+    // HS2-ZY4Z4G
+    expect(schedulerReasonText('requirement_unmet')).toBe(
+      'its project’s machine does not meet a requirement of the step',
+    );
+    expect(schedulerReasonText('requirement_unknown')).toContain('has not said whether');
+    expect(
+      explanationRows({ standing: 'not_placed', reason: 'requirement_unmet', detail: 'os:windows' }, clock),
+    ).toEqual([
+      { label: 'Scheduler', value: 'Waits: its project’s machine does not meet a requirement of the step' },
+      { label: 'Requirement', value: 'os:windows' },
+      { label: 'Next', value: 'Looked at again when something it waits on changes' },
+    ]);
   });
 
   it('names steps by slug, title or a short id', () => {

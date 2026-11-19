@@ -364,6 +364,10 @@ test('HS2-Y3N3PH the project detail reads capacity and admission for an added pr
     await expect(capacity.getByText('Free Memory')).toBeVisible();
     await expect(capacity.getByText('Codex Admission')).toBeVisible();
     await expect(capacity).toContainText(/Can start|Refused/);
+    // HS2-ZY4Z4G: what the machine is, as the real server reports it.
+    await expect(capacity.getByText('System', { exact: true })).toBeVisible();
+    await expect(capacity).toContainText(/(macOS|Linux|Windows)[^,]*, (arm64|x86_64)/);
+    await expect(capacity.getByText('Toolchains', { exact: true })).toBeVisible();
     await expect(detail).not.toContainText('is not available');
     await expect(detail).not.toContainText('not allowed it yet');
     // Nobody was asked: no permission request was filed for these reads.

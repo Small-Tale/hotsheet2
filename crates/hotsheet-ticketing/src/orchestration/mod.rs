@@ -5,6 +5,7 @@ mod actions;
 mod assignment;
 mod audit;
 mod bindings;
+mod capabilities;
 mod capacity;
 pub(crate) mod contract;
 mod gates;
@@ -55,6 +56,12 @@ pub use audit::{
     coalescible, continued_wait, repeats,
 };
 pub use bindings::BindingRegistry;
+pub use capabilities::{
+    DEFAULT_TOOLCHAINS, GPU_VENDORS, GpuCapability, HostCapabilities, MAX_MODEL_CHARS,
+    MAX_REQUIREMENT_VALUES, MAX_TOOLCHAINS, MAX_VERSION_CHARS, OsFamily, RequirementMiss,
+    RequirementState, StepRequirements, ToolVersion, ToolchainCapability, normalize_arch,
+    requirement_misses, valid_toolchain, validate_toolchains,
+};
 pub use capacity::{
     AdmissionConfig, AdmissionDecision, AdmissionOutcome, AdmissionReason, AdmissionRequest,
     AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,

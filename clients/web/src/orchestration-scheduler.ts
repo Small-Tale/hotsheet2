@@ -56,6 +56,9 @@ const REASONS: Readonly<Record<string, string>> = {
   target_unavailable: 'its project could not be reached',
   provisional_not_dispatched: 'provisional work is not started under this policy',
   speculation_refused: 'the provisional rule refuses it',
+  // HS2-ZY4Z4G: the detail names the requirement, such as `os:windows`.
+  requirement_unmet: 'its project’s machine does not meet a requirement of the step',
+  requirement_unknown: 'its project’s machine has not said whether it meets a requirement of the step',
   permission_required: 'it waits for a person’s permission',
   actor_required: 'the scheduler has not looked at it yet',
 };
@@ -86,6 +89,9 @@ export function explanationRows(
   const rows = [
     { label: 'Scheduler', value: lastPassMs === undefined ? standing : `${standing} (last pass ${clock(lastPassMs)})` },
   ];
+  // HS2-ZY4Z4G: name the requirement the machine misses, such as `os:windows`.
+  if (explanation.reason.startsWith('requirement_') && explanation.detail)
+    rows.push({ label: 'Requirement', value: explanation.detail });
   if (explanation.retry_at_ms !== undefined)
     rows.push({ label: 'Next', value: `Looked at again by ${clock(explanation.retry_at_ms)}` });
   else if (explanation.standing === 'not_placed')

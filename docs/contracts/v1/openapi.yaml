@@ -21424,6 +21424,129 @@ components:
           items:
             $ref: '#/components/schemas/OrchestrationToolExclusion'
       additionalProperties: false
+    MachineCapabilities:
+      description:
+        What the machine is (HS2-ZY4Z4G, docs/26 §26.10). Absent from an older host or when it could not tell; every
+        member but `os` and `arch` is left out when unknown. Names and bare versions only.
+      type: object
+      required:
+        - os
+        - arch
+      properties:
+        os:
+          enum:
+            - macos
+            - linux
+            - windows
+            - other
+        os_version:
+          type: string
+          maxLength: 32
+        os_distribution:
+          description: Linux only, the distribution's `ID`.
+          type: string
+          maxLength: 32
+        arch:
+          description: The native architecture, normalized (`x86_64`, `arm64`).
+          type: string
+          maxLength: 32
+        cpu_model:
+          type: string
+          maxLength: 96
+        gpu:
+          type: object
+          required:
+            - present
+          properties:
+            present:
+              type: boolean
+            vendors:
+              type: array
+              items:
+                enum:
+                  - amd
+                  - apple
+                  - intel
+                  - nvidia
+                  - qualcomm
+                  - other
+        ai_tools:
+          description: Each installed drivable AI tool, with its version when it was read.
+          type: array
+          items:
+            type: object
+            required:
+              - tool
+            properties:
+              tool:
+                type: string
+              version:
+                type: string
+                maxLength: 32
+        toolchains:
+          description: The toolchains the machine owner declared (or the default list), each installed or not.
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required:
+              - name
+              - installed
+            properties:
+              name:
+                type: string
+                maxLength: 32
+              installed:
+                type: boolean
+              version:
+                type: string
+                maxLength: 32
+    StepRequirements:
+      description:
+        What a plan step's target machine must be (HS2-ZY4Z4G, docs/26 §26.15). `os` and `arch` are alternatives;
+        every tool and toolchain is needed. The scheduler places the work only where all are met.
+      type: object
+      properties:
+        os:
+          type: array
+          maxItems: 8
+          items:
+            enum:
+              - macos
+              - linux
+              - windows
+        arch:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 32
+        tools:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 160
+        toolchains:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 32
+        min_memory_gb:
+          type: integer
+          minimum: 1
+          maximum: 65536
+        gpu:
+          enum:
+            - any
+            - amd
+            - apple
+            - intel
+            - nvidia
+            - qualcomm
+            - other
+      additionalProperties: false
     TargetCapacitySnapshot:
       description:
         What one machine measured for a checkout it hosts (HS2-J8PRTV). Megabytes and percent; null means the host
@@ -21642,6 +21765,8 @@ components:
               type: integer
               minimum: 0
           additionalProperties: false
+        capabilities:
+          $ref: '#/components/schemas/MachineCapabilities'
     HostedTargetAdmissionRequest:
       type: object
       required:
@@ -22618,6 +22743,8 @@ components:
             - string
             - 'null'
           maxLength: 128
+        requirements:
+          $ref: '#/components/schemas/StepRequirements'
         step_id:
           type:
             - string
@@ -22747,6 +22874,8 @@ components:
         model:
           description: The model preferred for the step's work (HS2-TH53NN).
           type: string
+        requirements:
+          $ref: '#/components/schemas/StepRequirements'
         revision:
           type: integer
           minimum: 1
@@ -22934,6 +23063,8 @@ components:
         model:
           description: The model the plan step prefers (HS2-TH53NN).
           type: string
+        requirements:
+          $ref: '#/components/schemas/StepRequirements'
       additionalProperties: false
     OrchestrationSessionRole:
       description: The part a started session plays in its target's existing role model (HS2-GDJXGZ). `planner` is the
@@ -23656,8 +23787,11 @@ components:
             - resource_unknown
             - cooldown
             - refusal_backoff
+            - requirement_unmet
+            - requirement_unknown
         detail:
-          description: The limit, policy rule, tool exclusion or resource behind the reason.
+          description: The limit, policy rule, tool exclusion or resource behind the reason; for `requirement_unmet` and
+            `requirement_unknown` the requirement, such as `os:windows` (HS2-ZY4Z4G).
           type: string
         retry_at_ms:
           description: When the reason is known to end.

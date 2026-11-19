@@ -74,8 +74,14 @@ enum AdmissionCmd {
         /// Estimated resident memory of one session, as <tool>=<megabytes>. Repeatable.
         #[arg(long = "tool-footprint")]
         tool_footprints: Vec<String>,
+        /// HS2-ZY4Z4G: a toolchain this machine reports in its capabilities, such as
+        /// node, cargo, xcode or docker. Repeatable; the names given replace the list
+        /// (the default is node, cargo, git, python, docker, xcode, go, java, dotnet).
+        #[arg(long = "toolchain")]
+        toolchains: Vec<String>,
         /// Remove one limit: max_sessions, min_free_ram_mb, max_cpu_percent,
-        /// min_free_disk_mb, default_footprint_mb, or tool_footprint:<tool>. Repeatable.
+        /// min_free_disk_mb, default_footprint_mb, tool_footprint:<tool>, or toolchains
+        /// (back to the default list). Repeatable.
         #[arg(long = "clear")]
         clear: Vec<String>,
     },
@@ -175,6 +181,7 @@ fn clear(config: &mut AdmissionConfig, field: &str) -> Result<()> {
         "max_cpu_percent" => config.max_cpu_percent = None,
         "min_free_disk_mb" => config.min_free_disk_mb = None,
         "default_footprint_mb" => config.default_footprint_mb = None,
+        "toolchains" => config.toolchains = None,
         other => match other.strip_prefix("tool_footprint:") {
             Some(tool) => {
                 config.tool_footprint_mb.remove(tool);
@@ -204,6 +211,7 @@ pub(super) fn admission(arguments: AdmissionArgs, context: &Ctx) -> Result<Plann
             allow_unknown,
             default_footprint_mb,
             tool_footprints,
+            toolchains,
             clear: cleared,
         } => {
             // The session these limits govern must not loosen them.
@@ -232,6 +240,11 @@ pub(super) fn admission(arguments: AdmissionArgs, context: &Ctx) -> Result<Plann
                     config.default_footprint_mb =
                         default_footprint_mb.or(config.default_footprint_mb);
                     config.tool_footprint_mb.extend(footprints);
+                    if !toolchains.is_empty() {
+                        let mut declared = toolchains.clone();
+                        declared.dedup();
+                        config.toolchains = Some(declared);
+                    }
                 })
                 .map_err(failed)?;
             print(&view)?;

@@ -54,6 +54,7 @@ import type {
   NotifierSettingField,
   OrchestrationAdmission,
   OrchestrationBinding,
+  OrchestrationCapabilities,
   OrchestrationCapacity,
   OrchestrationLink,
   OrchestrationManifest,
@@ -1784,27 +1785,55 @@ const measured =
   (fields: readonly string[]): Check =>
   (field) =>
     isRecord(field) && fields.every((name) => isNullableNumber(field[name]));
-export const parseOrchestrationCapacity = shape<OrchestrationCapacity>('target capacity', {
-  sampled_at_ms: isNullableNumber,
-  memory: measured(['free_mb', 'total_mb']),
-  cpu: measured(['load_percent', 'logical_cpus']),
-  disk: measured(['free_mb', 'total_mb']),
-  tools: (field) =>
-    field === null ||
-    listOf((tool) => isRecord(tool) && isString(tool.tool) && isBoolean(tool.installed) && isBoolean(tool.configured))(
-      field,
+/** HS2-ZY4Z4G: optional members are skipped by the server when unknown, never `null`. */
+const capabilitiesShape = shape<OrchestrationCapabilities>(
+  'machine capabilities',
+  { os: isString, arch: isString },
+  {},
+  {
+    os_version: isString,
+    os_distribution: isString,
+    cpu_model: isString,
+    gpu: (field) =>
+      isRecord(field) && isBoolean(field.present) && (field.vendors === undefined || isStringArray(field.vendors)),
+    ai_tools: listOf(
+      (tool) => isRecord(tool) && isString(tool.tool) && (tool.version === undefined || isString(tool.version)),
     ),
-  sessions: (field) =>
-    field === null ||
-    listOf((session) => isRecord(session) && isString(session.session_id) && isBoolean(session.busy))(field),
-  claims: (field) =>
-    field === null ||
-    listOf(
-      (claim) =>
-        isRecord(claim) && isString(claim.namespace) && isString(claim.resource) && isNumber(claim.expires_at_ms),
-    )(field),
-  claim_namespaces: isStringArray,
-});
+    toolchains: listOf(
+      (chain) =>
+        isRecord(chain) &&
+        isString(chain.name) &&
+        isBoolean(chain.installed) &&
+        (chain.version === undefined || isString(chain.version)),
+    ),
+  },
+);
+export const parseOrchestrationCapacity = shape<OrchestrationCapacity>(
+  'target capacity',
+  {
+    sampled_at_ms: isNullableNumber,
+    memory: measured(['free_mb', 'total_mb']),
+    cpu: measured(['load_percent', 'logical_cpus']),
+    disk: measured(['free_mb', 'total_mb']),
+    tools: (field) =>
+      field === null ||
+      listOf(
+        (tool) => isRecord(tool) && isString(tool.tool) && isBoolean(tool.installed) && isBoolean(tool.configured),
+      )(field),
+    sessions: (field) =>
+      field === null ||
+      listOf((session) => isRecord(session) && isString(session.session_id) && isBoolean(session.busy))(field),
+    claims: (field) =>
+      field === null ||
+      listOf(
+        (claim) =>
+          isRecord(claim) && isString(claim.namespace) && isString(claim.resource) && isNumber(claim.expires_at_ms),
+      )(field),
+    claim_namespaces: isStringArray,
+  },
+  {},
+  { capabilities: capabilitiesShape.check },
+);
 export const parseOrchestrationAdmission = shape<OrchestrationAdmission>('admission decision', {
   outcome: oneOf('accepted', 'reduced', 'refused'),
   tool: isString,

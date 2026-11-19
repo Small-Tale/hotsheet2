@@ -72,6 +72,7 @@ pub(super) fn policy(targets: &[(u128, u32)]) -> PolicyBody {
 
 pub(super) fn work(n: u128, on: u128) -> WorkItem {
     WorkItem {
+        requirements: Default::default(),
         step_id: id(n),
         target_id: target(on),
         connection_id: "git".into(),
@@ -98,6 +99,7 @@ fn prio(mut item: WorkItem, priority: &str) -> WorkItem {
 /// A machine with both tools installed, a quiet CPU and plenty of disk.
 pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> CapacitySnapshot {
     CapacitySnapshot {
+        capabilities: None,
         schema_version: 1,
         server_id: id(9000 + server),
         checkout_id: "checkout".into(),
@@ -1983,4 +1985,125 @@ fn hs2_th53nn_a_preferred_tool_and_model_are_tried_first_and_never_required() {
     world.tools = healthy();
     world.sessions.clear();
     assert_eq!(starts(&world.now()), vec![(id(1), "beta".into())]);
+}
+
+// ---- HS2-ZY4Z4G: step requirements ----
+
+use crate::orchestration::{GpuCapability, HostCapabilities, OsFamily, ToolchainCapability};
+
+fn windows_arm(snapshot: &mut CapacitySnapshot) {
+    snapshot.capabilities = Some(HostCapabilities {
+        toolchains: Some(vec![ToolchainCapability {
+            name: "cargo".into(),
+            installed: true,
+            version: Some("1.0.0".into()),
+        }]),
+        gpu: Some(GpuCapability::default()),
+        ..HostCapabilities::bare(OsFamily::Windows, "aarch64")
+    });
+}
+
+/// A step that needs another machine is placed on none of the target's sessions, a
+/// free one included, and the reason names the requirement; a step that fits starts.
+#[test]
+fn hs2_zy4z4g_work_goes_only_where_its_requirements_are_met() {
+    let mut world = World::new(&[(1, 2), (2, 2)]);
+    for target in &mut world.targets {
+        windows_arm(target.capacity.as_mut().unwrap());
+    }
+    let needs = |n: u128, on: u128, specs: &[&str]| {
+        let mut item = work(n, on);
+        for spec in specs {
+            item.requirements.add(spec).unwrap();
+        }
+        item.requirements = item.requirements.clone().normalized().unwrap();
+        item
+    };
+    world.work = vec![
+        needs(
+            1,
+            1,
+            &["os=windows", "arch=arm64", "toolchain=cargo", "tool=alpha"],
+        ),
+        needs(2, 1, &["os=linux"]),
+        needs(3, 2, &["gpu=any"]),
+        needs(4, 2, &["toolchain=xcode"]),
+        needs(5, 2, &["min_memory_gb=64"]),
+        work(6, 2),
+    ];
+    // A free session on target 1 must not take the Linux work either.
+    world.sessions = vec![session("free", 1, SessionActivity::Idle)];
+    let schedule = world.now();
+    assert_eq!(fate(&schedule, "free"), ("keep", "refill"));
+    assert_eq!(
+        schedule.standing(&id(1)).unwrap().standing,
+        "keep",
+        "the matching work takes the free session"
+    );
+    assert_eq!(
+        blocked(&schedule, 2),
+        ("requirement_unmet", Some("os:linux".into()))
+    );
+    assert_eq!(
+        blocked(&schedule, 3),
+        ("requirement_unmet", Some("gpu:any".into()))
+    );
+    assert_eq!(
+        blocked(&schedule, 4),
+        ("requirement_unknown", Some("toolchain:xcode".into()))
+    );
+    assert_eq!(
+        blocked(&schedule, 5),
+        ("requirement_unmet", Some("min_memory_gb:64".into()))
+    );
+    assert_eq!(starts(&schedule), vec![(id(6), "alpha".into())]);
+    let standing = schedule.standing(&id(2)).unwrap();
+    assert_eq!(
+        (
+            standing.standing,
+            standing.reason,
+            standing.detail.as_deref()
+        ),
+        ("not_placed", "requirement_unmet", Some("os:linux"))
+    );
+}
+
+/// A machine that did not report what it is, or was not read at all, is not trusted
+/// with work that names requirements; work without any is placed as before.
+#[test]
+fn hs2_zy4z4g_an_unreported_machine_takes_no_work_with_requirements() {
+    let mut world = World::new(&[(1, 3), (2, 3)]);
+    world.targets[1] = TargetState {
+        target_id: target(2),
+        capacity: None,
+        unavailable: Some("target_unreachable".into()),
+    };
+    let mut with = work(1, 1);
+    with.requirements.os = vec![OsFamily::Linux];
+    let mut unread = work(2, 2);
+    unread.requirements.gpu = Some("any".into());
+    world.work = vec![with, unread, work(3, 1)];
+    let schedule = world.now();
+    assert_eq!(
+        blocked(&schedule, 1),
+        ("requirement_unknown", Some("os:linux".into()))
+    );
+    assert_eq!(
+        blocked(&schedule, 2),
+        ("requirement_unknown", Some("capacity_not_read".into()))
+    );
+    assert_eq!(starts(&schedule), vec![(id(3), "alpha".into())]);
+
+    // Once the machine says what it is, the same work starts: empty, then refilled.
+    let mut linux = snapshot(1, 16_384, 0);
+    linux.capabilities = Some(HostCapabilities::bare(OsFamily::Linux, "x86_64"));
+    world.targets[0] = state(1, linux);
+    world.work.truncate(1);
+    assert_eq!(starts(&world.now()), vec![(id(1), "alpha".into())]);
+    // And a change of machine (the target rebound elsewhere) stops it again.
+    windows_arm(world.targets[0].capacity.as_mut().unwrap());
+    assert_eq!(
+        blocked(&world.now(), 1),
+        ("requirement_unmet", Some("os:linux".into()))
+    );
 }

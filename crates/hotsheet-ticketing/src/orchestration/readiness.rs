@@ -111,6 +111,11 @@ pub struct PlanStep {
     /// offers it. A preference only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// HS2-ZY4Z4G: what the target's machine must be for this work: OS, architecture,
+    /// AI tools, toolchains, memory, GPU. Readiness ignores them; the scheduler places
+    /// the work only where they are met.
+    #[serde(default, skip_serializing_if = "StepRequirements::is_empty")]
+    pub requirements: StepRequirements,
     /// Starts at 1 and grows with every changed definition.
     pub revision: u32,
     pub created_at_ms: u64,
@@ -130,6 +135,8 @@ pub struct NewPlanStep {
     pub tool: Option<String>,
     /// HS2-TH53NN: the preferred model, if any.
     pub model: Option<String>,
+    /// HS2-ZY4Z4G: what the target's machine must be, normalized.
+    pub requirements: StepRequirements,
 }
 
 /// A target ticket as of one successful read. Codes and identifiers only.
@@ -1153,6 +1160,7 @@ impl PlanRegistry {
                     && step.resources == new.resources
                     && step.tool == new.tool
                     && step.model == new.model
+                    && step.requirements == new.requirements
                 {
                     (step.step(owner_checkout_id), false)
                 } else {
@@ -1160,6 +1168,7 @@ impl PlanRegistry {
                     step.resources = new.resources;
                     step.tool = new.tool;
                     step.model = new.model;
+                    step.requirements = new.requirements;
                     step.revision = step.revision.saturating_add(1);
                     step.updated_at_ms = now_ms;
                     step.updated_by = actor_id;
@@ -1181,6 +1190,7 @@ impl PlanRegistry {
                     resources: new.resources,
                     tool: new.tool,
                     model: new.model,
+                    requirements: new.requirements,
                     revision: 1,
                     created_at_ms: now_ms,
                     updated_at_ms: now_ms,
@@ -1481,6 +1491,12 @@ fn validate_step(step: &PlanStep) -> Result<(), OrchestrationError> {
     }
     if let Some(model) = &step.model {
         super::actions::valid_model(model)?;
+    }
+    // HS2-ZY4Z4G: stored only in their canonical form.
+    if step.requirements.clone().normalized()? != step.requirements {
+        return Err(OrchestrationError::Invalid(
+            "step requirements must be normalized",
+        ));
     }
     if step.prerequisites.len() > MAX_STEP_PLAN_PREREQUISITES {
         return Err(OrchestrationError::Invalid(

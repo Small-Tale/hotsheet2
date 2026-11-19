@@ -15,6 +15,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use super::capabilities::HostCapabilities;
 use super::contract::{bounded_text, valid_identifier};
 use super::policy::{MAX_POLICY_SESSIONS, MAX_POLICY_TOOLS, MachineLimits};
 use super::storage::{Storage, decode};
@@ -89,6 +90,10 @@ pub struct HostObservation {
     pub disk: DiskCapacity,
     pub tools: Option<Vec<ToolAvailability>>,
     pub sessions: Option<Vec<SessionFootprint>>,
+    /// HS2-ZY4Z4G: what the machine is (OS, architecture, CPU, GPU, tool versions,
+    /// toolchains). `None` when the host did not report it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<HostCapabilities>,
 }
 
 /// HS2-JSF985: a target project's own committed opt-in to provisional readiness
@@ -147,6 +152,11 @@ pub struct CapacitySnapshot {
     /// scheduler then starts no role session there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pool: Option<PoolState>,
+    /// HS2-ZY4Z4G: what the machine is, for plan steps that declare requirements.
+    /// Absent from an older peer, or when the host could not tell: a requirement then
+    /// reads as unknown, never as met.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<HostCapabilities>,
 }
 
 /// HS2-TK9ADC: what a target's coordination pool says about its single-holder roles
@@ -256,6 +266,15 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
             pool.handoffs_pending
         );
     }
+    // HS2-ZY4Z4G: likewise only when reported. It changes when a tool or toolchain is
+    // installed, removed or upgraded.
+    if let Some(capabilities) = &snapshot.capabilities {
+        let _ = write!(
+            text,
+            ";k{}",
+            serde_json::to_string(capabilities).unwrap_or_default()
+        );
+    }
     fnv(&text)
 }
 
@@ -302,6 +321,7 @@ impl CapacitySnapshot {
             speculation: None,
             version: None,
             pool: None,
+            capabilities: host.capabilities,
         }
     }
 
@@ -359,6 +379,7 @@ impl CapacitySnapshot {
             disk: self.disk,
             tools: self.tools,
             sessions: self.sessions,
+            capabilities: self.capabilities,
         }
     }
 }
@@ -385,6 +406,10 @@ pub struct AdmissionConfig {
     /// Estimated resident memory of one session of a tool, in megabytes.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tool_footprint_mb: BTreeMap<String, u64>,
+    /// HS2-ZY4Z4G: the toolchains this machine reports in its capabilities, replacing
+    /// [`DEFAULT_TOOLCHAINS`](super::capabilities::DEFAULT_TOOLCHAINS). Not a limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toolchains: Option<Vec<String>>,
 }
 
 impl AdmissionConfig {
@@ -420,9 +445,23 @@ impl AdmissionConfig {
                 "at most 16 tool footprints may be configured",
             ));
         }
+        if let Some(toolchains) = &self.toolchains {
+            super::capabilities::validate_toolchains(toolchains)?;
+        }
         self.tool_footprint_mb
             .keys()
             .try_for_each(|tool| valid_identifier(tool))
+    }
+
+    /// HS2-ZY4Z4G: the toolchains this machine reports: the owner's list, or the
+    /// default one.
+    pub fn declared_toolchains(&self) -> Vec<String> {
+        self.toolchains.clone().unwrap_or_else(|| {
+            super::capabilities::DEFAULT_TOOLCHAINS
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect()
+        })
     }
 }
 

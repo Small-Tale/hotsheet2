@@ -28,6 +28,7 @@ fn healthy() -> CapacitySnapshot {
         ulid::Ulid::from(7_u128).to_string(),
         "target-0123456789ab".into(),
         HostObservation {
+            capabilities: None,
             sampled_at_ms: Some(1_000),
             memory: MemoryCapacity {
                 free_mb: Some(8192),

@@ -30,6 +30,28 @@ impl hotsheet_server::CapacitySource for Fixed {
     fn tools(&mut self, _: &[PathBuf]) -> Option<Vec<(String, bool)>> {
         Some(vec![("codex".into(), true)])
     }
+    /// HS2-ZY4Z4G: Windows on Arm with cargo, whatever toolchains its owner declares.
+    fn capabilities(
+        &mut self,
+        _: &[PathBuf],
+        toolchains: &[String],
+    ) -> Option<hotsheet_ticketing::orchestration::HostCapabilities> {
+        use hotsheet_ticketing::orchestration::{HostCapabilities, OsFamily, ToolchainCapability};
+        Some(HostCapabilities {
+            os_version: Some("10.0.26100".into()),
+            toolchains: Some(
+                toolchains
+                    .iter()
+                    .map(|name| ToolchainCapability {
+                        name: name.clone(),
+                        installed: name == "cargo",
+                        version: (name == "cargo").then(|| "1.97.0".into()),
+                    })
+                    .collect(),
+            ),
+            ..HostCapabilities::bare(OsFamily::Windows, "arm64")
+        })
+    }
 }
 
 /// Three sessions per machine and codex permitted on the target.
@@ -198,6 +220,23 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
     assert_eq!(snapshot["claims"], json!([]));
     assert_eq!(snapshot["claim_namespaces"], json!(["builds"]));
     assert_eq!(samples.capacity_samples(), 1);
+    // HS2-ZY4Z4G: what the peer is travels with its capacity, for the default toolchains.
+    let capabilities = &snapshot["capabilities"];
+    assert_eq!(
+        (
+            &capabilities["os"],
+            &capabilities["os_version"],
+            &capabilities["arch"]
+        ),
+        (&json!("windows"), &json!("10.0.26100"), &json!("arm64"))
+    );
+    let declared = capabilities["toolchains"].as_array().unwrap();
+    assert_eq!(declared.len(), 9);
+    assert_eq!(
+        declared[1],
+        json!({"name":"cargo","installed":true,"version":"1.97.0"})
+    );
+    assert_eq!(samples.capability_detections(), 1);
     // No path, origin or credential of the peer travels with its capacity.
     let wire = snapshot.to_string();
     for private in [
@@ -297,6 +336,26 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
         ],
     );
     assert_eq!(check("codex", "2")["outcome"], "accepted");
+
+    // HS2-ZY4Z4G: the peer's owner declares its own toolchains, and the next read
+    // reports exactly those; clearing them restores the default list.
+    let declared = cli_named(
+        &peer_home,
+        &peer_owner,
+        &["set", "--toolchain", "cargo", "--toolchain", "xcode"],
+    );
+    assert_eq!(
+        declared["admission"]["toolchains"],
+        json!(["cargo", "xcode"])
+    );
+    let reported = cli_named(&home, &scheduler, &show);
+    assert_eq!(
+        reported["capabilities"]["toolchains"],
+        json!([{"name":"cargo","installed":true,"version":"1.97.0"},
+            {"name":"xcode","installed":false}])
+    );
+    let cleared = cli_named(&peer_home, &peer_owner, &["set", "--clear", "toolchains"]);
+    assert!(cleared["admission"].get("toolchains").is_none());
 
     // HS2-XHQ1EH: asking starts nothing, so nobody is asked and no rule is needed:
     // an actor no rule names reads the peer's capacity too.

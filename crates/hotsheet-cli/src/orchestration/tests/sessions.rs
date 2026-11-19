@@ -212,6 +212,7 @@ impl CapacityProbe for Probe {
 }
 pub(super) fn roomy() -> HostObservation {
     HostObservation {
+        capabilities: None,
         sampled_at_ms: Some(150),
         memory: MemoryCapacity {
             free_mb: Some(16_384),

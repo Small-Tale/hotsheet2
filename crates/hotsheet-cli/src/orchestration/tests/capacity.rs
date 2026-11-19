@@ -43,6 +43,7 @@ impl CapacityProbe for Scripted {
 /// An idle machine with room: 8 GB free, 10% CPU, 60 GB disk, codex installed.
 fn roomy() -> HostObservation {
     HostObservation {
+        capabilities: None,
         sampled_at_ms: Some(150),
         memory: MemoryCapacity {
             free_mb: Some(8192),

@@ -50,6 +50,7 @@ impl CapacityProbe for Probe {
 /// An idle machine with room and both tools installed.
 fn roomy() -> HostObservation {
     HostObservation {
+        capabilities: None,
         sampled_at_ms: Some(150),
         memory: MemoryCapacity {
             free_mb: Some(8192),
@@ -2354,4 +2355,105 @@ fn hs2_tk9adc_the_scheduler_starts_a_dispatcher_then_an_integrator_through_the_e
         logged,
         [Some("dispatcher".to_owned()), Some("integrator".to_owned())]
     );
+}
+
+/// HS2-ZY4Z4G: a plan step's requirements reach the scheduler. Work that needs
+/// another machine starts nowhere and `explain` names the missing requirement; once
+/// the machine reports what the step needs, the same work starts.
+#[test]
+fn hs2_zy4z4g_a_step_starts_only_on_a_machine_that_meets_its_requirements() {
+    use hotsheet_ticketing::orchestration::{HostCapabilities, OsFamily, ToolchainCapability};
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let ticket = ops::create(
+        &s.m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "Needs Windows on Arm with cargo".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let defined =
+        s.m.runtime
+            .readiness_define(
+                &s.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": s.m.owner_connection(),
+                        "native_id": s.orchestration.id.to_string()},
+                    "target_id": id(1), "connection_id": s.m.target_connection(),
+                    "native_id": ticket.slug, "prerequisites": [],
+                    "requirements": {"os": ["win", "windows"], "arch": ["aarch64"],
+                        "toolchains": ["cargo"]},
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    let step = defined.readiness.step.step_id.clone();
+    // Stored in canonical form, and the same definition spelled otherwise is no change.
+    let ready = s.m.runtime.ready_work(&s.owner(), &mut tx).unwrap();
+    assert_eq!(
+        serde_json::to_value(&ready[0].requirements).unwrap(),
+        json!({"os": ["windows"], "arch": ["arm64"], "toolchains": ["cargo"]})
+    );
+    set_policy(&s.m, policy(true), &mut tx);
+    let owner = s.owner();
+    let explain = |tx: &mut Transaction<'_>| {
+        s.m.runtime
+            .scheduler_explain(
+                &owner,
+                &serde_json::from_value(json!({"step_id": step})).unwrap(),
+                Some(&worker()),
+                tx,
+            )
+            .unwrap()
+    };
+    // The machine has not said what it is: nothing starts on a guess.
+    let unknown = explain(&mut tx);
+    assert_eq!(
+        (unknown.reason.as_str(), unknown.detail.as_deref()),
+        ("requirement_unknown", Some("os:windows"))
+    );
+    // A Linux machine misses the OS.
+    s.probe.set(|observation| {
+        observation.capabilities = Some(HostCapabilities::bare(OsFamily::Linux, "arm64"));
+    });
+    let tick = s.tick(&mut tx);
+    assert!(s.sessions.calls().is_empty());
+    assert_eq!(
+        unplaced(&tick.view),
+        [("requirement_unmet", Some("os:windows"))]
+    );
+    // Windows on Arm without cargo installed misses the toolchain.
+    s.probe.set(|observation| {
+        observation.capabilities = Some(HostCapabilities {
+            toolchains: Some(vec![ToolchainCapability {
+                name: "cargo".into(),
+                installed: false,
+                version: None,
+            }]),
+            ..HostCapabilities::bare(OsFamily::Windows, "arm64")
+        });
+    });
+    let missing = explain(&mut tx);
+    assert_eq!(
+        (missing.reason.as_str(), missing.detail.as_deref()),
+        ("requirement_unmet", Some("toolchain:cargo"))
+    );
+    // Installed: the work starts.
+    s.probe.set(|observation| {
+        if let Some(toolchains) = observation
+            .capabilities
+            .as_mut()
+            .and_then(|caps| caps.toolchains.as_mut())
+        {
+            toolchains[0].installed = true;
+        }
+    });
+    let tick = s.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
 }
