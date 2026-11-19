@@ -135,7 +135,13 @@ fn hs2_h3wppy_wait_free_reports_free_or_the_holder_without_acquiring() {
 
     let held = holder.acquire(&vm, &AcquireRequest::new(LONG)).unwrap();
     let before = watcher.inspections();
-    let outcome = watcher.wait_free(&vm, Duration::from_millis(400)).unwrap();
+    let started = Instant::now();
+    let wait = Duration::from_millis(400);
+    let outcome = watcher.wait_free(&vm, wait).unwrap();
+    assert!(
+        started.elapsed() >= wait,
+        "HS2-K3ZXR5: never gives up early"
+    );
     assert_eq!(
         outcome,
         WaitOutcome::TimedOut {
@@ -269,4 +275,65 @@ fn hs2_h3wppy_an_injected_clock_decides_expiry_for_waiters() {
     let grant = result.recv_timeout(PROMPT).unwrap().unwrap();
     assert_eq!(grant.claim.acquired_at_ms, 5_120_000);
     assert_eq!(grant.claim.fencing_token, 2);
+}
+
+/// HS2-K3ZXR5: the caller's wait is measured on the monotonic clock. A backend clock
+/// that stands still or jumps ahead decides the holder's expiry, never when the caller
+/// has waited long enough.
+#[test]
+fn hs2_k3zxr5_a_wait_ends_on_monotonic_time_whatever_the_backend_clock_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::new(5_000_000));
+    let keys = Arc::new(StaticKeyProvider::new(ClaimKey::from_bytes([3; 32])));
+    let make = || {
+        Arc::new(LocalBackend::new(
+            dir.path().join("resource-claims"),
+            clock.clone(),
+            keys.clone(),
+        ))
+    };
+    let (holder, waiter) = (make(), make());
+    let vm = target("vms/mac-1");
+    let lease = Duration::from_secs(60 * 60);
+    let held = holder.acquire(&vm, &AcquireRequest::new(lease)).unwrap();
+    let wait = Duration::from_millis(400);
+
+    // A clock that stands still: the wait still ends, after one sleep, not early. (On the
+    // backend clock it never ended: the waiter re-slept forever.)
+    let (done, result) = mpsc::channel();
+    let thread_waiter = waiter.clone();
+    let thread_vm = vm.clone();
+    let started = Instant::now();
+    thread::spawn(move || {
+        let outcome = thread_waiter.acquire_wait(&thread_vm, &AcquireRequest::new(LONG), wait);
+        done.send((outcome, started.elapsed())).unwrap();
+    });
+    let (outcome, elapsed) = result
+        .recv_timeout(PROMPT)
+        .expect("a frozen backend clock must not stall the wait");
+    assert!(elapsed >= wait);
+    assert_eq!(outcome.unwrap_err().code(), "wait_timeout");
+    assert_eq!(waiter.inspections(), 2);
+
+    // A clock that jumps ahead mid-wait (well past the wait, still inside the holder's
+    // lease and the registration's cleanup grace) does not end the wait: the signal
+    // costs one re-inspection and the waiter sleeps out the rest.
+    let (done, result) = mpsc::channel();
+    let thread_waiter = waiter.clone();
+    let thread_vm = vm.clone();
+    let started = Instant::now();
+    thread::spawn(move || {
+        let outcome = thread_waiter.acquire_wait(&thread_vm, &AcquireRequest::new(LONG), wait);
+        done.send((outcome, started.elapsed())).unwrap();
+    });
+    until_inspected(&waiter, 3);
+    clock.advance_ms(10_000);
+    holder.signal(vm.namespace()).unwrap();
+    let (outcome, elapsed) = result.recv_timeout(PROMPT).unwrap();
+    assert_eq!(outcome.unwrap_err().code(), "wait_timeout");
+    assert!(
+        elapsed >= wait,
+        "a stepped clock must not end the wait early"
+    );
+    assert_eq!(holder.get(&vm).unwrap(), Some(held.claim));
 }

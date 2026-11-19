@@ -11,7 +11,7 @@ mod waiters;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::backend::ClaimBackend;
 use crate::clock::{Clock, SystemClock};
@@ -176,20 +176,57 @@ impl LocalBackend {
     }
 }
 
+/// The caller's own wait, measured on the monotonic clock (HS2-K3ZXR5).
+///
+/// A wait is a local duration, not a shared instant: deciding it from whole wall-clock
+/// milliseconds let a waiter give up up to a millisecond early (both ends truncated),
+/// and a stepped or slewed wall clock could end it sooner still. The holder's expiry
+/// stays on the backend clock; only "has the caller waited long enough" is monotonic.
+struct WaitDeadline {
+    at: Instant,
+    /// The same deadline on the backend clock, published in the waiter registration
+    /// only so a crashed waiter's registration can be cleaned up later.
+    backend_ms: u64,
+}
+
+impl WaitDeadline {
+    fn new(clock: &dyn Clock, timeout: Duration) -> Result<Self, ClaimError> {
+        let wait = wait_ms(timeout)?;
+        Ok(Self {
+            at: Instant::now() + timeout,
+            // Round up so the registration never names an earlier instant than the wait.
+            backend_ms: clock.now_ms().saturating_add(wait).saturating_add(1),
+        })
+    }
+
+    /// What is left of the wait, or `None` once it has fully elapsed.
+    fn remaining(&self) -> Option<Duration> {
+        let left = self.at.saturating_duration_since(Instant::now());
+        (!left.is_zero()).then_some(left)
+    }
+}
+
+/// Round a sleep up to whole milliseconds. A socket timeout is truncated to whole
+/// microseconds by the OS interface, so an exact sleep could wake a hair before the
+/// deadline and cost a second inspection; rounding up wakes at or after it.
+fn ceil_ms(duration: Duration) -> Duration {
+    let millis = duration.as_nanos().div_ceil(1_000_000);
+    Duration::from_millis(u64::try_from(millis).unwrap_or(u64::MAX))
+}
+
 /// Sleep once until the earlier of the holder's expiry and the caller's deadline, or
 /// until a release wakes the waiter. `false` means the caller's deadline has passed.
 fn park_until(
     waiter: &Waiter,
     clock: &dyn Clock,
     holder: &Claim,
-    deadline_ms: u64,
+    deadline: &WaitDeadline,
 ) -> Result<bool, ClaimError> {
-    let now_ms = clock.now_ms();
-    if now_ms >= deadline_ms {
+    let Some(left) = deadline.remaining() else {
         return Ok(false);
-    }
-    let until_ms = holder.expires_at_ms.min(deadline_ms);
-    waiter.park(Duration::from_millis(until_ms.saturating_sub(now_ms)))?;
+    };
+    let to_expiry = Duration::from_millis(holder.expires_at_ms.saturating_sub(clock.now_ms()));
+    waiter.park(ceil_ms(left).min(to_expiry))?;
     Ok(true)
 }
 
@@ -262,18 +299,18 @@ impl ClaimBackend for LocalBackend {
         request: &AcquireRequest,
         timeout: Duration,
     ) -> Result<Grant, ClaimError> {
-        let deadline_ms = self.clock.now_ms().saturating_add(wait_ms(timeout)?);
+        let deadline = WaitDeadline::new(self.clock.as_ref(), timeout)?;
         lease_ms(request.duration)?;
         validate_metadata(&request.metadata)?;
         // Register before the first attempt: a release that lands between the attempt
         // and the sleep must find this waiter.
-        let waiter = self.register_waiter(target.namespace(), deadline_ms)?;
+        let waiter = self.register_waiter(target.namespace(), deadline.backend_ms)?;
         loop {
             let holder = match self.acquire(target, request) {
                 Err(ClaimError::HeldBy { holder }) => holder,
                 other => return other,
             };
-            if !park_until(&waiter, self.clock.as_ref(), &holder, deadline_ms)? {
+            if !park_until(&waiter, self.clock.as_ref(), &holder, &deadline)? {
                 return Err(ClaimError::WaitTimedOut { holder });
             }
         }
@@ -366,17 +403,17 @@ impl ClaimBackend for LocalBackend {
         target: &ResourceRef,
         timeout: Duration,
     ) -> Result<WaitOutcome, ClaimError> {
-        let deadline_ms = self.clock.now_ms().saturating_add(wait_ms(timeout)?);
+        let deadline = WaitDeadline::new(self.clock.as_ref(), timeout)?;
         // Nothing to wait for: do not create a namespace or a waiter for a free resource.
         if self.get(target)?.is_none() {
             return Ok(WaitOutcome::Free);
         }
-        let waiter = self.register_waiter(target.namespace(), deadline_ms)?;
+        let waiter = self.register_waiter(target.namespace(), deadline.backend_ms)?;
         loop {
             let Some(holder) = self.get(target)? else {
                 return Ok(WaitOutcome::Free);
             };
-            if !park_until(&waiter, self.clock.as_ref(), &holder, deadline_ms)? {
+            if !park_until(&waiter, self.clock.as_ref(), &holder, &deadline)? {
                 return Ok(WaitOutcome::TimedOut {
                     holder: Box::new(holder),
                 });
