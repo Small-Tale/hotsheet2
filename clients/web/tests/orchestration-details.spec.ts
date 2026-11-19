@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { expect, type Page, test } from '@playwright/test';
@@ -15,6 +15,8 @@ import {
   realTicketServer,
   scheduler,
   send,
+  SYNTHETIC_TOOL,
+  syntheticTool,
   TARGET,
   type Ticket,
   visualPass,
@@ -22,6 +24,8 @@ import {
 
 const execute = promisify(execFile);
 const REPO = 'acme/synthetic-widgets';
+/** HS2-QDARNW: a second site of the Self project. */
+const SITE = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
 
 /**
  * On a phone the inspector is a sheet; with no card selected, its toggle opens it. Whether the sheet is
@@ -422,6 +426,137 @@ test('HS2-77SRHC a ready card says why it is not running and the overview lists 
       check: () => expect(why).toContainText('Scheduler'),
       atPhone: () => view.locator(`[data-ticket-slug="${ready.slug}"]`).click(),
     });
+  } finally {
+    await server.stop(page);
+  }
+});
+
+/**
+ * HS2-QDARNW (HS2-9FKTB3): a project with two sites, the second one able to run the step and the first one
+ * not listed in the policy, so the scheduler chooses the second. The card's Why It Is Not Running names the
+ * chosen site and why the first was passed over, through the real Orchestration view and a real server.
+ */
+test('HS2-QDARNW Why It Is Not Running names the chosen site and each site passed over', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(180_000);
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
+  try {
+    await orchestrateSelf(server);
+    const base = `/checkouts/${server.checkoutId}/orchestration`;
+    const person = { role: 'human', id: 'maintainer' };
+    // A second checkout of the same ticket store, declared as another site of Self and bound here.
+    const root = join(dirname(server.root), 'second-site');
+    await mkdir(root, { recursive: true });
+    const second = await server.request<{ id: string }>('/checkouts', 'POST', { root, stores: [server.store] });
+    const declared = await send(server, 'GET', `${base}/targets`);
+    const added = await send(server, 'POST', `${base}/targets`, {
+      target_id: SITE,
+      label: 'Self second site',
+      expected_revision: declared.revision,
+      site_of: TARGET,
+    });
+    const candidate = await send(server, 'POST', `${base}/inspect`, {
+      destination: { kind: 'local', checkout_id: second.id },
+    });
+    await send(server, 'PUT', `${base}/targets/${SITE}/binding`, {
+      target: { owner_checkout_id: server.checkoutId, target_id: SITE },
+      expected_manifest_revision: added.revision,
+      expected_binding_revision: 0,
+      previous_destination: null,
+      destination: candidate.destination,
+    });
+    for (const target of [TARGET, SITE]) {
+      await send(server, 'POST', `${base}/permission-rules`, {
+        target_id: target,
+        action: 'work_start',
+        actor: person,
+      });
+      await send(server, 'POST', `${base}/permission-rules`, {
+        target_id: target,
+        action: 'session_start',
+        tool: SYNTHETIC_TOOL,
+        actor: person,
+      });
+    }
+    const plan = await planTwoSteps(server);
+    // Self is not listed in the policy, so no session may start there; the second site may run the tool.
+    // The machine limits never refuse on a busy test host.
+    await send(server, 'PUT', `${base}/policy`, {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 64, min_free_ram_mb: 0, max_cpu_percent: 100, min_free_disk_mb: 0 },
+        tools: [{ tool: SYNTHETIC_TOOL, max_sessions: 4 }],
+        targets: [{ target_id: SITE, tools: [{ tool: SYNTHETIC_TOOL }], max_sessions: 2 }],
+        placement: { automatic: false, actor: 'scheduler-1' },
+      },
+      actor: person,
+    });
+    await send(server, 'POST', `${base}/scheduler/tick`, { dry_run: true, actor: scheduler });
+    // The scheduler's own explanation: placed on the second site, Self passed over with its reason.
+    const explained = (await send(server, 'POST', `${base}/scheduler/explain`, {
+      target_id: TARGET,
+      connection_id: plan.first.connection_id,
+      native_id: plan.first.id,
+      actor: scheduler,
+    })) as { standing: string; placement?: { target_id: string }; sites?: { target_id: string; reason: string }[] };
+    expect(explained, JSON.stringify(explained)).toMatchObject({ standing: 'start', placement: { target_id: SITE } });
+    expect(explained.sites?.map((pass) => pass.target_id)).toEqual([TARGET]);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOrchestration(page, server);
+    const view = page.locator('[data-orchestration-view="true"]');
+    const card = view.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    await card.click();
+    const why = page.locator('[data-orchestration-inspector] [data-orchestration-section="Why It Is Not Running"]');
+    const rows = why.locator('dl > div');
+    await expect(why).toContainText('It would start on the next pass');
+    await expect(why).toContainText('Self second site');
+    await expect(why).toContainText('Not on Self');
+    const labels = await why.locator('dt').allInnerTexts();
+    expect(labels.map((label) => label.trim())).toEqual(expect.arrayContaining(['Scheduler', 'Site', 'Not on Self']));
+    // The chosen site comes before the sites passed over.
+    expect(labels.findIndex((label) => label.trim() === 'Site')).toBeLessThan(
+      labels.findIndex((label) => label.trim() === 'Not on Self'),
+    );
+    await expect(rows.filter({ hasText: 'Site' }).first()).toContainText('Self second site');
+
+    // Visual QA: 1440, 1100, 390 (the card's inspector sheet), wide again, in both color schemes.
+    const directory = join('target', 'visual-captures', 'hs2-qdarnw');
+    await mkdir(directory, { recursive: true });
+    const settle = () =>
+      page.waitForFunction(() =>
+        document
+          .getAnimations()
+          .every(
+            (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
+          ),
+      );
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, [width, height]] of (
+        [
+          [1440, 900],
+          [1100, 820],
+          [390, 844],
+          [1440, 900],
+        ] as const
+      ).entries()) {
+        await page.setViewportSize({ width, height });
+        if (width === 390) await card.click();
+        await expect(why).toContainText('Not on Self');
+        await why.scrollIntoViewIfNeeded();
+        await settle();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({
+          path: join(
+            directory,
+            `hs2-qdarnw-why-${String(width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}.png`,
+          ),
+        });
+      }
+    }
   } finally {
     await server.stop(page);
   }

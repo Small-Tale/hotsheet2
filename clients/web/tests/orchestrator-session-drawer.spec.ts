@@ -1,57 +1,14 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
 import { expect, test } from '@playwright/test';
 
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
 import { openMockedProject } from './open-mocked-project';
-import { orchestrateSelf, scheduler, send, TARGET } from './orchestration-real-fixtures';
+import { orchestrateSelf, scheduler, send, SYNTHETIC_TOOL, syntheticTool, TARGET } from './orchestration-real-fixtures';
 
 const person = { role: 'human', id: 'maintainer' };
 
-const TOOL = 'hs-synthetic-agent';
+const TOOL = SYNTHETIC_TOOL;
 const RUN = '01ARZ3NDEKTSV4RRFFQ69G5FB0';
-
-/**
- * A synthetic AI tool in the fixture server's own plugin directory: it launches the Node binary
- * that runs this spec and holds, so no real AI tool is started or probed.
- */
-async function syntheticTool(home: string) {
-  const plugin = join(home, 'plugins', TOOL);
-  await mkdir(plugin, { recursive: true });
-  await writeFile(join(plugin, 'instructions.md'), 'Synthetic agent\n');
-  await writeFile(
-    join(plugin, 'manifest.toml'),
-    [
-      `id = "${TOOL}"`,
-      `display_name = "${TOOL}"`,
-      'product_name = "Synthetic agent"',
-      'tier = "cli-agent"',
-      // Detected through the Node binary already on PATH; driven by spawning it.
-      '[detection]',
-      'binaries = ["node"]',
-      '[drive]',
-      'transport = "spawn"',
-      `program = ${JSON.stringify(process.execPath)}`,
-      'args = []',
-      'content = "arg"',
-      '[instructions]',
-      'target = "AGENTS.md"',
-      'section = "instructions.md"',
-      '[mcp]',
-      'target = ".mcp.json"',
-      'format = "claude-json"',
-      'server_name = "hotsheet"',
-      'command = "hotsheet-mcp"',
-      'args = ["--path", "{store}"]',
-      '[launch]',
-      `program = ${JSON.stringify(process.execPath)}`,
-      `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
-      '',
-    ].join('\n'),
-  );
-}
 
 // HS2-KTHJN2: a session an orchestrator starts on this machine is an ordinary AI terminal of its
 // drawer, named by the saved tab name `<orchestration project>: run <last eight of the run id>`

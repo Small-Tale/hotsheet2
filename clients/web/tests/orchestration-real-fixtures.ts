@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { proxyFetch, realTicketServer } from './real-ticket-server';
@@ -167,6 +170,49 @@ export async function visualPass(
   await capture(page, ticket, `${state}-390-dark`);
   await page.emulateMedia({ colorScheme: 'light' });
   await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+/** An AI tool no machine really has: detected through Node, which every test host runs (HS2-KTHJN2). */
+export const SYNTHETIC_TOOL = 'hs-synthetic-agent';
+
+/**
+ * A synthetic AI tool in the fixture server's own plugin directory: it launches the Node binary
+ * that runs this spec and holds, so no real AI tool is started or probed.
+ */
+export async function syntheticTool(home: string) {
+  const plugin = join(home, 'plugins', SYNTHETIC_TOOL);
+  await mkdir(plugin, { recursive: true });
+  await writeFile(join(plugin, 'instructions.md'), 'Synthetic agent\n');
+  await writeFile(
+    join(plugin, 'manifest.toml'),
+    [
+      `id = "${SYNTHETIC_TOOL}"`,
+      `display_name = "${SYNTHETIC_TOOL}"`,
+      'product_name = "Synthetic agent"',
+      'tier = "cli-agent"',
+      // Detected through the Node binary already on PATH; driven by spawning it.
+      '[detection]',
+      'binaries = ["node"]',
+      '[drive]',
+      'transport = "spawn"',
+      `program = ${JSON.stringify(process.execPath)}`,
+      'args = []',
+      'content = "arg"',
+      '[instructions]',
+      'target = "AGENTS.md"',
+      'section = "instructions.md"',
+      '[mcp]',
+      'target = ".mcp.json"',
+      'format = "claude-json"',
+      'server_name = "hotsheet"',
+      'command = "hotsheet-mcp"',
+      'args = ["--path", "{store}"]',
+      '[launch]',
+      `program = ${JSON.stringify(process.execPath)}`,
+      `args = ["-e", "process.stdout.write('ready\\\\n'); setInterval(() => {}, 1000000)"]`,
+      '',
+    ].join('\n'),
+  );
 }
 
 export { realTicketServer };
