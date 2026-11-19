@@ -21,6 +21,8 @@
 
 import { spawn as nodeSpawn, spawnSync as nodeSpawnSync } from 'node:child_process';
 
+import { nonBlank } from './non-blank.mjs';
+
 export const BROWSER_SLOT_NAMESPACE = 'browser-engines';
 /** WebKit browsers that may live at once on this machine unless `HOTSHEET_WEBKIT_SLOTS` says otherwise. */
 export const DEFAULT_WEBKIT_SLOTS = 2;
@@ -58,7 +60,7 @@ export function slotNames(engine, env) {
 
 /** @param {Record<string, string | undefined>} env */
 export function claimCli(env) {
-  return env.HOTSHEET_CLI_BIN || 'hotsheet-cli';
+  return nonBlank(env.HOTSHEET_CLI_BIN) ?? 'hotsheet-cli';
 }
 
 /** `90s`-style duration for the CLI, rounded up to whole seconds. */

@@ -7,6 +7,7 @@ import { expect, test } from '@playwright/test';
 import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-ticket-server';
 
 const run = promisify(execFile);
@@ -75,9 +76,7 @@ test('raises and clears the ticket store sync banner from real sync events (HS2-
     await routeProjectChangeSocket(page, server, server.checkoutId);
     await page.setViewportSize({ width: 1280, height: 844 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.getByRole('button', { name: 'Local Project' }).click();
-    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await openMockedProject(page);
     await expect.poll(() => timeline.includes('read'), { timeout: 30_000 }).toBe(true);
     const banner = page.locator('[data-component="ticket-store-sync-banner"]');
     await expect(banner).toHaveCount(0);
