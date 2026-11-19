@@ -1,2 +1,5 @@
 # HS2-AHE5SV: keep formatted text and executable shebangs LF on Windows checkouts.
 * text=auto eol=lf
+# HS2-GY4938: vendored upstream patches keep their diff context lines byte-exact (a blank
+# context line is a single space), so the staged whitespace check must not reject them.
+.github/vcpkg-ports/**/*.patch -whitespace
