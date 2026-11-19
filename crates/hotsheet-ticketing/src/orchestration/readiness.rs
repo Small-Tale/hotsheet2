@@ -829,12 +829,22 @@ impl PlanHealth {
 type RootOf =
     std::sync::Arc<dyn Fn(&str) -> Result<std::path::PathBuf, OrchestrationError> + Send + Sync>;
 
+/// HS2-EPRWB6: the grouping of an owner's manifest with each site's sources joined to
+/// its home's by this machine's bindings.
+type BindSites = std::sync::Arc<dyn Fn(&str, ProjectSites) -> ProjectSites + Send + Sync>;
+
 /// The plan: step definitions checked in beside the manifest (HS2-YDY5HJ), and the
 /// tickets this machine read for them and the levels it published, machine-local.
+///
+/// HS2-EPRWB6: a checked-in step names each ticket by the home site's connection id
+/// ([`ProjectSites::shared_connection`]), which every machine binding the home shares,
+/// and is read back with this machine's own id for the site it names
+/// ([`ProjectSites::local_connection`]).
 #[derive(Clone)]
 pub struct PlanRegistry {
     storage: Storage,
     root_of: RootOf,
+    bind_sites: Option<BindSites>,
 }
 
 impl PlanRegistry {
@@ -846,7 +856,20 @@ impl PlanRegistry {
         Self {
             storage: Storage::machine_named(home, "orchestration-plan.json"),
             root_of: std::sync::Arc::new(root_of),
+            bind_sites: None,
         }
+    }
+
+    /// HS2-EPRWB6: join each site's sources to its home's with `bind`, which receives
+    /// the owner checkout id and the manifest's grouping (for example from this
+    /// machine's bindings). Without it, connection ids are compared as they are.
+    #[must_use]
+    pub fn with_sites(
+        mut self,
+        bind: impl Fn(&str, ProjectSites) -> ProjectSites + Send + Sync + 'static,
+    ) -> Self {
+        self.bind_sites = Some(std::sync::Arc::new(bind));
+        self
     }
 
     fn shared(&self, owner_checkout_id: &str) -> Result<SharedPlanStore, OrchestrationError> {
@@ -901,11 +924,14 @@ impl PlanRegistry {
 
     /// The owner's step definitions: the checked-in ones merged by step id with any
     /// this machine kept before they were checked in. A conflict is refused.
+    ///
+    /// HS2-EPRWB6: each ticket is named with this machine's id for its site.
     fn steps_of(
         &self,
         owner_checkout_id: &str,
         shared: Option<&SharedPlan>,
         file: &PlanFile,
+        sites: &ProjectSites,
     ) -> Result<Vec<PlanStep>, OrchestrationError> {
         let checked_in: &[SharedStep] = shared.map_or(&[], |document| &document.steps);
         let local: Vec<SharedStep> = legacy(file, owner_checkout_id);
@@ -913,7 +939,7 @@ impl PlanRegistry {
             .map_err(|_| OrchestrationError::Readiness(ReadinessError::PlanConflict))?;
         let steps: Vec<PlanStep> = merged
             .iter()
-            .map(|step| step.step(owner_checkout_id))
+            .map(|step| localized(step.step(owner_checkout_id), sites))
             .collect();
         for step in &steps {
             validate_step(step).map_err(|_| OrchestrationError::Corrupt)?;
@@ -924,9 +950,10 @@ impl PlanRegistry {
     /// The owner's step definitions now, ordered by step id.
     fn definitions(&self, owner_checkout_id: &str) -> Result<Vec<PlanStep>, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        let sites = self.sites(owner_checkout_id)?;
         let shared = self.shared(owner_checkout_id)?.read()?;
         let file = self.read_file()?;
-        self.steps_of(owner_checkout_id, shared.as_ref(), &file)
+        self.steps_of(owner_checkout_id, shared.as_ref(), &file, &sites)
     }
 
     /// True when the owner plans nothing. Cheap enough to ask on every event.
@@ -946,9 +973,10 @@ impl PlanRegistry {
     /// The owner's steps with the levels this machine published, ordered by step id.
     pub fn records(&self, owner_checkout_id: &str) -> Result<Vec<PlanRecord>, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        let sites = self.sites(owner_checkout_id)?;
         let shared = self.shared(owner_checkout_id)?.read()?;
         let file = self.read_file()?;
-        let steps = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        let steps = self.steps_of(owner_checkout_id, shared.as_ref(), &file, &sites)?;
         Ok(steps
             .into_iter()
             .map(|step| {
@@ -998,9 +1026,14 @@ impl PlanRegistry {
     }
 
     /// HS2-SHH7WW: which targets of the owner's manifest are sites of one project.
+    /// HS2-EPRWB6: with the sources joined when the registry was given a binding.
     pub fn sites(&self, owner_checkout_id: &str) -> Result<ProjectSites, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
-        ManifestStore::new(self.shared(owner_checkout_id)?.storage.anchor()).sites()
+        let sites = ManifestStore::new(self.shared(owner_checkout_id)?.storage.anchor()).sites()?;
+        Ok(match &self.bind_sites {
+            Some(bind) if !sites.is_empty() => bind(owner_checkout_id, sites),
+            _ => sites,
+        })
     }
 
     /// HS2-F1BKQ0: the plan's state as a value, where every plan read would fail with
@@ -1153,6 +1186,10 @@ impl PlanRegistry {
             validate_update(target, update)?;
         }
         new.resources.sort();
+        // HS2-EPRWB6: the step is checked in with the home's connection ids, so the
+        // same ticket defined through any site, on any machine, is written alike.
+        let sites = self.sites(owner_checkout_id)?;
+        shared_ids(&mut new.target, &mut new.prerequisites, &sites);
         let now_ms = tx.clock.now_ms();
         let shared = self.shared(owner_checkout_id)?;
         let _shared_lock = shared.lock()?;
@@ -1164,7 +1201,6 @@ impl PlanRegistry {
             .map(|document| document.steps.clone())
             .unwrap_or_default();
         // HS2-SHH7WW: one step per ticket of a project, whichever site names it.
-        let sites = ManifestStore::new(shared.storage.anchor()).sites()?;
         let existing = steps
             .iter()
             .position(|step| sites.same_ticket(&step.target, &new.target));
@@ -1178,14 +1214,19 @@ impl PlanRegistry {
                 if step.ticket != new.ticket {
                     return Err(OrchestrationError::Conflict);
                 }
-                if step.target == new.target
-                    && step.prerequisites == new.prerequisites
+                // HS2-EPRWB6: a step checked in before the ids were shared is the same
+                // definition when it names the same tickets; it is not rewritten.
+                let (mut target, mut prerequisites) =
+                    (step.target.clone(), step.prerequisites.clone());
+                shared_ids(&mut target, &mut prerequisites, &sites);
+                if target == new.target
+                    && prerequisites == new.prerequisites
                     && step.resources == new.resources
                     && step.tool == new.tool
                     && step.model == new.model
                     && step.requirements == new.requirements
                 {
-                    (step.step(owner_checkout_id), false)
+                    (localized(step.step(owner_checkout_id), &sites), false)
                 } else {
                     // HS2-SHH7WW: planning the ticket through another site of its
                     // project moves the step to that site.
@@ -1200,7 +1241,7 @@ impl PlanRegistry {
                     step.updated_by = actor_id;
                     let step = step.step(owner_checkout_id);
                     validate_step(&step)?;
-                    (step, true)
+                    (localized(step, &sites), true)
                 }
             }
             None => {
@@ -1224,12 +1265,12 @@ impl PlanRegistry {
                 };
                 validate_step(&step)?;
                 steps.push(SharedStep::of(&step));
-                (step, true)
+                (localized(step, &sites), true)
             }
         };
         let definitions: Vec<PlanStep> = steps
             .iter()
-            .map(|step| step.step(owner_checkout_id))
+            .map(|step| localized(step.step(owner_checkout_id), &sites))
             .collect();
         // HS2-G052RV: an evaluation reads the checked-in plan and then this machine's
         // file, without the locks. The reads are therefore written first, so whoever sees
@@ -1260,6 +1301,7 @@ impl PlanRegistry {
     ) -> Result<PlanStep, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         valid_token(step_id)?;
+        let sites = self.sites(owner_checkout_id)?;
         let shared = self.shared(owner_checkout_id)?;
         let _shared_lock = shared.lock()?;
         let _lock = self.storage.lock()?;
@@ -1273,11 +1315,11 @@ impl PlanRegistry {
             .iter()
             .position(|step| step.step_id == step_id)
             .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))?;
-        let removed = steps.remove(index).step(owner_checkout_id);
+        let removed = localized(steps.remove(index).step(owner_checkout_id), &sites);
         shared.write_locked(current.as_ref(), steps.clone(), tx)?;
         let definitions: Vec<PlanStep> = steps
             .iter()
-            .map(|step| step.step(owner_checkout_id))
+            .map(|step| localized(step.step(owner_checkout_id), &sites))
             .collect();
         if prune(&mut file, owner_checkout_id, &definitions) {
             self.write_file(&file)?;
@@ -1310,6 +1352,7 @@ impl PlanRegistry {
     ) -> Result<bool, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         validate_update(target, &update)?;
+        let sites = self.sites(owner_checkout_id)?;
         let store = self.shared(owner_checkout_id)?;
         // Read the checked-in steps only under this machine's lock: a definition
         // written meanwhile has its reads stored before this lock is free, so they are
@@ -1317,7 +1360,7 @@ impl PlanRegistry {
         let _lock = self.storage.lock()?;
         let shared = store.read()?;
         let mut file = self.read_file()?;
-        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file, &sites)?;
         let pruned = prune(&mut file, owner_checkout_id, &definitions);
         if !apply_observation(&mut file, owner_checkout_id, &definitions, target, update) && !pruned
         {
@@ -1336,12 +1379,13 @@ impl PlanRegistry {
         now_ms: u64,
     ) -> Result<Vec<LevelChange>, OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
+        let sites = self.sites(owner_checkout_id)?;
         let store = self.shared(owner_checkout_id)?;
         // As in `observe`: the steps are read under this machine's lock.
         let _lock = self.storage.lock()?;
         let shared = store.read()?;
         let mut file = self.read_file()?;
-        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file)?;
+        let definitions = self.steps_of(owner_checkout_id, shared.as_ref(), &file, &sites)?;
         let pruned = prune(&mut file, owner_checkout_id, &definitions);
         let mut changes = Vec::new();
         for step in &definitions {
@@ -1380,6 +1424,41 @@ impl PlanRegistry {
             self.write_file(&file)?;
         }
         Ok(changes)
+    }
+}
+
+/// HS2-EPRWB6: name every ticket of a step by the home site's connection id, as the
+/// checked-in plan does.
+fn shared_ids(target: &mut RunTarget, prerequisites: &mut [Prerequisite], sites: &ProjectSites) {
+    map_ids(target, prerequisites, |site, id| {
+        sites.shared_connection(site, id)
+    });
+}
+
+/// HS2-EPRWB6: a checked-in step with every ticket named by this machine's id for
+/// the site that names it.
+fn localized(mut step: PlanStep, sites: &ProjectSites) -> PlanStep {
+    map_ids(&mut step.target, &mut step.prerequisites, |site, id| {
+        sites.local_connection(site, id)
+    });
+    step
+}
+
+fn map_ids(
+    target: &mut RunTarget,
+    prerequisites: &mut [Prerequisite],
+    map: impl Fn(&str, &str) -> String,
+) {
+    target.connection_id = map(&target.target_id, &target.connection_id);
+    for prerequisite in prerequisites {
+        if let Prerequisite::Ticket {
+            target_id,
+            connection_id,
+            ..
+        } = prerequisite
+        {
+            *connection_id = map(target_id, connection_id);
+        }
     }
 }
 

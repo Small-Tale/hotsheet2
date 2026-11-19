@@ -889,3 +889,94 @@ async fn hs2_rcr4a6_a_peer_outage_takes_no_second_claim() {
     fleet.peer_online().await;
     fleet.shut_down().await;
 }
+
+/// HS2-EPRWB6: a ticket of the project is one checked-in plan step whichever site
+/// defines it. The checked-in plan names it by the home's connection id, which every
+/// machine binding the home shares; the orchestrator reads the step back with its own
+/// id for the site the step names, and a prerequisite named through the peer is an
+/// edge to the step planned through the home.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_eprwb6_one_plan_step_whichever_site_defines_it() {
+    let fleet = Fleet::sites().await;
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
+    let first = fleet.target_ticket(Side::Controller, "Change made first");
+    let then = fleet.target_ticket(Side::Controller, "Change made after it");
+    converge(&fleet);
+    let (home, peer) = (
+        fleet.connection(Side::Controller),
+        fleet.connection(Side::Peer),
+    );
+    assert_ne!(
+        home, peer,
+        "each machine names the shared store its own way"
+    );
+    let define = |side: Side| {
+        let fleet = &fleet;
+        let orchestration = &orchestration;
+        let then = &then;
+        let first = &first;
+        async move {
+            fleet
+                .ok(
+                    "POST",
+                    "/readiness/define",
+                    json!({"actor":Fleet::ai(),"ticket":{"native_id":orchestration.slug},
+                        "target_id":Fleet::target(side),"connection_id":fleet.connection(side),
+                        "native_id":then.slug,"prerequisites":[fleet.after(side, first)]}),
+                )
+                .await
+        }
+    };
+    let checked_in = || -> Value {
+        let path = Path::new(&fleet.owner.root).join(".hotsheet2/orchestration-plan.json");
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+    };
+
+    // Through the peer, then the home, then the peer again: one step throughout.
+    let through_peer = define(Side::Peer).await;
+    let step = through_peer["step"]["step_id"].as_str().unwrap().to_owned();
+    let plan = checked_in();
+    assert_eq!(plan["steps"].as_array().unwrap().len(), 1, "{plan}");
+    assert_eq!(plan["steps"][0]["target"]["target_id"], TARGET_B, "{plan}");
+    assert_eq!(
+        plan["steps"][0]["target"]["connection_id"],
+        home.as_str(),
+        "{plan}"
+    );
+    assert_eq!(
+        plan["steps"][0]["prerequisites"][0]["connection_id"],
+        home.as_str(),
+        "{plan}"
+    );
+    let through_home = define(Side::Controller).await;
+    assert_eq!(
+        through_home["step"]["step_id"],
+        step.as_str(),
+        "{through_home}"
+    );
+    assert_eq!(through_home["step"]["revision"], 2, "{through_home}");
+    let again = define(Side::Peer).await;
+    assert_eq!(again["step"]["step_id"], step.as_str(), "{again}");
+    assert_eq!(checked_in()["steps"].as_array().unwrap().len(), 1);
+    assert_eq!(again["step"]["revision"], 3, "{again}");
+    let repeated = define(Side::Peer).await;
+    assert_eq!(repeated["step"]["revision"], 3, "{repeated}");
+    // Read back with the peer's own id, so a dispatch on the peer finds the ticket.
+    let shown = fleet.readiness(&step).await;
+    assert_eq!(shown["step"]["target"]["target_id"], TARGET_B, "{shown}");
+    assert_eq!(
+        shown["step"]["target"]["connection_id"],
+        peer.as_str(),
+        "{shown}"
+    );
+    // Its prerequisite, named through the peer, is the step planned through the home.
+    let before = fleet
+        .plan(&orchestration, Side::Controller, &first, json!([]))
+        .await;
+    let before = before["step"]["step_id"].as_str().unwrap().to_owned();
+    let shown = fleet.readiness(&before).await;
+    assert_eq!(shown["unblocks"], json!([step]), "{shown}");
+    assert_eq!(fleet.readiness(&step).await["level"], "blocked");
+    assert_eq!(checked_in()["steps"].as_array().unwrap().len(), 2);
+    fleet.shut_down().await;
+}

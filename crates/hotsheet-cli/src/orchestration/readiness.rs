@@ -267,8 +267,12 @@ pub const OVERRIDE_OPTIONS: [&str; 2] = ["Start anyway", "Wait until it is ready
 impl OrchestrationRuntime {
     /// HS2-YDY5HJ: the step definitions are checked in under each orchestration
     /// project's checkout; what this machine observed and published stays in its home.
+    ///
+    /// HS2-EPRWB6: steps are checked in with the home site's connection ids and read
+    /// back with this machine's, joined by the sources its bindings confirmed.
     pub(super) fn plan(&self) -> PlanRegistry {
         let checkouts = self.checkouts.clone();
+        let runtime = self.clone();
         PlanRegistry::new(&self.home, move |owner_id| {
             let checkout = checkouts
                 .describe(owner_id)
@@ -280,6 +284,7 @@ impl OrchestrationRuntime {
             }
             Ok(std::path::PathBuf::from(checkout.root))
         })
+        .with_sites(move |owner_id, sites| runtime.with_bound_sources(owner_id, sites))
     }
 
     /// HS2-YDY5HJ: move this machine's plan definitions kept before the plan was
@@ -336,7 +341,7 @@ impl OrchestrationRuntime {
     ) -> Result<PlanFacts, OrchestrationError> {
         // HS2-SHH7WW: a ticket reached through several sites of one project has the
         // facts of every site: reads, runs and gates are joined by project.
-        let sites = self.with_bound_sources(owner_id, self.plan().sites(owner_id)?);
+        let sites = self.plan().sites(owner_id)?;
         let mut facts = PlanFacts {
             sites: sites.clone(),
             ..PlanFacts::default()

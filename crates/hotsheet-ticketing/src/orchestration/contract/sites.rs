@@ -140,6 +140,22 @@ impl ProjectSites {
             .map_or_else(|| home.to_owned(), |((_, own), _)| own.clone())
     }
 
+    /// HS2-EPRWB6: `connection` as the checked-in plan names it: the home site's id for
+    /// the source `site` names `connection`. The home's id is the one its bound
+    /// checkout reports, the same on every machine that binds the home, so one ticket
+    /// is written alike whichever site and machine defined it.
+    pub fn shared_connection(&self, site: &str, connection: &str) -> String {
+        self.home_connection(site, connection).to_owned()
+    }
+
+    /// HS2-EPRWB6: a connection id read from the checked-in plan as this machine names
+    /// it for `site`: the site's own id for the home's source. Unchanged when this
+    /// machine does not know the site under another id, so a plan written before the
+    /// ids were shared reads as it was.
+    pub fn local_connection(&self, site: &str, connection: &str) -> String {
+        self.connection_on(site, connection, site)
+    }
+
     /// HS2-9FKTB3: the grouping of the active declarations only, the sites a step may
     /// be placed on now. A removed site is not tried again.
     pub fn active(targets: &[TargetDeclaration]) -> Self {

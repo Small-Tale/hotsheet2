@@ -964,3 +964,266 @@ fn hs2_3jgpdr_site_connection_ids_join_the_homes_by_source_identity() {
     // A grouping change leaves no stale mapping behind: a new grouping starts empty.
     assert_eq!(ProjectSites::of(&targets), plain);
 }
+
+/// HS2-EPRWB6: the checked-in plan names a ticket by the home's connection id and each
+/// machine reads it back with its own id for the site a step names. Translating from
+/// the home, from the site, and back is stable; without joined sources nothing moves.
+#[test]
+fn hs2_eprwb6_plan_ids_translate_between_the_home_and_a_site() {
+    let targets = [target(1, "Home", None), target(2, "Site", Some(1))];
+    let (home, site) = (id(1), id(2));
+    let plain = ProjectSites::of(&targets);
+    let sites = ProjectSites::of(&targets).with_sources([
+        (home.as_str(), vec![("home-conn", "store-x")]),
+        (
+            site.as_str(),
+            vec![("site-conn", "store-x"), ("site-only", "store-z")],
+        ),
+    ]);
+    // Written: the home's id, whichever site names the ticket.
+    assert_eq!(sites.shared_connection(&site, "site-conn"), "home-conn");
+    assert_eq!(sites.shared_connection(&home, "home-conn"), "home-conn");
+    // Read: the named site's own id; a home-named ticket stays the home's.
+    assert_eq!(sites.local_connection(&site, "home-conn"), "site-conn");
+    assert_eq!(sites.local_connection(&home, "home-conn"), "home-conn");
+    // A plan written before the ids were shared reads as it was.
+    assert_eq!(sites.local_connection(&site, "site-conn"), "site-conn");
+    // Round trips are stable, repeated or not.
+    for _ in 0..2 {
+        let written = sites.shared_connection(&site, "site-conn");
+        assert_eq!(sites.local_connection(&site, &written), "site-conn");
+        assert_eq!(sites.shared_connection(&site, &written), written);
+    }
+    // A source the home lacks, and a machine without joined sources, keep the id.
+    assert_eq!(sites.shared_connection(&site, "site-only"), "site-only");
+    assert_eq!(sites.local_connection(&site, "site-only"), "site-only");
+    assert_eq!(plain.shared_connection(&site, "site-conn"), "site-conn");
+    assert_eq!(plain.local_connection(&site, "home-conn"), "home-conn");
+}
+
+/// A plan registry on one machine over the shared checkout `root`, joining the home's
+/// and the site's sources by identity when `bound`.
+fn machine(root: &Path, home: &Path, bound: bool) -> PlanRegistry {
+    let anchor = root.to_path_buf();
+    let registry = PlanRegistry::new(home, move |owner| {
+        assert_eq!(owner, OWNER);
+        Ok(anchor.clone())
+    });
+    if !bound {
+        return registry;
+    }
+    registry.with_sites(|owner, sites| {
+        assert_eq!(owner, OWNER);
+        let (home, site) = (id(1), id(2));
+        sites.with_sources([
+            (home.as_str(), vec![("home-conn", "store-x")]),
+            (site.as_str(), vec![("site-conn", "store-x")]),
+        ])
+    })
+}
+
+fn after(target: u128, connection: &str, native: &str) -> Prerequisite {
+    Prerequisite::Ticket {
+        target_id: id(target),
+        connection_id: connection.into(),
+        native_id: native.into(),
+        gates: GateRequirement::None,
+        commit: None,
+    }
+}
+
+/// HS2-EPRWB6: one ticket of a project is one checked-in step whichever site and
+/// machine defined it. Each machine reads the step with its own ids, a prerequisite
+/// named through either site is an edge, and the machine's reads of it are kept.
+#[test]
+fn hs2_eprwb6_one_checked_in_step_whichever_machine_defines_it() {
+    let root = tempfile::tempdir().unwrap();
+    let (home_a, home_b, home_c) = (
+        tempfile::tempdir().unwrap(),
+        tempfile::tempdir().unwrap(),
+        tempfile::tempdir().unwrap(),
+    );
+    let store = ManifestStore::new(root.path());
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let view = store.add(None, target(1, "Home", None), &mut tx).unwrap();
+    store
+        .add(view.revision, target(2, "Site", Some(1)), &mut tx)
+        .unwrap();
+    let a = machine(root.path(), home_a.path(), true);
+    let b = machine(root.path(), home_b.path(), true);
+    let checked_in = || SharedPlanStore::new(root.path()).read().unwrap().unwrap();
+
+    // Machine A plans the ticket through the site, after a ticket named through it.
+    let (first, changed) = define(
+        &a,
+        on(2, "site-conn", "T-1"),
+        vec![after(2, "site-conn", "T-0")],
+        &mut tx,
+    )
+    .unwrap();
+    assert!(changed);
+    assert_eq!(first.target, on(2, "site-conn", "T-1"));
+    let document = checked_in();
+    assert_eq!(document.steps.len(), 1);
+    assert_eq!(document.steps[0].target, on(2, "home-conn", "T-1"));
+    assert_eq!(
+        document.steps[0].prerequisites,
+        vec![after(2, "home-conn", "T-0")]
+    );
+
+    // Machine B plans the same ticket through the home: the same step, moved.
+    let (moved, changed) = define(
+        &b,
+        on(1, "home-conn", "T-1"),
+        vec![after(1, "home-conn", "T-0")],
+        &mut tx,
+    )
+    .unwrap();
+    assert!(changed);
+    assert_eq!(moved.step_id, first.step_id);
+    assert_eq!(moved.revision, first.revision + 1);
+    // And back through the site: still one step; repeating it changes nothing.
+    let (back, changed) = define(
+        &b,
+        on(2, "site-conn", "T-1"),
+        vec![after(2, "site-conn", "T-0")],
+        &mut tx,
+    )
+    .unwrap();
+    assert!(changed);
+    assert_eq!(back.step_id, first.step_id);
+    let revision = checked_in().revision;
+    for registry in [&a, &b] {
+        let (same, changed) = define(
+            registry,
+            on(2, "site-conn", "T-1"),
+            vec![after(2, "site-conn", "T-0")],
+            &mut tx,
+        )
+        .unwrap();
+        assert!(!changed);
+        assert_eq!(same, back);
+    }
+    assert_eq!(checked_in().revision, revision);
+    assert_eq!(checked_in().steps.len(), 1);
+
+    // Either machine finds it through either site, named with its own ids.
+    for registry in [&a, &b] {
+        for target in [on(1, "home-conn", "T-1"), on(2, "site-conn", "T-1")] {
+            let found = registry.find_target(OWNER, &target).unwrap().unwrap();
+            assert_eq!(found.step_id, first.step_id);
+            assert_eq!(found.target, on(2, "site-conn", "T-1"));
+        }
+        assert_eq!(registry.records(OWNER).unwrap().len(), 1);
+    }
+
+    // The prerequisite planned through the home is an edge on both machines.
+    let (before, _) = define(&a, on(1, "home-conn", "T-0"), Vec::new(), &mut tx).unwrap();
+    for registry in [&a, &b] {
+        let steps: Vec<PlanStep> = registry
+            .records(OWNER)
+            .unwrap()
+            .into_iter()
+            .map(|record| record.step)
+            .collect();
+        let facts = PlanFacts {
+            sites: registry.sites(OWNER).unwrap(),
+            ..PlanFacts::default()
+        };
+        let answers = evaluate_plan(&steps, &facts);
+        let prerequisite = answers
+            .iter()
+            .find(|answer| answer.step.step_id == before.step_id)
+            .unwrap();
+        assert_eq!(prerequisite.unblocks, vec![first.step_id.clone()]);
+    }
+
+    // A read through the site with this machine's id is kept for the step.
+    let seen = TicketUpdate {
+        observed: Some(TicketSeen {
+            at_ms: 100,
+            exists: true,
+            status: "not_started".into(),
+            priority: None,
+            up_next: None,
+            created_at_ms: None,
+            opted_out: None,
+            slug: None,
+        }),
+        unreachable: Some(None),
+    };
+    assert!(a.observe(OWNER, &on(2, "site-conn", "T-1"), seen).unwrap());
+    assert!(
+        a.tickets(OWNER)
+            .unwrap()
+            .iter()
+            .any(|record| record.target == on(2, "site-conn", "T-1"))
+    );
+
+    // A machine that has not joined the sources reads the shared ids as they are.
+    let c = machine(root.path(), home_c.path(), false);
+    let found = c
+        .find_target(OWNER, &on(2, "home-conn", "T-1"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(found.step_id, first.step_id);
+}
+
+/// HS2-EPRWB6: a plan checked in before the ids were shared keeps reading as it was.
+/// Defining the same ticket again finds that step and does not rewrite it; a change
+/// writes it with the home's ids.
+#[test]
+fn hs2_eprwb6_a_plan_written_with_site_ids_keeps_reading() {
+    let root = tempfile::tempdir().unwrap();
+    let (home_old, home_new) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let store = ManifestStore::new(root.path());
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let view = store.add(None, target(1, "Home", None), &mut tx).unwrap();
+    store
+        .add(view.revision, target(2, "Site", Some(1)), &mut tx)
+        .unwrap();
+    // Written by a machine that compared ids as they were.
+    let old = machine(root.path(), home_old.path(), false);
+    let (legacy, _) = define(&old, on(2, "site-conn", "T-1"), Vec::new(), &mut tx).unwrap();
+    let document = SharedPlanStore::new(root.path()).read().unwrap().unwrap();
+    assert_eq!(document.steps[0].target, on(2, "site-conn", "T-1"));
+
+    let new = machine(root.path(), home_new.path(), true);
+    assert_eq!(
+        new.records(OWNER).unwrap()[0].step.target,
+        on(2, "site-conn", "T-1")
+    );
+    // The same definition through the site, or the ticket found through the home.
+    let (same, changed) = define(&new, on(2, "site-conn", "T-1"), Vec::new(), &mut tx).unwrap();
+    assert!(!changed);
+    assert_eq!(same.step_id, legacy.step_id);
+    assert_eq!(
+        SharedPlanStore::new(root.path()).read().unwrap().unwrap(),
+        document
+    );
+    assert_eq!(
+        new.find_target(OWNER, &on(1, "home-conn", "T-1"))
+            .unwrap()
+            .unwrap()
+            .step_id,
+        legacy.step_id
+    );
+    // A change through the home moves it there, with the home's id.
+    let (moved, changed) = define(&new, on(1, "home-conn", "T-1"), Vec::new(), &mut tx).unwrap();
+    assert!(changed);
+    assert_eq!(moved.step_id, legacy.step_id);
+    let document = SharedPlanStore::new(root.path()).read().unwrap().unwrap();
+    assert_eq!(document.steps.len(), 1);
+    assert_eq!(document.steps[0].target, on(1, "home-conn", "T-1"));
+    assert_eq!(document.schema_version, ORCHESTRATION_VERSION);
+}

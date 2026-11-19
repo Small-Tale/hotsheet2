@@ -215,6 +215,22 @@ ticket whichever machine's id names it. A step's run dispatched on another site 
 that site's own connection id, so the site's server finds the ticket. A source the home
 is not bound to keeps its own id.
 
+**Checked-in plan steps name the home's id (HS2-EPRWB6).** A step definition is shared
+through the checked-in plan, so it must not carry one machine's id. When a step is
+defined, its target and each ticket prerequisite are written with the home site's
+connection id for their source (`ProjectSites::shared_connection`). The home's id is the
+one its bound checkout reports, the same on every machine that binds the home, so one
+ticket is written alike whichever site and machine defined it, and `define` and
+`find_target` through any site find that one step. A machine reads each step back with
+its own id for the site the step names (`local_connection`), so its ticket reads, its
+refresh and a dispatch through that site name the ticket as the site's server knows it.
+The document shape and version 1 are unchanged: a step checked in before this, with a
+site's own id, reads as it was, is found through either site, and is not rewritten by
+the same definition again; the next real change writes it with the home's id. Steps a
+change does not touch are never rewritten, so two machines never conflict over a
+re-encoding. A machine whose bindings have not confirmed both the home's and the site's
+sources compares and reads ids as they are.
+
 A step names one site, and the scheduler may place it on any active site of its
 project by capacity and capabilities (HS2-9FKTB3, "Which site runs a step" under
 Packing); the step's run is dispatched on the chosen site. Each site's OS and tools
@@ -6049,18 +6065,19 @@ sync of its clone. The test plays the agents (the dispatcher assigning, the work
 the integrator) through the hosting server's own routes. Every wait is woken by an
 event stream or a file change, with a deadline. The whole path is proven:
 
-| Claim                                               | How the test shows it                                                                                                                                                      |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One claim per ticket under forced concurrent claims | Both servers claim one ticket at once: exactly one succeeds, and both clones name that holder after a sync                                                                 |
-| One run, one session and one claim per ticket       | Three steps end with three runs, three worker sessions, and one claim event per ticket in both clones                                                                      |
-| Steps land only on matching sites                   | `os:windows` is placed on the peer and `os:linux` and `tools:fake-codex` on the home, each naming why the other site was passed over                                       |
-| One dispatcher and one integrator, on the home      | The loop starts exactly one of each, both on the home site, and five sessions in all                                                                                       |
-| The site worker joins the home's pool               | The relay registers it under its session id, and its host tells it `site_assigned`                                                                                         |
-| Overlapping scopes serialized                       | The home's pool refuses a home worker's scope that overlaps the peer's pending one, and offers it once the peer's work is integrated                                       |
-| The release wakes the home's loop                   | The peer's release turns the run `intervened` on the peer's change feed, and the home then records the handoff with the pushed commit fetched; nothing asks the controller |
-| Linear `main`, each commit once                     | No merge commits, each ticket's commit subject once, the same `main` on the remote and both machines                                                                       |
-| All tickets complete and the stores converge        | Every run completes through its own site's feed, and both store clones have one `HEAD` and every ticket completed                                                          |
-| A peer outage takes no second claim                 | With the peer down and the home free again, a pass starts nothing for the peer's step, which keeps one run and one claim                                                   |
+| Claim                                               | How the test shows it                                                                                                                                                                                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One claim per ticket under forced concurrent claims | Both servers claim one ticket at once: exactly one succeeds, and both clones name that holder after a sync                                                                                                                                           |
+| One run, one session and one claim per ticket       | Three steps end with three runs, three worker sessions, and one claim event per ticket in both clones                                                                                                                                                |
+| Steps land only on matching sites                   | `os:windows` is placed on the peer and `os:linux` and `tools:fake-codex` on the home, each naming why the other site was passed over                                                                                                                 |
+| One dispatcher and one integrator, on the home      | The loop starts exactly one of each, both on the home site, and five sessions in all                                                                                                                                                                 |
+| The site worker joins the home's pool               | The relay registers it under its session id, and its host tells it `site_assigned`                                                                                                                                                                   |
+| Overlapping scopes serialized                       | The home's pool refuses a home worker's scope that overlaps the peer's pending one, and offers it once the peer's work is integrated                                                                                                                 |
+| The release wakes the home's loop                   | The peer's release turns the run `intervened` on the peer's change feed, and the home then records the handoff with the pushed commit fetched; nothing asks the controller                                                                           |
+| Linear `main`, each commit once                     | No merge commits, each ticket's commit subject once, the same `main` on the remote and both machines                                                                                                                                                 |
+| All tickets complete and the stores converge        | Every run completes through its own site's feed, and both store clones have one `HEAD` and every ticket completed                                                                                                                                    |
+| One plan step whichever site defines it             | One ticket defined through the peer, the home and the peer again is one step, checked in with the home's connection id and shown with the peer's; a prerequisite named through the peer is an edge to the step planned through the home (HS2-EPRWB6) |
+| A peer outage takes no second claim                 | With the peer down and the home free again, a pass starts nothing for the peer's step, which keeps one run and one claim                                                                                                                             |
 
 The proof found and fixed three defects: a step's run on another machine named the
 home's connection id (HS2-3JGPDR, above); the relay skipped `intervened` runs, so a
