@@ -46,6 +46,8 @@ pnpm-debug.log*
 /dist/
 **/dist/
 **/dist-host/
+**/dist-saver/
+/clients/macos-screensaver/build/
 /coverage/
 coverage/
 /test-results/

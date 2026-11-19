@@ -294,6 +294,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/desktop-window-theme.ts # Tauri window chrome follows the pinned theme through core `plugin:window|set_theme` (`null` under Auto) (HS2-15W35F)
     src/theme-tile-art.tsx   # Theme picker tile artwork: frozen light/dark palettes, stylized window, diagonal Auto split (HS2-EFTHS6)
     src/standby.ts           # Standby (HS2-EQVZTZ): /standby-settings contract + parser, scope by entry point, display model from live state (rows, amber alerts), clock/freshness labels, request-free idle timer
+    src/standby-saver/       # The macOS screen saver's page: snapshot.ts parses the server's credential-free snapshot and derives the standby display; main.tsx mounts the real `StandbyScreen` inline, fed through `window.hotsheetSaver.update`; built by `npm run build:saver` (vite.saver.config.ts) into one classic script and stylesheet (HS2-MZM988)
     src/feedback-response-drafts.ts # Local qualified reader response purpose, pending text, and stale-completion ownership (HS2-VBFSZJ)
     src/feedback-needed.ts   #   Client mirror of the core feedback projection (`Ticket::feedback_needed`, `wire::api_feedback_needed`): marker, exchange, presented kinds, details-card state, stale dismissals (HS2-NVD36W)
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
@@ -616,6 +617,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts
+  clients/macos-screensaver/ # macOS screen saver bundle (HS2-MZM988, docs/34 §34.12): Sources/HotSheetSaverView.swift (a `ScreenSaverView` hosting the standby page in a `WKWebView`, watching the snapshot file), Resources/standby/index.html, Info.plist, build.sh (universal ad hoc signed `HotSheet.saver`), Harness/ and check.sh (hosting check without the real engine)
   crates/
     test-support/first_launch.rs # not a crate: integration tests include it by #[path]; launches a fresh or copied binary once before any timed window (macOS first-launch assessment, HS2-04D6DW); Node twin is clients/web/scripts/first-launch.mjs
     test-support/workspace_bin.rs # not a crate: the only way integration tests locate workspace binaries; per-build snapshot of private copies (APFS clones) of the profile's executables, built by exactly one process under test-bin-snapshots/.lock so a concurrent Cargo command's uplift cannot remove them mid-test (HS2-4TCTEW; pinned by hotsheet-cli/tests/workspace_bin_policy.rs)

@@ -18,6 +18,7 @@
 /clients/web/ai/component-catalog-extension.json
 /clients/web/ai/component-composition.generated.json
 **/dist-host/
+**/dist-saver/
 /clients/web/src-tauri/resources/
 /clients/web/src-tauri/binaries/
 /clients/web/src-tauri/gen/

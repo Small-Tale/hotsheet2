@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hot Sheet standby</title>
+    <link rel="stylesheet" href="standby.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app" class="kui-app-root"></main>
+    <!-- A classic script: WebKit refuses module scripts over file://, which is how the saver loads this page. -->
+    <script src="standby.js"></script>
+  </body>
+</html>
