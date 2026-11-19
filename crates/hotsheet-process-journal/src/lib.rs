@@ -331,15 +331,7 @@ impl DetachedChild {
             Detached::Tracked(child) => child.kill(),
             Detached::Spawned { pid, status } => {
                 if status.is_none() {
-                    #[cfg(unix)]
-                    {
-                        let pid = libc::pid_t::try_from(*pid).map_err(io::Error::other)?;
-                        // SAFETY: the pid is this process's own unreaped child, so it cannot
-                        // name another process.
-                        if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-                            return Err(io::Error::last_os_error());
-                        }
-                    }
+                    kill_spawned(*pid)?;
                     self.killed = true;
                 }
                 Ok(())
@@ -386,6 +378,25 @@ fn reap(pid: u32, block: bool) -> io::Result<Option<ExitStatus>> {
 
 #[cfg(not(unix))]
 fn reap(_pid: u32, _block: bool) -> io::Result<Option<ExitStatus>> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
+}
+
+/// SIGKILL child `pid`, which the caller has not reaped, so it cannot name another process.
+#[cfg(unix)]
+fn kill_spawned(pid: u32) -> io::Result<()> {
+    let pid = libc::pid_t::try_from(pid).map_err(io::Error::other)?;
+    // SAFETY: the pid is this process's own unreaped child, so it cannot name another process.
+    if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// HS2-AS2285: only macOS launches through `posix_spawn`, so other targets never hold a
+/// `Detached::Spawned` child; like [`reap`], killing one is unsupported rather than a silent
+/// success that would record the launch as killed.
+#[cfg(not(unix))]
+fn kill_spawned(_pid: u32) -> io::Result<()> {
     Err(io::Error::from(io::ErrorKind::Unsupported))
 }
 
