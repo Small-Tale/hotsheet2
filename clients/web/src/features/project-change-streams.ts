@@ -32,6 +32,7 @@ import {
 } from '../project-change-poll';
 import { createProjectChangeRefresh } from '../project-change-refresh';
 import type { createRefreshBarrier } from '../refresh-barrier';
+import type { RemoteHostHealth } from '../remote-host-health';
 import type { RemoteLiveStates } from '../remote-live-states';
 import { isRemoteProjectId } from '../remote-projects/identity';
 import { type ServerClocks, serverClocks } from '../server-clock';
@@ -104,6 +105,11 @@ export interface ProjectChangeStreamsDependencies {
    * each stream resync re-reads it. No timer reads it.
    */
   hostHealth?: Pick<HostHealthResource, 'applyEvents' | 'resync'>;
+  /**
+   * Host health of cross-server project tabs (HS2-K4DY5G): a remote project's `host_health` events and
+   * resync feed its own server's resource here, never the local `hostHealth`.
+   */
+  remoteHostHealth?: Pick<RemoteHostHealth, 'resourceFor' | 'drop'>;
   /**
    * Machine-wide standby settings (HS2-A5BTTK): `standby_settings` events trigger one coalesced
    * re-read and each stream resync re-reads them. No timer reads them.
@@ -303,6 +309,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     liveStates,
     remoteLiveStates,
     hostHealth,
+    remoteHostHealth,
     standbySettings,
     browserGrants,
     pairingRequests,
@@ -390,6 +397,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         ticketRefresh.cancel(id);
         removeClientNotifications?.(id);
         remoteLiveStates?.drop(id);
+        remoteHostHealth?.drop(id);
         onStreamHealth?.(id, undefined);
       }
     for (const [id, timer] of repositoryRefreshTimers)
@@ -427,6 +435,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         const unfollowTicketReads = ticketReadCursors.follow(current.apiPath, handshakeGap.read);
         // A remote tab's snapshots are the remote server's own: they never enter the local store.
         const projectLiveStore = isRemoteProjectId(current.id) ? remoteLiveStates?.storeFor(current.id) : liveStates;
+        const projectHostHealth = isRemoteProjectId(current.id)
+          ? remoteHostHealth?.resourceFor(current.id, () => new Api(current.apiPath))
+          : hostHealth;
         const stopStream = startStream(current, {
           client: new Api(current.apiPath),
           beforeRefresh: () => localTicketMutationBarrier.wait(),
@@ -443,7 +454,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(refreshAdvisoryClaim ? [refreshAdvisoryClaim(current)] : []),
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
               ...(projectLiveStore ? [projectLiveStore.resync(new Api(current.apiPath))] : []),
-              ...(hostHealth ? [hostHealth.resync()] : []),
+              ...(projectHostHealth ? [projectHostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
               ...(browserGrants ? [browserGrants.resync()] : []),
               ...(pairingRequests ? [pairingRequests.resync()] : []),
@@ -461,7 +472,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           onEvents: contained(async (response) => {
             onStreamHealth?.(current.id, true);
             projectLiveStore?.applyEvents(response.events);
-            void hostHealth?.applyEvents(response.events);
+            void projectHostHealth?.applyEvents(response.events);
             void standbySettings?.applyEvents(response.events);
             void browserGrants?.applyEvents(response.events);
             void pairingRequests?.applyEvents(response.events);

@@ -243,6 +243,7 @@ import {
 } from '../project-ticket-refresh';
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
+import { createRemoteHostHealth, projectHostHealth } from '../remote-host-health';
 import { createRemoteLiveStates, projectLiveStates } from '../remote-live-states';
 import {
   desktopRemoteForget,
@@ -4551,6 +4552,16 @@ export async function startHotSheetWebClient() {
     const target = projects.peek().find((item) => item.id === statsProjectId.peek()) ?? projects.peek().at(0);
     return new Api(target?.apiPath ?? '');
   });
+  // A cross-server tab reads its own server's health (HS2-K4DY5G); the sidebar picks per project.
+  const remoteHostHealth = createRemoteHostHealth();
+  const sidebarHostHealth = projectHostHealth(
+    {
+      get value() {
+        return hostHealth.state.value.snapshot;
+      },
+    },
+    remoteHostHealth,
+  );
   // The live CPU feed (HS2-CPFBWP) reads through the same server; the Stats glance starts it only while
   // Stats shows on a visible page.
   const hostCpu = createHostCpuFeed(() => {
@@ -4674,6 +4685,7 @@ export async function startHotSheetWebClient() {
     liveStates,
     remoteLiveStates,
     hostHealth,
+    remoteHostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
     browserGrants,
     pairingRequests,
@@ -5247,11 +5259,7 @@ export async function startHotSheetWebClient() {
     liveStates: sidebarLiveStates,
     liveClock,
     liveSectionExpanded,
-    hostHealth: {
-      get value() {
-        return hostHealth.state.value.snapshot;
-      },
-    },
+    hostHealth: sidebarHostHealth.forProject,
   });
   /**
    * Settings → Permissions lays the pending request's popup out above its automation controls instead of
@@ -7508,6 +7516,7 @@ export async function startHotSheetWebClient() {
       statsGlance.dispose();
       hostCpu.stop();
       hostHealth.dispose();
+      remoteHostHealth.reset();
       disposeGridSidebarPages();
       terminalOperationsSurface.dispose();
       liveStates.reset();

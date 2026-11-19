@@ -197,7 +197,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   checkout id, and the remote server may host a store whose id the local server also uses, so each remote
   project owns a live store fed by its own change stream and its own `GET /live-state` resync, and the section
   reads the stores linked to the remote checkout id. A remote snapshot never enters the local store, so it
-  cannot overwrite a local one, and closing the tab drops it. The remote host's warnings are HS2-K4DY5G.
+  cannot overwrite a local one, and closing the tab drops it.
+- **Remote host warnings (HS2-K4DY5G).** The disk, memory, and other callouts describe the machine the project
+  runs on, so a remote tab shows its own server's health and never this machine's. Each remote project owns a
+  host-health resource read through its bridge path, fed by that tab's `host_health` events and resync; until
+  it has read once the tab shows no callouts rather than the local ones. The local resource, standby, and the
+  away digest keep reading this machine.
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes

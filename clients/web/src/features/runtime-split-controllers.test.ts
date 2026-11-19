@@ -11,10 +11,12 @@ import type { Project } from '../interactions/types';
 import { createLiveStateStore } from '../live-state';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createRefreshBarrier } from '../refresh-barrier';
+import { createRemoteHostHealth } from '../remote-host-health';
 import { createRemoteLiveStates } from '../remote-live-states';
 import { remoteProjectId } from '../remote-projects/identity';
 import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketView } from '../ticket-views';
+import { demoHostHealth } from '../ux-demo/live-section-fixtures';
 import {
   CHANGE_STREAM_WORKER_READY_TIMEOUT_SETTING,
   changeStreamWorkerReadyTimeoutMs,
@@ -583,6 +585,74 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.syncProjectChangeStreams();
     expect(remoteLiveStates.forProject(remoteId)).toEqual([]);
     expect(liveStates.forProject('a')).toHaveLength(1);
+    owner.dispose();
+  });
+
+  it('change streams: a remote project reads its own server host health, never the local resource (HS2-K4DY5G)', async () => {
+    const remoteId = remoteProjectId('01M7S5JGSGWFWB3A2WHJ0P2NTC', 'far-ab12cd'),
+      reads: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        reads.push(url);
+        const body = url.endsWith('/host-health')
+          ? { ...demoHostHealth('battery'), host: { name: 'far-host', os: 'linux', arch: 'x86_64' } }
+          : { epoch_ms: 1, stores: [] };
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+    const projects = signal([project('a'), project(remoteId)]),
+      noop = vi.fn(async () => undefined),
+      hostHealth = { applyEvents: vi.fn(() => undefined), resync: vi.fn(async () => undefined) },
+      remoteHostHealth = createRemoteHostHealth(),
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        hostHealth,
+        remoteHostHealth,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get(`/api/${remoteId}`)!('initial');
+    // The remote tab's resync read its own server's health and left the local resource alone.
+    expect(reads.filter((url) => url.endsWith('/host-health'))).toEqual([`/api/${remoteId}/host-health`]);
+    expect(remoteHostHealth.snapshot(remoteId)?.host.name).toBe('far-host');
+    expect(hostHealth.resync).not.toHaveBeenCalled();
+    // A remote host_health event reads the remote again and never the local resource.
+    const events = [{ kind: 'host_health', store: '', id: 'h', slug: '', cursor: 1 }];
+    await streams.onEvents.get(`/api/${remoteId}`)!({ cursor: 1, overflow: false, events });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads.filter((url) => url.endsWith('/host-health'))).toHaveLength(2);
+    expect(hostHealth.applyEvents).not.toHaveBeenCalled();
+    // The local project's stream still feeds the local resource.
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onEvents.get('/api/a')!({ cursor: 2, overflow: false, events });
+    expect(hostHealth.resync).toHaveBeenCalledTimes(1);
+    expect(hostHealth.applyEvents).toHaveBeenCalledWith(events);
+    // Closing the remote tab drops its resource.
+    projects.value = [project('a')];
+    owner.syncProjectChangeStreams();
+    expect(remoteHostHealth.snapshot(remoteId)).toBeUndefined();
     owner.dispose();
   });
 
