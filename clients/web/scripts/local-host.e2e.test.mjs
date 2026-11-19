@@ -186,10 +186,12 @@ productionEnvironment.HOTSHEET_TEST_SERVER_OWNER_PID = 'host';
 
 // Exercise the working tree's server, not a possibly stale release build the host would prefer.
 const target = resolve(repoRoot, process.env.CARGO_TARGET_DIR ?? 'target');
+// HS2-XP3Y4D: Cargo writes `.exe` images on Windows, and a copy must keep that suffix to run.
+const exe = process.platform === 'win32' ? '.exe' : '';
 const workingTreeBinaries = {
-  HOTSHEET_SERVER_BIN: resolve(target, 'debug/hotsheet-server'),
-  HOTSHEET_CLI_BIN: resolve(target, 'debug/hotsheet-cli'),
-  HOTSHEET_MIGRATE_BIN: resolve(target, 'debug/hotsheet-migrate'),
+  HOTSHEET_SERVER_BIN: resolve(target, `debug/hotsheet-server${exe}`),
+  HOTSHEET_CLI_BIN: resolve(target, `debug/hotsheet-cli${exe}`),
+  HOTSHEET_MIGRATE_BIN: resolve(target, `debug/hotsheet-migrate${exe}`),
 };
 
 /** The bootstrap machine server's registration under `home` (pid, launcher, build), or undefined. */
@@ -208,7 +210,7 @@ async function copyBinaries(directory) {
   return Object.fromEntries(
     await Promise.all(
       Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
-        const destination = resolve(directory, variable.toLowerCase());
+        const destination = resolve(directory, `${variable.toLowerCase()}${exe}`);
         // A server started from an earlier copy may still be executing `destination`; Linux
         // refuses to overwrite a running executable (ETXTBSY) but allows replacing it by rename.
         const staged = `${destination}.${process.pid}.${Date.now()}.tmp`;
@@ -297,7 +299,7 @@ it.concurrent(
       const candidates = Object.fromEntries(
         await Promise.all(
           Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
-            const destination = resolve(candidateBin, variable.toLowerCase());
+            const destination = resolve(candidateBin, `${variable.toLowerCase()}${exe}`);
             await copyFile(source, destination);
             await chmod(destination, (await stat(source)).mode & 0o777);
             // Launch each copy once before the host probes it, so its startup window is not spent (HS2-04D6DW, HS2-B74N07).
