@@ -67,9 +67,9 @@ pub use capacity::{
     AdmissionStore, AdmissionView, CAPACITY_DISK_STEP_MB, CAPACITY_LOAD_STEP_PERCENT,
     CAPACITY_MEMORY_STEP_MB, CapacityField, CapacitySnapshot, CpuCapacity,
     DEFAULT_SESSION_FOOTPRINT_MB, DiskCapacity, FootprintSource, HeldClaim, HostObservation,
-    MAX_CLAIM_NAMESPACES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState, SessionFootprint,
-    TargetSpeculation, ToolAvailability, capacity_version, decide_admission, effective_limits,
-    estimated_footprint,
+    MAX_CLAIM_NAMESPACES, MAX_CLAIM_PAGES, MAX_SESSION_FOOTPRINT_MB, MemoryCapacity, PoolState,
+    SessionFootprint, TargetSpeculation, ToolAvailability, UnreadableNamespace, capacity_version,
+    decide_admission, effective_limits, estimated_footprint,
 };
 pub use contract::*;
 pub use gates::{

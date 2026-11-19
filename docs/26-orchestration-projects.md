@@ -1023,7 +1023,12 @@ estimated in its place.
   a partial list. When a named namespace's
   backend cannot be read, `claims` is `null` as a whole and `claims_offline` says
   what that backend's configuration asks for meanwhile (`fail_closed` or
-  `provisional`, §26.20); the member is absent otherwise.
+  `provisional`, §26.20); the member is absent otherwise. Since HS2-KCEHVR the same
+  answer also carries `claims_unreadable`, each unreadable namespace with its own
+  policy, and `claims_readable`, the claims of the namespaces that were read. A reader
+  that does not know them still sees every namespace unknown under the strictest
+  policy, so it never takes a partial list as complete; both are absent when every
+  namespace was read.
 - **Privacy** follows HS2-SW5ZK3. A process is a session id, a tool name and numbers.
   No process path, command line, working directory, user name or claim metadata is in
   a snapshot, for a local or a remote reader.
@@ -3888,8 +3893,12 @@ The same name on two machines is two resources; two targets on one machine share
 that machine's. Each claim reaches the scheduler as a namespace, a resource and an
 expiry, never a holder, a token or metadata.
 
-One read lists at most eight namespaces. A namespace beyond that is unknown, not
-assumed free (HS2-KCEHVR).
+One read lists at most eight namespaces, so a pass reads a target's namespaces in
+pages of eight, at most four reads (32 namespaces) per target (HS2-KCEHVR). The first
+page's answer is the target's capacity and the one a capacity watch follows; a later
+page contributes only its claims, and a page that cannot be read leaves its
+namespaces unknown under `fail_closed`. A namespace beyond the fourth page is unknown
+(`namespace_limit`), not assumed free.
 
 ### What a pass decides
 
@@ -3958,11 +3967,16 @@ work is never started on the same unverified resource in one pass, and when the
 backend returns, the claim the session took is read like any other. A provisional
 claim is never treated as exclusive.
 
-Backend configurations do not exist yet (HS2-JJWESD). Every namespace is served by
-the local machine backend, which is never offline; a namespace whose stored state
-cannot be read fails closed. The `provisional` policy is reached only through the
-claim-source seam (`ClaimSource`), which the configured backends will implement
-(HS2-KCEHVR). An older peer that reports no policy fails closed.
+The policy is the one the namespace's machine binding names (§36.7, HS2-JJWESD),
+read through `hotsheet_resource_claims::offline_policy` when its backend cannot be
+read (HS2-KCEHVR). An unbound namespace is served by the local machine backend; it,
+a local configuration, and a configuration registry that cannot itself be read fail
+closed. Each unreadable namespace is decided by its own policy: on one machine a
+`provisional` namespace can start work while a `fail_closed` one defers its work,
+and the namespaces that were read are held or free as usual. An older peer that
+reports only one policy for all of them is read that way, and one that reports no
+policy fails closed. The capacity read uses the machine's bindings, not a hosted
+project's own (HS2-AP8KPT).
 
 ### Reading contention
 

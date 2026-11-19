@@ -140,6 +140,8 @@ pub(super) fn snapshot(server: u128, free_ram_mb: u64, running: u32) -> Capacity
         claims: None,
         claim_namespaces: Vec::new(),
         claims_offline: None,
+        claims_readable: None,
+        claims_unreadable: Vec::new(),
         speculation: None,
         version: None,
         pool: None,

@@ -832,19 +832,68 @@ fn hs2_2fg91x_requirements_are_validated_where_they_are_declared() {
     }
 }
 
+/// HS2-KCEHVR: one read lists eight namespaces, so a target's namespaces are read in
+/// pages of eight, at most four per pass. Only a namespace beyond the fourth page is
+/// unknown, never assumed free.
 #[test]
 fn hs2_2fg91x_a_namespace_one_read_has_no_room_for_is_unknown_not_free() {
     tx!(tx);
     let s = setup(true, &mut tx);
     let mut body = policy(false);
+    body.machine.max_sessions = 12;
+    for tool in &mut body.tools {
+        tool.max_sessions = 12;
+    }
+    body.targets[0].max_sessions = 12;
+    set_policy(&s.m, body, &mut tx);
+    // Thirty-three namespaces across nine steps; one pass reads thirty-two.
+    let names: Vec<String> = (0..33).map(|n| format!("ns{n:02}/r")).collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let steps: Vec<String> = refs
+        .chunks(4)
+        .enumerate()
+        .map(|(n, chunk)| s.ready_needing(&format!("Step {n}"), chunk, &mut tx).1)
+        .collect();
+    let read = s.probe.asked();
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&s.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    // Four reads of eight, one target.
+    assert_eq!(s.probe.asked() - read, 4);
+    // Every namespace in the four pages was read: only the 33rd is unknown. (Steps
+    // the machine has no room for this pass wait for room, not for a resource.)
+    let unknown: Vec<_> = plan
+        .schedule
+        .unplaced
+        .iter()
+        .filter(|item| item.reason.code() == "resource_unknown")
+        .map(|item| (item.step_id.clone(), item.detail.clone()))
+        .collect();
+    assert_eq!(unknown, [(steps[8].clone(), Some("ns32/r".to_owned()))]);
+    assert_eq!(plan.schedule.contention.len(), 1);
+    assert_eq!(
+        plan.schedule.contention[0].unreadable,
+        Some(UnreadableReason::NamespaceLimit)
+    );
+    assert_eq!(plan.inputs.unreadable_namespaces, 1);
+}
+
+/// HS2-KCEHVR: a namespace on a later page is read, not assumed free: its claim
+/// defers the work that needs it.
+#[test]
+fn hs2_kcehvr_a_claim_on_a_later_page_is_read_and_defers_its_work() {
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let mut body = policy(false);
     body.targets[0].max_sessions = 4;
     set_policy(&s.m, body, &mut tx);
-    // Nine namespaces across three steps; one capacity read lists eight.
     let names: Vec<String> = (0..9).map(|n| format!("ns{n}/r")).collect();
     let refs: Vec<&str> = names.iter().map(String::as_str).collect();
     let (_, a) = s.ready_needing("A", &refs[0..4], &mut tx);
     let (_, b) = s.ready_needing("B", &refs[4..8], &mut tx);
     let (_, c) = s.ready_needing("C", &refs[8..9], &mut tx);
+    let grant = acquire(&s.m.home, "ns8/r");
     let plan =
         s.m.runtime
             .scheduler_plan(&s.owner(), Some(&worker()), &mut tx)
@@ -857,12 +906,166 @@ fn hs2_2fg91x_a_namespace_one_read_has_no_room_for_is_unknown_not_free() {
         .collect();
     assert!(started.contains(&a) && started.contains(&b));
     assert_eq!(plan.schedule.unplaced[0].step_id, c);
-    assert_eq!(unplaced(&plan), [("resource_unknown", Some("ns8/r"))]);
-    assert_eq!(
-        plan.schedule.contention[0].unreadable,
-        Some(UnreadableReason::NamespaceLimit)
+    assert_eq!(unplaced(&plan), [("resource_held", Some("ns8/r"))]);
+    assert_eq!(plan.inputs.unreadable_namespaces, 0);
+    release(&s.m.home, &grant);
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&s.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    assert!(
+        plan.schedule.unplaced.is_empty(),
+        "{:?}",
+        plan.schedule.unplaced
     );
-    assert_eq!(plan.inputs.unreadable_namespaces, 1);
+}
+
+/// HS2-KCEHVR: the machine's own claim service reports each unreadable namespace with
+/// the offline policy its configuration names, and the claims of the namespaces it
+/// could read. The scheduler defers only the unreadable work, each by its own policy.
+/// A configuration bound on the machine without a repository cannot be read; no
+/// credential is configured, so nothing reaches a credential store.
+#[test]
+fn hs2_kcehvr_each_unreadable_namespace_reports_its_configured_policy() {
+    use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind, Scope};
+    tx!(tx);
+    let s = setup(true, &mut tx);
+    let mut body = policy(false);
+    body.targets[0].max_sessions = 4;
+    set_policy(&s.m, body, &mut tx);
+    let configuration = |id: &str, offline| {
+        let mut c = BackendConfiguration::new(id, BackendKind::GitRef).unwrap();
+        c.offline = offline;
+        c
+    };
+    Scope::Machine {
+        home: s.m.home.clone(),
+    }
+    .update(|r| {
+        r.upsert_configuration(configuration("open", OfflinePolicy::Provisional))?;
+        r.upsert_configuration(configuration("strict", OfflinePolicy::FailClosed))?;
+        r.bind_namespace("pool", "open");
+        r.bind_namespace("lab", "strict");
+        Ok(())
+    })
+    .unwrap();
+    let grant = acquire(&s.m.home, VM);
+
+    let snapshot =
+        s.m.runtime
+            .hosted_capacity(&s.m.target.id, &["pool".into(), "lab".into(), "vm".into()])
+            .unwrap();
+    // A reader that knows only the older members still sees every namespace unknown,
+    // under the strictest policy.
+    assert_eq!(
+        (snapshot.claims.clone(), snapshot.claims_offline),
+        (None, Some(OfflinePolicy::FailClosed))
+    );
+    let wire = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(wire["claims"], Value::Null);
+    assert_eq!(
+        wire["claims_unreadable"],
+        json!([{"namespace": "pool", "offline": "provisional"},
+            {"namespace": "lab", "offline": "fail_closed"}])
+    );
+    assert_eq!(wire["claims_readable"][0]["resource"], "macos-vm");
+    assert_eq!(wire["claims_readable"].as_array().unwrap().len(), 1);
+
+    let (_, open) = s.ready_needing("Open pool", &["pool/a"], &mut tx);
+    let (_, strict) = s.ready_needing("Strict lab", &["lab/a"], &mut tx);
+    let (_, held) = s.ready_needing("Held VM", &[VM], &mut tx);
+    let plan =
+        s.m.runtime
+            .scheduler_plan(&s.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    let started: Vec<_> = plan
+        .schedule
+        .placements
+        .iter()
+        .flat_map(|placement| placement.steps.clone())
+        .collect();
+    assert_eq!(started, [open]);
+    let mut waiting: Vec<_> = plan
+        .schedule
+        .unplaced
+        .iter()
+        .map(|item| (item.step_id.clone(), item.reason.code()))
+        .collect();
+    waiting.sort();
+    let mut expected = vec![(strict, "resource_unknown"), (held, "resource_held")];
+    expected.sort();
+    assert_eq!(waiting, expected);
+    assert_eq!(plan.inputs.unreadable_namespaces, 2);
+    release(&s.m.home, &grant);
+}
+
+/// HS2-KCEHVR: what an older peer answered, all unknown under one policy, still
+/// makes every asked namespace unknown; a partial answer without its readable claims
+/// is read the same way.
+#[test]
+fn hs2_kcehvr_an_answer_without_per_namespace_detail_keeps_every_namespace_unknown() {
+    use hotsheet_ticketing::orchestration::{CapacitySnapshot, UnreadableNamespace};
+    let mut snapshot = CapacitySnapshot::new(
+        "s".into(),
+        "c".into(),
+        HostObservation::default(),
+        vec!["a".into(), "b".into()],
+        None,
+    )
+    .with_claims_offline(Some(OfflinePolicy::Provisional));
+    assert!(snapshot.claims_unreadable.is_empty());
+    let names = vec!["a".to_owned(), "b".to_owned()];
+    let (mut held, mut unreadable) = (Vec::new(), Vec::new());
+    crate::orchestration::scheduler::read_claims(&snapshot, &names, &mut held, &mut unreadable);
+    assert!(held.is_empty());
+    assert_eq!(
+        unreadable
+            .iter()
+            .map(|entry| (entry.namespace.as_str(), entry.offline))
+            .collect::<Vec<_>>(),
+        [
+            ("a", OfflinePolicy::Provisional),
+            ("b", OfflinePolicy::Provisional)
+        ]
+    );
+    // A partial answer: only "b" is unreadable, and "a" holds a claim.
+    snapshot = snapshot.with_partial_claims(
+        vec![HeldClaim {
+            namespace: "a".into(),
+            resource: "r".into(),
+            expires_at_ms: 9,
+        }],
+        vec![UnreadableNamespace {
+            namespace: "b".into(),
+            offline: OfflinePolicy::FailClosed,
+        }],
+    );
+    let (mut held, mut unreadable) = (Vec::new(), Vec::new());
+    crate::orchestration::scheduler::read_claims(&snapshot, &names, &mut held, &mut unreadable);
+    assert_eq!(held.len(), 1);
+    assert_eq!(
+        unreadable
+            .iter()
+            .map(|entry| (entry.namespace.as_str(), entry.offline))
+            .collect::<Vec<_>>(),
+        [("b", OfflinePolicy::FailClosed)]
+    );
+    // Known claims ignore any partial detail.
+    let known = CapacitySnapshot::new(
+        "s".into(),
+        "c".into(),
+        HostObservation::default(),
+        names.clone(),
+        Some(Vec::new()),
+    )
+    .with_partial_claims(
+        Vec::new(),
+        vec![UnreadableNamespace {
+            namespace: "b".into(),
+            offline: OfflinePolicy::FailClosed,
+        }],
+    );
+    assert!(known.claims_unreadable.is_empty() && known.claims_readable.is_none());
 }
 
 /// A controller whose only target is hosted by a peer machine, reached over the

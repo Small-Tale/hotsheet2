@@ -80,10 +80,11 @@ pub trait ClaimSource: Send + Sync {
     }
 }
 
-/// The claim service of this machine (`hotsheet_resource_claims`). Backend
-/// configurations and their offline policy are HS2-JJWESD; until then every
-/// namespace is served by the local machine backend, which is never offline, and a
-/// namespace that cannot be read fails closed.
+/// The claim service of this machine (`hotsheet_resource_claims`). A namespace is
+/// served by the backend its machine binding names (HS2-JJWESD), or the machine's local
+/// backend when it is unbound. HS2-KCEHVR: a namespace whose backend cannot be read
+/// reports its configuration's offline policy; an unbound namespace, the local backend,
+/// and a configuration registry that cannot itself be read fail closed.
 pub struct MachineClaims {
     home: PathBuf,
 }
@@ -91,16 +92,24 @@ impl MachineClaims {
     pub fn new(home: impl Into<PathBuf>) -> Self {
         Self { home: home.into() }
     }
+
+    /// HS2-KCEHVR: what the configuration bound to `namespace` says to do while its
+    /// backend cannot be read.
+    fn offline(&self, namespace: &Namespace) -> ClaimsUnreachable {
+        ClaimsUnreachable {
+            offline: hotsheet_resource_claims::offline_policy(&self.home, None, namespace)
+                .unwrap_or(OfflinePolicy::FailClosed),
+        }
+    }
 }
 impl ClaimSource for MachineClaims {
     fn held(&self, namespace: &str) -> Result<Vec<HeldClaim>, ClaimsUnreachable> {
-        let closed = ClaimsUnreachable {
+        let parsed = Namespace::parse(namespace).map_err(|_| ClaimsUnreachable {
             offline: OfflinePolicy::FailClosed,
-        };
-        let parsed = Namespace::parse(namespace).map_err(|_| closed)?;
+        })?;
         Ok(ClaimService::new(&self.home)
             .list(&parsed)
-            .map_err(|_| closed)?
+            .map_err(|_| self.offline(&parsed))?
             .into_iter()
             .map(|claim| HeldClaim {
                 namespace: namespace.to_owned(),

@@ -186,9 +186,9 @@ as exclusive. The local machine backend has no remote and is never offline, so a
 configuration refuses `provisional`. The choice is recorded in the configuration
 (§36.13, HS2-JJWESD) and read through `hotsheet_resource_claims::offline_policy(home,
 project, namespace)`, or the `offline` field of `resolve`. The orchestration
-scheduler already acts on either choice when a machine reports it (§26.20 of
-[26-orchestration-projects.md](26-orchestration-projects.md); HS2-KCEHVR connects
-the configured value).
+scheduler acts on either choice, per namespace, as the machine's capacity read
+reports it (§26.20 of [26-orchestration-projects.md](26-orchestration-projects.md),
+HS2-KCEHVR).
 
 ## 36.8 Plugin form
 

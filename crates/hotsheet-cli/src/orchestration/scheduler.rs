@@ -552,7 +552,8 @@ impl OrchestrationRuntime {
                 .find(|entry| entry.target_id == target_id)
                 .and_then(|entry| entry.refused_until_ms())
                 .is_some_and(|until| until > now_ms);
-            // One read lists a bounded number of namespaces. A namespace left out is
+            // One read lists a bounded number of namespaces, and a pass makes at most
+            // MAX_CLAIM_PAGES reads of one target (HS2-KCEHVR). A namespace left out is
             // unknown, never assumed free (HS2-2FG91X).
             let mut namespaces: Vec<String> = work
                 .iter()
@@ -561,11 +562,16 @@ impl OrchestrationRuntime {
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect();
-            let left_out = namespaces.split_off(
-                namespaces
-                    .len()
-                    .min(hotsheet_ticketing::orchestration::MAX_CLAIM_NAMESPACES),
-            );
+            let left_out = namespaces.split_off(namespaces.len().min(
+                hotsheet_ticketing::orchestration::MAX_CLAIM_NAMESPACES
+                    * hotsheet_ticketing::orchestration::MAX_CLAIM_PAGES,
+            ));
+            let mut pages = namespaces
+                .chunks(hotsheet_ticketing::orchestration::MAX_CLAIM_NAMESPACES)
+                .map(<[String]>::to_vec)
+                .collect::<Vec<_>>()
+                .into_iter();
+            let namespaces = pages.next().unwrap_or_default();
             let read = if waiting {
                 Err("refusal_backoff".to_owned())
             } else if actor.is_none() {
@@ -592,26 +598,23 @@ impl OrchestrationRuntime {
                         offline,
                         reason,
                     };
-                    match &snapshot.claims {
-                        Some(claims) => held.extend(
-                            claims
-                                .iter()
-                                .filter(|claim| namespaces.contains(&claim.namespace))
-                                .map(|claim| HeldResource {
-                                    namespace: claim.namespace.clone(),
-                                    resource: claim.resource.clone(),
-                                    expires_at_ms: claim.expires_at_ms,
-                                    server_id: Some(snapshot.server_id.clone()),
-                                }),
-                        ),
-                        // An older peer says nothing of a policy: that fails closed.
-                        None => unreadable.extend(namespaces.iter().map(|namespace| {
-                            unread(
-                                namespace,
-                                snapshot.claims_offline.unwrap_or_default(),
-                                UnreadableReason::BackendUnreachable,
-                            )
-                        })),
+                    read_claims(&snapshot, &namespaces, &mut held, &mut unreadable);
+                    // HS2-KCEHVR: the further pages of this target's namespaces. Only
+                    // their claims are read; a page that cannot be read leaves its
+                    // namespaces unknown, failing closed.
+                    for page in pages.by_ref() {
+                        match Self::target_ref(owner_id, target_id)
+                            .and_then(|target| self.target_capacity(&target, &page, actor, tx))
+                        {
+                            Ok(more) => read_claims(&more, &page, &mut held, &mut unreadable),
+                            Err(_) => unreadable.extend(page.iter().map(|namespace| {
+                                unread(
+                                    namespace,
+                                    OfflinePolicy::FailClosed,
+                                    UnreadableReason::BackendUnreachable,
+                                )
+                            })),
+                        }
                     }
                     unreadable.extend(left_out.iter().map(|namespace| {
                         unread(
@@ -1601,5 +1604,66 @@ impl OrchestrationRuntime {
                 .map_or(u64::MAX, |at| at.saturating_sub(now_ms));
             waiter.wait(remaining.min(Duration::from_millis(until_retry)));
         }
+    }
+}
+
+/// One capacity read's claims for the namespaces it was asked about: held claims are
+/// unavailable capacity, and a namespace it could not read is unknown with its policy.
+/// HS2-KCEHVR: a machine that names each unreadable namespace defers only those, each
+/// by its own policy; one that does not (an older peer) makes every asked namespace
+/// unknown with the policy it reported, and one that reports none fails closed.
+pub(crate) fn read_claims(
+    snapshot: &hotsheet_ticketing::orchestration::CapacitySnapshot,
+    namespaces: &[String],
+    held: &mut Vec<HeldResource>,
+    unreadable: &mut Vec<UnreadableClaims>,
+) {
+    let held_claim = |claim: &hotsheet_ticketing::orchestration::HeldClaim| HeldResource {
+        namespace: claim.namespace.clone(),
+        resource: claim.resource.clone(),
+        expires_at_ms: claim.expires_at_ms,
+        server_id: Some(snapshot.server_id.clone()),
+    };
+    let unread = |namespace: &String, offline| UnreadableClaims {
+        server_id: snapshot.server_id.clone(),
+        namespace: namespace.clone(),
+        offline,
+        reason: UnreadableReason::BackendUnreachable,
+    };
+    match (&snapshot.claims, &snapshot.claims_readable) {
+        (Some(claims), _) => held.extend(
+            claims
+                .iter()
+                .filter(|claim| namespaces.contains(&claim.namespace))
+                .map(held_claim),
+        ),
+        (None, Some(readable)) if !snapshot.claims_unreadable.is_empty() => {
+            let policy = |namespace: &String| {
+                snapshot
+                    .claims_unreadable
+                    .iter()
+                    .find(|entry| &entry.namespace == namespace)
+                    .map(|entry| entry.offline)
+            };
+            held.extend(
+                readable
+                    .iter()
+                    .filter(|claim| {
+                        namespaces.contains(&claim.namespace) && policy(&claim.namespace).is_none()
+                    })
+                    .map(held_claim),
+            );
+            unreadable.extend(
+                namespaces
+                    .iter()
+                    .filter_map(|namespace| Some(unread(namespace, policy(namespace)?))),
+            );
+        }
+        // An older peer says nothing of a policy: that fails closed.
+        _ => unreadable.extend(
+            namespaces
+                .iter()
+                .map(|namespace| unread(namespace, snapshot.claims_offline.unwrap_or_default())),
+        ),
     }
 }

@@ -26,6 +26,18 @@ pub const DEFAULT_SESSION_FOOTPRINT_MB: u64 = 1024;
 pub const MAX_SESSION_FOOTPRINT_MB: u64 = 1024 * 1024;
 /// Claim namespaces one snapshot request may name.
 pub const MAX_CLAIM_NAMESPACES: usize = 8;
+/// HS2-KCEHVR: requests of [`MAX_CLAIM_NAMESPACES`] each that one scheduling pass makes
+/// to one target, so a target's work may name this many times as many namespaces before
+/// one waits as `namespace_limit`.
+pub const MAX_CLAIM_PAGES: usize = 4;
+
+/// HS2-KCEHVR: one named namespace whose backend could not be read, with what its
+/// configuration says to do meanwhile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnreadableNamespace {
+    pub namespace: String,
+    pub offline: OfflinePolicy,
+}
 const MAX_ADMISSION_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +148,14 @@ pub struct CapacitySnapshot {
     /// what its configuration says to do meanwhile. `claims` is then `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claims_offline: Option<OfflinePolicy>,
+    /// HS2-KCEHVR: when only some named namespaces could be read, the claims of the
+    /// ones that were. `claims` stays `None` and `claims_offline` the strictest policy,
+    /// so a reader that knows neither member still treats every namespace as unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claims_readable: Option<Vec<HeldClaim>>,
+    /// HS2-KCEHVR: each named namespace that could not be read, with its own policy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims_unreadable: Vec<UnreadableNamespace>,
     /// HS2-JSF985: the hosted project's own speculation setting, reported only when
     /// the project opts in. Absent, the project has not opted in, its machine does
     /// not say (an older peer) or the setting could not be read: never allowed.
@@ -256,6 +276,22 @@ pub fn capacity_version(snapshot: &CapacitySnapshot) -> String {
         "o{:?};p{:?}",
         snapshot.claims_offline, snapshot.speculation
     );
+    // HS2-KCEHVR: only when reported, so a snapshot without it keeps its version.
+    if !snapshot.claims_unreadable.is_empty() {
+        let mut readable: Vec<String> = snapshot
+            .claims_readable
+            .iter()
+            .flatten()
+            .map(|claim| format!("{}/{}", claim.namespace, claim.resource))
+            .collect();
+        readable.sort();
+        let unreadable: Vec<String> = snapshot
+            .claims_unreadable
+            .iter()
+            .map(|entry| format!("{}={:?}", entry.namespace, entry.offline))
+            .collect();
+        let _ = write!(text, ";u{};{}", unreadable.join(","), readable.join(","));
+    }
     // HS2-TK9ADC: only when reported, so a snapshot without it keeps its version.
     if let Some(pool) = snapshot.pool {
         let _ = write!(
@@ -318,6 +354,8 @@ impl CapacitySnapshot {
             claims,
             claim_namespaces,
             claims_offline: None,
+            claims_readable: None,
+            claims_unreadable: Vec::new(),
             speculation: None,
             version: None,
             pool: None,
@@ -367,6 +405,22 @@ impl CapacitySnapshot {
     #[must_use]
     pub fn with_claims_offline(mut self, offline: Option<OfflinePolicy>) -> Self {
         self.claims_offline = offline.filter(|_| self.claims.is_none());
+        self
+    }
+
+    /// HS2-KCEHVR: the claims could not all be read; say which namespaces could not,
+    /// each with its own policy, and give the claims of the rest. Ignored while the
+    /// claims are known or when no namespace is unreadable.
+    #[must_use]
+    pub fn with_partial_claims(
+        mut self,
+        readable: Vec<HeldClaim>,
+        unreadable: Vec<UnreadableNamespace>,
+    ) -> Self {
+        if self.claims.is_none() && !unreadable.is_empty() {
+            self.claims_readable = Some(readable);
+            self.claims_unreadable = unreadable;
+        }
         self
     }
 

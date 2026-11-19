@@ -12,7 +12,7 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AccessRequest, AdmissionDecision, AdmissionRequest, AdmissionStore, CapacitySnapshot,
     DenialReason, HeldClaim, HostObservation, MAX_CLAIM_NAMESPACES, OfflinePolicy, SessionRequest,
-    TargetAction, TargetSpeculation, decide_admission,
+    TargetAction, TargetSpeculation, UnreadableNamespace, decide_admission,
 };
 use serde::Deserialize;
 
@@ -118,6 +118,18 @@ pub(super) fn capacity_after(after: Option<&str>) -> Result<Option<&str>, Orches
     }
 }
 
+/// What one hosted claims read found (HS2-KCEHVR).
+#[derive(Debug, Default)]
+struct ClaimsRead {
+    /// Every named namespace's claims, or `None` when any could not be read.
+    claims: Option<Vec<HeldClaim>>,
+    /// The strictest policy among the unreadable namespaces.
+    offline: Option<OfflinePolicy>,
+    /// The claims of the namespaces that were read, when some were not.
+    readable: Vec<HeldClaim>,
+    unreadable: Vec<UnreadableNamespace>,
+}
+
 /// HS2-YDZAFH: the most namespaces a capacity read that names none enumerates; beyond
 /// it the claims read as unknown rather than as a partial list.
 pub const MAX_ENUMERATED_NAMESPACES: usize = 64;
@@ -164,14 +176,12 @@ impl OrchestrationRuntime {
     /// Live claims in the named namespaces, without paths, holders or metadata. An
     /// unreadable namespace makes the whole list unknown rather than partial, and
     /// the answer then carries the strictest offline policy among the unreadable
-    /// ones (HS2-2FG91X): work may start on an unverified resource only when every
-    /// backend that could not be read allows it.
-    fn held_claims(
-        &self,
-        namespaces: &[String],
-    ) -> (Option<Vec<HeldClaim>>, Option<OfflinePolicy>) {
+    /// ones (HS2-2FG91X), so a reader that knows no more never takes a partial list
+    /// as complete. HS2-KCEHVR: it also names each unreadable namespace with its own
+    /// policy and gives the claims of the rest, for a reader that defers only those.
+    fn held_claims(&self, namespaces: &[String]) -> ClaimsRead {
         if namespaces.is_empty() {
-            return (None, None);
+            return ClaimsRead::default();
         }
         self.held_in(namespaces)
     }
@@ -191,22 +201,30 @@ impl OrchestrationRuntime {
         }
     }
 
-    fn held_in(&self, namespaces: &[String]) -> (Option<Vec<HeldClaim>>, Option<OfflinePolicy>) {
+    fn held_in(&self, namespaces: &[String]) -> ClaimsRead {
         let mut held = Vec::new();
-        let mut offline: Option<OfflinePolicy> = None;
+        let mut unreadable = Vec::new();
         for name in namespaces {
             match self.claims.held(name) {
                 Ok(claims) => held.extend(claims),
-                Err(unreachable) => {
-                    offline = Some(
-                        offline.map_or(unreachable.offline, |known| known.min(unreachable.offline)),
-                    );
-                }
+                Err(unreachable) => unreadable.push(UnreadableNamespace {
+                    namespace: name.clone(),
+                    offline: unreachable.offline,
+                }),
             }
         }
-        match offline {
-            Some(policy) => (None, Some(policy)),
-            None => (Some(held), None),
+        let strictest = unreadable.iter().map(|entry| entry.offline).min();
+        match strictest {
+            Some(offline) => ClaimsRead {
+                claims: None,
+                offline: Some(offline),
+                readable: held,
+                unreadable,
+            },
+            None => ClaimsRead {
+                claims: Some(held),
+                ..ClaimsRead::default()
+            },
         }
     }
 
@@ -218,23 +236,30 @@ impl OrchestrationRuntime {
     ) -> Result<CapacitySnapshot, OrchestrationError> {
         let checkout = self.owner(checkout_id)?;
         // HS2-YDZAFH: with no namespace named, every held claim of this machine.
-        let (scope, claims, offline) = match self.claim_scope(namespaces) {
-            Ok(scope) if scope.is_empty() => (scope, Some(Vec::new()), None),
+        let (scope, read) = match self.claim_scope(namespaces) {
+            Ok(scope) if scope.is_empty() => (
+                scope,
+                ClaimsRead {
+                    claims: Some(Vec::new()),
+                    ..ClaimsRead::default()
+                },
+            ),
             Ok(scope) => {
-                let (claims, offline) = self.held_claims(&scope);
-                (scope, claims, offline)
+                let read = self.held_claims(&scope);
+                (scope, read)
             }
             // Unknown, exactly as a read that named nothing reported before.
-            Err(_) => (namespaces.to_vec(), None, None),
+            Err(_) => (namespaces.to_vec(), ClaimsRead::default()),
         };
         Ok(CapacitySnapshot::new(
             self.server_id.clone(),
             checkout.id.clone(),
             self.capacity.observe(&checkout),
             scope,
-            claims,
+            read.claims,
         )
-        .with_claims_offline(offline)
+        .with_claims_offline(read.offline)
+        .with_partial_claims(read.readable, read.unreadable)
         // HS2-JSF985: the hosted project's own committed opt-in. It is reported only
         // when the project opts in, so the answer of every project that does not is
         // what it always was; an orchestrator reads its absence as not allowed.
