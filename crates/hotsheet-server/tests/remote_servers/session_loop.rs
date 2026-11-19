@@ -282,7 +282,7 @@ async fn hs2_nptks8_the_loop_replaces_a_session_that_never_joins_and_keeps_one_t
     let orchestration = world.ticket("Coordinate the synthetic work");
     let work = world.ticket("Synthetic work for a silent session");
     let step_id = plan_step(&world, &orchestration, &work).await;
-    super::session_work::commit_all(&world.project);
+    super::sessions::commit_all(&world.project);
     world
         .allow(
             &LOOP_ACTIONS,
@@ -301,7 +301,7 @@ async fn hs2_nptks8_the_loop_replaces_a_session_that_never_joins_and_keeps_one_t
     .await;
     // The tool setup the start ran is committed, as a person does, so nothing but
     // the session itself holds its safe point.
-    super::session_work::commit_all(&world.project);
+    super::sessions::commit_all(&world.project);
     let (stop, _) = decided(
         &world,
         "wind-down of the silent session",

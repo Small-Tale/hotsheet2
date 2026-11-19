@@ -11,8 +11,8 @@
 //! own test so that a failure names the seam it crossed.
 use super::job_monitor::Provider;
 use super::orchestration::{api, shared_runtime};
-use super::session_work::{PUSH_AGENT, PUSH_PLUGIN, commit_all, now_ms};
-use super::sessions::git_project;
+use super::session_work::{PUSH_AGENT, PUSH_PLUGIN, now_ms};
+use super::sessions::{commit_all, git_project};
 use super::*;
 use hotsheet_cli::orchestration::{DetachedJobMonitor, OwnedSessions};
 use hotsheet_server::AppState;

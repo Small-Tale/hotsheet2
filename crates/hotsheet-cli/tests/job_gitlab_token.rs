@@ -1,6 +1,10 @@
 //! HS2-RTEQ7R: the built `hotsheet-cli` finds a GitLab token in `GITLAB_TOKEN`, else from
 //! a signed-in `glab` for the API root's host, and says which in `job watch status`,
 //! never the token itself. A synthetic `glab` script stands in for the real CLI.
+//!
+//! HS2-652GYE: Unix only. The stand-in is a `/bin/sh` script, and Windows resolves a bare
+//! `glab` to an executable image, not a script.
+#![cfg(unix)]
 
 #[path = "../../test-support/workspace_bin.rs"]
 mod workspace_bin;

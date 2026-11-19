@@ -621,6 +621,7 @@ async fn an_unreachable_session_api_is_a_502() {
 
 /// HS2-4R5MNJ: a stand-in Codex TUI. It shows the update notice until a person answers
 /// it, then draws the composer's placeholder and echoes whatever is typed.
+#[cfg(unix)] // HS2-652GYE: used only by the Unix broker tests below.
 fn write_codex_stand_in(root: &std::path::Path, id: &str) {
     let dir = root.join(id);
     std::fs::create_dir(&dir).unwrap();
@@ -654,6 +655,7 @@ mechanism = "codex-queue"
 }
 
 /// Wait until terminal `id` has printed `text`.
+#[cfg(unix)] // HS2-652GYE: used only by the Unix broker tests below.
 async fn wait_for_output(router: &axum::Router, id: &str, text: &str) {
     for _ in 0..500 {
         let (_, terminal) = send(router, "GET", &format!("/terminals/{id}"), None).await;
@@ -1423,6 +1425,7 @@ async fn hs2_db2fq2_an_exited_push_session_is_announced_so_clients_show_the_new_
 }
 
 /// A Git-store app whose machine home (and so its feedback delivery journal) is `home`.
+#[cfg(unix)] // HS2-652GYE: used only by the Unix broker tests below.
 fn journaled_app(
     store_dir: &std::path::Path,
     plugins: &std::path::Path,
