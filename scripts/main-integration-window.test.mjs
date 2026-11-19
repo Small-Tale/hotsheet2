@@ -41,7 +41,15 @@ verify=0
 if [ "\${1:-}" = '--verify-receipt' ]; then verify=1; shift; fi
 selection=$(printf '%s\\n' "$@" | shasum -a 256 | cut -c 1-12)
 marker=$(git rev-parse --git-path "test-gate-$tree-$selection")
-if [ "$verify" -eq 1 ]; then test -f "$marker"; exit; fi
+if [ "$verify" -eq 1 ]; then
+  # HS2-CV0JC8: ordinary push only verifies; hold that check while the push holds main.
+  if [ -n "\${HS2_TEST_HOLD:-}" ] && [ -f "$HS2_TEST_HOLD" ] && git show-ref --exists refs/hotsheet/main-integration-window; then
+    printf '%s\\n' "$$" > "$HS2_TEST_STARTED"
+    while [ -f "$HS2_TEST_HOLD" ]; do sleep 0.1; done
+  fi
+  printf 'verify\\n' >> "$HS2_TEST_VERIFY_LOG"
+  test -f "$marker"; exit
+fi
 if [ -f "$marker" ]; then exit 0; fi
 printf 'gate\\n' >> "$HS2_TEST_GATE_LOG"
 if [ -n "\${HS2_TEST_HOLD:-}" ]; then
@@ -106,6 +114,7 @@ function fixture() {
     ...withoutGitRepositoryEnv(process.env),
     PATH: `${bin}:${process.env.PATH}`,
     HS2_TEST_GATE_LOG: resolve(root, 'gate.log'),
+    HS2_TEST_VERIFY_LOG: resolve(root, 'verify.log'),
     HS2_TEST_FAIL: resolve(root, 'fail'),
     HS2_TEST_HOLD: '',
     HS2_TEST_STARTED: resolve(root, 'started'),
@@ -118,6 +127,14 @@ function commit(repo, path, env) {
   put(resolve(repo, path), `${path}\n`);
   run('git', ['add', path], repo, env);
   return run('git', ['commit', '-m', `Synthetic ${path}`], repo, env);
+}
+
+/** HS2-CV0JC8: run the push's selected gate first, as an operator must, then push. */
+function gated(f, args = [], env = f.env, cwd = f.repo) {
+  const gateArgs = [];
+  for (let index = 0; index < args.length; index++) if (args[index] === '--gate-arg') gateArgs.push(args[++index]);
+  run('bash', ['scripts/check.sh', ...gateArgs], cwd, env);
+  return run('bash', ['scripts/push.sh', ...args], cwd, env);
 }
 
 function runAsync(program, args, cwd, env) {
@@ -511,6 +528,8 @@ exec "$HS2_TEST_REAL_GIT" "$@"
 }
 
 function expiredRef(f) {
+  // HS2-CV0JC8: the gate passed on this tree before the push; its run is not the push's gate.
+  run('bash', ['scripts/check.sh'], f.repo, { ...f.env, HS2_TEST_GATE_LOG: resolve(f.root, 'earlier-gate.log') });
   const ref = 'refs/hotsheet/main-integration-window',
     head = run('git', ['rev-parse', 'HEAD'], f.repo),
     value = {
@@ -724,7 +743,8 @@ await pushMain(${JSON.stringify(f.repo)}, []);
     assert.match(readFileSync(env.HS2_TEST_REF_CAS_FAILURE, 'utf8'), /^[1-9]\d*\n$/);
     assert.equal(readFileSync(env.HS2_TEST_REF_LOOKUP, 'utf8'), '');
     assert.equal(readFileSync(env.HS2_TEST_REF_PRESENT, 'utf8'), '');
-    assert.equal(readFileSync(env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\n');
+    // HS2-CV0JC8: the push verified the earlier receipt and ran no gate itself.
+    assert.equal(existsSync(env.HS2_TEST_GATE_LOG), false);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
     assert.equal(readWindow(f.repo), null);
     assert.throws(() => run('git', ['show-ref', '--verify', ref], f.repo));
@@ -737,7 +757,7 @@ test('HS2-BND42N expired owner is replaced and its ref is released', () => {
   const f = fixture();
   try {
     run('git', ['config', 'core.hooksPath', resolve(f.repo, '.githooks')], f.repo);
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    gated(f);
     commit(f.repo, 'next', f.env);
     const head = run('git', ['rev-parse', 'HEAD'], f.repo);
     const tree = run('git', ['rev-parse', 'HEAD^{tree}'], f.repo);
@@ -758,7 +778,7 @@ test('HS2-BND42N expired owner is replaced and its ref is released', () => {
       () => verifyMainPush(f.repo, 'expired', 'origin', 'refs/heads/main', head, '0'.repeat(40)),
       /lost or expired/,
     );
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    gated(f);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
     assert.throws(() => run('git', ['show-ref', '--verify', 'refs/hotsheet/main-integration-window'], f.repo));
   } finally {
@@ -766,10 +786,10 @@ test('HS2-BND42N expired owner is replaced and its ref is released', () => {
   }
 });
 
-test('HS2-BND42N remote writer rejects local gate before it starts', () => {
+test('HS2-BND42N remote writer rejects the push before it verifies', () => {
   const f = fixture();
   try {
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    gated(f);
     commit(f.repo, 'local', f.env);
     const writer = resolve(f.root, 'writer');
     run('git', ['clone', f.remote, writer], f.root);
@@ -778,9 +798,10 @@ test('HS2-BND42N remote writer rejects local gate before it starts', () => {
     commit(writer, 'remote', f.env);
     run('git', ['push', 'origin', 'main'], writer);
     const tip = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
-    assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, f.env));
+    run('bash', ['scripts/check.sh'], f.repo, f.env);
+    assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, f.env), /not an ancestor/);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), tip);
-    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\n');
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
   } finally {
     f.dispose();
   }
@@ -802,8 +823,9 @@ test('HS2-BND42N a live pool fences standalone push without mutating its state',
     });
     const pool = resolve(f.repo, '.git/hotsheet-coordination/state.json');
     put(pool, state);
+    run('bash', ['scripts/check.sh'], f.repo, f.env);
     assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, f.env));
-    assert.equal(existsSync(f.env.HS2_TEST_GATE_LOG), false);
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\n');
     run('bash', ['scripts/push.sh', '--integrator-id', 'i', '--integrator-session', 'g'], f.repo, f.env);
     assert.equal(readFileSync(pool, 'utf8'), state);
   } finally {
@@ -829,7 +851,7 @@ test('HS2-822EVF standalone push uses the linked store for pool authority', () =
       assignments: {},
     });
     put(resolve(f.repo, '.git/hotsheet-coordination/state.json'), state);
-    run('bash', ['scripts/push.sh', '--standalone'], f.repo, f.env);
+    gated(f, ['--standalone']);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), run('git', ['rev-parse', 'HEAD'], f.repo));
   } finally {
     f.dispose();
@@ -844,7 +866,61 @@ test('HS2-Q390N2 explicit standalone push skips local gate but verifies its rese
     run('bash', ['scripts/push.sh', '--standalone', '--skip-tests'], f.repo, f.env);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), head);
     assert.equal(existsSync(f.env.HS2_TEST_GATE_LOG), false);
+    assert.equal(existsSync(f.env.HS2_TEST_VERIFY_LOG), false);
     assert.equal(readWindow(f.repo), null);
+  } finally {
+    f.dispose();
+  }
+});
+
+test('HS2-CV0JC8 ordinary push verifies a precomputed receipt and never runs the gate', () => {
+  const f = fixture();
+  try {
+    const remoteBefore = () =>
+      spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], {
+        cwd: f.remote,
+        env: withoutGitRepositoryEnv(process.env),
+        encoding: 'utf8',
+      }).stdout.trim();
+    // No receipt: refused before main is reserved, naming the exact gate command to run.
+    const missing = spawnSync('bash', ['scripts/push.sh', '--gate-arg', '--full'], {
+      cwd: f.repo,
+      env: f.env,
+      encoding: 'utf8',
+    });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /No exact-tree gate receipt/);
+    assert.match(
+      missing.stderr,
+      /scripts\/check\.sh --full --test-plan <reviewed\.json>/,
+      'the refusal names the exact gate command',
+    );
+    assert.equal(existsSync(f.env.HS2_TEST_GATE_LOG), false, 'push never runs the gate');
+    assert.equal(readWindow(f.repo), null, 'nothing was reserved');
+    assert.equal(remoteBefore(), '');
+
+    // A receipt for another selection is not this push's receipt.
+    run('bash', ['scripts/check.sh'], f.repo, f.env);
+    assert.throws(
+      () => run('bash', ['scripts/push.sh', '--gate-arg', '--full'], f.repo, f.env),
+      /No exact-tree gate receipt/,
+    );
+    assert.equal(remoteBefore(), '');
+
+    // The matching receipt pushes without a gate run.
+    run('bash', ['scripts/check.sh', '--full'], f.repo, f.env);
+    run('bash', ['scripts/push.sh', '--gate-arg', '--full'], f.repo, f.env);
+    assert.equal(remoteBefore(), run('git', ['rev-parse', 'HEAD'], f.repo));
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
+
+    // A changed tree after the receipt needs its own gate run.
+    commit(f.repo, 'changed', f.env);
+    assert.throws(
+      () => run('bash', ['scripts/push.sh', '--gate-arg', '--full'], f.repo, f.env),
+      /No exact-tree gate receipt/,
+    );
+    assert.notEqual(remoteBefore(), run('git', ['rev-parse', 'HEAD'], f.repo));
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
   } finally {
     f.dispose();
   }
@@ -861,7 +937,7 @@ test('HS2-BND42N ticket phase advances at the gate and confirmed-push boundaries
       true,
     );
     const env = { ...f.env, HOTSHEET_MAIN_WINDOW_CLI: cli, HS2_TEST_PHASES: phases };
-    run('bash', ['scripts/push.sh', '--gate-arg', '--ticket', '--gate-arg', 'HS2-BND42N'], f.repo, env);
+    gated(f, ['--gate-arg', '--ticket', '--gate-arg', 'HS2-BND42N'], env);
     assert.equal(readFileSync(phases, 'utf8'), 'integrating\nfinal_testing\n');
   } finally {
     f.dispose();
@@ -871,99 +947,114 @@ test('HS2-BND42N ticket phase advances at the gate and confirmed-push boundaries
 test('HS2-BND42N full selection is verified again inside the push hook', () => {
   const f = fixture();
   try {
-    run('bash', ['scripts/push.sh', '--gate-arg', '--full'], f.repo, f.env);
+    gated(f, ['--gate-arg', '--full']);
     assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\n');
+    // HS2-CV0JC8: before the reservation, inside it, and in the pre-push hook; never a gate run.
+    assert.equal(readFileSync(f.env.HS2_TEST_VERIFY_LOG, 'utf8'), 'verify\nverify\nverify\n');
   } finally {
     f.dispose();
   }
 });
 
-test('HS2-BND42N a remote writer during the gate fails the second preflight', { timeout: 60_000 }, async () => {
-  const f = fixture();
-  let running;
-  try {
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
-    commit(f.repo, 'local', f.env);
-    const writer = resolve(f.root, 'writer');
-    run('git', ['clone', f.remote, writer], f.root);
-    run('git', ['config', 'user.name', 'Remote Test'], writer);
-    run('git', ['config', 'user.email', 'remote@invalid.example'], writer);
-    commit(writer, 'remote', f.env);
-    const hold = resolve(f.root, 'hold');
-    put(hold, 'hold');
-    running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
-    await waitForFile(f.env.HS2_TEST_STARTED, running);
-    run('git', ['push', 'origin', 'main'], writer);
-    const tip = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
-    rmSync(hold);
-    const result = await running.completed;
-    assert.notEqual(result.code, 0, result.output);
-    assert.match(result.output, /not an ancestor/);
-    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), tip);
-  } finally {
-    if (running?.child.exitCode === null)
-      try {
-        process.kill(-running.child.pid, 'SIGTERM');
-      } catch {
-        /* exited */
-      }
-    f.dispose();
-  }
-});
+test(
+  'HS2-BND42N a remote writer during the reserved verification fails the second preflight',
+  { timeout: 60_000 },
+  async () => {
+    const f = fixture();
+    let running;
+    try {
+      gated(f);
+      commit(f.repo, 'local', f.env);
+      run('bash', ['scripts/check.sh'], f.repo, f.env);
+      const writer = resolve(f.root, 'writer');
+      run('git', ['clone', f.remote, writer], f.root);
+      run('git', ['config', 'user.name', 'Remote Test'], writer);
+      run('git', ['config', 'user.email', 'remote@invalid.example'], writer);
+      commit(writer, 'remote', f.env);
+      const hold = resolve(f.root, 'hold');
+      put(hold, 'hold');
+      running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
+      await waitForFile(f.env.HS2_TEST_STARTED, running);
+      run('git', ['push', 'origin', 'main'], writer);
+      const tip = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+      rmSync(hold);
+      const result = await running.completed;
+      assert.notEqual(result.code, 0, result.output);
+      assert.match(result.output, /not an ancestor/);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), tip);
+    } finally {
+      if (running?.child.exitCode === null)
+        try {
+          process.kill(-running.child.pid, 'SIGTERM');
+        } catch {
+          /* exited */
+        }
+      f.dispose();
+    }
+  },
+);
 
-test('HS2-BND42N a changed local HEAD during the gate cannot be pushed', { timeout: 60_000 }, async () => {
-  const f = fixture();
-  let running;
-  try {
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
-    const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
-    commit(f.repo, 'first', f.env);
-    const hold = resolve(f.root, 'hold');
-    put(hold, 'hold');
-    running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
-    await waitForFile(f.env.HS2_TEST_STARTED, running);
-    commit(f.repo, 'changed', f.env);
-    rmSync(hold);
-    const result = await running.completed;
-    assert.notEqual(result.code, 0, result.output);
-    assert.match(result.output, /checked-out HEAD|Checked-out main changed|check\.sh failed/);
-    assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
-  } finally {
-    if (running?.child.exitCode === null)
-      try {
-        process.kill(-running.child.pid, 'SIGTERM');
-      } catch {
-        /* exited */
-      }
-    f.dispose();
-  }
-});
+test(
+  'HS2-BND42N a changed local HEAD during the reserved verification cannot be pushed',
+  { timeout: 60_000 },
+  async () => {
+    const f = fixture();
+    let running;
+    try {
+      gated(f);
+      const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
+      commit(f.repo, 'first', f.env);
+      run('bash', ['scripts/check.sh'], f.repo, f.env);
+      const hold = resolve(f.root, 'hold');
+      put(hold, 'hold');
+      running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
+      await waitForFile(f.env.HS2_TEST_STARTED, running);
+      commit(f.repo, 'changed', f.env);
+      rmSync(hold);
+      const result = await running.completed;
+      assert.notEqual(result.code, 0, result.output);
+      assert.match(result.output, /checked-out HEAD|Checked-out main changed|No exact-tree gate receipt/);
+      assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), remoteBase);
+    } finally {
+      if (running?.child.exitCode === null)
+        try {
+          process.kill(-running.child.pid, 'SIGTERM');
+        } catch {
+          /* exited */
+        }
+      f.dispose();
+    }
+  },
+);
 
-test('HS2-BND42N two worktrees serialize the gate and reject the superseded writer', { timeout: 60_000 }, async () => {
+test('HS2-BND42N two worktrees serialize the push and reject the superseded writer', { timeout: 60_000 }, async () => {
   const f = fixture();
   let first;
   let second;
   try {
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    gated(f);
     const other = resolve(f.root, 'other');
     run('git', ['worktree', 'add', '-b', 'contender', other], f.repo);
     for (const path of ['clients/web', 'migrator', 'spikes/kerf-webawesome'])
       mkdirSync(resolve(other, path), { recursive: true });
     commit(f.repo, 'first', f.env);
     commit(other, 'second', f.env);
+    run('bash', ['scripts/check.sh'], f.repo, f.env);
+    run('bash', ['scripts/check.sh'], other, f.env);
     const hold = resolve(f.root, 'hold');
     put(hold, 'hold');
     first = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
     await waitForFile(f.env.HS2_TEST_STARTED, first);
     second = runAsync('bash', ['scripts/push.sh', 'origin', 'HEAD:main'], other, f.env);
     await new Promise((done) => setTimeout(done, 350));
-    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
+    // The second push waits for the reservation; neither push runs a gate itself.
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\ngate\n');
     rmSync(hold);
     const [winner, loser] = await Promise.all([first.completed, second.completed]);
     assert.equal(winner.code, 0, winner.output);
     assert.notEqual(loser.code, 0, loser.output);
     assert.match(loser.output, /not an ancestor/);
-    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\ngate\n');
   } finally {
     for (const running of [first, second])
       if (running?.child.exitCode === null)
@@ -1019,9 +1110,10 @@ test(
     let running;
     const hold = resolve(f.root, 'hold');
     try {
-      run('bash', ['scripts/push.sh'], f.repo, f.env);
+      gated(f);
       const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
       commit(f.repo, 'heartbeat', f.env);
+      run('bash', ['scripts/check.sh'], f.repo, f.env);
       put(hold, 'hold');
       running = runAsync('bash', ['scripts/push.sh'], f.repo, {
         ...f.env,
@@ -1061,8 +1153,9 @@ test('HS2-822EVF a transient heartbeat ref read keeps the gate and push alive', 
   const seen = resolve(f.root, 'ref-read-seen');
   let running;
   try {
-    run('bash', ['scripts/push.sh'], f.repo, f.env);
+    gated(f);
     commit(f.repo, 'transient-ref-read', f.env);
+    run('bash', ['scripts/check.sh'], f.repo, f.env);
     const head = run('git', ['rev-parse', 'HEAD'], f.repo, f.env);
     const realGit = run('sh', ['-c', 'command -v git'], f.repo, f.env);
     put(
@@ -1153,9 +1246,10 @@ for (const signal of ['SIGTERM', 'SIGINT'])
       let running;
       const hold = resolve(f.root, 'hold');
       try {
-        run('bash', ['scripts/push.sh'], f.repo, f.env);
+        gated(f);
         const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
         commit(f.repo, `signal-${signal}`, f.env);
+        run('bash', ['scripts/check.sh'], f.repo, f.env);
         put(hold, 'hold');
         running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
         await heldGatePid(f, running);
@@ -1197,9 +1291,10 @@ test(
     let running;
     const hold = resolve(f.root, 'hold');
     try {
-      run('bash', ['scripts/push.sh'], f.repo, f.env);
+      gated(f);
       const remoteBase = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
       commit(f.repo, 'external', f.env);
+      run('bash', ['scripts/check.sh'], f.repo, f.env);
       put(hold, 'hold');
       running = runAsync('bash', ['scripts/push.sh'], f.repo, { ...f.env, HS2_TEST_HOLD: hold });
       const gate = await heldGatePid(f, running);
@@ -1255,7 +1350,7 @@ test('HS2-GT57BQ staged pushes move only the integration branch and promotion fa
   const f = fixture();
   try {
     const env = withoutGitRepositoryEnv(f.env);
-    run('bash', ['scripts/push.sh'], f.repo, env);
+    gated(f, [], env);
     const main = run('git', ['rev-parse', 'refs/heads/main'], f.remote);
     stagedPool(f, stagedLedger('ci', '0'.repeat(40)));
     run('git', ['switch', '-qc', 'integration'], f.repo, env);
@@ -1266,7 +1361,8 @@ test('HS2-GT57BQ staged pushes move only the integration branch and promotion fa
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), main);
     // The hook verified the reservation instead of running the root gate a second time.
     assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\n');
-    // A ci-staged integrator never pushes main directly unless its breaker tripped.
+    // A ci-staged integrator never pushes main directly unless its breaker tripped, even with a receipt.
+    run('bash', ['scripts/check.sh'], f.repo, env);
     assert.throws(() => run('bash', ['scripts/push.sh', ...integrator], f.repo, env), /only through --promote/);
     // A rebuilt tip replaces the unpromoted old tip, never rewriting main.
     run('git', ['reset', '-q', '--hard', 'main'], f.repo, env);
@@ -1280,7 +1376,7 @@ test('HS2-GT57BQ staged pushes move only the integration branch and promotion fa
     run('git', ['switch', '-q', 'main'], f.repo, env);
     run('bash', ['scripts/push.sh', '--promote', rebuilt, ...integrator], f.repo, env);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), rebuilt);
-    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\ngate\n');
+    assert.equal(readFileSync(f.env.HS2_TEST_GATE_LOG, 'utf8'), 'gate\ngate\ngate\ngate\n');
     // Replaying a completed promotion pushes nothing.
     run('bash', ['scripts/push.sh', '--promote', rebuilt, ...integrator], f.repo, env);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), rebuilt);
@@ -1293,7 +1389,7 @@ test('HS2-GT57BQ promotion is refused once main moved and no longer fast-forward
   const f = fixture();
   try {
     const env = withoutGitRepositoryEnv(f.env);
-    run('bash', ['scripts/push.sh'], f.repo, env);
+    gated(f, [], env);
     run('git', ['switch', '-qc', 'integration'], f.repo, env);
     commit(f.repo, 'staged', env);
     const staged = run('git', ['rev-parse', 'HEAD'], f.repo);
@@ -1316,7 +1412,7 @@ test('HS2-GT57BQ promotion is refused once main moved and no longer fast-forward
     run('git', ['switch', '-q', 'main'], f.repo, env);
     run('git', ['pull', '-q', '--ff-only', 'origin', 'main'], f.repo, env);
     commit(f.repo, 'serial', env);
-    run('bash', ['scripts/push.sh', ...integrator], f.repo, env);
+    gated(f, integrator, env);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], f.remote), run('git', ['rev-parse', 'HEAD'], f.repo));
   } finally {
     f.dispose();

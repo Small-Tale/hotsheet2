@@ -167,8 +167,9 @@ customer content or local paths into the report.
 ## Existing gates and optimization decisions
 
 `scripts/check.sh` caches a successful clean exact `HEAD^{tree}` under the Git-local root-gate
-cache; dirty or different trees cannot reuse it. `scripts/push.sh` runs that gate before opening
-the remote, and the pre-push hook recognizes the passed tree (HS2-CD3D2T). This correction does
+cache; dirty or different trees cannot reuse it. An ordinary `scripts/push.sh` verifies that
+receipt before opening the remote and no longer runs the gate itself (HS2-CV0JC8), and the
+pre-push hook recognizes the passed tree (HS2-CD3D2T). This correction does
 not change that policy or add another cache.
 
 Historical main-mutation, review and local gate stage durations are not established by the

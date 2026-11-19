@@ -71,10 +71,11 @@ After pushing, check the covering `main` CI run with `node scripts/ci-gate.mjs
 status --covers <full-sha>`. A remote run never replaces a failing ticket or
 integration gate except for the explicit standalone override below.
 
-Fast-push deviation (HS2-Q390N2): ticket and integration checks should run before
-push and record an exact-tree receipt. `scripts/push.sh` reuses that receipt;
-without one it runs the selected gate. Run `scripts/check.sh` at the appropriate
-ticket or integration boundary to keep the push itself fast.
+Fast-push deviation (HS2-Q390N2, HS2-CV0JC8): ticket and integration checks run
+before push and record an exact-tree receipt. An ordinary `scripts/push.sh` only
+verifies that receipt; without one it refuses at once and prints the exact
+`scripts/check.sh` command to run first. Batch smoke and staged pushes keep their
+in-window gate. Run `scripts/check.sh` at the ticket or integration boundary.
 For an urgent standalone push when the maintainer explicitly accepts CI-based
 verification, use
 `scripts/push.sh --standalone --skip-tests`. This explicit override skips local

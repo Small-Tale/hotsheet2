@@ -937,10 +937,16 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   `.githooks`, relative or absolute, from the main checkout or any linked worktree; worktree
   creation can leave the absolute form behind. Any other location is refused (HS2-Z333GJ).
   At the ticket or integration boundary, inspect `scripts/check.sh --plan` and run the
-  selected gate on the committed tree. Then use `scripts/push.sh origin main`. The wrapper
-  reserves the Git common directory's main integration ref before reading remote main,
-  reuses an existing exact-input receipt or runs the selected gate, makes a fast-forward push of the frozen commit, and
-  confirms remote main contains it. A live coordination integrator must supply
+  selected gate on the committed tree. Then use `scripts/push.sh origin main`. An
+  ordinary push never runs the gate (HS2-CV0JC8): it verifies the exact-input receipt
+  for the same `--gate-arg` selection, and without one it stops at once, before
+  reserving main, and prints the `scripts/check.sh` command to run (with
+  `--test-plan <reviewed.json>`, which a plan already recorded for that tree makes
+  optional). The wrapper then reserves the Git common directory's main integration ref
+  before reading remote main, verifies the receipt again for the reserved HEAD, makes a
+  fast-forward push of the frozen commit, and confirms remote main contains it. Batch
+  smoke and staged pushes below still run their gate inside the reservation; a
+  promotion runs none. A live coordination integrator must supply
   `--integrator-id <id> --integrator-session <generation>` and the active code handoff's
   `--assignment <id>` when one holds the integration fence. An inactive retained pool
   requires explicit `--standalone`. The wrapper reads the checkout's
@@ -957,9 +963,9 @@ hotsheet-aitools/test-permission-vault`, then run `cargo nextest run -p hotsheet
   that cannot start or does not finish within 10 s is a host stall, not a reservation
   failure: the heartbeat skips that renewal with a warning while the last renewal still
   outlasts one more interval, and the error names the stall (on macOS, syspolicyd
-  assessing new executables) when it finally stops the push (HS2-QP2AM2). Running
-  `scripts/check.sh` first and then the wrapper reuses its exact receipt and keeps the
-  reservation short. An explicit `scripts/push.sh --standalone --skip-tests` skips local
+  assessing new executables) when it finally stops the push (HS2-QP2AM2). Because the
+  gate runs before the wrapper, the reservation lasts only for verification, the push,
+  and confirmation. An explicit `scripts/push.sh --standalone --skip-tests` skips local
   tests and receipt verification when the maintainer explicitly accepts CI-based verification. It
   still requires a clean checkout, reservation, fast-forward push, remote confirmation,
   and covering main CI; record the reason in the ticket. Integrator and staged pushes

@@ -76,7 +76,7 @@ test('HS2-RS0FFT required gate uses receipt validation without an environment by
   assert.doesNotMatch(readFileSync(resolve(source, '.githooks/pre-push'), 'utf8'), /HOTSHEET_GATE_PASSED_TREE/);
 });
 
-test('HS2-BND42N reserves main before gate and rejects direct main push', () => {
+test('HS2-BND42N reserves main to push a gated tree and rejects direct main push', () => {
   const f = fixture();
   try {
     const log = resolve(f.root, 'gate.log');
@@ -103,6 +103,8 @@ test('HS2-BND42N reserves main before gate and rejects direct main push', () => 
       HOTSHEET_HOOK_TEST_FAIL: fail,
       HOTSHEET_GATE_PASSED_TREE: run('git', ['rev-parse', 'HEAD^{tree}'], f.repo).trim(),
     };
+    // HS2-CV0JC8: the gate runs before the push, which only verifies its receipt.
+    run('bash', ['scripts/check.sh'], f.repo, env);
     run('bash', ['scripts/push.sh'], f.repo, env);
     assert.equal(readFileSync(log, 'utf8'), 'check\n');
     const pushed = run('git', ['rev-parse', 'refs/heads/main'], remote).trim();
@@ -110,11 +112,13 @@ test('HS2-BND42N reserves main before gate and rejects direct main push', () => 
     run('git', ['add', 'next'], f.repo);
     run('git', ['commit', '-m', 'Next'], f.repo, env);
     put(fail, 'fail');
-    assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, env));
+    assert.throws(() => run('bash', ['scripts/check.sh'], f.repo, env));
+    assert.throws(() => run('bash', ['scripts/push.sh'], f.repo, env), /No exact-tree gate receipt/);
     assert.equal(run('git', ['rev-parse', 'refs/heads/main'], remote).trim(), pushed);
     assert.throws(() => run('git', ['show-ref', '--verify', 'refs/hotsheet/main-integration-window'], f.repo));
     rmSync(fail);
     assert.throws(() => run('git', ['push', 'origin', 'main'], f.repo, env));
+    run('bash', ['scripts/check.sh'], f.repo, env);
     run('bash', ['scripts/push.sh'], f.repo, env);
     assert.equal(readFileSync(log, 'utf8'), 'check\ncheck\ncheck\n');
     assert.notEqual(run('git', ['rev-parse', 'refs/heads/main'], remote).trim(), pushed);

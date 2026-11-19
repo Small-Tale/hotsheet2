@@ -616,11 +616,44 @@ export function gateDiagnostics(list = () => spawnSync('ps', ['-axo', 'pid=,etim
   ].join('\n');
 }
 
+// HS2-CV0JC8: an ordinary main push only verifies the exact-tree receipt that `scripts/check.sh`
+// recorded before it; it never runs the gate inside the reservation. The batch smoke push and the
+// ci-staged push keep their in-window gate, a promotion is gated by its green CI run, and the
+// explicit standalone override skips local verification.
+export function requiresPrecomputedReceipt(options) {
+  return options.mode === 'main' && !options.skipTests && !options.gateArgs.includes('--smoke');
+}
+
+const shellWord = (word) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
+
+export function missingReceiptMessage(gateArgs) {
+  const command = ['scripts/check.sh', ...gateArgs, '--test-plan', '<reviewed.json>'].map((word, index, all) =>
+    index === all.length - 1 ? word : shellWord(word),
+  );
+  return [
+    'No exact-tree gate receipt for this commit. Push verifies a receipt and never runs the gate (HS2-CV0JC8).',
+    `Run the gate on this committed tree first, then push again: ${command.join(' ')}`,
+    'A reviewed test plan already recorded for this exact tree lets you omit --test-plan.',
+  ].join('\n');
+}
+
+async function verifyReceipt(repo, options, signal) {
+  try {
+    await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], { signal });
+  } catch (error) {
+    if (error?.exitSignal || signal?.aborted || !requiresPrecomputedReceipt(options)) throw error;
+    throw new Error(missingReceiptMessage(options.gateArgs), { cause: error });
+  }
+}
+
 export async function pushMain(repo, args) {
   const options = parseMainPushArgs(args);
   options.sourceStore = selectedSourceStore(repo, options.sourceStore);
   if (!acceptedHooksPath(repo, git(repo, ['config', '--get', 'core.hooksPath'])))
     throw new Error('Run scripts/install-git-hooks.sh before main push');
+  const receiptOnly = requiresPrecomputedReceipt(options);
+  // Fail at once, before reserving main, when the gate has not passed on this tree.
+  if (receiptOnly) await verifyReceipt(repo, options);
   let window = await acquire(repo, options);
   const token = window.value.token;
   const control = new AbortController();
@@ -660,11 +693,12 @@ export async function pushMain(repo, args) {
     // HS2-GT57BQ: a promotion's gate is the green CI run on the exact SHA, not a local receipt.
     if (options.mode === 'promote' && before === window.value.head) return window.value.head;
     if (options.mode !== 'promote' && !options.skipTests) {
-      await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
-      check();
-      await child(repo, 'bash', ['scripts/check.sh', '--verify-receipt', ...options.gateArgs], {
-        signal: control.signal,
-      });
+      if (!receiptOnly) {
+        await child(repo, 'bash', ['scripts/check.sh', ...options.gateArgs], { signal: control.signal });
+        check();
+      }
+      // The reserved HEAD is verified again: the tree checked before the reservation may have moved.
+      await verifyReceipt(repo, options, control.signal);
       check();
     }
     authority(repo, window.value);
