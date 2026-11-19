@@ -2933,3 +2933,128 @@ fn hs2_tk9adc_a_role_start_launches_its_role_without_a_run_and_is_listed_as_it()
         "{roles:?}"
     );
 }
+
+/// HS2-9FKTB3: target 2 is another site of target 1's project on this machine, and
+/// target 1's own machine limits leave it no room. A step named on target 1 is
+/// planned on target 2 with why target 1 was passed over, dispatched there, logged
+/// so, and a refused start leaves its run on that site rather than moving it.
+#[test]
+fn hs2_9fktb3_a_step_is_placed_and_dispatched_on_the_qualifying_site() {
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    bind_and_allow(&f.m, 2, &[], &mut tx);
+    allow_on(
+        &f.m.runtime,
+        &f.m.owner.id,
+        &id(2),
+        &BOTH,
+        &["codex"],
+        &mut tx,
+    );
+    let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
+    f.m.runtime
+        .request(
+            "PATCH",
+            &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
+            &json!({"expected_revision": revision, "label": "Target", "site_of": id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let mut body = policy();
+    let site = TargetPolicy {
+        target_id: id(2),
+        ..body.targets[0].clone()
+    };
+    body.targets[0].machine = Some(MachineLimits {
+        min_free_ram_mb: 1_000_000,
+        ..MachineLimits::default()
+    });
+    body.targets.push(site);
+    f.set_policy(body.clone(), &mut tx);
+    let step = f.ready("Either site", &mut tx);
+    let passed = |sites: &[hotsheet_ticketing::orchestration::SitePass]| {
+        sites
+            .iter()
+            .map(|pass| {
+                (
+                    pass.target_id.clone(),
+                    pass.reason.clone(),
+                    pass.detail.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = vec![(
+        id(1),
+        "machine_refused".to_owned(),
+        Some("below_ram_floor".to_owned()),
+    )];
+
+    // The dry run names the chosen site and why the named one was passed over.
+    let plan =
+        f.m.runtime
+            .scheduler_plan(&f.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    let start = &plan.schedule.placements[0];
+    assert_eq!(
+        (start.action, start.target_id.as_str()),
+        (PlacementAction::Start, id(2).as_str())
+    );
+    assert_eq!(passed(&start.sites), expected);
+    let explained =
+        f.m.runtime
+            .scheduler_explain(
+                &f.owner(),
+                &serde_json::from_value(json!({"step_id": step})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap();
+    assert_eq!(explained.standing, "start");
+    assert_eq!(passed(&explained.sites), expected);
+    let wire = serde_json::to_value(&explained).unwrap();
+    assert_eq!(wire["placement"]["target_id"], id(2));
+    assert_eq!(wire["sites"][0]["reason"], "machine_refused");
+    assert!(f.m.runtime.run_list(&f.owner(), false).unwrap().is_empty());
+
+    // A refused start: the step's run is dispatched on the chosen site and stays there.
+    f.host.refusing.store(true, Ordering::SeqCst);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("refused", Some("session_start_failed"))]);
+    let run = f.run_of(&step);
+    assert_eq!(run.target.target_id, id(2));
+    let logged =
+        f.m.runtime
+            .scheduler_decisions(&f.owner(), &DecisionsRequest::default())
+            .unwrap()
+            .entries
+            .into_iter()
+            .map(|entry| entry.record)
+            .find(|record| record.kind == hotsheet_ticketing::orchestration::DecisionKind::Start)
+            .unwrap();
+    assert_eq!(logged.target_id.as_deref(), Some(id(2).as_str()));
+    assert_eq!(passed(&logged.sites), expected);
+
+    // Target 1 qualifies now, but the run is on target 2: its step waits for target 2
+    // and then starts there, on the same run.
+    body.targets[0].machine = None;
+    f.set_policy(body, &mut tx);
+    f.host.refusing.store(false, Ordering::SeqCst);
+    let waiting = f.tick(&mut tx);
+    assert!(waiting.outcomes.is_empty());
+    let unplaced = &waiting.view.schedule.unplaced[0];
+    assert_eq!(
+        (unplaced.target_id.as_str(), unplaced.reason.code()),
+        (id(2).as_str(), "refusal_backoff")
+    );
+    assert!(unplaced.sites.is_empty());
+    f.at(&clock, START + 2 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(
+        tick.outcomes[0].run_id.as_deref(),
+        Some(run.run_id.as_str())
+    );
+    assert_eq!(tick.outcomes[0].target_id, id(2));
+    assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
+}

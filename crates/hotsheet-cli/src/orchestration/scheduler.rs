@@ -167,6 +167,10 @@ pub struct Explanation {
     pub retry_at_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<Placement>,
+    /// HS2-9FKTB3: the other sites of the step's project and why each was passed over.
+    /// The chosen site is the placement's `target_id`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<hotsheet_ticketing::orchestration::SitePass>,
     /// HS2-2FG91X: every resource ready work requires, and how this pass saw it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<RequiredResource>,
@@ -399,8 +403,19 @@ impl OrchestrationRuntime {
                 resources: item.resources,
                 // HS2-JSF985: decided once the involved targets were read.
                 speculation: None,
+                // HS2-9FKTB3: filled below from the manifest's active sites.
+                sites: Vec::new(),
             })
             .collect();
+        // HS2-9FKTB3: ready work may run on any active site of its project.
+        let grouping = hotsheet_ticketing::orchestration::ProjectSites::active(
+            &self.declarations(owner_id)?.targets,
+        );
+        if !grouping.is_empty() {
+            for item in &mut work {
+                item.sites = grouping.other_sites(&item.target_id);
+            }
+        }
         // HS2-YC2P7K: a step whose scheduler run is unfinished and no unfinished
         // session works it (its start was refused, or its session was lost) needs a
         // session again. The run is reused, so nothing is dispatched twice.
@@ -431,7 +446,8 @@ impl OrchestrationRuntime {
             }
             work.push(WorkItem {
                 step_id: step.step_id,
-                target_id: step.target.target_id,
+                // HS2-9FKTB3: the run stays on the site it was dispatched to.
+                target_id: run.target.target_id.clone(),
                 connection_id: step.target.connection_id,
                 native_id: step.target.native_id,
                 level: WorkLevel::Confirmed,
@@ -449,6 +465,7 @@ impl OrchestrationRuntime {
                 resources: step.resources,
                 // HS2-JSF985: an orphaned run's step is placed as confirmed work.
                 speculation: None,
+                sites: Vec::new(),
             });
         }
         Ok(work)
@@ -526,10 +543,14 @@ impl OrchestrationRuntime {
         };
         // HS2-TK9ADC: a target that lists role sessions is read every pass, so its pool
         // (a handoff waiting for an integrator) is known without work there.
+        // HS2-9FKTB3: every site the work may run on is read too.
         let wanted: BTreeSet<&str> = work
             .iter()
             .filter(|item| places(item))
-            .map(|item| item.target_id.as_str())
+            .flat_map(|item| {
+                std::iter::once(item.target_id.as_str())
+                    .chain(item.sites.iter().map(String::as_str))
+            })
             .chain(
                 policy
                     .placement
@@ -557,7 +578,11 @@ impl OrchestrationRuntime {
             // unknown, never assumed free (HS2-2FG91X).
             let mut namespaces: Vec<String> = work
                 .iter()
-                .filter(|item| places(item) && item.target_id == target_id)
+                .filter(|item| {
+                    places(item)
+                        && (item.target_id == target_id
+                            || item.sites.iter().any(|site| site == target_id))
+                })
                 .flat_map(|item| item.resources.iter().map(|need| need.namespace.clone()))
                 .collect::<BTreeSet<_>>()
                 .into_iter()
@@ -913,6 +938,7 @@ impl OrchestrationRuntime {
             score: None,
             retry_at_ms: None,
             placement: None,
+            sites: Vec::new(),
             resources: Vec::new(),
             speculation: None,
             provisional: None,
@@ -1038,6 +1064,7 @@ impl OrchestrationRuntime {
                         answer.score = Some(standing.score);
                         answer.retry_at_ms = standing.retry_at_ms;
                         answer.placement = standing.placement;
+                        answer.sites = standing.sites;
                     }
                     None => {
                         answer.standing = "not_placed".into();
@@ -1304,6 +1331,8 @@ impl OrchestrationRuntime {
                     placement.reason.code(),
                     &placement.detail,
                     &placement.steps,
+                    // HS2-9FKTB3: why the other sites were passed over.
+                    site_passes(&placement.sites),
                     // HS2-95SWQ4: two starts that each began a session are two
                     // decisions, so the session an applied start began is part of it.
                     outcome_of(placement).map(|outcome| {
@@ -1318,7 +1347,13 @@ impl OrchestrationRuntime {
                     .hash(&mut hasher);
             }
             for item in &schedule.unplaced {
-                (&item.step_id, item.reason.code(), &item.detail).hash(&mut hasher);
+                (
+                    &item.step_id,
+                    item.reason.code(),
+                    &item.detail,
+                    site_passes(&item.sites),
+                )
+                    .hash(&mut hasher);
             }
             for found in &reported {
                 (
@@ -1362,6 +1397,7 @@ impl OrchestrationRuntime {
             score: None,
             inputs: None,
             tick: None,
+            sites: Vec::new(),
         };
         let mut logged = 0;
         journal.append(DecisionRecord {
@@ -1392,6 +1428,7 @@ impl OrchestrationRuntime {
                 retry_at_ms: placement.retry_at_ms,
                 score: placement.score,
                 inputs: Some(placement.inputs.clone()),
+                sites: placement.sites.clone(),
                 ..base(match placement.action {
                     PlacementAction::Start => DecisionKind::Start,
                     PlacementAction::Keep => DecisionKind::Keep,
@@ -1407,6 +1444,7 @@ impl OrchestrationRuntime {
             detail,
             retry_at_ms,
             score,
+            sites,
         } in &schedule.unplaced
         {
             journal.append(DecisionRecord {
@@ -1416,6 +1454,7 @@ impl OrchestrationRuntime {
                 detail: detail.clone(),
                 retry_at_ms: *retry_at_ms,
                 score: Some(*score),
+                sites: sites.clone(),
                 ..base(DecisionKind::Unplaced)
             })?;
             logged += 1;
@@ -1612,6 +1651,22 @@ impl OrchestrationRuntime {
 /// HS2-KCEHVR: a machine that names each unreadable namespace defers only those, each
 /// by its own policy; one that does not (an older peer) makes every asked namespace
 /// unknown with the policy it reported, and one that reports none fails closed.
+/// HS2-9FKTB3: the passed-over sites of a decision, for its change digest.
+fn site_passes(
+    sites: &[hotsheet_ticketing::orchestration::SitePass],
+) -> Vec<(&str, &str, Option<&str>)> {
+    sites
+        .iter()
+        .map(|pass| {
+            (
+                pass.target_id.as_str(),
+                pass.reason.as_str(),
+                pass.detail.as_deref(),
+            )
+        })
+        .collect()
+}
+
 pub(crate) fn read_claims(
     snapshot: &hotsheet_ticketing::orchestration::CapacitySnapshot,
     namespaces: &[String],

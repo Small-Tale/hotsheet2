@@ -89,6 +89,7 @@ pub(super) fn work(n: u128, on: u128) -> WorkItem {
         model: None,
         resources: Vec::new(),
         speculation: None,
+        sites: Vec::new(),
     }
 }
 fn prio(mut item: WorkItem, priority: &str) -> WorkItem {
@@ -1577,6 +1578,7 @@ fn record(kind: DecisionKind) -> DecisionRecord {
         score: Some(ScoreParts::default()),
         inputs: Some(PlacementInputs::default()),
         tick: None,
+        sites: Vec::new(),
     }
 }
 

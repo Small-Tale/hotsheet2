@@ -287,10 +287,11 @@ impl OrchestrationRuntime {
                 reason: error.code().into(),
             },
         };
+        // HS2-9FKTB3: an operation id names one start whichever site of the project it
+        // went to, so the latest one is looked for on every target.
         let latest_of = |records: Vec<OrchestratedSession>| {
             records
                 .into_iter()
-                .filter(|session| session.target_id == request.target_id)
                 .filter_map(|session| {
                     generation(&request.operation_id, &session.operation_id).map(|n| (n, session))
                 })
@@ -309,6 +310,7 @@ impl OrchestrationRuntime {
         if let Some((_, session)) = &latest
             && session.state == SessionState::Requested
             && (session.tool != request.tool
+                || session.target_id != request.target_id
                 || session.model != request.model
                 || session.account != request.account)
         {
@@ -350,10 +352,12 @@ impl OrchestrationRuntime {
         let repeated = latest.is_some_and(|(_, session)| !session.state.is_terminal());
         let run_id = match (earlier_run, request.steps.first()) {
             (Some(run_id), _) => Some(run_id),
-            (None, Some(step_id)) => match self.scheduler_run(owner_id, step_id, &actor, tx) {
-                Ok(run) => Some(run.run_id),
-                Err(error) => return refused(&error),
-            },
+            (None, Some(step_id)) => {
+                match self.scheduler_run(owner_id, step_id, &request.target_id, &actor, tx) {
+                    Ok(run) => Some(run.run_id),
+                    Err(error) => return refused(&error),
+                }
+            }
             (None, None) => None,
         };
         // HS2-DG0YPA: a live session that already works the run is adopted, never
@@ -455,11 +459,13 @@ impl OrchestrationRuntime {
     /// repeated request is the same run; once that run failed or was cancelled the
     /// next is `<id>.<n>`. Dispatched in dispatcher mode as `actor`, so the target's
     /// dispatcher assigns the exact ticket, through the gate (`work_start`) and the
-    /// readiness guard.
+    /// readiness guard. HS2-9FKTB3: on `site`, the site of the step's project the
+    /// scheduler chose; a live run of the step on another site is refused.
     pub(super) fn scheduler_run(
         &self,
         owner_id: &str,
         step_id: &str,
+        site: &str,
         actor: &MutationActor,
         tx: &mut Transaction<'_>,
     ) -> Result<Run, OrchestrationError> {
@@ -472,7 +478,15 @@ impl OrchestrationRuntime {
             .max_by_key(|(n, _)| *n);
         let operation_id = match latest {
             None => base,
-            Some((_, run)) if !run.state.is_terminal() => return Ok(run),
+            Some((_, run)) if !run.state.is_terminal() => {
+                return if run.target.target_id == site {
+                    Ok(run)
+                } else {
+                    Err(OrchestrationError::Site(
+                        hotsheet_ticketing::orchestration::SiteError::RunConflict,
+                    ))
+                };
+            }
             Some((_, run)) if run.state == RunState::Completed => {
                 return Err(OrchestrationError::Run(
                     hotsheet_ticketing::orchestration::RunError::NotActive,
@@ -488,7 +502,7 @@ impl OrchestrationRuntime {
                     native_id: step.ticket.native_id.clone(),
                 },
                 target: TargetTicket {
-                    target_id: step.target.target_id.clone(),
+                    target_id: site.to_owned(),
                     connection_id: step.target.connection_id.clone(),
                     native_id: step.target.native_id.clone(),
                 },
@@ -531,7 +545,13 @@ impl OrchestrationRuntime {
                 reason: SessionError::NotActive.code().into(),
             };
         }
-        let run = match self.scheduler_run(&request.owner_id, &request.step_id, &actor, tx) {
+        let run = match self.scheduler_run(
+            &request.owner_id,
+            &request.step_id,
+            &request.target_id,
+            &actor,
+            tx,
+        ) {
             Ok(run) => run,
             Err(error) => return refused(&error),
         };

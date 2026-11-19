@@ -26,7 +26,8 @@ use super::{
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
     OrchestrationError, PolicyBody, PolicyDenial, RequirementState, ResourceContention,
     ResourceState, RoleSessionKind, SelectionRequest, SessionCount, SessionRole, SignalSupport,
-    StepRequirements, UnreadableClaims, decide_admission, requirement_misses, select,
+    StepRequirements, UnreadableClaims, UnreadableReason, decide_admission, requirement_misses,
+    select,
 };
 
 /// One priority band, in points. Every other term is expressed against it.
@@ -138,6 +139,10 @@ pub struct WorkItem {
     /// item is ranked and never placed, as before the policy could opt in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speculation: Option<WorkSpeculation>,
+    /// HS2-9FKTB3: the other sites of the work's project it may run on, besides
+    /// `target_id`, which is tried first. Empty: only `target_id`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -564,6 +569,10 @@ pub struct Placement {
     /// HS2-TK9ADC: the role of the session started or kept, when it is not a worker.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<SessionRole>,
+    /// HS2-9FKTB3: the other sites of the work's project and why each was passed
+    /// over; `target_id` is the site chosen. Empty for a one-site project.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SitePass>,
 }
 
 /// Why ready work gets no session in this pass. The wire spelling equals `code()`.
@@ -636,6 +645,10 @@ pub struct Unplaced {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_at_ms: Option<u64>,
     pub score: ScoreParts,
+    /// HS2-9FKTB3: every other site of the work's project with its own reason;
+    /// `target_id`, `reason` and `detail` are those of the site the step names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SitePass>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -678,6 +691,9 @@ pub struct Standing {
     pub score: ScoreParts,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<Placement>,
+    /// HS2-9FKTB3: the other sites of the work's project and why each was passed over.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SitePass>,
 }
 
 impl Schedule {
@@ -702,6 +718,7 @@ impl Schedule {
                 retry_at_ms: None,
                 rank: rank + 1,
                 score,
+                sites: placement.sites.clone(),
                 placement: Some(placement.clone()),
             },
             (None, Some(item)) => Standing {
@@ -713,6 +730,7 @@ impl Schedule {
                 rank: rank + 1,
                 score,
                 placement: None,
+                sites: item.sites.clone(),
             },
             (None, None) => return None,
         })
@@ -816,14 +834,628 @@ enum Fate {
         Option<String>,
         Option<u64>,
     ),
-    /// The step a free session takes, its score, and whether it is provisional.
-    Refilled(String, ScoreParts, bool),
+    /// The step a free session takes, its score, whether it is provisional, and the
+    /// other sites of its project passed over (HS2-9FKTB3).
+    Refilled(String, ScoreParts, bool, Vec<SitePass>),
 }
 
 fn earliest(retry: &mut Option<u64>, at_ms: u64, now_ms: u64) {
     if at_ms > now_ms {
         *retry = Some(retry.map_or(at_ms, |known| known.min(at_ms)));
     }
+}
+
+/// Sessions of a tool, and of one of its accounts when named, in the pass's load.
+fn running(load: &[SessionCount], tool: &str, account: Option<&str>) -> u32 {
+    load.iter()
+        .filter(|entry| {
+            entry.tool == tool && account.is_none_or(|a| entry.account.as_deref() == Some(a))
+        })
+        .fold(0u32, |sum, entry| sum.saturating_add(entry.sessions))
+}
+
+// ---- HS2-9FKTB3: which site of a project runs a step ----
+
+/// Why one site of a project was passed over for a step, or why it took no session
+/// there. `reason` is a [`Blocker`] code, or `not_chosen` for a site that could have
+/// taken the work when another was better; then `detail` says why: `free_session`
+/// (another site had a free session), `preferred_tool` (another site could start the
+/// preferred tool), `fewer_sessions` (another site's machine ran fewer sessions) or
+/// `site_order` (a tie, broken by the named site, then the site id).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SitePass {
+    pub target_id: String,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+pub const SITE_NOT_CHOSEN: &str = "not_chosen";
+
+/// What one site would do with one step, decided without changing the pass.
+enum SiteOutcome<'a> {
+    /// A free session of the site takes it; `preferred` when the session has the
+    /// work's preferred tool and model.
+    Refill { index: usize, preferred: bool },
+    /// A new session starts there.
+    Start {
+        placement: Box<Placement>,
+        server: &'a str,
+        /// Sessions on the site's machine, and on the site, with this one.
+        machine_sessions: u32,
+        target_sessions: u32,
+        preferred: bool,
+    },
+    Blocked {
+        reason: Blocker,
+        detail: Option<String>,
+        retry: Option<u64>,
+    },
+}
+
+/// A resource the step waits on at one site, recorded only when the step is
+/// placed nowhere.
+struct WaitNote<'a> {
+    machine: Option<&'a str>,
+    need: &'a ResourceNeed,
+    state: ResourceState,
+    expires_at_ms: Option<u64>,
+    taken_by: Option<&'a str>,
+    unreadable: Option<UnreadableReason>,
+}
+
+struct SiteTry<'a> {
+    site: &'a str,
+    /// The machine that hosts the site, when it was read.
+    machine: Option<&'a str>,
+    outcome: SiteOutcome<'a>,
+    /// Times a decision at this site changes by time alone.
+    retries: Vec<u64>,
+    waits: Vec<WaitNote<'a>>,
+    /// Resources taken there without their claims being readable.
+    unverified: Vec<(&'a ResourceNeed, UnreadableReason)>,
+}
+
+impl SiteTry<'_> {
+    fn note(&self, contention: &mut ContentionLog, step_id: &str) {
+        for wait in &self.waits {
+            let entry = contention.entry(wait.machine, wait.need, wait.state);
+            if let Some(at) = wait.expires_at_ms {
+                entry.expires_at_ms = Some(at);
+            }
+            if let Some(taker) = wait.taken_by {
+                entry.taken_by = Some(taker.to_owned());
+            }
+            if let Some(reason) = wait.unreadable {
+                entry.unreadable = Some(reason);
+            }
+            entry.waiting.push(step_id.to_owned());
+        }
+    }
+
+    /// Lower is better: a free session of the preferred tool, a start of it, a free
+    /// session of another tool, a start of another tool. Then the start whose
+    /// machine runs fewest sessions; then the site's place in the candidate list.
+    fn rank(&self, position: usize) -> Option<(u8, u32, u32, usize)> {
+        match &self.outcome {
+            SiteOutcome::Refill { preferred, .. } => {
+                Some((if *preferred { 0 } else { 2 }, 0, 0, position))
+            }
+            SiteOutcome::Start {
+                preferred,
+                machine_sessions,
+                target_sessions,
+                ..
+            } => Some((
+                if *preferred { 1 } else { 3 },
+                *machine_sessions,
+                *target_sessions,
+                position,
+            )),
+            SiteOutcome::Blocked { .. } => None,
+        }
+    }
+}
+
+/// The best site, or `None` when every site is blocked.
+fn choose_site(tries: &[SiteTry<'_>]) -> Option<usize> {
+    tries
+        .iter()
+        .enumerate()
+        .filter_map(|(position, tried)| tried.rank(position))
+        .min()
+        .map(|(_, _, _, position)| position)
+}
+
+/// Every site but the chosen one (or the named one, when none was chosen), with why.
+fn passed_over(tries: &[SiteTry<'_>], chosen: Option<usize>) -> Vec<SitePass> {
+    let lead = chosen.unwrap_or(0);
+    let best = chosen.and_then(|index| tries[index].rank(index));
+    tries
+        .iter()
+        .enumerate()
+        .filter(|(position, _)| *position != lead)
+        .map(|(position, tried)| {
+            let (reason, detail) = match (&tried.outcome, tried.rank(position), best) {
+                (SiteOutcome::Blocked { reason, detail, .. }, _, _) => {
+                    (reason.code().to_owned(), detail.clone())
+                }
+                (_, Some(mine), Some(best)) => {
+                    let why = if best.0 % 2 == 0 {
+                        "free_session"
+                    } else if mine.0 > best.0 {
+                        "preferred_tool"
+                    } else if (mine.1, mine.2) > (best.1, best.2) {
+                        "fewer_sessions"
+                    } else {
+                        "site_order"
+                    };
+                    (SITE_NOT_CHOSEN.to_owned(), Some(why.to_owned()))
+                }
+                _ => (SITE_NOT_CHOSEN.to_owned(), None),
+            };
+            SitePass {
+                target_id: tried.site.to_owned(),
+                reason,
+                detail,
+            }
+        })
+        .collect()
+}
+
+/// What one pass knows when it tries one site for one step.
+struct SiteContext<'p, 'a> {
+    input: &'p ScheduleInput<'a>,
+    support: &'p dyn Fn(&str) -> SignalSupport,
+    item: &'a WorkItem,
+    parts: &'p ScoreParts,
+    site: &'a str,
+    sessions: &'p [&'a ScheduledSession],
+    fates: &'p [Fate],
+    load: &'p [SessionCount],
+    on_target: &'p BTreeMap<&'a str, u32>,
+    planned_target: &'p BTreeMap<&'a str, u32>,
+    planned_machine: &'p BTreeMap<&'a str, u32>,
+    allocated: &'p BTreeMap<(&'a str, &'a ResourceNeed), &'a str>,
+    cooldown_ms: u64,
+}
+
+/// HS2-9FKTB3: what one site would do with one step: every check the step names
+/// (provisional opt-in, requirements, resources on the site's machine, a free
+/// session, the policy, the site's cap, refusal backoff, cooldown, capacity, tool
+/// accounts and admission), in the order a one-site project always used. Pure.
+fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
+    use PlacementReason as R;
+    let input = cx.input;
+    let policy = input.policy;
+    let now = input.now_ms;
+    let item = cx.item;
+    let site = cx.site;
+    let provisional = item.level == WorkLevel::Provisional;
+    let mut tried = SiteTry {
+        site,
+        machine: None,
+        outcome: SiteOutcome::Blocked {
+            reason: Blocker::TargetUnavailable,
+            detail: None,
+            retry: None,
+        },
+        retries: Vec::new(),
+        waits: Vec::new(),
+        unverified: Vec::new(),
+    };
+    macro_rules! finish {
+        ($outcome:expr) => {{
+            tried.outcome = $outcome;
+            return tried;
+        }};
+    }
+    let blocked =
+        |reason: Blocker, detail: Option<String>, retry: Option<u64>| SiteOutcome::Blocked {
+            reason,
+            detail,
+            retry,
+        };
+    if provisional {
+        // HS2-JSF985: placed only when the policy opts in for the site and the
+        // provisional rule allowed this exact item.
+        match &item.speculation {
+            Some(rule) if policy.speculation_allowed(site) => {
+                if !rule.allowed {
+                    finish!(blocked(
+                        Blocker::SpeculationRefused,
+                        rule.refusal.clone(),
+                        None
+                    ));
+                }
+            }
+            _ => finish!(blocked(Blocker::Provisional, None, None)),
+        }
+    }
+    let state = input.targets.iter().find(|state| state.target_id == site);
+    let snapshot = state.and_then(|state| state.capacity.as_ref());
+    // HS2-ZY4Z4G: work that names requirements goes only where the site's machine
+    // meets them. A machine that misses one gets the work on no session, a free one
+    // included; one that was not read, or did not say, is not trusted with it.
+    if !item.requirements.is_empty() {
+        let misses = snapshot.map(|snapshot| requirement_misses(&item.requirements, snapshot));
+        let first = |state: RequirementState| {
+            misses
+                .iter()
+                .flatten()
+                .find(|miss| miss.state == state)
+                .map(|miss| miss.requirement.clone())
+        };
+        if let Some(requirement) = first(RequirementState::Unmet) {
+            finish!(blocked(Blocker::RequirementUnmet, Some(requirement), None));
+        }
+        if let Some(requirement) = first(RequirementState::Unknown) {
+            finish!(blocked(
+                Blocker::RequirementUnknown,
+                Some(requirement),
+                None
+            ));
+        }
+        if snapshot.is_none() {
+            finish!(blocked(
+                Blocker::RequirementUnknown,
+                Some("capacity_not_read".into()),
+                None
+            ));
+        }
+    }
+    // HS2-2FG91X: a resource means something only on the machine that hosts the
+    // site. Without a reading of that machine nothing is known about it.
+    let machine = snapshot.map(|snapshot| snapshot.server_id.as_str());
+    tried.machine = machine;
+    let wait = |machine, need, state| WaitNote {
+        machine,
+        need,
+        state,
+        expires_at_ms: None,
+        taken_by: None,
+        unreadable: None,
+    };
+    for need in &item.resources {
+        let Some(machine) = machine else {
+            tried.waits.push(wait(None, need, ResourceState::NotRead));
+            continue;
+        };
+        let holder = input
+            .held
+            .iter()
+            .filter(|held| {
+                held.namespace == need.namespace
+                    && held.resource == need.resource
+                    && held.expires_at_ms > now
+                    && held.server_id.as_deref().is_none_or(|id| id == machine)
+            })
+            .map(|held| held.expires_at_ms)
+            .max();
+        if let Some(expires) = holder {
+            tried.waits.push(WaitNote {
+                expires_at_ms: Some(expires),
+                ..wait(Some(machine), need, ResourceState::Held)
+            });
+            tried.retries.push(expires);
+            finish!(blocked(
+                Blocker::ResourceHeld,
+                Some(need.name()),
+                Some(expires)
+            ));
+        }
+        if let Some(taker) = cx.allocated.get(&(machine, need)) {
+            tried.waits.push(WaitNote {
+                taken_by: Some(taker),
+                ..wait(Some(machine), need, ResourceState::Taken)
+            });
+            finish!(blocked(Blocker::ResourceHeld, Some(need.name()), None));
+        }
+        let unread = input
+            .unreadable
+            .iter()
+            .filter(|unread| unread.server_id == machine && unread.namespace == need.namespace)
+            .min_by_key(|unread| unread.offline);
+        match unread {
+            Some(unread) if unread.offline == OfflinePolicy::FailClosed => {
+                tried.waits.push(WaitNote {
+                    unreadable: Some(unread.reason),
+                    ..wait(Some(machine), need, ResourceState::Unreadable)
+                });
+                finish!(blocked(Blocker::ResourceUnknown, Some(need.name()), None));
+            }
+            Some(unread) => tried.unverified.push((need, unread.reason)),
+            None => {}
+        }
+    }
+    // A free session of the site takes the work: idle ones before those that wait
+    // on a gate, which may be called back to their own ticket. HS2-TH53NN: the work's
+    // tool and model are preferences. A free session that has them takes it first; a
+    // new session of the preferred tool comes next; another free session of the site
+    // takes it only when the preferred tool cannot start.
+    let preferred = |session: &ScheduledSession| {
+        item.tool.as_ref().is_none_or(|tool| tool == &session.tool)
+            && item
+                .model
+                .as_ref()
+                .is_none_or(|model| session.model.as_ref() == Some(model))
+    };
+    let free_where = |wanted: bool| {
+        cx.sessions
+            .iter()
+            .enumerate()
+            .filter(|(index, session)| {
+                matches!(cx.fates[*index], Fate::Free)
+                    // Work whose resources were not read is not handed to anyone.
+                    && (machine.is_some() || item.resources.is_empty())
+                    && session.target_id == site
+                    && preferred(session) == wanted
+            })
+            .min_by_key(|(_, session)| (std::cmp::Reverse(session.activity), &session.session_id))
+            .map(|(index, _)| index)
+    };
+    if let Some(index) = free_where(true) {
+        finish!(SiteOutcome::Refill {
+            index,
+            preferred: true
+        });
+    }
+    let other_free = free_where(false);
+    // A blocked start falls back to another free session of the site.
+    macro_rules! fallback {
+        ($reason:expr, $detail:expr, $retry:expr $(,)?) => {{
+            match other_free {
+                Some(index) => finish!(SiteOutcome::Refill {
+                    index,
+                    preferred: false
+                }),
+                None => finish!(blocked($reason, $detail, $retry)),
+            }
+        }};
+    }
+    let selection_for = |tool: Option<&str>, model: Option<&str>| {
+        select(
+            &SelectionRequest {
+                policy,
+                target_id: site,
+                tool,
+                model,
+                entries: input.tool_entries,
+                load: cx.load,
+                now_ms: now,
+            },
+            cx.support,
+        )
+    };
+    let mut selection = selection_for(item.tool.as_deref(), item.model.as_deref());
+    // HS2-TH53NN: a preferred tool or model that leaves nothing to start on is a
+    // preference, not a requirement: any allowed tool account takes the work.
+    if selection.denied.is_none()
+        && selection.candidates.is_empty()
+        && (item.tool.is_some() || item.model.is_some())
+    {
+        if let Some(index) = other_free {
+            finish!(SiteOutcome::Refill {
+                index,
+                preferred: false
+            });
+        }
+        selection = selection_for(None, None);
+    }
+    if let Some(denied) = selection.denied {
+        fallback!(Blocker::PolicyDenied, Some(denied.into()), None);
+    }
+    let Some(target) = policy.target(site) else {
+        fallback!(
+            Blocker::PolicyDenied,
+            Some(PolicyDenial::TargetNotPermitted.code().into()),
+            None,
+        );
+    };
+    let target_sessions = cx.on_target.get(site).copied().unwrap_or(0)
+        + cx.planned_target.get(site).copied().unwrap_or(0);
+    if target_sessions >= target.max_sessions {
+        fallback!(Blocker::TargetCap, None, None);
+    }
+    // What the policy and the site's cap say stands until a person changes it; a
+    // refusal or a cooldown only postpones, so those are named after.
+    let remembered = input.memory.iter().find(|entry| entry.target_id == site);
+    if let Some(until) = remembered
+        .and_then(PlacementMemory::refused_until_ms)
+        .filter(|until| *until > now)
+    {
+        let reason = remembered.and_then(|entry| entry.refusal_reason.clone());
+        // HS2-AWB7BX: a capacity refusal on a site whose changes arrive as events
+        // waits for the change, not for a time.
+        let evented = input.capacity_streams.iter().any(|id| id == site)
+            && reason.as_deref().is_some_and(is_capacity_refusal);
+        if evented {
+            fallback!(Blocker::RefusalBackoff, reason, None);
+        }
+        tried.retries.push(until);
+        fallback!(Blocker::RefusalBackoff, reason, Some(until));
+    }
+    if let Some(until) = remembered
+        .and_then(|entry| entry.last_wound_down_at_ms)
+        .map(|at| at.saturating_add(cx.cooldown_ms))
+        .filter(|until| *until > now)
+    {
+        tried.retries.push(until);
+        fallback!(Blocker::Cooldown, None, Some(until));
+    }
+    let Some(snapshot) = snapshot else {
+        fallback!(
+            Blocker::TargetUnavailable,
+            Some(
+                state
+                    .and_then(|state| state.unavailable.clone())
+                    .unwrap_or_else(|| "capacity_not_read".into()),
+            ),
+            None,
+        );
+    };
+    let limits = policy.machine_limits(site);
+    let on_machine = cx
+        .planned_machine
+        .get(snapshot.server_id.as_str())
+        .copied()
+        .unwrap_or(0);
+    let mut nearest: Option<(Blocker, String, Option<u64>)> = None;
+    let mut placed = None;
+    for candidate in &selection.candidates {
+        let account = candidate.account.as_deref();
+        // A degraded account is tried by one session at a time.
+        if candidate.status.state == CapacityState::Degraded
+            && running(cx.load, &candidate.tool, account) > 0
+        {
+            nearest.get_or_insert((Blocker::NoTool, "probe_in_flight".into(), None));
+            continue;
+        }
+        // HS2-TH53NN: the preferred model goes with the preferred tool (or with any
+        // tool when none is preferred); another tool uses its own first model.
+        let model = item
+            .model
+            .clone()
+            .filter(|_| {
+                item.tool
+                    .as_ref()
+                    .is_none_or(|tool| tool == &candidate.tool)
+                    && target.tools.iter().any(|scope| {
+                        scope.tool == candidate.tool
+                            && (scope.models.is_empty()
+                                || item
+                                    .model
+                                    .as_ref()
+                                    .is_some_and(|m| scope.models.contains(m)))
+                    })
+            })
+            .or_else(|| {
+                target
+                    .tools
+                    .iter()
+                    .find(|scope| scope.tool == candidate.tool)
+                    .and_then(|scope| scope.models.first().cloned())
+            });
+        let admission = decide_admission(
+            snapshot,
+            &AdmissionConfig::default(),
+            &AdmissionRequest {
+                tool: candidate.tool.clone(),
+                model: model.clone(),
+                sessions: on_machine + 1,
+                limits: Some(limits),
+            },
+        );
+        if admission.outcome == AdmissionOutcome::Accepted {
+            placed = Some((candidate, model, admission));
+            break;
+        }
+        let reason = admission.reason.unwrap_or(AdmissionReason::CapacityUnknown);
+        if matches!(
+            reason,
+            AdmissionReason::ToolNotInstalled | AdmissionReason::ToolNotConfigured
+        ) {
+            // Another allowed tool may be present on that machine.
+            nearest = Some((Blocker::NoTool, reason.code().into(), None));
+            continue;
+        }
+        nearest = Some((Blocker::MachineRefused, reason.code().into(), None));
+        break;
+    }
+    let Some((candidate, model, admission)) = placed else {
+        let (reason, detail, retry) = nearest.unwrap_or_else(|| {
+            // Nothing was even a candidate: name the exclusion that ends soonest.
+            let limited = selection
+                .excluded
+                .iter()
+                .filter_map(
+                    |excluded| match excluded.status.map(|status| status.state) {
+                        Some(CapacityState::Limited { until_ms }) => Some(until_ms),
+                        _ => None,
+                    },
+                )
+                .min();
+            let detail = match (limited, selection.excluded.first()) {
+                (Some(_), _) => "limited".to_owned(),
+                (None, Some(first)) => serde_json::to_value(first.excluded)
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_owned))
+                    .unwrap_or_else(|| "excluded".into()),
+                (None, None) => "no_tool_permitted".into(),
+            };
+            (Blocker::NoTool, detail, limited)
+        });
+        if let Some(at) = retry {
+            tried.retries.push(at);
+        }
+        finish!(blocked(reason, Some(detail), retry));
+    };
+    // HS2-TH53NN: a start of another tool than the preferred one is no better than a
+    // free session of the site that is already running.
+    let preferred_start = item
+        .tool
+        .as_ref()
+        .is_none_or(|tool| tool == &candidate.tool)
+        && item
+            .model
+            .as_ref()
+            .is_none_or(|wanted| model.as_ref() == Some(wanted));
+    if let Some(index) = other_free.filter(|_| !preferred_start) {
+        finish!(SiteOutcome::Refill {
+            index,
+            preferred: false
+        });
+    }
+    let account = candidate.account.as_deref();
+    let machine_sessions = snapshot.sessions.as_ref().map(|running| {
+        u32::try_from(running.len())
+            .unwrap_or(u32::MAX)
+            .saturating_add(on_machine + 1)
+    });
+    finish!(SiteOutcome::Start {
+        placement: Box::new(Placement {
+            action: PlacementAction::Start,
+            target_id: site.to_owned(),
+            tool: candidate.tool.clone(),
+            account: candidate.account.clone(),
+            model,
+            session_id: None,
+            reason: if provisional {
+                R::ProvisionalWork
+            } else {
+                R::ReadyWork
+            },
+            detail: None,
+            provisional,
+            steps: vec![item.step_id.clone()],
+            score: Some(*cx.parts),
+            probe: !candidate.verified,
+            retry_at_ms: None,
+            inputs: PlacementInputs {
+                target_sessions: target_sessions + 1,
+                target_cap: Some(target.max_sessions),
+                machine_sessions,
+                machine_cap: Some(admission.limits.max_sessions),
+                free_ram_mb: snapshot.memory.free_mb,
+                footprint_mb: Some(admission.footprint_mb),
+                tool_state: Some(candidate.status.state.code().into()),
+                tool_free: Some(candidate.free_sessions),
+                tool_sessions: Some(running(cx.load, &candidate.tool, None)),
+                account_sessions: account.map(|account| running(
+                    cx.load,
+                    &candidate.tool,
+                    Some(account)
+                )),
+            },
+            role: None,
+            sites: Vec::new(),
+        }),
+        server: snapshot.server_id.as_str(),
+        machine_sessions: machine_sessions.unwrap_or(on_machine + 1),
+        target_sessions: target_sessions + 1,
+        preferred: preferred_start,
+    });
 }
 
 /// Decide every placement for one owner. See the module documentation.
@@ -958,13 +1590,6 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     for session in &sessions {
         count(&mut load, &session.tool, session.account.as_deref());
     }
-    let running = |load: &[SessionCount], tool: &str, account: Option<&str>| {
-        load.iter()
-            .filter(|entry| {
-                entry.tool == tool && account.is_none_or(|a| entry.account.as_deref() == Some(a))
-            })
-            .fold(0u32, |sum, entry| sum.saturating_add(entry.sessions))
-    };
     let mut planned_target: BTreeMap<&str, u32> = BTreeMap::new();
     let mut planned_machine: BTreeMap<&str, u32> = BTreeMap::new();
     // HS2-2FG91X: a resource given to work in this pass, per machine, and to which step.
@@ -1142,6 +1767,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                         .map(|account| running(&load, &candidate.tool, Some(account))),
                 },
                 role: Some(role),
+                sites: Vec::new(),
             });
             count(&mut load, &candidate.tool, account);
             *planned_target.entry(target_id).or_default() += 1;
@@ -1152,7 +1778,57 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
     }
 
     for (parts, item) in ranked.iter().map(|(parts, item)| (parts, *item)) {
-        let mut skip = |reason: Blocker, detail: Option<String>, retry: Option<u64>| {
+        let provisional = item.level == WorkLevel::Provisional;
+        // HS2-9FKTB3: the site the step names first, then the other sites of its project
+        // it may run on by id, whatever order they were listed in. Each is tried on its
+        // own; nothing changes until one is chosen.
+        let others: BTreeSet<&str> = item
+            .sites
+            .iter()
+            .map(String::as_str)
+            .filter(|site| *site != item.target_id)
+            .collect();
+        let candidates: Vec<&str> = std::iter::once(item.target_id.as_str())
+            .chain(others)
+            .take(MAX_TARGETS)
+            .collect();
+        let tries: Vec<SiteTry<'_>> = candidates
+            .iter()
+            .map(|site| {
+                try_site(&SiteContext {
+                    input,
+                    support,
+                    item,
+                    parts,
+                    site,
+                    sessions: &sessions,
+                    fates: &fates,
+                    load: &load,
+                    on_target: &on_target,
+                    planned_target: &planned_target,
+                    planned_machine: &planned_machine,
+                    allocated: &allocated,
+                    cooldown_ms,
+                })
+            })
+            .collect();
+        let Some(chosen) = choose_site(&tries) else {
+            // Nowhere: the named site's reason leads, every other site says its own.
+            for tried in &tries {
+                tried.note(&mut contention, &item.step_id);
+                for at in &tried.retries {
+                    earliest(&mut retry_at, *at, now);
+                }
+            }
+            let (reason, detail, retry) = match &tries[0].outcome {
+                SiteOutcome::Blocked {
+                    reason,
+                    detail,
+                    retry,
+                } => (*reason, detail.clone(), *retry),
+                // choose_site found nothing, so every try is blocked.
+                _ => (Blocker::TargetUnavailable, None, None),
+            };
             unplaced.push(Unplaced {
                 step_id: item.step_id.clone(),
                 target_id: item.target_id.clone(),
@@ -1160,430 +1836,43 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                 detail,
                 retry_at_ms: retry.filter(|at| *at > now),
                 score: *parts,
+                sites: passed_over(&tries, None),
             });
-        };
-        let provisional = item.level == WorkLevel::Provisional;
-        if provisional {
-            // HS2-JSF985: placed only when the policy opts in for the target and the
-            // provisional rule allowed this exact item.
-            match &item.speculation {
-                Some(rule) if policy.speculation_allowed(&item.target_id) => {
-                    if !rule.allowed {
-                        skip(Blocker::SpeculationRefused, rule.refusal.clone(), None);
-                        continue;
-                    }
-                }
-                _ => {
-                    skip(Blocker::Provisional, None, None);
-                    continue;
-                }
-            }
-        }
-        // HS2-ZY4Z4G: work that names requirements goes only where the target's machine
-        // meets them. A machine that misses one gets the work on no session, a free one
-        // included; one that was not read, or did not say, is not trusted with it.
-        if !item.requirements.is_empty() {
-            let snapshot = input
-                .targets
-                .iter()
-                .find(|target| target.target_id == item.target_id)
-                .and_then(|target| target.capacity.as_ref());
-            let misses = snapshot.map(|snapshot| requirement_misses(&item.requirements, snapshot));
-            let first = |state: RequirementState| {
-                misses
-                    .iter()
-                    .flatten()
-                    .find(|miss| miss.state == state)
-                    .map(|miss| miss.requirement.clone())
-            };
-            if let Some(requirement) = first(RequirementState::Unmet) {
-                skip(Blocker::RequirementUnmet, Some(requirement), None);
-                continue;
-            }
-            if let Some(requirement) = first(RequirementState::Unknown) {
-                skip(Blocker::RequirementUnknown, Some(requirement), None);
-                continue;
-            }
-            if snapshot.is_none() {
-                skip(
-                    Blocker::RequirementUnknown,
-                    Some("capacity_not_read".into()),
-                    None,
-                );
-                continue;
-            }
-        }
-        // HS2-2FG91X: a resource means something only on the machine that hosts the
-        // target. Without a reading of that machine nothing is known about it.
-        let machine = input
-            .targets
-            .iter()
-            .find(|target| target.target_id == item.target_id)
-            .and_then(|target| target.capacity.as_ref())
-            .map(|snapshot| snapshot.server_id.as_str());
-        let mut unverified = Vec::new();
-        let mut deferred = None;
-        for need in &item.resources {
-            let Some(machine) = machine else {
-                contention
-                    .entry(None, need, ResourceState::NotRead)
-                    .waiting
-                    .push(item.step_id.clone());
-                continue;
-            };
-            let holder = input
-                .held
-                .iter()
-                .filter(|held| {
-                    held.namespace == need.namespace
-                        && held.resource == need.resource
-                        && held.expires_at_ms > now
-                        && held.server_id.as_deref().is_none_or(|id| id == machine)
-                })
-                .map(|held| held.expires_at_ms)
-                .max();
-            if let Some(expires) = holder {
-                let entry = contention.entry(Some(machine), need, ResourceState::Held);
-                entry.expires_at_ms = Some(expires);
-                entry.waiting.push(item.step_id.clone());
-                deferred = Some((need, Blocker::ResourceHeld, Some(expires)));
-                break;
-            }
-            if let Some(taker) = allocated.get(&(machine, need)) {
-                let entry = contention.entry(Some(machine), need, ResourceState::Taken);
-                entry.taken_by = Some((*taker).to_owned());
-                entry.waiting.push(item.step_id.clone());
-                deferred = Some((need, Blocker::ResourceHeld, None));
-                break;
-            }
-            let unread = input
-                .unreadable
-                .iter()
-                .filter(|unread| unread.server_id == machine && unread.namespace == need.namespace)
-                .min_by_key(|unread| unread.offline);
-            match unread {
-                Some(unread) if unread.offline == OfflinePolicy::FailClosed => {
-                    let entry = contention.entry(Some(machine), need, ResourceState::Unreadable);
-                    entry.unreadable = Some(unread.reason);
-                    entry.waiting.push(item.step_id.clone());
-                    deferred = Some((need, Blocker::ResourceUnknown, None));
-                    break;
-                }
-                Some(unread) => unverified.push((need, unread.reason)),
-                None => {}
-            }
-        }
-        if let Some((need, reason, expires)) = deferred {
-            if let Some(at) = expires {
-                earliest(&mut retry_at, at, now);
-            }
-            skip(reason, Some(need.name()), expires);
             continue;
+        };
+        let sites = passed_over(&tries, Some(chosen));
+        let tried = &tries[chosen];
+        for at in &tried.retries {
+            earliest(&mut retry_at, *at, now);
         }
         // Given to this step: nothing ranked below it in this pass gets it too.
-        macro_rules! take {
-            () => {
-                if let Some(machine) = machine {
-                    for need in &item.resources {
-                        allocated.insert((machine, need), item.step_id.as_str());
-                    }
-                    for (need, reason) in &unverified {
-                        let entry =
-                            contention.entry(Some(machine), need, ResourceState::Unverified);
-                        entry.unreadable = Some(*reason);
-                        entry.taken_by = Some(item.step_id.clone());
-                    }
-                }
-            };
-        }
-        // A free session of the target takes the work: idle ones before those that
-        // wait on a gate, which may be called back to their own ticket. HS2-TH53NN: the
-        // work's tool and model are preferences. A free session that has them takes it
-        // first; a new session of the preferred tool comes next; another free session
-        // of the target takes it only when the preferred tool cannot start.
-        let preferred = |session: &ScheduledSession| {
-            item.tool.as_ref().is_none_or(|tool| tool == &session.tool)
-                && item
-                    .model
-                    .as_ref()
-                    .is_none_or(|model| session.model.as_ref() == Some(model))
-        };
-        let free_where = |fates: &[Fate], wanted: bool| {
-            sessions
-                .iter()
-                .enumerate()
-                .filter(|(index, session)| {
-                    matches!(fates[*index], Fate::Free)
-                        // Work whose resources were not read is not handed to anyone.
-                        && (machine.is_some() || item.resources.is_empty())
-                        && session.target_id == item.target_id
-                        && preferred(session) == wanted
-                })
-                .min_by_key(|(_, session)| {
-                    (std::cmp::Reverse(session.activity), &session.session_id)
-                })
-                .map(|(index, _)| index)
-        };
-        if let Some(index) = free_where(&fates, true) {
-            fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
-            take!();
-            continue;
-        }
-        let other_free = free_where(&fates, false);
-        // A blocked start falls back to another free session of the target.
-        macro_rules! blocked {
-            ($reason:expr, $detail:expr, $retry:expr $(,)?) => {{
-                if let Some(index) = other_free {
-                    fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
-                    take!();
-                } else {
-                    skip($reason, $detail, $retry);
-                }
-                continue;
-            }};
-        }
-        let selection_for = |tool: Option<&str>, model: Option<&str>| {
-            select(
-                &SelectionRequest {
-                    policy,
-                    target_id: &item.target_id,
-                    tool,
-                    model,
-                    entries: input.tool_entries,
-                    load: &load,
-                    now_ms: now,
-                },
-                support,
-            )
-        };
-        let mut selection = selection_for(item.tool.as_deref(), item.model.as_deref());
-        // HS2-TH53NN: a preferred tool or model that leaves nothing to start on is a
-        // preference, not a requirement: any allowed tool account takes the work.
-        if selection.denied.is_none()
-            && selection.candidates.is_empty()
-            && (item.tool.is_some() || item.model.is_some())
-        {
-            if let Some(index) = other_free {
-                fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
-                take!();
-                continue;
+        if let Some(machine) = tried.machine {
+            for need in &item.resources {
+                allocated.insert((machine, need), item.step_id.as_str());
             }
-            selection = selection_for(None, None);
-        }
-        if let Some(denied) = selection.denied {
-            blocked!(Blocker::PolicyDenied, Some(denied.into()), None);
-        }
-        let Some(target) = policy.target(&item.target_id) else {
-            blocked!(
-                Blocker::PolicyDenied,
-                Some(PolicyDenial::TargetNotPermitted.code().into()),
-                None,
-            );
-        };
-        let target_sessions = on_target.get(item.target_id.as_str()).copied().unwrap_or(0)
-            + planned_target
-                .get(item.target_id.as_str())
-                .copied()
-                .unwrap_or(0);
-        if target_sessions >= target.max_sessions {
-            blocked!(Blocker::TargetCap, None, None);
-        }
-        // What the policy and the target's cap say stands until a person changes it;
-        // a refusal or a cooldown only postpones, so those are named after.
-        let remembered = memory(&item.target_id);
-        if let Some(until) = remembered
-            .and_then(PlacementMemory::refused_until_ms)
-            .filter(|until| *until > now)
-        {
-            let reason = remembered.and_then(|entry| entry.refusal_reason.clone());
-            // HS2-AWB7BX: a capacity refusal on a target whose changes arrive as events
-            // waits for the change, not for a time.
-            let evented = input.capacity_streams.contains(&item.target_id)
-                && reason.as_deref().is_some_and(is_capacity_refusal);
-            if evented {
-                blocked!(Blocker::RefusalBackoff, reason, None);
+            for (need, reason) in &tried.unverified {
+                let entry = contention.entry(Some(machine), need, ResourceState::Unverified);
+                entry.unreadable = Some(*reason);
+                entry.taken_by = Some(item.step_id.clone());
             }
-            earliest(&mut retry_at, until, now);
-            blocked!(Blocker::RefusalBackoff, reason, Some(until));
         }
-        if let Some(until) = remembered
-            .and_then(|entry| entry.last_wound_down_at_ms)
-            .map(|at| at.saturating_add(cooldown_ms))
-            .filter(|until| *until > now)
-        {
-            earliest(&mut retry_at, until, now);
-            blocked!(Blocker::Cooldown, None, Some(until));
-        }
-        let state = input
-            .targets
-            .iter()
-            .find(|state| state.target_id == item.target_id);
-        let Some(snapshot) = state.and_then(|state| state.capacity.as_ref()) else {
-            blocked!(
-                Blocker::TargetUnavailable,
-                Some(
-                    state
-                        .and_then(|state| state.unavailable.clone())
-                        .unwrap_or_else(|| "capacity_not_read".into()),
-                ),
-                None,
-            );
-        };
-        let limits = policy.machine_limits(&item.target_id);
-        let on_machine = planned_machine
-            .get(snapshot.server_id.as_str())
-            .copied()
-            .unwrap_or(0);
-        let mut nearest: Option<(Blocker, String, Option<u64>)> = None;
-        let mut placed = None;
-        for candidate in &selection.candidates {
-            let account = candidate.account.as_deref();
-            // A degraded account is tried by one session at a time.
-            if candidate.status.state == CapacityState::Degraded
-                && running(&load, &candidate.tool, account) > 0
-            {
-                nearest.get_or_insert((Blocker::NoTool, "probe_in_flight".into(), None));
-                continue;
+        match &tried.outcome {
+            SiteOutcome::Refill { index, .. } => {
+                fates[*index] = Fate::Refilled(item.step_id.clone(), *parts, provisional, sites);
             }
-            // HS2-TH53NN: the preferred model goes with the preferred tool (or with any
-            // tool when none is preferred); another tool uses its own first model.
-            let model = item
-                .model
-                .clone()
-                .filter(|_| {
-                    item.tool
-                        .as_ref()
-                        .is_none_or(|tool| tool == &candidate.tool)
-                        && target.tools.iter().any(|scope| {
-                            scope.tool == candidate.tool
-                                && (scope.models.is_empty()
-                                    || item
-                                        .model
-                                        .as_ref()
-                                        .is_some_and(|m| scope.models.contains(m)))
-                        })
-                })
-                .or_else(|| {
-                    target
-                        .tools
-                        .iter()
-                        .find(|scope| scope.tool == candidate.tool)
-                        .and_then(|scope| scope.models.first().cloned())
+            SiteOutcome::Start {
+                placement, server, ..
+            } => {
+                count(&mut load, &placement.tool, placement.account.as_deref());
+                *planned_target.entry(tried.site).or_default() += 1;
+                *planned_machine.entry(server).or_default() += 1;
+                starts.push(Placement {
+                    sites,
+                    ..(**placement).clone()
                 });
-            let admission = decide_admission(
-                snapshot,
-                &AdmissionConfig::default(),
-                &AdmissionRequest {
-                    tool: candidate.tool.clone(),
-                    model: model.clone(),
-                    sessions: on_machine + 1,
-                    limits: Some(limits),
-                },
-            );
-            if admission.outcome == AdmissionOutcome::Accepted {
-                placed = Some((candidate, model, admission));
-                break;
             }
-            let reason = admission.reason.unwrap_or(AdmissionReason::CapacityUnknown);
-            if matches!(
-                reason,
-                AdmissionReason::ToolNotInstalled | AdmissionReason::ToolNotConfigured
-            ) {
-                // Another allowed tool may be present on that machine.
-                nearest = Some((Blocker::NoTool, reason.code().into(), None));
-                continue;
-            }
-            nearest = Some((Blocker::MachineRefused, reason.code().into(), None));
-            break;
+            SiteOutcome::Blocked { .. } => {}
         }
-        let Some((candidate, model, admission)) = placed else {
-            let (reason, detail, retry) = nearest.unwrap_or_else(|| {
-                // Nothing was even a candidate: name the exclusion that ends soonest.
-                let limited = selection
-                    .excluded
-                    .iter()
-                    .filter_map(
-                        |excluded| match excluded.status.map(|status| status.state) {
-                            Some(CapacityState::Limited { until_ms }) => Some(until_ms),
-                            _ => None,
-                        },
-                    )
-                    .min();
-                let detail = match (limited, selection.excluded.first()) {
-                    (Some(_), _) => "limited".to_owned(),
-                    (None, Some(first)) => serde_json::to_value(first.excluded)
-                        .ok()
-                        .and_then(|value| value.as_str().map(str::to_owned))
-                        .unwrap_or_else(|| "excluded".into()),
-                    (None, None) => "no_tool_permitted".into(),
-                };
-                (Blocker::NoTool, detail, limited)
-            });
-            if let Some(at) = retry {
-                earliest(&mut retry_at, at, now);
-            }
-            skip(reason, Some(detail), retry);
-            continue;
-        };
-        // HS2-TH53NN: a start of another tool than the preferred one is no better than
-        // a free session of the target that is already running.
-        if let Some(index) = other_free.filter(|_| {
-            item.tool
-                .as_ref()
-                .is_some_and(|tool| tool != &candidate.tool)
-                || item
-                    .model
-                    .as_ref()
-                    .is_some_and(|wanted| model.as_ref() != Some(wanted))
-        }) {
-            fates[index] = Fate::Refilled(item.step_id.clone(), *parts, provisional);
-            take!();
-            continue;
-        }
-        let account = candidate.account.as_deref();
-        starts.push(Placement {
-            action: A::Start,
-            target_id: item.target_id.clone(),
-            tool: candidate.tool.clone(),
-            account: candidate.account.clone(),
-            model,
-            session_id: None,
-            reason: if provisional {
-                R::ProvisionalWork
-            } else {
-                R::ReadyWork
-            },
-            detail: None,
-            provisional,
-            steps: vec![item.step_id.clone()],
-            score: Some(*parts),
-            probe: !candidate.verified,
-            retry_at_ms: None,
-            inputs: PlacementInputs {
-                target_sessions: target_sessions + 1,
-                target_cap: Some(target.max_sessions),
-                machine_sessions: snapshot.sessions.as_ref().map(|running| {
-                    u32::try_from(running.len())
-                        .unwrap_or(u32::MAX)
-                        .saturating_add(on_machine + 1)
-                }),
-                machine_cap: Some(admission.limits.max_sessions),
-                free_ram_mb: snapshot.memory.free_mb,
-                footprint_mb: Some(admission.footprint_mb),
-                tool_state: Some(candidate.status.state.code().into()),
-                tool_free: Some(candidate.free_sessions),
-                tool_sessions: Some(running(&load, &candidate.tool, None)),
-                account_sessions: account
-                    .map(|account| running(&load, &candidate.tool, Some(account))),
-            },
-            role: None,
-        });
-        count(&mut load, &candidate.tool, account);
-        *planned_target.entry(item.target_id.as_str()).or_default() += 1;
-        *planned_machine
-            .entry(snapshot.server_id.as_str())
-            .or_default() += 1;
-        take!();
     }
 
     // ---- Free sessions nothing was found for ----
@@ -1693,9 +1982,11 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         .zip(fates)
         .map(|(session, fate)| {
             let mut provisional = false;
+            let mut sites = Vec::new();
             let (action, reason, detail, steps, score, retry) = match fate {
-                Fate::Refilled(step, parts, rests_on_gate) => {
+                Fate::Refilled(step, parts, rests_on_gate, passed) => {
                     provisional = rests_on_gate;
+                    sites = passed;
                     (A::Keep, R::Refill, None, vec![step], Some(parts), None)
                 }
                 Fate::Decided(action, reason, detail, retry) => {
@@ -1730,6 +2021,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     ..PlacementInputs::default()
                 },
                 role: session.role.filter(|role| *role != SessionRole::Worker),
+                sites,
             }
         })
         .collect();
@@ -1859,6 +2151,9 @@ pub struct DecisionRecord {
     pub inputs: Option<PlacementInputs>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tick: Option<TickInputs>,
+    /// HS2-9FKTB3: the other sites of the step's project and why each was passed over.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SitePass>,
 }
 
 impl JournalRecord for DecisionRecord {
@@ -1885,6 +2180,18 @@ impl JournalRecord for DecisionRecord {
         .flatten()
         {
             valid_identifier(value)?;
+        }
+        if self.sites.len() > MAX_TARGETS {
+            return Err(OrchestrationError::Invalid("too many sites"));
+        }
+        for pass in &self.sites {
+            valid_token(&pass.target_id)?;
+            valid_identifier(&pass.reason)?;
+            if pass.detail.as_ref().is_some_and(|detail| {
+                !bounded_text(detail, 200) || detail.chars().any(char::is_whitespace)
+            }) {
+                return Err(OrchestrationError::Invalid("bounded decision detail"));
+            }
         }
         // A detail may name a resource (`namespace/resource`) or a model.
         for value in [&self.detail, &self.model].into_iter().flatten() {

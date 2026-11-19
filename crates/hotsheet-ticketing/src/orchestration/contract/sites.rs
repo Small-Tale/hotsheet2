@@ -82,6 +82,29 @@ impl ProjectSites {
         }
     }
 
+    /// HS2-9FKTB3: the grouping of the active declarations only, the sites a step may
+    /// be placed on now. A removed site is not tried again.
+    pub fn active(targets: &[TargetDeclaration]) -> Self {
+        let active: Vec<TargetDeclaration> = targets
+            .iter()
+            .filter(|target| target.state == DeclarationState::Active)
+            .cloned()
+            .collect();
+        Self::of(&active)
+    }
+
+    /// HS2-9FKTB3: the other sites of `target_id`'s project, by id. Empty for a
+    /// one-site project.
+    pub fn other_sites(&self, target_id: &str) -> Vec<String> {
+        let mut others: Vec<String> = self
+            .sites_of(self.project_of(target_id))
+            .into_iter()
+            .filter(|site| site != target_id)
+            .collect();
+        others.sort();
+        others
+    }
+
     pub fn is_empty(&self) -> bool {
         self.project_of.is_empty()
     }

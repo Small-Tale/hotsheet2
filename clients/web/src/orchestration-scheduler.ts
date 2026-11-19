@@ -30,6 +30,13 @@ export interface SchedulerDecisionPage {
   more: boolean;
 }
 
+/** HS2-9FKTB3: one other site of the step's project and why the scheduler passed it over (`SitePass`). */
+export interface SchedulerSitePass {
+  target_id: string;
+  reason: string;
+  detail?: string;
+}
+
 /** What `scheduler explain` says about one step (`Explanation`), as much of it as the view shows. */
 export interface SchedulerExplanation {
   standing: string;
@@ -38,6 +45,10 @@ export interface SchedulerExplanation {
   retry_at_ms?: number;
   /** HS2-5GRXFN: every resource the work requires and how this pass saw it. */
   resources?: ResourceStandingView[];
+  /** HS2-9FKTB3: the site of its project the work was placed on, when it was placed. */
+  site?: string;
+  /** HS2-9FKTB3: the project's other sites and why each was passed over. */
+  sites?: SchedulerSitePass[];
 }
 
 const words = (code: string) => code.replaceAll('_', ' ');
@@ -67,6 +78,26 @@ export function schedulerReasonText(code: string): string {
   return REASONS[code] ?? words(code);
 }
 
+/** HS2-9FKTB3: why a site that could have taken the work was not chosen. */
+const NOT_CHOSEN: Readonly<Record<string, string>> = {
+  free_session: 'another site has a free session for it',
+  preferred_tool: 'another site can start its preferred tool',
+  fewer_sessions: 'another site’s machine runs fewer sessions',
+  site_order: 'another site was as good and comes first',
+};
+
+/** HS2-9FKTB3: why one site of the project was passed over, as a phrase. */
+export function sitePassText(pass: SchedulerSitePass): string {
+  if (pass.reason === 'not_chosen') return (pass.detail && NOT_CHOSEN[pass.detail]) || 'another site was chosen';
+  const reason = schedulerReasonText(pass.reason);
+  return pass.detail ? `${reason} (${pass.detail})` : reason;
+}
+
+/** A site by its project label on the timeline; a short id when the timeline does not show it. */
+export function siteLabel(targetId: string, timeline: OrchestrationTimeline | undefined): string {
+  return timeline?.targets.find((target) => target.target_id === targetId)?.label ?? `site ${targetId.slice(-6)}`;
+}
+
 const STANDINGS: Readonly<Record<string, string>> = {
   start: 'It would start on the next pass',
   keep: 'A session keeps it',
@@ -81,6 +112,7 @@ export function explanationRows(
   explanation: SchedulerExplanation,
   clock: ClockFormat,
   lastPassMs?: number,
+  timeline?: OrchestrationTimeline,
 ): Array<{ label: string; value: string }> {
   const standing =
     explanation.standing === 'not_placed'
@@ -92,6 +124,11 @@ export function explanationRows(
   // HS2-ZY4Z4G: name the requirement the machine misses, such as `os:windows`.
   if (explanation.reason.startsWith('requirement_') && explanation.detail)
     rows.push({ label: 'Requirement', value: explanation.detail });
+  // HS2-9FKTB3: the site chosen among the project's sites, and why each other one was passed over.
+  const passed = explanation.sites ?? [];
+  if (explanation.site && passed.length > 0) rows.push({ label: 'Site', value: siteLabel(explanation.site, timeline) });
+  for (const pass of passed)
+    rows.push({ label: `Not on ${siteLabel(pass.target_id, timeline)}`, value: sentence(sitePassText(pass)) });
   if (explanation.retry_at_ms !== undefined)
     rows.push({ label: 'Next', value: `Looked at again by ${clock(explanation.retry_at_ms)}` });
   else if (explanation.standing === 'not_placed')
@@ -181,11 +218,25 @@ export function parseDecisionPage(value: Record<string, unknown>): SchedulerDeci
 /** Read `scheduler explain`, or undefined when it is not that shape. */
 export function parseExplanation(value: Record<string, unknown> | undefined): SchedulerExplanation | undefined {
   if (!value || typeof value.standing !== 'string' || typeof value.reason !== 'string') return undefined;
+  const placement = value.placement as Record<string, unknown> | undefined;
+  const sites = Array.isArray(value.sites) ? (value.sites as Array<Record<string, unknown>>) : [];
   return {
     standing: value.standing,
     reason: value.reason,
     detail: typeof value.detail === 'string' ? value.detail : undefined,
     retry_at_ms: typeof value.retry_at_ms === 'number' ? value.retry_at_ms : undefined,
     resources: parseRequiredResources(value),
+    site: typeof placement?.target_id === 'string' ? placement.target_id : undefined,
+    sites: sites.flatMap((pass) =>
+      typeof pass.target_id === 'string' && typeof pass.reason === 'string'
+        ? [
+            {
+              target_id: pass.target_id,
+              reason: pass.reason,
+              detail: typeof pass.detail === 'string' ? pass.detail : undefined,
+            },
+          ]
+        : [],
+    ),
   };
 }

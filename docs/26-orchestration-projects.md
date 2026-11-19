@@ -205,9 +205,10 @@ they name; comparisons go through the project key:
   any site counts for the ticket, and cycles that close only through another site are
   found.
 
-Which site works a step is still the step's own site; choosing a site by capacity and
-capabilities is the scheduler's (HS2-9FKTB3), and reporting each site's OS and tools is
-HS2-ZY4Z4G.
+A step names one site, and the scheduler may place it on any active site of its
+project by capacity and capabilities (HS2-9FKTB3, "Which site runs a step" under
+Packing); the step's run is dispatched on the chosen site. Each site's OS and tools
+come from its machine's capacity snapshot (HS2-ZY4Z4G).
 
 **Migration.** Existing manifests, plans and runs are read through the grouping and
 never rewritten. A grouping change that would make existing records ambiguous, two
@@ -3477,6 +3478,51 @@ So a limited tool moves work to another allowed tool, a machine below its RAM fl
 takes nothing, targets on one machine share its room, and every start counts
 against the target, machine, tool and account caps before the next is considered.
 A start on an account that is not verified available is marked `probe`.
+
+#### Which site runs a step (HS2-9FKTB3)
+
+A step of a project with several sites (§26.2) may run on any active site of that
+project. The runtime lists the project's other active sites on the work item and
+reads each one's capacity like the step's own site; a site removed from the manifest
+is not tried again from the next pass. A step whose run lost its session stays on the
+site its run was dispatched to. A one-site project is placed exactly as above.
+
+Steps 1 to 8 above are tried on each site on its own, without changing anything:
+the provisional opt-in of that site, its machine's requirements, resources on its
+machine, its free sessions, its policy entry and cap, its refusal backoff and
+cooldown, its capacity, and tool accounts and admission on its machine. Of the sites
+that can take the step, the scheduler chooses, in this order:
+
+1. a free session with the step's preferred tool and model;
+2. a start of the preferred tool;
+3. a free session of another tool;
+4. a start of another tool.
+
+Between two starts, the site whose machine then runs fewer sessions wins, then the one
+whose site runs fewer, then the site the step names, then the lowest site id. Because
+each start counts against its machine before the next step is placed, steps of one
+project spread over its machines under each machine's cap. The same inputs give the
+same choice whatever order the sites or the work were listed in.
+
+The placement's `target_id` is the chosen site, and `sites` lists every other site
+with why it was passed over: its own blocker code and detail (`requirement_unmet`
+`os:windows`, `machine_refused` `session_cap_reached`, `target_cap`, ...), or
+`not_chosen` with `free_session`, `preferred_tool`, `fewer_sessions` or `site_order`.
+Work placed nowhere is `not_placed` with the reason of the site the step names, and
+`sites` gives every other site's reason. `scheduler explain`, the decision log
+records and the Orchestration view's Why It Is Not Running rows carry the same list.
+A resource another site was waiting on is listed in `contention` only when the work
+was placed nowhere, and a retry time counts only from the chosen site or, unplaced,
+from every site.
+
+The start and the refill dispatch the step's run on the chosen site (`sched-run-<step>`
+with that site as its target). A live run of the step on another site refuses the
+start as `site_run_conflict`, and a session start is looked up by its operation id on
+every site, so an operation id is never reused on another one. One active run per
+ticket of the project still holds (§26.2).
+
+Role sessions (§26.24) are still decided per target from the work that names that
+target.
 
 A session is **free** when it is idle with no unfinished run, or when its run waits
 on CI, a deployment or a person's answer: time spent waiting on an external system is

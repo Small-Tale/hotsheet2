@@ -23873,6 +23873,31 @@ components:
             - dispatcher
             - integrator
             - planner
+        sites:
+          description:
+            HS2-9FKTB3. For a start or refill, `target_id` is the site chosen. The other sites of the work's project and why each was passed over; empty or absent for a
+            one-site project.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerSitePass'
+      additionalProperties: false
+    SchedulerSitePass:
+      description:
+        One site of a project the scheduler passed over for a step (HS2-9FKTB3). `reason` is a `SchedulerUnplaced`
+        reason code for a site that could not take the work, or `not_chosen` for one that could when another was
+        better; then `detail` is `free_session`, `preferred_tool`, `fewer_sessions` or `site_order`.
+      type: object
+      required:
+        - target_id
+        - reason
+      properties:
+        target_id:
+          type: string
+        reason:
+          type: string
+        detail:
+          description: The code behind the reason, such as the requirement `os:windows` or `session_cap_reached`.
+          type: string
       additionalProperties: false
     SchedulerUnplaced:
       description: Ready work that gets no session in this pass, with why (HS2-ECWG50).
@@ -23912,6 +23937,13 @@ components:
           minimum: 0
         score:
           $ref: '#/components/schemas/SchedulerScore'
+        sites:
+          description:
+            HS2-9FKTB3. `target_id`, `reason` and `detail` are those of the site the step names. The other sites of the work's project and why each was passed over; empty or absent for a
+            one-site project.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerSitePass'
       additionalProperties: false
     SchedulerTickInputs:
       description: What one pass read and how much it decided (HS2-ECWG50). Counts and identifiers only.
@@ -24135,6 +24167,13 @@ components:
           minimum: 0
         placement:
           $ref: '#/components/schemas/SchedulerPlacement'
+        sites:
+          description:
+            HS2-9FKTB3. The chosen site is the placement's `target_id`. The other sites of the work's project and why each was passed over; empty or absent for a
+            one-site project.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerSitePass'
         resources:
           description: Every resource ready work requires and how this pass saw it (HS2-2FG91X).
           type: array
@@ -24267,6 +24306,13 @@ components:
           $ref: '#/components/schemas/SchedulerPlacementInputs'
         tick:
           $ref: '#/components/schemas/SchedulerTickInputs'
+        sites:
+          description:
+            HS2-9FKTB3. The other sites of the work's project and why each was passed over; empty or absent for a
+            one-site project.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerSitePass'
       additionalProperties: false
     SchedulerDecisionPage:
       description: Decision records after a cursor, oldest first (HS2-ECWG50).

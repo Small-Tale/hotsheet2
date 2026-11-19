@@ -101,6 +101,7 @@ impl OrchestrationRuntime {
                     score: None,
                     retry_at_ms: None,
                     provisional: false,
+                    sites: Vec::new(),
                     ..placement.clone()
                 };
             } else if decided.exhausted {

@@ -43,7 +43,7 @@ export function OrchestrationWhyNotRunningSection({
     <OrchestrationInspectorSection label="Why It Is Not Running">
       <ValueTable label="Why it is not running" density="compact" stackBelow="narrow">
         {[
-          ...explanationRows(explanation, clock, item.placement?.at_ms),
+          ...explanationRows(explanation, clock, item.placement?.at_ms, timeline),
           // HS2-5GRXFN: the resources the work needs and any that is not free.
           ...resourceRows(explanation.resources ?? [], timeline, clock),
         ].map((row) => (

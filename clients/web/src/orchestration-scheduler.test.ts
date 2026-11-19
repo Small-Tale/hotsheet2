@@ -9,6 +9,8 @@ import {
   parseExplanation,
   type SchedulerDecision,
   schedulerReasonText,
+  siteLabel,
+  sitePassText,
   stepLabel,
 } from './orchestration-scheduler';
 import { demoClock, demoDecisions, demoTimeline } from './ux-demo/orchestration-fixtures';
@@ -121,6 +123,40 @@ describe('the scheduler in words (HS2-77SRHC)', () => {
       retry_at_ms: 3,
       detail: 'd',
       resources: [],
+      sites: [],
     });
+  });
+
+  it('names the chosen site of a project and why each other site was passed over (HS2-9FKTB3)', () => {
+    const explanation = parseExplanation({
+      standing: 'start',
+      reason: 'ready_work',
+      placement: { target_id: 'web' },
+      sites: [
+        { target_id: 'api', reason: 'requirement_unmet', detail: 'os:windows' },
+        { target_id: 'docs', reason: 'not_chosen', detail: 'fewer_sessions' },
+        { target_id: 'gone-01ABCDEF', reason: 'not_chosen' },
+        { reason: 'malformed' },
+      ],
+    })!;
+    expect(explanation.site).toBe('web');
+    expect(explanation.sites).toHaveLength(3);
+    expect(explanationRows(explanation, clock, undefined, timeline)).toEqual([
+      { label: 'Scheduler', value: 'It would start on the next pass' },
+      { label: 'Site', value: 'Web' },
+      {
+        label: 'Not on API',
+        value: 'Its project’s machine does not meet a requirement of the step (os:windows)',
+      },
+      { label: 'Not on Docs', value: 'Another site’s machine runs fewer sessions' },
+      { label: 'Not on site ABCDEF', value: 'Another site was chosen' },
+    ]);
+    // A one-site project shows no site rows.
+    expect(explanationRows({ standing: 'start', reason: 'ready_work', site: 'web', sites: [] }, clock)).toHaveLength(1);
+    expect(sitePassText({ target_id: 'x', reason: 'not_chosen', detail: 'site_order' })).toBe(
+      'another site was as good and comes first',
+    );
+    expect(sitePassText({ target_id: 'x', reason: 'target_cap' })).toBe('the project’s session limit is reached');
+    expect(siteLabel('api', undefined)).toBe('site api');
   });
 });

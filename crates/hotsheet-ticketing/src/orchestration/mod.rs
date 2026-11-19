@@ -161,10 +161,11 @@ pub use scheduler::{
     Blocker, DecisionEntry, DecisionJournal, DecisionKind, DecisionMode, DecisionPage,
     DecisionRecord, HeldResource, MAX_SCHEDULE_SESSIONS, MAX_SCHEDULE_WORK, Placement,
     PlacementAction, PlacementInputs, PlacementMemory, PlacementOutcome, PlacementReason,
-    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, Schedule, ScheduleInput,
-    ScheduledSession, SchedulerStore, ScoreParts, SessionActivity, Standing, TargetState,
-    TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation, is_capacity_refusal,
-    lift_capacity_refusal, plan, refusal_backoff_ms, remember, scheduler_pass_lock, score,
+    REFUSAL_BACKOFF_BASE_MS, REFUSAL_BACKOFF_CAP_MS, Ranked, ResourceNeed, SITE_NOT_CHOSEN,
+    Schedule, ScheduleInput, ScheduledSession, SchedulerStore, ScoreParts, SessionActivity,
+    SitePass, Standing, TargetState, TickInputs, Unplaced, WorkItem, WorkLevel, WorkSpeculation,
+    is_capacity_refusal, lift_capacity_refusal, plan, refusal_backoff_ms, remember,
+    scheduler_pass_lock, score,
 };
 pub use session_fence::{
     MAX_WITHDRAWN_FENCES, WITHDRAWN_FENCE_MS, Withdrawal, WithdrawnFences, WithdrawnOperation,
@@ -449,6 +450,8 @@ mod session_idle_tests;
 mod session_tests;
 #[cfg(test)]
 mod shared_plan_tests;
+#[cfg(test)]
+mod site_scheduling_tests;
 #[cfg(test)]
 mod sites_tests;
 #[cfg(test)]
