@@ -15269,15 +15269,85 @@ interface RenderMetricsSnapshot {
 type InstrumentedWindow = typeof window & {
   __hotsheetRenderMetrics?: { reset(): void; snapshot(): RenderMetricsSnapshot };
 };
-type SearchProbeWindow = typeof window & {
-  __searchProbe?: {
-    rowGeometryReads: number;
-    rowClones: number;
-    ghosts: number;
-    inputMs: number;
-  };
-  __searchProbeRestore?: () => void;
+interface RowMotionWork {
+  rowGeometryReads: number;
+  readSlugs: string[];
+  rowClones: number;
+  ghosts: number;
+  passes: number | undefined;
+}
+type RowMotionProbeWindow = typeof window & {
+  __rowMotionProbe?: Omit<RowMotionWork, 'passes'>;
+  __rowMotionProbeRestore?: () => void;
+  __rowMotionProbeReset?: () => void;
 };
+// HS2-X0A331, HS2-3G911D: count the work that made large ticket views lock up (HS2-E76C4K, HS2-8Y2XST):
+// a geometry read, a DOM clone and a motion-ghost layer per rendered row. The counts, with the app's
+// render passes, pin the defect by structure rather than by a wall-clock budget that measures runner load.
+const startRowMotionProbe = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const isRow = (node: unknown) =>
+        node instanceof Element &&
+        node.matches('[data-component="ticket-list-row-container"], [data-component="summary-row"]'),
+      probe = { rowGeometryReads: 0, readSlugs: [] as string[], rowClones: 0, ghosts: 0 },
+      rect = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect') as TypedPropertyDescriptor<
+        (this: Element) => DOMRect
+      >,
+      clone = Object.getOwnPropertyDescriptor(Node.prototype, 'cloneNode') as TypedPropertyDescriptor<
+        (this: Node, deep?: boolean) => Node
+      >,
+      readRect = rect.value!,
+      cloneNode = clone.value!,
+      ghosts = new MutationObserver((records) => {
+        for (const record of records)
+          for (const node of record.addedNodes)
+            if (
+              node instanceof Element &&
+              (node.matches('[data-ticket-motion-ghost]') || node.querySelector('[data-ticket-motion-ghost]'))
+            )
+              probe.ghosts += 1;
+      });
+    Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
+      ...rect,
+      value(this: Element) {
+        if (isRow(this)) {
+          probe.rowGeometryReads += 1;
+          const slug =
+            (this as HTMLElement).dataset.ticketSlug ??
+            this.querySelector<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ??
+            '';
+          if (!probe.readSlugs.includes(slug)) probe.readSlugs.push(slug);
+        }
+        return readRect.call(this);
+      },
+    });
+    Object.defineProperty(Node.prototype, 'cloneNode', {
+      ...clone,
+      value(this: Node, deep?: boolean) {
+        if (isRow(this)) probe.rowClones += 1;
+        return cloneNode.call(this, deep);
+      },
+    });
+    ghosts.observe(document, { childList: true, subtree: true });
+    const state = window as RowMotionProbeWindow & InstrumentedWindow;
+    state.__rowMotionProbeRestore = () => {
+      Object.defineProperty(Element.prototype, 'getBoundingClientRect', rect);
+      Object.defineProperty(Node.prototype, 'cloneNode', clone);
+      ghosts.disconnect();
+    };
+    state.__rowMotionProbe = probe;
+    state.__rowMotionProbeReset = () => {
+      Object.assign(probe, { rowGeometryReads: 0, readSlugs: [], rowClones: 0, ghosts: 0 });
+      state.__hotsheetRenderMetrics?.reset();
+    };
+    state.__rowMotionProbeReset();
+  });
+const finishRowMotionProbe = (page: import('@playwright/test').Page) =>
+  page.evaluate((): RowMotionWork => {
+    const state = window as RowMotionProbeWindow & InstrumentedWindow;
+    state.__rowMotionProbeRestore?.();
+    return { ...state.__rowMotionProbe!, passes: state.__hotsheetRenderMetrics?.snapshot().passes };
+  });
 const resetRenderMetrics = (page: import('@playwright/test').Page) =>
   page.evaluate(() => {
     (window as InstrumentedWindow).__hotsheetRenderMetrics?.reset();
@@ -31857,30 +31927,37 @@ test('switches and searches large ticket views without cloning every row into mo
   await page.goto('/');
   await openMockedProject(page);
   await expect(page.locator('[data-component="summary-row"]')).toHaveCount(60);
+  const viewStatus = { Backlog: 'backlog', Archive: 'archive', Queue: 'not_started' } as const;
   for (const [view, count] of [
     ['Backlog', 18],
     ['Archive', 2_075],
     ['Queue', 60],
   ] as const) {
-    const button = page.getByRole('button', { name: new RegExp(view) }),
-      initial = await button.evaluate(
-        (element, itemId) => {
-          const started = performance.now();
-          (element as HTMLElement).click();
-          const list = document.querySelector<HTMLElement>('[data-component="ticket-list"]'),
-            selected = document.querySelector<HTMLElement>(`[data-action="select-view"][data-item-id="${itemId}"]`);
-          return {
-            elapsed: performance.now() - started,
-            selected: selected?.getAttribute('aria-current'),
-            rendered: list?.dataset.renderedCount,
-            total: list?.dataset.totalCount,
-            loading: Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]')),
-          };
-        },
-        view === 'Queue' ? 'all' : view.toLowerCase(),
-      );
+    const button = page.getByRole('button', { name: new RegExp(view) });
+    // HS2-3G911D: pin the switch by its work, as HS2-X0A331 does for search, not by a 250 ms wall-clock budget
+    // that measures the runner. The click renders the selected view and its first tranche synchronously.
+    await startRowMotionProbe(page);
+    const initial = await button.evaluate(
+      (element, itemId) => {
+        // Reset beside the click: an ordinary render of the previous view (a refresh that captures its own
+        // small collection for motion) can land between two evaluations under load, and is not the switch's.
+        (window as RowMotionProbeWindow).__rowMotionProbeReset?.();
+        const started = performance.now();
+        (element as HTMLElement).click();
+        const list = document.querySelector<HTMLElement>('[data-component="ticket-list"]'),
+          selected = document.querySelector<HTMLElement>(`[data-action="select-view"][data-item-id="${itemId}"]`);
+        return {
+          elapsed: performance.now() - started,
+          passes: (window as InstrumentedWindow).__hotsheetRenderMetrics?.snapshot().passes,
+          selected: selected?.getAttribute('aria-current'),
+          rendered: list?.dataset.renderedCount,
+          total: list?.dataset.totalCount,
+          loading: Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]')),
+        };
+      },
+      view === 'Queue' ? 'all' : view.toLowerCase(),
+    );
     await expect(page.locator('#workspace-page-title')).toContainText(view);
-    expect(initial.elapsed).toBeLessThan(250);
     expect(initial.selected).toBe('page');
     await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     if (view === 'Archive') {
@@ -31889,56 +31966,33 @@ test('switches and searches large ticket views without cloning every row into mo
     }
     await expect(page.locator('[data-component="summary-row"]')).toHaveCount(count, { timeout: 20_000 });
     await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
+    const switched = await finishRowMotionProbe(page);
+    // The click renders the app once; the rest arrives in fixed 160-row tranches after a 40-row first one
+    // (HS2-W52RER), one pass each plus a few for the load (Archive measured 21), never one per row.
+    expect(initial.passes).toBe(1);
+    expect(switched.passes).toBeLessThanOrEqual(Math.ceil(Math.max(0, count - 40) / 160) + 12);
+    // A view switch changes the collection, so motion never measures the rows it replaces (HS2-8Y2XST), and
+    // no row is cloned into a motion ghost: measured 0 ghosts. Capturing the replaced rows read 100 rows on
+    // the first switch and locked the Archive's progressive render. A later render of the destination view
+    // may still capture its own small collection (18 reads seen under load), which is ordinary motion. Row
+    // clones are the renderer's own row templates, one per rendered row, so they are not a motion signal here.
+    const destination = new Set(
+      largeRows.filter((ticket) => ticket.status === viewStatus[view]).map((ticket) => ticket.slug),
+    );
+    expect(switched.readSlugs.filter((slug) => !destination.has(slug))).toEqual([]);
+    expect(switched.ghosts).toBeLessThanOrEqual(12);
+    // A coarse lockup guard only: the synchronous switch measured 10-70 ms.
+    expect(initial.elapsed).toBeLessThan(2_000);
     if (view === 'Archive') {
       await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
       const editor = page.getByRole('searchbox', { name: 'Search tickets' });
       // HS2-X0A331: pin the search's work by structure, not by a wall-clock budget a loaded CI runner
       // misses (284-344 ms on the 2-vCPU shard). HS2-E76C4K locked the page for over 30 s because search
-      // sent every rendered row through motion capture: a geometry read, a DOM clone and a ghost layer
-      // per row. Count exactly those, and the app's render passes, from the keystroke to the match.
+      // sent every rendered row through motion capture. Count that work from the keystroke to the match.
       await editor.evaluate((element) => {
-        const isRow = (node: unknown) =>
-            node instanceof Element &&
-            node.matches('[data-component="ticket-list-row-container"], [data-component="summary-row"]'),
-          probe = { rowGeometryReads: 0, rowClones: 0, ghosts: 0, inputMs: 0 },
-          rect = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect') as TypedPropertyDescriptor<
-            (this: Element) => DOMRect
-          >,
-          clone = Object.getOwnPropertyDescriptor(Node.prototype, 'cloneNode') as TypedPropertyDescriptor<
-            (this: Node, deep?: boolean) => Node
-          >,
-          readRect = rect.value!,
-          cloneNode = clone.value!,
-          ghosts = new MutationObserver((records) => {
-            for (const record of records)
-              for (const node of record.addedNodes)
-                if (
-                  node instanceof Element &&
-                  (node.matches('[data-ticket-motion-ghost]') || node.querySelector('[data-ticket-motion-ghost]'))
-                )
-                  probe.ghosts += 1;
-          });
-        Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
-          ...rect,
-          value(this: Element) {
-            if (isRow(this)) probe.rowGeometryReads += 1;
-            return readRect.call(this);
-          },
-        });
-        Object.defineProperty(Node.prototype, 'cloneNode', {
-          ...clone,
-          value(this: Node, deep?: boolean) {
-            if (isRow(this)) probe.rowClones += 1;
-            return cloneNode.call(this, deep);
-          },
-        });
-        ghosts.observe(document, { childList: true, subtree: true });
-        (window as SearchProbeWindow).__searchProbeRestore = () => {
-          Object.defineProperty(Element.prototype, 'getBoundingClientRect', rect);
-          Object.defineProperty(Node.prototype, 'cloneNode', clone);
-          ghosts.disconnect();
-        };
+        const state = window as typeof window & { __searchInputMs?: number };
         let started = 0;
+        state.__searchInputMs = 0;
         window.addEventListener(
           'input',
           (event) => {
@@ -31947,18 +32001,16 @@ test('switches and searches large ticket views without cloning every row into mo
           true,
         );
         window.addEventListener('input', (event) => {
-          if (event.target === element) probe.inputMs = performance.now() - started;
+          if (event.target === element) state.__searchInputMs = performance.now() - started;
         });
-        (window as SearchProbeWindow).__searchProbe = probe;
-        (window as InstrumentedWindow).__hotsheetRenderMetrics?.reset();
       });
+      await startRowMotionProbe(page);
       await editor.fill('2074');
       await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
-      const search = await page.evaluate(() => {
-        const state = window as SearchProbeWindow & InstrumentedWindow;
-        state.__searchProbeRestore?.();
-        return { ...state.__searchProbe!, passes: state.__hotsheetRenderMetrics?.snapshot().passes };
-      });
+      const search = {
+        ...(await finishRowMotionProbe(page)),
+        inputMs: await page.evaluate(() => (window as typeof window & { __searchInputMs?: number }).__searchInputMs),
+      };
       // The fix: a collection above the capture limit (100 rows) renders directly. Motion may still fade in the
       // one match as it arrives, but it never measures or clones the 2,075 rows being replaced: at most the
       // incoming-animation cap (12) of clones and ghosts, and fewer row geometry reads than the capture limit.
@@ -31976,7 +32028,6 @@ test('switches and searches large ticket views without cloning every row into mo
       await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
     }
   }
-  await page.waitForTimeout(300);
 });
 
 test('matches HS1 multi-selection semantics and selected outlines in list and column views', async ({ page }) => {
