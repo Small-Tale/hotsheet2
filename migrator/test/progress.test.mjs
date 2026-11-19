@@ -110,7 +110,10 @@ describe('measured export progress and complete attachment evidence', () => {
       const failed = spawnSync(binary, [source, '-C', store, '--migrator', exporter, '--progress-json'], {
         encoding: 'utf8',
       });
-      expect(failed.status, failed.error?.message ?? failed.stderr).not.toBe(0);
+      // HS2-WE1AW4: a binary that never started (not built, wrong path) is named as such,
+      // not reported as a missing diagnostic on an undefined stderr.
+      expect(failed.error, `could not start ${binary}`).toBeUndefined();
+      expect(failed.status, failed.stderr).not.toBe(0);
       expect(failed.stderr).toContain('Referenced HS1 attachment is missing');
       expect(fs.existsSync(path.join(store, '.git/hotsheet-hs1-import-completed.json'))).toBe(false);
       expect(fs.existsSync(path.join(store, '.git/hotsheet-hs1-backup.json'))).toBe(false);
