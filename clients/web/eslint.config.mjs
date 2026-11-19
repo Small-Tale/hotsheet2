@@ -12,6 +12,7 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'dist-host/**',
+      'dist-saver/**',
       'target/**',
       'src-tauri/**',
       'node_modules/**',

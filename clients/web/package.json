@@ -19,6 +19,7 @@
     "sign:setup:macos": "bash ../../scripts/setup-macos-dev-signing.sh",
     "prod:rebuild": "npm run server:rebuild:release -- --force && npm run prod",
     "build": "vite build && node scripts/check-production-bundle.mjs",
+    "build:saver": "vite build --config vite.saver.config.ts",
     "build:host": "vite build --ssr src/local-host.ts --outDir dist-host --emptyOutDir",
     "format": "node scripts/format-sources.mjs --write && cargo fmt --all --manifest-path ../../Cargo.toml",
     "format:check": "node scripts/format-sources.mjs --check && cargo fmt --all --check --manifest-path ../../Cargo.toml",

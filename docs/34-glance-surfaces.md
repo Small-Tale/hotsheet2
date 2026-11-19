@@ -430,4 +430,38 @@ HS2-GAJSX9:
 | While-you-were-away digest (shipped)                          | §34.9      | HS2-JJ9RYN | HS2-EQVZTZ, HS2-JTTQMY  |
 | Stuck causes: usage-limit resume time, awaiting input         | §34.2      | HS2-EGKKA0 | HS2-JTTQMY              |
 | Standardize the state icons                                   | §34.10     | HS2-CSPKQX | none                    |
+| macOS screen saver                                            | §34.12     | HS2-MZM988 | HS2-EQVZTZ              |
 | Speedometer gauge request (intake)                            | §34.3      | HS2-PZPD83 | covered by HS2-CVE3SK   |
+
+## 34.12 macOS screen saver (HS2-MZM988)
+
+A real macOS screen saver, `HotSheet.saver`, so that macOS asks for the account password when the saver ends.
+That prompt is the system setting "Require password after screen saver begins"; an app cannot turn it on
+without a device-management profile, so Hot Sheet reports the setting's state and the System Settings path
+(`hotsheet-cli screensaver status`) rather than changing it. The visual is the standby screen itself.
+
+- **One implementation.** `StandbyScreen` already has an `inline` presentation and is a pure render of a
+  model. The saver's page (`clients/web/src/standby-saver/`) mounts that component and derives the model with
+  `standbyModel` from the same live state list the app uses, so the saver cannot drift from standby. It is
+  built by `npm run build:saver` into one classic script and one stylesheet, because WebKit refuses module
+  scripts over `file://`.
+- **Native host.** `clients/macos-screensaver/` holds a `ScreenSaverView` subclass that hosts the page in a
+  `WKWebView` (universal binary, macOS 12 and later, ad hoc signed locally; `build.sh`). The host is the
+  system's sandboxed `legacyScreenSaver` engine.
+- **No secret, no network.** The saver holds no server credential and opens no connection. The Hot Sheet
+  server leaves one JSON snapshot in the engine's container
+  (`~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/HotSheet/standby-snapshot.json`),
+  written atomically by rename. The saver watches that directory and reads the file when it changes; an idle
+  machine does no work.
+- **Snapshot.** `{version: 1, written_at_ms, valid_until_ms, live}` where `live` is the `GET /live-state`
+  list. The saver ignores a file that is not valid JSON, and the page ignores JSON that is not a snapshot, so a
+  half-written or foreign file leaves the last good display. `valid_until_ms` is how long the server vouches for
+  the file: a running server rewrites it before then, so once it passes the freshness line says "connection
+  lost" and a stopped Hot Sheet never looks healthy.
+- **Content.** The same as standby: project names and states are visible while the screen is locked. A
+  counts-only mode is HS2-R7CXD5.
+- **Verification.** `clients/macos-screensaver/check.sh` builds the bundle, loads its principal class, hosts
+  the view in a window, and proves the page renders, a snapshot written by rename reaches it, invalid input is
+  ignored, and the screen fills the view wide to narrow to wide. It cannot show what the real engine's sandbox
+  allows; that is HS2-P01KTG. Signing for distribution is HS2-XB5EME; running the check in the macOS job is
+  HS2-CWP7G0.
