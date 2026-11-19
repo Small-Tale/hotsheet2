@@ -290,7 +290,7 @@ fn ensure_remote(store_path: &Path) -> Result<(), DistError> {
 
 /// A rejected push (the marker already exists / stale lease / non-fast-forward) — the CAS
 /// lost the race, not a transport failure.
-fn looks_like_reject(stderr: &str) -> bool {
+pub(crate) fn looks_like_reject(stderr: &str) -> bool {
     let s = stderr.to_lowercase();
     s.contains("rejected")
         || s.contains("fetch first")
@@ -301,7 +301,7 @@ fn looks_like_reject(stderr: &str) -> bool {
 }
 
 /// Run `git -C store_path <args>`, capturing (success, stdout, stderr).
-fn git(store_path: &Path, args: &[&str]) -> (bool, String, String) {
+pub(crate) fn git(store_path: &Path, args: &[&str]) -> (bool, String, String) {
     match crate::git::command()
         .arg("-C")
         .arg(store_path)
@@ -318,7 +318,7 @@ fn git(store_path: &Path, args: &[&str]) -> (bool, String, String) {
 }
 
 /// Like [`git`] but feeds `stdin` to the command.
-fn git_stdin(store_path: &Path, args: &[&str], stdin: &str) -> (bool, String, String) {
+pub(crate) fn git_stdin(store_path: &Path, args: &[&str], stdin: &str) -> (bool, String, String) {
     use std::io::Write;
     use std::process::Stdio;
     let mut child = match crate::git::command()

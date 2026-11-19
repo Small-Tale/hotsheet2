@@ -220,6 +220,10 @@ pub enum StoreError {
     InvalidStoreIdentity(String),
     #[error("invalid ticket prefix '{0}': use 2 to 16 letters or digits, starting with a letter")]
     InvalidTicketPrefix(String),
+    /// HS2-WJF0D8: the claim backend a store's tickets are bound to could not be reached
+    /// and its configuration fails closed; nothing was claimed or renewed.
+    #[error("claim_backend_unreachable: {0}")]
+    ClaimBackendUnreachable(String),
     #[error(
         "This {format} was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found {found}, supported through {supported})."
     )]
@@ -836,6 +840,8 @@ impl FsStore {
         extra_paths: &[PathBuf],
     ) -> Result<PathBuf, StoreError> {
         let path = self.write_ticket(ticket)?;
+        // HS2-WJF0D8: a write that ended a claim releases its claim-backend marker.
+        crate::claim_gate::after_write(self, ticket);
         if self.defer_autocommit {
             return Ok(path);
         }

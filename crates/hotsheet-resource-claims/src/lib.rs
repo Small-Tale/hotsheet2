@@ -13,6 +13,7 @@ mod clock;
 mod codec;
 mod config;
 mod error;
+mod gitref;
 mod local;
 mod model;
 mod service;
@@ -30,6 +31,7 @@ pub use config::{
     key_next_step, offline_policy, project_state_root, resolve, test_configuration,
 };
 pub use error::ClaimError;
+pub use gitref::GitRefBackend;
 pub use local::{LOCAL_ROOT_DIR, LocalBackend};
 pub use model::{
     AcquireRequest, Capabilities, Claim, Grant, Guarantee, MAX_LEASE, MAX_METADATA_BYTES,

@@ -843,6 +843,12 @@ transition. A person's correction is the one exception to the edges (§26.14).
   activity note with the run id at dispatch and when it finishes. The note holds
   identifiers only.
 
+When the target's Git store is bound to a `git_ref` claim backend, the exact claim,
+its renewals and its release go through the shared remote's compare-and-swap first,
+so targets of one store on several machines never hold one ticket twice; a claim
+another machine holds is refused naming that holder
+([36](36-resource-claims.md) §36.14, HS2-WJF0D8).
+
 Exact claims exist only for git ticket sources; another provider answers
 `target_operation_unsupported` to a direct dispatch. Dispatcher mode works wherever
 the provider can set Up Next.

@@ -122,8 +122,22 @@ pub(crate) fn sync_once_with(store_path: &Path, limits: SyncLimits) -> SyncRepor
     record_attempt_start(store_path);
     let (report, detail, moved) = cycle(store_path, limits);
     record_outcome(store_path, report, detail);
+    if matches!(report, SyncReport::Synced { pulled: true, .. }) {
+        reconcile_claims(store_path);
+    }
     crate::sync_health::record_stale_lock_recovery(store_path, moved);
     report
+}
+
+/// HS2-WJF0D8: a pull may have merged another machine's claim over one this host holds.
+/// For a store bound to a claim backend, check this host's live claims against it now,
+/// so the losing session's ticket names the real holder and the conflict is recorded.
+fn reconcile_claims(store_path: &Path) {
+    let Ok(store) = crate::FsStore::open_without_maintenance(store_path) else {
+        return;
+    };
+    let now = hotsheet_model::Timestamp::from_datetime(time::OffsetDateTime::now_utc());
+    let _ = crate::claim_gate::reconcile(&store, &now);
 }
 
 /// Whether the store publishes to a Git remote of its own: it has a remote and is not a

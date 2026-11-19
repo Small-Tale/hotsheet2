@@ -426,6 +426,10 @@ Empirically validated, so this is no longer a bet:
   (invisible to normal git + the GitHub UI, bulk-prunable), with **reserved-prefix
   tags as a documented fallback** for any remote that rejects custom refs. The
   CAS/lease semantics are identical either way — a git server-side guarantee.
+- **Exact claims use the same markers (HS2-WJF0D8).** A ticket store bound to a
+  `git_ref` claim backend takes every exact claim, renewal and release through
+  `refs/hotsheet/claims/<ulid>` before writing the frontmatter
+  ([36](36-resource-claims.md) §36.14), so this loop and exact claims exclude each other.
 - **Not stress-tested:** a truly concurrent push race _against GitHub specifically_
   (vs. the local proof) — it's a git protocol guarantee, but worth a load test if we
   ever see contention anomalies.

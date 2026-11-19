@@ -15,6 +15,7 @@ use hotsheet_model::{
     ProjectTicketRef, ReviewRequest, StartedPhase, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
 
+use crate::claim_gate;
 use crate::store::{FsStore, StoreError};
 
 /// An error from a ticket operation (store I/O or a coordination-policy violation).
@@ -2858,13 +2859,53 @@ pub fn claim_next_with_eta(
     eta: Option<Timestamp>,
 ) -> Result<Option<Ticket>, StoreError> {
     store.with_ticket_transaction(|| {
-        let Some(mut t) = peek_claim_next(store, now)? else {
-            return Ok(None);
+        let Some(gate) = claim_gate::ticket_gate(store)? else {
+            let Some(mut t) = peek_claim_next(store, now)? else {
+                return Ok(None);
+            };
+            apply_next_claim(&mut t, now, lease_expires, worker, label, eta);
+            store.write_ticket_committing(&t)?;
+            return Ok(Some(t));
         };
-        apply_next_claim(&mut t, now, lease_expires, worker, label, eta);
-        store.write_ticket_committing(&t)?;
-        Ok(Some(t))
+        // HS2-WJF0D8: a ticket another machine holds through the backend is skipped.
+        let mut queue: Vec<Ticket> = claim_next_queue(store.list_tickets()?, now).collect();
+        queue.sort_by(claim_next_order);
+        for mut t in queue {
+            apply_next_claim(
+                &mut t,
+                now,
+                lease_expires.clone(),
+                worker,
+                label.clone(),
+                eta.clone(),
+            );
+            if gated_next_claim(store, &gate, &t, worker, now)? {
+                store.write_ticket_committing(&t)?;
+                return Ok(Some(t));
+            }
+        }
+        Ok(None)
     })
+}
+
+/// Take a claim-next candidate through the backend. `false` when another machine holds
+/// it; the local ticket is then repaired to name that holder.
+fn gated_next_claim(
+    store: &FsStore,
+    gate: &claim_gate::TicketGate,
+    t: &Ticket,
+    worker: &str,
+    now: &Timestamp,
+) -> Result<bool, StoreError> {
+    match claim_gate::gate_claim(store, gate, t, worker, now)? {
+        claim_gate::GateOutcome::HeldBy(holder) => {
+            let mut current = store.read_ticket(&t.id)?;
+            claim_gate::adopt_holder(&mut current, &holder, now);
+            store.write_ticket_committing(&current)?;
+            Ok(false)
+        }
+        _ => Ok(true),
+    }
 }
 
 /// Claim `id` for claim-next only while it is still eligible inside the store
@@ -2884,6 +2925,11 @@ fn claim_next_candidate(
             return Ok(None);
         };
         apply_next_claim(&mut t, now, lease_expires, worker, label, eta);
+        if let Some(gate) = claim_gate::ticket_gate(store)? {
+            if !gated_next_claim(store, &gate, &t, worker, now)? {
+                return Ok(None);
+            }
+        }
         store.write_ticket_committing(&t)?;
         Ok(Some(t))
     })
@@ -2988,9 +3034,39 @@ pub fn claim_with_eta(
 ) -> Result<Ticket, OpError> {
     store.with_ticket_transaction(|| {
         let mut t = prepare_claim(store, id, now, lease_expires, worker, label, eta)?;
+        // HS2-WJF0D8: a store bound to a claim backend takes the claim there first.
+        if let Some(gate) = claim_gate::ticket_gate(store)? {
+            if let claim_gate::GateOutcome::HeldBy(holder) =
+                claim_gate::gate_claim(store, &gate, &t, worker, now)?
+            {
+                return Err(held_elsewhere(store, id, &holder, worker, now)?);
+            }
+        }
         start_claimed_ticket(&mut t, now);
         store.write_ticket_committing(&t)?;
         Ok(t)
+    })
+}
+
+/// HS2-WJF0D8: the backend names another holder. Repair the local ticket to name it, so
+/// every reader agrees with the backend, and refuse the claim naming that holder.
+fn held_elsewhere(
+    store: &FsStore,
+    id: &Ulid,
+    holder: &crate::gitref_cas::RefMarker,
+    worker: &str,
+    now: &Timestamp,
+) -> Result<OpError, OpError> {
+    let mut current = store.read_ticket(id)?;
+    let before = current.clone();
+    claim_gate::adopt_holder(&mut current, holder, now);
+    if current != before {
+        store.write_ticket_committing(&current)?;
+    }
+    Ok(OpError::WrongWorker {
+        slug: current.slug,
+        holder: holder.worker.clone(),
+        worker: worker.to_string(),
     })
 }
 
@@ -3210,6 +3286,18 @@ where
 {
     store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
+        let gate = claim_gate::ticket_gate(store)?;
+        // HS2-WJF0D8: a merge may have replaced this worker's claim in the frontmatter
+        // while the backend still holds it for this worker; the backend wins.
+        if let (Some(gate), Some(holder)) = (&gate, t.claimed_by.as_deref())
+            && holder != worker
+            && let Ok(Some((_, marker))) =
+                gate.cas.read(&crate::gitref_cas::GitRefCas::ticket_ref(id))
+            && marker.worker == worker
+        {
+            let at = t.updated_at.clone();
+            claim_gate::adopt_holder(&mut t, &marker, &at);
+        }
         match &t.claimed_by {
             Some(holder) if holder == worker => {}
             Some(holder) => {
@@ -3245,6 +3333,12 @@ where
                 slug: t.slug,
                 reason: "claim attempt changed; inspect ownership before continuing",
             });
+        }
+        if let Some(gate) = &gate
+            && let claim_gate::GateOutcome::HeldBy(holder) =
+                claim_gate::gate_renew(store, gate, &t, worker, &now, &lease_expires)?
+        {
+            return Err(held_elsewhere(store, id, &holder, worker, &now)?);
         }
         t.claim_lease_expires_at = Some(lease_expires.clone());
         if let Some(eta) = eta {

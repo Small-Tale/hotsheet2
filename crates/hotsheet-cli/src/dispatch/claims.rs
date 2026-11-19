@@ -375,6 +375,12 @@ pub(crate) fn cmd_claim(
         println!("{notice}");
     }
     print_provisional(&store, cwd, &claimed);
+    // HS2-WJF0D8: a claim taken while the bound claim backend was unreachable.
+    if hotsheet_ticketing::claim_gate::provisional_claims(&store).contains_key(&claimed.id) {
+        println!(
+            "Provisional claim: the claim backend is unreachable, so this claim is advisory, not exclusive. The next renew confirms it or names the machine that holds the ticket."
+        );
+    }
     Ok(())
 }
 

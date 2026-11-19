@@ -98,7 +98,12 @@ _alerting_ is best-effort on top (live when connected, on-sync otherwise).
 The claim/lease primitive ([05](05-ai-tool-plugins.md) §5.7) already handles the
 machine side, and on git storage the **claim state is persisted to ticket
 frontmatter** so it's visible across the team while remaining expiring/ephemeral.
-Two refinements for the distributed/team case:
+Frontmatter alone is synced every cycle and merged newest-first, so on its own it does
+not stop two machines claiming one ticket between syncs. A store whose data source is
+bound to a `git_ref` claim backend takes each claim through a Git-ref compare-and-swap
+on the shared remote first, so exactly one machine wins
+([36](36-resource-claims.md) §36.14, HS2-WJF0D8). Two refinements for the
+distributed/team case:
 
 - **Human assignment can scope machine claiming.** A `claim-next` can be filtered to
   "tickets assigned to me / my team / unassigned," so a person's agents drain that

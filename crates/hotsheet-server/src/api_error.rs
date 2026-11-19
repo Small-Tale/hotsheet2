@@ -120,6 +120,7 @@ impl From<StoreError> for ApiError {
             | StoreError::InvalidGroupName(_)
             | StoreError::ImageCrop(_) => StatusCode::BAD_REQUEST,
             StoreError::FeedbackNoteEdit(_) | StoreError::Admission(_) => StatusCode::CONFLICT,
+            StoreError::ClaimBackendUnreachable(_) => StatusCode::SERVICE_UNAVAILABLE,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,
             StoreError::NotAStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

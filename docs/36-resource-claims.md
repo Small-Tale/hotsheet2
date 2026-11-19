@@ -13,10 +13,12 @@ Two uses drive the design (decided 2026-11-03, HS2-H3WPPY):
 
 This document covers the contract, the built-in local machine backend, the CLI, MCP,
 and server surfaces, and backend configurations with namespace and data-source binding
-(§36.13); the `hotsheet-resource-claims` crate implements them. The other backends are
-design only; §36.9 names their tickets. The claim on a Git-backed
-ticket ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)) is
-unchanged and is not yet routed through this contract.
+(§36.13); the `hotsheet-resource-claims` crate implements them. The built-in Git-ref
+backend and the routing of a bound ticket source's claims through it are §36.14; the
+other backends are design only, and §36.9 names their tickets. The claim on a Git-backed
+ticket ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)) goes
+through a claim backend when its store is bound to a `git_ref` configuration (§36.14);
+otherwise it is unchanged.
 
 ## 36.1 Model
 
@@ -190,9 +192,9 @@ the configured value).
 
 ## 36.8 Plugin form
 
-Backends are implementations of the Rust trait. The planned built-ins are the local
-machine file backend (shipped), the existing Git-ref compare-and-swap, and Upstash Redis
-REST. External backends will use a subprocess protocol modeled on notifier plugins
+Backends are implementations of the Rust trait. The built-ins are the local machine
+file backend and the Git-ref compare-and-swap (§36.14, HS2-WJF0D8); Upstash Redis REST
+is planned (HS2-K9J1RK). External backends will use a subprocess protocol (HS2-322ZSZ) modeled on notifier plugins
 ([32-notifier-plugins.md](32-notifier-plugins.md) §32.6). Every setup and recovery path
 has an idempotent `hotsheet-cli` path shared with the graphical client.
 
@@ -203,6 +205,7 @@ has an idempotent `hotsheet-cli` path shared with the graphical client.
 | Backend contract, error model, codecs, local machine backend                                     | Shipped                                                                                     | HS2-H3WPPY |
 | CLI, MCP, and server surfaces with token-only renew and release (§36.10 to §36.12)               | Shipped for machine-scoped namespaces on the local backend                                  | HS2-FMHH9Y |
 | Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Shipped in the CLI and library (§36.13); server and web settings are HS2-JJWESD's follow-up | HS2-JJWESD |
+| Git-ref backend; exact ticket claims of a bound Git store through it                             | Shipped (§36.14)                                                                            | HS2-WJF0D8 |
 | AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                                                 | HS2-SHDW2Q |
 
 The first consumer outside tickets is the machine-wide `browser-engines` pool that caps local
@@ -333,7 +336,7 @@ A **configuration** names one claim backend. Namespaces and ticket data sources 
 | Field        | Meaning                                                                                                                      |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `id`         | 1 to 64 characters of `a-z`, `0-9`, `.`, `_`, `-`                                                                            |
-| `kind`       | `local` (§36.6) or `git_ref` (the Git-ref compare-and-swap, HS2-WJF0D8)                                                      |
+| `kind`       | `local` (§36.6) or `git_ref` (the Git-ref compare-and-swap, §36.14)                                                          |
 | `settings`   | Non-secret settings from a per-kind allow-list: none for `local`; `remote` (default `origin`) and `repository` for `git_ref` |
 | `credential` | The OS credential-store account that holds the configuration's 32-byte key (`resource-claims.<id>`), never a value           |
 | `offline`    | `fail_closed` (default) or `provisional` (§36.7); `local` takes only `fail_closed`                                           |
@@ -361,7 +364,8 @@ in two projects, or in a project and on the machine, never shares a claim.
 **Ticket data sources.** A source is a connection id, or `store:<instanceId>` for a Git
 ticket store. A Git store's connection id is derived from its local path and differs
 between clones, so bind the store identity (`--store <path>`) to cover every clone.
-Routing ticket claims through the configuration is HS2-WJF0D8.
+A Git store bound to a `git_ref` configuration routes its ticket claims through it
+(§36.14); a `local` binding changes nothing for ticket claims.
 
 **Commands.** All are idempotent, print JSON (`change` is `created`, `updated`,
 `unchanged`, `removed` or `absent`), and take `--project <dir>` to use the project
@@ -388,3 +392,83 @@ project, namespace)`, `CredentialKeyProvider` over any `SecretStore`, `generate_
 `import_key`, `export_key`, and `test_configuration`. The server and web settings call
 these functions (HS2-JJWESD follow-up); tests inject an in-memory `SecretStore` and run
 with `HOTSHEET_NATIVE_SECRETS=deny`.
+
+## 36.14 The Git-ref backend and ticket claims across machines (HS2-WJF0D8)
+
+The `git_ref` backend keeps each claim as a marker ref on a Git remote that every
+machine shares, and lets the remote serialize every change. It is how one ticket store
+cloned on several paired machines guarantees that two machines never hold one ticket
+(HS2-ZKJX16).
+
+**Markers.** A marker is a ref pointing at an orphan commit whose message is the claim
+as JSON: `worker`, `expires_at`, `claimed_at` (the fields of the `distclaim` markers of
+[08](08-distributed-and-remote.md) §8.5, so the distributed work loop and exact claims
+exclude each other), plus `claim_id`, `fencing`, `acquired_at_ms`, `expires_at_ms`,
+`host`, and for a resource claim the SHA-256 of its renewal token and its metadata.
+
+| Claim                | Ref                                                    |
+| -------------------- | ------------------------------------------------------ |
+| A ticket             | `refs/hotsheet/claims/<ticket ULID>`                   |
+| A namespace resource | `refs/hotsheet/resource-claims/<namespace>/<resource>` |
+
+**Operations** (`hotsheet_ticketing::gitref_cas`):
+
+- **Acquire.** With no marker, a plain push creates the ref and only the first push
+  wins. A lapsed marker is replaced by a push with `--force-with-lease=<ref>:<seen>`,
+  so of two takers one wins. A live marker of another claim refuses. A live marker of
+  the same claim is an idempotent retry that keeps its fencing token.
+- **Renew** rewrites the claim's own marker under the same lease check.
+- **Release** deletes the marker under the same lease check, so it never removes a
+  claim that replaced the one being released.
+- **Fencing** is `max(previous + 1, acquire time in ms)`, which keeps increasing across
+  a deleted marker while clocks move forward.
+- **Clock.** Git has no clock of its own, so expiry uses the claimer's clock. Machines
+  sharing a remote need roughly synchronized clocks.
+- **Waiting.** The remote cannot signal a release, so the backend advertises
+  `wait: none`: a try-now acquire works and a wait answers `unsupported` (a genuine wait is HS2-CR4STA).
+
+**Configuration.** `remote` (default `origin`) and `repository`. For a ticket store the
+repository is the store itself. For a project-scoped namespace it is the project
+directory; a machine-scoped namespace needs `repository`. No secret is involved beyond
+the remote's own Git authentication. A configuration with `--credential` keys `hmac` and
+`enc` metadata from the OS credential store; without one only `plain:` metadata is
+accepted.
+
+**Ticket claims of a bound store.** When a Git ticket store's source (normally
+`store:<instanceId>`, committed in the store's `.hotsheet2/resource-claims.json`) is
+bound to a `git_ref` configuration, every claim path in `ops` goes through the backend
+before the ticket's frontmatter changes: `hotsheet-cli claim`, the MCP claim tools, the
+hosted `/checkouts/{checkout}/target-claims` route and orchestration runs, coordination
+assignments, workers, and claim-next (which skips a ticket another machine holds and
+takes the next one).
+
+| Event                                   | Effect                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claim, marker free or lapsed            | The marker is pushed for the new claim attempt (the claim event's id), then the frontmatter is written                                                 |
+| Claim, another machine holds it         | Refused as `WrongWorker` naming the holder; the local ticket is repaired to name the holder with the marker's claim id                                 |
+| Renew                                   | The attempt's marker is extended; a missing marker (provisional, or a claim from before the binding) is acquired now                                   |
+| Renew after losing the ticket           | Refused naming the holder, and the local ticket is repaired. A worker whose own claim a merge overwrote in the frontmatter is restored from the marker |
+| Release, completion, any terminal state | The write that ends the claim deletes the attempt's marker (best effort; a marker left behind lapses at its lease)                                     |
+| Sync that pulled                        | Every live claim this host holds is checked against its marker; one another machine holds is repaired and recorded as a conflict                       |
+
+An unbound store, or one bound to a `local` configuration, behaves exactly as before.
+
+**Offline.** With `fail_closed`, a claim, claim-next or renew while the remote cannot be
+reached answers `claim_backend_unreachable` (HTTP 503) and nothing is written. With
+`provisional`, the claim is written locally and recorded as provisional in the clone's
+Git directory (`hotsheet-provisional-claims.json`); `hotsheet-cli claim` says it is
+advisory, and `claim_gate::provisional_claims` lists such claims. The next renew or sync
+that reaches the remote confirms it, or, when another machine took the ticket meanwhile,
+refuses it naming that holder. A release always succeeds locally.
+
+**Conflicts.** A claim this host lost is appended to the clone's
+`hotsheet-claim-conflicts.json` (at most 256 entries: ticket, slug, the local worker,
+the holder and the time), which `claim_gate::take_conflicts` returns once. The losing
+session's next renew is refused naming the holder. Pushing a conflict to the session as
+a notification is HS2-1639Q0.
+
+**Namespace resources.** A namespace bound to a `git_ref` configuration is served by
+`GitRefBackend`: exclusive with fencing; renew and release by token alone from any
+machine sharing the remote; `provisional` grants come from a local fallback under
+`<HOTSHEET_HOME>/resource-claims/provisional/<configuration>/` and report
+`advisory_only`; reconciling them when the remote returns is HS2-1SXBK9.

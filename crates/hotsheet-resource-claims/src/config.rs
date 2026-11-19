@@ -133,10 +133,31 @@ pub fn backend_for(home: &Path, resolved: &Resolved) -> Result<Arc<dyn ClaimBack
                 Arc::new(LocalBackend::new(root, Arc::new(SystemClock), keys))
             }
         }),
-        BackendKind::GitRef => Err(ClaimError::Unsupported(format!(
-            "configuration '{}' uses the git-ref backend, which this build does not serve yet",
-            resolved.configuration.id
-        ))),
+        BackendKind::GitRef => {
+            let configuration = &resolved.configuration;
+            let repository = git_repository(resolved.project.as_deref(), configuration)
+                .ok_or_else(|| {
+                    ClaimError::Invalid(format!(
+                        "configuration '{}' needs a repository setting when bound on the machine",
+                        configuration.id
+                    ))
+                })?;
+            let keys: Option<Arc<dyn KeyProvider>> = match configuration.credential {
+                Some(_) => Some(Arc::new(CredentialKeyProvider::new(
+                    hotsheet_ticketing::OsKeychain::at(home),
+                    configuration,
+                )?)),
+                None => None,
+            };
+            Ok(Arc::new(crate::gitref::GitRefBackend::new(
+                home,
+                &configuration.id,
+                &repository,
+                git_remote(configuration),
+                configuration.offline,
+                keys,
+            )))
+        }
     }
 }
 
