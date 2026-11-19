@@ -72,16 +72,29 @@ pub(super) fn stop_recorded_steps(home: &Path) -> usize {
         {
             continue;
         }
-        #[cfg(unix)]
-        if let Ok(group) = libc::pid_t::try_from(process.pid) {
-            // SAFETY: plain integers; the group's leader is the recorded step process,
-            // checked by its start time just above.
-            if unsafe { libc::killpg(group, libc::SIGKILL) } == 0 {
-                stopped += 1;
-            }
+        if kill_step_group(process.pid) {
+            stopped += 1;
         }
     }
     stopped
+}
+
+/// SIGKILL the step group led by `pid`; true when it was signalled.
+#[cfg(unix)]
+fn kill_step_group(pid: u32) -> bool {
+    let Ok(group) = libc::pid_t::try_from(pid) else {
+        return false;
+    };
+    // SAFETY: plain integers; the group's leader is the recorded step process, checked by
+    // its start time before this call.
+    unsafe { libc::killpg(group, libc::SIGKILL) == 0 }
+}
+
+/// HS2-RA94J2: no process group to signal off Unix, so nothing is counted, as before; the
+/// split keeps `stopped` used under -D warnings on Windows.
+#[cfg(not(unix))]
+fn kill_step_group(_pid: u32) -> bool {
+    false
 }
 
 impl Machine {

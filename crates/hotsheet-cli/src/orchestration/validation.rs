@@ -176,8 +176,9 @@ fn executions() -> std::sync::MutexGuard<'static, Vec<Arc<Execution>>> {
 }
 
 /// HS2-7BTV98: a test stands in for a restart of the hosting process: every execution
-/// it held in memory is gone, and only what the machine recorded remains.
-#[cfg(test)]
+/// it held in memory is gone, and only what the machine recorded remains. Its tests are
+/// Unix-only (HS2-RA94J2).
+#[cfg(all(test, unix))]
 pub(super) fn forget_executions() {
     executions().clear();
 }
@@ -219,8 +220,9 @@ fn ended(end: ExecutionEnd, started_at_ms: u64, started: Instant) -> ExecutionOu
     }
 }
 
-/// HS2-H1EK8R: an outcome as [`execute_reporting`] starts it, for the settle tests.
-#[cfg(test)]
+/// HS2-H1EK8R: an outcome as [`execute_reporting`] starts it, for the settle tests, which
+/// are Unix-only (HS2-RA94J2).
+#[cfg(all(test, unix))]
 pub(super) fn ended_for_test(end: ExecutionEnd) -> ExecutionOutcome {
     ended(end, 0, Instant::now())
 }
