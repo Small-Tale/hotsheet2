@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { watch } from 'node:fs';
 import { mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -232,20 +233,36 @@ describe('migration ownership adversaries', () => {
           };
         }),
     );
-    const a = new MigrationJobs(directory, runner, undefined, locks.lock);
-    const b = new MigrationJobs(directory, runner, undefined, locks.lock);
+    // HS2-Z69ARD: each registry still installs a real OS directory watcher, but the
+    // test also keeps its change callbacks. Under gate load macOS FSEvents delivered
+    // the owner's rename seconds late, so the test wakes the foreign long poll itself
+    // once the terminal checkpoint is durable instead of waiting on OS latency.
+    const wakes: ((filename: string | null) => void)[] = [];
+    const recordingWatch: WatchDirectory = (path, changed) => {
+      wakes.push(changed);
+      return watch(path, (_event, filename) => {
+        changed(filename);
+      });
+    };
+    const a = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, recordingWatch);
+    const b = new MigrationJobs(directory, runner, undefined, locks.lock, undefined, recordingWatch);
     try {
       await Promise.all([a.snapshot(owner.root), b.snapshot(owner.root)]);
       const starts = await Promise.allSettled([a.start(owner), b.start(owner)]);
       expect(starts.filter((start) => start.status === 'fulfilled')).toHaveLength(1);
       expect(runner).toHaveBeenCalledTimes(1);
-      const current = (await a.snapshot(owner.root))!;
-      const changed = b.watch(owner.root, current.revision);
+      const [owning, foreign] = starts[0].status === 'fulfilled' ? [a, b] : [b, a];
+      const current = (await owning.snapshot(owner.root))!;
+      const changed = foreign.watch(owner.root, current.revision);
       finish();
+      // Wait on state: the owner's terminal checkpoint is on disk.
+      while ((await foreign.snapshot(owner.root))?.status === 'running') await owning.flush();
+      for (const wake of wakes) wake(`${current.id}.json`);
       let terminal = await changed;
-      while (terminal?.status === 'running') terminal = await b.watch(owner.root, terminal.revision);
+      while (terminal?.status === 'running') terminal = await foreign.watch(owner.root, terminal.revision);
       expect(terminal?.status).toBe('succeeded');
-      expect((await b.start(owner)).attempt).toBe(current.attempt);
+      expect(terminal?.revision).toBeGreaterThan(current.revision);
+      expect((await foreign.start(owner)).attempt).toBe(current.attempt);
     } finally {
       finish();
       await a.flush();
