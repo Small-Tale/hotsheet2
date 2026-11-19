@@ -59,7 +59,7 @@ pub use fixture::{FIXTURE_KIND, FixtureWatchSource};
 pub use github::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, BUILDKITE_KIND, CIRCLECI_KIND, CiProvider,
     CiTarget, GITHUB_ACTIONS_KIND, GITLAB_CI_KIND, GithubActionsSource, GithubApi, RunFloor,
-    repo_from_remote,
+    UNKNOWN_COMMIT_LIMIT_MS, repo_from_remote,
 };
 pub use gitlab::GitlabCiSource;
 pub use model::{

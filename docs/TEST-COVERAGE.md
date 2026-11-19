@@ -37,7 +37,8 @@ cleaning of provider text. `tests/github.rs` drives the source through the real
 monitor and store with a scripted `GithubApi`: queued to green with steps, ETA,
 URL, and 304 answers that write nothing; red, repeated ensure, and re-watch to
 green; a run cancelled for a newer push; cancelled and superseded gates; a commit
-the provider does not know yet; cancel permitted, refused, undeclared, and never
+the provider does not know yet, and one it never learns, which ends with gate
+`unknown` at the HS2-XGV2J9 bound on the injected clock; cancel permitted, refused, undeclared, and never
 sent for another commit's run; an unreachable provider, a rate limit with a
 requested delay, a malformed body, and a missing repository; hostile provider
 text; eight concurrent callers of `ensure_ci_watch`; a lost watch; and

@@ -12,8 +12,9 @@ use common::{CHECKOUT, Fixture, LEASE_MS, LOST_AFTER_MS, fixture};
 use hotsheet_jobs::{
     ApiMethod, ApiRequest, ApiResponse, ApiUnavailable, CiArtifact, CiRun, CiTarget,
     CiWatchOptions, GITHUB_ACTIONS_KIND, GateState, GithubActionsSource, GithubApi, JobError,
-    Liveness, Monitor, MonitorConfig, NoProbe, Status, StepStatus, TicketLink, WATCH_STATE_KEY,
-    ci_outcome, ensure_ci_watch, find_ci_watch, gate_state, rewatch_ci, wait_for_gate_change,
+    Liveness, Monitor, MonitorConfig, NoProbe, Status, StepStatus, TicketLink,
+    UNKNOWN_COMMIT_LIMIT_MS, WATCH_STATE_KEY, ci_outcome, ensure_ci_watch, find_ci_watch,
+    gate_state, rewatch_ci, wait_for_gate_change,
 };
 use serde_json::{Value, json};
 
@@ -562,6 +563,83 @@ fn a_commit_the_provider_does_not_know_yet_waits_for_its_run() {
     api.jobs(13, vec![]);
     step(&fx, &mut monitor);
     assert_eq!(fx.get(&job.id).status, Status::Succeeded);
+}
+
+#[test]
+fn hs2_xgv2j9_a_commit_the_provider_never_learns_about_ends_with_gate_unknown() {
+    let fx = fixture();
+    let api = FakeApi::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    // The compare endpoint keeps answering 404 for the commit: a mistyped SHA, or a
+    // commit that was never pushed.
+    api.runs(vec![run(5, OLD, "completed", Some("success"))]);
+    let mut monitor = monitor(&fx, &api);
+    monitor.tick().unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+
+    // Just inside the bound it still waits, and unchanged polls keep asking.
+    let created = fx.get(&job.id).created_ms;
+    let asked = api.count("/compare/");
+    // Large clock moves: the watch keeps its Job across them, as on a sleeping machine.
+    while fx.store.now_ms() + 60_000 < created + UNKNOWN_COMMIT_LIMIT_MS {
+        fx.clock.advance(60_000);
+        monitor.tick().unwrap();
+    }
+    assert_eq!(fx.get(&job.id).status, Status::Waiting);
+    assert_eq!(gate(&fx), GateState::Pending);
+    assert!(api.count("/compare/") > asked);
+
+    // At the bound, measured on the injected clock, the watch ends.
+    fx.clock.advance(60_000);
+    monitor.tick().unwrap();
+    let done = fx.get(&job.id);
+    assert_eq!(done.status, Status::Failed);
+    assert_eq!(done.outcome.as_ref().unwrap().refs["gate"], "unknown");
+    assert_eq!(gate(&fx), GateState::Unknown);
+    let outcome = ci_outcome(&done).unwrap();
+    assert_eq!(outcome.gate, GateState::Unknown);
+    assert_eq!(
+        outcome.summary.as_deref(),
+        Some("1111111 is not known to acme/widgets after 30 minutes")
+    );
+
+    // Polling stops with the Job.
+    let polled = api.count("actions/runs?");
+    step(&fx, &mut monitor);
+    assert_eq!(api.count("actions/runs?"), polled);
+
+    // A rewatch after the commit is finally pushed follows its run in a new Job.
+    let again = rewatch_ci(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    assert_ne!(again.id, job.id);
+    assert_eq!(again.retry_of.as_deref(), Some(job.id.as_str()));
+    api.runs(vec![run(13, SHA, "completed", Some("success"))]);
+    api.jobs(13, vec![]);
+    step(&fx, &mut monitor);
+    assert_eq!(fx.get(&again.id).status, Status::Succeeded);
+}
+
+#[test]
+fn hs2_xgv2j9_a_commit_that_appears_before_the_bound_is_followed_normally() {
+    let fx = fixture();
+    let api = FakeApi::default();
+    let job = ensure_ci_watch(&fx.store, CHECKOUT, &target(), &CiWatchOptions::default()).unwrap();
+    api.runs(vec![run(5, OLD, "completed", Some("success"))]);
+    let mut monitor = monitor(&fx, &api);
+    monitor.tick().unwrap();
+    // Pushed late but inside the bound: the run is followed, and the bound no longer
+    // applies once a run covers the commit, even long after it.
+    fx.clock.advance(UNKNOWN_COMMIT_LIMIT_MS - 1_000);
+    api.runs(vec![
+        run(13, SHA, "in_progress", None),
+        run(5, OLD, "completed", Some("success")),
+    ]);
+    api.jobs(13, vec![]);
+    step(&fx, &mut monitor);
+    assert_eq!(fx.get(&job.id).status, Status::Running);
+    fx.clock.advance(UNKNOWN_COMMIT_LIMIT_MS);
+    step(&fx, &mut monitor);
+    assert_eq!(fx.get(&job.id).status, Status::Running);
+    assert_eq!(gate(&fx), GateState::Pending);
 }
 
 #[test]

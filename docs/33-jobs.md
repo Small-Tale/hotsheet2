@@ -268,14 +268,14 @@ of `scripts/ci-gate.mjs status --covers <sha>`: only push runs of that workflow 
 that branch count, and a run **covers** the commit when its head is the commit or
 a descendant of it.
 
-| Gate         | Meaning                                                                                                 | Job status  |
-| ------------ | ------------------------------------------------------------------------------------------------------- | ----------- |
-| `pending`    | No covering run exists yet, or the newest covering run is queued or in progress.                        | active      |
-| `green`      | A successful covering run exists.                                                                       | `succeeded` |
-| `red`        | The newest covering run failed, timed out, failed to start, or needs action.                            | `failed`    |
-| `cancelled`  | The newest covering run was cancelled and nothing newer covers the commit, or watching was stopped.     | `cancelled` |
-| `superseded` | The newest run on the branch is on a line that does not contain the commit, so no run can cover it.     | `failed`    |
-| `unknown`    | No watch Job exists for the target, its observer was lost, or the watch failed for an unrelated reason. | any other   |
+| Gate         | Meaning                                                                                                                                        | Job status  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `pending`    | No covering run exists yet, or the newest covering run is queued or in progress.                                                               | active      |
+| `green`      | A successful covering run exists.                                                                                                              | `succeeded` |
+| `red`        | The newest covering run failed, timed out, failed to start, or needs action.                                                                   | `failed`    |
+| `cancelled`  | The newest covering run was cancelled and nothing newer covers the commit, or watching was stopped.                                            | `cancelled` |
+| `superseded` | The newest run on the branch is on a line that does not contain the commit, so no run can cover it.                                            | `failed`    |
+| `unknown`    | No watch Job exists for the target, its observer was lost, the provider never learned the commit, or the watch failed for an unrelated reason. | any other   |
 
 A run that the provider cancelled because a newer push replaced it keeps the gate
 `pending` while the newer covering run is running. A covering run that was
@@ -298,7 +298,11 @@ run it follows, both with conditional requests, so an unchanged answer costs no
 rate limit and writes nothing. Whether a newer run's head contains the commit
 comes from the provider's compare endpoint; an answer is kept for the life of the
 monitor, and one poll starts at most 5 such lookups. A commit the provider does
-not know yet waits for its run. A repository that cannot be read fails the Job
+not know yet waits for its run. When the compare endpoint still does not know the
+commit 30 minutes after the watch Job was created (a mistyped SHA, or a commit
+that was never pushed), the Job fails with gate `unknown` and the summary
+`<short sha> is not known to <repo> after 30 minutes`, so it stops polling
+(HS2-XGV2J9). `--rewatch` starts a new watch once the commit is pushed. A repository that cannot be read fails the Job
 with gate `unknown`. The HTTP client takes its token from `GH_TOKEN` or
 `GITHUB_TOKEN`, otherwise from `gh auth token`; the token is never written to a
 Job, a log, or the process journal. A failed `gh auth token` is not tried again

@@ -23,6 +23,11 @@ const MAX_COMPARES_PER_POLL: usize = 5;
 /// Successful runs needed before a duration estimate is given.
 const MIN_DURATIONS: usize = 3;
 const MAX_DURATIONS: usize = 10;
+/// HS2-XGV2J9: how long after a watch Job's creation the provider may keep answering
+/// that it does not know the commit before the watch ends with gate `unknown`. GitHub
+/// learns a pushed commit within seconds, so this only ends watches of a mistyped SHA
+/// or a commit that was never pushed. Measured on the store's clock.
+pub const UNKNOWN_COMMIT_LIMIT_MS: u64 = 30 * 60_000;
 
 /// HS2-TPAHYA: the Job kind name and the `external.system` of a GitLab CI watch.
 pub const GITLAB_CI_KIND: &str = "gitlab-ci";
@@ -772,11 +777,23 @@ impl<A: GithubApi> WatchSource for GithubActionsSource<A> {
         // A lookup left for the next poll means this verdict is not final, so the next
         // poll must judge again even when the provider reports nothing new.
         let mut unfinished = false;
+        let mut commit_unknown = false;
         let decision = decide(&target, floor, &runs, |head| {
             let relation = self.relation(&target, head, &mut budget)?;
             unfinished |= relation.is_none();
+            commit_unknown |= relation == Some(Relation::Unknown);
             Ok(relation)
         })?;
+        // HS2-XGV2J9: a commit the provider still does not know long after the watch
+        // began will never get a run: end the watch instead of polling it forever.
+        let never_reached = matches!(decision, Decision::Pending { run: None })
+            && commit_unknown
+            && now_ms.saturating_sub(job.created_ms) >= UNKNOWN_COMMIT_LIMIT_MS;
+        if never_reached {
+            return Ok(Poll::Observed(Box::new(Observation::new(
+                Observed::Failed(outcome(&target, "unknown", None, &[])),
+            ))));
+        }
         let current = match decision {
             Decision::Pending { run } => run,
             Decision::Green { run } | Decision::Red { run } | Decision::Cancelled { run } => {
@@ -1021,6 +1038,12 @@ fn outcome(
                 target.short_sha()
             )
         }
+        None if gate == "unknown" => format!(
+            "{} is not known to {} after {} minutes",
+            target.short_sha(),
+            clean(&target.repo, 200),
+            UNKNOWN_COMMIT_LIMIT_MS / 60_000
+        ),
         None => format!(
             "{} is no longer on {}",
             target.short_sha(),
