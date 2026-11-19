@@ -243,6 +243,7 @@ import {
 } from '../project-ticket-refresh';
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
+import { createRemoteLiveStates, projectLiveStates } from '../remote-live-states';
 import {
   desktopRemoteForget,
   desktopRemoteOpen,
@@ -4541,6 +4542,9 @@ export async function startHotSheetWebClient() {
   });
   // Server-pushed per-store live state that glance surfaces bind to (HS2-JTTQMY).
   const liveStates = createLiveStateStore();
+  // Cross-server tabs keep their own snapshots (HS2-4R99XY); the Live section reads both through one lookup.
+  const remoteLiveStates = createRemoteLiveStates();
+  const sidebarLiveStates = projectLiveStates(liveStates, remoteLiveStates);
   // The server host's health (HS2-NS0AYR). Every project reaches the same machine server through
   // the bridge, so one resource reads through the Stats project, else the first open project.
   const hostHealth = createHostHealthResource(() => {
@@ -4668,6 +4672,7 @@ export async function startHotSheetWebClient() {
     },
     reloadTicketGroups: (target) => ticketGroups.reloadGroups(target),
     liveStates,
+    remoteLiveStates,
     hostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
     browserGrants,
@@ -5239,7 +5244,7 @@ export async function startHotSheetWebClient() {
     commandRunFor,
     commandIcon,
     aiToolLabel,
-    liveStates,
+    liveStates: sidebarLiveStates,
     liveClock,
     liveSectionExpanded,
     hostHealth: {
@@ -6095,7 +6100,7 @@ export async function startHotSheetWebClient() {
     permissionCount: (projectId?: string) =>
       permissionCount(projectId) + clientNotifications.pending(projectId ?? selectedProjectId.value).length,
     workersLive: (projectId: string) =>
-      workersLive(projectLiveSummary(liveStates.forProject(projectId), liveClock.value)),
+      workersLive(projectLiveSummary(sidebarLiveStates.forProject(projectId), liveClock.value)),
     orchestration: {
       available: (projectId: string) => orchestrationView.isOrchestrationProject(projectId),
       pageHeader: () => {
@@ -7506,6 +7511,7 @@ export async function startHotSheetWebClient() {
       disposeGridSidebarPages();
       terminalOperationsSurface.dispose();
       liveStates.reset();
+      remoteLiveStates.reset();
       liveClockTimer.stop();
       disposeStandby();
       announcerController.dispose();

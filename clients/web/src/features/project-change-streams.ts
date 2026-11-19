@@ -32,6 +32,8 @@ import {
 } from '../project-change-poll';
 import { createProjectChangeRefresh } from '../project-change-refresh';
 import type { createRefreshBarrier } from '../refresh-barrier';
+import type { RemoteLiveStates } from '../remote-live-states';
+import { isRemoteProjectId } from '../remote-projects/identity';
 import { type ServerClocks, serverClocks } from '../server-clock';
 import { parsePollResponse } from '../server-response-parsers';
 import type { createDriveConversationsController } from './drive-conversations';
@@ -92,6 +94,11 @@ export interface ProjectChangeStreamsDependencies {
    * and each stream resync re-reads `GET /live-state` once. No timer reads it.
    */
   liveStates?: LiveStateStore;
+  /**
+   * Live state of cross-server project tabs (HS2-4R99XY): a remote project's `live_state` events and
+   * `/live-state` resync feed its own store here, never the local `liveStates`.
+   */
+  remoteLiveStates?: Pick<RemoteLiveStates, 'storeFor' | 'drop'>;
   /**
    * The server host's health (HS2-NS0AYR): `host_health` events trigger one coalesced re-read and
    * each stream resync re-reads it. No timer reads it.
@@ -294,6 +301,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     orchestrationChanged,
     reloadTicketGroups,
     liveStates,
+    remoteLiveStates,
     hostHealth,
     standbySettings,
     browserGrants,
@@ -381,6 +389,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         projectChangeStreams.delete(id);
         ticketRefresh.cancel(id);
         removeClientNotifications?.(id);
+        remoteLiveStates?.drop(id);
         onStreamHealth?.(id, undefined);
       }
     for (const [id, timer] of repositoryRefreshTimers)
@@ -416,6 +425,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           },
         });
         const unfollowTicketReads = ticketReadCursors.follow(current.apiPath, handshakeGap.read);
+        // A remote tab's snapshots are the remote server's own: they never enter the local store.
+        const projectLiveStore = isRemoteProjectId(current.id) ? remoteLiveStates?.storeFor(current.id) : liveStates;
         const stopStream = startStream(current, {
           client: new Api(current.apiPath),
           beforeRefresh: () => localTicketMutationBarrier.wait(),
@@ -431,7 +442,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               refreshPermissions(current.id),
               ...(refreshAdvisoryClaim ? [refreshAdvisoryClaim(current)] : []),
               ...(refreshClientNotifications ? [refreshClientNotifications(current)] : []),
-              ...(liveStates ? [liveStates.resync(new Api(current.apiPath))] : []),
+              ...(projectLiveStore ? [projectLiveStore.resync(new Api(current.apiPath))] : []),
               ...(hostHealth ? [hostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
               ...(browserGrants ? [browserGrants.resync()] : []),
@@ -449,7 +460,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
           },
           onEvents: contained(async (response) => {
             onStreamHealth?.(current.id, true);
-            liveStates?.applyEvents(response.events);
+            projectLiveStore?.applyEvents(response.events);
             void hostHealth?.applyEvents(response.events);
             void standbySettings?.applyEvents(response.events);
             void browserGrants?.applyEvents(response.events);

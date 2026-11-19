@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { expect, type Page, test } from '@playwright/test';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+import { remoteProjectId } from '../src/remote-projects/identity';
 import { demoHostHealth } from '../src/ux-demo/live-section-fixtures';
 import { openMockedProject } from './open-mocked-project';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
@@ -10,12 +11,18 @@ import { proxyFetch, realTicketServer } from './real-ticket-server';
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 
 /** Open the real app on an isolated server through the dev proxy, as archive-load-more does. */
-async function openProject(page: Page, server: Server, beforeLoad?: () => Promise<unknown>) {
-  const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
+async function openProject(
+  page: Page,
+  server: Server,
+  beforeLoad?: () => Promise<unknown>,
+  /** The browser's id for the project: a `remote:` id opens it as a cross-server tab (HS2-4R99XY). */
+  projectId = server.checkoutId,
+) {
+  const apiPath = `/__hotsheet/project-api/${encodeURIComponent(projectId)}`;
   await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
     route.fulfill({
       status: 201,
-      json: { id: server.checkoutId, root: server.root, name: 'live', stores: [server.store], apiPath },
+      json: { id: projectId, root: server.root, name: 'live', stores: [server.store], apiPath },
     }),
   );
   await page.route(`**${apiPath}/**`, async (route) => {
@@ -196,6 +203,47 @@ test('project sidebar Live section shows reported main CI as a chip only when it
       const fits = await row.evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
       expect(fits).toBe(true);
       await live.screenshot({ path: `target/visual-captures/hs2-57byea-ci-row-expanded-${width}.png` });
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
+// HS2-4R99XY: a cross-server (remote) project tab shows the same Live gauges and badges as a local one. The
+// browser's `remote:<binding>:<checkout>` id never equals the remote server's checkout id, so the section reads
+// the tab's own live store by the remote checkout id; a reported failing run still reaches its chip.
+test('project sidebar Live section shows gauges and badges for a remote project tab (HS2-4R99XY)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await page.routeWebSocket(/.*/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openProject(page, server, undefined, remoteProjectId('01M7S5JGSGWFWB3A2WHJ0P2NTC', server.checkoutId));
+    const sidebar = page.locator('section[aria-label="Project sidebar"]').first();
+    const live = sidebar.locator('[data-component="project-live-section"]');
+    await expect(live).toHaveAttribute('data-mode', 'compact', { timeout: 30_000 });
+    const gauges = live.locator('svg.glance-gauge');
+    await expect(gauges).toHaveCount(2);
+    await expect(gauges.nth(0)).toHaveAccessibleName(/^Token rate: 0 tokens\/min/);
+    await expect(gauges.nth(1)).toHaveAccessibleName(/^Tickets updated: \d+ tickets\/h/);
+
+    await server.request(`/checkouts/${server.checkoutId}/ci-status`, 'POST', {
+      status: 'failure',
+      branch: 'main',
+      sha: '9f8e7d6c5b4a',
+      workflow: 'CI',
+      started_at_ms: Date.now() - 18 * 60_000,
+      finished_at_ms: Date.now() - 12 * 60_000,
+    });
+    const chip = live.locator('[data-live-chip="ci"]');
+    await expect(chip).toBeVisible({ timeout: 30_000 });
+    await expect(chip).toHaveAttribute('data-tone', 'danger');
+    for (const width of [1280, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(chip).toBeVisible();
+      await live.screenshot({ path: `target/visual-captures/hs2-4r99xy-remote-live-${width}.png` });
     }
   } finally {
     await server.stop(page);
