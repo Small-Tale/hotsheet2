@@ -2,12 +2,19 @@
 //! store whose upstream has no `.gitattributes` and whose checkout never ran `init` still
 //! merges ticket files through the driver. Synthetic stores and bodies only.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 use super::tests::{clean, ok, remote_with_two_clones};
 use super::*;
-use crate::merge_driver::{MergeDriverStatus, TEST_PROGRAM};
-use crate::sync_health::{health, read_record};
+use crate::merge_driver::MergeDriverStatus;
+// HS2-RA94J2: only the Unix tests (an executable fake driver) use these.
+#[cfg(unix)]
+use crate::merge_driver::TEST_PROGRAM;
+use crate::sync_health::health;
+#[cfg(unix)]
+use crate::sync_health::read_record;
 
 /// A stand-in for `hotsheet-cli merge-driver %O %A %B`: a line-union merge that also
 /// records each call, so a test sees that Git consulted the driver.

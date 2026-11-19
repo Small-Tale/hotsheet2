@@ -331,15 +331,7 @@ impl DetachedChild {
             Detached::Tracked(child) => child.kill(),
             Detached::Spawned { pid, status } => {
                 if status.is_none() {
-                    #[cfg(unix)]
-                    {
-                        let pid = libc::pid_t::try_from(*pid).map_err(io::Error::other)?;
-                        // SAFETY: the pid is this process's own unreaped child, so it cannot
-                        // name another process.
-                        if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
-                            return Err(io::Error::last_os_error());
-                        }
-                    }
+                    kill_unreaped(*pid)?;
                     self.killed = true;
                 }
                 Ok(())
@@ -359,6 +351,24 @@ impl DetachedChild {
             let _ = self.journal.finish(&id, reason);
         }
     }
+}
+
+/// Send SIGKILL to this process's own unreaped child `pid`.
+#[cfg(unix)]
+fn kill_unreaped(pid: u32) -> io::Result<()> {
+    let pid = libc::pid_t::try_from(pid).map_err(io::Error::other)?;
+    // SAFETY: the pid is this process's own unreaped child, so it cannot name another process.
+    if unsafe { libc::kill(pid, libc::SIGKILL) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+// HS2-RA94J2: `Detached::Spawned` is built only on macOS; off Unix the pid has no signal, as
+// with `reap`, so the kill reports Unsupported instead of leaving `pid` unused under -D warnings.
+#[cfg(not(unix))]
+fn kill_unreaped(_pid: u32) -> io::Result<()> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
 }
 
 /// Reap child `pid` (blocking when `block`), or `None` while it still runs.

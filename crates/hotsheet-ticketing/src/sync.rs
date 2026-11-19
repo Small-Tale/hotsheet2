@@ -1344,6 +1344,8 @@ pub(crate) mod tests {
 
     use crate::sync_health::{SyncState, health, read_record};
 
+    // HS2-RA94J2: only the Unix rejected-push tests use it.
+    #[cfg(unix)]
     fn small_limits() -> SyncLimits {
         SyncLimits {
             oversized_bytes: 1_024,

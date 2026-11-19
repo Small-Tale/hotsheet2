@@ -5,10 +5,15 @@
 
 use std::path::{Path, PathBuf};
 
-use super::tests::{clean, commit_file, head, ok, peer_pushes, reflog_len, remote_with_two_clones};
+// HS2-RA94J2: `reflog_len` and `SyncState` serve only the Unix tests.
+#[cfg(unix)]
+use super::tests::reflog_len;
+use super::tests::{clean, commit_file, head, ok, peer_pushes, remote_with_two_clones};
 use super::*;
 use crate::store::{FsStore, StoreMetadata};
-use crate::sync_health::{IntegrationInProgress, SyncState, health};
+#[cfg(unix)]
+use crate::sync_health::SyncState;
+use crate::sync_health::{IntegrationInProgress, health};
 
 fn attached(root: &Path) -> bool {
     git_ok(root, &["symbolic-ref", "--quiet", "HEAD"])
