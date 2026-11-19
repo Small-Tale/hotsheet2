@@ -315,10 +315,24 @@ async fn hs2_fds95d_a_press_replans_the_idle_planner_in_its_open_tab() {
     // The tool comes up and ends a turn; its role prompt reaches it then.
     let prompt = received_prompt(&world.reports, &terminal, "`hotsheet-planner`");
     assert!(prompt.contains("press-1"), "{prompt}");
-    // It planned and sits idle in its open tab.
-    let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+    // It planned and sits idle in its open tab. The fake records the prompt before the
+    // server records its delivery, so wait (woken by the machine session records
+    // changing) until the server sees the planner idle (HS2-FDS95D flake under load).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let shown = loop {
+        let waiter = hotsheet_jobs::ChangeWaiter::starting(&[world.home.as_path()]).unwrap();
+        let (_, shown) = world.call("POST", "/planning/show", json!({})).await;
+        if shown["replannable"] == true {
+            break shown;
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "the planner never became replannable: {shown}"
+        );
+        tokio::task::block_in_place(|| waiter.wait(remaining));
+    };
     assert_eq!(shown["state"], "planning", "{shown}");
-    assert_eq!(shown["replannable"], true, "{shown}");
 
     let again = press("press-2").await;
     assert_eq!(again["outcome"], "replanned", "{again}");
