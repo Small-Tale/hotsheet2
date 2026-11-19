@@ -45,6 +45,7 @@ pub mod overlay;
 pub mod permission_automation;
 pub mod phase_report;
 pub mod phase_timing;
+pub mod plugin_digest;
 pub mod ports;
 pub mod pricing;
 pub mod project_gitignore;

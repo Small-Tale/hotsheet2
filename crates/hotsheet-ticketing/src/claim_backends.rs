@@ -80,6 +80,10 @@ pub enum BackendKind {
     Local,
     /// The built-in Git-ref compare-and-swap on a shared remote (HS2-WJF0D8).
     GitRef,
+    /// An external plugin under `<HOTSHEET_HOME>/claim-backends/<id>/` (HS2-322ZSZ),
+    /// named by the `plugin` setting. The plugin's own manifest declares the other
+    /// settings, so the registry only checks their shape.
+    External,
 }
 
 impl BackendKind {
@@ -87,8 +91,9 @@ impl BackendKind {
         match text.trim().to_ascii_lowercase().replace('-', "_").as_str() {
             "local" => Ok(Self::Local),
             "git_ref" => Ok(Self::GitRef),
+            "external" => Ok(Self::External),
             other => Err(RegistryError::Invalid(format!(
-                "unknown backend kind '{other}'; use local or git-ref"
+                "unknown backend kind '{other}'; use local, git-ref or external"
             ))),
         }
     }
@@ -97,6 +102,7 @@ impl BackendKind {
         match self {
             Self::Local => "local",
             Self::GitRef => "git_ref",
+            Self::External => "external",
         }
     }
 
@@ -109,6 +115,8 @@ impl BackendKind {
             // repository whose remote serializes claims (default: the project or the
             // bound ticket store).
             Self::GitRef => &["remote", "repository"],
+            // Only `plugin` is fixed; the plugin's manifest declares the rest.
+            Self::External => &["plugin"],
         }
     }
 
@@ -150,7 +158,10 @@ impl BackendConfiguration {
         validate_id(&self.id, "configuration id")?;
         let allowed = self.kind.setting_keys();
         for (key, value) in &self.settings {
-            if !allowed.contains(&key.as_str()) {
+            // An external plugin declares its own settings; here only their shape is
+            // checked. Secret-typed ones are refused where the manifest is known.
+            let declared_by_plugin = self.kind == BackendKind::External && valid_setting_key(key);
+            if !declared_by_plugin && !allowed.contains(&key.as_str()) {
                 return Err(RegistryError::Invalid(if allowed.is_empty() {
                     format!(
                         "a {} backend takes no settings ('{key}')",
@@ -177,10 +188,21 @@ impl BackendConfiguration {
             validate_credential(account)?;
         }
         if !self.kind.is_remote() && self.offline == OfflinePolicy::Provisional {
-            return Err(RegistryError::Invalid(format!(
-                "a {} backend is never offline, so it takes no provisional policy",
-                self.kind.as_str()
-            )));
+            return Err(RegistryError::Invalid(
+                if self.kind == BackendKind::External {
+                    "an external backend fails closed while its plugin is unreachable; a provisional policy is not supported for it".to_owned()
+                } else {
+                    format!(
+                        "a {} backend is never offline, so it takes no provisional policy",
+                        self.kind.as_str()
+                    )
+                },
+            ));
+        }
+        if self.kind == BackendKind::External && self.setting("plugin").is_none() {
+            return Err(RegistryError::Invalid(
+                "an external backend needs --setting plugin=<id> naming a directory under claim-backends/".into(),
+            ));
         }
         Ok(())
     }
@@ -589,6 +611,15 @@ pub fn git_store_sources(store: &crate::FsStore) -> Vec<String> {
 
 /// Check an id: 1-64 characters of `a-z`, `0-9`, `.`, `_`, `-`, starting with a letter
 /// or digit.
+/// A plugin-declared setting key: a short lowercase identifier.
+pub fn valid_setting_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 48
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
 pub fn validate_id(value: &str, what: &str) -> Result<String, RegistryError> {
     let valid = !value.is_empty()
         && value.len() <= MAX_ID_LEN

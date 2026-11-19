@@ -133,6 +133,7 @@ pub fn backend_for(home: &Path, resolved: &Resolved) -> Result<Arc<dyn ClaimBack
                 Arc::new(LocalBackend::new(root, Arc::new(SystemClock), keys))
             }
         }),
+        BackendKind::External => crate::external::backend_for(home, &resolved.configuration),
         BackendKind::GitRef => {
             let configuration = &resolved.configuration;
             let repository = git_repository(resolved.project.as_deref(), configuration)
@@ -325,6 +326,7 @@ pub fn test_configuration<S: SecretStore>(
     let reach = match configuration.kind {
         BackendKind::Local => LocalBackend::machine(home).namespaces().map(|_| ()),
         BackendKind::GitRef => git_reachable(project, configuration),
+        BackendKind::External => external_reachable(home, configuration),
     };
     match reach {
         Ok(()) => report.reachable = true,
@@ -363,6 +365,13 @@ pub fn git_repository(
 /// The Git remote a git-ref configuration pushes claims to (default `origin`).
 pub fn git_remote(configuration: &BackendConfiguration) -> &str {
     configuration.setting("remote").unwrap_or("origin")
+}
+
+/// An external plugin answers one cheap read-only call (`namespaces`) once it is approved.
+fn external_reachable(home: &Path, configuration: &BackendConfiguration) -> Result<(), ClaimError> {
+    crate::external::backend_for(home, configuration)?
+        .namespaces()
+        .map(|_| ())
 }
 
 fn git_reachable(

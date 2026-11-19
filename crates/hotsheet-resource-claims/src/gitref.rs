@@ -13,15 +13,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ring::digest;
-
 use hotsheet_ticketing::gitref_cas::{
     Acquired, CasError, GitRefCas, RESOURCE_REF_PREFIX, RefMarker,
 };
 
 use crate::backend::ClaimBackend;
 use crate::clock::{Clock, SystemClock};
-use crate::codec::{FileKeyProvider, KeyProvider, MetadataCodecs, hex};
+use crate::codec::{FileKeyProvider, KeyProvider, MetadataCodecs};
 use crate::config::OfflinePolicy;
 use crate::error::ClaimError;
 use crate::local::{LOCAL_ROOT_DIR, LocalBackend};
@@ -51,7 +49,7 @@ impl std::fmt::Debug for GitRefBackend {
 }
 
 fn token_digest(token: &str) -> String {
-    hex(digest::digest(&digest::SHA256, token.as_bytes()).as_ref())
+    token::sha256_hex(token)
 }
 
 impl GitRefBackend {

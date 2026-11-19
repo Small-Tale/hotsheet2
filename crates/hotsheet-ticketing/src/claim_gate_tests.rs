@@ -707,3 +707,29 @@ fn hs2_ewgptz_an_unkeyed_configuration_keeps_plain_holder_fields() {
     assert_eq!(held.worker, "worker-a");
     assert!(held.metadata.is_empty());
 }
+
+#[test]
+fn hs2_322zsz_a_store_bound_to_an_external_backend_refuses_to_claim_without_it() {
+    let f = fleet(1, OfflinePolicy::FailClosed);
+    let source = git_store_sources(&f.a).remove(0);
+    Scope::Project {
+        root: f.a.root().to_path_buf(),
+    }
+    .update(|r| {
+        let mut config = BackendConfiguration::new("plug", BackendKind::External)?;
+        config.settings.insert("plugin".into(), "vault".into());
+        r.upsert_configuration(config)?;
+        r.bind_source(&source, "plug");
+        Ok(())
+    })
+    .unwrap();
+    // Ticket claims do not route through external backends yet (HS2-3SJ8JX): refusing is
+    // the only safe answer, because claiming locally would ignore the binding.
+    match claim(&f.a, &f.tickets[0], "worker-a") {
+        Err(OpError::Store(StoreError::Io(error))) => {
+            assert!(error.to_string().contains("not supported yet"), "{error}");
+        }
+        other => panic!("expected a refusal: {other:?}"),
+    }
+    assert_eq!(f.a.read_ticket(&f.tickets[0]).unwrap().claimed_by, None);
+}

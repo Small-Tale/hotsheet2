@@ -77,10 +77,15 @@ pub(crate) enum ResourceCmd {
         #[command(flatten)]
         scope: super::resource_backends::ScopeArg,
     },
-    /// Claim backend configurations: add, list, show, test, remove, key (HS2-JJWESD).
+    /// Claim backend configurations: add, list, show, test, remove, key, secret (HS2-JJWESD, HS2-322ZSZ).
     Backend {
         #[command(subcommand)]
         cmd: super::resource_backends::BackendCmd,
+    },
+    /// External claim-backend plugins: list them, approve one (HS2-322ZSZ).
+    Plugin {
+        #[command(subcommand)]
+        cmd: super::resource_backends::PluginCmd,
     },
     /// Bind a resource namespace to a configuration, or unbind it.
     Namespace {
@@ -100,6 +105,7 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
     };
     let cmd = match cmd {
         ResourceCmd::Backend { cmd } => return super::resource_backends::backend(cmd),
+        ResourceCmd::Plugin { cmd } => return super::resource_backends::plugin(cmd),
         ResourceCmd::Namespace { cmd } => return super::resource_backends::namespace(cmd),
         ResourceCmd::Source { cmd } => return super::resource_backends::source(cmd),
         other => other,
@@ -193,6 +199,7 @@ fn request(cmd: ResourceCmd) -> Result<(&'static str, String, Value)> {
             ("GET", format!("{ROUTE_PREFIX}/{namespace}"), Value::Null)
         }
         ResourceCmd::Backend { .. }
+        | ResourceCmd::Plugin { .. }
         | ResourceCmd::Namespace { .. }
         | ResourceCmd::Source { .. } => {
             bail!("not a claim request")

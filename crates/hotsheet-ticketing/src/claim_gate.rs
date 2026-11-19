@@ -208,6 +208,14 @@ pub fn ticket_gate_with(
     let configuration = resolved.configuration;
     Ok(match configuration.kind {
         BackendKind::Local => None,
+        // HS2-3SJ8JX routes ticket claims through every backend kind. Until then a
+        // store bound to one must not silently claim without it.
+        BackendKind::External => {
+            return Err(config_error(format!(
+                "ticket claims through an external backend ('{}') are not supported yet",
+                configuration.id
+            )));
+        }
         BackendKind::GitRef => {
             let repository = configuration
                 .setting("repository")

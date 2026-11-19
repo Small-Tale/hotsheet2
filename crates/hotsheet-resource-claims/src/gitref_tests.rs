@@ -228,3 +228,15 @@ fn hs2_wjf0d8_a_project_binding_serves_its_namespace_through_the_remote() {
     // The machine scope never sees the project's namespace.
     assert!(ClaimService::new(&home).show(&target()).unwrap().is_none());
 }
+
+#[test]
+fn hs2_322zsz_the_git_ref_backend_passes_the_conformance_suite() {
+    let f = fixture();
+    let backend = backend(&f, &f.a, OfflinePolicy::FailClosed);
+    crate::conformance::run(&crate::conformance::Fixture {
+        backend: &backend,
+        namespace: Namespace::parse("conformance").unwrap(),
+        advance: &std::thread::sleep,
+        short_lease: Duration::from_millis(900),
+    });
+}

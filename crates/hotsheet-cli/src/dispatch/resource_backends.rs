@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
+use hotsheet_resource_claims::external::{
+    SettingType, approval_state, approve, approve_if_new, check_settings, load_all, load_plugin,
+    plugin_root, secret_account,
+};
 use hotsheet_resource_claims::{
     OfflinePolicy, configuration_json, export_key, generate_key, import_key, key_next_step,
     test_configuration,
@@ -16,6 +20,7 @@ use hotsheet_ticketing::claim_backends::{
     BackendConfiguration, BackendKind, Change, ClaimRegistry, Registries, RegistryError, Scope,
     git_store_sources, validate_id, validate_source,
 };
+use hotsheet_ticketing::secrets::SecretStore;
 use hotsheet_ticketing::{FsStore, OsKeychain};
 use serde_json::{Value, json};
 
@@ -77,6 +82,18 @@ pub(crate) enum BackendCmd {
         #[command(flatten)]
         scope: ScopeArg,
     },
+    /// Store a secret setting of an external plugin in the OS credential store; the value is
+    /// read from standard input and never printed (HS2-322ZSZ).
+    Secret {
+        id: String,
+        /// The plugin setting, declared `type = "secret"` in its manifest.
+        key: String,
+        /// Remove the stored secret instead.
+        #[arg(long)]
+        delete: bool,
+        #[command(flatten)]
+        scope: ScopeArg,
+    },
     /// Put the configuration's key in the OS credential store, or copy it out.
     Key {
         id: String,
@@ -92,6 +109,17 @@ pub(crate) enum BackendCmd {
         #[command(flatten)]
         scope: ScopeArg,
     },
+}
+
+/// `resource plugin`: the external claim-backend plugins on this machine (HS2-322ZSZ).
+#[derive(Subcommand)]
+pub(crate) enum PluginCmd {
+    /// List plugins under `<HOTSHEET_HOME>/claim-backends/`, their approval, and any that
+    /// failed to load.
+    List,
+    /// Approve a plugin as it is now. Review its directory first: approval covers exactly
+    /// the files that exist, and any change needs approving again.
+    Trust { id: String },
 }
 
 #[derive(Subcommand)]
@@ -240,8 +268,27 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
                 configuration.credential = Some(BackendConfiguration::default_credential(&id));
             }
             configuration.offline = parse_offline(&offline)?;
+            let plugin = if configuration.kind == BackendKind::External {
+                let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
+                check_settings(&manifest, &configuration).map_err(claim_error)?;
+                Some(manifest)
+            } else {
+                None
+            };
             let target = scope_of(&scope);
             let change = mutate(&target, |r| r.upsert_configuration(configuration.clone()))?;
+            // Adding a configuration approves its plugin as it is now; adding again never
+            // re-trusts code that changed since (HS2-208RB1's rule, for claim backends).
+            let approval = match &plugin {
+                Some(manifest) => {
+                    approve_if_new(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+                    Some(
+                        approval_state(&home(), &manifest.id, &manifest.dir)
+                            .map_err(claim_error)?,
+                    )
+                }
+                None => None,
+            };
             let (key, next_steps) = if credential {
                 created_key(&OsKeychain::at(home()), &configuration, change, no_key)
             } else {
@@ -251,6 +298,7 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
                 "change": change,
                 "configuration": configuration_json(target.name(), &configuration, &[]),
                 "key": key,
+                "plugin": approval,
                 "next_steps": next_steps,
             }))
         }
@@ -302,6 +350,55 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             validate_id(&id, "configuration id").map_err(registry_error)?;
             let change = mutate(&scope_of(&scope), |r| r.remove_configuration(&id))?;
             print(&json!({ "change": change, "id": id }))
+        }
+        BackendCmd::Secret {
+            id,
+            key,
+            delete,
+            scope,
+        } => {
+            let (_, configuration, _) = find(&scope, &id)?;
+            let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
+            let declared = manifest
+                .setting(&key)
+                .is_some_and(|spec| spec.kind == SettingType::Secret);
+            if !declared {
+                bail!(
+                    "invalid: plugin '{}' declares no secret setting '{key}'",
+                    manifest.id
+                );
+            }
+            let secrets = OsKeychain::at(home());
+            let account = secret_account(&id, &key);
+            let change = if delete {
+                if secrets.delete(&account).map_err(secret_error)? {
+                    Change::Removed
+                } else {
+                    Change::Absent
+                }
+            } else {
+                let mut value = String::new();
+                std::io::stdin()
+                    .take(8192)
+                    .read_to_string(&mut value)
+                    .context("reading the secret from standard input")?;
+                let value = value.trim_end_matches(['\r', '\n']);
+                if value.is_empty() {
+                    bail!("invalid: the secret on standard input is empty");
+                }
+                let previous = secrets.get(&account).map_err(secret_error)?;
+                if previous.as_deref() == Some(value) {
+                    Change::Unchanged
+                } else {
+                    secrets.set(&account, value).map_err(secret_error)?;
+                    if previous.is_some() {
+                        Change::Updated
+                    } else {
+                        Change::Created
+                    }
+                }
+            };
+            print(&json!({ "change": change, "configuration": id, "secret": key }))
         }
         BackendCmd::Key {
             id,
@@ -426,6 +523,56 @@ fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
     validate_source(&source).map_err(registry_error)
 }
 
+fn claim_error(e: hotsheet_resource_claims::ClaimError) -> anyhow::Error {
+    anyhow!("{}: {e}", e.code())
+}
+
+fn secret_error(e: hotsheet_ticketing::secrets::SecretError) -> anyhow::Error {
+    anyhow!("backend_unreachable: OS credential store: {e}")
+}
+
+pub(crate) fn plugin(cmd: PluginCmd) -> Result<()> {
+    let root = plugin_root(&home());
+    match cmd {
+        PluginCmd::List => {
+            let (plugins, load_errors) = load_all(&root);
+            let mut listed = Vec::new();
+            for manifest in &plugins {
+                let approval =
+                    approval_state(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+                listed.push(json!({
+                    "id": manifest.id,
+                    "display_name": manifest.display_name,
+                    "directory": manifest.dir,
+                    "capabilities": manifest.capabilities(),
+                    "settings": manifest.settings,
+                    "approval": approval,
+                }));
+            }
+            print(&json!({
+                "directory": root,
+                "plugins": listed,
+                "load_errors": load_errors,
+            }))
+        }
+        PluginCmd::Trust { id } => {
+            let (plugins, load_errors) = load_all(&root);
+            let Some(manifest) = plugins.iter().find(|m| m.id == id) else {
+                let why = load_errors
+                    .iter()
+                    .find(|e| e.contains(&id))
+                    .cloned()
+                    .unwrap_or_else(|| format!("expected {}", root.join(&id).display()));
+                bail!("not_found: no loadable claim-backend plugin '{id}' ({why})");
+            };
+            let change = approve(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+            let state =
+                approval_state(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+            print(&json!({ "change": change, "id": id, "approval": state }))
+        }
+    }
+}
+
 pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
     match cmd {
         SourceCmd::Bind {
@@ -450,7 +597,12 @@ pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
                 }
                 (None, None) => bail!("pass --backend <id> or --like <source>"),
             };
-            require_configuration(&scope, &configuration)?;
+            let (_, bound, _) = find(&scope, &configuration)?;
+            if bound.kind == BackendKind::External {
+                bail!(
+                    "unsupported: ticket claims cannot go through an external backend yet (HS2-3SJ8JX); '{configuration}' serves resource namespaces only"
+                );
+            }
             let change = mutate(&scope_of(&scope), |r| {
                 Ok(r.bind_source(&key, &configuration))
             })?;

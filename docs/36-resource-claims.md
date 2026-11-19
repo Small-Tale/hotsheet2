@@ -194,9 +194,10 @@ HS2-KCEHVR).
 
 Backends are implementations of the Rust trait. The built-ins are the local machine
 file backend and the Git-ref compare-and-swap (§36.14, HS2-WJF0D8); Upstash Redis REST
-is planned (HS2-K9J1RK). External backends will use a subprocess protocol (HS2-322ZSZ) modeled on notifier plugins
-([32-notifier-plugins.md](32-notifier-plugins.md) §32.6). Every setup and recovery path
-has an idempotent `hotsheet-cli` path shared with the graphical client.
+is planned (HS2-K9J1RK). External backends use the subprocess protocol of §36.16
+(HS2-322ZSZ), modeled on notifier plugins ([32-notifier-plugins.md](32-notifier-plugins.md)
+§32.6). Every setup and recovery path has an idempotent `hotsheet-cli` path shared with the
+graphical client.
 
 ## 36.9 Status
 
@@ -509,3 +510,119 @@ the backend:
   existing markers unreadable and foreign; they keep excluding other claimants until their
   lease lapses, and the next claim is written under the new key. There is no in-place
   re-encryption of live claims.
+
+## 36.16 External claim-backend plugins (HS2-322ZSZ)
+
+A third party adds a claim backend without changing Hot Sheet. The plugin is a directory
+`<HOTSHEET_HOME>/claim-backends/<id>/` whose name equals its manifest `id`:
+
+```toml
+id = "vault"
+display_name = "Vault claims"
+command = ["claim.sh"]        # no shell; a relative file in this directory runs from here
+timeout_seconds = 30          # per operation, at most 300
+
+[capabilities]
+guarantee = "exclusive_with_fencing"   # or "advisory_only"
+wait = "blocking"                      # or "none" (the default)
+max_metadata_entries = 8               # optional; Hot Sheet's own bounds cap these
+max_lease_seconds = 3600
+
+[[settings]]
+key = "endpoint"
+label = "Endpoint"
+type = "string"                        # string | secret | choice
+required = true
+
+[[settings]]
+key = "api_token"
+label = "API token"
+type = "secret"
+```
+
+**The plugin is the backend.** It owns atomic acquire (compare-and-swap), the fencing
+counter and the backend clock, exactly as §36.5 requires of any backend. A plugin that
+cannot guarantee that declares `advisory_only`. Hot Sheet owns what a plugin must never see:
+the renewal token, the metadata key, and the approval of the plugin's own code.
+
+**One process per operation.** Hot Sheet runs the command, writes one JSON envelope to stdin
+and reads the last stdout line that is a JSON result; earlier lines are ignored, so logging is
+safe. A plugin that outlives its timeout is killed. Exiting without a result line, or
+reporting `ok` and then exiting non-zero, is `backend_unreachable` with the stderr tail.
+
+```json
+{
+  "protocol": 1,
+  "backend": "vault",
+  "configuration": { "id": "team" },
+  "op": "acquire",
+  "settings": { "endpoint": "…", "api_token": "<resolved>" },
+  "request": {
+    "target": "vms/mac-1",
+    "claim_id": "<ulid>",
+    "token_digest": "<sha256 hex>",
+    "duration_ms": 60000,
+    "metadata": { "owner": "plain:build" }
+  }
+}
+```
+
+| `op`             | `request`                                                       | `result` on `ok: true`                       |
+| ---------------- | --------------------------------------------------------------- | -------------------------------------------- |
+| `acquire`        | `target`, `claim_id`, `token_digest`, `duration_ms`, `metadata` | `claim`                                      |
+| `renew`          | `target`, `claim_id`, `token_digest`, `duration_ms`             | `claim`                                      |
+| `release`        | `target`, `claim_id`, `token_digest`                            | `claim` (the ended one)                      |
+| `get`            | `target`                                                        | `claim` or `null`                            |
+| `list`           | `namespace`                                                     | `claims`: each a claim plus `resource`       |
+| `namespaces`     | none                                                            | `namespaces`                                 |
+| `wait`           | `target`, `timeout_ms`                                          | `free: true`, or `free: false` with `holder` |
+| `verify_fencing` | `target`, `fencing_token`                                       | empty                                        |
+
+A `claim` is `{claim_id, fencing_token, acquired_at_ms, expires_at_ms, metadata}`. The plugin
+returns it from the claim's own clock; `get` and `list` return live claims only. A failure is
+`{"ok": false, "error": {"code", "message", "holder"?}}` with `code` one of `held_by` (with
+`holder`), `expired`, `not_holder`, `token_invalid`, `backend_unreachable`, `unsupported`,
+`invalid`, `capacity`; any other code is a storage error. Hot Sheet validates what comes back:
+the claim id must be the one requested, an exclusive plugin's fencing token must be above 0,
+expiry cannot precede acquisition, and metadata keeps its codec prefixes and bounds.
+
+- **Tokens.** Hot Sheet mints the renewal token (§36.4) and sends only its SHA-256 digest. The
+  plugin stores the digest with the claim and compares it on `renew` and `release`; the token
+  itself never crosses.
+- **Waiting.** `wait = "none"` means only try-now acquire works: a wait with a timeout is
+  `unsupported`. `wait = "blocking"` means the plugin implements `wait`: one invocation parks on
+  the plugin's own push signal until the resource is free or `timeout_ms` passes, and Hot Sheet
+  allows that process the wait plus one operation's timeout. Hot Sheet never loops on a timer.
+- **Credentials only on stdin.** A `secret` setting is stored in the OS credential store under
+  `resource-claims.<configuration>.<key>` (`hotsheet-cli resource backend secret <id> <key>`,
+  value on standard input) and appears in the envelope's `settings` and nowhere else: not in
+  argv, not in the environment, not in a configuration file, not in output. A secret-typed key
+  given as a `--setting` is refused. The configuration's metadata key (§36.15) is separate.
+- **Approval by directory digest.** The first `backend add` that names a plugin approves it as
+  it then is, recording a SHA-256 over every file in the directory in
+  `<HOTSHEET_HOME>/claim-backends/approvals.json` (a machine decision, never checked in).
+  Before every run Hot Sheet recomputes the digest; an unapproved plugin, or one with any file
+  added, removed, renamed or edited, is refused without running and the error names
+  `hotsheet-cli resource plugin trust <id>`. A repeated `add` never re-trusts changed code.
+- **Collisions and load errors.** The built-in ids (`local`, `git-ref`, `upstash-redis`,
+  `external`) win a collision; a plugin that takes one fails to load. A directory that fails to
+  load is listed in `load_errors` of `resource plugin list` and never hides the others.
+- **Fail closed.** An unreachable plugin refuses the claim; a `provisional` offline policy is not
+  offered for external backends. Ticket claims do not route through an external backend yet
+  (HS2-3SJ8JX): `resource source bind` refuses one and a store bound to one refuses to claim.
+
+`hotsheet-cli resource backend add <id> --kind external --setting plugin=<id> [--setting
+key=value]` configures one; `resource plugin list` shows each plugin's capabilities, settings
+and approval state; `resource plugin trust <id>` approves the current content; `resource
+backend test <id>` approves nothing and makes one read-only `namespaces` call.
+
+**Conformance.** `hotsheet_resource_claims::conformance::run` is the suite every backend must
+pass, built-in or external: capabilities within Hot Sheet's bounds; a grant with a fencing token
+and a token that names its own claim; a held resource refusing a second acquire with `held_by`
+naming the holder; readers (`get`, `list`, `namespaces`) seeing the claim without its token;
+metadata round trip; renew extending the lease and keeping the fencing token; a garbage, revoked
+or earlier claim's token refused; release freeing the resource; fencing tokens strictly growing
+across release and expiry; a lapsed claim reading as free and refusing renew with `expired`;
+`verify_fencing` following the live claim; zero, oversized and unprefixed requests refused with
+`invalid`; six concurrent acquirers with exactly one winner; and waiting that matches the
+advertised mechanism. The local backend, the Git-ref backend and a fake external plugin run it.
