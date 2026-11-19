@@ -9012,6 +9012,11 @@ test('opening and closing a chat message menu keeps the reading position (HS2-BT
           .map((animation) => animation.finished.catch(() => undefined)),
       );
     });
+    // HS2-74WTZP: each send pins the transcript to its end in the next animation frame, and the
+    // resize renders in a frame too. The DOM and composer assertions above need no frame, so under
+    // load the last pin could still be pending here and move the transcript after `before` was read.
+    // Let those frames run first, as they always have by the time a reader scrolls back.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await messages.nth(5).evaluate((node) => {
       node.scrollIntoView({ block: 'center' });
     });
