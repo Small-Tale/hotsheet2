@@ -84,6 +84,9 @@ pub enum BackendKind {
     /// named by the `plugin` setting. The plugin's own manifest declares the other
     /// settings, so the registry only checks their shape.
     External,
+    /// The built-in Upstash Redis REST backend (HS2-K9J1RK). The REST token lives in the
+    /// OS credential store, never in a setting.
+    UpstashRedis,
 }
 
 impl BackendKind {
@@ -92,8 +95,9 @@ impl BackendKind {
             "local" => Ok(Self::Local),
             "git_ref" => Ok(Self::GitRef),
             "external" => Ok(Self::External),
+            "upstash" | "upstash_redis" => Ok(Self::UpstashRedis),
             other => Err(RegistryError::Invalid(format!(
-                "unknown backend kind '{other}'; use local, git-ref or external"
+                "unknown backend kind '{other}'; use local, git-ref, upstash-redis or external"
             ))),
         }
     }
@@ -103,6 +107,7 @@ impl BackendKind {
             Self::Local => "local",
             Self::GitRef => "git_ref",
             Self::External => "external",
+            Self::UpstashRedis => "upstash_redis",
         }
     }
 
@@ -117,6 +122,8 @@ impl BackendKind {
             Self::GitRef => &["remote", "repository"],
             // Only `plugin` is fixed; the plugin's manifest declares the rest.
             Self::External => &["plugin"],
+            // `url`: the database's REST URL. `prefix`: the key prefix (default `hs2rc`).
+            Self::UpstashRedis => &["url", "prefix"],
         }
     }
 
@@ -189,14 +196,22 @@ impl BackendConfiguration {
         }
         if !self.kind.is_remote() && self.offline == OfflinePolicy::Provisional {
             return Err(RegistryError::Invalid(
-                if self.kind == BackendKind::External {
-                    "an external backend fails closed while its plugin is unreachable; a provisional policy is not supported for it".to_owned()
+                if matches!(self.kind, BackendKind::External | BackendKind::UpstashRedis) {
+                    format!(
+                        "a {} backend fails closed while it is unreachable; a provisional policy is not supported for it",
+                        self.kind.as_str()
+                    )
                 } else {
                     format!(
                         "a {} backend is never offline, so it takes no provisional policy",
                         self.kind.as_str()
                     )
                 },
+            ));
+        }
+        if self.kind == BackendKind::UpstashRedis && self.setting("url").is_none() {
+            return Err(RegistryError::Invalid(
+                "an upstash-redis backend needs --setting url=<the database's REST URL>".into(),
             ));
         }
         if self.kind == BackendKind::External && self.setting("plugin").is_none() {

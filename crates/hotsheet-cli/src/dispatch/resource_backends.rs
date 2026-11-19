@@ -12,6 +12,7 @@ use hotsheet_resource_claims::external::{
     SettingType, approval_state, approve, approve_if_new, check_settings, load_all, load_plugin,
     plugin_root, secret_account,
 };
+use hotsheet_resource_claims::upstash::{TOKEN_SETTING, check_settings as check_upstash_settings};
 use hotsheet_resource_claims::{
     OfflinePolicy, configuration_json, export_key, generate_key, import_key, key_next_step,
     test_configuration,
@@ -268,6 +269,9 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
                 configuration.credential = Some(BackendConfiguration::default_credential(&id));
             }
             configuration.offline = parse_offline(&offline)?;
+            if configuration.kind == BackendKind::UpstashRedis {
+                check_upstash_settings(&configuration).map_err(claim_error)?;
+            }
             let plugin = if configuration.kind == BackendKind::External {
                 let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
                 check_settings(&manifest, &configuration).map_err(claim_error)?;
@@ -289,11 +293,16 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
                 }
                 None => None,
             };
-            let (key, next_steps) = if credential {
+            let (key, mut next_steps) = if credential {
                 created_key(&OsKeychain::at(home()), &configuration, change, no_key)
             } else {
                 (json!(null), Vec::new())
             };
+            if configuration.kind == BackendKind::UpstashRedis {
+                next_steps.push(format!(
+                    "store the database's REST token: `hotsheet-cli resource backend secret {id} {TOKEN_SETTING}` with the token on standard input, then `hotsheet-cli resource backend test {id}`"
+                ));
+            }
             print(&json!({
                 "change": change,
                 "configuration": configuration_json(target.name(), &configuration, &[]),
@@ -358,15 +367,30 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             scope,
         } => {
             let (_, configuration, _) = find(&scope, &id)?;
-            let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
-            let declared = manifest
-                .setting(&key)
-                .is_some_and(|spec| spec.kind == SettingType::Secret);
-            if !declared {
-                bail!(
-                    "invalid: plugin '{}' declares no secret setting '{key}'",
-                    manifest.id
-                );
+            match configuration.kind {
+                BackendKind::External => {
+                    let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
+                    let declared = manifest
+                        .setting(&key)
+                        .is_some_and(|spec| spec.kind == SettingType::Secret);
+                    if !declared {
+                        bail!(
+                            "invalid: plugin '{}' declares no secret setting '{key}'",
+                            manifest.id
+                        );
+                    }
+                }
+                BackendKind::UpstashRedis => {
+                    if key != TOKEN_SETTING {
+                        bail!(
+                            "invalid: an upstash-redis backend keeps one secret, '{TOKEN_SETTING}'"
+                        );
+                    }
+                }
+                _ => bail!(
+                    "invalid: a {} backend has no secret settings",
+                    configuration.kind.as_str()
+                ),
             }
             let secrets = OsKeychain::at(home());
             let account = secret_account(&id, &key);
@@ -598,9 +622,13 @@ pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
                 (None, None) => bail!("pass --backend <id> or --like <source>"),
             };
             let (_, bound, _) = find(&scope, &configuration)?;
-            if bound.kind == BackendKind::External {
+            if matches!(
+                bound.kind,
+                BackendKind::External | BackendKind::UpstashRedis
+            ) {
                 bail!(
-                    "unsupported: ticket claims cannot go through an external backend yet (HS2-3SJ8JX); '{configuration}' serves resource namespaces only"
+                    "unsupported: ticket claims cannot go through a {} backend yet (HS2-3SJ8JX); '{configuration}' serves resource namespaces only",
+                    bound.kind.as_str()
                 );
             }
             let change = mutate(&scope_of(&scope), |r| {

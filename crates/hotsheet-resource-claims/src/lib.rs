@@ -20,6 +20,7 @@ mod local;
 mod model;
 mod service;
 mod token;
+pub mod upstash;
 
 pub use backend::ClaimBackend;
 pub use clock::{Clock, ManualClock, SystemClock};

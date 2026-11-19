@@ -552,3 +552,97 @@ fn hs2_322zsz_plugin_settings_are_checked_and_ticket_claims_refuse_an_external_b
     assert!(!ticket.ok);
     assert!(ticket.stderr.contains("HS2-3SJ8JX"), "{}", ticket.stderr);
 }
+
+#[test]
+fn hs2_k9j1rk_an_upstash_configuration_is_checked_and_names_the_token_command() {
+    let e = env();
+    let add = [
+        "backend",
+        "add",
+        "up",
+        "--kind",
+        "upstash-redis",
+        "--setting",
+        "url=https://example-db.upstash.io",
+        "--setting",
+        "prefix=team-one",
+    ];
+    let first = ok(&e.home, &add);
+    assert_eq!(first["change"], "created", "{first}");
+    assert_eq!(first["configuration"]["kind"], "upstash_redis");
+    assert!(
+        first["next_steps"]
+            .to_string()
+            .contains("resource backend secret up token"),
+        "{first}"
+    );
+    assert_eq!(ok(&e.home, &add)["change"], "unchanged");
+
+    for (args, needle) in [
+        (
+            vec!["--setting", "url=http://example-db.upstash.io"],
+            "must be https://",
+        ),
+        (
+            vec![
+                "--setting",
+                "url=https://example-db.upstash.io",
+                "--setting",
+                "prefix=Bad:Prefix",
+            ],
+            "key prefix",
+        ),
+        (
+            vec![
+                "--setting",
+                "url=https://example-db.upstash.io",
+                "--setting",
+                "token=pasted",
+            ],
+            "unknown setting 'token'",
+        ),
+        (vec![], "needs --setting url="),
+        (
+            vec![
+                "--setting",
+                "url=https://example-db.upstash.io",
+                "--offline",
+                "provisional",
+            ],
+            "provisional policy is not supported",
+        ),
+    ] {
+        let mut full = vec!["backend", "add", "bad", "--kind", "upstash-redis"];
+        full.extend(args);
+        let refused = run(&e.home, &full);
+        assert!(!refused.ok, "{full:?}");
+        assert!(
+            refused.stderr.contains(needle),
+            "{full:?}: {}",
+            refused.stderr
+        );
+        assert!(!refused.stderr.contains("pasted"), "never echoes a value");
+    }
+
+    // The native credential store is denied here, so reading the token fails closed and says
+    // so; the missing-token message that names the command is pinned in tests/upstash.rs.
+    let tested = run(&e.home, &["backend", "test", "up"]);
+    assert!(!tested.ok);
+    assert!(
+        tested.stderr.contains("OS credential store"),
+        "{}",
+        tested.stderr
+    );
+    let wrong_key = run(&e.home, &["backend", "secret", "up", "password"]);
+    assert!(!wrong_key.ok);
+    assert!(
+        wrong_key.stderr.contains("keeps one secret, 'token'"),
+        "{}",
+        wrong_key.stderr
+    );
+    let ticket = run(
+        &e.home,
+        &["source", "bind", "some-connection", "--backend", "up"],
+    );
+    assert!(ticket.stderr.contains("HS2-3SJ8JX"), "{}", ticket.stderr);
+}

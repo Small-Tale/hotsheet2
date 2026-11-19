@@ -1292,6 +1292,7 @@ dependencies = [
  "time",
  "toml 0.8.23",
  "ulid",
+ "ureq",
 ]
 
 [[package]]

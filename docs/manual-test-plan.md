@@ -1479,3 +1479,25 @@ tested safely, so check the real pattern by hand on macOS:
 3. A third run waits instead of starting a browser, then starts when a slot frees.
 4. Over the following days, no WindowServer `IOSurface creation failed` abort coincides with
    concurrent WebKit runs.
+
+## Upstash claim backend against a real database (HS2-K9J1RK)
+
+The Lua scripts of the Upstash claim backend (`docs/36` §36.17) run only against real Redis here;
+CI uses a fake that applies their contract. Run this after any change to
+`crates/hotsheet-resource-claims/src/upstash/scripts.rs` and before relying on a new database.
+
+1. Create a dedicated, disposable Upstash Redis database. Never use one that holds other data.
+2. From the repository root, run `HOTSHEET_TEST_UPSTASH_URL=<REST URL> HOTSHEET_TEST_UPSTASH_TOKEN=<token>
+cargo nextest run -p hotsheet-resource-claims --test upstash_live`. Both tests must pass: the
+   conformance suite, then a release waking a parked waiter in under 20 seconds with a larger
+   fencing token.
+3. Through the CLI, with a throwaway `HOTSHEET_HOME`: `hotsheet-cli resource backend add up --kind
+upstash-redis --setting url=<REST URL> --setting prefix=manual`, then
+   `hotsheet-cli resource backend secret up token` (token on standard input) and `resource backend test up`
+   (expect `ok: true`). Bind a namespace (`resource namespace bind vms --backend up`).
+4. From two terminals, `resource acquire vms/one --duration 30s` in the first and `resource acquire
+vms/one --duration 30s --wait 60s` in the second; release the first and confirm the second acquires
+   within a second or two with a larger `fencing_token`. Repeat with the first left to expire.
+5. Watch the database's command count while a wait is parked: it must not climb on a timer.
+6. Record the date and the Upstash plan in the ticket. Flush the database when done: each run leaves
+   its fencing counters and name sets (claim keys expire on their own).

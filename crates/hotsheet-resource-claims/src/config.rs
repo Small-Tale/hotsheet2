@@ -134,6 +134,7 @@ pub fn backend_for(home: &Path, resolved: &Resolved) -> Result<Arc<dyn ClaimBack
             }
         }),
         BackendKind::External => crate::external::backend_for(home, &resolved.configuration),
+        BackendKind::UpstashRedis => crate::upstash::backend_for(home, &resolved.configuration),
         BackendKind::GitRef => {
             let configuration = &resolved.configuration;
             let repository = git_repository(resolved.project.as_deref(), configuration)
@@ -327,6 +328,7 @@ pub fn test_configuration<S: SecretStore>(
         BackendKind::Local => LocalBackend::machine(home).namespaces().map(|_| ()),
         BackendKind::GitRef => git_reachable(project, configuration),
         BackendKind::External => external_reachable(home, configuration),
+        BackendKind::UpstashRedis => upstash_reachable(home, configuration),
     };
     match reach {
         Ok(()) => report.reachable = true,
@@ -370,6 +372,16 @@ pub fn git_remote(configuration: &BackendConfiguration) -> &str {
 /// An external plugin answers one cheap read-only call (`namespaces`) once it is approved.
 fn external_reachable(home: &Path, configuration: &BackendConfiguration) -> Result<(), ClaimError> {
     crate::external::backend_for(home, configuration)?
+        .namespaces()
+        .map(|_| ())
+}
+
+/// Upstash answers `PING`, a cheap read-only call, once its URL and token are in place. A
+/// missing token is reported by name, not as an outage.
+fn upstash_reachable(home: &Path, configuration: &BackendConfiguration) -> Result<(), ClaimError> {
+    // `namespaces` reads one set: a real, read-only round trip through the same scripts-free
+    // path every claim uses, which also proves the token authorizes reads.
+    crate::upstash::backend_for(home, configuration)?
         .namespaces()
         .map(|_| ())
 }

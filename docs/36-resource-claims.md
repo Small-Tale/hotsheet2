@@ -193,8 +193,8 @@ HS2-KCEHVR).
 ## 36.8 Plugin form
 
 Backends are implementations of the Rust trait. The built-ins are the local machine
-file backend and the Git-ref compare-and-swap (§36.14, HS2-WJF0D8); Upstash Redis REST
-is planned (HS2-K9J1RK). External backends use the subprocess protocol of §36.16
+file backend, the Git-ref compare-and-swap (§36.14, HS2-WJF0D8) and Upstash Redis REST
+(§36.17, HS2-K9J1RK). External backends use the subprocess protocol of §36.16
 (HS2-322ZSZ), modeled on notifier plugins ([32-notifier-plugins.md](32-notifier-plugins.md)
 §32.6). Every setup and recovery path has an idempotent `hotsheet-cli` path shared with the
 graphical client.
@@ -626,3 +626,60 @@ across release and expiry; a lapsed claim reading as free and refusing renew wit
 `verify_fencing` following the live claim; zero, oversized and unprefixed requests refused with
 `invalid`; six concurrent acquirers with exactly one winner; and waiting that matches the
 advertised mechanism. The local backend, the Git-ref backend and a fake external plugin run it.
+
+## 36.17 The Upstash Redis REST backend (HS2-K9J1RK)
+
+`kind = upstash_redis` serves a namespace from an Upstash Redis database over its REST API. It
+is exclusive with fencing and waits by push signal. `hotsheet-cli resource backend add <id>
+--kind upstash-redis --setting url=<REST URL> [--setting prefix=<key prefix>]` configures it;
+`resource backend secret <id> token` stores the REST token in the OS credential store (value on
+standard input); `resource backend test <id>` reads the namespace set, a real read-only call that
+also proves the token. The URL must be `https://` (plain `http://` only to a loopback address, for
+development), without credentials, query or fragment: the token travels in an `Authorization`
+header and nowhere else. A secret never goes in a setting, and `provisional` offline is not offered
+(fail closed; HS2-NYXQ3Y).
+
+**Atomic steps on the Redis clock.** Acquire, renew and release are Lua scripts
+(`upstash::scripts`), so each is one atomic step and expiry uses `TIME` on the Redis server, never
+the client's clock. Each script's first line names it (`-- hs2rc:acquire:v1`).
+
+| Key                                     | Holds                                                                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `<prefix>:v1:<namespace>:c:<resource>`  | the claim: a hash of claim id, token digest, fencing token, acquired and expiry (Redis ms) and the metadata JSON |
+| `<prefix>:v1:<namespace>:f:<resource>`  | the fencing counter, `INCR`ed on every grant and never expired                                                   |
+| `<prefix>:v1:<namespace>:r`             | the set of resource names Hot Sheet has claimed in the namespace (what `list` reads)                             |
+| `<prefix>:v1:namespaces`                | the set of namespaces (what `namespaces` reads)                                                                  |
+| `<prefix>:v1:<namespace>:ch:<resource>` | the pub/sub channel a release publishes on                                                                       |
+
+Keys hold only the prefix and the namespace and resource names the caller chose; values hold ids, a
+SHA-256 of the renewal token (the token itself is never sent), numbers and the bounded metadata
+(§36.3), so no customer content reaches Redis unless a caller puts it in a name or a `plain:` value.
+The counter and the two sets are small and never expire; a very large, churning namespace should be
+pruned with HS2-FYXHA6.
+
+- **Expiry and `expired`.** Liveness is the stored expiry against `TIME`. The claim hash is kept
+  for a one hour grace past its expiry (`PEXPIRE lease+grace`), so a late `renew` answers `expired`
+  as the other backends do; after the grace the hash is gone and the token is simply unknown
+  (`token_invalid`). A grant after any gap still carries a larger fencing token.
+- **Waiting.** Blocking list pops (`BLPOP`, `BRPOP`) are not available over Upstash REST, so a wait
+  holds one `POST /subscribe/<channel>` server-sent-event stream open. The wait reads the holder and
+  its time left, opens a stream that lives that long (or the wait's timeout, if sooner), re-reads the
+  state once the service confirms the subscription (so a release in the gap is found, not waited
+  for), and then reads until a message, the end of the stream (expiry) or the deadline. A release
+  publishes `released`; a renewal that shortens a lease publishes `shortened`. Nothing polls on a
+  timer: a parked wait sends no request, and a stream that fails backs off 250 ms, 500 ms … up to
+  5 s, at most six times, then fails with `backend_unreachable`.
+- **Rate limits and errors.** A 429 is retried at most three times after the `Retry-After` delay
+  (capped at 2 s); more is `backend_unreachable` naming the configuration. A 401 is `unsupported`
+  and names `resource backend secret <id> token`; a refused command is a storage error; an unreachable
+  service fails closed.
+- **Ticket claims** do not route through this backend yet (HS2-3SJ8JX); `resource source bind`
+  refuses it.
+
+**Verification.** `tests/upstash.rs` runs the conformance suite and the cases above against a fake
+that speaks the service's real HTTP shapes (401, 429 with `Retry-After`, 400 `{"error"}`, a JSON
+command array, `/pipeline`, SSE) and applies each script's documented contract; it refuses a script
+whose text differs from the library's. The fake has no Lua interpreter, so the scripts run against
+real Redis only in `tests/upstash_live.rs`, which needs a dedicated database
+(`HOTSHEET_TEST_UPSTASH_URL`, `HOTSHEET_TEST_UPSTASH_TOKEN`) and returns at once without one. Run it
+after any script change ([manual-test-plan.md](manual-test-plan.md), "Upstash claim backend").

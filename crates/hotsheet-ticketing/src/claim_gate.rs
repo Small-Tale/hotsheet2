@@ -210,9 +210,10 @@ pub fn ticket_gate_with(
         BackendKind::Local => None,
         // HS2-3SJ8JX routes ticket claims through every backend kind. Until then a
         // store bound to one must not silently claim without it.
-        BackendKind::External => {
+        BackendKind::External | BackendKind::UpstashRedis => {
             return Err(config_error(format!(
-                "ticket claims through an external backend ('{}') are not supported yet",
+                "ticket claims through a {} backend ('{}') are not supported yet",
+                configuration.kind.as_str(),
                 configuration.id
             )));
         }
