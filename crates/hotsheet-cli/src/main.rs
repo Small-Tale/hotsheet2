@@ -556,6 +556,13 @@ enum Cmd {
         #[command(subcommand)]
         cmd: dispatch::resources::ResourceCmd,
     },
+    /// Reusable connections to external event services that hint a Git remote advanced, and
+    /// the sources bound to them (machine-wide; no server needed). See
+    /// docs/37-remote-change-notifications.md.
+    RemoteChange {
+        #[command(subcommand)]
+        cmd: dispatch::remote_change::RemoteChangeCmd,
+    },
     /// Jobs: transient machine-local records of long-running work such as a wait for CI
     /// (docs/33-jobs.md). Reads the local Job store and runs the watch monitor; no
     /// server or ticket store is needed.

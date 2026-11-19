@@ -531,7 +531,7 @@ pub(crate) fn namespace(cmd: NamespaceCmd) -> Result<()> {
     }
 }
 
-fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
+pub(crate) fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
     if let Some(store) = store {
         let store = FsStore::open(store)
             .with_context(|| format!("opening the ticket store at {}", store.display()))?;

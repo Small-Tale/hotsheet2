@@ -21,6 +21,7 @@ sha2.workspace = true
 ring.workspace = true
 percent-encoding.workspace = true
 ureq.workspace = true
+tempfile.workspace = true
 hotsheet-ticketing.workspace = true
 hotsheet-sync.workspace = true
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
