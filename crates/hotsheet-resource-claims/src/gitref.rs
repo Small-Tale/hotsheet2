@@ -206,7 +206,7 @@ impl ClaimBackend for GitRefBackend {
                 Err(ClaimError::WaitTimedOut { holder })
             }
             Err(ClaimError::HeldBy { .. }) => Err(ClaimError::Unsupported(
-                "the git-ref backend cannot wait; acquire again later".into(),
+                "the git-ref backend cannot wait: a Git remote cannot signal a release. Acquire again later, or bind this namespace to a backend that can wait (local, upstash-redis, or an external plugin with a blocking wait; docs/36 section 36.14)".into(),
             )),
             other => other,
         }
@@ -316,7 +316,7 @@ impl ClaimBackend for GitRefBackend {
                 holder: Box::new(holder),
             }),
             Some(_) => Err(ClaimError::Unsupported(
-                "the git-ref backend cannot wait; check again later".into(),
+                "the git-ref backend cannot wait: a Git remote cannot signal a release. Check again later, or bind this namespace to a backend that can wait (docs/36 section 36.14)".into(),
             )),
         }
     }

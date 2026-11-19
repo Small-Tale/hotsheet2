@@ -240,3 +240,27 @@ fn hs2_322zsz_the_git_ref_backend_passes_the_conformance_suite() {
         short_lease: Duration::from_millis(900),
     });
 }
+
+#[test]
+fn hs2_cr4sta_a_wait_on_the_git_ref_backend_is_refused_with_the_way_out_named() {
+    let f = fixture();
+    let backend = backend(&f, &f.a, OfflinePolicy::FailClosed);
+    let held = backend.acquire(&target(), &request()).unwrap();
+    let refused = backend
+        .acquire_wait(&target(), &request(), Duration::from_secs(5))
+        .unwrap_err();
+    assert_eq!(refused.code(), "unsupported");
+    assert!(refused.to_string().contains("upstash-redis"), "{refused}");
+    let check = backend
+        .wait_free(&target(), Duration::from_secs(5))
+        .unwrap_err();
+    assert_eq!(check.code(), "unsupported");
+    assert!(check.to_string().contains("bind this namespace"), "{check}");
+    // A zero-timeout wait is a try-now that still names the holder.
+    match backend.acquire_wait(&target(), &request(), Duration::ZERO) {
+        Err(ClaimError::WaitTimedOut { holder }) => {
+            assert_eq!(holder.claim_id, held.claim.claim_id)
+        }
+        other => panic!("{other:?}"),
+    }
+}

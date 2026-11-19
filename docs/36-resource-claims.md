@@ -527,6 +527,16 @@ machine sharing the remote; `provisional` grants come from a local fallback unde
 `<HOTSHEET_HOME>/resource-claims/provisional/<configuration>/` and report
 `advisory_only`; reconciling them when the remote returns is HS2-1SXBK9.
 
+**Waiting is not offered by the Git-ref backend (HS2-CR4STA).** A Git remote cannot signal a release, and
+a wait must not poll on a timer, so a namespace served by a `git_ref` configuration answers a wait
+with a non-zero timeout `unsupported`, naming the way out: bind the namespace to a backend whose wait is
+a push signal (the local backend for machine-scoped resources, Upstash Redis §36.17, or an external
+plugin with a blocking wait §36.16). A zero-timeout wait is an ordinary try-now and still names the
+holder. The designs considered and rejected for now: a wake from the sync loop would still depend on
+the remote advancing a branch (claims live in `refs/hotsheet/claims/*`, which no push hint announces);
+long-polling a Hot Sheet server that hosts the remote would make that server a required claim service
+for a backend whose point is that Git alone suffices.
+
 **Telling the losing session (HS2-1639Q0).** After every sync pass that reaches the remote, the
 server reads the conflicts `reconcile` recorded (`claim_gate::pending_conflicts`) and pushes each into
 the live terminal whose claim worker id is the loser, through the session-push path every
