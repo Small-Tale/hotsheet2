@@ -141,6 +141,17 @@ impl TargetEvents for ServerEvents {
         // keep a light watch on its tickets while followers ask, so a write made there
         // outside the server (a headless CLI) reaches the feed too.
         follow_unhosted_stores(state, checkout);
+        // HS2-XA9DZA: a push from this checkout moves its remote-tracking refs; keep a
+        // watch on them while followers ask, so a site's late handoff push wakes its home.
+        state.code_ref_watches.follow(
+            &checkout.id,
+            std::path::Path::new(&checkout.root),
+            &state.event_log,
+            &state.events,
+        );
+        let refs_change = |event: &crate::ChangeEvent| {
+            event.kind == crate::code_ref_watch::CODE_REFS_CHANGE_KIND && event.store == checkout.id
+        };
         // HS2-257Q2Z: a session an orchestrator started in this checkout ended or
         // finished a turn.
         let session_change = |event: &crate::ChangeEvent| {
@@ -154,6 +165,7 @@ impl TargetEvents for ServerEvents {
             overflow: false,
             // HS2-FJ6MDW: filled by the shared runtime after the wait.
             speculation: None,
+            remote_refs_changed: false,
         };
         // Whether the event was one this checkout's followers want.
         let take = |page: &mut TargetEventPage, event: &crate::ChangeEvent| {
@@ -171,6 +183,8 @@ impl TargetEvents for ServerEvents {
                     cursor,
                     session_id: event.id.clone(),
                 });
+            } else if refs_change(event) {
+                page.remote_refs_changed = true;
             } else {
                 return false;
             }
@@ -206,7 +220,10 @@ impl TargetEvents for ServerEvents {
                                 if let Some(at) = event.cursor {
                                     cursor = cursor.max(at);
                                 }
-                                if ticket_change(&event) || session_change(&event) {
+                                if ticket_change(&event)
+                                    || session_change(&event)
+                                    || refs_change(&event)
+                                {
                                     return Some(Ok(event));
                                 }
                             }

@@ -1856,6 +1856,7 @@ impl TargetEvents for QuietFeed {
             sessions: Vec::new(),
             overflow: false,
             speculation: None,
+            remote_refs_changed: false,
         })
     }
 }

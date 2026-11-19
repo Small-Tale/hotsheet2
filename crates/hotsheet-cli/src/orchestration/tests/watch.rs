@@ -23,6 +23,8 @@ struct Feed {
     calls: Mutex<Vec<(Option<u64>, u64)>>,
     failing: std::sync::atomic::AtomicBool,
     overflow: std::sync::atomic::AtomicBool,
+    /// HS2-XA9DZA: the hosted checkout's remote-tracking refs moved; reported once.
+    refs: std::sync::atomic::AtomicBool,
     /// HS2-VN8PDA: work done on the host while the next request waits.
     during: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
@@ -48,6 +50,11 @@ impl Feed {
                 cursor,
                 session_id: session_id.into(),
             });
+    }
+    /// HS2-XA9DZA: the hosted checkout pushed.
+    fn pushed(&self) {
+        self.cursor.fetch_add(1, Ordering::SeqCst);
+        self.refs.store(true, Ordering::SeqCst);
     }
     fn calls(&self) -> Vec<(Option<u64>, u64)> {
         self.calls
@@ -101,6 +108,7 @@ impl TargetEvents for Feed {
             }),
             overflow: self.overflow.load(Ordering::SeqCst),
             speculation: None,
+            remote_refs_changed: since.is_some() && self.refs.swap(false, Ordering::SeqCst),
         })
     }
 }
@@ -1416,4 +1424,79 @@ fn hs2_rqdh0q_a_ticket_change_wakes_a_run_whose_site_handoff_waits_on_a_person()
         .runtime
         .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
     assert!(!unrelated.woke_scheduler, "{unrelated:?}");
+}
+
+/// HS2-XA9DZA: a push from the site's checkout wakes the scheduler while a run there
+/// was released by its worker or waits on a person for its site handoff, each time it
+/// happens; a push while the run is still worked, or with no session there, does not.
+#[test]
+fn hs2_xa9dza_a_push_wakes_a_run_whose_site_handoff_is_pending() {
+    use hotsheet_ticketing::orchestration::{RunRegistry, RunUpdate};
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Worked on a site");
+    let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+    let mut state = WatchState::default();
+    let step = |state: &mut WatchState, tx: &mut Transaction<'_>| {
+        m.runtime
+            .watch_step(&m.owner.id, &id(1), state, 8_000, tx)
+            .woke_scheduler
+    };
+    // No session of the owner there: a push tells the scheduler nothing.
+    step(&mut state, &mut tx);
+    feed.pushed();
+    assert!(!step(&mut state, &mut tx));
+    // A session works the run: its pushes while it works wake nothing.
+    hosted_session(&m, &id(901), Some(run_id.clone()), &mut tx);
+    feed.pushed();
+    assert!(!step(&mut state, &mut tx));
+    // The worker released its claim (the run was intervened): a push wakes, each time.
+    let registry = RunRegistry::new(&m.home);
+    registry
+        .update(
+            &m.owner.id,
+            &run_id,
+            RunUpdate {
+                to: Some(RunState::Intervened),
+                reason: Some("claim_released".into()),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    for _ in 0..2 {
+        feed.pushed();
+        assert!(step(&mut state, &mut tx));
+    }
+    // Nothing pushed since: nothing to wake for.
+    assert!(!step(&mut state, &mut tx));
+    // The timed asks gave up and the run waits on a person: a push wakes it too.
+    registry
+        .update(
+            &m.owner.id,
+            &run_id,
+            RunUpdate {
+                reconciliation: Some(crate::orchestration::assignment::site_handoff_attention(
+                    1_000,
+                    "handoff_fetch_failed",
+                )),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    feed.pushed();
+    assert!(step(&mut state, &mut tx));
 }

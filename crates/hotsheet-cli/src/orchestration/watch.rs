@@ -63,6 +63,10 @@ pub struct TargetEventPage {
     /// host, which says nothing about it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speculation: Option<HostedSpeculation>,
+    /// HS2-XA9DZA: the hosted checkout's remote-tracking refs moved after `since`, as a
+    /// push made from it does. Absent (false) from an older host, which cannot say.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub remote_refs_changed: bool,
 }
 
 /// HS2-FJ6MDW: a hosted project's own speculation setting, alone.
@@ -392,7 +396,9 @@ fn session_supervisor(session: &OrchestratedSession) -> Option<MutationActor> {
 /// the target changed (a claim taken or let go is what makes a session busy or idle)
 /// while a session of the owner works no unfinished run, so no run sync reports it;
 /// or a ticket changed whose run waits on a person for its site handoff (HS2-RQDH0Q);
-/// or the follower cannot tell what it missed while it has any session there.
+/// or the checkout pushed while a run there was released or waits on its site handoff
+/// (HS2-XA9DZA); or the follower cannot tell what it missed while it has any session
+/// there.
 fn wakes_scheduler(
     page: &TargetEventPage,
     sessions: &[OrchestratedSession],
@@ -426,6 +432,18 @@ fn wakes_scheduler(
                 && event.native_id == run.target.native_id
         })
     }) {
+        return true;
+    }
+    // HS2-XA9DZA: the hosted checkout pushed (its remote-tracking refs moved) while a
+    // run there was released by its worker, whose handoff branch the home may not have
+    // fetched yet, or waits on a person for that handoff. The pass asks the home again,
+    // which fetches the branch; a push alone is no ticket event.
+    if page.remote_refs_changed
+        && runs.iter().any(|run| {
+            run.state == hotsheet_ticketing::orchestration::RunState::Intervened
+                || super::assignment::site_handoff_waiting(run).is_some()
+        })
+    {
         return true;
     }
     let free = sessions.iter().any(|session| {

@@ -6048,6 +6048,23 @@ wakes the scheduler, whose pass asks the home again; so does any other pass. Onc
 home no longer waits for the site's evidence, the run is reconciled against the world
 and that outcome replaces the stored one. Each release asks a person at most once.
 
+**A late push wakes the home (HS2-XA9DZA).** A push is not a ticket event, and nothing
+learns of a push to the shared remote without polling it, which the project does not
+do. The clone that pushed records it, though: a successful push moves that clone's
+remote-tracking ref (`refs/remotes/<remote>/<branch>`, or `packed-refs`) in its git
+common directory, which its worktrees share. While followers ask a server's target
+feed (§26.13) for a checkout, the server keeps one file watch on that directory
+(kernel events; until the watch is live, a local re-read every second, as for linked
+stores, HS2-R49D43) and records each remote-tracking change as a `code_refs_changed`
+change event naming the checkout only. The feed answer then carries
+`remote_refs_changed: true` (omitted when false, and by an older host). The
+orchestrator's follower of the site wakes the scheduler on it while a run there is
+released (`intervened`) or waits on a person for its site handoff, so the pass asks the
+home again, which fetches the branch; before the 30 minutes this only comes sooner than
+the next timed ask. A push from another clone, or a branch the remote received some
+other way, changes nothing on the site; a person then adds a note to the ticket, which
+wakes the home as above.
+
 The note:
 
 ```text

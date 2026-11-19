@@ -12,6 +12,7 @@ pub mod auto_group;
 mod blocking_offload;
 pub mod ci_status;
 pub mod client_drive;
+mod code_ref_watch;
 pub mod code_review;
 pub mod commands;
 mod credential_cache;
@@ -433,6 +434,9 @@ pub struct AppState {
     /// HS2-G5FYP6: watches on the tickets of followed checkouts' linked Git stores that
     /// this server does not host, kept while run followers' target feeds ask.
     target_store_watches: Arc<target_store_watch::TargetStoreWatches>,
+    /// HS2-XA9DZA: watches on the remote-tracking refs of followed checkouts, so a push
+    /// made from one reaches its run followers as an event.
+    code_ref_watches: Arc<code_ref_watch::CodeRefWatches>,
     /// The `CODEX_HOME` a Codex session that reported none runs under; `None` is the user's
     /// default home (hermetic tests point it at an empty directory).
     default_codex_home: Option<Arc<std::path::PathBuf>>,
@@ -685,6 +689,7 @@ impl AppState {
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             codex_session_watches: Arc::default(),
             target_store_watches: Arc::default(),
+            code_ref_watches: Arc::default(),
             default_codex_home: None,
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),

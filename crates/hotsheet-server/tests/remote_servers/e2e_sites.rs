@@ -1035,3 +1035,58 @@ async fn hs2_6nqkp9_each_site_is_judged_by_its_own_policy_resources() {
     assert!(!prompt.contains("home-vm"), "{prompt}");
     fleet.shut_down().await;
 }
+
+/// HS2-XA9DZA: a branch pushed from the peer's clone of the project is an event on the
+/// peer's hosted feed, the one the controller's follower holds open for the site: the
+/// feed says its remote-tracking refs changed, naming no ref or commit. Synthetic
+/// commits only.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_xa9dza_a_push_on_a_site_reaches_the_followed_feed() {
+    let fleet = Fleet::sites().await;
+    let feed = format!("/checkouts/{}/target-events", fleet.b_checkout.id);
+    let read = |since: u64| {
+        let (router, path) = (
+            fleet.peer_api.clone(),
+            format!("{feed}?since={since}&wait_ms=8000"),
+        );
+        async move {
+            let (status, page) =
+                super::orchestration::api(router, "GET", &path, Value::Null, true).await;
+            assert_eq!(status, StatusCode::OK, "{page}");
+            page
+        }
+    };
+    // Read until a page says the refs changed, as a follower does, within a deadline.
+    let changed = |mut cursor: u64, what: &'static str| {
+        let read = &read;
+        async move {
+            let deadline = std::time::Instant::now() + MINUTE;
+            loop {
+                let page = read(cursor).await;
+                cursor = page["cursor"].as_u64().unwrap();
+                if page["remote_refs_changed"] == true {
+                    assert!(page.get("events").is_some(), "{page}");
+                    return cursor;
+                }
+                assert!(std::time::Instant::now() < deadline, "{what}: {page}");
+            }
+        }
+    };
+    // The handshake starts the watch; starting it records nothing.
+    let (status, handshake) =
+        super::orchestration::api(fleet.peer_api.clone(), "GET", &feed, Value::Null, true).await;
+    assert_eq!(status, StatusCode::OK, "{handshake}");
+    assert!(
+        handshake.get("remote_refs_changed").is_none(),
+        "{handshake}"
+    );
+    let cursor = handshake["cursor"].as_u64().unwrap();
+
+    // A site worker commits its handoff on a branch and pushes it to the shared remote.
+    let peer = fleet.project(Side::Peer).to_path_buf();
+    git(&peer, &["checkout", "-q", "-b", "hs2-xa9dza-handoff"]);
+    commit_file(&peer, "src/handoff.txt", "Synthetic handoff");
+    git(&peer, &["push", "-q", "origin", "hs2-xa9dza-handoff"]);
+    changed(cursor, "the push").await;
+    fleet.shut_down().await;
+}

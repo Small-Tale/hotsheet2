@@ -21285,6 +21285,11 @@ components:
           type: boolean
         speculation:
           $ref: '#/components/schemas/HostedSpeculation'
+        remote_refs_changed:
+          description:
+            The checkout's remote-tracking refs moved after `since`, as a push made from it does (HS2-XA9DZA). Names no
+            ref or commit. Omitted when false and by an older host.
+          type: boolean
       additionalProperties: false
     HostedSpeculation:
       description:
