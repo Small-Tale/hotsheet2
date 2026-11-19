@@ -42,6 +42,36 @@ pub struct SiteRelay {
     pub pool: Option<HostedPoolReply>,
     /// The session was told the home assigned it the run's ticket (`site_assigned`).
     pub told: bool,
+    /// HS2-RCR4A6: when to ask the home again. Now when the home just recorded a step,
+    /// so the project's role sessions are decided on the changed pool. Otherwise set
+    /// while the run has seen the worker release its claim and the home still waits for
+    /// that release, its note or its branch to reach the home's clone of the shared
+    /// remote, so a handoff never waits for an unrelated event; the interval doubles
+    /// from one second to a minute.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_at_ms: Option<u64>,
+}
+
+/// HS2-RCR4A6: the waiting codes that mean the home has not yet seen what the site
+/// published: its release, its handoff note or its pushed branch.
+pub const SITE_EVIDENCE_LAG: [&str; 4] = [
+    "claim_not_taken",
+    "claim_held",
+    "handoff_note_missing",
+    "handoff_fetch_failed",
+];
+
+/// HS2-RCR4A6: the next time after `now_ms` to ask the home again about a release
+/// the run saw at `released_at_ms`: one second after it, then doubling up to a minute
+/// apart. Pure, so the schedule needs no memory between passes.
+pub fn site_handoff_retry_at(released_at_ms: u64, now_ms: u64) -> u64 {
+    let mut interval = 1_000_u64;
+    let mut at = released_at_ms.saturating_add(interval);
+    while at <= now_ms {
+        interval = (interval * 2).min(60_000);
+        at = at.saturating_add(interval);
+    }
+    at
 }
 
 /// One placed step's run that a running scheduler session waits on, with who will
@@ -191,7 +221,7 @@ impl OrchestrationRuntime {
                         if home == session.target_id {
                             self.pool_roles(session, actor, tx)
                         } else {
-                            self.home_pool(session, &home, None, actor, tx)
+                            self.home_pool(session, &home, None, &sites, actor, tx)
                                 .map(|reply| reply.roles)
                         }
                     });
@@ -243,9 +273,11 @@ impl OrchestrationRuntime {
     /// HS2-5P112Z: the active grouping of the owner's targets into projects. An
     /// unreadable manifest groups nothing, so every target is its own home.
     pub(super) fn active_project_sites(&self, owner_id: &str) -> ProjectSites {
-        self.declarations(owner_id)
+        let sites = self
+            .declarations(owner_id)
             .map(|view| ProjectSites::active(&view.targets))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        self.with_bound_sources(owner_id, sites)
     }
 
     /// HS2-5P112Z: the home site's pool as it answers for `session`, a worker on another
@@ -258,6 +290,7 @@ impl OrchestrationRuntime {
         session: &OrchestratedSession,
         home: &str,
         run: Option<&Run>,
+        sites: &ProjectSites,
         actor: &MutationActor,
         tx: &mut Transaction<'_>,
     ) -> Option<HostedPoolReply> {
@@ -279,7 +312,12 @@ impl OrchestrationRuntime {
                         generation: session.session_id.clone(),
                         lease_seconds: MAX_MEMBER_LEASE_SECONDS,
                         site_target_id: session.target_id.clone(),
-                        connection_id: Some(run.target.connection_id.clone()),
+                        // HS2-3JGPDR: the ticket as the home names it.
+                        connection_id: Some(sites.connection_on(
+                            &run.target.target_id,
+                            &run.target.connection_id,
+                            home,
+                        )),
                         native_id: Some(run.target.native_id.clone()),
                         actor: Some(actor.clone()),
                     })
@@ -332,9 +370,12 @@ impl OrchestrationRuntime {
         if sites.is_empty() {
             return Vec::new();
         }
+        // HS2-RCR4A6: every unfinished run, `intervened` included. A site worker's
+        // release turns its run `intervened`, and that is the run the relay must carry to
+        // the home so the handoff is recorded; the active-only list left it out.
         let (Ok(sessions), Ok(runs)) = (
             self.session_list(owner_id, true),
-            self.run_list(owner_id, true),
+            self.run_list(owner_id, false),
         ) else {
             return Vec::new();
         };
@@ -357,13 +398,16 @@ impl OrchestrationRuntime {
             else {
                 continue;
             };
-            let pool = self.home_pool(session, home, Some(run), actor, tx);
+            let pool = self.home_pool(session, home, Some(run), &sites, actor, tx);
+            // HS2-3JGPDR: the home's pool names the ticket by the home's connection id.
             let offered = pool
                 .as_ref()
                 .and_then(|reply| reply.assignment.as_ref())
                 .is_some_and(|assigned| {
                     assigned.phase == crate::coordination::Phase::Offered
-                        && assigned.connection_id == run.target.connection_id
+                        && assigned.connection_id
+                            == sites
+                                .home_connection(&run.target.target_id, &run.target.connection_id)
                         && assigned.native_id == run.target.native_id
                 });
             let told = offered
@@ -376,6 +420,23 @@ impl OrchestrationRuntime {
                         tx,
                     )
                     .is_ok();
+            let assigned = pool.as_ref().and_then(|reply| reply.assignment.as_ref());
+            let lagging = assigned
+                .and_then(|assigned| assigned.waiting.as_deref())
+                .is_some_and(|code| SITE_EVIDENCE_LAG.contains(&code));
+            // A step the home just recorded changes its pool after this pass decided
+            // the project's role sessions: the next pass decides them again at once, so
+            // a handoff starts the integrator without waiting for another event.
+            let recorded = assigned.is_some_and(|assigned| assigned.recorded.is_some());
+            let released_at_ms = (run.state == RunState::Intervened)
+                .then(|| {
+                    run.history
+                        .iter()
+                        .rev()
+                        .find(|transition| transition.to == RunState::Intervened)
+                        .map(|transition| transition.at_ms)
+                })
+                .flatten();
             relays.push(SiteRelay {
                 session_id: session.session_id.clone(),
                 run_id: run.run_id.clone(),
@@ -383,6 +444,13 @@ impl OrchestrationRuntime {
                 home_target_id: home.to_owned(),
                 pool,
                 told,
+                retry_at_ms: if recorded {
+                    Some(tx.clock.now_ms())
+                } else {
+                    released_at_ms
+                        .filter(|_| lagging)
+                        .map(|at| site_handoff_retry_at(at, tx.clock.now_ms()))
+                },
             });
         }
         relays

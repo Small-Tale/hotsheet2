@@ -63,6 +63,11 @@ impl SiteError {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectSites {
     project_of: BTreeMap<String, String>,
+    /// HS2-3JGPDR: a site's connection id for a source mapped to the home site's id
+    /// for the same source. A Git source's connection id is a hash of its local path, so
+    /// the one store every site shares has another id on each machine. Empty without
+    /// [`Self::with_sources`], when every site's ids are compared as they are.
+    connections: BTreeMap<(String, String), String>,
 }
 
 impl ProjectSites {
@@ -79,7 +84,60 @@ impl ProjectSites {
                         .map(|project| (target.target_id.clone(), project))
                 })
                 .collect(),
+            connections: BTreeMap::new(),
         }
+    }
+
+    /// HS2-3JGPDR: the same grouping, with each site's sources joined to its home's by
+    /// source identity. `bound` lists, per bound target, its sources as
+    /// `(connection_id, identity)` the way this machine last confirmed them. A source
+    /// the home is not bound to, or does not have, keeps its own connection id.
+    #[must_use]
+    pub fn with_sources<'a>(
+        mut self,
+        bound: impl IntoIterator<Item = (&'a str, Vec<(&'a str, &'a str)>)>,
+    ) -> Self {
+        let bound: BTreeMap<&str, Vec<(&str, &str)>> = bound.into_iter().collect();
+        let mut connections = BTreeMap::new();
+        for (site, sources) in &bound {
+            let home = self.home_of(site);
+            if home == *site {
+                continue;
+            }
+            let Some(home_sources) = bound.get(home) else {
+                continue;
+            };
+            for (connection, identity) in sources {
+                if let Some((home_connection, _)) =
+                    home_sources.iter().find(|(_, other)| other == identity)
+                    && home_connection != connection
+                {
+                    connections.insert(
+                        ((*site).to_owned(), (*connection).to_owned()),
+                        (*home_connection).to_owned(),
+                    );
+                }
+            }
+        }
+        self.connections = connections;
+        self
+    }
+
+    /// HS2-3JGPDR: the home site's connection id for `connection` as `site` names it.
+    pub fn home_connection<'a>(&'a self, site: &str, connection: &'a str) -> &'a str {
+        self.connections
+            .get(&(site.to_owned(), connection.to_owned()))
+            .map_or(connection, String::as_str)
+    }
+
+    /// HS2-3JGPDR: the connection id `to_site` has for the source `from_site` names
+    /// `connection`. Unchanged when `to_site` is not known to have it under another id.
+    pub fn connection_on(&self, from_site: &str, connection: &str, to_site: &str) -> String {
+        let home = self.home_connection(from_site, connection);
+        self.connections
+            .iter()
+            .find(|((site, _), mapped)| site == to_site && mapped.as_str() == home)
+            .map_or_else(|| home.to_owned(), |((_, own), _)| own.clone())
     }
 
     /// HS2-9FKTB3: the grouping of the active declarations only, the sites a step may
@@ -149,7 +207,8 @@ impl ProjectSites {
     pub fn ticket_key(&self, target: &RunTarget) -> TicketKey {
         (
             self.project_of(&target.target_id).to_owned(),
-            target.connection_id.clone(),
+            self.home_connection(&target.target_id, &target.connection_id)
+                .to_owned(),
             target.native_id.clone(),
         )
     }
@@ -158,14 +217,15 @@ impl ProjectSites {
     pub fn canonical(&self, key: &TicketKey) -> TicketKey {
         (
             self.project_of(&key.0).to_owned(),
-            key.1.clone(),
+            self.home_connection(&key.0, &key.1).to_owned(),
             key.2.clone(),
         )
     }
 
     /// One ticket of the project, through whichever sites the two name.
     pub fn same_ticket(&self, left: &RunTarget, right: &RunTarget) -> bool {
-        left.connection_id == right.connection_id
+        self.home_connection(&left.target_id, &left.connection_id)
+            == self.home_connection(&right.target_id, &right.connection_id)
             && left.native_id == right.native_id
             && self.same_project(&left.target_id, &right.target_id)
     }

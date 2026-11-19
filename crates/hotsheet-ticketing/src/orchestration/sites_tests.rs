@@ -903,3 +903,64 @@ fn hs2_shh7ww_readiness_edges_join_tickets_across_sites() {
     );
     assert!(answers.iter().all(|a| a.level == ReadinessLevel::Cyclic));
 }
+
+fn on(target: u128, connection: &str, native: &str) -> RunTarget {
+    RunTarget {
+        target_id: id(target),
+        connection_id: connection.into(),
+        native_id: native.into(),
+    }
+}
+
+/// HS2-3JGPDR: one store has another connection id on each machine. With the sources
+/// this machine's bindings confirmed, a site's ids join the home's by source identity;
+/// without them, or for a source the home lacks, ids compare as they are.
+#[test]
+fn hs2_3jgpdr_site_connection_ids_join_the_homes_by_source_identity() {
+    let targets = [
+        target(1, "Home", None),
+        target(2, "Site", Some(1)),
+        target(3, "Other project", None),
+    ];
+    let (home, site, other) = (id(1), id(2), id(3));
+    let plain = ProjectSites::of(&targets);
+    let sites = ProjectSites::of(&targets).with_sources([
+        (
+            home.as_str(),
+            vec![("home-conn", "store-x"), ("home-extra", "store-y")],
+        ),
+        (
+            site.as_str(),
+            vec![("site-conn", "store-x"), ("site-only", "store-z")],
+        ),
+        (other.as_str(), vec![("other-conn", "store-x")]),
+    ]);
+    // Without sources nothing is joined.
+    assert!(!plain.same_ticket(&on(1, "home-conn", "T"), &on(2, "site-conn", "T")));
+    // The site's id for the shared store is the home's.
+    assert!(sites.same_ticket(&on(1, "home-conn", "T"), &on(2, "site-conn", "T")));
+    assert!(!sites.same_ticket(&on(1, "home-conn", "T"), &on(2, "site-conn", "U")));
+    assert_eq!(
+        sites.ticket_key(&on(2, "site-conn", "T")),
+        sites.ticket_key(&on(1, "home-conn", "T"))
+    );
+    assert_eq!(
+        sites.canonical(&(site.clone(), "site-conn".into(), "T".into())),
+        (home.clone(), "home-conn".into(), "T".into())
+    );
+    assert_eq!(sites.home_connection(&site, "site-conn"), "home-conn");
+    // A source the home does not have keeps its own id, and so does another project.
+    assert_eq!(sites.home_connection(&site, "site-only"), "site-only");
+    assert_eq!(sites.home_connection(&other, "other-conn"), "other-conn");
+    // Translating to a site: from the home, from the site, and to the home.
+    assert_eq!(sites.connection_on(&home, "home-conn", &site), "site-conn");
+    assert_eq!(sites.connection_on(&site, "site-conn", &home), "home-conn");
+    assert_eq!(sites.connection_on(&site, "site-conn", &site), "site-conn");
+    // A source the target site has no id for is named as the home names it.
+    assert_eq!(
+        sites.connection_on(&home, "home-extra", &site),
+        "home-extra"
+    );
+    // A grouping change leaves no stale mapping behind: a new grouping starts empty.
+    assert_eq!(ProjectSites::of(&targets), plain);
+}

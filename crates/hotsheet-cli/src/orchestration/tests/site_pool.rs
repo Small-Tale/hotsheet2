@@ -605,3 +605,27 @@ fn hs2_5p112z_site_evidence_walks_offered_accepted_and_handoff() {
         Some(SiteEvidence::Wait("handoff_branch_invalid"))
     );
 }
+
+/// HS2-RCR4A6: after a site worker's release, the home is asked again one second after
+/// it, then at doubling intervals up to a minute apart, always strictly in the future.
+#[test]
+fn hs2_rcr4a6_a_released_handoff_is_asked_about_again_with_a_doubling_interval() {
+    use crate::orchestration::assignment::{SITE_EVIDENCE_LAG, site_handoff_retry_at};
+    let released = 1_000_000;
+    let expected = [
+        (released, released + 1_000),
+        (released + 999, released + 1_000),
+        (released + 1_000, released + 3_000),
+        (released + 3_000, released + 7_000),
+        (released + 7_000, released + 15_000),
+        (released + 63_000, released + 123_000),
+        (released + 123_000, released + 183_000),
+    ];
+    for (now, at) in expected {
+        assert_eq!(site_handoff_retry_at(released, now), at, "now {now}");
+        assert!(site_handoff_retry_at(released, now) > now);
+    }
+    // Only the codes that mean the home has not yet seen what the site published.
+    assert!(SITE_EVIDENCE_LAG.contains(&"claim_held"));
+    assert!(!SITE_EVIDENCE_LAG.contains(&"handoff_out_of_scope"));
+}

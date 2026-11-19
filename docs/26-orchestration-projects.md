@@ -206,6 +206,15 @@ they name; comparisons go through the project key:
   any site counts for the ticket, and cycles that close only through another site are
   found.
 
+**One ticket, one id per machine (HS2-3JGPDR).** A Git source's connection id is a hash
+of the store's local path, so the store every site shares has another connection id on
+each machine. Comparisons therefore join a site's connection id to the home site's by
+the source identity this machine's bindings last confirmed
+(`ProjectSites::with_sources`): the run rules, readiness and the pool relay see one
+ticket whichever machine's id names it. A step's run dispatched on another site carries
+that site's own connection id, so the site's server finds the ticket. A source the home
+is not bound to keeps its own id.
+
 A step names one site, and the scheduler may place it on any active site of its
 project by capacity and capabilities (HS2-9FKTB3, "Which site runs a step" under
 Packing); the step's run is dispatched on the chosen site. Each site's OS and tools
@@ -5952,8 +5961,8 @@ hosted routes, so it relays. The home's machine hosts
   creates the pool with its own setup.
 
 Each applied pass relays every running worker session the orchestrator owns on a
-site that is not its project's home and whose run is unfinished
-(`site_pool_relay`). It joins that session to the home's pool, through the gate as
+site that is not its project's home and whose run is unfinished, `intervened`
+included (`site_pool_relay`). It joins that session to the home's pool, through the gate as
 `work_start` continuing the run's dispatch, and renews it for an hour. When the home
 offered the run's exact ticket to it, the session is told with the request kind
 `site_assigned` (§26.16). The host pushes the same request only once. The session's
@@ -5968,9 +5977,18 @@ waiting run reads the home's pool in `scheduler_assignments`. Its assignment nam
 4. adds the handoff record, a regular note (shown below);
 5. only then releases its claim.
 
-The release changes the run's observed claim, and that run event wakes the loop. The
-note therefore has to be in place before the release, because adding a note alone wakes
-nothing. The note:
+The release changes the run's observed claim (the run becomes `intervened`), and that
+run event wakes the loop. The note therefore has to be in place before the release,
+because adding a note alone wakes nothing.
+
+The site's release, note and branch reach the home's clone of the shared store only
+through its remote (HS2-RCR4A6). So when the home would wait on them it pulls its clone
+once first, at most once every two seconds per store. When it still waits
+(`claim_not_taken`, `claim_held`, `handoff_note_missing` or `handoff_fetch_failed`) after
+the run saw the release, the pass asks again one second after the release, then at
+doubling intervals up to a minute apart, so a handoff never waits for an unrelated
+event. A pass in which the home recorded a step runs again at once, so a handoff starts
+the home's integrator without another event. The note:
 
 ```text
 ## Integration handoff
@@ -6020,8 +6038,34 @@ session is not told. The relay reports both, and nothing else changes.
 - `tests/session_executor.rs`: a session on a site waits on and joins the home's pool
   and is told its assignment once.
 
-The two-server proof is HS2-RCR4A6. It can drive the same route through a remote
-binding and the relay of an applied pass.
+#### Proven on two servers (HS2-RCR4A6)
+
+`crates/hotsheet-server/tests/remote_servers/e2e_sites.rs` runs one project on two real
+servers: the controller (Linux, both fake tools) holds the home site and the
+orchestration project, and the peer (Windows, one fake tool) is reached over mTLS.
+Each server holds its own clone of one bare ticket store, bound to a `git_ref` claim
+backend, and of one bare code repository. Each machine's sync loop is played by one
+sync of its clone. The test plays the agents (the dispatcher assigning, the workers,
+the integrator) through the hosting server's own routes. Every wait is woken by an
+event stream or a file change, with a deadline. The whole path is proven:
+
+| Claim                                               | How the test shows it                                                                                                                                                      |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One claim per ticket under forced concurrent claims | Both servers claim one ticket at once: exactly one succeeds, and both clones name that holder after a sync                                                                 |
+| One run, one session and one claim per ticket       | Three steps end with three runs, three worker sessions, and one claim event per ticket in both clones                                                                      |
+| Steps land only on matching sites                   | `os:windows` is placed on the peer and `os:linux` and `tools:fake-codex` on the home, each naming why the other site was passed over                                       |
+| One dispatcher and one integrator, on the home      | The loop starts exactly one of each, both on the home site, and five sessions in all                                                                                       |
+| The site worker joins the home's pool               | The relay registers it under its session id, and its host tells it `site_assigned`                                                                                         |
+| Overlapping scopes serialized                       | The home's pool refuses a home worker's scope that overlaps the peer's pending one, and offers it once the peer's work is integrated                                       |
+| The release wakes the home's loop                   | The peer's release turns the run `intervened` on the peer's change feed, and the home then records the handoff with the pushed commit fetched; nothing asks the controller |
+| Linear `main`, each commit once                     | No merge commits, each ticket's commit subject once, the same `main` on the remote and both machines                                                                       |
+| All tickets complete and the stores converge        | Every run completes through its own site's feed, and both store clones have one `HEAD` and every ticket completed                                                          |
+| A peer outage takes no second claim                 | With the peer down and the home free again, a pass starts nothing for the peer's step, which keeps one run and one claim                                                   |
+
+The proof found and fixed three defects: a step's run on another machine named the
+home's connection id (HS2-3JGPDR, above); the relay skipped `intervened` runs, so a
+site's release never recorded its handoff; and the home could miss a release it had not
+pulled yet, now pulled and asked about again as described above.
 
 ## 26.31 Orchestration details in the inspector (HS2-2XJSJK)
 

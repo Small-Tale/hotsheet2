@@ -119,6 +119,12 @@ pub(super) fn runtime(home: &Path, memory: &Arc<Memory>) -> RemoteRuntime {
     )
 }
 
+/// HS2-RCR4A6: the owned `hotsheet-cli` snapshot, as a sibling of the server binary.
+pub(super) fn cli_binary() -> std::path::PathBuf {
+    workspace_bin::path("hotsheet-server")
+        .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX))
+}
+
 pub(super) fn cli(home: &Path, arguments: &[&str]) -> Value {
     cli_named(home, &["remote"], arguments)
 }

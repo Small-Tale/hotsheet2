@@ -195,6 +195,39 @@ pub fn site_evidence(
     }
 }
 
+/// HS2-RCR4A6: the least time between two pulls the home makes for its members.
+pub const FRESHEN_INTERVAL_MS: u64 = 2_000;
+
+/// HS2-RCR4A6: pull the home's clone of the shared ticket store, at most once per
+/// [`FRESHEN_INTERVAL_MS`] per store, so evidence a site published is read without
+/// waiting for the home's next sync pass. True when new commits arrived.
+fn freshen(root: &Path, now_ms: u64) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static LAST: OnceLock<Mutex<HashMap<std::path::PathBuf, u64>>> = OnceLock::new();
+    if !hotsheet_ticketing::sync::publishes_to_remote(root) {
+        return false;
+    }
+    {
+        let mut last = LAST
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let key = root.to_path_buf();
+        if last
+            .get(&key)
+            .is_some_and(|at| now_ms.saturating_sub(*at) < FRESHEN_INTERVAL_MS)
+        {
+            return false;
+        }
+        last.insert(key, now_ms);
+    }
+    matches!(
+        hotsheet_ticketing::sync::sync_once(root),
+        hotsheet_ticketing::sync::SyncReport::Synced { pulled: true, .. }
+    )
+}
+
 /// The pool's source id of a store root, as `Coordinator` derives it.
 fn source_id(root: &Path) -> Option<String> {
     let canonical = root.canonicalize().ok()?;
@@ -467,8 +500,18 @@ impl OrchestrationRuntime {
         let mut reply = view(assigned);
         if assigned.ticket.connection_id != git_connection_id(&store) {
             reply.waiting = Some("source_unsupported".into());
-        } else if let Some(evidence) = self.site_pool_evidence(&store, assigned, &member, tx)? {
-            self.site_pool_record(&coordinator, assigned, &member, evidence, &mut reply)?;
+        } else {
+            let mut evidence = self.site_pool_evidence(&store, assigned, &member, tx)?;
+            // HS2-RCR4A6: the member's claim, release and note reach this clone only
+            // through the shared remote. Before waiting on them, pull once.
+            if matches!(evidence, Some(SiteEvidence::Wait(_)))
+                && freshen(store.root(), tx.clock.now_ms())
+            {
+                evidence = self.site_pool_evidence(&store, assigned, &member, tx)?;
+            }
+            if let Some(evidence) = evidence {
+                self.site_pool_record(&coordinator, assigned, &member, evidence, &mut reply)?;
+            }
         }
         let state = coordinator.state().map_err(|_| failed())?;
         if let Some(now) = state.assignments.get(&assigned.id) {

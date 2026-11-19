@@ -503,7 +503,12 @@ impl OrchestrationRuntime {
                 },
                 target: TargetTicket {
                     target_id: site.to_owned(),
-                    connection_id: step.target.connection_id.clone(),
+                    // HS2-3JGPDR: the chosen site's own connection id for the store.
+                    connection_id: self.project_sites(owner_id)?.connection_on(
+                        &step.target.target_id,
+                        &step.target.connection_id,
+                        site,
+                    ),
                     native_id: step.target.native_id.clone(),
                 },
                 operation_id,

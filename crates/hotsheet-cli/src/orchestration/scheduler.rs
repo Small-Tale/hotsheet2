@@ -1188,6 +1188,7 @@ impl OrchestrationRuntime {
         let mut applied: Vec<(String, PlacementOutcome)> = Vec::new();
         let mut assignments;
         let mut reconciled = Vec::new();
+        let mut relays = Vec::new();
         if let (DecisionMode::Applied, Some(actor_id)) = (mode, &actor_id) {
             // HS2-HV9ED3: told why before it is asked to stop.
             self.tell_cancelled(owner_id, &schedule, actor, tx);
@@ -1232,7 +1233,7 @@ impl OrchestrationRuntime {
                 self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
             self.assignment_apply(owner_id, &mut assignments, actor, &mut applied, tx);
             // HS2-5P112Z: workers on a project's other sites join its home's pool.
-            let _relays = self.site_pool_relay(owner_id, actor, tx);
+            relays = self.site_pool_relay(owner_id, actor, tx);
             // HS2-AH8CRS: what reconciliation found is acted on, through the gate.
             reconciled = self.scheduler_dispositions(owner_id, actor, tx);
             // A machine that had no room, or could not be read, is left alone for a
@@ -1264,6 +1265,10 @@ impl OrchestrationRuntime {
                 self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
         }
         Self::assignment_retry(&mut schedule, &assignments);
+        // HS2-RCR4A6: a site's release the home has not seen yet is asked about again.
+        for at in relays.iter().filter_map(|relay| relay.retry_at_ms) {
+            schedule.retry_at_ms = Some(schedule.retry_at_ms.map_or(at, |known| known.min(at)));
+        }
 
         let logged = self.scheduler_log(
             owner_id,

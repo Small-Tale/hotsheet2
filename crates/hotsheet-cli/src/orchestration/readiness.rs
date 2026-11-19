@@ -336,7 +336,7 @@ impl OrchestrationRuntime {
     ) -> Result<PlanFacts, OrchestrationError> {
         // HS2-SHH7WW: a ticket reached through several sites of one project has the
         // facts of every site: reads, runs and gates are joined by project.
-        let sites = self.plan().sites(owner_id)?;
+        let sites = self.with_bound_sources(owner_id, self.plan().sites(owner_id)?);
         let mut facts = PlanFacts {
             sites: sites.clone(),
             ..PlanFacts::default()

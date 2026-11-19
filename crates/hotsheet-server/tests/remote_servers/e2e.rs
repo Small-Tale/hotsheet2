@@ -39,8 +39,13 @@ const MIB: u64 = 1024 * 1024;
 /// The synthetic provider token the Job monitor presents to the loopback provider.
 pub(super) const TOKEN: &str = "synthetic-token-for-tests";
 
-/// A roomy machine with the fake tools installed.
-struct Roomy(Vec<&'static str>);
+/// A roomy machine with the fake tools installed. HS2-RCR4A6: with an OS it also
+/// reports its capabilities (HS2-ZY4Z4G), as a machine of that family would, so a
+/// step's requirements are matched against it without probing the real host.
+struct Roomy(
+    Vec<&'static str>,
+    Option<hotsheet_ticketing::orchestration::OsFamily>,
+);
 impl hotsheet_server::CapacitySource for Roomy {
     fn machine(&mut self) -> hotsheet_server::MachineReading {
         hotsheet_server::MachineReading {
@@ -62,6 +67,14 @@ impl hotsheet_server::CapacitySource for Roomy {
                 .map(|tool| ((*tool).to_owned(), true))
                 .collect(),
         )
+    }
+    fn capabilities(
+        &mut self,
+        _: &[PathBuf],
+        _: &[String],
+    ) -> Option<hotsheet_ticketing::orchestration::HostCapabilities> {
+        self.1
+            .map(|os| hotsheet_ticketing::orchestration::HostCapabilities::bare(os, "arm64"))
     }
 }
 
@@ -116,6 +129,90 @@ args = ["--report-dir", {reports:?}, {agent} "--print", "ready", "--hold-ms", "6
     plugins
 }
 
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = hotsheet_ticketing::git::launch("git")
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "-c",
+            "user.name=Synthetic",
+            "-c",
+            "user.email=synthetic@example.test",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout).unwrap().trim().to_owned()
+}
+
+/// HS2-RCR4A6: one bare ticket store and one bare code repository, each cloned once
+/// for each machine. The store is bound to a `git_ref` claim backend on its shared
+/// remote (HS2-WJF0D8) in its checked-in project registry, so both clones claim
+/// through one compare-and-swap.
+fn shared_clones(root: &Path, a_store: &Path, b_store: &Path, a_project: &Path, b_project: &Path) {
+    use hotsheet_ticketing::claim_backends::{BackendConfiguration, BackendKind, Scope};
+    let bare = |name: &str| {
+        let path = root.join(name);
+        git(
+            root,
+            &["init", "-q", "--bare", "-b", "main", path.to_str().unwrap()],
+        );
+        path
+    };
+    let publish = |clone: &Path, remote: &Path| {
+        commit_all(clone);
+        git(clone, &["branch", "-M", "main"]);
+        git(
+            clone,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(clone, &["push", "-q", "-u", "origin", "main"]);
+    };
+    let store_remote = bare("store.git");
+    let store = FsStore::init_git(a_store, &StoreMetadata::new("TST")).unwrap();
+    let sources = hotsheet_ticketing::claim_backends::git_store_sources(&store);
+    Scope::Project {
+        root: a_store.to_path_buf(),
+    }
+    .update(|registry| {
+        registry.upsert_configuration(BackendConfiguration::new("shared", BackendKind::GitRef)?)?;
+        registry.bind_source(&sources[0], "shared");
+        Ok(())
+    })
+    .unwrap();
+    publish(a_store, &store_remote);
+    git(
+        root,
+        &[
+            "clone",
+            "-q",
+            store_remote.to_str().unwrap(),
+            b_store.to_str().unwrap(),
+        ],
+    );
+    let code_remote = bare("code.git");
+    git_project(a_project);
+    std::fs::write(a_project.join("README.md"), "Synthetic project\n").unwrap();
+    publish(a_project, &code_remote);
+    git(
+        root,
+        &[
+            "clone",
+            "-q",
+            code_remote.to_str().unwrap(),
+            b_project.to_str().unwrap(),
+        ],
+    );
+}
+
 fn create(store: &Path, prefix: &str, title: &str) -> hotsheet_model::Ticket {
     ops::create(
         &FsStore::open(store).unwrap(),
@@ -128,6 +225,19 @@ fn create(store: &Path, prefix: &str, title: &str) -> hotsheet_model::Ticket {
         },
     )
     .unwrap()
+}
+
+/// How the fleet's two targets relate.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Layout {
+    /// Two projects: each server hosts its own store and code repository.
+    Separate,
+    /// HS2-RCR4A6: one project on two machines. Each server holds its own clone of one
+    /// bare ticket store (bound to a `git_ref` claim backend, HS2-WJF0D8) and of one
+    /// bare code repository; target B is declared a site of target A, the home
+    /// (HS2-SHH7WW). The controller reports itself a Linux machine with both fake
+    /// tools installed, the peer a Windows machine with only the push-driven one.
+    Sites,
 }
 
 /// Which server hosts a target's checkout and its sessions.
@@ -153,7 +263,11 @@ pub(super) struct Fleet {
     pub(super) a_store: PathBuf,
     pub(super) a_project: PathBuf,
     pub(super) a_checkout: Checkout,
-    a_plugins: PathBuf,
+    a_plugins: Vec<PathBuf>,
+    pub(super) layout: Layout,
+    /// HS2-RCR4A6: each server's store watcher in [`Layout::Sites`], so a change pulled
+    /// from the shared remote reaches that server's change feed as on a real host.
+    watchers: Vec<hotsheet_server::WatchHandle>,
     pub(super) controller: AppState,
     pub(super) router: axum::Router,
     pub(super) base: String,
@@ -176,6 +290,15 @@ impl Fleet {
     /// Two servers, both targets declared, bound, with remembered rules and allowed by a policy
     /// whose placement is not automatic yet.
     pub(super) async fn new() -> Self {
+        Self::build(Layout::Separate).await
+    }
+
+    /// HS2-RCR4A6: the same two servers holding one project as two sites ([`Layout::Sites`]).
+    pub(super) async fn sites() -> Self {
+        Self::build(Layout::Sites).await
+    }
+
+    async fn build(layout: Layout) -> Self {
         assert!(hotsheet_aitools::test_permission_vault_available());
         hotsheet_aitools::enable_test_permission_vault();
         let root = tempfile::tempdir().unwrap();
@@ -183,24 +306,46 @@ impl Fleet {
         let provider = Provider::default();
         let provider_url = provider.start();
 
+        let a_store = root.path().join("a-store");
+        let b_store = root.path().join("b-store");
+        let a_project = root.path().join("a-project");
+        let b_project = root.path().join("b-project");
+        let (peer_tools, controller_tools, peer_os, controller_os) = match layout {
+            Layout::Separate => {
+                git_project(&b_project);
+                git_project(&a_project);
+                (vec![TOOL_B, TOOL_A], vec![TOOL_A], None, None)
+            }
+            Layout::Sites => {
+                // Each machine merges the shared store's tickets with the semantic merge
+                // driver its own CLI registers, as a server and a CLI do at startup.
+                hotsheet_ticketing::merge_driver::set_program(super::support::cli_binary());
+                shared_clones(root.path(), &a_store, &b_store, &a_project, &b_project);
+                use hotsheet_ticketing::orchestration::OsFamily;
+                (
+                    vec![TOOL_A],
+                    vec![TOOL_A, TOOL_B],
+                    Some(OsFamily::Windows),
+                    Some(OsFamily::Linux),
+                )
+            }
+        };
+
         // The peer: a server over mTLS hosting target B and its fake tool.
         let paths = Paths::at(root.path().join("tls"));
         init_ca(&paths, &[]).unwrap();
         let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
         set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
         let peer_home = root.path().join("peer-home");
-        let b_store = root.path().join("b-store");
         // Both fake tools are installed on the peer; the policy lets target B run only
         // its own until a scenario says otherwise.
         let peer_state = state(&b_store, &peer_home)
-            .with_capacity_source(Box::new(Roomy(vec![TOOL_B, TOOL_A])))
+            .with_capacity_source(Box::new(Roomy(peer_tools, peer_os)))
             .with_capacity_cache(Duration::ZERO)
             .with_plugin_dirs(vec![
                 plugin(root.path(), TOOL_B, &reports),
                 plugin(root.path(), TOOL_A, &reports),
             ]);
-        let b_project = root.path().join("b-project");
-        git_project(&b_project);
         let b_checkout = CheckoutRegistry::new(peer_home.join("checkouts.json"))
             .register(&b_project, None, None, vec![b_store.clone()])
             .unwrap();
@@ -213,8 +358,10 @@ impl Fleet {
         // in the store the controller serves, so ticket writes reach its change feed.
         let home = root.path().join("controller-home");
         std::fs::create_dir_all(&home).unwrap();
-        let a_store = root.path().join("a-store");
-        let a_plugins = plugin(root.path(), TOOL_A, &reports);
+        let a_plugins: Vec<PathBuf> = controller_tools
+            .iter()
+            .map(|tool| plugin(root.path(), tool, &reports))
+            .collect();
         let owner_store = root.path().join("owner-store");
         FsStore::init_git(&owner_store, &StoreMetadata::new("OWN")).unwrap();
         let owner_project = root.path().join("release-train");
@@ -223,8 +370,6 @@ impl Fleet {
         let owner = registry
             .register(&owner_project, None, None, vec![owner_store.clone()])
             .unwrap();
-        let a_project = root.path().join("a-project");
-        git_project(&a_project);
         let memory = Arc::new(Memory::default());
         super::support::runtime(&home, &memory)
             .register(hotsheet_ticketing::remote_servers::RegisterRemote {
@@ -235,13 +380,26 @@ impl Fleet {
                 credentials: credentials(&device),
             })
             .unwrap();
-        let controller =
-            Self::controller_state(&a_store, &home, &a_plugins, &memory, &provider_url);
+        let controller = Self::controller_state(
+            &a_store,
+            &home,
+            &a_plugins,
+            &memory,
+            &provider_url,
+            Roomy(controller_tools, controller_os),
+        );
         let a_checkout = registry
             .register(&a_project, None, None, vec![a_store.clone()])
             .unwrap();
         let router = app(controller.clone());
         let base = format!("/checkouts/{}/orchestration", owner.id);
+        let watchers = match layout {
+            Layout::Separate => Vec::new(),
+            Layout::Sites => vec![
+                hotsheet_server::spawn_watcher(controller.clone()).unwrap(),
+                hotsheet_server::spawn_watcher(peer_state.clone()).unwrap(),
+            ],
+        };
         let mut fleet = Self {
             root,
             paths,
@@ -256,6 +414,8 @@ impl Fleet {
             a_project,
             a_checkout,
             a_plugins,
+            layout,
+            watchers,
             controller,
             router,
             base,
@@ -282,9 +442,10 @@ impl Fleet {
     fn controller_state(
         a_store: &Path,
         home: &Path,
-        plugins: &Path,
+        plugins: &[PathBuf],
         memory: &Arc<Memory>,
         provider_url: &str,
+        capacity: Roomy,
     ) -> AppState {
         // The runtime a server composes with `OrchestrationRuntime::live`, over the
         // in-memory credentials of the synthetic remote registration.
@@ -309,9 +470,9 @@ impl Fleet {
                     .env("GH_TOKEN", TOKEN),
             ));
         state(a_store, home)
-            .with_capacity_source(Box::new(Roomy(vec![TOOL_A])))
+            .with_capacity_source(Box::new(capacity))
             .with_capacity_cache(Duration::ZERO)
-            .with_plugin_dirs(vec![plugins.to_path_buf()])
+            .with_plugin_dirs(plugins.to_vec())
             .with_orchestration_runtime(runtime)
     }
 
@@ -354,14 +515,13 @@ impl Fleet {
                 json!({"kind":"remote","registration_id":ID,"checkout_id":self.b_checkout.id}),
             ),
         ] {
-            let added = self
-                .ok(
-                    "POST",
-                    "/targets",
-                    json!({"target_id":target,"label":format!("Target {target}"),
-                        "expected_revision":revision}),
-                )
-                .await;
+            let mut body = json!({"target_id":target,"label":format!("Target {target}"),
+                "expected_revision":revision});
+            // HS2-RCR4A6: target B is another site of target A's project.
+            if self.layout == Layout::Sites && target == TARGET_B {
+                body["site_of"] = json!(TARGET_A);
+            }
+            let added = self.ok("POST", "/targets", body).await;
             revision = added["revision"].clone();
             let candidate = self
                 .ok("POST", "/inspect", json!({"destination":destination}))
@@ -381,8 +541,15 @@ impl Fleet {
         }
     }
 
-    pub(super) fn tool(target: &str) -> &'static str {
-        if target == TARGET_A { TOOL_A } else { TOOL_B }
+    /// The tool each target's sessions run: its own in [`Layout::Separate`], the
+    /// push-driven one on both sites in [`Layout::Sites`], so a site's session can be
+    /// told its assignment after launch.
+    pub(super) fn tool(&self, target: &str) -> &'static str {
+        if target == TARGET_A || self.layout == Layout::Sites {
+            TOOL_A
+        } else {
+            TOOL_B
+        }
     }
 
     /// HS2-XHQ1EH: adding and binding the target consented to reading and following
@@ -390,7 +557,7 @@ impl Fleet {
     /// a session start of the target's tool), so the loop asks nobody. Returns the
     /// rule ids.
     pub(super) async fn remember(&self, target: &str) -> Vec<String> {
-        self.remember_tools(target, &[Self::tool(target)]).await
+        self.remember_tools(target, &[self.tool(target)]).await
     }
 
     /// The same rules for the given tools.
@@ -418,7 +585,8 @@ impl Fleet {
             "tools":[{"tool":TOOL_A,"max_sessions":4},{"tool":TOOL_B,"max_sessions":4}],
             "targets":[
                 {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":1},
-                {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_B}],"max_sessions":1}],
+                {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":self.tool(TARGET_B)}],
+                    "max_sessions":1}],
             "wind_down":{"idle_minutes":1,"keep_warm":0}});
         policy
             .as_object_mut()
@@ -797,12 +965,20 @@ impl Fleet {
             .await;
             assert_eq!(status, StatusCode::NO_CONTENT);
         }
+        let (tools, os) = match self.layout {
+            Layout::Separate => (vec![TOOL_A], None),
+            Layout::Sites => (
+                vec![TOOL_A, TOOL_B],
+                Some(hotsheet_ticketing::orchestration::OsFamily::Linux),
+            ),
+        };
         let next = Self::controller_state(
             &self.a_store,
             &self.home,
             &self.a_plugins,
             &self.memory,
             &self.provider_url,
+            Roomy(tools, os),
         );
         next.spawn_run_recovery();
         self.router = app(next.clone());
@@ -849,6 +1025,7 @@ impl Fleet {
             peer.stop().await;
         }
         cli_named(&self.home, &["job", "watch"], &["stop"]);
+        drop(std::mem::take(&mut self.watchers));
         drop(self.root);
     }
 }

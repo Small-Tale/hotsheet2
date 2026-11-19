@@ -324,7 +324,35 @@ impl OrchestrationRuntime {
         &self,
         owner_id: &str,
     ) -> Result<hotsheet_ticketing::orchestration::ProjectSites, OrchestrationError> {
-        ManifestStore::new(Path::new(&self.owner(owner_id)?.root)).sites()
+        let sites = ManifestStore::new(Path::new(&self.owner(owner_id)?.root)).sites()?;
+        Ok(self.with_bound_sources(owner_id, sites))
+    }
+
+    /// HS2-3JGPDR: `sites` with each site's sources joined to its home's by the source
+    /// identity this machine's bindings last confirmed, so one ticket of the shared store
+    /// is one ticket whichever machine's connection id names it. A grouping of one-site
+    /// projects, or unreadable bindings, is returned as it is.
+    pub(crate) fn with_bound_sources(
+        &self,
+        owner_id: &str,
+        sites: hotsheet_ticketing::orchestration::ProjectSites,
+    ) -> hotsheet_ticketing::orchestration::ProjectSites {
+        if sites.is_empty() {
+            return sites;
+        }
+        let Ok(bindings) = self.bindings(owner_id) else {
+            return sites;
+        };
+        sites.with_sources(bindings.iter().map(|binding| {
+            (
+                binding.target.target_id.as_str(),
+                binding
+                    .last_confirmed_sources
+                    .iter()
+                    .map(|source| (source.connection_id.as_str(), source.identity.as_str()))
+                    .collect(),
+            )
+        }))
     }
 
     pub fn bindings(&self, owner_id: &str) -> Result<Vec<BindingView>, OrchestrationError> {
