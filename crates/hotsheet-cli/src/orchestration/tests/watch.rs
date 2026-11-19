@@ -1351,3 +1351,69 @@ fn hs2_tma4ya_a_follower_read_that_fails_changes_no_level() {
         "no stale level from a failed follower read"
     );
 }
+
+/// HS2-RQDH0Q: once a run's site handoff is no longer asked about on a timer, a change
+/// to its ticket (a note, a claim) wakes the scheduler, whose relay asks the home
+/// again, although the run's sync has nothing new to report. Without that outcome the
+/// same change wakes nothing beyond the run's own event.
+#[test]
+fn hs2_rqdh0q_a_ticket_change_wakes_a_run_whose_site_handoff_waits_on_a_person() {
+    use hotsheet_ticketing::orchestration::{RunRegistry, RunUpdate};
+    let feed = Arc::new(Feed::default());
+    let m = machine_with(10, false, unsupported, Some(feed.clone()));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[TargetAction::TicketsRead, TargetAction::WorkStart],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Worked on a site");
+    let run_id = dispatch(&m, &orchestration, &ticket, "op-1", "worker-a");
+    hosted_session(&m, &id(901), Some(run_id.clone()), &mut tx);
+    let mut state = WatchState::default();
+    m.runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    feed.push(&m.target_connection(), &ticket);
+    let plain = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(!plain.woke_scheduler);
+    // The timed asks gave up: the run's outcome names the home's waiting code.
+    RunRegistry::new(&m.home)
+        .update(
+            &m.owner.id,
+            &run_id,
+            RunUpdate {
+                reconciliation: Some(crate::orchestration::assignment::site_handoff_attention(
+                    1_000,
+                    "handoff_note_missing",
+                )),
+                ..RunUpdate::default()
+            },
+            &mut tx,
+        )
+        .unwrap();
+    // Repeated changes wake each time; a change to another ticket does not. No host
+    // here knows a scripted session, so the run's sync above read it as lost; the
+    // site's worker session is followed afresh (as above).
+    hosted_session(&m, &id(910), Some(run_id.clone()), &mut tx);
+    for _ in 0..2 {
+        feed.push(&m.target_connection(), &ticket);
+        let woken = m
+            .runtime
+            .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+        assert!(woken.woke_scheduler, "{woken:?}");
+    }
+    let other = target_ticket(&m, "Unrelated");
+    feed.push(&m.target_connection(), &other);
+    let unrelated = m
+        .runtime
+        .watch_step(&m.owner.id, &id(1), &mut state, 8_000, &mut tx);
+    assert!(!unrelated.woke_scheduler, "{unrelated:?}");
+}

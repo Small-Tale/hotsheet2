@@ -3065,28 +3065,24 @@ fn hs2_9fktb3_a_step_is_placed_and_dispatched_on_the_qualifying_site() {
 /// run's exact ticket, the session is told so once. Both sites are bound to one
 /// checkout here, so the home's pool is real and readable; HS2-RCR4A6 runs the same
 /// across two servers.
-#[test]
-fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_assignment() {
-    use crate::coordination::{Assignment, Coordinator, Phase, ReturnRoute, Role};
-    clocked!(clock, tx);
-    let f = Placed::new(&BOTH, &mut tx);
+/// HS2-5P112Z: a fixture whose target 2 is a site of target 1, the project's home,
+/// with one step planned on the site and the home's pool holding a live legacy
+/// integrator. Returns the fixture, the step, its target ticket and the home's pool.
+fn on_a_site(
+    tx: &mut Transaction<'_>,
+) -> (Placed, String, Ticket, crate::coordination::Coordinator) {
+    use crate::coordination::{Coordinator, ReturnRoute, Role};
+    let f = Placed::new(&BOTH, tx);
     // Target 2 is a site of target 1, the project's home.
-    bind_and_allow(&f.m, 2, &[], &mut tx);
-    allow_on(
-        &f.m.runtime,
-        &f.m.owner.id,
-        &id(2),
-        &BOTH,
-        &["codex"],
-        &mut tx,
-    );
+    bind_and_allow(&f.m, 2, &[], tx);
+    allow_on(&f.m.runtime, &f.m.owner.id, &id(2), &BOTH, &["codex"], tx);
     let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
     f.m.runtime
         .request(
             "PATCH",
             &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
             &json!({"expected_revision": revision, "label": "Target", "site_of": id(1)}),
-            &mut tx,
+            tx,
         )
         .unwrap();
     let mut body = policy();
@@ -3094,7 +3090,7 @@ fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_ass
         target_id: id(2),
         ..body.targets[0].clone()
     });
-    f.set_policy(body, &mut tx);
+    f.set_policy(body, tx);
     // A step named on the site: placed there, its run queued for a dispatcher.
     let ticket = ops::create(
         &f.m.target_store,
@@ -3119,7 +3115,7 @@ fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_ass
                 }))
                 .unwrap(),
                 Some(&worker()),
-                &mut tx,
+                tx,
             )
             .unwrap()
             .readiness
@@ -3142,6 +3138,15 @@ fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_ass
         ReturnRoute::HumanRelay,
     )
     .unwrap();
+    (f, step, ticket, pool)
+}
+
+#[test]
+fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_assignment() {
+    use crate::coordination::{Assignment, Phase, ReturnRoute};
+    clocked!(clock, tx);
+    let (f, step, ticket, pool) = on_a_site(&mut tx);
+    let now_s = i64::try_from(START / 1000).unwrap();
 
     let tick = f.tick(&mut tx);
     assert_eq!(outcomes(&tick), [("started", None)]);
@@ -3238,4 +3243,172 @@ fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_ass
         pool.state().unwrap().assignments["home-assignment-1"].phase,
         Phase::Accepted
     );
+}
+
+/// HS2-RQDH0Q: a site worker that released its claim without the handoff the home
+/// waits for is asked about on a timer only for 30 minutes after the release: one
+/// second after it, doubling to a minute apart, the last ask exactly at the cap. Then
+/// the run needs a person: its stored outcome is `needs_attention` with the home's
+/// waiting code, a person is asked once on the goal ticket, the explanation says so,
+/// and no timed ask is scheduled. Later passes (woken by events) ask the home again but
+/// never ask the person twice. Once the home no longer waits for the site's evidence,
+/// the pass the worker's note wakes reconciles the outcome away.
+#[test]
+fn hs2_rqdh0q_a_site_handoff_that_never_arrives_asks_a_person_once() {
+    use crate::coordination::{Assignment, Phase, ReturnRoute};
+    use crate::orchestration::assignment::SITE_HANDOFF_GIVE_UP_MS;
+    clocked!(clock, tx);
+    let (f, step, ticket, pool) = on_a_site(&mut tx);
+    let owner = f.owner();
+    let now_s = i64::try_from(START / 1000).unwrap();
+    f.tick(&mut tx);
+    let session = f.record(&format!("sched-start-{step}"));
+    let run = f.run_of(&step);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    pool.assign(
+        "integrator-1",
+        "ig1",
+        now_s,
+        Assignment {
+            id: "home-assignment-1".into(),
+            worker: worker_id.clone(),
+            generation: session.session_id.clone(),
+            ticket: hotsheet_ticketing::TicketRef {
+                connection_id: run.target.connection_id.clone(),
+                native_id: run.target.native_id.clone(),
+            },
+            slug: ticket.slug.clone(),
+            base: "0".repeat(40),
+            phase: Phase::Offered,
+            commit: None,
+            handoff: None,
+            return_route: ReturnRoute::HumanRelay,
+            recovery_note: None,
+            suspension: None,
+            suspension_history: Vec::new(),
+            scope: Vec::new(),
+            transitions: Vec::new(),
+            retirement_note: None,
+            worktree: None,
+        },
+    )
+    .unwrap();
+    let claim = |f: &Placed| {
+        ops::claim_with_eta(
+            &f.m.target_store,
+            &ticket.id,
+            &hotsheet_model::Timestamp::new(NOW),
+            hotsheet_model::Timestamp::new("2099-01-01T00:00:00Z"),
+            &worker_id,
+            None,
+            None,
+        )
+        .unwrap();
+    };
+    let release = |f: &Placed, tx: &mut Transaction<'_>| {
+        ops::release(&f.m.target_store, &ticket.id, NOW.into(), &worker_id, false).unwrap();
+        let synced =
+            f.m.runtime
+                .run_sync(&owner, &run.run_id, Some(&worker()), tx)
+                .unwrap()
+                .run;
+        assert_eq!(synced.state, RunState::Intervened);
+        synced
+            .history
+            .iter()
+            .rev()
+            .find(|entry| entry.to == RunState::Intervened)
+            .unwrap()
+            .at_ms
+    };
+    let asked = |f: &Placed| {
+        f.m.owner_store
+            .read_ticket(&f.orchestration.id)
+            .unwrap()
+            .notes
+            .into_iter()
+            .filter(|note| note.kind == hotsheet_model::NoteKind::FeedbackNeeded)
+            .map(|note| note.text)
+            .collect::<Vec<_>>()
+    };
+    let stored = |f: &Placed| {
+        let run = f.m.runtime.run(&f.owner(), &run.run_id).unwrap();
+        crate::orchestration::assignment::site_handoff_waiting(&run).map(str::to_owned)
+    };
+    claim(&f);
+    f.at(&clock, START + MINUTE);
+    f.tick(&mut tx);
+    f.m.runtime
+        .run_sync(&owner, &run.run_id, Some(&worker()), &mut tx)
+        .unwrap();
+    // The worker releases without its handoff note.
+    let released = release(&f, &mut tx);
+    // Asked again one second after the release, then at doubling intervals.
+    for (now, due) in [
+        (released, released + 1_000),
+        (released + 1_000, released + 3_000),
+        (released + 3_000, released + 7_000),
+    ] {
+        f.at(&clock, now);
+        let tick = f.tick(&mut tx);
+        assert_eq!(tick.view.schedule.retry_at_ms, Some(due), "at {now}");
+        assert_eq!(stored(&f), None);
+    }
+    // The last timed ask is the cap itself.
+    let give_up = released + SITE_HANDOFF_GIVE_UP_MS;
+    f.at(&clock, give_up - 1);
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.schedule.retry_at_ms, Some(give_up));
+    assert!(asked(&f).is_empty());
+    // At the cap: no timed ask, the run needs a person, who is asked once.
+    f.at(&clock, give_up);
+    let tick = f.tick(&mut tx);
+    assert_eq!(tick.view.schedule.retry_at_ms, None);
+    assert_eq!(stored(&f).as_deref(), Some("handoff_note_missing"));
+    let notes = asked(&f);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].contains(&run.run_id) && notes[0].contains("handoff_note_missing"));
+    assert!(!notes[0].contains("On the site"), "no ticket content");
+    let explained = f.explain(&step, &mut tx);
+    assert_eq!(
+        (explained.reason.as_str(), explained.detail.as_deref()),
+        ("needs_attention", Some("handoff_note_missing"))
+    );
+    assert_eq!(explained.retry_at_ms, None);
+    // Later passes, woken by events, ask the home again but not the person.
+    for later in [give_up + MINUTE, give_up + 10 * MINUTE] {
+        f.at(&clock, later);
+        let tick = f.tick(&mut tx);
+        assert_eq!(tick.view.schedule.retry_at_ms, None);
+        assert_eq!(asked(&f).len(), 1);
+        assert_eq!(stored(&f).as_deref(), Some("handoff_note_missing"));
+    }
+    // The worker's note arrives (here with a branch the home refuses, so the home no
+    // longer waits for evidence): the pass it wakes reconciles the outcome away.
+    ops::add_note(
+        &f.m.target_store,
+        &ticket.id,
+        ulid::Ulid::new(),
+        NOW.into(),
+        hotsheet_model::NoteKind::Regular,
+        format!(
+            "## Integration handoff\nBranch: -x\nCommit: {}",
+            "a".repeat(40)
+        ),
+    )
+    .unwrap();
+    f.at(&clock, give_up + 11 * MINUTE);
+    let tick = f.tick(&mut tx);
+    assert_eq!(stored(&f), None);
+    assert_eq!(tick.view.schedule.retry_at_ms, None);
+    assert_ne!(
+        f.explain(&step, &mut tx).detail.as_deref(),
+        Some("handoff_note_missing")
+    );
+    // Whatever reconciliation now finds is its own outcome; the handoff was asked once.
+    let handoff = asked(&f)
+        .into_iter()
+        .filter(|text| text.contains("still has not seen its handoff"))
+        .count();
+    assert_eq!(handoff, 1);
 }

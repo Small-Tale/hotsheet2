@@ -1001,6 +1001,20 @@ impl OrchestrationRuntime {
                     answer.reason = found.state.code().into();
                     answer.retry_at_ms = found.claim_at_ms;
                 }
+                // HS2-RQDH0Q: a site's handoff the home never saw waits on a person.
+                let step_id = &step.readiness.step.step_id;
+                if let Some(code) = self.run_list(owner_id, false)?.iter().find_map(|run| {
+                    super::session_executor::scheduled_run_of(run, step_id)
+                        .then(|| super::assignment::site_handoff_waiting(run))
+                        .flatten()
+                        .map(str::to_owned)
+                }) {
+                    answer.reason = hotsheet_ticketing::orchestration::Disposition::NeedsAttention
+                        .code()
+                        .into();
+                    answer.detail = Some(code);
+                    answer.retry_at_ms = None;
+                }
             }
             ReadinessLevel::Finished => answer.standing = "finished".into(),
             ReadinessLevel::Blocked | ReadinessLevel::Stale | ReadinessLevel::Cyclic => {

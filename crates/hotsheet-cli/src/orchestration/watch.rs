@@ -391,6 +391,7 @@ fn session_supervisor(session: &OrchestratedSession) -> Option<MutationActor> {
 /// does. A session of the owner ended or finished a turn on its host; or a ticket of
 /// the target changed (a claim taken or let go is what makes a session busy or idle)
 /// while a session of the owner works no unfinished run, so no run sync reports it;
+/// or a ticket changed whose run waits on a person for its site handoff (HS2-RQDH0Q);
 /// or the follower cannot tell what it missed while it has any session there.
 fn wakes_scheduler(
     page: &TargetEventPage,
@@ -413,6 +414,18 @@ fn wakes_scheduler(
         })
     };
     if page.sessions.iter().any(|event| mine(&event.session_id)) {
+        return true;
+    }
+    // HS2-RQDH0Q: a run whose site handoff stopped being asked about on a timer is
+    // asked about again when its ticket changes (a note added, a claim taken or let
+    // go), though the run's sync reports nothing new.
+    if page.events.iter().any(|event| {
+        runs.iter().any(|run| {
+            super::assignment::site_handoff_waiting(run).is_some()
+                && event.connection_id == run.target.connection_id
+                && event.native_id == run.target.native_id
+        })
+    }) {
         return true;
     }
     let free = sessions.iter().any(|session| {

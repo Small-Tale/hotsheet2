@@ -210,22 +210,40 @@ impl OrchestrationRuntime {
             })
             .collect();
         let note_id = hotsheet_ticketing::mint_ulid(tx.clock, tx.rng);
-        let text = format!(
-            "Run `{}` in target `{}` needs a person: reconciliation found \
+        // HS2-RQDH0Q: a site's release whose handoff the home never saw.
+        let text = if let Some(code) = super::assignment::site_handoff_waiting(run) {
+            format!(
+                "Run `{}` on site `{}` released its claim, but the project's home site \
+                 still has not seen its handoff (`{code}`) {} minutes later, so the \
+                 orchestrator stopped asking the home on a timer (`needs_attention`).\n\n\
+                 Check that the worker pushed its branch and added its \
+                 `## Integration handoff` note before releasing, or hand off, correct or \
+                 cancel the run with `orchestration run status {}` or the run's controls \
+                 in the Orchestration view. A note or a claim change on the ticket asks \
+                 the home again.",
+                run.run_id,
+                run.target.target_id,
+                super::assignment::SITE_HANDOFF_GIVE_UP_MS / 60_000,
+                run.run_id,
+            )
+        } else {
+            format!(
+                "Run `{}` in target `{}` needs a person: reconciliation found \
              that its record and its target disagree in a way the orchestrator does not \
              settle (`needs_attention`, state `{}`).\n\nFindings: {}.\n\nUse `orchestration \
              run status {}`, then hand it off, correct, pause or cancel it, or the run's \
              controls in the Orchestration view. The orchestrator does not act on it.",
-            run.run_id,
-            run.target.target_id,
-            state_code(run.state),
-            if findings.is_empty() {
-                "none recorded".to_owned()
-            } else {
-                findings.join(", ")
-            },
-            run.run_id,
-        );
+                run.run_id,
+                run.target.target_id,
+                state_code(run.state),
+                if findings.is_empty() {
+                    "none recorded".to_owned()
+                } else {
+                    findings.join(", ")
+                },
+                run.run_id,
+            )
+        };
         ops::add_note_with_metadata(
             &store,
             &id,

@@ -3731,7 +3731,8 @@ person's cancel holds, §26.24), its detail, the rank and score,
 when to expect a change, and each resource the work requires (§26.20). A running
 step whose run waits for a target dispatcher that is not there answers reason
 `no_live_dispatcher` (or `pool_unknown`) with `assignment` and the claim time
-(§26.24). `tick` is one pass. A headless process hosts no sessions and
+(§26.24). A running step whose site handoff stopped being asked about answers
+`needs_attention` with the home's waiting code as `detail` (HS2-RQDH0Q, §26.30). `tick` is one pass. A headless process hosts no sessions and
 asks the server on the same machine for capacity (§26.10); with none running the
 machine reads as `capacity_unknown`.
 
@@ -6004,7 +6005,24 @@ once first, at most once every two seconds per store. When it still waits
 the run saw the release, the pass asks again one second after the release, then at
 doubling intervals up to a minute apart, so a handoff never waits for an unrelated
 event. A pass in which the home recorded a step runs again at once, so a handoff starts
-the home's integrator without another event. The note:
+the home's integrator without another event.
+
+**The timed asks end (HS2-RQDH0Q).** They stop 30 minutes after the release
+(`SITE_HANDOFF_GIVE_UP_MS`); the last one is at that instant. A release whose evidence
+has not reached the home by then is not going to without someone: the pass stores the
+run's outcome as `needs_attention` with one finding naming the home's waiting code
+(`target_claim` for `claim_not_taken` and `claim_held`, `target_ticket` for
+`handoff_note_missing` and `handoff_fetch_failed`), timed at the give-up instant. The
+scheduler then asks a person once on the goal ticket (a `FEEDBACK NEEDED` note naming
+the run, the site and the code, §26.14 dispositions), `scheduler explain` for the step
+answers reason `needs_attention` with the code as `detail`, and the run's last
+reconciliation shows it in the Orchestration view. No timed ask is scheduled after
+that. A change to the run's ticket on the site (a note added, a claim taken or let go)
+wakes the scheduler, whose pass asks the home again; so does any other pass. Once the
+home no longer waits for the site's evidence, the run is reconciled against the world
+and that outcome replaces the stored one. Each release asks a person at most once.
+
+The note:
 
 ```text
 ## Integration handoff

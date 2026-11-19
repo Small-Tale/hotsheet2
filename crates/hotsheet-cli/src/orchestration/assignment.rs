@@ -8,9 +8,10 @@ use std::collections::BTreeMap;
 
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
-    AssignmentInput, AssignmentState, DispatchMode, OrchestratedSession, PlacementAction,
-    PlacementMemory, PlacementOutcome, PolicyBody, ProjectSites, RequestKind, Run, RunState,
-    RunUpdate, SessionOwner, SessionRole, SessionState, TargetAction, TargetOpError,
+    AssignmentInput, AssignmentState, DispatchMode, Disposition, ExternalSource,
+    OrchestratedSession, PlacementAction, PlacementMemory, PlacementOutcome, PolicyBody,
+    ProjectSites, RequestKind, Run, RunReconciliation, RunState, RunUpdate, SessionOwner,
+    SessionRole, SessionState, SourceFinding, TargetAction, TargetOpError, Verification,
     decide_assignment,
 };
 use serde::Serialize;
@@ -50,6 +51,10 @@ pub struct SiteRelay {
     /// from one second to a minute.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_at_ms: Option<u64>,
+    /// HS2-RQDH0Q: the home's waiting code when the release has waited past
+    /// [`SITE_HANDOFF_GIVE_UP_MS`] and the run now needs a person.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention: Option<String>,
 }
 
 /// HS2-RCR4A6: the waiting codes that mean the home has not yet seen what the site
@@ -61,17 +66,62 @@ pub const SITE_EVIDENCE_LAG: [&str; 4] = [
     "handoff_fetch_failed",
 ];
 
+/// HS2-RQDH0Q: how long after a site's release the home is asked again on a timer.
+/// A handoff that has not reached the home by then is not going to without someone:
+/// the run is marked as needing a person, and only an event asks the home again.
+pub const SITE_HANDOFF_GIVE_UP_MS: u64 = 30 * 60 * 1000;
+
 /// HS2-RCR4A6: the next time after `now_ms` to ask the home again about a release
 /// the run saw at `released_at_ms`: one second after it, then doubling up to a minute
 /// apart. Pure, so the schedule needs no memory between passes.
-pub fn site_handoff_retry_at(released_at_ms: u64, now_ms: u64) -> u64 {
+///
+/// HS2-RQDH0Q: the last ask is at [`SITE_HANDOFF_GIVE_UP_MS`] after the release, and
+/// from then on there is none (`None`): the run needs a person.
+pub fn site_handoff_retry_at(released_at_ms: u64, now_ms: u64) -> Option<u64> {
+    let give_up = released_at_ms.saturating_add(SITE_HANDOFF_GIVE_UP_MS);
+    if now_ms >= give_up {
+        return None;
+    }
     let mut interval = 1_000_u64;
     let mut at = released_at_ms.saturating_add(interval);
     while at <= now_ms {
         interval = (interval * 2).min(60_000);
         at = at.saturating_add(interval);
     }
-    at
+    Some(at.min(give_up))
+}
+
+/// HS2-RQDH0Q: the stored outcome of a release whose handoff the home still had not
+/// seen when the timed asks gave up: `needs_attention`, with one finding naming the
+/// home's waiting code, at the instant it gave up, so each release asks a person once.
+pub fn site_handoff_attention(released_at_ms: u64, code: &str) -> RunReconciliation {
+    let source = if code.starts_with("claim_") {
+        ExternalSource::TargetClaim
+    } else {
+        ExternalSource::TargetTicket
+    };
+    RunReconciliation {
+        at_ms: released_at_ms.saturating_add(SITE_HANDOFF_GIVE_UP_MS),
+        disposition: Disposition::NeedsAttention,
+        findings: vec![SourceFinding {
+            source,
+            verification: Verification::Mismatched,
+            reason: Some(code.to_owned()),
+        }],
+    }
+}
+
+/// HS2-RQDH0Q: the home's waiting code when the run's stored outcome is a site
+/// handoff that never arrived ([`site_handoff_attention`]).
+pub fn site_handoff_waiting(run: &Run) -> Option<&str> {
+    let found = run.reconciliation.as_ref()?;
+    match found.findings.as_slice() {
+        [finding] if found.disposition == Disposition::NeedsAttention => finding
+            .reason
+            .as_deref()
+            .filter(|code| SITE_EVIDENCE_LAG.contains(code)),
+        _ => None,
+    }
 }
 
 /// One placed step's run that a running scheduler session waits on, with who will
@@ -423,7 +473,7 @@ impl OrchestrationRuntime {
             let assigned = pool.as_ref().and_then(|reply| reply.assignment.as_ref());
             let lagging = assigned
                 .and_then(|assigned| assigned.waiting.as_deref())
-                .is_some_and(|code| SITE_EVIDENCE_LAG.contains(&code));
+                .filter(|code| SITE_EVIDENCE_LAG.contains(code));
             // A step the home just recorded changes its pool after this pass decided
             // the project's role sessions: the next pass decides them again at once, so
             // a handoff starts the integrator without waiting for another event.
@@ -437,6 +487,14 @@ impl OrchestrationRuntime {
                         .map(|transition| transition.at_ms)
                 })
                 .flatten();
+            let now_ms = tx.clock.now_ms();
+            let lag = released_at_ms.zip(lagging);
+            let retry_at_ms = lag.and_then(|(at, _)| site_handoff_retry_at(at, now_ms));
+            // HS2-RQDH0Q: past the cap a person is asked instead of the home on a timer.
+            let attention = lag
+                .filter(|_| retry_at_ms.is_none())
+                .map(|(at, code)| site_handoff_attention(at, code));
+            self.site_handoff_settle(owner_id, run, attention.as_ref(), pool.is_some(), actor, tx);
             relays.push(SiteRelay {
                 session_id: session.session_id.clone(),
                 run_id: run.run_id.clone(),
@@ -444,16 +502,49 @@ impl OrchestrationRuntime {
                 home_target_id: home.to_owned(),
                 pool,
                 told,
-                retry_at_ms: if recorded {
-                    Some(tx.clock.now_ms())
-                } else {
-                    released_at_ms
-                        .filter(|_| lagging)
-                        .map(|at| site_handoff_retry_at(at, tx.clock.now_ms()))
-                },
+                retry_at_ms: if recorded { Some(now_ms) } else { retry_at_ms },
+                attention: attention
+                    .as_ref()
+                    .and_then(|found| found.findings.first())
+                    .and_then(|finding| finding.reason.clone()),
             });
         }
         relays
+    }
+
+    /// HS2-RQDH0Q: keep the run's stored outcome in line with its site handoff. A
+    /// handoff that gave up is stored as `needs_attention` (once per release: the
+    /// same outcome again writes nothing). A stored site-handoff outcome that no longer
+    /// holds, because the home answered without waiting or a newer release is being
+    /// asked about, is replaced by reconciling the run against the world.
+    fn site_handoff_settle(
+        &self,
+        owner_id: &str,
+        run: &Run,
+        attention: Option<&RunReconciliation>,
+        answered: bool,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) {
+        let stored = site_handoff_waiting(run).and(run.reconciliation.as_ref());
+        match (attention, stored) {
+            (Some(found), stored) if stored.is_none_or(|stored| !stored.same_facts(found)) => {
+                let _ = self.run_apply(
+                    owner_id,
+                    &run.run_id,
+                    RunUpdate {
+                        reconciliation: Some(found.clone()),
+                        actor_id: actor.id.clone(),
+                        ..RunUpdate::default()
+                    },
+                    tx,
+                );
+            }
+            (None, Some(_)) if answered => {
+                let _ = self.run_reconcile(owner_id, &run.run_id, Some(actor), tx);
+            }
+            _ => {}
+        }
     }
 
     /// An applied pass claims each run that is due for its session, records what
