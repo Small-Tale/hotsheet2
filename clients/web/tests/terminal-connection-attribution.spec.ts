@@ -254,8 +254,7 @@ test('keeps every hooked session connected and marks one primary across close an
       await app.server.request('/terminals', 'POST', {
         id,
         connect: 'claude',
-        command: '/bin/sh',
-        args: ['-c', 'exec cat'],
+        ...printThenEcho(''),
         cwd: app.server.root,
       });
       await app.server.request('/mcp-presence', 'POST', {

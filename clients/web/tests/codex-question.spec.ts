@@ -6,6 +6,7 @@ import { expect, type Locator, test } from '@playwright/test';
 import type { TerminalInfo } from '../src/api';
 import { desktopApp } from './desktop-draft-files-fixture';
 import { openMockedProject } from './open-mocked-project';
+import { printThenEcho } from './terminal-fixture-command';
 
 // HS2-D0QTGB: a question a Codex session asks through `request_user_input_async` reaches the
 // in-app prompt from its own rollout, across resize, and clears when the terminal answers it.
@@ -31,8 +32,7 @@ test('shows a Codex rollout question in the app and clears it on terminal input 
     await app.server.request('/terminals', 'POST', {
       id: TERMINAL,
       connect: 'codex',
-      command: '/bin/sh',
-      args: ['-c', 'exec cat'],
+      ...printThenEcho(''),
       cwd: app.server.root,
     });
     const report = await fetch(`${app.server.url}/terminals/${TERMINAL}/ai-connection`, {

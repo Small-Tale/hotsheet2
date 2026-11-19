@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -52,5 +53,15 @@ describe('portable terminal fixture commands (HS2-TMZ13Z)', () => {
     expect(result.stdout).toBe('LIVE READY\r\ntyped keys\n');
     const silent = printThenEcho('', 'node');
     expect(spawnSync(silent.command, silent.args, { input: 'x', encoding: 'utf8' }).stdout).toBe('x');
+  });
+
+  it('leaves no browser spec launching /bin/sh directly (HS2-TMZ13Z)', () => {
+    // Windows has no /bin/sh; every spec goes through the portable fixture commands above. The
+    // opt-in, local-only WebKit memory probe is skipped in Platforms.
+    const directory = new URL('../tests/', import.meta.url);
+    const direct = readdirSync(directory)
+      .filter((name) => name.endsWith('.spec.ts') && name !== 'webkit-memory.spec.ts')
+      .filter((name) => /command:\s*'\/bin\/sh'/.test(readFileSync(new URL(name, directory), 'utf8')));
+    expect(direct).toEqual([]);
   });
 });
