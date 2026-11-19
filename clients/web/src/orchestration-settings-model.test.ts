@@ -19,6 +19,8 @@ import {
   policyWithTargetLimits,
   projectRows,
   removePolicyAccount,
+  roleSessionsHint,
+  roleSessionsLocked,
   sessionDescription,
   sessionStatus,
   tabProjectIdOf,
@@ -700,5 +702,24 @@ describe("a project's coordination sessions (HS2-TK9ADC)", () => {
       'Integrator · CODEX · m · since now',
     );
     expect(sessionDescription({ ...base, role: 'worker' }, label, 'now')).toBe('CODEX · since now');
+  });
+});
+
+describe("a site's coordination sessions (HS2-SYZB33)", () => {
+  it('point at the home and allow only clearing roles that have no effect', () => {
+    // The home, or a one-site project: the ordinary hint, never locked.
+    expect(roleSessionsHint(undefined, [])).toMatch(/^The orchestrator starts these here/u);
+    expect(roleSessionsLocked(undefined, [])).toBe(false);
+    expect(roleSessionsLocked(undefined, ['dispatcher'])).toBe(false);
+    // Another site with nothing checked: locked, pointing at the home.
+    expect(roleSessionsHint('Widgets', [])).toBe(
+      "Coordination sessions start only on Widgets, this project's home site. Set them there.",
+    );
+    expect(roleSessionsLocked('Widgets', [])).toBe(true);
+    // A stored entry on the site: it can be cleared, and the hint says it has no effect.
+    expect(roleSessionsHint('Widgets', ['dispatcher'])).toBe(
+      "Coordination sessions start only on Widgets, this project's home site. Set them there. The roles checked here have no effect; clear them.",
+    );
+    expect(roleSessionsLocked('Widgets', ['dispatcher'])).toBe(false);
   });
 });

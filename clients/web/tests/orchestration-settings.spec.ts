@@ -968,6 +968,128 @@ test('HS2-SHH7WW Settings lists a project with its other sites after it', async 
   }
 });
 
+/**
+ * HS2-SYZB33: coordination sessions start only on a project's home site. A site's Limits points at
+ * the home; a role a stored policy still lists on the site is shown with a note that it has no
+ * effect and can only be cleared, through the real policy route. The home's Limits are unchanged.
+ */
+test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home', async ({ page, browserName }) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Widgets'],
+      [docs, 'Widgets second clone'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    const { revision } = await server.request<{ revision: string }>(`${base}/targets`);
+    await server.request(`${base}/targets/${targets['Widgets second clone']}`, 'PATCH', {
+      expected_revision: revision,
+      label: 'Widgets second clone',
+      site_of: targets.Widgets,
+      actor: { role: 'human' },
+    });
+    const site = targets['Widgets second clone'];
+    // A policy stored before the grouping: the site still lists a dispatcher.
+    await server.request(`${base}/policy`, 'PUT', {
+      expected_revision: null,
+      policy: {
+        machine: { max_sessions: 4 },
+        tools: [{ tool: 'codex', max_sessions: 3 }],
+        targets: [
+          { target_id: targets.Widgets, tools: [{ tool: 'codex' }], max_sessions: 2 },
+          { target_id: site, tools: [{ tool: 'codex' }], max_sessions: 2 },
+        ],
+        placement: { role_sessions: [{ target_id: site, roles: ['dispatcher'] }] },
+      },
+      actor: { role: 'human' },
+    });
+    const validated = await server.request<{ valid: boolean; warnings?: { code: string; subject: string }[] }>(
+      `${base}/policy/validate`,
+      'POST',
+      {},
+    );
+    expect(validated.valid).toBe(true);
+    expect(validated.warnings?.map((warning) => [warning.code, warning.subject])).toEqual([
+      ['role_sessions_not_home', site],
+    ]);
+    type Stored = { policy: { placement?: { role_sessions?: { target_id: string; roles: string[] }[] } } };
+    const roles = async () => (await server.request<Stored>(`${base}/policy`)).policy.placement?.role_sessions;
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const open = (label: string) =>
+      settings
+        .locator('[data-orchestration-project]')
+        .filter({ hasText: label })
+        .getByRole('button', { name: new RegExp(label) })
+        .first()
+        .click();
+    await open('Widgets second clone');
+    const limits = page.locator('[data-component="orchestration-project-limits"]');
+    const dispatcher = limits.getByRole('checkbox', { name: 'Dispatcher' }),
+      integrator = limits.getByRole('checkbox', { name: 'Integrator' });
+    await expect(limits).toContainText("Coordination sessions start only on Widgets, this project's home site.");
+    await expect(limits).toContainText('The roles checked here have no effect; clear them.');
+    await expect(dispatcher).toBeChecked();
+    await expect(dispatcher).toBeEnabled();
+
+    const directory = join('target', 'visual-captures', 'hs2-syzb33');
+    await mkdir(directory, { recursive: true });
+    const capture = async (name: string) => {
+      await integrator.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(directory, `hs2-syzb33-${name}-${browserName}.png`), animations: 'disabled' });
+    };
+    await capture('site-stored-1440');
+    // Cleared: the entry goes, and the choice is unavailable, pointing at the home.
+    await dispatcher.uncheck();
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect.poll(roles).toBeUndefined();
+    await expect(limits).not.toContainText('no effect');
+    await expect(dispatcher).not.toBeChecked();
+    await expect(dispatcher).toBeDisabled();
+    await expect(integrator).toBeDisabled();
+    for (const [index, size] of [{ width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+      await page.setViewportSize(size);
+      if (size.width === 390) {
+        const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+        if (await show.isVisible()) await show.click();
+      }
+      await expect(integrator).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await capture(`site-${String(size.width)}${index === 2 ? '-after-390' : ''}`);
+    }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await capture('site-1440-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+
+    // The home's choice is as before.
+    await open('Widgets');
+    await expect(limits).toContainText('The orchestrator starts these here when needed');
+    await expect(dispatcher).toBeEnabled();
+    await dispatcher.check();
+    await limits.getByRole('button', { name: 'Apply Limits' }).click();
+    await expect.poll(roles).toEqual([{ target_id: targets.Widgets, roles: ['dispatcher'] }]);
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

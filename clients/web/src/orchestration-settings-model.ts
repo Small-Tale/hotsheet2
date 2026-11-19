@@ -531,6 +531,31 @@ export interface TargetLimitsDraft {
   roleSessions: OrchestrationRoleSession[];
 }
 
+const ROLE_SESSIONS_HINT =
+  'The orchestrator starts these here when needed: a dispatcher for ready work, an integrator for handed-off work. Each counts toward Sessions Here.';
+
+/**
+ * HS2-SYZB33: coordination sessions start only on a project's home site (HS2-5P112Z). On another site
+ * the choice points at the home and is unavailable, except to clear roles still checked here (a stored
+ * entry), which have no effect.
+ */
+export function roleSessionsHint(homeLabel: string | undefined, checked: readonly string[]): string {
+  if (!homeLabel) return ROLE_SESSIONS_HINT;
+  const where = `Coordination sessions start only on ${homeLabel}, this project's home site. Set them there.`;
+  return checked.length ? `${where} The roles checked here have no effect; clear them.` : where;
+}
+
+/**
+ * The project's own limits in the policy (HS2-7WF6JD): whether the orchestrator acts here, the AI
+ * tools sessions here may use, the session cap, a machine override and build-ahead. Applied with
+ * Apply Limits, which writes only this project's entry; the policy stays limits only.
+ */
+
+/** HS2-SYZB33: on another site the roles can only be cleared, never chosen. */
+export function roleSessionsLocked(homeLabel: string | undefined, checked: readonly string[]): boolean {
+  return Boolean(homeLabel) && checked.length === 0;
+}
+
 /** HS2-TK9ADC: the role sessions in the order the form and the policy list them. */
 export const ROLE_SESSIONS: readonly OrchestrationRoleSession[] = ['dispatcher', 'integrator'];
 

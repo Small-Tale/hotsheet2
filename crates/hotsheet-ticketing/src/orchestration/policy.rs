@@ -470,6 +470,24 @@ pub enum PolicyVerdict {
     Denied(PolicyDenial),
 }
 
+/// HS2-SYZB33: something in a valid policy that has no effect. It never makes the
+/// policy invalid, so a stored policy that holds it still reads and is still set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PolicyWarning {
+    pub code: &'static str,
+    pub message: &'static str,
+    /// The target the entry names.
+    pub subject: String,
+    /// For `role_sessions_not_home`: the home site of that target's project, where
+    /// its role sessions start.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_target_id: Option<String>,
+}
+
+/// HS2-SYZB33: a `placement.role_sessions` entry naming a site that is not its
+/// project's home. Role sessions start only on the home (HS2-5P112Z).
+pub const ROLE_SESSIONS_NOT_HOME: &str = "role_sessions_not_home";
+
 /// HS2-XHQ1EH: a retired field an older policy file still holds. It is ignored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IgnoredField {
@@ -768,6 +786,26 @@ impl PolicyBody {
             }
         }
         found
+    }
+
+    /// HS2-SYZB33: entries of this policy that have no effect given how the declared
+    /// targets are grouped into projects: a `placement.role_sessions` entry on a site
+    /// that is not its project's home starts nothing, because role sessions are
+    /// decided per project and started only on its home (HS2-5P112Z).
+    pub fn warnings(&self, sites: &ProjectSites) -> Vec<PolicyWarning> {
+        self.placement
+            .role_sessions
+            .iter()
+            .filter_map(|entry| {
+                let home = sites.home_of(&entry.target_id);
+                (home != entry.target_id).then(|| PolicyWarning {
+                    code: ROLE_SESSIONS_NOT_HOME,
+                    message: "role sessions start only on the project's home site; this entry has no effect",
+                    subject: entry.target_id.clone(),
+                    home_target_id: Some(home.to_owned()),
+                })
+            })
+            .collect()
     }
 
     /// HS2-XHQ1EH: retired fields this policy still holds; each is ignored.

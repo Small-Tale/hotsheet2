@@ -179,9 +179,8 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const target = settings.selected.value[current.id];
     if (!target) return undefined;
     const state = settings.settings.value[current.id],
-      row = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value).find(
-        (item) => item.targetId === target,
-      ),
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value),
+      row = rows.find((item) => item.targetId === target),
       detail = settings.details.value[`${current.id}:${target}`],
       policy = state?.policy?.policy;
     if (!row) return undefined;
@@ -205,6 +204,8 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       ],
       removing: Boolean(state?.busy.includes(target)),
       policyTools: (policy?.tools ?? []).map((tool) => tool.tool),
+      // HS2-SYZB33: another site's coordination sessions start on its project's home.
+      homeLabel: row.siteOf ? rows.find((item) => item.targetId === row.siteOf)?.label : undefined,
       toolLabel: dependencies.toolLabel,
     });
   }

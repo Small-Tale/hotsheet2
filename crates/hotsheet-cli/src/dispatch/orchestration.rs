@@ -1170,6 +1170,25 @@ fn with_role_sessions(mut policy: Value, edit: &Value) -> Value {
     policy
 }
 
+/// HS2-SYZB33: one policy warning as a line a person reads.
+fn policy_warning_line(warning: &Value) -> String {
+    let text = |key: &str| warning[key].as_str().unwrap_or("unknown").to_owned();
+    match warning["code"].as_str() {
+        Some(hotsheet_ticketing::orchestration::ROLE_SESSIONS_NOT_HOME) => format!(
+            "warning: role_sessions_not_home: target {} is a site of the project whose home is {}; role sessions start only on the home, so this entry has no effect. Set them with --target {}.",
+            text("subject"),
+            text("home_target_id"),
+            text("home_target_id"),
+        ),
+        _ => format!(
+            "warning: {}: {} ({})",
+            text("code"),
+            text("message"),
+            text("subject")
+        ),
+    }
+}
+
 /// A policy body from a file, or stdin for `-`.
 fn policy_file(path: &str) -> Result<Value> {
     let text = if path == "-" {
@@ -1608,6 +1627,15 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                     // The actor this command attached stays with the request.
                     body["policy"] = with_role_sessions(stored["policy"].take(), &edit);
                     body["expected_revision"] = stored["revision"].take();
+                    let mut answer = runtime.request_now(method, &path, &body)?;
+                    // HS2-SYZB33: say when the entry names a site that is not its
+                    // project's home, where it starts nothing.
+                    let checked =
+                        runtime.request_now("POST", &format!("{path}/validate"), &json!({}))?;
+                    if let Some(warnings) = checked.get("warnings") {
+                        answer["warnings"] = warnings.clone();
+                    }
+                    return Ok(answer);
                 }
                 // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
                 // repeated setup run is a no-op and a concurrent edit still conflicts.
@@ -1641,6 +1669,10 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         }
     }
     println!("{}", serde_json::to_string_pretty(&output)?);
+    // HS2-SYZB33: a policy entry that has no effect is said on stderr too.
+    for warning in output["warnings"].as_array().into_iter().flatten() {
+        eprintln!("{}", policy_warning_line(warning));
+    }
     // HS2-YYNW9F: checking a profile file fails the command when it has problems.
     if (path.ends_with("/target-validation-profiles") || path.ends_with("/validations/profiles"))
         && output["valid"] == false

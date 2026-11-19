@@ -24,6 +24,8 @@ import {
   type ConnectionStatus,
   connectionStatus,
   formatMegabytes,
+  roleSessionsHint,
+  roleSessionsLocked,
   sessionDescription,
   sessionStatus,
   sessionTitle,
@@ -49,6 +51,11 @@ export interface OrchestrationProjectDetailProps {
   claimNamespaces?: readonly string[];
   /** The AI tools the policy sets up, which the Limits form offers (HS2-7WF6JD). */
   policyTools?: readonly string[];
+  /**
+   * HS2-SYZB33: when this project is another site of a project, the label of that project's home
+   * site, where its coordination sessions start.
+   */
+  homeLabel?: string;
   removing?: boolean;
   toolLabel?: (tool: string) => string;
   /** Formats a time in milliseconds; the catalog passes a fixed clock. */
@@ -110,6 +117,7 @@ export function OrchestrationProjectDetail({
   sessions = [],
   claimNamespaces = [],
   policyTools = [],
+  homeLabel,
   removing = false,
   toolLabel = (tool) => tool,
   formatTime = defaultTime,
@@ -131,7 +139,7 @@ export function OrchestrationProjectDetail({
           </ValueTable>
           {detail?.resolutionError ? unreadable('The connection', detail.resolutionError) : null}
         </section>
-        {limitsSection({ detail, policyTools, toolLabel })}
+        {limitsSection({ detail, policyTools, toolLabel, homeLabel })}
         <section aria-label="Capacity and Admission">
           <ListHeader label="Capacity and Admission" />
           {capacity ? (
@@ -308,14 +316,10 @@ interface LimitsSectionProps {
   detail?: OrchestrationDetailState;
   policyTools: readonly string[];
   toolLabel: (tool: string) => string;
+  homeLabel?: string;
 }
 
-/**
- * The project's own limits in the policy (HS2-7WF6JD): whether the orchestrator acts here, the AI
- * tools sessions here may use, the session cap, a machine override and build-ahead. Applied with
- * Apply Limits, which writes only this project's entry; the policy stays limits only.
- */
-function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
+function limitsSection({ detail, policyTools, toolLabel, homeLabel }: LimitsSectionProps) {
   const limits = detail?.limits,
     saving = Boolean(detail?.limitsSaving),
     disabled = saving || !limits;
@@ -363,13 +367,13 @@ function limitsSection({ detail, policyTools, toolLabel }: LimitsSectionProps) {
         <CheckboxGroup
           name="limits.role_sessions"
           label="Coordination Sessions"
-          hint="The orchestrator starts these here when needed: a dispatcher for ready work, an integrator for handed-off work. Each counts toward Sessions Here."
+          hint={roleSessionsHint(homeLabel, limits?.roleSessions ?? [])}
           choices={[
             { value: 'dispatcher', label: 'Dispatcher' },
             { value: 'integrator', label: 'Integrator' },
           ]}
           value={limits?.roleSessions ?? []}
-          disabled={disabled}
+          disabled={disabled || roleSessionsLocked(homeLabel, limits.roleSessions)}
         />
         <TextField
           name="limits.max_sessions"

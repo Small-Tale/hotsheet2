@@ -197,3 +197,144 @@ async fn hs2_tk9adc_role_sessions_set_headlessly_and_the_pool_reported_with_capa
     );
     assert_ne!(reported["version"], empty["version"]);
 }
+
+/// HS2-SYZB33: a role-sessions entry on a site that is not its project's home starts
+/// nothing. The owned CLI still stores it, so stored policies keep working, but says
+/// so in `warnings` and on stderr, pointing at the home; validate and the dry run
+/// report the same warning code and stay valid. The home's own entry warns nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_syzb33_role_sessions_on_a_site_say_they_have_no_effect() {
+    const SITE: &str = "01ARZ3NDEKTSV4RRFFQ69G5FC6";
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("host-store");
+    let memory = Arc::new(Memory::default());
+    let host = state(&source, &home);
+    let owner = configured_owner(&source, &home, &root.path().join("owner"));
+    let host = host.with_orchestration_runtime(shared_runtime(&source, &home, &memory));
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", owner.id);
+    let (status, declared) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":TARGET,"label":"Synthetic","expected_revision":null}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{declared}");
+    let (status, declared) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":SITE,"label":"Synthetic second clone","site_of":TARGET,
+            "expected_revision":declared["revision"]}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{declared}");
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        source.to_str().unwrap(),
+        "orchestration",
+    ];
+    let body = json!({
+        "machine": {"max_sessions": 4},
+        "tools": [{"tool":"codex","max_sessions":2}],
+        "targets": [{"target_id":TARGET,"tools":[{"tool":"codex"}],"max_sessions":3},
+            {"target_id":SITE,"tools":[{"tool":"codex"}],"max_sessions":3}],
+    });
+    let file = root.path().join("policy.json");
+    std::fs::write(&file, serde_json::to_vec(&body).unwrap()).unwrap();
+    let owner_id = owner.id.as_str();
+    cli_named(
+        &home,
+        &human,
+        &[
+            "policy",
+            "set",
+            "--project",
+            owner_id,
+            "--file",
+            file.to_str().unwrap(),
+        ],
+    );
+    let on = |target: &'static str, roles: &[&'static str]| -> Vec<&str> {
+        let mut arguments = vec![
+            "policy",
+            "role-sessions",
+            "--project",
+            owner_id,
+            "--target",
+            target,
+        ];
+        for role in roles {
+            arguments.extend(["--role", role]);
+        }
+        arguments
+    };
+    let expected = json!([{"code":"role_sessions_not_home",
+        "message":"role sessions start only on the project's home site; this entry has no effect",
+        "subject":SITE,"home_target_id":TARGET}]);
+
+    // On the site: stored as asked, and reported as having no effect.
+    let set = cli_named(&home, &human, &on(SITE, &["dispatcher"]));
+    assert_eq!(
+        set["policy"]["placement"]["role_sessions"],
+        json!([{"target_id":SITE,"roles":["dispatcher"]}])
+    );
+    assert_eq!(set["warnings"], expected, "{set}");
+    let printed = cli_outcome(&home, &human, &on(SITE, &["dispatcher"]));
+    assert!(
+        printed.contains(&format!(
+            "warning: role_sessions_not_home: target {SITE} is a site of the project whose home is {TARGET}"
+        )),
+        "{printed}"
+    );
+    // The service still reads the stored policy; validate and the dry run warn too.
+    let (status, read) = api(
+        router.clone(),
+        "GET",
+        &format!("{base}/policy"),
+        Value::Null,
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    for route in ["validate", "dry-run"] {
+        let (status, answer) = api(
+            router.clone(),
+            "POST",
+            &format!("{base}/policy/{route}"),
+            json!({}),
+            true,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{route}: {answer}");
+        assert_eq!(answer["valid"], true, "{route}: {answer}");
+        assert_eq!(answer["warnings"], expected, "{route}: {answer}");
+    }
+
+    // Cleared on the site and set on the home: nothing to warn about.
+    let cleared = cli_named(&home, &human, &on(SITE, &[]));
+    assert!(cleared.get("warnings").is_none(), "{cleared}");
+    let on_home = cli_named(&home, &human, &on(TARGET, &["dispatcher", "integrator"]));
+    assert!(on_home.get("warnings").is_none(), "{on_home}");
+    let printed = cli_outcome(&home, &human, &on(TARGET, &["dispatcher", "integrator"]));
+    assert!(!printed.contains("warning:"), "{printed}");
+    let (_, answer) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/policy/validate"),
+        json!({}),
+        true,
+    )
+    .await;
+    assert!(answer.get("warnings").is_none(), "{answer}");
+}

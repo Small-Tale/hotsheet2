@@ -20261,6 +20261,26 @@ components:
           description: The tool, account or target id the problem concerns.
           type: string
       additionalProperties: false
+    OrchestrationPolicyWarning:
+      description: An entry of a valid policy that has no effect (HS2-SYZB33), such as role_sessions_not_home for a
+        placement.role_sessions entry on a site that is not its project's home. It never makes the policy invalid.
+      type: object
+      required:
+        - code
+        - message
+        - subject
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        subject:
+          description: The target id the entry names.
+          type: string
+        home_target_id:
+          description: The home site of the target's project, where its role sessions start.
+          type: string
+      additionalProperties: false
     OrchestrationPolicyValidation:
       type: object
       required:
@@ -20291,6 +20311,11 @@ components:
             additionalProperties: false
         retired:
           $ref: '#/components/schemas/OrchestrationRetiredAuthority'
+        warnings:
+          description: Entries that have no effect; omitted when there are none (HS2-SYZB33).
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationPolicyWarning'
       additionalProperties: false
     OrchestrationPolicyDryRun:
       description: What a policy would let the orchestrator do per declared target; nothing is written or contacted.
@@ -20312,6 +20337,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrchestrationPolicyProblem'
+        warnings:
+          description: Entries that have no effect; omitted when there are none (HS2-SYZB33).
+          type: array
+          items:
+            $ref: '#/components/schemas/OrchestrationPolicyWarning'
         targets:
           type: array
           maxItems: 256

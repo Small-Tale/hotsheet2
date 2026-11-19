@@ -112,6 +112,25 @@ export function OrchestrationProjectDetailDemo() {
           formatTime={demoTime}
         />
       </CatalogExample>
+      <CatalogExample label="Another Site of a Project">
+        <OrchestrationProjectDetail
+          targetId={DEMO_TARGETS.api}
+          label="Web second clone"
+          where="Site of Web · Remote on Build Host"
+          binding={demoBinding('api')}
+          detail={{
+            targetId: DEMO_TARGETS.api,
+            admissions: [],
+            sessions: [],
+            loading: false,
+            limits: { ...listedLimits, targetId: DEMO_TARGETS.api, roleSessions: ['dispatcher'] },
+          }}
+          policyTools={policyTools}
+          homeLabel="Web"
+          toolLabel={demoToolLabel}
+          formatTime={demoTime}
+        />
+      </CatalogExample>
       <CatalogExample label="Loading">
         <OrchestrationProjectDetail
           targetId={DEMO_TARGETS.api}

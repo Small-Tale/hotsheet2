@@ -8,8 +8,8 @@ use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AccessRequest, AuditOutcome, AuditRecord, DeclarationState, IgnoredField, PermissionAction,
     PermissionKey, PolicyBody, PolicyDenial, PolicyProblem, PolicyQuestion, PolicyStore,
-    PolicyVerdict, PolicyView, RetiredAuthority, SchedulerStore, SessionLoad, SessionRequest,
-    SetPolicy, TargetAction, retired_authority,
+    PolicyVerdict, PolicyView, PolicyWarning, ProjectSites, RetiredAuthority, SchedulerStore,
+    SessionLoad, SessionRequest, SetPolicy, TargetAction, retired_authority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,10 @@ pub struct PolicyValidation {
     pub problems: Vec<PolicyProblem>,
     /// HS2-XHQ1EH: retired fields the policy still holds; each is ignored.
     pub ignored: Vec<IgnoredField>,
+    /// HS2-SYZB33: entries that have no effect, such as role sessions on a site that
+    /// is not its project's home. They never make the policy invalid.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<PolicyWarning>,
     /// HS2-XHQ1EH: grant and approval files on this machine, never read as authority.
     pub retired: RetiredAuthority,
 }
@@ -71,6 +75,9 @@ pub struct DryRun {
     pub source: &'static str,
     pub valid: bool,
     pub problems: Vec<PolicyProblem>,
+    /// HS2-SYZB33: entries that have no effect; see [`PolicyValidation::warnings`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<PolicyWarning>,
     pub targets: Vec<DryRunTarget>,
 }
 
@@ -151,10 +158,12 @@ impl OrchestrationRuntime {
                 .ok_or(OrchestrationError::NotFound)?,
         };
         let problems = body.problems(Some(&self.declared(owner_id)?));
+        let sites = ProjectSites::active(&self.declarations(owner_id)?.targets);
         Ok(PolicyValidation {
             valid: problems.is_empty(),
             problems,
             ignored: body.ignored_fields(),
+            warnings: body.warnings(&sites),
             retired: retired_authority(&self.home),
         })
     }
@@ -181,6 +190,7 @@ impl OrchestrationRuntime {
             .unwrap_or_default();
         let empty = PolicyBody::default();
         let policy = body.as_ref().unwrap_or(&empty);
+        let warnings = policy.warnings(&ProjectSites::active(&manifest.targets));
         let rules = self.permission_ledger().rules(owner_id)?;
         // HS2-J3ZF27: a Software project acts on nothing, whatever the policy says.
         let orchestrating = self.orchestrating(owner_id)?;
@@ -301,6 +311,7 @@ impl OrchestrationRuntime {
             source,
             valid: problems.is_empty(),
             problems,
+            warnings,
             targets,
         })
     }

@@ -310,3 +310,37 @@ fn hs2_5p112z_a_role_session_on_another_site_keeps_its_own_targets_rule() {
     world.sessions[1] = session("worker", 1, SessionActivity::Busy);
     assert_eq!(decided(&world.at(later), "site-dispatcher").0, "wind_down");
 }
+
+/// HS2-SYZB33: an entry on a site that is not its project's home is a warning that
+/// names the home, never a problem; the home's own entry, a one-site project and a
+/// site separated again warn nothing. The schedule ignores the site's entry either way.
+#[test]
+fn hs2_syzb33_role_sessions_on_a_site_warn_and_name_the_home() {
+    let mut world = project();
+    assert!(world.policy.warnings(&world.sites).is_empty());
+    opted(&mut world, 2, &[D]);
+    let warnings = world.policy.warnings(&world.sites);
+    assert_eq!(
+        warnings,
+        vec![PolicyWarning {
+            code: ROLE_SESSIONS_NOT_HOME,
+            message: "role sessions start only on the project's home site; this entry has no effect",
+            subject: target(2),
+            home_target_id: Some(target(1)),
+        }]
+    );
+    assert!(
+        world.policy.problems(None).is_empty(),
+        "a warning is not a problem"
+    );
+    let json = serde_json::to_value(&warnings).unwrap();
+    assert_eq!(json[0]["code"], "role_sessions_not_home");
+    assert_eq!(json[0]["home_target_id"], target(1));
+    assert!(
+        !roles_started(&world.now())
+            .iter()
+            .any(|name| name.ends_with("@2"))
+    );
+    // Separated again: target 2 is its own home, and its entry takes effect.
+    assert!(world.policy.warnings(&ProjectSites::default()).is_empty());
+}

@@ -5934,6 +5934,18 @@ dispatcher again.
   target's entry (no `--role` removes it) and sets it at the revision read, through the
   same policy route the form uses. A person runs it; an AI actor is refused. A repeat
   changes nothing.
+- **On another site of a project (HS2-SYZB33).** Role sessions start only on the
+  project's home site, so an entry on another site has no effect. It is still stored,
+  so policies set before the grouping keep reading and setting, but every surface says
+  so. The site's Coordination Sessions point at the home ("Coordination sessions start
+  only on <home>, this project's home site. Set them there.") and are unavailable,
+  except that roles a stored entry still lists stay checked with "The roles checked
+  here have no effect; clear them." until a person clears them.
+  `policy role-sessions --target <site>` sets the entry and answers `warnings`, also
+  printed on stderr with the home's id. `policy validate` and `policy dry-run` stay
+  valid and list `warnings`, each with `code` `role_sessions_not_home`, `message`,
+  `subject` (the site) and `home_target_id`; `warnings` is omitted when there are
+  none.
 - The scheduler's plan, explanation and decision log carry `role` on a role session's
   placement, and the decision's detail names the role.
 
@@ -5956,14 +5968,14 @@ the policy or its pool unreadable, no role session starts for the project anywhe
 because a second home would be a second pool and a second assignment authority for
 the same tickets. Work is still placed on the other sites. Their runs keep the bounded
 wait of §26.24 and then claim the ticket for their own session, as any run with no
-live dispatcher does. A failover home is HS2-EX594V; saying so when an entry names a site is HS2-SYZB33.
+live dispatcher does. A failover home is HS2-EX594V. An entry naming a site is reported as having no effect (HS2-SYZB33, "Surfaces" above).
 
 **Placing role sessions per project.** The scheduler's input carries the active
 grouping (`ScheduleInput.sites`):
 
 - A `placement.role_sessions` entry counts only when it names a home. An entry naming
-  another site starts nothing there; it applies again once that site is separated
-  into its own project.
+  another site starts nothing there, and validation warns `role_sessions_not_home`
+  (HS2-SYZB33); it applies again once that site is separated into its own project.
 - The home's **dispatcher** starts when placeable work exists on any site of the
   project and the home's pool shows no live dispatcher. It needs room on the home for
   itself and a worker, unless a worker of the project already runs, or another enabled
