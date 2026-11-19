@@ -75,17 +75,12 @@ pub(crate) enum ConnectionCmd {
         #[arg(long = "setting", value_name = "KEY=VALUE")]
         settings: Vec<String>,
     },
-    Show {
-        id: String,
-    },
+    /// Show one connection: its settings, whether its credential is stored, and its bindings.
+    Show { id: String },
     /// Make one cheap real call through the plugin and report the result.
-    Test {
-        id: String,
-    },
+    Test { id: String },
     /// Remove a connection and its credential. Refused while anything is bound to it.
-    Remove {
-        id: String,
-    },
+    Remove { id: String },
     /// Store the connection's credential in the OS credential store (value on standard input).
     Secret {
         id: String,
