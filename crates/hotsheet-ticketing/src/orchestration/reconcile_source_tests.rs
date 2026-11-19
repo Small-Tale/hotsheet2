@@ -333,6 +333,7 @@ fn finding_of_source(
         status: "started".into(),
         claimed_by: Some("w".into()),
         lease_expires_at_ms: Some(5_000),
+        claim_count: None,
     }));
     match source {
         ExternalSource::CiRun => observations.ci = observed.clone(),

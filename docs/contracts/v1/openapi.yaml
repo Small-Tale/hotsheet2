@@ -21123,6 +21123,10 @@ components:
             lease_expires_at_ms:
               type: integer
               minimum: 0
+            claim_count:
+              description: Claims the ticket had seen at this read; absent from older records and providers without counts (HS2-ZNET66).
+              type: integer
+              minimum: 0
           additionalProperties: false
         unreachable:
           description: Present while the target cannot be confirmed; `observed` is then stale.

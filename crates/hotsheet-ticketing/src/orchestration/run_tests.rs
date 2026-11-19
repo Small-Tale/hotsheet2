@@ -607,6 +607,7 @@ fn hs2_7qhwhj_observation_keeps_the_newest_read_and_when_an_outage_began() {
             started_phase: None,
             claimed_by: Some("worker-1".into()),
             lease_expires_at_ms: Some(9_000),
+            claim_count: None,
         }),
         ..RunUpdate::default()
     };

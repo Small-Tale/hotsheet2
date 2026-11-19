@@ -144,6 +144,7 @@ fn facts(status: &str, claim: Claim) -> TargetFacts {
         status: status.into(),
         claimed_by: claimed_by.map(Into::into),
         lease_expires_at_ms: lease,
+        claim_count: None,
     }
 }
 fn target(facts: TargetFacts) -> Observations {
@@ -1098,4 +1099,139 @@ fn hs2_ah8crs_the_scheduler_acts_only_on_a_retry_or_a_person_and_never_on_a_paus
     assert_eq!(A::Redispatch.code(), "redispatch");
     assert_eq!(A::AskPerson.code(), "needs_attention");
     assert_eq!(A::Leave("paused").code(), "paused");
+}
+
+/// HS2-ZNET66: a run observed with `seen` claims, whatever its state.
+fn observed_with(bench: &mut Bench, run: &Run, seen: Option<u32>) -> Run {
+    bench
+        .update(
+            run,
+            RunUpdate {
+                observed: Some(RunObservation {
+                    at_ms: NOW,
+                    status: "not_started".into(),
+                    started_phase: None,
+                    claimed_by: None,
+                    lease_expires_at_ms: None,
+                    claim_count: seen,
+                }),
+                ..RunUpdate::default()
+            },
+        )
+        .unwrap()
+}
+
+#[test]
+fn hs2_znet66_a_claim_taken_and_released_between_two_reads_intervenes_a_queued_run() {
+    use RunState::{Intervened, Queued};
+    // Every state, mode and claim, against every count last observed and read now.
+    // `align` is pure, so one observed run per state, mode and count serves every
+    // read; only a run that moves is applied, on a fresh copy.
+    let mut bench = Bench::new();
+    for state in RunState::ALL {
+        for mode in MODES {
+            for seen in [None, Some(0), Some(1)] {
+                let run = bench.run(state, mode);
+                let run = if state.is_terminal() {
+                    run
+                } else {
+                    observed_with(&mut bench, &run, seen)
+                };
+                for claim in CLAIMS {
+                    for now in [None, Some(0), Some(1), Some(2)] {
+                        let label = format!("{state:?} {mode:?} {claim:?} {seen:?} {now:?}");
+                        let mut read = facts("started", claim);
+                        read.claim_count = now;
+                        let without = TargetFacts {
+                            claim_count: None,
+                            ..read.clone()
+                        };
+                        let aligned = align(&run, &read, NOW);
+                        let moved = now.zip(seen).is_some_and(|(now, seen)| now > seen);
+                        let free = matches!(claim, Claim::Free | Claim::OursLapsed);
+                        if state != Queued || !free || !moved {
+                            // Everything else aligns exactly as it would without counts,
+                            // and a finished run never moves.
+                            assert_eq!(aligned, align(&run, &without, NOW), "{label}");
+                            continue;
+                        }
+                        assert_eq!(
+                            (aligned.to, aligned.reason, aligned.worker_id.as_deref()),
+                            (Some(Intervened), Some("claim_released"), None),
+                            "{label}"
+                        );
+                        assert!(state.may_become(Intervened), "{label}");
+                        // Before it is applied the claim source names the release.
+                        assert_eq!(
+                            assess(&run, &target(read.clone()), NOW)
+                                .finding(ExternalSource::TargetClaim)
+                                .unwrap()
+                                .reason
+                                .as_deref(),
+                            Some("claim_released"),
+                            "{label}"
+                        );
+                        // Applied with the read that found it, nothing is left to
+                        // align, and the same read again changes nothing.
+                        let fresh = bench.run(state, mode);
+                        let fresh = observed_with(&mut bench, &fresh, seen);
+                        let settled = bench.apply(&fresh, &aligned);
+                        let settled = observed_with(&mut bench, &settled, now);
+                        assert!(align(&settled, &read, NOW).is_none(), "{label}");
+                        assert_eq!(
+                            assess(&settled, &target(read.clone()), NOW).disposition,
+                            Disposition::NeedsAttention,
+                            "{label}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn hs2_znet66_a_queued_run_follows_reads_before_during_and_after_a_claim() {
+    use RunState::{Dispatched, Intervened, Queued};
+    let mut bench = Bench::new();
+    let read = |claim, count| {
+        let mut seen = facts("started", claim);
+        seen.claim_count = Some(count);
+        seen
+    };
+    // Seen during the claim: dispatched to its holder, then intervened on release,
+    // exactly as before counts were read.
+    let run = bench.run(Queued, DispatchMode::Dispatcher);
+    let run = observed_with(&mut bench, &run, Some(0));
+    let aligned = align(&run, &read(Claim::Ours, 1), NOW);
+    assert_eq!(aligned.to, Some(Dispatched));
+    let dispatched = bench.apply(&run, &aligned);
+    let run = observed_with(&mut bench, &dispatched, Some(1));
+    let aligned = align(&run, &read(Claim::Free, 1), NOW);
+    assert_eq!(
+        (aligned.to, aligned.reason),
+        (Some(Intervened), Some("claim_released"))
+    );
+
+    // Never seen claimed: the same release still intervenes it, once.
+    let run = bench.run(Queued, DispatchMode::Dispatcher);
+    let run = observed_with(&mut bench, &run, Some(0));
+    // An unchanged count with nothing held is still waiting for the dispatcher.
+    assert!(align(&run, &read(Claim::Free, 0), NOW).is_none());
+    let aligned = align(&run, &read(Claim::Free, 1), NOW);
+    assert_eq!(aligned.to, Some(Intervened));
+    let intervened = bench.apply(&run, &aligned);
+    let run = observed_with(&mut bench, &intervened, Some(1));
+    assert!(align(&run, &read(Claim::Free, 1), NOW).is_none());
+    // A later claim and release of an intervened dispatcher run is a person's to
+    // settle, as before.
+    assert!(align(&run, &read(Claim::Free, 2), NOW).is_none());
+
+    // No count recorded before the read (an older record, or none at all) keeps it
+    // waiting: nothing shows the claim came after the run was queued.
+    let run = bench.run(Queued, DispatchMode::Dispatcher);
+    let run = observed_with(&mut bench, &run, None);
+    assert!(align(&run, &read(Claim::Free, 3), NOW).is_none());
+    let unobserved = bench.run(Queued, DispatchMode::Dispatcher);
+    assert!(align(&unobserved, &read(Claim::Free, 3), NOW).is_none());
 }

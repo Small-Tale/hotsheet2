@@ -1173,3 +1173,84 @@ fn hs2_68dwam_a_sync_that_moves_the_run_on_drops_the_shown_reconciliation() {
         again.run.reconciliation
     );
 }
+
+#[test]
+fn hs2_znet66_a_queued_run_learns_a_claim_taken_and_released_between_two_syncs() {
+    let m = machine(10, false, unsupported);
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    bind_and_allow(
+        &m,
+        1,
+        &[
+            TargetAction::TicketsRead,
+            TargetAction::TicketsWrite,
+            TargetAction::WorkStart,
+        ],
+        &mut tx,
+    );
+    let orchestration = m.orchestration_ticket("Coordinate");
+    let ticket = target_ticket(&m, "Worked between two reads");
+    let queued = m
+        .runtime
+        .run_dispatch(
+            &m.owner.id,
+            dispatch(
+                &m,
+                &orchestration,
+                &ticket.id.to_string(),
+                "op-1",
+                json!({"mode":"dispatcher"}),
+            ),
+            Some(&worker()),
+            &mut tx,
+        )
+        .unwrap()
+        .run;
+    let sync = |tx: &mut Transaction<'_>| {
+        m.runtime
+            .run_sync(&m.owner.id, &queued.run_id, Some(&worker()), tx)
+            .unwrap()
+            .run
+    };
+    // The first read records the ticket's claim count.
+    let waiting = sync(&mut tx);
+    assert_eq!(waiting.state, RunState::Queued);
+    assert_eq!(waiting.observed.as_ref().unwrap().claim_count, Some(0));
+    // Read again with nothing changed: still waiting for the target's dispatcher.
+    assert_eq!(sync(&mut tx).state, RunState::Queued);
+    // The pool's worker claims, works and releases before the run reads again.
+    ops::claim_with_eta(
+        &m.target_store,
+        &ticket.id,
+        &NOW.into(),
+        LEASE.into(),
+        "pool-worker-3",
+        None,
+        None,
+    )
+    .unwrap();
+    ops::release(
+        &m.target_store,
+        &ticket.id,
+        NOW.into(),
+        "pool-worker-3",
+        false,
+    )
+    .unwrap();
+    let released = sync(&mut tx);
+    assert_eq!(released.state, RunState::Intervened);
+    assert_eq!(
+        released.history.last().unwrap().reason.as_deref(),
+        Some("claim_released")
+    );
+    assert_eq!(released.observed.as_ref().unwrap().claim_count, Some(1));
+    assert!(released.observed.as_ref().unwrap().claimed_by.is_none());
+    // Reading the same ticket again changes nothing more.
+    let again = sync(&mut tx);
+    assert_eq!(again.state, RunState::Intervened);
+    assert_eq!(again.history.len(), released.history.len());
+}

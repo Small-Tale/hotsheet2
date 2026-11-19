@@ -623,22 +623,37 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
         ),
         w_commit
     );
+    // HS2-ZNET66: the run sees the release on the peer's feed, and the home may record
+    // the handoff first: any pass relays every unfinished run and pulls the home's
+    // clone, so the two are not ordered. Wait for the run on its event stream.
     let w_run = w.run_id.clone().unwrap();
-    let run = fleet
-        .ok("GET", &format!("/runs/{w_run}"), Value::Null)
-        .await;
-    let intervened = run["history"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["to"] == "intervened")
-        .unwrap_or_else(|| panic!("the run never saw the release: {run:#}"));
+    let deadline = std::time::Instant::now() + 2 * MINUTE;
+    let mut cursor = 0;
+    let (run, intervened) = loop {
+        let run = fleet
+            .ok("GET", &format!("/runs/{w_run}"), Value::Null)
+            .await;
+        let seen = run["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["to"] == "intervened")
+            .cloned();
+        if let Some(intervened) = seen {
+            break (run, intervened);
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never saw the release: {run:#}"
+        );
+        cursor = fleet.next_event(Some(&w_run), cursor).await;
+    };
     assert!(
         intervened["at_ms"].as_u64().unwrap() >= released_at,
         "{run:#}"
     );
-    // The home recorded the handoff only after the run saw the release on the peer's
-    // feed: the release's run event is what woke the loop whose relay recorded it.
+    // The home recorded the handoff only after the peer released, whichever pass saw
+    // the release first: the run's event or another pass pulling the home's clone.
     let handed_at = handed
         .transitions
         .iter()
@@ -650,10 +665,7 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
                 / 1_000_000
         })
         .unwrap();
-    assert!(
-        handed_at >= i128::from(intervened["at_ms"].as_u64().unwrap()),
-        "{handed:#?} {run:#}"
-    );
+    assert!(handed_at >= i128::from(released_at), "{handed:#?} {run:#}");
 
     // 8. Handoffs are pending in the home's pool: the integrator starts on the home and
     //    lands each commit once, in order, on a linear main.

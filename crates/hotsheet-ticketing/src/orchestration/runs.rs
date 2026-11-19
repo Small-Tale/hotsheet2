@@ -208,6 +208,10 @@ pub struct RunObservation {
     pub claimed_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lease_expires_at_ms: Option<u64>,
+    /// HS2-ZNET66: how many claims the ticket has seen, so a claim taken and let go
+    /// between two reads is still noticed. Absent from older records and providers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_count: Option<u32>,
 }
 
 impl RunObservation {
@@ -217,6 +221,7 @@ impl RunObservation {
             && self.started_phase == other.started_phase
             && self.claimed_by == other.claimed_by
             && self.lease_expires_at_ms == other.lease_expires_at_ms
+            && self.claim_count == other.claim_count
     }
 }
 

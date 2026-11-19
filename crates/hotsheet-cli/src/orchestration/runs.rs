@@ -1025,6 +1025,10 @@ impl OrchestrationRuntime {
             let holder = text(&ticket, "claimed_by");
             let lease = field_ms(&ticket, "claim_lease_expires_at");
             let status = text(&ticket, "status").unwrap_or_default();
+            let claim_count = ticket
+                .get("claim_count")
+                .and_then(Value::as_u64)
+                .and_then(|count| u32::try_from(count).ok());
             // HS2-WBREDM: the alignment rules live in the pure core, shared with
             // reconciliation.
             let aligned = align(
@@ -1034,6 +1038,7 @@ impl OrchestrationRuntime {
                     status: status.into(),
                     claimed_by: holder.map(Into::into),
                     lease_expires_at_ms: lease,
+                    claim_count,
                 },
                 tx.clock.now_ms(),
             );
@@ -1056,6 +1061,7 @@ impl OrchestrationRuntime {
                         started_phase: text(&ticket, "started_phase").map(Into::into),
                         claimed_by: holder.map(Into::into),
                         lease_expires_at_ms: lease,
+                        claim_count,
                     }),
                     unreachable: Some(None),
                     from_target: true,

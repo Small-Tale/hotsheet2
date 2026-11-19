@@ -3648,7 +3648,15 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   placement on the matching site only, one dispatcher and one integrator on the home,
   the relay and `site_assigned`, overlapping scopes serialized across machines, the
   release waking the home's loop, a linear `main`, converged stores, and the peer
-  outage taking no second claim.
+  outage taking no second claim. The run's `intervened` and the home's `handoff` are
+  not ordered, so the test waits for the run on its event stream (HS2-ZNET66).
+- `reconcile_tests.rs # hs2_znet66` walks every run state, mode and claim against
+  every claim count last recorded and read now: only a `queued` run with no live claim
+  and a higher count becomes `intervened` (`claim_released`), once, and everything
+  else aligns as it would without counts. The sequences cover a claim seen live, one
+  missed between two reads, an unchanged count, and no recorded count.
+  `tests/runs.rs # hs2_znet66` drives `run sync` against a real store through a claim
+  and release between two reads.
 
 ### Keeping the automatic loop moving (HS2-DG0YPA, HS2-T16SK0, HS2-NPTKS8, HS2-R7QH35)
 

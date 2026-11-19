@@ -2458,7 +2458,7 @@ same run (§26.9), and a target ticket is created at most once per operation id
 ### Alignment and disposition
 
 The rules by which a run follows its target ticket live in the same module
-(`align`), and `run sync` applies them. They are the rules of §26.9, plus two an
+(`align`), and `run sync` applies them. They are the rules of §26.9, plus three an
 interruption needs:
 
 - A `requested` dispatcher run whose ticket already shows a live claim becomes
@@ -2467,6 +2467,11 @@ interruption needs:
 - A ticket finished before its dispatch was recorded completes the run
   (`requested` to `completed`), and a taken-over run whose ticket disappeared fails
   (`intervened` to `failed`). Without these edges such a run could never settle.
+- A `queued` run whose ticket shows no live claim, but more claims than the run's
+  last read recorded, becomes `intervened` (`claim_released`): a worker claimed,
+  worked and released between two reads, so the run never saw it `dispatched`
+  (HS2-ZNET66). Each read records the ticket's `claim_count` with what it observed;
+  a run with no count recorded before the read keeps waiting.
 
 After alignment the run gets a **disposition**:
 
@@ -6022,7 +6027,11 @@ waiting run reads the home's pool in `scheduler_assignments`. Its assignment nam
 
 The release changes the run's observed claim (the run becomes `intervened`), and that
 run event wakes the loop. The note therefore has to be in place before the release,
-because adding a note alone wakes nothing.
+because adding a note alone wakes nothing. Any other pass that sees the release first
+may record the handoff before the run's own sync turns it `intervened`: the home
+decides from the shared ticket alone, so the two are not ordered. A claim and release
+that both fall between two of the run's reads still turn a `queued` run `intervened`
+(§26.14, HS2-ZNET66), so the release wakes the loop and the timed asks start.
 
 The site's release, note and branch reach the home's clone of the shared store only
 through its remote (HS2-RCR4A6). So when the home would wait on them it pulls its clone
@@ -6134,16 +6143,18 @@ event stream or a file change, with a deadline. The whole path is proven:
 | One dispatcher and one integrator, on the home      | The loop starts exactly one of each, both on the home site, and five sessions in all                                                                                                                                                                 |
 | The site worker joins the home's pool               | The relay registers it under its session id, and its host tells it `site_assigned`                                                                                                                                                                   |
 | Overlapping scopes serialized                       | The home's pool refuses a home worker's scope that overlaps the peer's pending one, and offers it once the peer's work is integrated                                                                                                                 |
-| The release wakes the home's loop                   | The peer's release turns the run `intervened` on the peer's change feed, and the home then records the handoff with the pushed commit fetched; nothing asks the controller                                                                           |
+| The release wakes the home's loop                   | The peer's release turns the run `intervened` on the peer's change feed, and the home records the handoff after the release with the pushed commit fetched; nothing asks the controller                                                              |
 | Linear `main`, each commit once                     | No merge commits, each ticket's commit subject once, the same `main` on the remote and both machines                                                                                                                                                 |
 | All tickets complete and the stores converge        | Every run completes through its own site's feed, and both store clones have one `HEAD` and every ticket completed                                                                                                                                    |
 | One plan step whichever site defines it             | One ticket defined through the peer, the home and the peer again is one step, checked in with the home's connection id and shown with the peer's; a prerequisite named through the peer is an edge to the step planned through the home (HS2-EPRWB6) |
 | A peer outage takes no second claim                 | With the peer down and the home free again, a pass starts nothing for the peer's step, which keeps one run and one claim                                                                                                                             |
 
-The proof found and fixed three defects: a step's run on another machine named the
+The proof found and fixed four defects: a step's run on another machine named the
 home's connection id (HS2-3JGPDR, above); the relay skipped `intervened` runs, so a
-site's release never recorded its handoff; and the home could miss a release it had not
-pulled yet, now pulled and asked about again as described above.
+site's release never recorded its handoff; the home could miss a release it had not
+pulled yet, now pulled and asked about again as described above; and a queued run
+whose worker claimed and released between two of its reads stayed `queued`, so its
+release never woke the loop (HS2-ZNET66, §26.14).
 
 ## 26.31 Orchestration details in the inspector (HS2-2XJSJK)
 

@@ -152,6 +152,7 @@ impl OrchestrationRuntime {
                         status: observed.status.clone(),
                         claimed_by: observed.claimed_by.clone(),
                         lease_expires_at_ms: observed.lease_expires_at_ms,
+                        claim_count: observed.claim_count,
                     }),
                     None => Observed::Unverifiable("target_not_observed".into()),
                 }

@@ -107,6 +107,8 @@ pub struct TargetFacts {
     pub status: String,
     pub claimed_by: Option<String>,
     pub lease_expires_at_ms: Option<u64>,
+    /// HS2-ZNET66: how many claims the ticket has seen; `None` when unknown.
+    pub claim_count: Option<u32>,
 }
 
 impl TargetFacts {
@@ -117,6 +119,7 @@ impl TargetFacts {
             status: String::new(),
             claimed_by: None,
             lease_expires_at_ms: None,
+            claim_count: None,
         }
     }
 
@@ -226,6 +229,11 @@ pub fn align(run: &Run, facts: &TargetFacts, now_ms: u64) -> Alignment {
         ..Alignment::step(RunState::Dispatched, "assigned_by_dispatcher")
     };
     match (run.state, run.mode) {
+        // HS2-ZNET66: its worker claimed, worked and released between two reads, so
+        // the run was never seen dispatched; the release still makes it `intervened`.
+        (RunState::Queued, _) if live.is_none() && claimed_meanwhile(run, facts) => {
+            Alignment::step(RunState::Intervened, "claim_released")
+        }
         (RunState::Queued, _) => live.map_or_else(Alignment::default, assigned),
         // The Up Next mark was set and the answer lost: whoever the target's
         // dispatcher assigned holds the work, and it is never queued twice.
@@ -433,6 +441,16 @@ fn ticket_verdict(facts: &TargetFacts) -> Result<(), &'static str> {
     }
 }
 
+/// HS2-ZNET66: a claim was taken and let go between two reads of the ticket. No
+/// holder is left to see, but its claim count moved past what the run last observed.
+/// Unknown on either side (an older record, a provider without counts) is never.
+fn claimed_meanwhile(run: &Run, facts: &TargetFacts) -> bool {
+    facts
+        .claim_count
+        .zip(run.observed.as_ref().and_then(|seen| seen.claim_count))
+        .is_some_and(|(now, seen)| now > seen)
+}
+
 fn claim_verdict(run: &Run, facts: &TargetFacts, now_ms: u64) -> Result<(), &'static str> {
     let live = facts.live_holder(now_ms);
     let ours = live.is_some() && live == run.worker_id.as_deref();
@@ -441,6 +459,7 @@ fn claim_verdict(run: &Run, facts: &TargetFacts, now_ms: u64) -> Result<(), &'st
         (RunState::Dispatched, _) if live.is_some() => Err("claim_taken"),
         (RunState::Dispatched, _) => Err("claim_released"),
         (RunState::Queued, _) if live.is_some() => Err("assigned_by_dispatcher"),
+        (RunState::Queued, _) if claimed_meanwhile(run, facts) => Err("claim_released"),
         (RunState::Requested, DispatchMode::Direct) if live.is_some() && !ours => {
             Err("claim_held_by_other")
         }
