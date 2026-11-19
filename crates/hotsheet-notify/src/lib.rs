@@ -18,6 +18,7 @@ pub mod links;
 pub mod message;
 pub mod notifier;
 pub mod registry;
+pub mod remote_change;
 pub mod render;
 pub mod settings;
 pub mod testing;

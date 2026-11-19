@@ -2900,7 +2900,7 @@ fn gated_next_claim(
     match claim_gate::gate_claim(store, gate, t, worker, now)? {
         claim_gate::GateOutcome::HeldBy(holder) => {
             let mut current = store.read_ticket(&t.id)?;
-            claim_gate::adopt_holder(&mut current, &holder, now);
+            claim_gate::adopt_holder(gate, &mut current, &holder, now);
             store.write_ticket_committing(&current)?;
             Ok(false)
         }
@@ -3039,7 +3039,7 @@ pub fn claim_with_eta(
             if let claim_gate::GateOutcome::HeldBy(holder) =
                 claim_gate::gate_claim(store, &gate, &t, worker, now)?
             {
-                return Err(held_elsewhere(store, id, &holder, worker, now)?);
+                return Err(held_elsewhere(store, &gate, id, &holder, worker, now)?);
             }
         }
         start_claimed_ticket(&mut t, now);
@@ -3052,6 +3052,7 @@ pub fn claim_with_eta(
 /// every reader agrees with the backend, and refuse the claim naming that holder.
 fn held_elsewhere(
     store: &FsStore,
+    gate: &claim_gate::TicketGate,
     id: &Ulid,
     holder: &crate::gitref_cas::RefMarker,
     worker: &str,
@@ -3059,13 +3060,13 @@ fn held_elsewhere(
 ) -> Result<OpError, OpError> {
     let mut current = store.read_ticket(id)?;
     let before = current.clone();
-    claim_gate::adopt_holder(&mut current, holder, now);
+    claim_gate::adopt_holder(gate, &mut current, holder, now);
     if current != before {
         store.write_ticket_committing(&current)?;
     }
     Ok(OpError::WrongWorker {
         slug: current.slug,
-        holder: holder.worker.clone(),
+        holder: gate.holder_name(holder),
         worker: worker.to_string(),
     })
 }
@@ -3293,10 +3294,10 @@ where
             && holder != worker
             && let Ok(Some((_, marker))) =
                 gate.cas.read(&crate::gitref_cas::GitRefCas::ticket_ref(id))
-            && marker.worker == worker
+            && gate.owns(&marker.worker, worker)
         {
             let at = t.updated_at.clone();
-            claim_gate::adopt_holder(&mut t, &marker, &at);
+            claim_gate::adopt_holder(gate, &mut t, &marker, &at);
         }
         match &t.claimed_by {
             Some(holder) if holder == worker => {}
@@ -3338,7 +3339,7 @@ where
             && let claim_gate::GateOutcome::HeldBy(holder) =
                 claim_gate::gate_renew(store, gate, &t, worker, &now, &lease_expires)?
         {
-            return Err(held_elsewhere(store, id, &holder, worker, &now)?);
+            return Err(held_elsewhere(store, gate, id, &holder, worker, &now)?);
         }
         t.claim_lease_expires_at = Some(lease_expires.clone());
         if let Some(eta) = eta {

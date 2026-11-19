@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
+use hotsheet_resource_claims::external::{
+    SettingType, approval_state, approve, approve_if_new, check_settings, load_all, load_plugin,
+    plugin_root, secret_account,
+};
+use hotsheet_resource_claims::upstash::{TOKEN_SETTING, check_settings as check_upstash_settings};
 use hotsheet_resource_claims::{
     OfflinePolicy, configuration_json, export_key, generate_key, import_key, key_next_step,
     test_configuration,
@@ -16,6 +21,7 @@ use hotsheet_ticketing::claim_backends::{
     BackendConfiguration, BackendKind, Change, ClaimRegistry, Registries, RegistryError, Scope,
     git_store_sources, validate_id, validate_source,
 };
+use hotsheet_ticketing::secrets::SecretStore;
 use hotsheet_ticketing::{FsStore, OsKeychain};
 use serde_json::{Value, json};
 
@@ -44,6 +50,10 @@ pub(crate) enum BackendCmd {
         /// `resource-claims.<id>` (see `resource backend key`).
         #[arg(long)]
         credential: bool,
+        /// With `--credential`, do not generate the key when the configuration is created:
+        /// this machine will import the key another machine exported (HS2-EWGPTZ).
+        #[arg(long, requires = "credential")]
+        no_key: bool,
         /// While the backend is unreachable: `fail-closed` (default) or `provisional`.
         #[arg(long, default_value = "fail-closed")]
         offline: String,
@@ -73,6 +83,18 @@ pub(crate) enum BackendCmd {
         #[command(flatten)]
         scope: ScopeArg,
     },
+    /// Store a secret setting of an external plugin in the OS credential store; the value is
+    /// read from standard input and never printed (HS2-322ZSZ).
+    Secret {
+        id: String,
+        /// The plugin setting, declared `type = "secret"` in its manifest.
+        key: String,
+        /// Remove the stored secret instead.
+        #[arg(long)]
+        delete: bool,
+        #[command(flatten)]
+        scope: ScopeArg,
+    },
     /// Put the configuration's key in the OS credential store, or copy it out.
     Key {
         id: String,
@@ -88,6 +110,17 @@ pub(crate) enum BackendCmd {
         #[command(flatten)]
         scope: ScopeArg,
     },
+}
+
+/// `resource plugin`: the external claim-backend plugins on this machine (HS2-322ZSZ).
+#[derive(Subcommand)]
+pub(crate) enum PluginCmd {
+    /// List plugins under `<HOTSHEET_HOME>/claim-backends/`, their approval, and any that
+    /// failed to load.
+    List,
+    /// Approve a plugin as it is now. Review its directory first: approval covers exactly
+    /// the files that exist, and any change needs approving again.
+    Trust { id: String },
 }
 
 #[derive(Subcommand)]
@@ -213,6 +246,7 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             kind,
             settings,
             credential,
+            no_key,
             offline,
             scope,
         } => {
@@ -235,19 +269,45 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
                 configuration.credential = Some(BackendConfiguration::default_credential(&id));
             }
             configuration.offline = parse_offline(&offline)?;
+            if configuration.kind == BackendKind::UpstashRedis {
+                check_upstash_settings(&configuration).map_err(claim_error)?;
+            }
+            let plugin = if configuration.kind == BackendKind::External {
+                let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
+                check_settings(&manifest, &configuration).map_err(claim_error)?;
+                Some(manifest)
+            } else {
+                None
+            };
             let target = scope_of(&scope);
             let change = mutate(&target, |r| r.upsert_configuration(configuration.clone()))?;
-            let next_steps: Vec<String> = if credential {
-                vec![format!(
-                    "unless this machine already has the key: {}",
-                    key_next_step(&id)
-                )]
-            } else {
-                Vec::new()
+            // Adding a configuration approves its plugin as it is now; adding again never
+            // re-trusts code that changed since (HS2-208RB1's rule, for claim backends).
+            let approval = match &plugin {
+                Some(manifest) => {
+                    approve_if_new(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+                    Some(
+                        approval_state(&home(), &manifest.id, &manifest.dir)
+                            .map_err(claim_error)?,
+                    )
+                }
+                None => None,
             };
+            let (key, mut next_steps) = if credential {
+                created_key(&OsKeychain::at(home()), &configuration, change, no_key)
+            } else {
+                (json!(null), Vec::new())
+            };
+            if configuration.kind == BackendKind::UpstashRedis {
+                next_steps.push(format!(
+                    "store the database's REST token: `hotsheet-cli resource backend secret {id} {TOKEN_SETTING}` with the token on standard input, then `hotsheet-cli resource backend test {id}`"
+                ));
+            }
             print(&json!({
                 "change": change,
                 "configuration": configuration_json(target.name(), &configuration, &[]),
+                "key": key,
+                "plugin": approval,
                 "next_steps": next_steps,
             }))
         }
@@ -300,6 +360,70 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             let change = mutate(&scope_of(&scope), |r| r.remove_configuration(&id))?;
             print(&json!({ "change": change, "id": id }))
         }
+        BackendCmd::Secret {
+            id,
+            key,
+            delete,
+            scope,
+        } => {
+            let (_, configuration, _) = find(&scope, &id)?;
+            match configuration.kind {
+                BackendKind::External => {
+                    let manifest = load_plugin(&home(), &configuration).map_err(claim_error)?;
+                    let declared = manifest
+                        .setting(&key)
+                        .is_some_and(|spec| spec.kind == SettingType::Secret);
+                    if !declared {
+                        bail!(
+                            "invalid: plugin '{}' declares no secret setting '{key}'",
+                            manifest.id
+                        );
+                    }
+                }
+                BackendKind::UpstashRedis => {
+                    if key != TOKEN_SETTING {
+                        bail!(
+                            "invalid: an upstash-redis backend keeps one secret, '{TOKEN_SETTING}'"
+                        );
+                    }
+                }
+                _ => bail!(
+                    "invalid: a {} backend has no secret settings",
+                    configuration.kind.as_str()
+                ),
+            }
+            let secrets = OsKeychain::at(home());
+            let account = secret_account(&id, &key);
+            let change = if delete {
+                if secrets.delete(&account).map_err(secret_error)? {
+                    Change::Removed
+                } else {
+                    Change::Absent
+                }
+            } else {
+                let mut value = String::new();
+                std::io::stdin()
+                    .take(8192)
+                    .read_to_string(&mut value)
+                    .context("reading the secret from standard input")?;
+                let value = value.trim_end_matches(['\r', '\n']);
+                if value.is_empty() {
+                    bail!("invalid: the secret on standard input is empty");
+                }
+                let previous = secrets.get(&account).map_err(secret_error)?;
+                if previous.as_deref() == Some(value) {
+                    Change::Unchanged
+                } else {
+                    secrets.set(&account, value).map_err(secret_error)?;
+                    if previous.is_some() {
+                        Change::Updated
+                    } else {
+                        Change::Created
+                    }
+                }
+            };
+            print(&json!({ "change": change, "configuration": id, "secret": key }))
+        }
         BackendCmd::Key {
             id,
             generate,
@@ -328,6 +452,47 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             };
             print(&json!({ "change": change, "configuration": id }))
         }
+    }
+}
+
+/// HS2-EWGPTZ: a configuration created with `--credential` gets its key at once, so the
+/// first machine can claim without a second step. A configuration that already existed
+/// keeps its key (it may have been imported), and an unavailable credential store does
+/// not fail the add: the answer names the commands that finish it.
+pub(crate) fn created_key<S: hotsheet_ticketing::secrets::SecretStore>(
+    secrets: &S,
+    configuration: &BackendConfiguration,
+    change: hotsheet_ticketing::claim_backends::Change,
+    skipped: bool,
+) -> (Value, Vec<String>) {
+    use hotsheet_ticketing::claim_backends::Change;
+    let id = &configuration.id;
+    if skipped {
+        return (
+            json!({ "status": "skipped" }),
+            vec![format!("import the key: {}", key_next_step(id))],
+        );
+    }
+    if change != Change::Created {
+        return (
+            json!({ "status": "kept" }),
+            vec![format!(
+                "unless this machine already has the key: {}",
+                key_next_step(id)
+            )],
+        );
+    }
+    match generate_key(secrets, configuration) {
+        Ok(change) => (
+            json!({ "status": "ready", "change": change }),
+            vec![format!(
+                "copy the key to every other machine that shares this configuration: `hotsheet-cli resource backend key {id} --export` here, `hotsheet-cli resource backend key {id} --import` there"
+            )],
+        ),
+        Err(error) => (
+            json!({ "status": "unavailable", "error": format!("{}: {error}", error.code()) }),
+            vec![key_next_step(id)],
+        ),
     }
 }
 
@@ -366,7 +531,7 @@ pub(crate) fn namespace(cmd: NamespaceCmd) -> Result<()> {
     }
 }
 
-fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
+pub(crate) fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
     if let Some(store) = store {
         let store = FsStore::open(store)
             .with_context(|| format!("opening the ticket store at {}", store.display()))?;
@@ -380,6 +545,56 @@ fn source_key(source: Option<String>, store: Option<&Path>) -> Result<String> {
     }
     let source = source.ok_or_else(|| anyhow!("name a source or pass --store <path>"))?;
     validate_source(&source).map_err(registry_error)
+}
+
+fn claim_error(e: hotsheet_resource_claims::ClaimError) -> anyhow::Error {
+    anyhow!("{}: {e}", e.code())
+}
+
+fn secret_error(e: hotsheet_ticketing::secrets::SecretError) -> anyhow::Error {
+    anyhow!("backend_unreachable: OS credential store: {e}")
+}
+
+pub(crate) fn plugin(cmd: PluginCmd) -> Result<()> {
+    let root = plugin_root(&home());
+    match cmd {
+        PluginCmd::List => {
+            let (plugins, load_errors) = load_all(&root);
+            let mut listed = Vec::new();
+            for manifest in &plugins {
+                let approval =
+                    approval_state(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+                listed.push(json!({
+                    "id": manifest.id,
+                    "display_name": manifest.display_name,
+                    "directory": manifest.dir,
+                    "capabilities": manifest.capabilities(),
+                    "settings": manifest.settings,
+                    "approval": approval,
+                }));
+            }
+            print(&json!({
+                "directory": root,
+                "plugins": listed,
+                "load_errors": load_errors,
+            }))
+        }
+        PluginCmd::Trust { id } => {
+            let (plugins, load_errors) = load_all(&root);
+            let Some(manifest) = plugins.iter().find(|m| m.id == id) else {
+                let why = load_errors
+                    .iter()
+                    .find(|e| e.contains(&id))
+                    .cloned()
+                    .unwrap_or_else(|| format!("expected {}", root.join(&id).display()));
+                bail!("not_found: no loadable claim-backend plugin '{id}' ({why})");
+            };
+            let change = approve(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+            let state =
+                approval_state(&home(), &manifest.id, &manifest.dir).map_err(claim_error)?;
+            print(&json!({ "change": change, "id": id, "approval": state }))
+        }
+    }
 }
 
 pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
@@ -406,7 +621,16 @@ pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
                 }
                 (None, None) => bail!("pass --backend <id> or --like <source>"),
             };
-            require_configuration(&scope, &configuration)?;
+            let (_, bound, _) = find(&scope, &configuration)?;
+            if matches!(
+                bound.kind,
+                BackendKind::External | BackendKind::UpstashRedis
+            ) {
+                bail!(
+                    "unsupported: ticket claims cannot go through a {} backend yet (HS2-3SJ8JX); '{configuration}' serves resource namespaces only",
+                    bound.kind.as_str()
+                );
+            }
             let change = mutate(&scope_of(&scope), |r| {
                 Ok(r.bind_source(&key, &configuration))
             })?;
@@ -421,5 +645,83 @@ pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
             let change = mutate(&scope_of(&scope), |r| Ok(r.unbind_source(&key)))?;
             print(&json!({ "change": change, "source": key }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    use hotsheet_ticketing::claim_backends::Change;
+    use hotsheet_ticketing::secrets::{SecretError, SecretStore};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Memory(Mutex<BTreeMap<String, String>>);
+
+    impl SecretStore for Memory {
+        fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
+            self.0.lock().unwrap().insert(account.into(), secret.into());
+            Ok(())
+        }
+        fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
+            Ok(self.0.lock().unwrap().get(account).cloned())
+        }
+        fn delete(&self, account: &str) -> Result<bool, SecretError> {
+            Ok(self.0.lock().unwrap().remove(account).is_some())
+        }
+    }
+
+    struct Unavailable;
+
+    impl SecretStore for Unavailable {
+        fn set(&self, _: &str, _: &str) -> Result<(), SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+        fn get(&self, _: &str) -> Result<Option<String>, SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+        fn delete(&self, _: &str) -> Result<bool, SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+    }
+
+    fn keyed(id: &str) -> BackendConfiguration {
+        let mut configuration = BackendConfiguration::new(id, BackendKind::GitRef).unwrap();
+        configuration.credential = Some(BackendConfiguration::default_credential(id));
+        configuration
+    }
+
+    #[test]
+    fn hs2_ewgptz_a_created_configuration_gets_its_key_once() {
+        let store = Memory::default();
+        let configuration = keyed("shared");
+        let (key, steps) = created_key(&store, &configuration, Change::Created, false);
+        assert_eq!(key["status"], "ready");
+        assert!(steps[0].contains("--export"));
+        let first = store.get("resource-claims.shared").unwrap().unwrap();
+        // The same add again keeps the key rather than replacing it.
+        let (key, _) = created_key(&store, &configuration, Change::Unchanged, false);
+        assert_eq!(key["status"], "kept");
+        assert_eq!(store.get("resource-claims.shared").unwrap().unwrap(), first);
+    }
+
+    #[test]
+    fn hs2_ewgptz_no_key_leaves_the_store_empty_and_names_the_import() {
+        let store = Memory::default();
+        let (key, steps) = created_key(&store, &keyed("shared"), Change::Created, true);
+        assert_eq!(key["status"], "skipped");
+        assert!(steps[0].contains("--import"));
+        assert!(store.get("resource-claims.shared").unwrap().is_none());
+    }
+
+    #[test]
+    fn hs2_ewgptz_an_unavailable_credential_store_does_not_fail_the_add() {
+        let (key, steps) = created_key(&Unavailable, &keyed("shared"), Change::Created, false);
+        assert_eq!(key["status"], "unavailable");
+        assert!(key["error"].as_str().unwrap().contains("no store"));
+        assert!(steps[0].contains("--generate"));
     }
 }

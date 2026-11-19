@@ -77,3 +77,8 @@ pub(crate) fn digest(key: &hmac::Key, token: &str) -> String {
 pub(crate) fn matches(key: &hmac::Key, token: &str, stored_digest: &str) -> bool {
     unhex(stored_digest).is_some_and(|tag| hmac::verify(key, token.as_bytes(), &tag).is_ok())
 }
+
+/// SHA-256 of a renewal token, hex: what an external backend stores to recognise it.
+pub(crate) fn sha256_hex(token: &str) -> String {
+    hex(ring::digest::digest(&ring::digest::SHA256, token.as_bytes()).as_ref())
+}

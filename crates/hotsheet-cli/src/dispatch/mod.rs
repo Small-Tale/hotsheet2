@@ -24,8 +24,10 @@ mod orchestration_scheduler;
 mod orchestration_sessions;
 mod orchestration_validation;
 pub(crate) mod providers;
+pub(crate) mod remote_change;
 pub(crate) mod remotes;
 pub(crate) mod resource_backends;
+pub(crate) mod resource_remote;
 pub(crate) mod resources;
 pub(crate) mod screensaver;
 pub(crate) mod server;
@@ -76,7 +78,7 @@ impl Cmd {
             Orchestration(_) => Group::Orchestration,
             Coordination(_) => Group::Coordination,
             Notify { .. } => Group::Notify,
-            Resource { .. } => Group::Resources,
+            Resource { .. } | RemoteChange { .. } => Group::Resources,
             Job { .. } => Group::Jobs,
             Init { .. }
             | Bootstrap { .. }
@@ -202,6 +204,7 @@ impl Cmd {
                 | Cmd::Guidance { .. }
                 | Cmd::Notify { .. }
                 | Cmd::Resource { .. }
+                | Cmd::RemoteChange { .. }
                 | Cmd::TerminalRelay { .. }
                 | Cmd::Screensaver { .. }
                 | Cmd::Serve { list: true, .. }
@@ -235,6 +238,7 @@ impl Cmd {
                 | Cmd::Notifications { .. }
                 | Cmd::Notify { .. }
                 | Cmd::Resource { .. }
+                | Cmd::RemoteChange { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
                 | Cmd::PermissionDiscard { .. }
@@ -269,7 +273,10 @@ pub(crate) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Group::Setup => setup::run(cmd, ctx),
         Group::Coordination => coordination::run(cmd, ctx),
         Group::Notify => notify::run(cmd, ctx),
-        Group::Resources => resources::run(cmd, ctx),
+        Group::Resources => match cmd {
+            Cmd::RemoteChange { .. } => remote_change::run(cmd, ctx),
+            _ => resources::run(cmd, ctx),
+        },
         Group::Jobs => jobs::run(cmd, ctx),
     }
 }

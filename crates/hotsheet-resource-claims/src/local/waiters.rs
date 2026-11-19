@@ -51,6 +51,17 @@ impl Waiter {
     /// Sleep until a wake-up arrives or `timeout` passes, whichever is first.
     pub(crate) fn park(&self, timeout: Duration) -> io::Result<()> {
         let mut byte = [0u8; 1];
+        // HS2-QGY1NN: under an `InterruptGuard`, poll the stop pipe beside the socket so a
+        // SIGTERM or SIGINT ends the wait and this waiter's drop removes its registration.
+        #[cfg(unix)]
+        if let Some(stopped) = crate::interrupt::poll_socket(&self.socket, timeout)? {
+            if stopped {
+                return Err(io::Error::from(io::ErrorKind::Interrupted));
+            }
+            self.socket.set_nonblocking(true)?;
+            while self.socket.recv(&mut byte).is_ok() {}
+            return Ok(());
+        }
         self.socket.set_nonblocking(false)?;
         self.socket
             .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;

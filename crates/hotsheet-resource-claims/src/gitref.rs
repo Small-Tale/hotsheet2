@@ -13,15 +13,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ring::digest;
-
 use hotsheet_ticketing::gitref_cas::{
     Acquired, CasError, GitRefCas, RESOURCE_REF_PREFIX, RefMarker,
 };
 
 use crate::backend::ClaimBackend;
 use crate::clock::{Clock, SystemClock};
-use crate::codec::{FileKeyProvider, KeyProvider, MetadataCodecs, hex};
+use crate::codec::{FileKeyProvider, KeyProvider, MetadataCodecs};
 use crate::config::OfflinePolicy;
 use crate::error::ClaimError;
 use crate::local::{LOCAL_ROOT_DIR, LocalBackend};
@@ -51,7 +49,7 @@ impl std::fmt::Debug for GitRefBackend {
 }
 
 fn token_digest(token: &str) -> String {
-    hex(digest::digest(&digest::SHA256, token.as_bytes()).as_ref())
+    token::sha256_hex(token)
 }
 
 impl GitRefBackend {
@@ -166,7 +164,7 @@ impl ClaimBackend for GitRefBackend {
                 self.configuration
             ))
         })?;
-        MetadataCodecs::new(&keys.key()?)
+        Ok(MetadataCodecs::new(&keys.key()?)?)
     }
 
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError> {
@@ -208,7 +206,7 @@ impl ClaimBackend for GitRefBackend {
                 Err(ClaimError::WaitTimedOut { holder })
             }
             Err(ClaimError::HeldBy { .. }) => Err(ClaimError::Unsupported(
-                "the git-ref backend cannot wait; acquire again later".into(),
+                "the git-ref backend cannot wait: a Git remote cannot signal a release. Acquire again later, or bind this namespace to a backend that can wait (local, upstash-redis, or an external plugin with a blocking wait; docs/36 section 36.14)".into(),
             )),
             other => other,
         }
@@ -318,7 +316,7 @@ impl ClaimBackend for GitRefBackend {
                 holder: Box::new(holder),
             }),
             Some(_) => Err(ClaimError::Unsupported(
-                "the git-ref backend cannot wait; check again later".into(),
+                "the git-ref backend cannot wait: a Git remote cannot signal a release. Check again later, or bind this namespace to a backend that can wait (docs/36 section 36.14)".into(),
             )),
         }
     }

@@ -1503,3 +1503,48 @@ engine-specific parts by hand. The saver takes over the display and a key press 
 8. `hotsheet-cli screensaver uninstall`, then confirm the snapshot file stops appearing.
 
 Record the macOS version and the result.
+
+## Upstash claim backend against a real database (HS2-K9J1RK)
+
+The Lua scripts of the Upstash claim backend (`docs/36` §36.17) run only against real Redis here;
+CI uses a fake that applies their contract. Run this after any change to
+`crates/hotsheet-resource-claims/src/upstash/scripts.rs` and before relying on a new database.
+
+1. Create a dedicated, disposable Upstash Redis database. Never use one that holds other data.
+2. From the repository root, run `HOTSHEET_TEST_UPSTASH_URL=<REST URL> HOTSHEET_TEST_UPSTASH_TOKEN=<token>
+cargo nextest run -p hotsheet-resource-claims --test upstash_live`. Both tests must pass: the
+   conformance suite, then a release waking a parked waiter in under 20 seconds with a larger
+   fencing token.
+3. Through the CLI, with a throwaway `HOTSHEET_HOME`: `hotsheet-cli resource backend add up --kind
+upstash-redis --setting url=<REST URL> --setting prefix=manual`, then
+   `hotsheet-cli resource backend secret up token` (token on standard input) and `resource backend test up`
+   (expect `ok: true`). Bind a namespace (`resource namespace bind vms --backend up`).
+4. From two terminals, `resource acquire vms/one --duration 30s` in the first and `resource acquire
+vms/one --duration 30s --wait 60s` in the second; release the first and confirm the second acquires
+   within a second or two with a larger `fencing_token`. Repeat with the first left to expire.
+5. Watch the database's command count while a wait is parked: it must not climb on a timer.
+6. Record the date and the Upstash plan in the ticket. Flush the database when done: each run leaves
+   its fencing counters and name sets (claim keys expire on their own).
+
+## Ably remote-change connection against the real service (HS2-BWJWWX)
+
+CI uses a scripted fake of Ably Realtime on loopback. This checks the real TLS handshake, the
+protocol constants and the GitHub to Ably webhook path (`docs/37` §37.9). Use a throwaway Ably app
+and a repository you can push to. Never use a key that can publish or manage the app.
+
+1. In Ably, create an app, an API key with only the subscribe capability on one channel
+   (`repo-events`), and an incoming webhook integration that publishes to that channel. In the
+   repository, add a webhook for push events to the integration URL (content type JSON).
+2. With a throwaway `HOTSHEET_HOME`: `hotsheet-cli remote-change connection add shared --plugin ably`,
+   `connection secret shared` (key on standard input), `connection test shared` (expect `ok: true`).
+   A wrong key must fail with `auth_failed` and the output must not contain the key.
+3. Bind a checkout or store: `bind checkout:<id> --connection shared --channel repo-events --repository
+<owner/name>`. Start a server (or the hub in a test harness) and confirm the connection reads
+   `connected` and the bound source is asked to recheck once.
+4. Push a commit to the bound branch: within a few seconds the source receives one change hint naming
+   the ref and the new tip. Push to a tag and to a branch the binding does not follow: neither is
+   delivered. Redeliver the same webhook from GitHub: it is not delivered twice.
+5. Disable the network for a minute and restore it: health shows `reconnecting` with a growing delay,
+   then `connected`, and every bound source is asked to recheck.
+6. Revoke the key in Ably: health becomes `auth_failed` and the connection stops retrying.
+7. Record the date and the Ably plan in the ticket.

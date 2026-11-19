@@ -45,6 +45,13 @@ fn lease(minutes: i64) -> Timestamp {
 /// A bare store remote with `count` tickets, a project binding of the store identity to
 /// a `git_ref` configuration with `offline`, and two clones.
 fn fleet(count: usize, offline: OfflinePolicy) -> Fleet {
+    fleet_with(count, offline, "shared", false)
+}
+
+/// [`fleet`] with an explicit configuration id, optionally naming a credential-store key
+/// (HS2-EWGPTZ). A keyed configuration id is unique per test, because the key account is
+/// derived from it and the machine home is shared by the test process.
+fn fleet_with(count: usize, offline: OfflinePolicy, id: &str, credential: bool) -> Fleet {
     let dir = tempfile::tempdir().unwrap();
     let bare = dir.path().join("store.git");
     let (a_path, b_path) = (dir.path().join("a"), dir.path().join("b"));
@@ -94,10 +101,13 @@ fn fleet(count: usize, offline: OfflinePolicy) -> Fleet {
         root: a_path.clone(),
     }
     .update(|r| {
-        let mut config = BackendConfiguration::new("shared", BackendKind::GitRef)?;
+        let mut config = BackendConfiguration::new(id, BackendKind::GitRef)?;
         config.offline = offline;
+        if credential {
+            config.credential = Some(BackendConfiguration::default_credential(id));
+        }
         r.upsert_configuration(config)?;
-        r.bind_source(&source, "shared");
+        r.bind_source(&source, id);
         Ok(())
     })
     .unwrap();
@@ -425,4 +435,301 @@ fn hs2_wjf0d8_a_sync_that_pulls_flags_a_claim_lost_to_another_machine() {
         ops::renew(&f.a, &id, now(), lease(60), "worker-a"),
         Err(OpError::WrongWorker { holder, .. }) if holder == "worker-b"
     ));
+}
+
+// ---- HS2-EWGPTZ: holder fields never reach the backend in plain ----
+
+fn unique_id(prefix: &str) -> String {
+    format!("{prefix}-{}", Ulid::new().to_string().to_lowercase())
+}
+
+/// An in-memory credential store for this test's thread: `ticket_gate_at` reads it
+/// instead of the native adapter (HS2-SFVWN5 forbids native credentials in unit tests).
+#[derive(Default)]
+struct MemorySecrets(std::sync::Mutex<std::collections::BTreeMap<String, String>>);
+
+impl crate::secrets::SecretStore for MemorySecrets {
+    fn set(&self, account: &str, secret: &str) -> Result<(), crate::secrets::SecretError> {
+        self.0
+            .lock()
+            .unwrap()
+            .insert(account.to_owned(), secret.to_owned());
+        Ok(())
+    }
+    fn get(&self, account: &str) -> Result<Option<String>, crate::secrets::SecretError> {
+        Ok(self.0.lock().unwrap().get(account).cloned())
+    }
+    fn delete(&self, account: &str) -> Result<bool, crate::secrets::SecretError> {
+        Ok(self.0.lock().unwrap().remove(account).is_some())
+    }
+}
+
+thread_local! {
+    static SECRETS: Arc<MemorySecrets> = Arc::new(MemorySecrets::default());
+    static INJECTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The gate's credential store when a keyed test is running on this thread.
+pub(super) fn injected_secrets() -> Option<Arc<dyn crate::secrets::SecretStore>> {
+    INJECTED
+        .with(std::cell::Cell::get)
+        .then(|| SECRETS.with(|s| Arc::clone(s) as Arc<dyn crate::secrets::SecretStore>))
+}
+
+fn account(id: &str) -> String {
+    BackendConfiguration::default_credential(id)
+}
+
+fn put_key(id: &str, byte: u8) {
+    use crate::secrets::SecretStore;
+    use base64::Engine;
+    INJECTED.with(|flag| flag.set(true));
+    SECRETS
+        .with(|s| {
+            s.set(
+                &account(id),
+                &base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([byte; 32]),
+            )
+        })
+        .unwrap();
+}
+
+fn drop_key(id: &str) {
+    use crate::secrets::SecretStore;
+    SECRETS.with(|s| s.delete(&account(id))).unwrap();
+}
+
+/// Every byte a backend holds for `id`, as the remote would show it.
+fn stored_marker_text(f: &Fleet, id: &Ulid) -> String {
+    let refname = GitRefCas::ticket_ref(id);
+    let tree = git(&f.bare, &["ls-tree", "-r", &refname]);
+    let mut text = tree.clone();
+    for line in tree.lines() {
+        if let Some(blob) = line.split_whitespace().nth(2) {
+            text.push_str(&git(&f.bare, &["cat-file", "-p", blob]));
+        }
+    }
+    text.push_str(&git(&f.bare, &["cat-file", "-p", &refname]));
+    text
+}
+
+#[test]
+fn hs2_ewgptz_no_plain_worker_id_reaches_the_backend_write() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    ops::claim(
+        &f.a,
+        &ticket,
+        &now(),
+        lease(30),
+        "worker-a-secret",
+        Some("Build agent".into()),
+    )
+    .unwrap();
+    let held = marker(&f, &ticket).unwrap();
+    assert!(held.worker.starts_with("hmac-sha256:"), "{}", held.worker);
+    assert!(held.metadata["label"].starts_with("enc:v1:"));
+    let stored = stored_marker_text(&f, &ticket);
+    assert!(stored.contains("hmac-sha256:"), "{stored}");
+    assert!(
+        !stored.contains("worker-a-secret"),
+        "plain worker id leaked: {stored}"
+    );
+    assert!(
+        !stored.contains("Build agent"),
+        "plain label leaked: {stored}"
+    );
+    drop_key(&id);
+}
+
+#[test]
+fn hs2_ewgptz_the_holder_renews_and_releases_its_own_keyed_claim() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    claim(&f.a, &ticket, "worker-a").unwrap();
+    // A retry and a renewal by the holder keep the same marker (ownership compares by digest).
+    let attempt = marker(&f, &ticket).unwrap().claim_id;
+    claim(&f.a, &ticket, "worker-a").unwrap();
+    ops::renew(&f.a, &ticket, now(), lease(90), "worker-a").unwrap();
+    assert_eq!(marker(&f, &ticket).unwrap().claim_id, attempt);
+    ops::release(&f.a, &ticket, now(), "worker-a", false).unwrap();
+    assert!(marker(&f, &ticket).is_none());
+    drop_key(&id);
+}
+
+#[test]
+fn hs2_ewgptz_the_loser_reads_the_winners_decrypted_label_and_hashing_still_compares() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    ops::claim(
+        &f.a,
+        &ticket,
+        &now(),
+        lease(30),
+        "worker-a",
+        Some("Build agent".into()),
+    )
+    .unwrap();
+    match claim(&f.b, &ticket, "worker-b") {
+        Err(OpError::WrongWorker { holder, .. }) => assert_eq!(holder, "Build agent"),
+        other => panic!("refused naming the label: {other:?}"),
+    }
+    let adopted = f.b.read_ticket(&ticket).unwrap();
+    assert_eq!(adopted.worker_label.as_deref(), Some("Build agent"));
+    let gate = ticket_gate(&f.b).unwrap().unwrap();
+    let held = marker(&f, &ticket).unwrap();
+    assert!(gate.owns(&held.worker, "worker-a"));
+    assert!(!gate.owns(&held.worker, "worker-b"));
+    drop_key(&id);
+}
+
+#[test]
+fn hs2_ewgptz_a_machine_without_the_key_reads_the_holder_as_unreadable_and_writes_nothing() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    ops::claim(
+        &f.a,
+        &ticket,
+        &now(),
+        lease(30),
+        "worker-a",
+        Some("Build agent".into()),
+    )
+    .unwrap();
+    drop_key(&id);
+    let gate = ticket_gate(&f.b).unwrap().unwrap();
+    assert!(matches!(gate.holder, HolderKey::Missing { .. }));
+    assert_eq!(
+        gate.holder_name(&marker(&f, &ticket).unwrap()),
+        UNREADABLE_HOLDER
+    );
+    // Claiming is refused before anything reaches the backend, naming the next step.
+    let before = marker(&f, &ticket).unwrap();
+    match claim(&f.b, &ticket, "worker-b") {
+        Err(OpError::Store(StoreError::Io(error))) => {
+            assert!(error.to_string().contains("--import"), "{error}");
+        }
+        other => panic!("a keyless claim must be refused: {other:?}"),
+    }
+    assert_eq!(
+        marker(&f, &ticket).unwrap(),
+        before,
+        "the backend's marker is untouched"
+    );
+    assert_eq!(
+        f.b.read_ticket(&ticket).unwrap().claimed_by,
+        None,
+        "nothing was written locally either"
+    );
+}
+
+#[test]
+fn hs2_ewgptz_importing_the_key_on_another_machine_restores_names_and_ownership() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    ops::claim(
+        &f.a,
+        &ticket,
+        &now(),
+        lease(30),
+        "worker-a",
+        Some("Build agent".into()),
+    )
+    .unwrap();
+    drop_key(&id);
+    assert_eq!(
+        ticket_gate(&f.b)
+            .unwrap()
+            .unwrap()
+            .holder_name(&marker(&f, &ticket).unwrap()),
+        UNREADABLE_HOLDER
+    );
+    put_key(&id, 7);
+    let gate = ticket_gate(&f.b).unwrap().unwrap();
+    assert_eq!(
+        gate.holder_name(&marker(&f, &ticket).unwrap()),
+        "Build agent"
+    );
+    drop_key(&id);
+}
+
+#[test]
+fn hs2_ewgptz_a_rotated_key_makes_old_holders_unreadable_and_foreign_until_they_lapse() {
+    let id = unique_id("keyed");
+    put_key(&id, 7);
+    let f = fleet_with(1, OfflinePolicy::FailClosed, &id, true);
+    let ticket = f.tickets[0];
+    ops::claim(
+        &f.a,
+        &ticket,
+        &now(),
+        lease(30),
+        "worker-a",
+        Some("Build agent".into()),
+    )
+    .unwrap();
+    put_key(&id, 8);
+    let gate = ticket_gate(&f.a).unwrap().unwrap();
+    let held = marker(&f, &ticket).unwrap();
+    assert_eq!(
+        gate.holder_name(&held),
+        UNREADABLE_HOLDER,
+        "sealed under the old key"
+    );
+    assert!(
+        !gate.owns(&held.worker, "worker-a"),
+        "the old digest no longer compares"
+    );
+    // The old claim keeps excluding other claimants until its lease lapses.
+    assert!(matches!(
+        claim(&f.b, &ticket, "worker-b"),
+        Err(OpError::WrongWorker { .. })
+    ));
+    drop_key(&id);
+}
+
+#[test]
+fn hs2_ewgptz_an_unkeyed_configuration_keeps_plain_holder_fields() {
+    let f = fleet(1, OfflinePolicy::FailClosed);
+    let ticket = f.tickets[0];
+    claim(&f.a, &ticket, "worker-a").unwrap();
+    let held = marker(&f, &ticket).unwrap();
+    assert_eq!(held.worker, "worker-a");
+    assert!(held.metadata.is_empty());
+}
+
+#[test]
+fn hs2_322zsz_a_store_bound_to_an_external_backend_refuses_to_claim_without_it() {
+    let f = fleet(1, OfflinePolicy::FailClosed);
+    let source = git_store_sources(&f.a).remove(0);
+    Scope::Project {
+        root: f.a.root().to_path_buf(),
+    }
+    .update(|r| {
+        let mut config = BackendConfiguration::new("plug", BackendKind::External)?;
+        config.settings.insert("plugin".into(), "vault".into());
+        r.upsert_configuration(config)?;
+        r.bind_source(&source, "plug");
+        Ok(())
+    })
+    .unwrap();
+    // Ticket claims do not route through external backends yet (HS2-3SJ8JX): refusing is
+    // the only safe answer, because claiming locally would ignore the binding.
+    match claim(&f.a, &f.tickets[0], "worker-a") {
+        Err(OpError::Store(StoreError::Io(error))) => {
+            assert!(error.to_string().contains("not supported yet"), "{error}");
+        }
+        other => panic!("expected a refusal: {other:?}"),
+    }
+    assert_eq!(f.a.read_ticket(&f.tickets[0]).unwrap().claimed_by, None);
 }

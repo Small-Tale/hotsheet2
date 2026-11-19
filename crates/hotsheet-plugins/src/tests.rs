@@ -49,6 +49,42 @@ fn every_builtin_teaches_portable_durable_references() {
 }
 
 #[test]
+fn hs2_shdw2q_every_builtin_skill_teaches_resource_claim_usage() {
+    for plugin in all_plugins(&[]) {
+        let Some((_, body)) = plugin.skill() else {
+            continue;
+        };
+        for phrase in [
+            "## Resource claims (HS2-SHDW2Q)",
+            "hotsheet-cli resource acquire <namespace>/<resource> --duration <d>",
+            "Wait with a timeout, never a retry loop",
+            "--wait <timeout>",
+            "HOTSHEET_RESOURCE_CLAIM_TOKEN",
+            "never argv, a note or a log",
+            "hotsheet-cli resource renew --duration <d>",
+            "--server https://<host>:<port>",
+            "Hot Sheet never renews",
+            "must let its lease lapse",
+            "`advisory_only`",
+            "hotsheet-cli resource release",
+            "claim_backend_unreachable",
+            "hotsheet-cli resource backend key <id> --import",
+        ] {
+            assert!(
+                body.contains(phrase),
+                "{} skill must teach resource claims: {phrase}",
+                plugin.id()
+            );
+        }
+        assert!(
+            !body.contains("sleep 1") && !body.contains("while true"),
+            "{}: the skill must not model a retry loop",
+            plugin.id()
+        );
+    }
+}
+
+#[test]
 fn every_builtin_carries_the_full_default_guidance() {
     // A brand-new project's default guidance must ticket direct-terminal work and cover
     // testing, requirements/docs, and commit hygiene while leaving pushing to each repo
@@ -1005,7 +1041,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 74 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 75 -->"));
     // HS2-XYF4YT: claim answers name prerequisites awaiting CI and red gates once.
     assert!(skill_body.contains("## Prerequisites awaiting CI (HS2-XYF4YT)"));
     assert!(skill_body.contains("provisional.red_gates"));
@@ -1014,7 +1050,7 @@ fn codex_declares_its_project_local_skill() {
     assert!(skill_body.contains("orchestration validation profiles --project <checkout>"));
     let claude = find_in("claude", &[]).unwrap();
     let (_, claude_body) = claude.skill().unwrap();
-    assert!(claude_body.contains("<!-- hotsheet-skill-version: 74 -->"));
+    assert!(claude_body.contains("<!-- hotsheet-skill-version: 75 -->"));
     assert!(claude_body.contains("## Prerequisites awaiting CI (HS2-XYF4YT)"));
     assert!(claude_body.contains("## Validation profiles (HS2-YYNW9F)"));
     // HS2-F9062F: setup must install the strategy-aware generic workflow.

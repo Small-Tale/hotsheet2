@@ -226,8 +226,13 @@ fn park_until(
         return Ok(false);
     };
     let to_expiry = Duration::from_millis(holder.expires_at_ms.saturating_sub(clock.now_ms()));
-    waiter.park(ceil_ms(left).min(to_expiry))?;
-    Ok(true)
+    match waiter.park(ceil_ms(left).min(to_expiry)) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+            Err(ClaimError::Interrupted)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 impl ClaimBackend for LocalBackend {
@@ -243,7 +248,7 @@ impl ClaimBackend for LocalBackend {
     }
 
     fn codecs(&self) -> Result<MetadataCodecs, ClaimError> {
-        MetadataCodecs::new(&self.keys.key()?)
+        Ok(MetadataCodecs::new(&self.keys.key()?)?)
     }
 
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError> {

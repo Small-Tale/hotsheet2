@@ -157,6 +157,9 @@ fn sync_hosted(
             // pass that publishes again closes the ask.
             if report != SyncReport::NoRemote {
                 crate::sync_ai::ask_after_pass(state, &id, path);
+                // HS2-1639Q0: a claim this host lost to another machine, found by the sync
+                // that just ran, is pushed to the losing session at once.
+                tell_losing_sessions(state, path);
             }
             // Measure after every pass that reached the remote. `UpToDate` matters too: the
             // store's best-effort autocommit push can publish growth between passes, leaving
@@ -306,12 +309,33 @@ pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncRep
     }
 }
 
+/// Push each pending lost-claim conflict of `store_root` to its losing session. A pass runs on
+/// the loop thread and from async routes, so the terminal lookup is spawned on the server's
+/// runtime instead of blocking the pass (a `block_on` here panics inside a runtime).
+fn tell_losing_sessions(state: &AppState, store_root: &std::path::Path) {
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let project = crate::sync_ai::project_root(state, store_root);
+    let state = state.clone();
+    let store_root = store_root.to_path_buf();
+    handle.spawn(async move {
+        crate::claim_conflict_push::after_pass(&state, &project, &store_root).await;
+    });
+}
+
 /// Spawn the background sync loop. The returned handle keeps it running; a write on the
 /// server sends a "kick" (via [`AppState`]) to wake the loop early for a prompt push.
 pub fn spawn_sync_loop(state: AppState, base: Duration) -> SyncHandle {
     let (tx, rx) = std::sync::mpsc::channel::<SyncKick>();
     state.set_sync_kicker(tx);
-    std::thread::spawn(move || run(state, base, rx));
+    // The loop thread enters the server's runtime (when there is one) so it can await the
+    // terminal broker for a lost-claim push (HS2-1639Q0).
+    let runtime = tokio::runtime::Handle::try_current().ok();
+    std::thread::spawn(move || {
+        let _entered = runtime.as_ref().map(tokio::runtime::Handle::enter);
+        run(state, base, rx);
+    });
     SyncHandle { _kick_marker: () }
 }
 

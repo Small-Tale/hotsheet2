@@ -1235,6 +1235,7 @@ dependencies = [
  "percent-encoding",
  "pulldown-cmark",
  "ring",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -1242,8 +1243,10 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "toml 0.8.23",
+ "tungstenite",
  "ulid",
  "ureq",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -1290,7 +1293,9 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "time",
+ "toml 0.8.23",
  "ulid",
+ "ureq",
 ]
 
 [[package]]
@@ -3665,8 +3670,11 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.20",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
