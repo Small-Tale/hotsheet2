@@ -1,5 +1,6 @@
 import { chromium, expect, test, webkit } from '@playwright/test';
 
+import { slotted } from './browser-slot';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 
 for (const [browserName, engine] of [
@@ -10,7 +11,7 @@ for (const [browserName, engine] of [
     baseURL,
   }) => {
     const proxy = await insecureOriginProxy(baseURL!),
-      browser = await engine.launch();
+      browser = await slotted(engine).launch();
     try {
       const page = await browser.newPage({ proxy: { server: proxy.url } });
       await page.route(remoteOrigin, (route) =>
@@ -91,7 +92,7 @@ for (const [browserName, engine] of [
     baseURL,
   }) => {
     const proxy = await insecureOriginProxy(baseURL!),
-      browser = await engine.launch();
+      browser = await slotted(engine).launch();
     try {
       const page = await browser.newPage({ proxy: { server: proxy.url } });
       // Keep the genuine insecure origin and shipped persistence module, without booting another app.

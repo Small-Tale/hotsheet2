@@ -1,6 +1,7 @@
 import { expect, test, webkit } from '@playwright/test';
 
 import type { FullTicket, ToolConnection } from '../src/api';
+import { slotted } from './browser-slot';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
@@ -15,7 +16,7 @@ for (const width of [390, 1280]) {
       cleanups.push(server.stop);
       const proxy = await insecureOriginProxy(baseURL!, server);
       cleanups.push(proxy.close);
-      const browser = await webkit.launch();
+      const browser = await slotted(webkit).launch();
       cleanups.push(() => browser.close());
       const context = await browser.newContext({
         proxy: { server: proxy.url },

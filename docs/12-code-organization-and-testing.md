@@ -1299,20 +1299,44 @@ Running the full suite with WebKit as its default engine would add a second set 
 1150 tests. It would cost about another four 20-minute shard jobs, before any WebKit-only
 failures are fixed. That proposal is measured separately before CI changes.
 
-**Local WebKit repeat guard (HS2-CKHSM5).** Playwright's macOS WebKit draws in real offscreen
+**Machine-wide WebKit slots (HS2-M6TZB5).** Playwright's macOS WebKit draws in real offscreen
 windows and screenshots through WindowServer. Several local WebKit browsers at once, across agent
 sessions and repositories, have exhausted the system IOSurface limit; WindowServer then aborted and
-logged out the session (HS2-M6TZB5). Until a machine-wide browser slot pool exists (HS2-M6TZB5,
-after HS2-H3WPPY and HS2-FMHH9Y), `playwright.config.ts` runs `scripts/playwright-webkit-guard.mjs`
-once in the runner:
+logged out the session. Every local WebKit browser therefore holds one slot of a machine-scoped
+resource-claim pool ([36](36-resource-claims.md)): `browser-engines/webkit-1` to `webkit-N`, shared
+by every project and worktree on the machine (`clients/web/scripts/browser-slots.mjs`).
+
+- N is 2, or `HOTSHEET_WEBKIT_SLOTS` (1 to 16). Every process that shares the pool should use the
+  same value.
+- A taker waits on every slot at once through the claim service's push-signalled wait, takes the
+  first one freed, and stops the other waits. A stopped wait's waiter registration lasts until its
+  own deadline, so waits run in 5-minute rounds, each blocking on the claim service. The wait is 30 minutes
+  (`HOTSHEET_BROWSER_SLOT_WAIT_MS`); a timeout names each holder's claim, process id, and expiry.
+- A held slot has a 2-minute lease that the holder renews every 40 seconds and releases when its
+  browser closes. A crashed holder stops renewing, so its slot frees itself within the lease.
+- A spec that starts WebKit itself calls `slotted(webkit).launch()` from `tests/browser-slot.ts`,
+  never `webkit.launch()`; the wait extends that test's timeout by the time waited.
+  `scripts/browser-slots.test.mjs` fails on a direct launch in any spec that imports `webkit`.
+- `--browser webkit|all` starts one WebKit per worker, so the runner holds one slot per worker
+  before any worker starts. It waits for the first, takes any others that are free, and runs that
+  many workers; an explicit `--workers` above the slots it got is refused. Its workers inherit
+  `HOTSHEET_BROWSER_SLOTS_HELD=webkit` and do not take a second slot for their own launches.
+- CI and `HOTSHEET_BROWSER_SLOTS=off` take no slots. The token passes through
+  `HOTSHEET_RESOURCE_CLAIM_TOKEN`, never on a command line. `hotsheet-cli resource list
+browser-engines` shows the holders.
+
+When the pool is unavailable (no `hotsheet-cli`, or the pool is off), the interim guard of
+HS2-CKHSM5 in `scripts/playwright-webkit-guard.mjs` applies once in the runner:
 
 - a local run that combines `--repeat-each` above 1 with WebKit stops before Vite or any browser
   starts. WebKit means `--browser webkit|all`, or a selected spec that launches WebKit itself; opt-in
   specs count only when their flag is set.
 - `HOTSHEET_ALLOW_LOCAL_WEBKIT_REPEAT=1` overrides it, when no other session runs WebKit.
-- any local WebKit run prints that no machine-wide pool limits WebKit yet.
+- any local WebKit run prints that no machine-wide pool limits WebKit.
 - CI, worker processes and `--list` are unaffected, and a Chromium-only repeat (the usual flake
   check) proceeds.
+
+With the pool, a repeated WebKit run is not refused: its browsers wait for slots.
 
 **Platform `cfg` branches (HS2-A7X8F5).** The local gate compiles Rust only for its host. On
 macOS a `#[cfg(target_os = "linux")]` or `#[cfg(windows)]` branch is never type-checked, and code

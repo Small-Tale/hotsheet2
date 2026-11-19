@@ -1465,3 +1465,17 @@ Automated tests drive the grouping turn with a scripted reply; this checks a rea
 4. Create ten tickets in quick succession with the CLI. They are grouped by one turn (one usage
    entry), not ten.
 5. Uncheck the setting, create a ticket, and confirm it stays ungrouped.
+
+## Machine-wide WebKit slots across sessions (HS2-M6TZB5)
+
+The automated suite proves the pool with stand-in processes. The IOSurface limit itself cannot be
+tested safely, so check the real pattern by hand on macOS:
+
+1. From two separate terminals, ideally in different worktrees or repositories, start local WebKit
+   runs at the same time, for example `npx playwright test tests/terminal-safari.spec.ts` in each.
+2. While they run, `hotsheet-cli resource list browser-engines` shows at most `HOTSHEET_WEBKIT_SLOTS`
+   (default 2) holders, and `ps -axo command | grep -c 'WebKit.*Playwright'` stays within that many
+   browsers.
+3. A third run waits instead of starting a browser, then starts when a slot frees.
+4. Over the following days, no WindowServer `IOSurface creation failed` abort coincides with
+   concurrent WebKit runs.

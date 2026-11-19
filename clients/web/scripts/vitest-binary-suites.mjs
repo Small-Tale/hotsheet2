@@ -4,6 +4,7 @@
 // `scripts/vitest-binary-suites.test.mjs` fails when a test file launches a binary but is not
 // listed here.
 export const BINARY_SUITES = [
+  'scripts/browser-slots.e2e.test.mjs',
   'scripts/local-host.e2e.test.mjs',
   'scripts/project-reopen-trace.e2e.test.mjs',
   'scripts/real-ticket-server-owner.e2e.test.mjs',

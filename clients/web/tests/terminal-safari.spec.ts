@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 
 import { expect, type Locator, type Page, test, webkit } from '@playwright/test';
 
+import { slotted } from './browser-slot';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 import { installTerminalFixture, project } from './terminal-feedback-fixture';
@@ -58,7 +59,7 @@ for (const width of [390, 1280]) {
   }, testInfo) => {
     test.setTimeout(90_000);
     const server = await realTicketServer(),
-      browser = await webkit.launch(),
+      browser = await slotted(webkit).launch(),
       proxy = await insecureOriginProxy(baseURL!, server),
       context = await browser.newContext({
         proxy: { server: proxy.url },
@@ -246,7 +247,7 @@ test('WebKit shows terminal initialization failures instead of an empty black su
   baseURL,
 }, testInfo) => {
   test.setTimeout(90_000);
-  const browser = await webkit.launch(),
+  const browser = await slotted(webkit).launch(),
     proxy = await insecureOriginProxy(baseURL!),
     context = await browser.newContext({
       proxy: { server: proxy.url },

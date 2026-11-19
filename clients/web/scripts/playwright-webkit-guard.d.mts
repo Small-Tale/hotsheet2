@@ -14,9 +14,11 @@ export declare function webkitRepeatGuard(input: {
   argv: string[];
   env: Record<string, string | undefined>;
   specs: SpecEngines;
-}): { refuse: string | null; warn: string | null };
+  pool?: () => boolean;
+}): { refuse: string | null; warn: string | null; webkit?: string[] };
 
 export declare function runnerWebkitGuard(
   argv?: string[],
   env?: Record<string, string | undefined>,
-): { refuse: string | null; warn: string | null };
+  pool?: () => boolean,
+): { refuse: string | null; warn: string | null; webkit?: string[] };

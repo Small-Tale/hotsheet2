@@ -5,9 +5,10 @@ import { join } from 'node:path';
 
 import { defineConfig } from '@playwright/test';
 
+import { holdRunnerWebkitSlots } from './scripts/browser-slots.mjs';
 import { recordBridgeOwner, releaseBridgeHome, sweepAbandonedBridgeHomes } from './scripts/playwright-bridge-home.mjs';
 import { playwrightServerPort } from './scripts/playwright-port.mjs';
-import { runnerWebkitGuard } from './scripts/playwright-webkit-guard.mjs';
+import { playwrightTestArgs, runnerWebkitGuard } from './scripts/playwright-webkit-guard.mjs';
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
 import {
   isolateAiToolProbes,
@@ -26,11 +27,25 @@ isolateNativeSecrets();
 // No worker, browser, web server or binary inherits a launched session's live server route
 // or terminal and actor identity (HS2-KDVHN5).
 isolateLaunchedSession();
-// Until a machine-wide browser slot pool exists, refuse repeated local WebKit and warn on any local
-// WebKit run: concurrent WebKit across sessions has aborted WindowServer (HS2-CKHSM5, HS2-M6TZB5).
+// Concurrent WebKit across sessions has aborted WindowServer. Every local WebKit browser holds a
+// machine-wide `browser-engines` slot; without that pool, refuse repeated local WebKit and warn on
+// any local WebKit run (HS2-CKHSM5, HS2-M6TZB5).
 const webkitGuard = runnerWebkitGuard();
 if (webkitGuard.warn) console.warn(webkitGuard.warn);
 if (webkitGuard.refuse) throw new Error(webkitGuard.refuse);
+const localWorkers = localPlaywrightWorkers({
+  cpus: availableParallelism(),
+  load1: loadavg()[0],
+  override: process.env.HOTSHEET_PLAYWRIGHT_WORKERS,
+  ci: Boolean(process.env.CI),
+});
+// `--browser webkit|all` launches a WebKit browser per worker: the runner holds one slot per worker
+// before any worker starts, and runs only as many workers as it holds slots (HS2-M6TZB5).
+const runnerSlots = await holdRunnerWebkitSlots({
+  args: playwrightTestArgs(process.argv),
+  env: process.env,
+  workers: localWorkers,
+});
 
 // A free port per run unless HOTSHEET_WEB_TEST_PORT names one; workers inherit the runner's choice
 // (HS2-6WH4PQ). Readiness still proves this run's own Vite answers (HS2-BJ00D1).
@@ -63,13 +78,9 @@ export default defineConfig({
   outputDir: 'target/playwright-test-results',
   // One shared Vite dev server serves every worker; scale parallelism to the machine's existing load
   // and give whole flows and assertions headroom for a busy CPU (HS2-MHPHZB). `--workers` or
-  // HOTSHEET_PLAYWRIGHT_WORKERS still overrides the count.
-  workers: localPlaywrightWorkers({
-    cpus: availableParallelism(),
-    load1: loadavg()[0],
-    override: process.env.HOTSHEET_PLAYWRIGHT_WORKERS,
-    ci: Boolean(process.env.CI),
-  }),
+  // HOTSHEET_PLAYWRIGHT_WORKERS still overrides the count; local WebKit runs as many workers as it
+  // holds slots (HS2-M6TZB5).
+  workers: runnerSlots?.workers ?? localWorkers,
   // Known flakes titled `@quarantine <slug>` are skipped unless HOTSHEET_RUN_QUARANTINED=1;
   // docs/test-quarantine.md tracks each one (HS2-3PX1E4).
   grepInvert: quarantineGrepInvert(),

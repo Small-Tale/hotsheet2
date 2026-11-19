@@ -1,17 +1,20 @@
 /**
- * Interim guard against concurrent local WebKit (HS2-CKHSM5, interim part of HS2-M6TZB5).
+ * Guard against unbounded concurrent local WebKit (HS2-CKHSM5, HS2-M6TZB5).
  *
  * Playwright's macOS WebKit draws in real offscreen windows and screenshots through WindowServer,
  * so several local WebKit browsers at once can exhaust the system IOSurface limit; WindowServer then
- * aborts and logs out the session. Until the machine-wide `browser-engines` resource-claim slot pool
- * exists (HS2-M6TZB5, after HS2-H3WPPY and HS2-FMHH9Y), a local run refuses `--repeat-each` with
- * WebKit unless HOTSHEET_ALLOW_LOCAL_WEBKIT_REPEAT=1, and any local WebKit run warns that nothing
- * limits WebKit across sessions. CI is unaffected. Pure: the caller supplies argv, env and specs.
+ * aborts and logs out the session. Every local WebKit browser holds a slot of the machine-wide
+ * `browser-engines` resource-claim pool (`scripts/browser-slots.mjs`), so repeated WebKit runs wait
+ * for a slot instead of stacking up. When that pool is unavailable (no `hotsheet-cli`), the interim
+ * guard stays: a local run refuses `--repeat-each` with WebKit unless
+ * HOTSHEET_ALLOW_LOCAL_WEBKIT_REPEAT=1, and any local WebKit run warns that nothing limits WebKit
+ * across sessions. CI is unaffected. Pure: the caller supplies argv, env, specs and pool state.
  */
 
 import { fileURLToPath } from 'node:url';
 
 import { specIndex } from '../../../scripts/browser-engines.mjs';
+import { browserSlotPoolAvailable, slotPolicy } from './browser-slots.mjs';
 
 export const WEBKIT_REPEAT_OVERRIDE = 'HOTSHEET_ALLOW_LOCAL_WEBKIT_REPEAT';
 
@@ -99,13 +102,13 @@ export function localWebkitUse({ args, env, specs }) {
 
 /**
  * The guard's decision for one local runner start. `refuse` is an error message; `warn` is
- * printed when the run uses local WebKit at all.
+ * printed when the run uses local WebKit without the slot pool. `webkit` names why WebKit runs.
  *
  * @param {{ argv: string[], env: Record<string, string | undefined>,
- *   specs: Record<string, { launched: string[], optIn: string[] }> }} input
- * @returns {{ refuse: string | null, warn: string | null }}
+ *   specs: Record<string, { launched: string[], optIn: string[] }>, pool?: () => boolean }} input
+ * @returns {{ refuse: string | null, warn: string | null, webkit?: string[] }}
  */
-export function webkitRepeatGuard({ argv, env, specs }) {
+export function webkitRepeatGuard({ argv, env, specs, pool = () => false }) {
   const none = { refuse: null, warn: null };
   // CI covers WebKit on dedicated runners; a worker re-loads the config and must not repeat this.
   if (env.CI || env.TEST_WORKER_INDEX !== undefined) return none;
@@ -113,10 +116,13 @@ export function webkitRepeatGuard({ argv, env, specs }) {
   if (!args) return none;
   const use = localWebkitUse({ args, env, specs });
   if (use.list || use.webkit.length === 0) return none;
+  // HS2-M6TZB5: with the machine-wide slot pool every WebKit browser waits for a slot.
+  if (slotPolicy('webkit', env) === 'on' && pool()) return { refuse: null, warn: null, webkit: use.webkit };
   const reasons = use.webkit.join(', ');
   const warn =
-    `Local WebKit (${reasons}): no machine-wide browser slot pool limits WebKit across sessions yet ` +
-    '(HS2-M6TZB5). Concurrent WebKit runs from other agents can exhaust the macOS IOSurface limit.';
+    `Local WebKit (${reasons}): no machine-wide browser slot pool limits WebKit across sessions ` +
+    '(HS2-M6TZB5; hotsheet-cli resource is unavailable or HOTSHEET_BROWSER_SLOTS=off). Concurrent WebKit ' +
+    'runs from other agents can exhaust the macOS IOSurface limit.';
   if (use.repeatEach <= 1 || env[WEBKIT_REPEAT_OVERRIDE] === '1') return { refuse: null, warn };
   return {
     refuse:
@@ -133,6 +139,6 @@ export function webkitRepeatGuard({ argv, env, specs }) {
  * @param {string[]} [argv]
  * @param {Record<string, string | undefined>} [env]
  */
-export function runnerWebkitGuard(argv = process.argv, env = process.env) {
-  return webkitRepeatGuard({ argv, env, specs: specIndex(fileURLToPath(new URL('..', import.meta.url))) });
+export function runnerWebkitGuard(argv = process.argv, env = process.env, pool = () => browserSlotPoolAvailable(env)) {
+  return webkitRepeatGuard({ argv, env, pool, specs: specIndex(fileURLToPath(new URL('..', import.meta.url))) });
 }

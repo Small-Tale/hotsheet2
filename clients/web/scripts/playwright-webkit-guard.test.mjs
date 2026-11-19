@@ -69,8 +69,8 @@ describe('local WebKit repeat guard (HS2-CKHSM5)', () => {
     expect(webkit).toContain('tests/terminal-safari.spec.ts');
     expect(webkit).not.toContain('tests/providers.spec.ts');
     expect(webkitRepeatGuard({ argv: runner('--repeat-each=2'), env: {}, specs: real }).refuse).not.toBeNull();
-    expect(runnerWebkitGuard(runner('tests/terminal-safari.spec.ts', '--repeat-each=2'), {}).refuse).toContain(
-      'tests/terminal-safari.spec.ts',
-    );
+    expect(
+      runnerWebkitGuard(runner('tests/terminal-safari.spec.ts', '--repeat-each=2'), {}, () => false).refuse,
+    ).toContain('tests/terminal-safari.spec.ts');
   });
 });

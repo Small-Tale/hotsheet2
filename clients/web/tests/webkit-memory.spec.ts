@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 
 import { expect, test, webkit } from '@playwright/test';
 
+import { slotted } from './browser-slot';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
@@ -33,7 +34,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
   const server = await realTicketServer({
     seed: (fixture) => seedLocalGitTickets(fixture, [{ status: 'started', count: 120 }]).then(() => undefined),
   });
-  const browser = await webkit.launch();
+  const browser = await slotted(webkit).launch();
   const proxy = await insecureOriginProxy(baseURL!, server);
   const context = await browser.newContext({
     proxy: { server: proxy.url },

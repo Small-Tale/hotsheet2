@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { expect, type Page, test, webkit } from '@playwright/test';
 
+import { slotted } from './browser-slot';
 import { realTicketServer } from './real-ticket-server';
 
 // HS2-K93QHA: a mounted terminal viewport negotiates a capped, compressed attach replay with a
@@ -134,7 +135,7 @@ for (const viewport of [
   }, testInfo) => {
     test.setTimeout(90_000);
     const server = await realTicketServer();
-    const webkitBrowser = viewport.browserName === 'webkit' ? await webkit.launch() : undefined;
+    const webkitBrowser = viewport.browserName === 'webkit' ? await slotted(webkit).launch() : undefined;
     const page = webkitBrowser ? await webkitBrowser.newPage({ baseURL }) : chromiumPage;
     try {
       const terminal = await server.request<{ id: string }>('/terminals', 'POST', {

@@ -200,6 +200,11 @@ has an idempotent `hotsheet-cli` path shared with the graphical client.
 | Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Design only                                                | HS2-JJWESD |
 | AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                | HS2-SHDW2Q |
 
+The first consumer outside tickets is the machine-wide `browser-engines` pool that caps local
+Playwright WebKit browsers (HS2-M6TZB5,
+[12](12-code-organization-and-testing.md)): one resource per slot, acquired with a wait,
+renewed by the browser's own process, and released when the browser closes.
+
 HS2-FMHH9Y shipped ahead of HS2-JJWESD. Until configurations exist, every namespace is
 machine-scoped and served by the local machine backend. The single seam is
 `hotsheet_resource_claims::resolve_backend(home, namespace)`; HS2-JJWESD replaces its
