@@ -145,6 +145,22 @@ pub struct WorkItem {
     pub sites: Vec<String>,
 }
 
+impl WorkItem {
+    /// HS2-6NQKP9: every resource the work needs on `site`: the step's own, then what
+    /// the policy requires of every piece of work on that site
+    /// (`placement.resources`), each once. Each site of a project is judged by its own
+    /// policy entry, never by the entry of the site the step names.
+    pub fn needs_on<'a>(&'a self, policy: &'a PolicyBody, site: &str) -> Vec<&'a ResourceNeed> {
+        let mut needs: Vec<&ResourceNeed> = self.resources.iter().collect();
+        for need in policy.target_resources(site) {
+            if !needs.contains(&need) {
+                needs.push(need);
+            }
+        }
+        needs
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionActivity {
@@ -1121,7 +1137,9 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
         taken_by: None,
         unreadable: None,
     };
-    for need in &item.resources {
+    // HS2-6NQKP9: the step's own resources and those this site's policy entry requires.
+    let needs = item.needs_on(policy, site);
+    for need in needs.iter().copied() {
         let Some(machine) = machine else {
             tried.waits.push(wait(None, need, ResourceState::NotRead));
             continue;
@@ -1192,7 +1210,7 @@ fn try_site<'a>(cx: &SiteContext<'_, 'a>) -> SiteTry<'a> {
             .filter(|(index, session)| {
                 matches!(cx.fates[*index], Fate::Free)
                     // Work whose resources were not read is not handed to anyone.
-                    && (machine.is_some() || item.resources.is_empty())
+                    && (machine.is_some() || needs.is_empty())
                     && session.target_id == site
                     && preferred(session) == wanted
             })
@@ -1886,7 +1904,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         }
         // Given to this step: nothing ranked below it in this pass gets it too.
         if let Some(machine) = tried.machine {
-            for need in &item.resources {
+            for need in item.needs_on(input.policy, tried.site) {
                 allocated.insert((machine, need), item.step_id.as_str());
             }
             for (need, reason) in &tried.unverified {

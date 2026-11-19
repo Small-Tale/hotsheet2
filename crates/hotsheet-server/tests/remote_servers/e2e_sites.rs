@@ -980,3 +980,58 @@ async fn hs2_eprwb6_one_plan_step_whichever_site_defines_it() {
     assert_eq!(checked_in()["steps"].as_array().unwrap().len(), 2);
     fleet.shut_down().await;
 }
+
+/// HS2-6NQKP9: the policy requires a different resource of each site. A session on the
+/// home holds the home's VM through the home's own claim route, so the loop passes the
+/// home over by that name and places the step on the peer, judged by the peer's own
+/// requirement read from the peer's backend. The peer's session is told to acquire
+/// that resource only. Synthetic resource names.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn hs2_6nqkp9_each_site_is_judged_by_its_own_policy_resources() {
+    let mut fleet = Fleet::sites().await;
+    let orchestration = fleet.orchestration_ticket("Coordinate the synthetic project");
+    let either = fleet.target_ticket(Side::Controller, "Change either machine can make");
+    converge(&fleet);
+    let (status, grant) = api(
+        fleet.router.clone(),
+        "POST",
+        "/resource-claims/vm/home-vm/acquire",
+        json!({"duration_ms": 1_800_000}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{grant}");
+    assert_eq!(grant["acquired"], true, "{grant}");
+    let step = fleet
+        .plan(&orchestration, Side::Controller, &either, json!([]))
+        .await;
+    let step = step["step"]["step_id"].as_str().unwrap().to_owned();
+    fleet
+        .policy(json!({
+            "machine":{"max_sessions":6},
+            "tools":[{"tool":TOOL_A,"max_sessions":8}],
+            "targets":[
+                {"target_id":TARGET_A,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":2},
+                {"target_id":TARGET_B,"actions":ACTIONS,"tools":[{"tool":TOOL_A}],"max_sessions":2}],
+            "placement":{"automatic":true,"actor":ACTOR,"cooldown_minutes":0,
+                "resources":[
+                    {"target_id":TARGET_A,"resources":[{"namespace":"vm","resource":"home-vm"}]},
+                    {"target_id":TARGET_B,"resources":[{"namespace":"vm","resource":"peer-vm"}]}]}
+        }))
+        .await;
+
+    let start = fleet.started_for(&step, 2 * MINUTE).await;
+    assert_eq!(start["target_id"], TARGET_B, "{start}");
+    assert!(
+        start["sites"].as_array().unwrap().iter().any(|entry| {
+            entry["target_id"] == TARGET_A
+                && entry["reason"] == "resource_held"
+                && entry["detail"] == "vm/home-vm"
+        }),
+        "{start}"
+    );
+    let placed = placed_from(&fleet, &start, TARGET_B).await;
+    let prompt = received_prompt(&fleet.reports, &placed.terminal, "`vm/peer-vm`");
+    assert!(!prompt.contains("home-vm"), "{prompt}");
+    fleet.shut_down().await;
+}

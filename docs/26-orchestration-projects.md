@@ -3411,7 +3411,9 @@ contacted and its work reads `target_unavailable` (`actor_required`). A target w
 machine cannot be read gets no session: nothing is assumed in a snapshot's place.
 
 The resources work names are those its plan step declares and those the policy
-requires of its target (§26.20).
+requires of its target (§26.20). For a step that may run on several sites, each
+site's read covers the namespaces that site's own policy entry requires
+(HS2-6NQKP9).
 
 **Preferred tool and model (HS2-TH53NN).** A plan step's optional `tool` and `model`
 (§26.25) reach the work as preferences, never as requirements:
@@ -3522,7 +3524,8 @@ site its run was dispatched to. A one-site project is placed exactly as above.
 
 Steps 1 to 8 above are tried on each site on its own, without changing anything:
 the provisional opt-in of that site, its machine's requirements, resources on its
-machine, its free sessions, its policy entry and cap, its refusal backoff and
+machine (the step's own and those the policy requires of that site, HS2-6NQKP9), its
+free sessions, its policy entry and cap, its refusal backoff and
 cooldown, its capacity, and tool accounts and admission on its machine. Of the sites
 that can take the step, the scheduler chooses, in this order:
 
@@ -4048,7 +4051,13 @@ written `<namespace>/<resource>` on a command line. It is declared in two places
 | A plan step | `resources` of `readiness define` (§26.15); CLI `--resource`, repeatable | That step's work                  | 4 per step   |
 | The policy  | `placement.resources[]`, each `{ "target_id", "resources" }` (§26.8)     | Every piece of work on the target | 4 per target |
 
-Work requires the union of both, each resource once. A step's set is stored sorted,
+Work requires the union of both, each resource once. The policy's part is that of
+the site the work runs on (HS2-6NQKP9): a step of a project with several sites
+(§26.17, "Which site runs a step") is judged on each site by that site's own
+`placement.resources` entry, its session is told to acquire the chosen site's set,
+and `scheduler explain` lists the set of the site the pass chose, or of the site the
+step names while it is placed nowhere. A site without an entry requires only the
+step's own resources. A step's set is stored sorted,
 so the same set in another order is the same definition; a changed set is a new
 revision and wakes the scheduler; defining a step without `resources` withdraws
 them. A requirement is not a prerequisite: readiness (§26.15) does not look at it.

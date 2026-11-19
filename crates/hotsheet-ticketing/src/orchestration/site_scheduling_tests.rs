@@ -424,3 +424,85 @@ fn hs2_9fktb3_a_decision_record_names_passed_over_sites_by_code() {
     record.sites[0].target_id = "../escape".into();
     assert!(record.validate().is_err());
 }
+
+/// HS2-6NQKP9: each site is judged by its own `placement.resources` entry, never by
+/// the entry of the site the step names. Two sites require different resources;
+/// whichever site is chosen, only its own requirement is checked and taken there.
+#[test]
+fn hs2_6nqkp9_each_site_requires_its_own_policy_resources() {
+    let mut world = World::new(&[(1, 2), (2, 2), (3, 2)]);
+    let mac = ResourceNeed::parse("vm/macos-vm").unwrap();
+    let win = ResourceNeed::parse("vm/windows-vm").unwrap();
+    world.policy.placement.resources = vec![
+        TargetResources {
+            target_id: target(1),
+            resources: vec![mac.clone()],
+        },
+        TargetResources {
+            target_id: target(2),
+            resources: vec![win.clone()],
+        },
+    ];
+    let held = |need: &ResourceNeed, machine: u128| HeldResource {
+        namespace: need.namespace.clone(),
+        resource: need.resource.clone(),
+        expires_at_ms: T0 + 10 * MIN,
+        server_id: Some(id(9000 + machine)),
+    };
+    world.work = vec![project(1, 1, &[2])];
+
+    // The named site's resource is held there: the other site needs only its own,
+    // which is free, so the step runs there.
+    world.held = vec![held(&mac, 1)];
+    let schedule = world.now();
+    assert_eq!(placed_on(&schedule, 1), target(2));
+    assert_eq!(
+        passes(&schedule, 1),
+        expect(&[pass(1, "resource_held", Some("vm/macos-vm"))])
+    );
+
+    // The named site's resource held on the other machine means nothing there.
+    world.held = vec![held(&mac, 2)];
+    assert_eq!(placed_on(&world.now(), 1), target(1));
+
+    // The other site's own resource is held there: it is passed over by that name,
+    // and the named site is passed over for its own.
+    world.held = vec![held(&mac, 1), held(&win, 2)];
+    let schedule = world.now();
+    assert_eq!(
+        blocked(&schedule, 1),
+        ("resource_held", Some("vm/macos-vm".into()))
+    );
+    assert_eq!(
+        passes(&schedule, 1),
+        expect(&[pass(2, "resource_held", Some("vm/windows-vm"))])
+    );
+
+    // A site without an entry requires nothing of the policy; the step's own
+    // resource still goes wherever the step runs.
+    let port = ResourceNeed::parse("ports/8080").unwrap();
+    let mut item = project(1, 1, &[3]);
+    item.resources = vec![port.clone()];
+    world.work = vec![item];
+    world.held = vec![held(&mac, 1)];
+    assert_eq!(placed_on(&world.now(), 1), target(3));
+    world.held = vec![held(&mac, 1), held(&port, 3)];
+    let schedule = world.now();
+    assert_eq!(
+        passes(&schedule, 1),
+        expect(&[pass(3, "resource_held", Some("ports/8080"))])
+    );
+
+    // Two steps that may run on either site: each site's own resource is given to
+    // one step only, so the second goes to the other site.
+    world.work = vec![project(1, 1, &[2]), project(2, 1, &[2])];
+    world.held = Vec::new();
+    let schedule = world.now();
+    let mut sites = vec![placed_on(&schedule, 1), placed_on(&schedule, 2)];
+    sites.sort();
+    assert_eq!(sites, vec![target(1), target(2)], "{schedule:#?}");
+    assert_eq!(
+        world.work[0].needs_on(&world.policy, &target(2)),
+        vec![&win]
+    );
+}

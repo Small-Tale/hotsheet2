@@ -3059,6 +3059,111 @@ fn hs2_9fktb3_a_step_is_placed_and_dispatched_on_the_qualifying_site() {
     assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
 }
 
+/// HS2-6NQKP9: target 2 is another site of target 1's project, and the policy
+/// requires a different resource of each site. With target 1's resource held, a step
+/// named on target 1 runs on target 2, is judged and explained by target 2's own
+/// requirement, and its session is told to acquire only that one.
+#[test]
+fn hs2_6nqkp9_a_step_on_another_site_needs_that_sites_own_policy_resources() {
+    use hotsheet_resource_claims::{ClaimService, ResourceRef};
+    use hotsheet_ticketing::orchestration::{ResourceNeed, TargetResources};
+    clocked!(clock, tx);
+    let _ = &clock;
+    let f = Placed::new(&BOTH, &mut tx);
+    bind_and_allow(&f.m, 2, &[], &mut tx);
+    allow_on(
+        &f.m.runtime,
+        &f.m.owner.id,
+        &id(2),
+        &BOTH,
+        &["codex"],
+        &mut tx,
+    );
+    let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
+    f.m.runtime
+        .request(
+            "PATCH",
+            &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
+            &json!({"expected_revision": revision, "label": "Target", "site_of": id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let need = |text: &str| ResourceNeed::parse(text).unwrap();
+    let mut body = policy();
+    body.targets.push(TargetPolicy {
+        target_id: id(2),
+        ..body.targets[0].clone()
+    });
+    body.placement.resources = vec![
+        TargetResources {
+            target_id: id(1),
+            resources: vec![need("vm/macos-vm")],
+        },
+        TargetResources {
+            target_id: id(2),
+            resources: vec![need("vm/windows-vm")],
+        },
+    ];
+    f.set_policy(body, &mut tx);
+    let step = f.ready("Either site", &mut tx);
+    // Both sites are on this machine; only target 1 needs the held VM.
+    let grant = ClaimService::new(&f.m.home)
+        .acquire(
+            &ResourceRef::parse("vm/macos-vm").unwrap(),
+            std::time::Duration::from_secs(30 * 60),
+            None,
+            &std::collections::BTreeMap::new(),
+        )
+        .unwrap();
+
+    let plan =
+        f.m.runtime
+            .scheduler_plan(&f.owner(), Some(&worker()), &mut tx)
+            .unwrap();
+    let start = &plan.schedule.placements[0];
+    assert_eq!(start.target_id, id(2), "{plan:#?}");
+    assert_eq!(
+        (
+            start.sites[0].target_id.as_str(),
+            start.sites[0].reason.as_str()
+        ),
+        (id(1).as_str(), "resource_held")
+    );
+    let explained = serde_json::to_value(
+        f.m.runtime
+            .scheduler_explain(
+                &f.owner(),
+                &serde_json::from_value(json!({"step_id": step})).unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        explained["resources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| (
+                entry["resource"].as_str().unwrap(),
+                entry["declared_by"].as_str().unwrap()
+            ))
+            .collect::<Vec<_>>(),
+        [("windows-vm", "target")]
+    );
+
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    assert_eq!(tick.outcomes[0].target_id, id(2));
+    let prompt = &f.host.launches()[0].role_prompt;
+    assert!(prompt.contains("`vm/windows-vm`"), "{prompt}");
+    assert!(!prompt.contains("macos-vm"), "{prompt}");
+    ClaimService::new(&f.m.home)
+        .release(&grant.renewal_token, None)
+        .unwrap();
+}
+
 /// HS2-5P112Z: a step placed on a site that is not its project's home runs a session
 /// that waits on the home's pool, not its own: each applied pass joins it to that pool
 /// (renewing its availability there), and once the home's authority offers it the

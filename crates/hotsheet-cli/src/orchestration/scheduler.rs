@@ -248,15 +248,17 @@ pub(super) struct Gathered {
 }
 
 impl Gathered {
-    /// HS2-2FG91X: every resource the named steps' work requires, each once.
-    pub(super) fn resources_of(&self, steps: &[String]) -> Vec<ResourceNeed> {
+    /// HS2-2FG91X: every resource the named steps' work requires on `site`, each once.
+    /// HS2-6NQKP9: the policy's requirement is the chosen site's own, not the one of
+    /// the site a step names.
+    pub(super) fn resources_of(&self, steps: &[String], site: &str) -> Vec<ResourceNeed> {
         let mut needs: Vec<ResourceNeed> = Vec::new();
         for item in self
             .work
             .iter()
             .filter(|item| steps.contains(&item.step_id))
         {
-            for need in &item.resources {
+            for need in item.needs_on(&self.policy, site) {
                 if !needs.contains(need) {
                     needs.push(need.clone());
                 }
@@ -525,15 +527,10 @@ impl OrchestrationRuntime {
         // HS2-YC2P7K: the sessions first. Listing them brings each record in line with
         // its host, so a run whose session was just found lost is placeable work.
         let (sessions, executor) = self.scheduler_sessions(owner_id, tx);
+        // HS2-2FG91X: what the policy requires of every piece of work on a target is
+        // added per site by the pure core (HS2-6NQKP9), so each site of a project is
+        // judged by its own `placement.resources` entry.
         let mut work = self.scheduler_work(owner_id, tx)?;
-        // HS2-2FG91X: what the policy requires of every piece of work on a target.
-        for item in &mut work {
-            for need in policy.target_resources(&item.target_id) {
-                if !item.resources.contains(need) {
-                    item.resources.push(need.clone());
-                }
-            }
-        }
         let memory = SchedulerStore::new(&self.home).memory(owner_id)?;
         // Only a target that could take a session is contacted: confirmed work, a
         // policy that lets sessions run there, and no refusal still being waited out.
@@ -591,7 +588,12 @@ impl OrchestrationRuntime {
                         && (item.target_id == target_id
                             || item.sites.iter().any(|site| site == target_id))
                 })
-                .flat_map(|item| item.resources.iter().map(|need| need.namespace.clone()))
+                // HS2-6NQKP9: the namespaces this site's own policy entry requires.
+                .flat_map(|item| {
+                    item.needs_on(&policy, target_id)
+                        .into_iter()
+                        .map(|need| need.namespace.clone())
+                })
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect();
@@ -1040,10 +1042,20 @@ impl OrchestrationRuntime {
                 }
                 // HS2-2FG91X: what the work must hold, and how this pass saw each.
                 let planned = &step.readiness.step;
+                // HS2-6NQKP9: the policy's requirement of the site the pass chose, or of
+                // the named site while the step is placed nowhere.
+                let site = view
+                    .schedule
+                    .standing(&planned.step_id)
+                    .and_then(|standing| standing.placement)
+                    .map_or_else(
+                        || planned.target.target_id.clone(),
+                        |placement| placement.target_id,
+                    );
                 let of_target: Vec<ResourceNeed> = self
                     .policy(owner_id)?
                     .policy
-                    .map(|policy| policy.target_resources(&planned.target.target_id).to_vec())
+                    .map(|policy| policy.target_resources(&site).to_vec())
                     .unwrap_or_default();
                 let needs: Vec<ResourceNeed> = planned
                     .resources
