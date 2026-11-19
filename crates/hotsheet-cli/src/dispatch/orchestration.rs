@@ -1211,6 +1211,9 @@ enum TargetCmd {
         label: String,
         #[arg(long)]
         expected_repository_identity: Option<String>,
+        /// HS2-SHH7WW: add the target as another site of this project target.
+        #[arg(long)]
+        site_of: Option<String>,
     },
     /// Rename one live target at the expected manifest revision; its id never changes.
     Rename {
@@ -1223,7 +1226,15 @@ enum TargetCmd {
         expected_repository_identity: Option<String>,
         #[arg(long)]
         clear_expected_repository_identity: bool,
+        /// HS2-SHH7WW: make the target a site of this project target.
+        #[arg(long, conflicts_with = "clear_site_of")]
+        site_of: Option<String>,
+        /// HS2-SHH7WW: make the target a project of its own again.
+        #[arg(long)]
+        clear_site_of: bool,
     },
+    /// HS2-SHH7WW: each project with its sites and this machine's binding of each.
+    Sites,
     /// Tombstone one target at the expected manifest revision; its id is never reused.
     Remove {
         id: String,
@@ -1280,10 +1291,11 @@ fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Val
             target_id,
             label,
             expected_repository_identity,
+            site_of,
         } => (
             "POST",
             prefix,
-            json!({"expected_revision":expected_revision,"target_id":target_id,"label":label,"expected_repository_identity":expected_repository_identity}),
+            json!({"expected_revision":expected_revision,"target_id":target_id,"label":label,"expected_repository_identity":expected_repository_identity,"site_of":site_of}),
         ),
         TargetCmd::Rename {
             id,
@@ -1291,10 +1303,17 @@ fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Val
             label,
             expected_repository_identity,
             clear_expected_repository_identity,
+            site_of,
+            clear_site_of,
         } => (
             "PATCH",
             format!("{prefix}/{id}"),
-            json!({"expected_revision":expected_revision,"label":label,"expected_repository_identity":expected_repository_identity,"clear_expected_repository_identity":clear_expected_repository_identity}),
+            json!({"expected_revision":expected_revision,"label":label,"expected_repository_identity":expected_repository_identity,"clear_expected_repository_identity":clear_expected_repository_identity,"site_of":site_of,"clear_site_of":clear_site_of}),
+        ),
+        TargetCmd::Sites => (
+            "GET",
+            format!("/checkouts/{project}/orchestration/sites"),
+            Value::Null,
         ),
         TargetCmd::Remove {
             id,

@@ -529,6 +529,37 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{owner}/orchestration/sites:
+    get:
+      operationId: listProjectSites
+      description: HS2-SHH7WW. Each project with its sites and this machine's binding of each. Machine-local.
+      responses:
+        '200':
+          description: The projects with their sites; reads the manifest and bindings and contacts nothing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SitesView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/targets/{target}:
     patch:
       operationId: renameTargetDeclaration
@@ -18951,6 +18982,10 @@ components:
             - type: string
               maxLength: 2048
             - type: 'null'
+        site_of:
+          description: HS2-SHH7WW. The target id of the project this target is another site of.
+          type: string
+          pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
       additionalProperties: false
     TargetManifestView:
       type: object
@@ -19014,6 +19049,12 @@ components:
             - type: string
               maxLength: 2048
             - type: 'null'
+        site_of:
+          description: HS2-SHH7WW. Add the target as another site of this project target.
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
@@ -19038,9 +19079,81 @@ components:
         clear_expected_repository_identity:
           type: boolean
           default: false
+        site_of:
+          description: HS2-SHH7WW. Make the target a site of this project target.
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        clear_site_of:
+          description: HS2-SHH7WW. Make the target a project of its own again.
+          type: boolean
+          default: false
         actor:
           $ref: '#/components/schemas/Actor'
       additionalProperties: false
+    SitesView:
+      description: >-
+        HS2-SHH7WW. Every active project of the manifest, ordered by label, with its active sites (the project's own
+        target first) and this machine's binding of each. An answer: readers accept fields they do not know.
+      type: object
+      required:
+        - revision
+        - projects
+      properties:
+        revision:
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
+        projects:
+          type: array
+          items:
+            type: object
+            required:
+              - project_id
+              - label
+              - sites
+            properties:
+              project_id:
+                type: string
+                pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+              label:
+                type: string
+              sites:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - target_id
+                    - label
+                    - project
+                    - destination
+                    - confirmed_at_ms
+                    - last_failure
+                    - stale
+                  properties:
+                    target_id:
+                      type: string
+                      pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+                    label:
+                      type: string
+                    project:
+                      type: boolean
+                    destination:
+                      anyOf:
+                        - $ref: '#/components/schemas/TargetDestination'
+                        - type: 'null'
+                    confirmed_at_ms:
+                      type:
+                        - integer
+                        - 'null'
+                    last_failure:
+                      type:
+                        - string
+                        - 'null'
+                    stale:
+                      type: boolean
     RemoveTarget:
       type: object
       required:

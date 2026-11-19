@@ -8,9 +8,14 @@ use crate::ProviderCapabilities;
 use crate::remote_servers::ReviewedRemoteIdentity;
 
 mod binding;
+mod sites;
 pub use binding::*;
+pub use sites::*;
 
 pub const ORCHESTRATION_VERSION: u32 = 1;
+/// HS2-SHH7WW: the target manifest version written while any target is another site
+/// of a project. A manifest without sites is still written as version 1, byte for byte.
+pub const MANIFEST_SITES_VERSION: u32 = 2;
 pub const MAX_TARGETS: usize = 256;
 pub const MAX_TARGET_SOURCES: usize = 64;
 pub const MAX_PROJECTION_BYTES: usize = 256 * 1024;
@@ -45,6 +50,17 @@ pub struct TargetDeclaration {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_repository_identity: Option<String>,
+    /// HS2-SHH7WW: this target is another site of the project declared by that target.
+    /// The project's own target is its first site; a project target is never a site.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_of: Option<String>,
+}
+
+impl TargetDeclaration {
+    /// HS2-SHH7WW: the key every site of one project shares: the project target's id.
+    pub fn project_id(&self) -> &str {
+        self.site_of.as_deref().unwrap_or(&self.target_id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +111,9 @@ pub struct AddTarget {
     pub label: String,
     #[serde(default)]
     pub expected_repository_identity: Option<String>,
+    /// HS2-SHH7WW: add the target as another site of this project target.
+    #[serde(default)]
+    pub site_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,6 +125,12 @@ pub struct RenameTarget {
     pub expected_repository_identity: Option<String>,
     #[serde(default)]
     pub clear_expected_repository_identity: bool,
+    /// HS2-SHH7WW: make the target a site of this project target.
+    #[serde(default)]
+    pub site_of: Option<String>,
+    /// HS2-SHH7WW: make the target a project of its own again.
+    #[serde(default)]
+    pub clear_site_of: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

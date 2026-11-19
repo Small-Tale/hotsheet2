@@ -291,6 +291,7 @@ fn hs2_w27n1d_a_retained_target_id_binds_the_declared_target_instead_of_another(
                 target_id: Some(id(7)),
                 label: "Earlier attempt".into(),
                 expected_repository_identity: None,
+                site_of: None,
             },
             &mut tx,
         )

@@ -274,6 +274,9 @@ pub enum OrchestrationError {
     /// HS2-GDJXGZ: the orchestrator-owned session does not allow this request.
     #[error("orchestration session refused the request: {}", .0.code())]
     Session(SessionError),
+    /// HS2-SHH7WW: a site of a project does not fit the project it names.
+    #[error("orchestration site refused the request: {}", .0.code())]
+    Site(SiteError),
 }
 
 impl From<std::io::Error> for OrchestrationError {
@@ -305,6 +308,7 @@ impl OrchestrationError {
             Self::Gate(error) => error.code(),
             Self::Readiness(error) => error.code(),
             Self::Session(error) => error.code(),
+            Self::Site(error) => error.code(),
         }
     }
 
@@ -445,6 +449,8 @@ mod session_idle_tests;
 mod session_tests;
 #[cfg(test)]
 mod shared_plan_tests;
+#[cfg(test)]
+mod sites_tests;
 #[cfg(test)]
 mod summary_tests;
 #[cfg(test)]

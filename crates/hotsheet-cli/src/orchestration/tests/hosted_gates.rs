@@ -103,6 +103,7 @@ pub(super) fn remote(tx: &mut Transaction<'_>) -> Remote {
                     expected_repository_identity: Some(
                         "https://github.com/example/widgets.git".into(),
                     ),
+                    site_of: None,
                 }],
             },
             tx,

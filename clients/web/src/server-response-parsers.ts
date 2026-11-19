@@ -1727,7 +1727,7 @@ const orchestrationDeclaration = shape<OrchestrationTargetDeclaration>(
   'orchestration target',
   { target_id: isString, state: oneOf('active', 'removed'), label: isString },
   {},
-  { expected_repository_identity: isString },
+  { expected_repository_identity: isString, site_of: isString },
 );
 export const parseOrchestrationManifest = shape<OrchestrationManifest>('orchestration targets', {
   enabled: isBoolean,

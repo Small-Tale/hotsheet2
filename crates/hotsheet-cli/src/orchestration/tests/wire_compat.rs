@@ -37,6 +37,8 @@ const CORE_SCHEDULER: &str =
     include_str!("../../../../hotsheet-ticketing/src/orchestration/scheduler.rs");
 const CORE_CONTRACT: &str =
     include_str!("../../../../hotsheet-ticketing/src/orchestration/contract.rs");
+const CORE_SITES: &str =
+    include_str!("../../../../hotsheet-ticketing/src/orchestration/contract/sites.rs");
 
 /// Answers read from a peer: they accept unknown fields.
 const ANSWERS: &[(&str, &str, &str)] = &[
@@ -55,6 +57,10 @@ const ANSWERS: &[(&str, &str, &str)] = &[
     ("core sessions.rs", CORE_SESSIONS, "HostedRequest"),
     ("core sessions.rs", CORE_SESSIONS, "SafePoint"),
     ("core gates.rs", CORE_GATES, "GateEvidence"),
+    // HS2-SHH7WW: the sites view.
+    ("core sites.rs", CORE_SITES, "SitesView"),
+    ("core sites.rs", CORE_SITES, "SiteProject"),
+    ("core sites.rs", CORE_SITES, "SiteView"),
 ];
 
 /// Requests a host reads, files, and types shared with either: they refuse them.
@@ -79,6 +85,11 @@ const REFUSING: &[(&str, &str, &str)] = &[
     // Machine-local and committed files.
     ("core policy.rs", CORE_POLICY, "PolicyBody"),
     ("core contract.rs", CORE_CONTRACT, "TargetManifest"),
+    // HS2-SHH7WW: `site_of` is new in a declaration and in the add and rename
+    // requests; an older host refuses it rather than add a target as its own project.
+    ("core contract.rs", CORE_CONTRACT, "TargetDeclaration"),
+    ("core contract.rs", CORE_CONTRACT, "AddTarget"),
+    ("core contract.rs", CORE_CONTRACT, "RenameTarget"),
     ("core validation.rs", CORE_VALIDATION, "ValidationStep"),
     ("core validation.rs", CORE_VALIDATION, "StepDefinition"),
 ];

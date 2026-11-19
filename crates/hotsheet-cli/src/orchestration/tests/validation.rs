@@ -1768,6 +1768,7 @@ fn hs2_wn0mxz_a_remote_target_runs_the_step_and_an_unconfirmed_one_stays_running
                     state: DeclarationState::Active,
                     label: "Remote target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             &mut tx,

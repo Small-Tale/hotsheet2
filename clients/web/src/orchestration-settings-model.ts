@@ -101,33 +101,53 @@ export interface OrchestrationProjectRow {
   connection: ConnectionStatus;
   /** The open tab that shows this project, when it is bound. */
   tabProjectId?: string;
+  /** HS2-SHH7WW: the project target this row is another site of. */
+  siteOf?: string;
 }
 
-/** The orchestrated projects: active declarations with this machine's binding, by label. */
+/**
+ * The orchestrated projects: active declarations with this machine's binding, by label. HS2-SHH7WW: a
+ * project with several sites lists its own row first and then each other site, labelled with its project.
+ */
 export function projectRows(
   manifest: OrchestrationManifest | undefined,
   bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
   remoteLabels: Readonly<Record<string, string>>,
 ): OrchestrationProjectRow[] {
-  return (manifest?.targets ?? [])
-    .filter((target) => target.state === 'active')
-    .map((target) => {
-      const binding = bindings[target.target_id],
-        destination = binding?.destination ?? undefined;
-      return {
-        targetId: target.target_id,
-        label: target.label,
-        location: destination ? destination.kind : binding ? 'unbound' : 'local',
-        where: destination
-          ? `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
-          : binding
-            ? 'Not bound on this computer'
-            : '',
-        connection: connectionStatus(binding),
-        tabProjectId: destination ? tabProjectIdOf(destination) : undefined,
-      } satisfies OrchestrationProjectRow;
-    })
-    .sort((left, right) => left.label.localeCompare(right.label));
+  const active = (manifest?.targets ?? []).filter((target) => target.state === 'active'),
+    byLabel = (left: { label: string }, right: { label: string }) => left.label.localeCompare(right.label),
+    projectOf = (target: (typeof active)[number]) =>
+      target.site_of && active.some((other) => other.target_id === target.site_of && !other.site_of)
+        ? target.site_of
+        : undefined;
+  const row = (target: (typeof active)[number], prefix: string): OrchestrationProjectRow => {
+    const binding = bindings[target.target_id],
+      destination = binding?.destination ?? undefined,
+      place = destination
+        ? `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
+        : binding
+          ? 'Not bound on this computer'
+          : '';
+    return {
+      targetId: target.target_id,
+      label: target.label,
+      location: destination ? destination.kind : binding ? 'unbound' : 'local',
+      where: [prefix, place].filter(Boolean).join(' · '),
+      connection: connectionStatus(binding),
+      tabProjectId: destination ? tabProjectIdOf(destination) : undefined,
+      siteOf: projectOf(target),
+    };
+  };
+  return active
+    .filter((target) => !projectOf(target))
+    .sort(byLabel)
+    .flatMap((project) => {
+      const sites = active.filter((target) => projectOf(target) === project.target_id).sort(byLabel);
+      return [
+        row(project, sites.length ? `${sites.length + 1} sites` : ''),
+        ...sites.map((site) => row(site, `Site of ${project.label}`)),
+      ];
+    });
 }
 
 export interface AddChoice {

@@ -1,31 +1,52 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
-use super::contract::{MAX_MANIFEST_BYTES, bounded_text, valid_token};
-use super::storage::{Storage, decode};
+use super::contract::{MAX_MANIFEST_BYTES, bounded_text, valid_identifier, valid_token};
+use super::shared_plan::SharedPlanStore;
+use super::storage::Storage;
 use super::*;
 
 #[derive(Clone)]
 pub struct ManifestStore {
     pub(crate) storage: Storage,
+    /// HS2-SHH7WW: this machine's home and the owning checkout, so a change to which
+    /// targets are sites of one project is checked against this machine's runs and
+    /// bindings as well as the checked-in plan.
+    machine: Option<(PathBuf, String)>,
 }
 
 impl ManifestStore {
     pub fn new(checkout_root: &Path) -> Self {
         Self {
             storage: Storage::shared(checkout_root),
+            machine: None,
         }
+    }
+
+    /// HS2-SHH7WW: check grouping changes against this machine's records too.
+    pub fn on_machine(mut self, home: &Path, owner_checkout_id: &str) -> Self {
+        self.machine = Some((home.into(), owner_checkout_id.into()));
+        self
     }
 
     pub fn read(&self) -> Result<ManifestView, OrchestrationError> {
         Ok(self.document()?.into())
     }
 
+    /// HS2-SHH7WW: which targets are sites of one project. Empty when nothing is
+    /// declared.
+    pub fn sites(&self) -> Result<ProjectSites, OrchestrationError> {
+        Ok(self
+            .document()?
+            .map(|document| ProjectSites::of(&document.targets))
+            .unwrap_or_default())
+    }
+
     pub(crate) fn document(&self) -> Result<Option<TargetManifest>, OrchestrationError> {
         let Some(bytes) = self.storage.read(MAX_MANIFEST_BYTES)? else {
             return Ok(None);
         };
-        let document: TargetManifest = decode(&bytes)?;
+        let document = decode_manifest(&bytes)?;
         validate(&document).map_err(|_| OrchestrationError::Corrupt)?;
         Ok(Some(document))
     }
@@ -64,9 +85,18 @@ impl ManifestStore {
         {
             return Ok(previous.into());
         }
+        validate_sites(&request.targets)?;
+        let before = previous
+            .as_ref()
+            .map(|document| ProjectSites::of(&document.targets))
+            .unwrap_or_default();
+        let after = ProjectSites::of(&request.targets);
+        if before != after {
+            self.check_grouping(&after, &request.targets)?;
+        }
         let revision = fresh_token(tx, previous.as_ref().map(|doc| doc.revision.as_str()))?;
         let document = TargetManifest {
-            schema_version: ORCHESTRATION_VERSION,
+            schema_version: manifest_version(&request.targets),
             revision,
             targets: request.targets,
         };
@@ -92,6 +122,9 @@ impl ManifestStore {
             return Err(OrchestrationError::Conflict);
         }
         let mut targets = current.map(|d| d.targets).unwrap_or_default();
+        if let Some(project) = &target.site_of {
+            active_project(&targets, project)?;
+        }
         if let Some(existing) = targets.iter().find(|t| t.target_id == target.target_id) {
             if existing.state == DeclarationState::Removed {
                 return Err(OrchestrationError::Removed);
@@ -124,12 +157,23 @@ impl ManifestStore {
                 "set or clear repository hint, not both",
             ));
         }
+        if request.site_of.is_some() && request.clear_site_of {
+            return Err(OrchestrationError::Invalid(
+                "set or clear the project a site belongs to, not both",
+            ));
+        }
+        if let Some(project) = &request.site_of {
+            valid_token(project)?;
+        }
         let _lock = self.storage.lock()?;
         let current = self.document()?.ok_or(OrchestrationError::NotFound)?;
         if current.revision != request.expected_revision {
             return Err(OrchestrationError::Conflict);
         }
         let mut targets = current.targets;
+        if let Some(project) = &request.site_of {
+            active_project(&targets, project)?;
+        }
         let target = targets
             .iter_mut()
             .find(|target| target.target_id == target_id)
@@ -138,6 +182,11 @@ impl ManifestStore {
             return Err(OrchestrationError::Removed);
         }
         target.label = request.label;
+        if let Some(project) = request.site_of {
+            target.site_of = Some(project);
+        } else if request.clear_site_of {
+            target.site_of = None;
+        }
         if let Some(hint) = request.expected_repository_identity {
             target.expected_repository_identity = Some(normalize_repository_hint(&hint)?);
         } else if request.clear_expected_repository_identity {
@@ -179,11 +228,114 @@ impl ManifestStore {
     }
 }
 
+impl ManifestStore {
+    /// HS2-SHH7WW: a change to which targets are sites of one project must leave every
+    /// ticket of a project with at most one plan step and one active run, and every
+    /// bound site of a project on the same ticket store. Existing records keep the
+    /// site they name; they are read through the new grouping, never rewritten.
+    fn check_grouping(
+        &self,
+        sites: &ProjectSites,
+        targets: &[TargetDeclaration],
+    ) -> Result<(), OrchestrationError> {
+        let plan = SharedPlanStore::new(self.storage.anchor()).read()?;
+        let mut steps = std::collections::BTreeSet::new();
+        for step in plan.iter().flat_map(|plan| &plan.steps) {
+            if !steps.insert(sites.ticket_key(&step.target)) {
+                return Err(OrchestrationError::Site(SiteError::PlanConflict));
+            }
+        }
+        let Some((home, owner)) = &self.machine else {
+            return Ok(());
+        };
+        valid_identifier(owner)?;
+        let mut active = std::collections::BTreeSet::new();
+        for run in RunRegistry::new(home).list(owner, true)? {
+            if !active.insert(sites.ticket_key(&run.target)) {
+                return Err(OrchestrationError::Site(SiteError::RunConflict));
+            }
+        }
+        let live = |id: &str| {
+            targets
+                .iter()
+                .any(|target| target.target_id == id && target.state == DeclarationState::Active)
+        };
+        let mut stores: BTreeMap<&str, String> = BTreeMap::new();
+        let file = BindingRegistry::new(home).read_file()?;
+        for binding in &file.bindings {
+            let Some(destination) = &binding.destination else {
+                continue;
+            };
+            if binding.target.owner_checkout_id != *owner || !live(&binding.target.target_id) {
+                continue;
+            }
+            let authority = destination.authority();
+            if *stores
+                .entry(sites.project_of(&binding.target.target_id))
+                .or_insert_with(|| authority.to_owned())
+                != authority
+            {
+                return Err(OrchestrationError::Site(SiteError::StoreMismatch));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// HS2-SHH7WW: the project a new site names must be an active target.
+fn active_project(targets: &[TargetDeclaration], project: &str) -> Result<(), OrchestrationError> {
+    valid_token(project)?;
+    if targets
+        .iter()
+        .any(|target| target.target_id == project && target.state == DeclarationState::Active)
+    {
+        Ok(())
+    } else {
+        Err(OrchestrationError::Site(SiteError::ProjectUnknown))
+    }
+}
+
+/// HS2-SHH7WW: version 1 while no target is a site, so an older binary keeps reading
+/// an ungrouped manifest; version 2 once one is, which an older binary refuses as
+/// `upgrade_required` before it could misread or overwrite it.
+fn manifest_version(targets: &[TargetDeclaration]) -> u32 {
+    if targets.iter().any(|target| target.site_of.is_some()) {
+        MANIFEST_SITES_VERSION
+    } else {
+        ORCHESTRATION_VERSION
+    }
+}
+
+/// The version is read before the strict field set, as every orchestration file does.
+fn decode_manifest(bytes: &[u8]) -> Result<TargetManifest, OrchestrationError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| OrchestrationError::Corrupt)?;
+    let found = value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(OrchestrationError::Corrupt)?;
+    if found != u64::from(ORCHESTRATION_VERSION) && found != u64::from(MANIFEST_SITES_VERSION) {
+        return Err(OrchestrationError::UnsupportedVersion { found });
+    }
+    serde_json::from_value(value).map_err(|_| OrchestrationError::Corrupt)
+}
+
 fn validate(document: &TargetManifest) -> Result<(), OrchestrationError> {
-    if document.schema_version != ORCHESTRATION_VERSION {
+    if document.schema_version != ORCHESTRATION_VERSION
+        && document.schema_version != MANIFEST_SITES_VERSION
+    {
         return Err(OrchestrationError::UnsupportedVersion {
             found: document.schema_version.into(),
         });
+    }
+    // Version 1 never carries a site, so an older reader never ignores one.
+    if document.schema_version == ORCHESTRATION_VERSION
+        && document
+            .targets
+            .iter()
+            .any(|target| target.site_of.is_some())
+    {
+        return Err(OrchestrationError::Corrupt);
     }
     valid_token(&document.revision)?;
     validate_targets(&document.targets)
@@ -206,6 +358,14 @@ fn validate_targets(targets: &[TargetDeclaration]) -> Result<(), OrchestrationEr
             if normalize_repository_hint(hint)? != *hint {
                 return Err(OrchestrationError::Invalid(
                     "repository hint must be normalized",
+                ));
+            }
+        }
+        if let Some(project) = &target.site_of {
+            valid_token(project)?;
+            if *project == target.target_id {
+                return Err(OrchestrationError::Invalid(
+                    "a target cannot be a site of itself",
                 ));
             }
         }

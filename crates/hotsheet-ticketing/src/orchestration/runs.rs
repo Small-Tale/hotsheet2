@@ -458,6 +458,26 @@ impl RunRegistry {
         actor_id: Option<String>,
         tx: &mut Transaction<'_>,
     ) -> Result<(Run, bool), OrchestrationError> {
+        self.begin_in(
+            owner_checkout_id,
+            new,
+            &ProjectSites::default(),
+            actor_id,
+            tx,
+        )
+    }
+
+    /// HS2-SHH7WW: [`Self::begin`] where several targets are sites of one project. A
+    /// ticket of the project has at most one active run whichever site it was
+    /// dispatched through, and a worker one active direct run per project.
+    pub fn begin_in(
+        &self,
+        owner_checkout_id: &str,
+        new: NewRun,
+        sites: &ProjectSites,
+        actor_id: Option<String>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<(Run, bool), OrchestrationError> {
         valid_identifier(owner_checkout_id)?;
         let now_ms = tx.clock.now_ms();
         let mut run = Run {
@@ -526,14 +546,14 @@ impl RunRegistry {
                 .filter(owned)
                 .filter(|r| r.state.is_active())
         };
-        if active().any(|other| other.target == run.target) {
+        if active().any(|other| sites.same_ticket(&other.target, &run.target)) {
             return Err(OrchestrationError::Run(RunError::TargetActive));
         }
         if run.mode == DispatchMode::Direct
             && active().any(|other| {
                 other.mode == DispatchMode::Direct
                     && other.worker_id == run.worker_id
-                    && other.target.target_id == run.target.target_id
+                    && sites.same_project(&other.target.target_id, &run.target.target_id)
             })
         {
             return Err(OrchestrationError::Run(RunError::WorkerBusy));

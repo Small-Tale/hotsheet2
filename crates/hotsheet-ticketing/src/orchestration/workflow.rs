@@ -58,11 +58,102 @@ impl Orchestration {
         bindings: BindingRegistry,
     ) -> Result<Self, OrchestrationError> {
         super::contract::valid_identifier(&owner_checkout_id)?;
+        // HS2-SHH7WW: grouping changes are checked against this machine's records.
+        let manifest = manifest.on_machine(bindings.storage.anchor(), &owner_checkout_id);
         Ok(Self {
             owner_checkout_id,
             manifest,
             bindings,
         })
+    }
+
+    /// HS2-SHH7WW: every active project with its active sites and this machine's
+    /// binding of each. Reads the manifest and the binding file; contacts nothing.
+    pub fn sites(&self) -> Result<SitesView, OrchestrationError> {
+        let Some(manifest) = self.manifest.document()? else {
+            return Ok(SitesView {
+                revision: None,
+                projects: Vec::new(),
+            });
+        };
+        let file = self.bindings.read_file()?;
+        let active: Vec<&TargetDeclaration> = manifest
+            .targets
+            .iter()
+            .filter(|target| target.state == DeclarationState::Active)
+            .collect();
+        let site = |target: &TargetDeclaration| {
+            let binding = file.bindings.iter().find(|binding| {
+                binding.target.owner_checkout_id == self.owner_checkout_id
+                    && binding.target.target_id == target.target_id
+            });
+            SiteView {
+                target_id: target.target_id.clone(),
+                label: target.label.clone(),
+                project: target.site_of.is_none(),
+                destination: binding.and_then(|binding| binding.destination.clone()),
+                confirmed_at_ms: binding.and_then(|binding| binding.confirmed_at_ms),
+                last_failure: binding.and_then(|binding| binding.last_failure),
+                stale: true,
+            }
+        };
+        let mut projects: Vec<SiteProject> = active
+            .iter()
+            .filter(|target| target.site_of.is_none())
+            .map(|project| {
+                let mut sites = vec![site(project)];
+                let mut others: Vec<SiteView> = active
+                    .iter()
+                    .filter(|target| target.site_of.as_deref() == Some(&project.target_id))
+                    .map(|target| site(target))
+                    .collect();
+                others.sort_by(|a, b| (&a.label, &a.target_id).cmp(&(&b.label, &b.target_id)));
+                sites.extend(others);
+                SiteProject {
+                    project_id: project.target_id.clone(),
+                    label: project.label.clone(),
+                    sites,
+                }
+            })
+            .collect();
+        projects.sort_by(|a, b| (&a.label, &a.project_id).cmp(&(&b.label, &b.project_id)));
+        Ok(SitesView {
+            revision: Some(manifest.revision),
+            projects,
+        })
+    }
+
+    /// HS2-SHH7WW: every other bound site of the target's project on this machine
+    /// must reach the same ticket store as `destination`.
+    fn check_site_store(
+        &self,
+        manifest: &TargetManifest,
+        file: &super::bindings::BindingFile,
+        target: &TargetRef,
+        destination: &TargetDestination,
+    ) -> Result<(), OrchestrationError> {
+        let sites = ProjectSites::of(&manifest.targets);
+        let live = |id: &str| {
+            manifest
+                .targets
+                .iter()
+                .any(|entry| entry.target_id == id && entry.state == DeclarationState::Active)
+        };
+        let mismatch = file.bindings.iter().any(|binding| {
+            binding.target.owner_checkout_id == self.owner_checkout_id
+                && binding.target.target_id != target.target_id
+                && live(&binding.target.target_id)
+                && sites.same_project(&binding.target.target_id, &target.target_id)
+                && binding
+                    .destination
+                    .as_ref()
+                    .is_some_and(|other| other.authority() != destination.authority())
+        });
+        if mismatch {
+            Err(OrchestrationError::Site(SiteError::StoreMismatch))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn declarations(&self) -> Result<ManifestView, OrchestrationError> {
@@ -100,6 +191,7 @@ impl Orchestration {
             state: DeclarationState::Active,
             label: request.label,
             expected_repository_identity: request.expected_repository_identity,
+            site_of: request.site_of,
         };
         observer.with_source_guard(
             &self.owner_checkout_id,
@@ -177,6 +269,11 @@ impl Orchestration {
             &observation,
             observer,
             |declaration, file| {
+                let manifest = self
+                    .manifest
+                    .document()?
+                    .ok_or(OrchestrationError::NotFound)?;
+                self.check_site_store(&manifest, file, &request.target, &request.destination)?;
                 let index = file
                     .bindings
                     .iter()
@@ -246,6 +343,8 @@ impl Orchestration {
                 }
                 let _binding_lock = self.bindings.storage.lock()?;
                 let mut file = self.bindings.read_file()?;
+                // HS2-SHH7WW: refuse another store before any probe.
+                self.check_site_store(&manifest, &file, &request.target, &request.destination)?;
                 let index = match file
                     .bindings
                     .iter()

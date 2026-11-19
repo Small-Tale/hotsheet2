@@ -1,0 +1,220 @@
+//! HS2-SHH7WW: several targets declared as sites of one orchestration project.
+//!
+//! A target names the project it is another site of with `site_of`; the project's own
+//! target is its first site. Every site of a project reaches the same ticket store, so
+//! one ticket of the project has one plan step and one active run whichever site it
+//! is reached through. Records keep the concrete site they name; comparisons go
+//! through [`ProjectSites`].
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use super::{DeclarationState, TargetDeclaration, TargetDestination, TargetFailure};
+use crate::orchestration::{RunTarget, TicketKey};
+
+/// Why a site of a project was refused. Content-free codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteError {
+    /// `site_of` names no active target of this manifest.
+    ProjectUnknown,
+    /// `site_of` names a target that is itself a site, or the target already has sites.
+    Chain,
+    /// A project target cannot be removed while another site of it is active.
+    ProjectHasSites,
+    /// The site declares a different normalized repository identity than its project.
+    RepositoryMismatch,
+    /// The site is bound on this machine to another ticket store than a site of its
+    /// project.
+    StoreMismatch,
+    /// The checked-in plan has two steps on one ticket of the project.
+    PlanConflict,
+    /// This machine has two active runs on one ticket of the project.
+    RunConflict,
+}
+
+impl SiteError {
+    pub const ALL: [Self; 7] = [
+        Self::ProjectUnknown,
+        Self::Chain,
+        Self::ProjectHasSites,
+        Self::RepositoryMismatch,
+        Self::StoreMismatch,
+        Self::PlanConflict,
+        Self::RunConflict,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::ProjectUnknown => "site_project_unknown",
+            Self::Chain => "site_chain",
+            Self::ProjectHasSites => "site_project_has_sites",
+            Self::RepositoryMismatch => "site_repository_mismatch",
+            Self::StoreMismatch => "site_store_mismatch",
+            Self::PlanConflict => "site_plan_conflict",
+            Self::RunConflict => "site_run_conflict",
+        }
+    }
+}
+
+/// Which project each target belongs to. A target without `site_of` is its own
+/// project, so an empty map treats every target as a one-site project.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectSites {
+    project_of: BTreeMap<String, String>,
+}
+
+impl ProjectSites {
+    /// The grouping the declarations describe, removed ones included so that their
+    /// history still counts for their project.
+    pub fn of(targets: &[TargetDeclaration]) -> Self {
+        Self {
+            project_of: targets
+                .iter()
+                .filter_map(|target| {
+                    target
+                        .site_of
+                        .clone()
+                        .map(|project| (target.target_id.clone(), project))
+                })
+                .collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.project_of.is_empty()
+    }
+
+    /// The project key of a target: the project target's id, or its own.
+    pub fn project_of<'a>(&'a self, target_id: &'a str) -> &'a str {
+        self.project_of
+            .get(target_id)
+            .map_or(target_id, String::as_str)
+    }
+
+    pub fn same_project(&self, left: &str, right: &str) -> bool {
+        self.project_of(left) == self.project_of(right)
+    }
+
+    /// The qualified ticket with its target replaced by the project key.
+    pub fn ticket_key(&self, target: &RunTarget) -> TicketKey {
+        (
+            self.project_of(&target.target_id).to_owned(),
+            target.connection_id.clone(),
+            target.native_id.clone(),
+        )
+    }
+
+    /// The same key for a key already built from a concrete site.
+    pub fn canonical(&self, key: &TicketKey) -> TicketKey {
+        (
+            self.project_of(&key.0).to_owned(),
+            key.1.clone(),
+            key.2.clone(),
+        )
+    }
+
+    /// One ticket of the project, through whichever sites the two name.
+    pub fn same_ticket(&self, left: &RunTarget, right: &RunTarget) -> bool {
+        left.connection_id == right.connection_id
+            && left.native_id == right.native_id
+            && self.same_project(&left.target_id, &right.target_id)
+    }
+
+    /// Every target of the project `project_id`: the project target first, then its
+    /// other sites by id.
+    pub fn sites_of(&self, project_id: &str) -> Vec<String> {
+        std::iter::once(project_id.to_owned())
+            .chain(
+                self.project_of
+                    .iter()
+                    .filter(|(site, project)| *project == project_id && *site != project_id)
+                    .map(|(site, _)| site.clone()),
+            )
+            .collect()
+    }
+}
+
+/// One site as this machine knows it: its binding, never a fresh probe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteView {
+    pub target_id: String,
+    pub label: String,
+    /// True for the project's own target.
+    pub project: bool,
+    /// Where this machine binds the site, when it does.
+    pub destination: Option<TargetDestination>,
+    pub confirmed_at_ms: Option<u64>,
+    pub last_failure: Option<TargetFailure>,
+    pub stale: bool,
+}
+
+/// One project with its active sites.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteProject {
+    pub project_id: String,
+    pub label: String,
+    pub sites: Vec<SiteView>,
+}
+
+/// `GET /checkouts/{owner}/orchestration/sites`: every active project of the manifest,
+/// one-site projects included, ordered by label then id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SitesView {
+    pub revision: Option<String>,
+    pub projects: Vec<SiteProject>,
+}
+
+/// Static checks of the grouping a manifest write would produce. Reads stay lenient
+/// so a grouping merged from another machine is reported rather than unreadable.
+pub(crate) fn validate_sites(
+    targets: &[TargetDeclaration],
+) -> Result<(), crate::orchestration::OrchestrationError> {
+    use crate::orchestration::OrchestrationError;
+    let by_id: BTreeMap<&str, &TargetDeclaration> = targets
+        .iter()
+        .map(|target| (target.target_id.as_str(), target))
+        .collect();
+    for target in targets {
+        let Some(project_id) = target.site_of.as_deref() else {
+            continue;
+        };
+        super::valid_token(project_id)?;
+        if project_id == target.target_id {
+            return Err(OrchestrationError::Invalid(
+                "a target cannot be a site of itself",
+            ));
+        }
+        if target.state != DeclarationState::Active {
+            continue;
+        }
+        let project = by_id
+            .get(project_id)
+            .ok_or(OrchestrationError::Site(SiteError::ProjectUnknown))?;
+        if project.site_of.is_some()
+            || targets.iter().any(|other| {
+                other.site_of.as_deref() == Some(target.target_id.as_str())
+                    && other.state == DeclarationState::Active
+            })
+        {
+            return Err(OrchestrationError::Site(SiteError::Chain));
+        }
+        if project.state != DeclarationState::Active {
+            return Err(OrchestrationError::Site(SiteError::ProjectHasSites));
+        }
+    }
+    // Every declared repository identity of one project's active sites is the same.
+    let mut hints: BTreeMap<&str, &str> = BTreeMap::new();
+    for target in targets
+        .iter()
+        .filter(|target| target.state == DeclarationState::Active)
+    {
+        if let Some(hint) = target.expected_repository_identity.as_deref()
+            && *hints.entry(target.project_id()).or_insert(hint) != hint
+        {
+            return Err(OrchestrationError::Site(SiteError::RepositoryMismatch));
+        }
+    }
+    Ok(())
+}

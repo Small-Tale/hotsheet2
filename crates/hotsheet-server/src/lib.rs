@@ -2134,6 +2134,11 @@ pub fn app(state: AppState) -> Router {
                 .post(routes::orchestration::write)
                 .put(routes::orchestration::write),
         )
+        // HS2-SHH7WW: each project with its sites and this machine's bindings.
+        .route(
+            "/checkouts/{owner}/orchestration/sites",
+            get(routes::orchestration::read),
+        )
         .route(
             "/checkouts/{owner}/orchestration/targets/{target}",
             axum::routing::patch(routes::orchestration::write).delete(routes::orchestration::write),

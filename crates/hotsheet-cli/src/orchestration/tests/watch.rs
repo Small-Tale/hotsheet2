@@ -729,6 +729,7 @@ fn hs2_7qhwhj_a_remote_target_is_followed_through_the_reviewed_transport() {
                     state: DeclarationState::Active,
                     label: "Remote".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             &mut tx,

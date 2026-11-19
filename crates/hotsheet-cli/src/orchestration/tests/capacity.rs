@@ -660,6 +660,7 @@ fn hs2_j8prtv_remote_target_answers_from_its_own_machine_over_the_reviewed_trans
                     state: DeclarationState::Active,
                     label: "Remote target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             &mut tx,

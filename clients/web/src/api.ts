@@ -1105,6 +1105,8 @@ export interface OrchestrationTargetDeclaration {
   state: 'active' | 'removed';
   label: string;
   expected_repository_identity?: string;
+  /** HS2-SHH7WW: this target is another site of the project declared by that target. */
+  site_of?: string;
 }
 /** `GET /checkouts/{owner}/orchestration/targets`. */
 export interface OrchestrationManifest {

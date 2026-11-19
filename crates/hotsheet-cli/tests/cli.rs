@@ -15320,3 +15320,114 @@ fn hs2_4j6v46_cli_missing_host_config_is_actionable_without_creating_identity_or
     assert!(!home.join("server-identity.json").exists());
     assert!(!home.join("checkouts.json").exists());
 }
+
+/// HS2-SHH7WW: the actual CLI declares a target as another site of a project, lists
+/// the project with its sites, separates it again, and writes manifest version 2 only
+/// while a site is declared.
+#[test]
+fn hs2_shh7ww_actual_cli_declares_lists_and_separates_sites_of_one_project() {
+    use hotsheet_ticketing::{
+        ProviderConfigRegistry, ProviderConnection,
+        checkouts::{CheckoutRegistry, TicketSource},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("host-config");
+    let project = root.path().join("project");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir(&source).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    hs2_4j6v46_capability(&home);
+    let providers = ProviderConfigRegistry::new(source.join("providers.json"));
+    providers
+        .save(&[ProviderConnection {
+            id: "synthetic".into(),
+            provider: "github".into(),
+            locator: "synthetic/repo".into(),
+            name: None,
+            default: false,
+            disabled: false,
+            settings: serde_json::Value::Null,
+        }])
+        .unwrap();
+    let owner = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register_registered_sources(
+            &providers,
+            &project,
+            None,
+            None,
+            vec![TicketSource {
+                connection_id: "synthetic".into(),
+                provider: "github".into(),
+                locator: "synthetic/repo".into(),
+            }],
+            None,
+        )
+        .unwrap();
+    let version = || {
+        let bytes = std::fs::read(project.join(".hotsheet2/orchestration.json")).unwrap();
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["schema_version"].clone()
+    };
+    let project_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    let site_id = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
+    let added = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &["add", "--target-id", project_id, "--label", "Widgets"],
+    );
+    assert_eq!(version(), 1);
+    let grouped = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "add",
+            "--target-id",
+            site_id,
+            "--label",
+            "Widgets on the build host",
+            "--site-of",
+            project_id,
+            "--expected-revision",
+            added["revision"].as_str().unwrap(),
+        ],
+    );
+    assert_eq!(grouped["targets"][1]["site_of"], project_id);
+    assert_eq!(version(), 2);
+    let sites = hs2_4j6v46_value(&home, &source, &owner.id, &["sites"]);
+    assert_eq!(sites["projects"][0]["project_id"], project_id);
+    assert_eq!(sites["projects"][0]["sites"][1]["target_id"], site_id);
+    assert_eq!(sites["projects"][0]["sites"][1]["project"], false);
+    // Removing the project while its site is active fails with the site's code.
+    hs2_4j6v46_command(&home, &source, false)
+        .args([
+            "remove",
+            project_id,
+            "--project",
+            &owner.id,
+            "--expected-revision",
+            grouped["revision"].as_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("site_project_has_sites"));
+    let separated = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "rename",
+            site_id,
+            "--label",
+            "Widgets on the build host",
+            "--clear-site-of",
+            "--expected-revision",
+            grouped["revision"].as_str().unwrap(),
+        ],
+    );
+    assert!(separated["targets"][1].get("site_of").is_none());
+    assert_eq!(version(), 1);
+    let sites = hs2_4j6v46_value(&home, &source, &owner.id, &["sites"]);
+    assert_eq!(sites["projects"].as_array().unwrap().len(), 2);
+}

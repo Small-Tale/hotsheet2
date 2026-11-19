@@ -24,6 +24,7 @@ fn target(value: u128, label: &str) -> TargetDeclaration {
         state: DeclarationState::Active,
         label: label.into(),
         expected_repository_identity: None,
+        site_of: None,
     }
 }
 

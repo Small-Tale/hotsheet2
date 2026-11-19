@@ -1131,6 +1131,7 @@ fn remote(tx: &mut Transaction<'_>) -> Remote {
                     state: DeclarationState::Active,
                     label: "Remote target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             tx,

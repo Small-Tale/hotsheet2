@@ -269,6 +269,7 @@ fn hs2_ycjdeb_set_validate_and_dry_run_against_fixture_targets() {
                         state: DeclarationState::Active,
                         label: label.into(),
                         expected_repository_identity: None,
+                        site_of: None,
                     })
                     .collect(),
             },

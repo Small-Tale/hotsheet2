@@ -334,13 +334,22 @@ impl OrchestrationRuntime {
         steps: &[PlanStep],
         now_ms: u64,
     ) -> Result<PlanFacts, OrchestrationError> {
-        let mut facts = PlanFacts::default();
-        let stored: BTreeMap<TicketKey, TicketFacts> = self
-            .plan()
-            .tickets(owner_id)?
-            .into_iter()
-            .map(|record| (ticket_key(&record.target), record.facts))
-            .collect();
+        // HS2-SHH7WW: a ticket reached through several sites of one project has the
+        // facts of every site: reads, runs and gates are joined by project.
+        let sites = self.plan().sites(owner_id)?;
+        let mut facts = PlanFacts {
+            sites: sites.clone(),
+            ..PlanFacts::default()
+        };
+        let mut stored: BTreeMap<TicketKey, TicketFacts> = BTreeMap::new();
+        for record in self.plan().tickets(owner_id)? {
+            let key = sites.ticket_key(&record.target);
+            let merged = match stored.remove(&key) {
+                Some(known) => known.merge(record.facts),
+                None => record.facts,
+            };
+            stored.insert(key, merged);
+        }
         let runs = self.runs().list(owner_id, false)?;
         // Standing gates only: a superseded link counts for nothing (§26.13).
         let gates = self.gate_summary(owner_id, &GateFilter::default())?.gates;
@@ -354,9 +363,15 @@ impl OrchestrationRuntime {
             if facts.tickets.contains_key(&key) {
                 continue;
             }
-            let mut known = stored.get(&key).cloned().unwrap_or_default();
+            let mut known = stored
+                .get(&sites.ticket_key(&target))
+                .cloned()
+                .unwrap_or_default();
             let mut latest: Option<&hotsheet_ticketing::orchestration::Run> = None;
-            for run in runs.iter().filter(|run| run.target == target) {
+            for run in runs
+                .iter()
+                .filter(|run| sites.same_ticket(&run.target, &target))
+            {
                 // §26.9: a run's last confirmed observation and whether it is stale.
                 known = known.merge(TicketFacts {
                     observed: run.observed.as_ref().map(|observed| TicketSeen {
@@ -390,7 +405,7 @@ impl OrchestrationRuntime {
                             (key.0.clone(), commit.clone()),
                             of(&|gate| {
                                 gate.run_id == run.run_id
-                                    && gate.target_id == key.0
+                                    && sites.same_project(&gate.target_id, &key.0)
                                     && gate.commit == *commit
                             }),
                         );
@@ -410,7 +425,9 @@ impl OrchestrationRuntime {
                 {
                     facts.commit_gates.insert(
                         (target_id.clone(), commit.clone()),
-                        of(&|gate| gate.target_id == *target_id && gate.commit == *commit),
+                        of(&|gate| {
+                            sites.same_project(&gate.target_id, target_id) && gate.commit == *commit
+                        }),
                     );
                 }
             }

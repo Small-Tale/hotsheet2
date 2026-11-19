@@ -375,6 +375,7 @@ fn hs2_d85g19_a_remote_target_is_listed_over_the_reviewed_transport() {
                     state: DeclarationState::Active,
                     label: "Remote target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             &mut tx,

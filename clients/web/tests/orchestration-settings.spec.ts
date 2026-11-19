@@ -888,6 +888,86 @@ test('HS2-0G80WD a remote orchestration project stops orchestrating a project af
   }
 });
 
+/**
+ * HS2-SHH7WW: two checkouts of one ticket store declared as sites of one project. Settings lists the
+ * other site right after its project, labelled with the project, its machine and connection, through
+ * the real routes; captured wide, medium, narrow and wide again in both schemes.
+ */
+test('HS2-SHH7WW Settings lists a project with its other sites after it', async ({ page, browserName }) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Widgets'],
+      [docs, 'Widgets second clone'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    const { revision } = await server.request<{ revision: string }>(`${base}/targets`);
+    // Both checkouts reach the same ticket store, so the second may be a site of the first.
+    await server.request(`${base}/targets/${targets['Widgets second clone']}`, 'PATCH', {
+      expected_revision: revision,
+      label: 'Widgets second clone',
+      site_of: targets.Widgets,
+      actor: { role: 'human' },
+    });
+    const sites = await server.request<{ projects: { project_id: string; sites: { target_id: string }[] }[] }>(
+      `${base}/sites`,
+    );
+    expect(sites.projects).toHaveLength(1);
+    expect(sites.projects[0].sites.map((site) => site.target_id)).toEqual([
+      targets.Widgets,
+      targets['Widgets second clone'],
+    ]);
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const rows = settings.locator('[data-orchestration-project]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Widgets');
+    await expect(rows.nth(0)).toContainText('2 sites · Local on This Computer');
+    await expect(rows.nth(1)).toContainText('Widgets second clone');
+    await expect(rows.nth(1)).toContainText('Site of Widgets · Local on This Computer');
+
+    const directory = join('target', 'visual-captures', 'hs2-shh7ww');
+    await mkdir(directory, { recursive: true });
+    const hideRails = async (names: string[]) => {
+      for (const name of names) {
+        const hide = page.getByRole('button', { name, exact: true });
+        if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+        await expect(hide).toBeHidden();
+      }
+    };
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const size of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide]) {
+        await page.setViewportSize(size);
+        if (size.width === 390) await hideRails(['Hide Settings Sidebar', 'Hide Ticket Inspector']);
+        await expect(rows.nth(1)).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({
+          path: join(directory, `hs2-shh7ww-sites-${String(size.width)}-${scheme}-${browserName}.png`),
+          animations: 'disabled',
+        });
+      }
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

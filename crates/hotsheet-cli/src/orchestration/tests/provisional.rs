@@ -421,6 +421,7 @@ fn two(opt: Option<&Opt>, tx: &mut Transaction<'_>) -> Two {
         state: DeclarationState::Active,
         label: "Second".into(),
         expected_repository_identity: None,
+        site_of: None,
     });
     let manifest = m
         .runtime

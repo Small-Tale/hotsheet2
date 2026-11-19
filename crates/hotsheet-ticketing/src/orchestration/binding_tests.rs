@@ -189,6 +189,7 @@ fn setup() -> (
                 state: DeclarationState::Active,
                 label: "Synthetic target".into(),
                 expected_repository_identity: None,
+                site_of: None,
             },
             &mut tx,
         )

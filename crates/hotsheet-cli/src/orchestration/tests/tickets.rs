@@ -263,6 +263,7 @@ pub(super) fn bind_and_allow(
         state: DeclarationState::Active,
         label: "Target".into(),
         expected_repository_identity: None,
+        site_of: None,
     });
     let manifest = m
         .runtime
@@ -1180,6 +1181,7 @@ fn hs2_az15ga_remote_destination_uses_the_reviewed_transport_and_peer_codes() {
                     state: DeclarationState::Active,
                     label: "Remote target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             &mut tx,

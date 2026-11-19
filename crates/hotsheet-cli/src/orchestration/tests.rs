@@ -39,6 +39,7 @@ mod session_executor;
 mod session_worktrees;
 mod sessions;
 mod shared_plan;
+mod sites;
 #[cfg(unix)]
 mod step_process;
 // HS2-2R32SD: Windows resolution rules, tested on every platform.
@@ -325,6 +326,7 @@ fn declaration(f: &Fixture, tx: &mut Transaction<'_>) -> String {
                     state: DeclarationState::Active,
                     label: "Synthetic target".into(),
                     expected_repository_identity: None,
+                    site_of: None,
                 }],
             },
             tx,

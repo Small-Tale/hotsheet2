@@ -310,6 +310,22 @@ impl OrchestrationRuntime {
         self.flow(&self.owner(owner_id)?)?.declarations()
     }
 
+    /// HS2-SHH7WW: every project with its sites and this machine's binding of each.
+    pub fn sites(
+        &self,
+        owner_id: &str,
+    ) -> Result<hotsheet_ticketing::orchestration::SitesView, OrchestrationError> {
+        self.flow(&self.owner(owner_id)?)?.sites()
+    }
+
+    /// HS2-SHH7WW: which targets of the owner's manifest are sites of one project.
+    pub(crate) fn project_sites(
+        &self,
+        owner_id: &str,
+    ) -> Result<hotsheet_ticketing::orchestration::ProjectSites, OrchestrationError> {
+        ManifestStore::new(Path::new(&self.owner(owner_id)?.root)).sites()
+    }
+
     pub fn bindings(&self, owner_id: &str) -> Result<Vec<BindingView>, OrchestrationError> {
         let owner = self.owner(owner_id)?;
         let flow = self.flow(&owner)?;
@@ -603,6 +619,12 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 | E::MidTurn => 409,
             }
         }
+        // HS2-SHH7WW: a project the site names is absent; anything else conflicts with
+        // the project's other sites or records.
+        OrchestrationError::Site(hotsheet_ticketing::orchestration::SiteError::ProjectUnknown) => {
+            404
+        }
+        OrchestrationError::Site(_) => 409,
         OrchestrationError::TargetOperation(error) => {
             use hotsheet_ticketing::orchestration::TargetOpError as E;
             match error {

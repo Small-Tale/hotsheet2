@@ -271,6 +271,9 @@ pub struct PlanFacts {
     pub gates: BTreeMap<TicketKey, GateFacts>,
     /// The gates of one target commit: `(target_id, commit)`.
     pub commit_gates: BTreeMap<(String, String), GateFacts>,
+    /// HS2-SHH7WW: which targets are sites of one project. A step and a prerequisite
+    /// naming one ticket through two sites of a project name the same ticket.
+    pub sites: ProjectSites,
     /// The evidence of a validation step: `(connection_id, native_id, step_id)` of
     /// the orchestration ticket. Absent when the step is not defined.
     pub validations: BTreeMap<(String, String, String), (ValidationState, Option<String>)>,
@@ -565,10 +568,11 @@ fn reachable(edges: &[Vec<usize>]) -> Vec<BTreeSet<usize>> {
 pub fn evaluate_plan(steps: &[PlanStep], facts: &PlanFacts) -> Vec<StepReadiness> {
     let mut steps: Vec<&PlanStep> = steps.iter().collect();
     steps.sort_by(|a, b| a.step_id.cmp(&b.step_id));
+    // HS2-SHH7WW: edges join tickets by project, whichever site names them.
     let by_ticket: BTreeMap<TicketKey, usize> = steps
         .iter()
         .enumerate()
-        .map(|(index, step)| (ticket_key(&step.target), index))
+        .map(|(index, step)| (facts.sites.ticket_key(&step.target), index))
         .collect();
     let edges: Vec<Vec<usize>> = steps
         .iter()
@@ -576,7 +580,7 @@ pub fn evaluate_plan(steps: &[PlanStep], facts: &PlanFacts) -> Vec<StepReadiness
             step.prerequisites
                 .iter()
                 .filter_map(Prerequisite::ticket_key)
-                .filter_map(|key| by_ticket.get(&key).copied())
+                .filter_map(|key| by_ticket.get(&facts.sites.canonical(&key)).copied())
                 .collect()
         })
         .collect();
@@ -645,7 +649,7 @@ pub fn evaluate_plan(steps: &[PlanStep], facts: &PlanFacts) -> Vec<StepReadiness
                         // A prerequisite inside a cycle cannot be reached by planned work.
                         let cyclic = prerequisite
                             .ticket_key()
-                            .and_then(|key| by_ticket.get(&key))
+                            .and_then(|key| by_ticket.get(&facts.sites.canonical(&key)))
                             .is_some_and(|other| reach[*other].contains(other));
                         (
                             if cyclic {
@@ -973,16 +977,30 @@ impl PlanRegistry {
             .ok_or(OrchestrationError::Readiness(ReadinessError::StepNotFound))
     }
 
-    /// The step that works this exact target ticket, when one is planned.
+    /// The step that works this exact target ticket, when one is planned. HS2-SHH7WW:
+    /// a step planned through another site of the ticket's project is that step.
     pub fn find_target(
         &self,
         owner_checkout_id: &str,
         target: &RunTarget,
     ) -> Result<Option<PlanStep>, OrchestrationError> {
-        Ok(self
-            .definitions(owner_checkout_id)?
-            .into_iter()
-            .find(|step| step.target == *target))
+        let sites = self.sites(owner_checkout_id)?;
+        let steps = self.definitions(owner_checkout_id)?;
+        Ok(steps
+            .iter()
+            .find(|step| step.target == *target)
+            .or_else(|| {
+                steps
+                    .iter()
+                    .find(|step| sites.same_ticket(&step.target, target))
+            })
+            .cloned())
+    }
+
+    /// HS2-SHH7WW: which targets of the owner's manifest are sites of one project.
+    pub fn sites(&self, owner_checkout_id: &str) -> Result<ProjectSites, OrchestrationError> {
+        valid_identifier(owner_checkout_id)?;
+        ManifestStore::new(self.shared(owner_checkout_id)?.storage.anchor()).sites()
     }
 
     /// HS2-F1BKQ0: the plan's state as a value, where every plan read would fail with
@@ -1145,7 +1163,11 @@ impl PlanRegistry {
             .as_ref()
             .map(|document| document.steps.clone())
             .unwrap_or_default();
-        let existing = steps.iter().position(|step| step.target == new.target);
+        // HS2-SHH7WW: one step per ticket of a project, whichever site names it.
+        let sites = ManifestStore::new(shared.storage.anchor()).sites()?;
+        let existing = steps
+            .iter()
+            .position(|step| sites.same_ticket(&step.target, &new.target));
         let found = existing.map_or(0, |index| steps[index].revision);
         if expected_revision.is_some_and(|expected| expected != found) {
             return Err(OrchestrationError::Readiness(ReadinessError::PlanConflict));
@@ -1156,7 +1178,8 @@ impl PlanRegistry {
                 if step.ticket != new.ticket {
                     return Err(OrchestrationError::Conflict);
                 }
-                if step.prerequisites == new.prerequisites
+                if step.target == new.target
+                    && step.prerequisites == new.prerequisites
                     && step.resources == new.resources
                     && step.tool == new.tool
                     && step.model == new.model
@@ -1164,6 +1187,9 @@ impl PlanRegistry {
                 {
                     (step.step(owner_checkout_id), false)
                 } else {
+                    // HS2-SHH7WW: planning the ticket through another site of its
+                    // project moves the step to that site.
+                    step.target = new.target;
                     step.prerequisites = new.prerequisites;
                     step.resources = new.resources;
                     step.tool = new.tool;

@@ -153,6 +153,97 @@ identity and fresh path-free checkout discovery. HS2-4J6V46 adds the target mode
 and bounded checkout-resolution projection; dispatch remains separate work.
 Cached remote observations never authorize target resolution or mutation.
 
+### Sites of one project (HS2-SHH7WW)
+
+One code project can be declared several times, for example a local clone and a
+clone on a paired remote server, so the orchestrator can spread its work over
+several machines (HS2-ZKJX16). Each declaration is a **site** of one project:
+
+- A target names the project it is another site of with optional `site_of`, the
+  `target_id` of the project's own target. The project's own target is its first
+  site. The **project key** of a target is its `site_of`, or its own id when it has
+  none, so every target declared before this feature is a one-site project and its
+  records need no change.
+- There are no chains: a target that is itself a site cannot be a project, and a
+  project with an active site cannot become a site. A target is never a site of
+  itself (`invalid_request`).
+- **Membership changes** are ordinary revisioned manifest writes:
+  `target add --site-of`, `target rename --site-of` (also to move a site to another
+  project) and `target rename --clear-site-of`. A removed site keeps its `site_of` in
+  its tombstone, so its history still counts for its project.
+
+Refusals have their own codes:
+
+| Code                       | Status | When                                                                                                                  |
+| -------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `site_project_unknown`     | 404    | `site_of` names no active target                                                                                      |
+| `site_chain`               | 409    | The project is itself a site, or the target already has sites                                                         |
+| `site_project_has_sites`   | 409    | Removing a project target while a site of it is active                                                                |
+| `site_repository_mismatch` | 409    | Two active sites of one project declare different normalized `expected_repository_identity`                           |
+| `site_store_mismatch`      | 409    | A site is bound on this machine to another ticket store (`checkout_authority`) than another bound site of its project |
+| `site_plan_conflict`       | 409    | The checked-in plan already has two steps on one ticket of the project the change would form                          |
+| `site_run_conflict`        | 409    | This machine has two active runs on one ticket of the project the change would form                                   |
+
+**One ticket store.** Every site of a project reaches the same ticket store. A bind
+or review of a site whose destination's `checkout_authority` differs from that of any
+other bound site of the project on this machine is refused before any probe, and so
+is a grouping change that would join targets bound to different stores. The
+declared repository identity is descriptive, but two sites of one project may not
+declare different ones.
+
+**One step and one run per ticket of a project.** Records keep the concrete site
+they name; comparisons go through the project key:
+
+- A ticket of the project has at most one plan step (§26.15). Planning it through
+  another site changes that step and moves it to that site (a new revision), and
+  `find_target` through either site finds it.
+- A ticket of the project has at most one active run, whichever site dispatched it
+  (`run_target_active`), and a worker at most one active direct run per project
+  (`run_worker_busy`, §26.9).
+- Readiness joins a ticket by project: a prerequisite named through one site is an
+  edge to the step planned through another, an active run or a confirmed read through
+  any site counts for the ticket, and cycles that close only through another site are
+  found.
+
+Which site works a step is still the step's own site; choosing a site by capacity and
+capabilities is the scheduler's (HS2-9FKTB3), and reporting each site's OS and tools is
+HS2-ZY4Z4G.
+
+**Migration.** Existing manifests, plans and runs are read through the grouping and
+never rewritten. A grouping change that would make existing records ambiguous, two
+plan steps or two active runs on one ticket of the new project, or bound sites on
+different stores, is refused with the codes above and writes nothing; finish or remove
+one of them and repeat the change. A grouping that arrives through a merge of the
+checked-in manifest from another machine is read as it is: a plan with two steps on one
+ticket of a project keeps both, and a new run or step is refused until one is removed.
+
+**Compatibility (§26.5).** The manifest stays `schema_version: 1`, byte for byte,
+while no entry names `site_of`. The first write that does produces `schema_version: 2`,
+which an older binary refuses as `upgrade_required` before it could read the file
+without the field or overwrite it. Clearing every `site_of` writes version 1 again; a
+tombstone that names a project keeps the file at version 2. A version-1 file that
+names `site_of` is damaged. The add and rename requests that carry `site_of` or
+`clear_site_of` are refused by an older host as unknown fields, so an older host never
+adds a site as a separate project.
+
+`target sites` (`GET /checkouts/{owner}/orchestration/sites`, MCP `hotsheet_targets`
+action `sites`) lists every active project, ordered by label, with its active sites
+(the project's own target first) and this machine's binding of each: destination,
+last confirmation, last failure. It reads the manifest and the binding file and
+contacts nothing; like every binding read it is machine-local. Settings ›
+Orchestration lists a project's other sites right after it, each labelled `Site of
+<project>` with its machine and connection state.
+
+```sh
+hotsheet-cli -C <configured-host-source> orchestration target add --project <owner> \
+  --target-id <retained-ULID> --label "Widgets on the build host" --site-of <project-target-id> \
+  --expected-revision <revision>
+hotsheet-cli -C <configured-host-source> orchestration target rename <target-id> --project <owner> \
+  --label "Widgets on the build host" --site-of <project-target-id> | --clear-site-of \
+  --expected-revision <revision>
+hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner>
+```
+
 ## 26.3 Ticket relationships and identity
 
 An orchestration ticket can link zero or more target tickets. Each link is a
@@ -324,6 +415,7 @@ HTTP declares the same request/response types:
 | `/checkouts/{owner}/orchestration/targets/{target}`         | PATCH rename; DELETE tombstone                                              |
 | `/checkouts/{owner}/orchestration/targets/{target}/binding` | GET cached machine binding; PUT explicit bind/review; DELETE machine unbind |
 | `/checkouts/{owner}/orchestration/targets/{target}/resolve` | GET fresh target resolution                                                 |
+| `/checkouts/{owner}/orchestration/sites`                    | GET each project with its sites and bindings (HS2-SHH7WW); machine-local    |
 | `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding write                             |
 | `/remote-checkouts/{checkout}/resolution`                   | GET bounded path-free hosting metadata                                      |
 
@@ -385,7 +477,8 @@ ticket field is implemented, older tickets read with an empty link list; writers
 must follow the version guard and rollout procedure in [19](19-format-compatibility.md)
 before producing the new field. A newer manifest version remains readable only
 as an explicit unsupported-version error; it is never overwritten by an older
-client. Removing orchestration configuration does not delete target tickets.
+client. Manifest version 2 is written only while an entry names `site_of`
+(HS2-SHH7WW, §26.2); without one the file stays version 1. Removing orchestration configuration does not delete target tickets.
 
 **Fields a newer peer adds (HS2-T2KS8G).** Machines of different versions talk to
 each other, so new fields are additive and the reading side decides what an unknown
@@ -811,7 +904,9 @@ transition. A person's correction is the one exception to the edges (§26.14).
   mode or worker is a conflict.
 - **One active run per target ticket**, whatever the operation or worker
   (`run_target_active`). A worker that already holds an active direct run on a target
-  takes no second ticket there (`run_worker_busy`).
+  takes no second ticket there (`run_worker_busy`). HS2-SHH7WW: for targets declared as
+  sites of one project both hold per project, whichever site the ticket is reached
+  through (§26.2).
 - **Authority.** Dispatch passes the gate as `work_start` with the operation id, so
   it asks a person unless a remembered rule allows it (§26.7). Renewing continues
   that decision: policy limits still apply, but nobody is asked again. Cancelling
@@ -2492,7 +2587,8 @@ GitLab or git ticket keeps its own semantics.
 
 A **step** is one orchestration ticket's work on one exact target ticket,
 `(target_id, connection_id, native_id)`. A target ticket has at most one step per
-owning checkout; planning it again for the same orchestration ticket changes that
+owning checkout, counted per project for targets declared as sites of one project
+(HS2-SHH7WW, §26.2); planning it again for the same orchestration ticket changes that
 step, and for another orchestration ticket conflicts. The step id is a ULID the
 plan assigns. A step holds at most 16 **prerequisites**, each named once:
 

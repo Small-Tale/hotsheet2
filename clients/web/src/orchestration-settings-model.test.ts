@@ -82,6 +82,49 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     expect(projectRows(undefined, {}, {})).toEqual([]);
   });
 
+  it('lists each project with its other sites after it (HS2-SHH7WW)', () => {
+    const sites: OrchestrationManifest = {
+      enabled: true,
+      revision: 'r2',
+      targets: [
+        { target_id: 'W2', state: 'active', label: 'Widgets on the build host', site_of: 'W1' },
+        { target_id: 'A1', state: 'active', label: 'Accounts' },
+        { target_id: 'W1', state: 'active', label: 'Widgets' },
+        { target_id: 'W3', state: 'active', label: 'Widgets laptop', site_of: 'W1' },
+        { target_id: 'W4', state: 'removed', label: 'Widgets retired', site_of: 'W1' },
+        // A site whose project is gone (a merge from another machine) shows as its own project.
+        { target_id: 'X2', state: 'active', label: 'Orphan site', site_of: 'X1' },
+      ],
+    };
+    const rows = projectRows(
+      sites,
+      {
+        W1: local('widgets-1'),
+        W2: {
+          ...local('widgets-2'),
+          destination: {
+            kind: 'remote',
+            registration_id: REMOTE,
+            identity: { server_id: 's' },
+            checkout_id: 'widgets-2',
+            checkout_authority: 'a',
+          },
+          last_failure: 'unreachable',
+        },
+      },
+      { [REMOTE]: 'Build host' },
+    );
+    expect(rows.map((row) => [row.label, row.siteOf, row.where])).toEqual([
+      ['Accounts', undefined, ''],
+      ['Orphan site', undefined, ''],
+      ['Widgets', undefined, '3 sites · Local on This Computer'],
+      ['Widgets laptop', 'W1', 'Site of Widgets'],
+      ['Widgets on the build host', 'W1', 'Site of Widgets · Remote on Build host'],
+    ]);
+    expect(rows[4].connection).toEqual({ label: 'Unreachable', tone: 'danger' });
+    expect(rows[4].location).toBe('remote');
+  });
+
   it('prefers a fresh resolution over the cached binding', () => {
     const binding = local('a');
     expect(connectionStatus(undefined)).toEqual({ label: 'Checking', tone: 'neutral' });

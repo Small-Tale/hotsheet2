@@ -12,6 +12,8 @@ pub fn is_path(path: &str) -> bool {
     matches!(
         parts.as_slice(),
         ["checkouts", _, "orchestration", "targets", ..]
+            // HS2-SHH7WW: projects with their sites.
+            | ["checkouts", _, "orchestration", "sites"]
             | ["checkouts", _, "orchestration", "inspect" | "audit"]
             // HS2-CRBR8X: this machine's journal of the sessions it hosted.
             | ["checkouts", _, "orchestration", "hosted-audit"]
@@ -125,6 +127,8 @@ pub fn is_machine_path(path: &str) -> bool {
             // ordinary authenticated data so a remote orchestrator can reach them.
             "binding" | "resolve" | "access" | "capacity" | "admission"
         ] | ["checkouts", _, "orchestration", "inspect" | "audit"]
+            // HS2-SHH7WW: the sites view reads this machine's bindings.
+            | ["checkouts", _, "orchestration", "sites"]
             // HS2-CRBR8X: only this machine's owner reads what it hosted.
             | ["checkouts", _, "orchestration", "hosted-audit"]
             // HS2-W27N1D: adding binds on this machine and removing unbinds here. The
@@ -487,6 +491,8 @@ impl OrchestrationRuntime {
             ("GET", ["checkouts", owner, "orchestration", "targets"]) => {
                 value(self.declarations(owner)?)
             }
+            // HS2-SHH7WW: projects with their sites and this machine's bindings.
+            ("GET", ["checkouts", owner, "orchestration", "sites"]) => value(self.sites(owner)?),
             ("PUT", ["checkouts", owner, "orchestration", "targets"]) => {
                 value(self.replace(owner, decode(body)?, tx)?)
             }

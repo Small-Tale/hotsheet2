@@ -600,7 +600,9 @@ impl OrchestrationRuntime {
                 actor,
                 tx,
             )?;
-            let (run, created) = self.runs().begin(
+            // HS2-SHH7WW: one active run per ticket of a project, whichever site.
+            let sites = self.project_sites(owner_id)?;
+            let (run, created) = self.runs().begin_in(
                 owner_id,
                 NewRun {
                     operation_id: request.operation_id.clone(),
@@ -616,6 +618,7 @@ impl OrchestrationRuntime {
                     mode,
                     worker_id: request.worker_id.clone(),
                 },
+                &sites,
                 actor.and_then(|actor| actor.id.clone()),
                 tx,
             )?;

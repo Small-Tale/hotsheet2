@@ -417,6 +417,7 @@ impl OrchestrationRuntime {
                         target_id: request.target_id.clone(),
                         label,
                         expected_repository_identity: None,
+                        site_of: None,
                     },
                     &observer,
                     tx,
