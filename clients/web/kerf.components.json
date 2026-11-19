@@ -77,7 +77,7 @@
           "name": "DesktopRemoteDialog"
         }
       ],
-      "sourceLinks": ["src/components/desktop-remote-dialog.tsx", "src/components/desktop-remote-dialog.css"],
+      "sourceLinks": ["src/components/desktop-remote-dialog.tsx"],
       "composition": {
         "parents": {
           "mode": "any",

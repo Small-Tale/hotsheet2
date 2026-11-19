@@ -1,14 +1,32 @@
-import './desktop-remote-dialog.css';
-
 import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
+import { Disclosure } from '@kerfjs/ui/disclosure';
 import { List } from '@kerfjs/ui/list';
+import { ListActionRow } from '@kerfjs/ui/list-action-row';
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListItem } from '@kerfjs/ui/list-item';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { TextField } from '@kerfjs/ui/text-field';
+import { MoreHorizontal, Pencil, X } from 'lucide';
 
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
-import type { DesktopRemoteDiscovery, DesktopRemotePairing, DesktopRemoteServer } from '../remote-projects/client';
+import type {
+  DesktopRemoteCheckout,
+  DesktopRemoteDiscovery,
+  DesktopRemotePairing,
+  DesktopRemoteServer,
+} from '../remote-projects/client';
+
+const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
+
+/** Quiet status for a remote project that cannot be opened (HS2-A5CKQS). */
+function checkoutStatus(state: DesktopRemoteCheckout['state']): string | undefined {
+  if (state === 'inaccessible') return 'Unavailable';
+  if (state === 'identity_changed') return 'Identity Changed';
+  return undefined;
+}
 
 export function DesktopRemoteDialog({
   open,
@@ -58,14 +76,13 @@ export function DesktopRemoteDialog({
                   required
                 />
                 <TextField name="remote-label" label="This Device's Name" value={editing?.label ?? ''} required />
-                <details>
-                  <summary>Advanced TLS settings</summary>
+                <Disclosure title="Advanced TLS Settings" rootAttributes={{ 'data-remote-tls-settings': '' }}>
                   <List gap="xs">
                     <TextField name="remote-ca-file" label="Host CA PEM Path (Optional)" />
                     <TextField name="remote-cert-file" label="Client Certificate PEM Path (Optional)" />
                     <TextField name="remote-key-file" label="Client Key PEM Path (Optional)" />
                   </List>
-                </details>
+                </Disclosure>
                 <Button type="submit" emphasis="primary" disabled={busy}>
                   {editing ? 'Review Connection' : 'Request Access'}
                 </Button>
@@ -101,56 +118,65 @@ export function DesktopRemoteDialog({
               Add Server
             </Button>
           ) : undefined}
+          {/* Servers and their projects are list rows, not solid buttons, so the two levels read as
+              different things: a server row opens discovery and keeps Edit and Remove behind its
+              overflow menu (HS2-A5CKQS, maintainer choice "Row overflow menu"). The rows stay
+              single-line, so a long origin ellipsizes, until KF-89C223 keeps a multiline row's
+              description on its own line. */}
           {!formOpen && servers.length > 0 && (
-            <List gap="xs">
-              <Text>Approved servers</Text>
+            <List gap="2xs" rootAttributes={{ 'data-remote-servers': '' }}>
+              <ListHeader label="Approved Servers" />
               {servers
                 .filter((server) => !server.revoked)
-                .map((server) => (
-                  <div class="desktop-remote-dialog__server" data-remote-id={server.id} data-revision={server.revision}>
-                    <div class="desktop-remote-dialog__server-info">
-                      <Button action={PROJECT_LIFECYCLE_ACTIONS.discoverDesktopRemoteServer.value} disabled={busy}>
-                        {server.last_failure ? `Retry ${server.label}` : server.label}
-                      </Button>
-                      <Text tone="quiet" variant="span" wrap="anywhere">
-                        {server.origin}
-                      </Text>
-                    </div>
-                    <Button
-                      emphasis="plain"
-                      action={PROJECT_LIFECYCLE_ACTIONS.editDesktopRemoteServer.value}
+                .map((server) => {
+                  const attributes = { 'data-remote-id': server.id, 'data-revision': String(server.revision) };
+                  return (
+                    <ListActionRow
+                      label={server.label}
+                      description={server.origin}
+                      status={server.last_failure ? 'Retry' : undefined}
+                      accessibleLabel={server.last_failure ? `Retry ${server.label}` : server.label}
+                      action={PROJECT_LIFECYCLE_ACTIONS.discoverDesktopRemoteServer.value}
+                      selected={discovery?.remote.id === server.id}
                       disabled={busy}
-                      ariaLabel={`Edit ${server.label}`}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      emphasis="plain"
-                      action={PROJECT_LIFECYCLE_ACTIONS.removeDesktopRemoteServer.value}
-                      disabled={busy}
-                      ariaLabel={`Remove ${server.label}`}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
+                      rootAttributes={attributes}
+                      trailingMenu={{
+                        label: `Actions for ${server.label}`,
+                        icon: menuIcon,
+                        disabled: busy,
+                        items: [
+                          {
+                            label: 'Edit',
+                            action: PROJECT_LIFECYCLE_ACTIONS.editDesktopRemoteServer.value,
+                            icon: <LucideIcon icon={Pencil} name="pencil" />,
+                            attributes,
+                          },
+                          {
+                            label: 'Remove',
+                            action: PROJECT_LIFECYCLE_ACTIONS.removeDesktopRemoteServer.value,
+                            tone: 'danger' as const,
+                            icon: <LucideIcon icon={X} name="x" />,
+                            attributes,
+                          },
+                        ],
+                      }}
+                    />
+                  );
+                })}
             </List>
           )}
           {!formOpen && discovery && (
-            <List gap="xs">
-              <Text>
-                {discovery.remote.label} · {discovery.remote.origin} ·{' '}
-                {discovery.remote.origin.startsWith('https:') ? 'HTTPS' : 'HTTP'}
-              </Text>
+            <List gap="2xs" rootAttributes={{ 'data-remote-checkouts': '' }}>
+              <ListHeader label={`Projects on ${discovery.remote.label}`} wrap />
               {discovery.checkouts?.length ? (
                 discovery.checkouts.map((checkout) => (
-                  <Button
-                    rootAttributes={{ 'data-checkout-id': checkout.id }}
+                  <ListItem
+                    label={checkout.name}
+                    status={checkoutStatus(checkout.state)}
                     action={PROJECT_LIFECYCLE_ACTIONS.openDesktopRemoteCheckout.value}
                     disabled={busy || checkout.state !== 'available'}
-                  >
-                    {checkout.name}
-                  </Button>
+                    rootAttributes={{ 'data-checkout-id': checkout.id }}
+                  />
                 ))
               ) : (
                 <Text tone="quiet">No available projects are open on this server.</Text>

@@ -2412,8 +2412,7 @@
         }
       ],
       "sourceLinks": [
-        "src/components/desktop-remote-dialog.tsx",
-        "src/components/desktop-remote-dialog.css"
+        "src/components/desktop-remote-dialog.tsx"
       ],
       "source": "src/components/desktop-remote-dialog.tsx",
       "parents": {

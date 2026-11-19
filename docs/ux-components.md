@@ -241,8 +241,9 @@ Supporting components:
   transitions, reopening, and keyboard selection (HS2-XX5Y2X).
 - `ProjectSourceChoiceDialog` and `DesktopRemoteDialog` — **demo built**: the trusted desktop's
   project-tab `+` first asks for a Local Project or Remote Project; the remote dialog pairs a
-  server address through one-time host approval, lists approved servers with retry, edit, and
-  remove, and opens the reviewed server's projects with its effective HTTP or HTTPS protocol.
+  server address through one-time host approval, lists approved servers as `ListActionRow`s
+  with retry and an Edit/Remove overflow menu, keeps the TLS paths in a Kerf `Disclosure`
+  (HS2-A5CKQS), and opens the reviewed server's projects with its effective HTTP or HTTPS protocol.
   A phone browser keeps the one-host `RemoteProjectDialog`. The interactive demo walks choice,
   servers, add-server form, awaiting approval, remote projects, and connection error with
   synthetic hosts only (HS2-BT4KN6).

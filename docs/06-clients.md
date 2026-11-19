@@ -235,7 +235,11 @@ The desktop bridge routes REST and change WebSockets to each tab's reviewed
 server; removing or reviewing one binding closes only its sessions. The phone
 browser continues to list projects from its single connected host. The dialog's
 form scrolls in Kerf's native dialog body, so a focused field keeps its whole focus
-ring at every width (HS2-MV0BA4).
+ring at every width (HS2-MV0BA4). Approved servers are list rows showing the
+server name and origin; a row opens discovery, and Edit and Remove sit in its overflow
+menu. The chosen server's projects are list rows under a "Projects on <server>"
+heading, and unavailable ones are disabled with their state. The optional TLS paths sit
+in a closed Advanced TLS Settings disclosure (HS2-A5CKQS).
 **Remote terminals (HS2-PPHJMZ, HS2-JJKVJJ).** A remote tab's terminal drawer
 attaches to that server's PTYs: the bridge upgrades `/terminals/{id}/attach` on the
 reviewed server with that server's private session, Origin and CSRF proof (and its

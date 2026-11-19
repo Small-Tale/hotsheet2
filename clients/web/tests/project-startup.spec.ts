@@ -814,3 +814,104 @@ test('keeps the focused remote server form field ring unclipped (HS2-MV0BA4)', a
     });
   }
 });
+
+// HS2-A5CKQS: approved servers and a server's projects are Kerf list rows, not solid buttons. A
+// server row opens discovery and keeps Edit and Remove behind its overflow menu (the maintainer's
+// "Row overflow menu" choice); the projects sit under a heading that names the server; the advanced
+// TLS fields sit in a Kerf Disclosure rather than a hand-built details element.
+test('lists remote servers and projects as rows with an overflow menu (HS2-A5CKQS)', async ({ page }) => {
+  const id = '01ARZ3NDEKTSV4RRFFQ69G5FAX';
+  const remotes = [
+    {
+      id,
+      label: 'Studio',
+      origin: 'http://studio.test:8787',
+      identity: { server_id: id, ca_fingerprint: null },
+      revision: 3,
+      revoked: false,
+      last_failure: null,
+      stale: false,
+    },
+  ];
+  const deletes: string[] = [];
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await page.route('**/__hotsheet/remotes**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (route.request().method() === 'DELETE') {
+      deletes.push(`${path}${url.search}`);
+      const removed = remotes.splice(0, 1)[0];
+      return route.fulfill({ json: { ...removed, revoked: true } });
+    }
+    if (path === '/__hotsheet/remotes') return route.fulfill({ json: remotes });
+    if (path === '/__hotsheet/remotes/selected-projects') return route.fulfill({ json: [] });
+    if (path === `/__hotsheet/remotes/${id}/checkouts`)
+      return route.fulfill({
+        json: {
+          remote: remotes[0],
+          checkouts: [
+            { id: 'open', name: 'Workspace', state: 'available', sources: [] },
+            { id: 'gone', name: 'Archive', state: 'inaccessible', sources: [] },
+          ],
+        },
+      });
+    return route.fulfill({ status: 404, json: { error: 'Unknown synthetic remote route' } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByRole('tab', { name: /^alpha/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.locator('[data-project-source-choice]').getByRole('button', { name: 'Remote Project' }).click();
+  const dialog = page.locator('[data-desktop-remote-dialog]');
+  await expect(dialog).toHaveJSProperty('open', true);
+
+  const servers = dialog.locator('[data-remote-servers]');
+  await expect(servers.getByText('Approved Servers')).toBeVisible();
+  const row = servers.locator(`[data-component="list-action-row"][data-remote-id="${id}"]`);
+  await expect(row).toBeVisible();
+  await expect(row.getByText('http://studio.test:8787')).toBeVisible();
+  // Edit and Remove are not inline row buttons any more.
+  await expect(dialog.getByRole('button', { name: 'Edit Studio' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Remove Studio' })).toHaveCount(0);
+
+  await row.getByRole('button', { name: 'Studio', exact: true }).click();
+  const projects = dialog.locator('[data-remote-checkouts]');
+  await expect(projects.getByText('Projects on Studio')).toBeVisible();
+  await expect(projects.locator('[data-checkout-id="open"]')).toBeEnabled();
+  await expect(projects.locator('[data-checkout-id="gone"]')).toBeDisabled();
+  await expect(projects.locator('[data-checkout-id="gone"]')).toContainText('Unavailable');
+  await expect(row.getByRole('button', { name: 'Studio', exact: true })).toHaveAttribute('aria-current', /.+/);
+
+  for (const [width, height] of [
+    [1440, 900],
+    [900, 700],
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(row.getByRole('button', { name: 'Actions for Studio' })).toBeInViewport();
+    await page.screenshot({ path: `target/visual-captures/hs2-a5ckqs-servers-${width}.png`, animations: 'disabled' });
+  }
+
+  await row.getByRole('button', { name: 'Actions for Studio' }).click();
+  const menu = page.getByRole('menu', { name: 'Actions for Studio' });
+  await expect(menu.getByRole('menuitem', { name: 'Edit' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-a5ckqs-server-menu-1440.png', animations: 'disabled' });
+  await menu.getByRole('menuitem', { name: 'Edit' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Server Address' })).toHaveValue('http://studio.test:8787');
+
+  const tls = dialog.locator('[data-remote-tls-settings]');
+  await expect(tls).toHaveJSProperty('open', false);
+  await expect(dialog.getByRole('textbox', { name: 'Host CA PEM Path (Optional)' })).toBeHidden();
+  await tls.getByText('Advanced TLS Settings').click();
+  await expect(tls).toHaveJSProperty('open', true);
+  await expect(dialog.getByRole('textbox', { name: 'Host CA PEM Path (Optional)' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-a5ckqs-tls-open-1440.png', animations: 'disabled' });
+  await dialog.getByRole('button', { name: 'Back to Servers' }).click();
+
+  await row.getByRole('button', { name: 'Actions for Studio' }).click();
+  await menu.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect.poll(() => deletes).toEqual([`/__hotsheet/remotes/${id}?revision=3`]);
+  await expect(row).toHaveCount(0);
+});
