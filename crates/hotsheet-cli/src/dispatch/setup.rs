@@ -502,6 +502,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Settings { cmd } => cmd_settings(path, cwd, cmd),
         Cmd::HostDisks { cmd } => cmd_host_disks(path, cwd, cmd),
         Cmd::TerminalRelay { cmd } => super::terminal_relay::run(cmd),
+        Cmd::Screensaver { cmd } => super::screensaver::run(cmd),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
         Cmd::Guidance { project, cmd } => cmd_guidance(path, &project, cmd),
         Cmd::PermissionDiscard {

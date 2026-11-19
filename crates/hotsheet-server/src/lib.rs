@@ -45,6 +45,7 @@ pub mod repository_browser;
 mod request_timing;
 mod routes;
 pub mod source_revision;
+pub mod standby_saver;
 pub mod stuck_causes;
 pub mod sync_ai;
 pub mod sync_loop;

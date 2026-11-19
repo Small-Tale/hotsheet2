@@ -20,6 +20,12 @@ HOTSHEET_HOME = { value = "target/test-hotsheet-home", force = true, relative = 
 # (`~/Library/Caches/hotsheet2` on macOS). Tests that assert cache contents still inject
 # their own temp directory with `AppState::with_cache_dir`.
 HOTSHEET_CACHE_DIR = { value = "target/test-hotsheet-cache", force = true, relative = true }
+# HS2-MZM988: the macOS screen saver reads a snapshot from the user's real
+# `~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver`, and the server writes there
+# whenever that directory exists, which it does once the saver is installed. No test process may
+# write the developer's real container, install into the real `~/Library/Screen Savers`, or remove
+# either: this points them at a repository-local home. Tests that exercise the saver pass a temp home.
+HOTSHEET_SCREENSAVER_HOME = { value = "target/test-screensaver-home", force = true, relative = true }
 # HS2-7W3D7V: AI-tool discovery would otherwise execute the developer's installed tools
 # (`codex --version`, the Codex app-server `model/list`, `opencode models`, `agy models`)
 # with their real credentials and network access whenever a test starts a server or CLI

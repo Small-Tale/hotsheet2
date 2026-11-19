@@ -1479,3 +1479,27 @@ tested safely, so check the real pattern by hand on macOS:
 3. A third run waits instead of starting a browser, then starts when a slot frees.
 4. Over the following days, no WindowServer `IOSurface creation failed` abort coincides with
    concurrent WebKit runs.
+
+## macOS screen saver with the real engine (HS2-MZM988, HS2-P01KTG)
+
+The hosting check (`clients/macos-screensaver/check.sh`) renders the saver view in a normal window, so it
+cannot show what the sandboxed `legacyScreenSaver` engine allows. On a Mac you are sitting at, verify the
+engine-specific parts by hand. The saver takes over the display and a key press ends it.
+
+1. `npm run build:saver` in `clients/web`, then `clients/macos-screensaver/build.sh`, then
+   `hotsheet-cli screensaver install --bundle clients/macos-screensaver/build/HotSheet.saver`.
+2. `hotsheet-cli screensaver status` reports it installed. In System Settings > Screen Saver choose
+   Hot Sheet. If the status line says the password is not required, turn it on in System Settings > Lock
+   Screen ("Require password after screen saver begins or display is turned off").
+3. With a Hot Sheet server running and a claimed ticket, confirm
+   `~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/HotSheet/standby-snapshot.json`
+   appears within a minute and its `written_at_ms` advances each minute.
+4. Start the saver from the Screen Saver pane's Preview, and then by letting the Mac idle. Confirm it shows
+   the same screen as standby with this project's name and state, the clock, and a "live" freshness line.
+5. While it shows, claim or release a ticket. Confirm the row and gauge change without restarting the saver.
+6. Quit Hot Sheet. Within about three minutes the freshness line reads "connection lost".
+7. Press a key. Confirm macOS asks for the account password when the delay has passed, and that the saver
+   ends after a correct one.
+8. `hotsheet-cli screensaver uninstall`, then confirm the snapshot file stops appearing.
+
+Record the macOS version and the result.

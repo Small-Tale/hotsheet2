@@ -523,6 +523,35 @@ pub fn snapshot_all(state: &AppState) -> LiveStateList {
     }
 }
 
+/// Every hosted store's last pushed snapshot, by store id, without rebuilding any of them
+/// (HS2-MZM988). [`snapshot_all`] rebuilds and may push; a reader that only mirrors what clients
+/// already received, like the macOS screen saver's snapshot file, must not cause events. A store
+/// that has not been built yet is left out.
+pub fn current_all(state: &AppState) -> LiveStateList {
+    let mut ids: Vec<String> = state
+        .host
+        .locations()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    let stores = {
+        let entries = state.live_states.stores.lock_or_recover();
+        ids.iter()
+            .filter_map(|id| {
+                let entry = entries.get(id)?;
+                let mut pushed = entry.last.clone()?;
+                pushed.revision = entry.revision;
+                Some(pushed)
+            })
+            .collect()
+    };
+    LiveStateList {
+        epoch_ms: state.live_states.epoch(),
+        stores,
+    }
+}
+
 fn build(state: &AppState, store: &str, now: OffsetDateTime) -> Option<LiveStoreState> {
     let entry = state.host.get(store)?;
     let activity = crate::notification_router::live_activity(state, store, now);
