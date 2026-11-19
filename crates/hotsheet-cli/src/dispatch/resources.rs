@@ -115,6 +115,15 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
         service = service.with_project(project);
     }
     let (method, path, body) = request(cmd)?;
+    // HS2-QGY1NN: a wait is ended by SIGTERM or SIGINT cleanly, so its waiter registration is
+    // removed instead of counting against the namespace until the wait's deadline.
+    let waits =
+        path.ends_with("/wait") || (path.ends_with("/acquire") && body.get("wait_ms").is_some());
+    let _interrupts = if waits {
+        Some(hotsheet_resource_claims::InterruptGuard::new()?)
+    } else {
+        None
+    };
     match service.request(method, &path, &body) {
         Ok(answer) => {
             print(&answer)?;

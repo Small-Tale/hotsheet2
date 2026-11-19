@@ -177,6 +177,16 @@ clock is the machine's clock (injectable in tests).
   crashed task returns with its old token after someone else acquired, it is
   `not_holder`.
 
+**A stopped wait cleans up (HS2-QGY1NN).** On unix, `hotsheet-cli resource acquire --wait` and `resource
+wait` hold an `InterruptGuard` while they wait: SIGINT, SIGTERM and SIGHUP write a byte to a self-pipe
+that the waiter's `park` polls beside its socket, so a signal ends the wait at once and without a race
+(a signal that lands before the poll leaves its byte waiting). The wait fails `interrupted` (HTTP 503 if
+a surface ever served it), the waiter drops and removes its registration, and the guard then restores
+the default disposition and re-raises the signal, so the process still dies by the signal it was sent. A
+stopped wait therefore no longer counts against the namespace's 256 registrations until its deadline
+and the 60 s grace. A SIGKILL cannot be caught and still leaves its registration until then. Outside a
+guard signals keep their default action. Windows has no guard yet (HS2-995FNQ covers Windows evidence).
+
 ## 36.7 Offline behavior
 
 What happens when a remote backend is unreachable is a per-configuration choice: fail

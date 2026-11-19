@@ -384,3 +384,110 @@ fn hs2_fmhh9y_bad_input_is_refused_before_anything_is_written() {
     }
     assert!(!env.home.join("resource-claims/namespaces").exists());
 }
+
+// ---- HS2-QGY1NN: a stopped wait removes its registration -----------------------------
+
+#[cfg(unix)]
+fn waiters_left(home: &Path, namespace: &str) -> usize {
+    std::fs::read_dir(
+        home.join("resource-claims/namespaces")
+            .join(namespace)
+            .join("waiters"),
+    )
+    .map_or(0, |entries| {
+        entries
+            .filter_map(Result::ok)
+            .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+            .count()
+    })
+}
+
+#[cfg(unix)]
+fn stopped_by(child: &mut Child) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status.signal();
+        }
+        assert!(started.elapsed() < PROMPT, "the stopped wait never exited");
+        std::thread::yield_now();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn hs2_qgy1nn_a_wait_ended_by_a_stop_signal_removes_its_registration_and_dies_by_the_signal() {
+    let e = env();
+    let held = granted(&e.home, &["acquire", "vms/one", "--duration", "300s"]);
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        let mut waiter = spawn_waiter(
+            &e.home,
+            "vms",
+            &["acquire", "vms/one", "--duration", "60s", "--wait", "600s"],
+        );
+        // `spawn_waiter` returns on the staged file; wait for the published registration.
+        let started = Instant::now();
+        while waiters_left(&e.home, "vms") < 1 {
+            assert!(started.elapsed() < PROMPT, "the wait never registered");
+            std::thread::yield_now();
+        }
+        // SAFETY: signalling a child process this test spawned and still owns.
+        assert_eq!(
+            unsafe { libc::kill(i32::try_from(waiter.id()).unwrap(), signal) },
+            0
+        );
+        assert_eq!(
+            stopped_by(&mut waiter),
+            Some(signal),
+            "the process still dies by the signal it was sent"
+        );
+        assert_eq!(
+            waiters_left(&e.home, "vms"),
+            0,
+            "signal {signal}: the registration was removed, not left to its deadline"
+        );
+    }
+    // The holder was never disturbed, and a stopped waiter did not use up the namespace.
+    let shown = run(&e.home, &["show", "vms/one"]);
+    assert!(shown.ok, "{}", shown.stderr);
+    assert_eq!(shown.json["claim"]["claim_id"], held["claim_id"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn hs2_qgy1nn_many_stopped_waits_never_fill_the_namespace() {
+    let e = env();
+    granted(&e.home, &["acquire", "vms/one", "--duration", "300s"]);
+    let mut waiters: Vec<Child> = (0..6)
+        .map(|_| {
+            command(
+                &e.home,
+                &["acquire", "vms/one", "--duration", "60s", "--wait", "600s"],
+            )
+            .spawn()
+            .unwrap()
+        })
+        .collect();
+    let started = Instant::now();
+    while waiters_left(&e.home, "vms") < 6 {
+        assert!(started.elapsed() < PROMPT, "not every waiter registered");
+        std::thread::yield_now();
+    }
+    for waiter in &waiters {
+        // SAFETY: signalling children this test spawned and still owns.
+        unsafe { libc::kill(i32::try_from(waiter.id()).unwrap(), libc::SIGTERM) };
+    }
+    for waiter in &mut waiters {
+        assert_eq!(stopped_by(waiter), Some(libc::SIGTERM));
+    }
+    assert_eq!(waiters_left(&e.home, "vms"), 0);
+    // A wait that ends normally is unchanged: it still times out naming the holder.
+    let timed_out = run(
+        &e.home,
+        &["acquire", "vms/one", "--duration", "60s", "--wait", "300ms"],
+    );
+    assert!(!timed_out.ok);
+    assert_eq!(timed_out.json["code"], "wait_timeout", "{}", timed_out.json);
+    assert_eq!(waiters_left(&e.home, "vms"), 0);
+}

@@ -16,6 +16,7 @@ pub mod conformance;
 mod error;
 pub mod external;
 mod gitref;
+mod interrupt;
 mod local;
 mod model;
 mod service;
@@ -35,6 +36,7 @@ pub use config::{
 };
 pub use error::ClaimError;
 pub use gitref::GitRefBackend;
+pub use interrupt::InterruptGuard;
 pub use local::{LOCAL_ROOT_DIR, LocalBackend};
 pub use model::{
     AcquireRequest, Capabilities, Claim, Grant, Guarantee, MAX_LEASE, MAX_METADATA_BYTES,

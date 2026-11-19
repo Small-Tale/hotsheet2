@@ -34,6 +34,9 @@ pub enum ClaimError {
     /// Stored state is unreadable or from an unknown schema; it is never overwritten.
     #[error("claim state is corrupt or from an unsupported schema")]
     Corrupt,
+    /// A stop signal ended a wait. The waiter's registration was removed.
+    #[error("the wait was interrupted by a signal")]
+    Interrupted,
     #[error("claim storage failed: {0}")]
     Storage(#[from] std::io::Error),
 }
@@ -52,6 +55,7 @@ impl ClaimError {
             Self::Invalid(_) => "invalid",
             Self::Capacity(_) => "capacity",
             Self::Corrupt => "corrupt",
+            Self::Interrupted => "interrupted",
             Self::Storage(_) => "storage",
         }
     }

@@ -95,7 +95,7 @@ pub fn http_status(error: &ClaimError) -> u16 {
         ClaimError::HeldBy { .. } | ClaimError::WaitTimedOut { .. } | ClaimError::NotHolder => 409,
         ClaimError::Expired => 410,
         ClaimError::TokenInvalid => 403,
-        ClaimError::BackendUnreachable(_) => 503,
+        ClaimError::BackendUnreachable(_) | ClaimError::Interrupted => 503,
         ClaimError::Unsupported(_) => 501,
         ClaimError::Invalid(_) => 400,
         ClaimError::Capacity(_) => 507,

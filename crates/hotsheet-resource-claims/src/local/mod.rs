@@ -189,8 +189,13 @@ fn park_until(
         return Ok(false);
     }
     let until_ms = holder.expires_at_ms.min(deadline_ms);
-    waiter.park(Duration::from_millis(until_ms.saturating_sub(now_ms)))?;
-    Ok(true)
+    match waiter.park(Duration::from_millis(until_ms.saturating_sub(now_ms))) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+            Err(ClaimError::Interrupted)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 impl ClaimBackend for LocalBackend {
