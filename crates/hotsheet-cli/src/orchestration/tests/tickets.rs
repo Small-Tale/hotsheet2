@@ -72,16 +72,29 @@ pub(super) fn stop_recorded_steps(home: &Path) -> usize {
         {
             continue;
         }
-        #[cfg(unix)]
-        if let Ok(group) = libc::pid_t::try_from(process.pid) {
-            // SAFETY: plain integers; the group's leader is the recorded step process,
-            // checked by its start time just above.
-            if unsafe { libc::killpg(group, libc::SIGKILL) } == 0 {
-                stopped += 1;
-            }
+        if kill_step_group(process.pid) {
+            stopped += 1;
         }
     }
     stopped
+}
+
+/// SIGKILL the step group led by `pid`, whose start time the caller just checked.
+#[cfg(unix)]
+fn kill_step_group(pid: u32) -> bool {
+    let Ok(group) = libc::pid_t::try_from(pid) else {
+        return false;
+    };
+    // SAFETY: plain integers; the group's leader is the recorded step process, checked by
+    // its start time by the caller.
+    unsafe { libc::killpg(group, libc::SIGKILL) == 0 }
+}
+
+/// HS2-652GYE: hosted validation steps run in Unix process groups only, so elsewhere
+/// there is no group to signal.
+#[cfg(not(unix))]
+fn kill_step_group(_pid: u32) -> bool {
+    false
 }
 
 impl Machine {

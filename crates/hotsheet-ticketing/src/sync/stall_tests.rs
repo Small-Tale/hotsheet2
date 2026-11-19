@@ -7,9 +7,14 @@ use std::path::Path;
 use super::tests::{clean, commit_file, head, ok, peer_pushes, reflog_len, remote_with_two_clones};
 use super::*;
 use crate::store::{FsStore, StoreMetadata};
-use crate::sync_health::{IntegrationInProgress, SyncState, health, read_record};
-use crate::sync_replay::{BEFORE_BRANCH_MOVE, MAX_CONTINUE_ATTEMPTS};
+#[cfg(unix)]
+use crate::sync_health::{IntegrationInProgress, read_record};
+use crate::sync_health::{SyncState, health};
+use crate::sync_replay::BEFORE_BRANCH_MOVE;
+#[cfg(unix)]
+use crate::sync_replay::MAX_CONTINUE_ATTEMPTS;
 
+#[cfg(unix)]
 fn live() -> SyncLimits {
     SyncLimits {
         replay: ReplayMode::LiveRebase,
@@ -17,6 +22,7 @@ fn live() -> SyncLimits {
     }
 }
 
+#[cfg(unix)]
 fn both_modes() -> [SyncLimits; 2] {
     [SyncLimits::default(), live()]
 }
@@ -130,6 +136,7 @@ fn incident_state(root: &Path, peer: &Path, round: u32) -> String {
 /// The signature recorded in the ticket: `rebase-merge` exists, the same pick is the last
 /// line of `done` and the only line of the todo, no `stopped-sha`, no unmerged path, and
 /// `HEAD` is detached.
+#[cfg(unix)]
 fn assert_incident_shape(root: &Path) {
     let state = root.join(".git/rebase-merge");
     assert!(state.is_dir(), "no unfinished rebase");

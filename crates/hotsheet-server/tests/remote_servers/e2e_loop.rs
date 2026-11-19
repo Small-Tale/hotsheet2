@@ -139,7 +139,7 @@ pub(super) async fn works(
         .await;
     assert!(synced["joined_at_ms"].as_u64().is_some(), "{synced}");
     // The setup files the tool wrote are committed, as a person commits project files.
-    super::session_work::commit_all(fleet.project(side));
+    super::sessions::commit_all(fleet.project(side));
     fleet.claim(side, ticket, &placed.worker).await;
     let dispatched = fleet
         .run_until(&placed.run_id, "dispatched to its session", |status| {

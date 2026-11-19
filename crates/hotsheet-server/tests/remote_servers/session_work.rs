@@ -4,7 +4,7 @@
 //! PTYs running the workspace fake agent; no AI tool is launched and nothing leaves
 //! loopback.
 use super::orchestration::api;
-use super::sessions::{drawer, git_project};
+use super::sessions::{commit_all, drawer, git_project};
 use super::*;
 use hotsheet_ticketing::checkouts::{Checkout, CheckoutRegistry};
 use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
@@ -105,33 +105,6 @@ pub(super) fn launch_report(reports: &Path, terminal_id: &str) -> Value {
             path.display()
         );
         tokio::task::block_in_place(|| waiter.wait(remaining));
-    }
-}
-
-/// Commit everything in the project, as a person does with the project files the
-/// first tool setup wrote (HS2-WEFJV8): uncommitted work holds a session's safe point.
-pub(super) fn commit_all(project: &Path) {
-    for arguments in [
-        &["add", "-A"][..],
-        &[
-            "-c",
-            "user.name=Synthetic",
-            "-c",
-            "user.email=synthetic@example.test",
-            "commit",
-            "-q",
-            "--allow-empty",
-            "-m",
-            "Synthetic project files",
-        ],
-    ] {
-        let status = hotsheet_ticketing::git::launch("git")
-            .arg("-C")
-            .arg(project)
-            .args(arguments)
-            .status()
-            .unwrap();
-        assert!(status.success(), "{arguments:?}");
     }
 }
 

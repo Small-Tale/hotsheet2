@@ -1165,6 +1165,7 @@ async fn hs2_9egwc4_a_server_group_write_is_committed_and_pushed_and_the_sync_lo
 
 /// The `group_registry_sync` events replayed by the long poll after `cursor`, as
 /// `(id, slug)`, and the new cursor.
+#[cfg(unix)] // HS2-652GYE: used only by the Unix permission test below.
 async fn registry_sync_events(router: &axum::Router, cursor: u64) -> (Vec<(String, String)>, u64) {
     let polled = ok(
         router,

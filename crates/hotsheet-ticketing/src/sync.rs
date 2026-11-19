@@ -1358,6 +1358,7 @@ pub(crate) mod tests {
 
     use crate::sync_health::{SyncState, health, read_record};
 
+    #[cfg(unix)]
     fn small_limits() -> SyncLimits {
         SyncLimits {
             oversized_bytes: 1_024,

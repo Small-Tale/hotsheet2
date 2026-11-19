@@ -180,8 +180,8 @@ impl StreamChild {
         })
     }
 
-    /// The child's process id (tests; a probe registers [`Self::probe_leader`]).
-    #[cfg(test)]
+    /// The child's process id (Unix tests; a probe registers [`Self::probe_leader`]).
+    #[cfg(all(test, unix))]
     pub(crate) fn id(&self) -> u32 {
         self.pid
     }

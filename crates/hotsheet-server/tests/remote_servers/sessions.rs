@@ -93,6 +93,35 @@ args = {script}
     plugins
 }
 
+/// Commit everything in the project, as a person does with the project files the
+/// first tool setup wrote (HS2-WEFJV8): uncommitted work holds a session's safe point.
+/// It lives here, not in the Unix-only session modules, because these tests run on
+/// every platform (HS2-652GYE).
+pub(super) fn commit_all(project: &Path) {
+    for arguments in [
+        &["add", "-A"][..],
+        &[
+            "-c",
+            "user.name=Synthetic",
+            "-c",
+            "user.email=synthetic@example.test",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "Synthetic project files",
+        ],
+    ] {
+        let status = hotsheet_ticketing::git::launch("git")
+            .arg("-C")
+            .arg(project)
+            .args(arguments)
+            .status()
+            .unwrap();
+        assert!(status.success(), "{arguments:?}");
+    }
+}
+
 pub(super) fn git_project(path: &Path) {
     std::fs::create_dir(path).unwrap();
     let status = hotsheet_ticketing::git::launch("git")
@@ -467,7 +496,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
     // HS2-WEFJV8: the first start set the checkout up for its tool, which wrote the
     // instruction file as a project file. A person commits it.
     for checkout in &peer_checkouts {
-        super::session_work::commit_all(Path::new(&checkout.root));
+        commit_all(Path::new(&checkout.root));
     }
     // The idle session is at a safe point; the busy one is mid-turn and stays.
     let a_id = a["session_id"].as_str().unwrap();
@@ -870,7 +899,7 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
         "mcp-op"
     );
     // HS2-WEFJV8: the start wrote the tool's instruction file; a person commits it.
-    super::session_work::commit_all(&project);
+    commit_all(&project);
     let point = call(json!({"action":"session_safe_point","session_id":session_id}));
     assert_eq!(point["safe_point"]["safe"], true, "{point}");
     assert_eq!(
@@ -1474,7 +1503,7 @@ async fn hs2_crbr8x_the_host_journals_a_remote_orchestrators_start_stop_and_refu
     let terminal = started["hosted"]["session_id"].as_str().unwrap().to_owned();
     // The first start set the checkout up for its tool; a person commits that, so the
     // idle session is at a safe point, and the orchestrator winds it down.
-    super::session_work::commit_all(Path::new(&hosted.root));
+    commit_all(Path::new(&hosted.root));
     let session_id = started["session_id"].as_str().unwrap();
     let stopped = cli_named(
         &home,
