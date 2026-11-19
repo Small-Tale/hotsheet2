@@ -95,6 +95,8 @@ impl Orchestration {
                 confirmed_at_ms: binding.and_then(|binding| binding.confirmed_at_ms),
                 last_failure: binding.and_then(|binding| binding.last_failure),
                 stale: true,
+                capabilities: None,
+                capabilities_error: None,
             }
         };
         let mut projects: Vec<SiteProject> = active

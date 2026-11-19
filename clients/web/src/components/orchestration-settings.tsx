@@ -202,7 +202,7 @@ export function OrchestrationSettings({
                   return (
                     <ListActionRow
                       label={row.label}
-                      description={row.where || undefined}
+                      description={[row.where, row.system].filter(Boolean).join(' · ') || undefined}
                       status={
                         <Badge tone={row.connection.tone} appearance="quiet" size="compact">
                           {row.connection.label}

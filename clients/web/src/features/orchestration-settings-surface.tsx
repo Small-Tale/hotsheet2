@@ -8,7 +8,7 @@ import type { SettingsCategory } from '../components/settings-navigation';
 import type { SidebarPanelParts } from '../components/sidebar-panel';
 import type { Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
-import { addChoices, projectRows } from '../orchestration-settings-model';
+import { addChoices, projectRows, siteReadFailure } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
 import { createOrchestrationSettings } from './orchestration-settings';
 
@@ -140,7 +140,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const state = settings.settings.value[current.id],
       labels = settings.remoteLabels.value;
     return {
-      rows: projectRows(state?.manifest, state?.bindings ?? {}, labels),
+      rows: projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
       choices: addChoices(
         projects.value.map((item) => ({ id: item.id, name: item.name })),
         current.id,
@@ -181,6 +181,8 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     const state = settings.settings.value[current.id],
       rows = projectRows(state?.manifest, state?.bindings ?? {}, settings.remoteLabels.value),
       row = rows.find((item) => item.targetId === target),
+      // HS2-D4G81Q: every site of the target's project, with what each machine is.
+      siteProject = state?.sites?.projects.find((item) => item.sites.some((site) => site.target_id === target)),
       detail = settings.details.value[`${current.id}:${target}`],
       policy = state?.policy?.policy;
     if (!row) return undefined;
@@ -206,6 +208,14 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
       policyTools: (policy?.tools ?? []).map((tool) => tool.tool),
       // HS2-SYZB33: another site's coordination sessions start on its project's home.
       homeLabel: row.siteOf ? rows.find((item) => item.targetId === row.siteOf)?.label : undefined,
+      sites: (siteProject?.sites ?? []).map((site) => ({
+        targetId: site.target_id,
+        label: site.label,
+        where: rows.find((item) => item.targetId === site.target_id)?.place ?? '',
+        home: site.project,
+        capabilities: site.capabilities,
+        error: site.capabilities_error ? siteReadFailure(site.capabilities_error) : undefined,
+      })),
       toolLabel: dependencies.toolLabel,
     });
   }

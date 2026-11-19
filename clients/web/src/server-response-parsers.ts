@@ -62,6 +62,8 @@ import type {
   OrchestrationProjectView,
   OrchestrationResolution,
   OrchestrationSession,
+  OrchestrationSitesView,
+  OrchestrationSiteView,
   OrchestrationTargetDeclaration,
   OrchestrationToolCapacity,
   OrchestrationToolCapacityRow,
@@ -1808,6 +1810,31 @@ const capabilitiesShape = shape<OrchestrationCapabilities>(
     ),
   },
 );
+/** HS2-SHH7WW, HS2-D4G81Q: one site of a project, with its machine when it was read. */
+const orchestrationSite = shape<OrchestrationSiteView>(
+  'orchestration site',
+  {
+    target_id: isString,
+    label: isString,
+    project: isBoolean,
+    destination: (field) => field === null || orchestrationDestination(field),
+    confirmed_at_ms: isNullableNumber,
+    last_failure: isNullableString,
+    stale: isBoolean,
+  },
+  {},
+  { capabilities: capabilitiesShape.check, capabilities_error: isString },
+);
+export const parseOrchestrationSites = shape<OrchestrationSitesView>('orchestration sites', {
+  revision: isNullableString,
+  projects: listOf(
+    (project) =>
+      isRecord(project) &&
+      isString(project.project_id) &&
+      isString(project.label) &&
+      listOf(orchestrationSite.check)(project.sites),
+  ),
+});
 export const parseOrchestrationCapacity = shape<OrchestrationCapacity>(
   'target capacity',
   {

@@ -23,6 +23,7 @@ import {
   roleSessionsLocked,
   sessionDescription,
   sessionStatus,
+  siteReadFailure,
   tabProjectIdOf,
   targetLimitsDraftFrom,
 } from './orchestration-settings-model';
@@ -125,6 +126,71 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     ]);
     expect(rows[4].connection).toEqual({ label: 'Unreachable', tone: 'danger' });
     expect(rows[4].location).toBe('remote');
+  });
+
+  it('shows the OS of each site of a project with several sites (HS2-D4G81Q)', () => {
+    const manifest: OrchestrationManifest = {
+      enabled: true,
+      revision: 'r2',
+      targets: [
+        { target_id: 'W1', state: 'active', label: 'Widgets' },
+        { target_id: 'W2', state: 'active', label: 'Widgets laptop', site_of: 'W1' },
+        { target_id: 'A1', state: 'active', label: 'Accounts' },
+      ],
+    };
+    const site = (target_id: string, extra: object = {}) => ({
+      target_id,
+      label: target_id,
+      project: target_id !== 'W2',
+      destination: null,
+      confirmed_at_ms: null,
+      last_failure: null,
+      stale: true,
+      ...extra,
+    });
+    const rows = projectRows(
+      manifest,
+      { W1: local('widgets-1'), W2: local('widgets-2'), A1: local('accounts') },
+      {},
+      {
+        revision: 'r2',
+        projects: [
+          // A one-site project's machine is its detail's business, not its row's.
+          {
+            project_id: 'A1',
+            label: 'Accounts',
+            sites: [site('A1', { capabilities: { os: 'linux', arch: 'x86_64' } })],
+          },
+          {
+            project_id: 'W1',
+            label: 'Widgets',
+            sites: [
+              site('W1', { capabilities: { os: 'macos', os_version: '15.1', arch: 'arm64' } }),
+              site('W2', { capabilities_error: 'target_unavailable' }),
+            ],
+          },
+        ],
+      },
+    );
+    expect(rows.map((row) => [row.label, row.system, row.place])).toEqual([
+      ['Accounts', undefined, 'Local on This Computer'],
+      ['Widgets', 'macOS 15.1, arm64', 'Local on This Computer'],
+      ['Widgets laptop', undefined, 'Local on This Computer'],
+    ]);
+    // Without the sites view, nothing changes.
+    expect(projectRows(manifest, { W1: local('widgets-1') }, {}).map((row) => row.system)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('says why a site machine could not be read (HS2-D4G81Q)', () => {
+    expect(siteReadFailure('target_unavailable')).toBe('Cannot be reached now');
+    expect(siteReadFailure('policy_denied')).toBe('The policy does not allow reading it');
+    expect(siteReadFailure('permission_required')).toBe('Waits for a person to answer a permission request');
+    expect(siteReadFailure('permission_denied')).toBe('A person denied reading it');
+    expect(siteReadFailure('conflict')).toBe('Could not be read (conflict)');
   });
 
   it('prefers a fresh resolution over the cached binding', () => {

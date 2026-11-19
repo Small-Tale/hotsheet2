@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{DeclarationState, TargetDeclaration, TargetDestination, TargetFailure};
-use crate::orchestration::{RunTarget, TicketKey};
+use crate::orchestration::{HostCapabilities, RunTarget, TicketKey};
 
 /// Why a site of a project was refused. Content-free codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -272,6 +272,16 @@ pub struct SiteView {
     pub confirmed_at_ms: Option<u64>,
     pub last_failure: Option<TargetFailure>,
     pub stale: bool,
+    /// HS2-D4G81Q: what the site's machine is (OS, architecture, CPU, GPU, AI tool and
+    /// toolchain versions), read through the gated capacity read only when the sites
+    /// view is asked for capabilities. Absent otherwise, and when the machine did not
+    /// report them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<HostCapabilities>,
+    /// HS2-D4G81Q: the error code of a capabilities read that failed, such as
+    /// `target_unavailable`; absent when none was read or the read succeeded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities_error: Option<String>,
 }
 
 /// One project with its active sites.

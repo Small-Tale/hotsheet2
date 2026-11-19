@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { OrchestrationCapabilities } from './api';
 import { aiToolsLabel, gpuLabel, systemLabel, toolchainsLabel } from './orchestration-capabilities';
-import { parseOrchestrationCapacity } from './server-response-parsers';
+import { parseOrchestrationCapacity, parseOrchestrationSites } from './server-response-parsers';
 
 const windows: OrchestrationCapabilities = {
   os: 'windows',
@@ -77,5 +77,42 @@ describe('HS2-ZY4Z4G capacity snapshot parsing', () => {
       { ...bare, os_version: null },
     ])
       expect(() => parseOrchestrationCapacity({ ...snapshot, capabilities })).toThrow();
+  });
+});
+
+describe('HS2-D4G81Q sites view parsing', () => {
+  const site = {
+    target_id: 'W1',
+    label: 'Widgets',
+    project: true,
+    destination: null,
+    confirmed_at_ms: null,
+    last_failure: null,
+    stale: true,
+  };
+  const view = (sites: unknown[]) => ({ revision: 'r1', projects: [{ project_id: 'W1', label: 'Widgets', sites }] });
+
+  it('reads a site without its machine, with it, and with a failed read', () => {
+    expect(parseOrchestrationSites(view([site])).projects[0].sites[0].capabilities).toBeUndefined();
+    const read = parseOrchestrationSites(
+      view([
+        { ...site, capabilities: windows },
+        { ...site, target_id: 'W2', capabilities_error: 'target_unavailable' },
+      ]),
+    );
+    expect(read.projects[0].sites.map((item) => [item.capabilities, item.capabilities_error])).toEqual([
+      [windows, undefined],
+      [undefined, 'target_unavailable'],
+    ]);
+    expect(parseOrchestrationSites({ revision: null, projects: [] }).projects).toEqual([]);
+  });
+
+  it('refuses a malformed site rather than showing it', () => {
+    for (const bad of [
+      { ...site, capabilities: { arch: 'arm64' } },
+      { ...site, capabilities_error: null },
+      { ...site, project: 'yes' },
+    ])
+      expect(() => parseOrchestrationSites(view([bad]))).toThrow();
   });
 });

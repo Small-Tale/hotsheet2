@@ -131,6 +131,40 @@ export function OrchestrationProjectDetailDemo() {
           formatTime={demoTime}
         />
       </CatalogExample>
+      <CatalogExample label="Several Sites">
+        <OrchestrationProjectDetail
+          targetId={DEMO_TARGETS.web}
+          label="Web"
+          where="Local on This Computer"
+          binding={demoBinding('web')}
+          detail={{ targetId: DEMO_TARGETS.web, capacity: demoCapacity, admissions: [], loading: false }}
+          sites={[
+            {
+              targetId: DEMO_TARGETS.web,
+              label: 'Web',
+              where: 'Local on This Computer',
+              home: true,
+              capabilities: demoCapacity.capabilities,
+            },
+            {
+              targetId: DEMO_TARGETS.api,
+              label: 'Web on the build host',
+              where: 'Remote on Build Host',
+              home: false,
+              capabilities: { os: 'windows', os_version: '10.0.26100', arch: 'x86_64', gpu: { present: false } },
+            },
+            {
+              targetId: DEMO_TARGETS.docs,
+              label: 'Web laptop',
+              where: 'Remote on Laptop',
+              home: false,
+              error: 'Cannot be reached now',
+            },
+          ]}
+          toolLabel={demoToolLabel}
+          formatTime={demoTime}
+        />
+      </CatalogExample>
       <CatalogExample label="Loading">
         <OrchestrationProjectDetail
           targetId={DEMO_TARGETS.api}

@@ -532,10 +532,67 @@ paths:
   /checkouts/{owner}/orchestration/sites:
     get:
       operationId: listProjectSites
-      description: HS2-SHH7WW. Each project with its sites and this machine's binding of each. Machine-local.
+      description:
+        HS2-SHH7WW. Each project with its sites and this machine's binding of each. Machine-local. HS2-D4G81Q, with
+        `capabilities=true`, also reads each bound site's machine through the gated capacity read (`gates_observe`,
+        never asks).
+      parameters:
+        - name: capabilities
+          in: query
+          description: Also read what each bound site's machine is; without it the view contacts nothing.
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
+        - name: actor_id
+          in: query
+          description: The acting identity for the capability reads, recorded in the audit.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+        - name: actor_role
+          in: query
+          schema:
+            type: string
+            enum:
+              - human
+              - ai
+              - system
+            default: ai
       responses:
         '200':
-          description: The projects with their sites; reads the manifest and bindings and contacts nothing.
+          description:
+            The projects with their sites; without `capabilities` it reads the manifest and bindings and contacts
+            nothing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SitesView'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: listProjectSitesAsActor
+      description: HS2-D4G81Q. The same read for adapters that attach the acting identity to a body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadSites'
+      responses:
+        '200':
+          description: The projects with their sites, and each bound site's machine when asked.
           content:
             application/json:
               schema:
@@ -19235,6 +19292,23 @@ components:
                         - 'null'
                     stale:
                       type: boolean
+                    capabilities:
+                      description:
+                        HS2-D4G81Q. What the site's machine is, read only when asked; absent when not read or not
+                        reported.
+                      $ref: '#/components/schemas/MachineCapabilities'
+                    capabilities_error:
+                      description: HS2-D4G81Q. The error code of a capabilities read that failed.
+                      type: string
+    ReadSites:
+      description: HS2-D4G81Q. The body form of the sites read.
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+        capabilities:
+          type: boolean
+      additionalProperties: false
     RemoveTarget:
       type: object
       required:

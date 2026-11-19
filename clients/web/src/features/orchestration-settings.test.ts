@@ -189,6 +189,76 @@ describe('Settings → Orchestration (HS2-W27N1D)', () => {
   });
 });
 
+describe('what each site of a project is (HS2-D4G81Q)', () => {
+  it('reads the sites view only while a project has several sites, and keeps the last one when a read fails', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(t.api.orchestrationSites).not.toHaveBeenCalled();
+    expect(state(t).sites).toBeUndefined();
+
+    // Docs becomes another site of Web.
+    const grouped = await t.api.orchestrationTargets(DEMO_OWNER);
+    grouped.targets = grouped.targets.map((target) =>
+      target.target_id === DEMO_TARGETS.docs ? { ...target, site_of: DEMO_TARGETS.web } : target,
+    );
+    vi.mocked(t.api.orchestrationTargets).mockResolvedValue(grouped);
+    vi.mocked(t.api.orchestrationSites).mockResolvedValueOnce({
+      revision: grouped.revision,
+      projects: [
+        {
+          project_id: DEMO_TARGETS.web,
+          label: 'Web',
+          sites: [
+            {
+              target_id: DEMO_TARGETS.web,
+              label: 'Web',
+              project: true,
+              destination: null,
+              confirmed_at_ms: null,
+              last_failure: null,
+              stale: true,
+              capabilities: { os: 'macos', os_version: '15.1', arch: 'arm64' },
+            },
+            {
+              target_id: DEMO_TARGETS.docs,
+              label: 'Docs',
+              project: false,
+              destination: null,
+              confirmed_at_ms: null,
+              last_failure: null,
+              stale: true,
+              capabilities_error: 'target_unavailable',
+            },
+          ],
+        },
+      ],
+    });
+    await t.settings.loadSettings(DEMO_OWNER);
+    await vi.waitFor(() => {
+      expect(state(t).sites?.projects[0].sites).toHaveLength(2);
+    });
+    expect(t.api.orchestrationSites).toHaveBeenCalledTimes(1);
+
+    // A failed read keeps the last view rather than clearing the rows.
+    vi.mocked(t.api.orchestrationSites).mockRejectedValueOnce(new Error('offline'));
+    await t.settings.loadSettings(DEMO_OWNER);
+    await vi.waitFor(() => {
+      expect(t.api.orchestrationSites).toHaveBeenCalledTimes(2);
+    });
+    expect(state(t).sites?.projects[0].sites[0].capabilities?.os).toBe('macos');
+    expect(state(t).message).toBe('');
+
+    // Separated again: the view is dropped and not read.
+    vi.mocked(t.api.orchestrationTargets).mockResolvedValue({
+      ...grouped,
+      targets: grouped.targets.map((target) => ({ ...target, site_of: undefined })),
+    });
+    await t.settings.loadSettings(DEMO_OWNER);
+    expect(state(t).sites).toBeUndefined();
+    expect(t.api.orchestrationSites).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('a project detail (HS2-W27N1D)', () => {
   it('reads each part on its own, so a refused part hides nothing else', async () => {
     const t = setup();

@@ -15399,6 +15399,10 @@ fn hs2_shh7ww_actual_cli_declares_lists_and_separates_sites_of_one_project() {
     assert_eq!(sites["projects"][0]["project_id"], project_id);
     assert_eq!(sites["projects"][0]["sites"][1]["target_id"], site_id);
     assert_eq!(sites["projects"][0]["sites"][1]["project"], false);
+    // HS2-D4G81Q: --capabilities reads each bound site's machine; neither is bound here,
+    // so the view is the same and names no machine.
+    let read = hs2_4j6v46_value(&home, &source, &owner.id, &["sites", "--capabilities"]);
+    assert_eq!(read, sites);
     // Removing the project while its site is active fails with the site's code.
     hs2_4j6v46_command(&home, &source, false)
         .args([

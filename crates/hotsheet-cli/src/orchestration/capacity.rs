@@ -95,6 +95,16 @@ pub struct ReadCapacity {
     pub wait_ms: Option<u64>,
 }
 
+/// HS2-D4G81Q: the body form of the sites read, for adapters that attach the actor to a
+/// body (CLI, MCP).
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadSites {
+    /// Also read what each bound site's machine is, through the gated capacity read.
+    #[serde(default)]
+    pub capabilities: bool,
+}
+
 /// HS2-P5GTSW: the longest one capacity wait parks, under the target transport's read
 /// timeout. A subscriber with a later deadline asks again with the version it got.
 pub const MAX_CAPACITY_WAIT_MS: u64 = 8_000;
@@ -327,6 +337,36 @@ impl OrchestrationRuntime {
         tx: &mut Transaction<'_>,
     ) -> Result<CapacitySnapshot, OrchestrationError> {
         self.target_capacity_wait(target, namespaces, None, 0, actor, tx)
+    }
+
+    /// HS2-D4G81Q: the sites view with what each site's machine is. Each site this
+    /// machine binds is read through the same gated capacity read as
+    /// [`Self::target_capacity`], one at a time; a site that is not bound is not read,
+    /// and a read that fails names its code instead, so one unreachable machine hides
+    /// nothing else.
+    pub fn sites_with_capabilities(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Result<hotsheet_ticketing::orchestration::SitesView, OrchestrationError> {
+        let mut view = self.sites(owner_id)?;
+        for site in view
+            .projects
+            .iter_mut()
+            .flat_map(|project| project.sites.iter_mut())
+            .filter(|site| site.destination.is_some())
+        {
+            let target = TargetRef {
+                owner_checkout_id: owner_id.to_owned(),
+                target_id: site.target_id.clone(),
+            };
+            match self.target_capacity(&target, &[], actor, tx) {
+                Ok(snapshot) => site.capabilities = snapshot.capabilities,
+                Err(error) => site.capabilities_error = Some(error.code().to_owned()),
+            }
+        }
+        Ok(view)
     }
 
     /// HS2-P5GTSW: the same read as a long poll: answered once the host's capacity

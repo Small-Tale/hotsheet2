@@ -16,7 +16,12 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { Bot, CircleStop, Hand, MoreHorizontal, PanelBottomOpen, Trash2 } from 'lucide';
 
-import type { OrchestrationAdmission, OrchestrationBinding, OrchestrationSession } from '../api';
+import type {
+  OrchestrationAdmission,
+  OrchestrationBinding,
+  OrchestrationCapabilities,
+  OrchestrationSession,
+} from '../api';
 import type { OrchestrationDetailState } from '../features/orchestration-settings';
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
 import { aiToolsLabel, gpuLabel, systemLabel, toolchainsLabel } from '../orchestration-capabilities';
@@ -39,6 +44,19 @@ export interface OrchestrationProjectDetailSession {
   busy: boolean;
 }
 
+/** HS2-D4G81Q: one site of the project this detail's target belongs to, with what its machine is. */
+export interface OrchestrationProjectDetailSite {
+  targetId: string;
+  label: string;
+  /** "Local on This Computer", "Remote on Build host", or "Not bound on this computer". */
+  where: string;
+  /** The project's own target, its home site. */
+  home: boolean;
+  capabilities?: OrchestrationCapabilities;
+  /** Why the machine could not be read, in words. */
+  error?: string;
+}
+
 export interface OrchestrationProjectDetailProps {
   targetId: string;
   label: string;
@@ -56,6 +74,8 @@ export interface OrchestrationProjectDetailProps {
    * site, where its coordination sessions start.
    */
   homeLabel?: string;
+  /** HS2-D4G81Q: every site of the target's project, when it has more than one. */
+  sites?: readonly OrchestrationProjectDetailSite[];
   removing?: boolean;
   toolLabel?: (tool: string) => string;
   /** Formats a time in milliseconds; the catalog passes a fixed clock. */
@@ -102,6 +122,65 @@ const quiet = (text: string) => (
 const unreadable = (what: string, message: string) => quiet(`${what} is not available. ${message}`);
 
 /**
+ * HS2-ZY4Z4G: what a machine is, as rows of a ValueTable: System, Processor (when reported), GPU, AI
+ * Tools and Toolchains. The capacity region shows them for a one-site project; a project with several
+ * sites shows them once per site in the Sites region instead (HS2-D4G81Q), never in both.
+ */
+const capabilityRows = (capabilities: OrchestrationCapabilities, toolLabel: (tool: string) => string) => (
+  <>
+    <ValueTableRow label="System" value={systemLabel(capabilities)} />
+    {capabilities.cpu_model ? <ValueTableRow label="Processor" value={capabilities.cpu_model} /> : null}
+    <ValueTableRow label="GPU" value={gpuLabel(capabilities)} />
+    <ValueTableRow label="AI Tools" value={aiToolsLabel(capabilities, toolLabel)} />
+    <ValueTableRow label="Toolchains" value={toolchainsLabel(capabilities)} />
+  </>
+);
+
+/**
+ * HS2-D4G81Q: every site of the project, so the machines its work may be placed on read side by side:
+ * where each one is bound and what its machine is.
+ */
+function sitesSection(
+  sites: readonly OrchestrationProjectDetailSite[],
+  toolLabel: (tool: string) => string,
+  shown: { targetId: string; capabilities?: OrchestrationCapabilities },
+) {
+  return (
+    <section aria-label="Sites" data-orchestration-sites>
+      <ListHeader label="Sites" />
+      <List gap="m">
+        {sites.map((site) => {
+          // The shown site's machine comes from the detail's own fresh capacity read when it has one.
+          const capabilities = (site.targetId === shown.targetId ? shown.capabilities : undefined) ?? site.capabilities;
+          return (
+            <ValueTable
+              label={`${site.label} site`}
+              density="compact"
+              stackBelow="compact"
+              rootAttributes={{ 'data-orchestration-site': site.targetId }}
+            >
+              <ValueTableRow label="Site" value={site.home ? `${site.label} · Home` : site.label} />
+              <ValueTableRow label="Where" value={site.where || 'Not bound on this computer'} />
+              {capabilities ? (
+                capabilityRows(capabilities, toolLabel)
+              ) : (
+                <ValueTableRow
+                  label="System"
+                  value={
+                    site.error ??
+                    (!site.where || site.where.startsWith('Not bound') ? 'Not bound here' : 'Not reported')
+                  }
+                />
+              )}
+            </ValueTable>
+          );
+        })}
+      </List>
+    </section>
+  );
+}
+
+/**
  * One orchestrated project's detail (HS2-W27N1D), opened from its row in Settings → Orchestration:
  * binding and connection, capacity and admission, AI tool capacity, held resources and the sessions
  * the orchestrator runs there, with Show in Drawer, Take Over and Stop. Every part is a read through
@@ -118,6 +197,7 @@ export function OrchestrationProjectDetail({
   claimNamespaces = [],
   policyTools = [],
   homeLabel,
+  sites = [],
   removing = false,
   toolLabel = (tool) => tool,
   formatTime = defaultTime,
@@ -126,7 +206,9 @@ export function OrchestrationProjectDetail({
     capacity = detail?.capacity,
     loading = Boolean(detail?.loading),
     checked = detail?.resolution?.binding.checked_at_ms ?? binding?.checked_at_ms,
-    tools = detail?.toolCapacity?.tools ?? [];
+    tools = detail?.toolCapacity?.tools ?? [],
+    // One place for what a machine is: the Sites region when the project has several sites.
+    several = sites.length > 1;
   return (
     <div data-component="orchestration-project-detail" data-target-id={targetId}>
       <List gap="l" controlInsets="rbl">
@@ -160,17 +242,7 @@ export function OrchestrationProjectDetail({
                 label="AI Sessions There"
                 value={capacity.sessions === null ? 'Unknown' : String(capacity.sessions.length)}
               />
-              {capacity.capabilities ? (
-                <>
-                  <ValueTableRow label="System" value={systemLabel(capacity.capabilities)} />
-                  {capacity.capabilities.cpu_model ? (
-                    <ValueTableRow label="Processor" value={capacity.capabilities.cpu_model} />
-                  ) : null}
-                  <ValueTableRow label="GPU" value={gpuLabel(capacity.capabilities)} />
-                  <ValueTableRow label="AI Tools" value={aiToolsLabel(capacity.capabilities, toolLabel)} />
-                  <ValueTableRow label="Toolchains" value={toolchainsLabel(capacity.capabilities)} />
-                </>
-              ) : null}
+              {capacity.capabilities && !several ? capabilityRows(capacity.capabilities, toolLabel) : null}
               {detail.admissions.map((admission) => (
                 <ValueTableRow label={`${toolLabel(admission.tool)} Admission`} value={admissionValue(admission)} />
               ))}
@@ -187,6 +259,7 @@ export function OrchestrationProjectDetail({
           )}
           {detail?.admissionError ? unreadable('Admission', detail.admissionError) : null}
         </section>
+        {several ? sitesSection(sites, toolLabel, { targetId, capabilities: capacity?.capabilities }) : null}
         <section aria-label="AI Tool Capacity">
           <ListHeader label="AI Tool Capacity" />
           {detail?.toolCapacityError ? (

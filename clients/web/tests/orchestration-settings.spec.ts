@@ -1090,6 +1090,146 @@ test('HS2-SYZB33 a site Limits point Coordination Sessions at the project home',
   }
 });
 
+/**
+ * HS2-D4G81Q: what each site's machine is, in Settings › Orchestration. Two checkouts of one ticket store
+ * grouped as sites of one project; the sites view reads each one's machine through the real gate, the
+ * rows add its OS and the detail lists every site with the machine rows, which the capacity region then
+ * leaves out so they show in one place.
+ */
+test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserName }) => {
+  test.setTimeout(240_000);
+  const { server, projects } = await openProjects(page);
+  try {
+    const [owner, web, docs] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const targets: Record<string, string> = {};
+    for (const [project, label] of [
+      [web, 'Widgets'],
+      [docs, 'Widgets second clone'],
+    ] as const)
+      targets[label] = (
+        await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+          destination: { kind: 'local', checkout_id: project.id },
+          label,
+          actor: { role: 'human' },
+        })
+      ).target_id;
+    const { revision } = await server.request<{ revision: string }>(`${base}/targets`);
+    await server.request(`${base}/targets/${targets['Widgets second clone']}`, 'PATCH', {
+      expected_revision: revision,
+      label: 'Widgets second clone',
+      site_of: targets.Widgets,
+      actor: { role: 'human' },
+    });
+    // The headless read the client shares: each bound site's machine, through the gate.
+    const system = /(macOS|Linux|Windows)[^,·]*, (arm64|x86_64)/;
+    const read = await server.request<{
+      projects: { sites: { target_id: string; capabilities?: { os: string; arch: string } }[] }[];
+    }>(`${base}/sites`, 'POST', { capabilities: true, actor: { role: 'human', id: 'maintainer' } });
+    expect(read.projects[0].sites.map((site) => [site.target_id, Boolean(site.capabilities?.os)])).toEqual([
+      [targets.Widgets, true],
+      [targets['Widgets second clone'], true],
+    ]);
+    // Nobody was asked for these reads.
+    expect((await server.request<{ requests: unknown[] }>(`${base}/permissions`)).requests).toEqual([]);
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const rows = settings.locator('[data-orchestration-project]');
+    await expect(rows).toHaveCount(2);
+    // Each site row adds its machine's OS once the sites view is read.
+    await expect(rows.nth(0)).toContainText('2 sites · Local on This Computer · ');
+    await expect(rows.nth(0)).toContainText(system);
+    await expect(rows.nth(1)).toContainText('Site of Widgets · Local on This Computer · ');
+    await expect(rows.nth(1)).toContainText(system);
+
+    // The home's detail lists both sites with the machine rows of the capacity region.
+    await rows
+      .nth(0)
+      .getByRole('button', { name: /Widgets/ })
+      .first()
+      .click();
+    const detail = page.locator('[data-component="orchestration-project-detail"]');
+    await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
+    const sites = detail.getByRole('region', { name: 'Sites' });
+    const tables = sites.locator('[data-orchestration-site]');
+    await expect(tables).toHaveCount(2);
+    await expect(tables.nth(0)).toContainText('Widgets · Home');
+    await expect(tables.nth(1)).toContainText('Widgets second clone');
+    for (const index of [0, 1]) {
+      const table = tables.nth(index);
+      await expect(table).toContainText('Local on This Computer');
+      await expect(table).toContainText(system);
+      for (const label of ['System', 'GPU', 'AI Tools', 'Toolchains'])
+        await expect(table.getByText(label, { exact: true })).toBeVisible();
+    }
+    // One place for what a machine is: with several sites the capacity region does not repeat it.
+    const capacityRegion = detail.getByRole('region', { name: 'Capacity and Admission' });
+    await expect(capacityRegion).toContainText('Free Memory');
+    await expect(capacityRegion).not.toContainText(system);
+    await expect(capacityRegion.getByText('Toolchains', { exact: true })).toHaveCount(0);
+    // The site's own detail shows the same Sites section.
+    await rows
+      .nth(1)
+      .getByRole('button', { name: /Widgets second clone/ })
+      .first()
+      .click();
+    await expect(detail).toHaveAttribute('data-target-id', targets['Widgets second clone']);
+    await expect(tables).toHaveCount(2);
+    await rows
+      .nth(0)
+      .getByRole('button', { name: /Widgets/ })
+      .first()
+      .click();
+    await expect(detail).toHaveAttribute('data-target-id', targets.Widgets);
+
+    const directory = join('target', 'visual-captures', 'hs2-d4g81q');
+    await mkdir(directory, { recursive: true });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+        await page.setViewportSize(size);
+        const name = `${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}`;
+        if (size.width === 390) {
+          const hide = page.getByRole('button', { name: 'Hide Settings Sidebar', exact: true });
+          if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          const hideInspector = page.getByRole('button', { name: 'Hide Project Detail', exact: true });
+          if (await hideInspector.isVisible()) await hideInspector.click({ timeout: 3_000 }).catch(() => undefined);
+          // The rows first, then the detail sheet with the Sites section.
+          await expect(rows.nth(1)).toContainText(system);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+          await page.screenshot({ path: join(directory, `hs2-d4g81q-rows-${name}.png`), animations: 'disabled' });
+          const show = page.getByRole('button', { name: 'Show Project Detail', exact: true });
+          if (await show.isVisible()) await show.click();
+          // The capacity region, which leaves the machine rows to the Sites tables, at the same width.
+          const capacity = detail.getByRole('region', { name: 'Capacity and Admission' });
+          await capacity.getByText('Free Memory', { exact: true }).scrollIntoViewIfNeeded();
+          await page.screenshot({ path: join(directory, `hs2-d4g81q-capacity-${name}.png`), animations: 'disabled' });
+        } else {
+          await expect(rows.nth(1)).toContainText(system);
+          await page.screenshot({ path: join(directory, `hs2-d4g81q-rows-${name}.png`), animations: 'disabled' });
+        }
+        await expect(tables.nth(1)).toContainText(system);
+        // The Sites header with the end of the capacity region above it.
+        await sites.evaluate((element) => {
+          element.scrollIntoView({ block: 'start' });
+          let scroller = element.parentElement;
+          while (scroller && scroller.scrollHeight <= scroller.clientHeight) scroller = scroller.parentElement;
+          scroller?.scrollBy(0, -120);
+        });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({ path: join(directory, `hs2-d4g81q-sites-${name}.png`), animations: 'disabled' });
+      }
+    }
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -10,6 +10,7 @@ import type {
   OrchestrationPolicyView,
   OrchestrationResolution,
   OrchestrationSession,
+  OrchestrationSitesView,
   OrchestrationToolCapacity,
   ProjectType,
   ProjectTypeView,
@@ -48,6 +49,7 @@ export type OrchestrationApi = Pick<
   | 'addHostedOrchestrationProject'
   | 'removeHostedOrchestrationProject'
   | 'orchestrationCapacity'
+  | 'orchestrationSites'
   | 'orchestrationAdmission'
   | 'orchestrationToolCapacity'
   | 'orchestrationSessions'
@@ -92,6 +94,11 @@ export interface OrchestrationSettingsState {
   hosted?: readonly HostedOrchestrationProjectChoice[];
   /** Why that list could not be read. */
   hostedError?: string;
+  /**
+   * HS2-D4G81Q: each project with its sites and what each site's machine is, read only while a
+   * project has more than one site.
+   */
+  sites?: OrchestrationSitesView;
 }
 
 /** A selected project's detail, shown in the inspector. Each part is read on its own. */
@@ -287,9 +294,28 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       const target = selected.value[projectId];
       if (target && active.every((item) => item.target_id !== target)) closeDetail(projectId);
       else if (target) syncLimits(projectId, target);
+      if (active.some((item) => item.site_of)) void loadSites(projectId);
+      else if (stateOf(projectId).sites) put(projectId, { sites: undefined });
     } catch (reason) {
       if (current(`settings:${projectId}`, generation))
         put(projectId, { loading: false, message: `Could not read the orchestration settings. ${messageOf(reason)}` });
+    }
+  }
+
+  /**
+   * HS2-D4G81Q: what each site's machine is, for a project with several sites. Each bound site is read
+   * through the gate on its own; the rows show what was read and say nothing for the rest, so a slow or
+   * unreachable machine never holds the settings back.
+   */
+  async function loadSites(projectId: string) {
+    const api = dependencies.api(projectId);
+    if (!api) return;
+    const generation = next(`sites:${projectId}`);
+    try {
+      const sites = await api.orchestrationSites(projectId);
+      if (current(`sites:${projectId}`, generation)) put(projectId, { sites });
+    } catch {
+      // The rows and the detail keep the rest; the site's own detail still reads its capacity.
     }
   }
 

@@ -1253,7 +1253,12 @@ enum TargetCmd {
         clear_site_of: bool,
     },
     /// HS2-SHH7WW: each project with its sites and this machine's binding of each.
-    Sites,
+    Sites {
+        /// HS2-D4G81Q: also read what each bound site's machine is (OS, architecture,
+        /// CPU, GPU, AI tool and toolchain versions) through the gated capacity read.
+        #[arg(long)]
+        capabilities: bool,
+    },
     /// Tombstone one target at the expected manifest revision; its id is never reused.
     Remove {
         id: String,
@@ -1329,11 +1334,22 @@ fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Val
             format!("{prefix}/{id}"),
             json!({"expected_revision":expected_revision,"label":label,"expected_repository_identity":expected_repository_identity,"clear_expected_repository_identity":clear_expected_repository_identity,"site_of":site_of,"clear_site_of":clear_site_of}),
         ),
-        TargetCmd::Sites => (
-            "GET",
-            format!("/checkouts/{project}/orchestration/sites"),
-            Value::Null,
-        ),
+        // HS2-D4G81Q: reading the machines passes the gate, so the actor rides in a body.
+        TargetCmd::Sites { capabilities } => {
+            if capabilities {
+                (
+                    "POST",
+                    format!("/checkouts/{project}/orchestration/sites"),
+                    json!({"capabilities": true}),
+                )
+            } else {
+                (
+                    "GET",
+                    format!("/checkouts/{project}/orchestration/sites"),
+                    Value::Null,
+                )
+            }
+        }
         TargetCmd::Remove {
             id,
             expected_revision,

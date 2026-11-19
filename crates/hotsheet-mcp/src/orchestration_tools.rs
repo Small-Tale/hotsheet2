@@ -22,6 +22,7 @@ pub(crate) fn definition() -> Value {
         "requirements":{"type":"object","properties":{"os":{"type":"array","maxItems":8,"items":{"type":"string","enum":["macos","linux","windows"]}},"arch":{"type":"array","maxItems":8,"items":{"type":"string"}},"tools":{"type":"array","maxItems":8,"items":{"type":"string"}},"toolchains":{"type":"array","maxItems":8,"items":{"type":"string"}},"min_memory_gb":{"type":"integer","minimum":1,"maximum":65536},"gpu":{"type":"string","enum":["any","amd","apple","intel","nvidia","qualcomm","other"]}},"additionalProperties":false,"description":"readiness_define: what the target's machine must be for the step's work (HS2-ZY4Z4G): os and arch are alternatives, every tool (installed AI tool) and toolchain is needed; the scheduler places the work only where all are met and explains a miss as requirement_unmet or requirement_unknown"},
         "resources":{"type":"array","maxItems":4,"items":{"type":"object"},"description":"readiness_define: resources the session working the step must hold, each {namespace,resource} in the resource-claim service's names (HS2-2FG91X); session_start: resources the work needs, which the started session is told to acquire itself (HS2-7YSKXE)"},
         "dry_run":{"type":"boolean","description":"scheduler_tick: compute and log the decisions and apply none of them, whatever the policy says"},
+        "capabilities":{"type":"boolean","description":"sites: also read what each bound site's machine is (OS, architecture, CPU, GPU, AI tool and toolchain versions) through the gated capacity read; a site whose read fails carries capabilities_error (HS2-D4G81Q)"},
         "tool_load":{"type":"array","items":{"type":"object","required":["tool","sessions"],"properties":{"tool":{"type":"string"},"account":{"type":"string"},"sessions":{"type":"integer","minimum":0}}},"description":"tool_select (required): sessions now running per tool account; an empty list states that none are running"},
         "claim_namespaces":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"capacity: resource-claim namespaces whose live claims to list; omit to list every held claim of the machine (HS2-YDZAFH)"},
         "sessions":{"type":"integer","minimum":1,"maximum":64,"description":"admission_check: how many sessions to ask for (default 1)"},
@@ -946,7 +947,15 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
         "rename" => backend.send("PATCH", &format!("{prefix}/{}",id.ok_or("target_id is required")?), &json!({"expected_revision":required(args,"expected_revision")?,"label":required(args,"label")?,"expected_repository_identity":args.get("expected_repository_identity").cloned().unwrap_or(Value::Null),"clear_expected_repository_identity":args.get("clear_expected_repository_identity").cloned().unwrap_or(json!(false)),
             "site_of":args.get("site_of").cloned().unwrap_or(Value::Null),"clear_site_of":args.get("clear_site_of").cloned().unwrap_or(json!(false))})),
         // HS2-SHH7WW: each project with its sites and this machine's binding of each.
-        "sites" => backend.get(&format!("/checkouts/{owner}/orchestration/sites"), &[]),
+        // HS2-D4G81Q: with capabilities, each bound site's machine is read too.
+        "sites" => {
+            let path = format!("/checkouts/{owner}/orchestration/sites");
+            if args.get("capabilities").and_then(Value::as_bool) == Some(true) {
+                backend.send("POST", &path, &json!({"capabilities":true}))
+            } else {
+                backend.get(&path, &[])
+            }
+        }
         "remove" => backend.send("DELETE", &format!("{prefix}/{}",id.ok_or("target_id is required")?), &json!({"expected_revision":required(args,"expected_revision")?})),
         "bind" | "unbind" => {
             let id = id.ok_or("target_id is required")?;
@@ -1516,6 +1525,27 @@ mod tests {
                 .contains("machine-local")
         );
         assert!(off.calls.lock_or_recover().is_empty());
+    }
+    #[test]
+    fn hs2_d4g81q_sites_with_capabilities_carries_the_actor_in_a_body() {
+        let backend = Recorded(Mutex::new(Vec::new()));
+        let owner = "owner-0123456789ab";
+        call(
+            &backend,
+            owner,
+            json!({"action":"sites","capabilities":true,"actor_role":"ai","actor_id":"scheduler-1"}),
+        );
+        call(
+            &backend,
+            owner,
+            json!({"action":"sites","capabilities":false}),
+        );
+        let sent = backend.0.lock_or_recover().clone();
+        assert_eq!(sent[0].0, "POST");
+        assert_eq!(sent[0].1, format!("/checkouts/{owner}/orchestration/sites"));
+        assert_eq!(sent[0].2["capabilities"], true);
+        assert_eq!(sent[0].2["actor"], json!({"role":"ai","id":"scheduler-1"}));
+        assert_eq!(sent[1].0, "GET");
     }
     #[test]
     fn hs2_j8prtv_orchestration_capacity_and_admission_actions_carry_the_actor_in_a_body() {

@@ -287,6 +287,18 @@ fn hosted<T: DeserializeOwned>(body: &Value) -> Result<T, OrchestrationError> {
     serde_json::from_value(body.clone())
         .map_err(|_| OrchestrationError::Invalid("invalid target ticket request"))
 }
+/// A read carries no body, so its actor travels in the query.
+fn query_actor(path: &str) -> Result<Option<MutationActor>, OrchestrationError> {
+    query_text(path, "actor_id")?
+        .map(|id| {
+            MutationActor::parse(
+                query_text(path, "actor_role")?.as_deref().unwrap_or("ai"),
+                Some(id),
+            )
+            .map_err(|_| OrchestrationError::Invalid("actor role must be human, ai, or system"))
+        })
+        .transpose()
+}
 fn reference(owner: &str, id: &str) -> Result<TargetRef, OrchestrationError> {
     let target = TargetRef {
         owner_checkout_id: owner.into(),
@@ -494,7 +506,29 @@ impl OrchestrationRuntime {
                 value(self.declarations(owner)?)
             }
             // HS2-SHH7WW: projects with their sites and this machine's bindings.
-            ("GET", ["checkouts", owner, "orchestration", "sites"]) => value(self.sites(owner)?),
+            ("GET", ["checkouts", owner, "orchestration", "sites"]) => {
+                // HS2-D4G81Q: with `capabilities=true`, each bound site's machine is read.
+                match query_text(path, "capabilities")?.as_deref() {
+                    None | Some("false") => value(self.sites(owner)?),
+                    Some("true") => {
+                        let actor = query_actor(path)?;
+                        value(self.sites_with_capabilities(owner, actor.as_ref(), tx)?)
+                    }
+                    Some(_) => Err(OrchestrationError::Invalid(
+                        "capabilities must be true or false",
+                    )),
+                }
+            }
+            // HS2-D4G81Q: the same read for adapters that attach the actor to a body.
+            ("POST", ["checkouts", owner, "orchestration", "sites"]) => {
+                let actor = actor(body)?;
+                let read: super::capacity::ReadSites = decode(body)?;
+                if read.capabilities {
+                    value(self.sites_with_capabilities(owner, actor.as_ref(), tx)?)
+                } else {
+                    value(self.sites(owner)?)
+                }
+            }
             ("PUT", ["checkouts", owner, "orchestration", "targets"]) => {
                 value(self.replace(owner, decode(body)?, tx)?)
             }
@@ -925,18 +959,7 @@ impl OrchestrationRuntime {
                 ],
             ) => {
                 // A read carries no body, so its actor travels in the query.
-                let actor = match query_text(path, "actor_id")? {
-                    Some(id) => Some(
-                        MutationActor::parse(
-                            query_text(path, "actor_role")?.as_deref().unwrap_or("ai"),
-                            Some(id),
-                        )
-                        .map_err(|_| {
-                            OrchestrationError::Invalid("actor role must be human, ai, or system")
-                        })?,
-                    ),
-                    None => None,
-                };
+                let actor = query_actor(path)?;
                 value(self.target_capacity_wait(
                     &reference(owner, id)?,
                     &super::capacity::claim_namespaces(

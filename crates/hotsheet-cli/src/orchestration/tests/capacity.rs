@@ -16,12 +16,12 @@ use super::*;
 
 /// A probe whose answer the test sets, counting how often the runtime asked.
 #[derive(Default)]
-struct Scripted {
+pub(super) struct Scripted {
     observation: Mutex<HostObservation>,
-    asked: AtomicUsize,
+    pub(super) asked: AtomicUsize,
 }
 impl Scripted {
-    fn set(&self, change: impl FnOnce(&mut HostObservation)) {
+    pub(super) fn set(&self, change: impl FnOnce(&mut HostObservation)) {
         change(
             &mut self
                 .observation
@@ -72,7 +72,7 @@ fn roomy() -> HostObservation {
         sessions: Some(Vec::new()),
     }
 }
-fn probed(m: &mut Machine) -> Arc<Scripted> {
+pub(super) fn probed(m: &mut Machine) -> Arc<Scripted> {
     let probe = Arc::new(Scripted::default());
     probe.set(|observation| *observation = roomy());
     m.runtime = m.runtime.clone().with_capacity_probe(probe.clone());

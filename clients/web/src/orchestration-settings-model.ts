@@ -12,8 +12,10 @@ import type {
   OrchestrationResolution,
   OrchestrationRoleSession,
   OrchestrationSession,
+  OrchestrationSitesView,
   OrchestrationTargetPolicy,
 } from './api';
+import { systemLabel } from './orchestration-capabilities';
 import { parseRemoteProjectId, remoteProjectId } from './remote-projects/identity';
 
 /** What an add asks the server to bind: a checkout here or on a reviewed remote registration. */
@@ -98,11 +100,15 @@ export interface OrchestrationProjectRow {
   location: 'local' | 'remote' | 'unbound';
   /** "Local on This Computer", "Remote on Build host", or "Not bound on this computer". */
   where: string;
+  /** HS2-D4G81Q: the machine part of `where` alone: "Remote on Build host", or empty when unknown. */
+  place: string;
   connection: ConnectionStatus;
   /** The open tab that shows this project, when it is bound. */
   tabProjectId?: string;
   /** HS2-SHH7WW: the project target this row is another site of. */
   siteOf?: string;
+  /** HS2-D4G81Q: the OS of a site's machine (`macOS 15.1, arm64`), once the sites view read it. */
+  system?: string;
 }
 
 /**
@@ -113,7 +119,15 @@ export function projectRows(
   manifest: OrchestrationManifest | undefined,
   bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
   remoteLabels: Readonly<Record<string, string>>,
+  sites?: OrchestrationSitesView,
 ): OrchestrationProjectRow[] {
+  // HS2-D4G81Q: a site's OS shows on the rows of a project with several sites.
+  const capabilities = new Map(
+    (sites?.projects ?? [])
+      .filter((project) => project.sites.length > 1)
+      .flatMap((project) => project.sites)
+      .flatMap((site) => (site.capabilities ? [[site.target_id, site.capabilities] as const] : [])),
+  );
   const active = (manifest?.targets ?? []).filter((target) => target.state === 'active'),
     byLabel = (left: { label: string }, right: { label: string }) => left.label.localeCompare(right.label),
     projectOf = (target: (typeof active)[number]) =>
@@ -122,6 +136,7 @@ export function projectRows(
         : undefined;
   const row = (target: (typeof active)[number], prefix: string): OrchestrationProjectRow => {
     const binding = bindings[target.target_id],
+      machine = capabilities.get(target.target_id),
       destination = binding?.destination ?? undefined,
       place = destination
         ? `${destination.kind === 'local' ? 'Local' : 'Remote'} on ${machineOf(destination, remoteLabels)}`
@@ -133,9 +148,11 @@ export function projectRows(
       label: target.label,
       location: destination ? destination.kind : binding ? 'unbound' : 'local',
       where: [prefix, place].filter(Boolean).join(' · '),
+      place,
       connection: connectionStatus(binding),
       tabProjectId: destination ? tabProjectIdOf(destination) : undefined,
       siteOf: projectOf(target),
+      system: machine ? systemLabel(machine) : undefined,
     };
   };
   return active
@@ -148,6 +165,17 @@ export function projectRows(
         ...sites.map((site) => row(site, `Site of ${project.label}`)),
       ];
     });
+}
+
+const SITE_READ_FAILURES: Readonly<Record<string, string>> = {
+  target_unavailable: 'Cannot be reached now',
+  policy_denied: 'The policy does not allow reading it',
+  permission_required: 'Waits for a person to answer a permission request',
+  permission_denied: 'A person denied reading it',
+};
+/** HS2-D4G81Q: why a site's machine could not be read, from the sites view's error code. */
+export function siteReadFailure(code: string): string {
+  return SITE_READ_FAILURES[code] ?? `Could not be read (${code})`;
 }
 
 export interface AddChoice {

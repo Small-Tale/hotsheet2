@@ -93,6 +93,7 @@ import {
   parseOrchestrationProjectView,
   parseOrchestrationResolution,
   parseOrchestrationSession,
+  parseOrchestrationSites,
   parseOrchestrationToolCapacity,
   parsePermissionAutomationSettings,
   parsePermissionDecision,
@@ -1188,6 +1189,29 @@ export interface OrchestrationCapabilities {
   gpu?: { present: boolean; vendors?: string[] };
   ai_tools?: { tool: string; version?: string }[];
   toolchains?: { name: string; installed: boolean; version?: string }[];
+}
+/**
+ * HS2-SHH7WW, HS2-D4G81Q: one site of a project as this machine knows it, from
+ * `GET /checkouts/{owner}/orchestration/sites?capabilities=true`.
+ */
+export interface OrchestrationSiteView {
+  target_id: string;
+  label: string;
+  /** The project's own target, its home site. */
+  project: boolean;
+  destination: OrchestrationDestination | null;
+  confirmed_at_ms: number | null;
+  last_failure: string | null;
+  stale: boolean;
+  /** HS2-D4G81Q: what the site's machine is; absent when it was not read or not reported. */
+  capabilities?: OrchestrationCapabilities;
+  /** HS2-D4G81Q: the error code of a capabilities read that failed. */
+  capabilities_error?: string;
+}
+/** HS2-SHH7WW: every active project with its active sites, the project's own target first. */
+export interface OrchestrationSitesView {
+  revision: string | null;
+  projects: { project_id: string; label: string; sites: OrchestrationSiteView[] }[];
 }
 /** `POST .../targets/{target}/admission` (HS2-J8PRTV). */
 export interface OrchestrationAdmission {
@@ -3187,6 +3211,14 @@ export class Api {
       parseOrchestrationCapacity,
       `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}/capacity?${query}`,
     );
+  };
+  /**
+   * HS2-D4G81Q: each project with its sites, and what each bound site's machine is. Each machine is
+   * read through the authorization gate as the capacity read is, so it names the app's person.
+   */
+  orchestrationSites = (owner: string) => {
+    const query = new URLSearchParams({ capabilities: 'true', actor_role: 'human', actor_id: ORCHESTRATION_APP_ACTOR });
+    return this.parsed(parseOrchestrationSites, `/checkouts/${encodeURIComponent(owner)}/orchestration/sites?${query}`);
   };
   orchestrationAdmission = (owner: string, target: string, tool: string) =>
     this.parsed(

@@ -233,6 +233,34 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
         },
       ),
     orchestrationResolve: (_owner, target) => Promise.resolve(resolution(target)),
+    // HS2-D4G81Q: each project with its sites; every bound site reads as the synthetic machine.
+    orchestrationSites: () => {
+      const live = manifest.targets.filter((target) => target.state === 'active'),
+        bound = new Map(Object.entries(bindings)),
+        site = (target: (typeof live)[number]) => {
+          const binding = bound.get(target.target_id);
+          return {
+            target_id: target.target_id,
+            label: target.label,
+            project: !target.site_of,
+            destination: binding?.destination ?? null,
+            confirmed_at_ms: binding?.confirmed_at_ms ?? null,
+            last_failure: null,
+            stale: true,
+            capabilities: binding?.destination ? demoCapacity.capabilities : undefined,
+          };
+        };
+      return Promise.resolve({
+        revision: manifest.revision,
+        projects: live
+          .filter((target) => !target.site_of)
+          .map((project) => ({
+            project_id: project.target_id,
+            label: project.label,
+            sites: [project, ...live.filter((target) => target.site_of === project.target_id)].map(site),
+          })),
+      });
+    },
     addOrchestrationProject: (_owner, request) => {
       const existing = Object.entries(bindings).find(
         ([, binding]) => binding.destination?.checkout_id === request.destination.checkout_id,

@@ -268,6 +268,26 @@ contacts nothing; like every binding read it is machine-local. Settings ›
 Orchestration lists a project's other sites right after it, each labelled `Site of
 <project>` with its machine and connection state.
 
+**What each site's machine is (HS2-D4G81Q).** Asked with `capabilities=true`
+(`GET …/sites?capabilities=true` with the actor in the query, or `POST …/sites` with
+`{"capabilities":true}` and the actor in the body; `target sites --capabilities`; MCP
+`sites` with `capabilities: true`), the view also reads each site this machine binds
+through the same gated capacity read as a project detail (`gates_observe`, which never
+asks; §26.10). Each such site carries `capabilities`, the machine's OS, architecture,
+CPU, GPU, AI tool and toolchain versions (HS2-ZY4Z4G), or `capabilities_error`, the
+error code of a read that failed. A site that is not bound here is not read, and a
+machine that reports nothing about itself carries neither. Both fields are additive and
+skipped when unset; without the flag the view still contacts nothing. Settings ›
+Orchestration reads it only while a project has more than one site, after the list has
+loaded, and on each `orchestration_changed` event. Each site row of such a project adds its
+machine's OS to its description (`Site of Widgets · Local on This Computer · macOS 15.1,
+arm64`), and the detail of any of its sites gains a **Sites** section with one table per
+site: Site (the home marked `Home`), Where, then the System, Processor, GPU, AI Tools
+and Toolchains rows of HS2-ZY4Z4G, or why the machine was not read. What a machine is
+shows in one place: for a project with several sites the capacity region leaves those
+rows out, and the shown site's table uses the detail's own fresh capacity read when it
+has one. A one-site project keeps them in the capacity region.
+
 ```sh
 hotsheet-cli -C <configured-host-source> orchestration target add --project <owner> \
   --target-id <retained-ULID> --label "Widgets on the build host" --site-of <project-target-id> \
@@ -275,7 +295,7 @@ hotsheet-cli -C <configured-host-source> orchestration target add --project <own
 hotsheet-cli -C <configured-host-source> orchestration target rename <target-id> --project <owner> \
   --label "Widgets on the build host" --site-of <project-target-id> | --clear-site-of \
   --expected-revision <revision>
-hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner>
+hotsheet-cli -C <configured-host-source> orchestration target sites --project <owner> [--capabilities]
 ```
 
 ## 26.3 Ticket relationships and identity
@@ -443,15 +463,15 @@ CAS and proof, so a candidate cannot survive a later retarget or revoke as autho
 
 HTTP declares the same request/response types:
 
-| Route                                                       | Methods and purpose                                                         |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/targets`                  | GET declarations; POST add; PUT complete retained-id replacement            |
-| `/checkouts/{owner}/orchestration/targets/{target}`         | PATCH rename; DELETE tombstone                                              |
-| `/checkouts/{owner}/orchestration/targets/{target}/binding` | GET cached machine binding; PUT explicit bind/review; DELETE machine unbind |
-| `/checkouts/{owner}/orchestration/targets/{target}/resolve` | GET fresh target resolution                                                 |
-| `/checkouts/{owner}/orchestration/sites`                    | GET each project with its sites and bindings (HS2-SHH7WW); machine-local    |
-| `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding write                             |
-| `/remote-checkouts/{checkout}/resolution`                   | GET bounded path-free hosting metadata                                      |
+| Route                                                       | Methods and purpose                                                                                                                                             |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/targets`                  | GET declarations; POST add; PUT complete retained-id replacement                                                                                                |
+| `/checkouts/{owner}/orchestration/targets/{target}`         | PATCH rename; DELETE tombstone                                                                                                                                  |
+| `/checkouts/{owner}/orchestration/targets/{target}/binding` | GET cached machine binding; PUT explicit bind/review; DELETE machine unbind                                                                                     |
+| `/checkouts/{owner}/orchestration/targets/{target}/resolve` | GET fresh target resolution                                                                                                                                     |
+| `/checkouts/{owner}/orchestration/sites`                    | GET each project with its sites and bindings (HS2-SHH7WW); with `capabilities=true` (or POST with a body) each bound site's machine (HS2-D4G81Q); machine-local |
+| `/checkouts/{owner}/orchestration/inspect`                  | POST fresh candidate metadata, no binding write                                                                                                                 |
+| `/remote-checkouts/{checkout}/resolution`                   | GET bounded path-free hosting metadata                                                                                                                          |
 
 All endpoints require the normal bearer and retain device-role authorization.
 Every binding read/write, resolve and inspect additionally requires literal

@@ -2155,7 +2155,8 @@ pub fn app(state: AppState) -> Router {
         // HS2-SHH7WW: each project with its sites and this machine's bindings.
         .route(
             "/checkouts/{owner}/orchestration/sites",
-            get(routes::orchestration::read),
+            // HS2-D4G81Q: POST is the same read with its actor in a body.
+            get(routes::orchestration::read).post(routes::orchestration::write),
         )
         .route(
             "/checkouts/{owner}/orchestration/targets/{target}",
