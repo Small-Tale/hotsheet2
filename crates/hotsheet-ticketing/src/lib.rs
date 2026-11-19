@@ -51,6 +51,7 @@ pub mod registry;
 pub mod remote_servers;
 pub mod roster;
 pub mod saved_views;
+pub mod screensaver;
 pub mod secrets;
 pub mod settings;
 pub mod standby;

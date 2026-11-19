@@ -447,6 +447,20 @@ without a device-management profile, so Hot Sheet reports the setting's state an
   half-written or foreign file leaves the last good display. `valid_until_ms` is how long the server vouches for
   the file: a running server rewrites it before then, so once it passes the freshness line says "connection
   lost" and a stopped Hot Sheet never looks healthy.
+- **Server.** The notification router already sees every `live_state` event and ticks once a minute. On each
+  it calls `standby_saver::write`, which mirrors the last pushed snapshots (`live_state::current_all`, read
+  only: it rebuilds nothing and pushes no event) into the snapshot file. That adds no timer, and it writes only
+  where a snapshot folder exists, so a machine that never installed the saver gets no file and no work. The
+  minute write keeps `valid_until_ms` three minutes ahead of the clock while the server runs.
+- **Install and status (headless).** `hotsheet-cli screensaver install [--bundle <HotSheet.saver>]` copies the
+  bundle into `~/Library/Screen Savers` (a newer build replaces the old one whole; re-running is safe) and, when
+  the engine's container already exists, creates the snapshot folder that opts the server in. `status` reports
+  whether it is installed, whether a snapshot waits, and whether macOS asks for the password after the saver
+  (read from `sysadminctl -screenLock status`; anything unreadable is "unknown", never a guess), with the exact
+  System Settings path for each step still to do. `uninstall` removes the bundle and the folder. Without
+  `--bundle` the CLI looks in the desktop app's resources, then in a development build.
+- **Test isolation.** `HOTSHEET_SCREENSAVER_HOME` replaces `$HOME` for these locations; `.cargo/config.toml`
+  forces it to a repository-local folder so no test touches the real container or `~/Library/Screen Savers`.
 - **Content.** The same as standby: project names and states are visible while the screen is locked. A
   counts-only mode is HS2-R7CXD5.
 - **Verification.** `clients/macos-screensaver/check.sh` builds the bundle, loads its principal class, hosts

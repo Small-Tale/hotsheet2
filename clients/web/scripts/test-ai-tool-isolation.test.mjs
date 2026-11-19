@@ -36,6 +36,7 @@ describe('HS2-34QFBQ machine-home isolation', () => {
       HOTSHEET_CACHE_DIR: join('/run', 'hotsheet-cache'),
       HOTSHEET_CLAUDE_USER_CONFIG: join('/run', 'claude-user-config', '.claude.json'),
       HOTSHEET_LAUNCH_AGENTS_DIR: join('/run', 'launch-agents'),
+      HOTSHEET_SCREENSAVER_HOME: join('/run', 'screensaver-home'),
     });
   });
 });

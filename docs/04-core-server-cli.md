@@ -1676,6 +1676,9 @@ hotsheet serve --stop --kill-all-terminals  # stop it and explicitly clear proje
 hotsheet terminal-relay install|status|uninstall [--server <path>] [--json]
                        # macOS: per-user LaunchAgent that starts terminal brokers in the
                        # desktop session (HS2-HYF56Y, 05-ai-tool-plugins.md)
+hotsheet screensaver install|status|uninstall [--bundle <HotSheet.saver>] [--json]
+                       # macOS: the screen saver that shows the standby screen, so macOS asks
+                       # for the account password when it ends (HS2-MZM988, 34-glance-surfaces.md §34.12)
 hotsheet serve --stop --force  # also stop a server owned by the pinned production host
 hotsheet reindex       # drop + rebuild the index from disk; prune idle older-schema index files
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
@@ -1926,6 +1929,7 @@ authoritative flag reference. Full-text search is `ls --text`; there is no separ
 | Migration | `import` | [07](07-migration.md) |
 | Server and transport security | `serve`, `cert` | §4.3.1, §4.6, [08](08-distributed-and-remote.md) |
 | Terminal launch relay (macOS) | `terminal-relay` (HS2-HYF56Y) | [05](05-ai-tool-plugins.md) |
+| macOS screen saver | `screensaver install`, `screensaver status`, `screensaver uninstall` (HS2-MZM988) | [34](34-glance-surfaces.md) §34.12 |
 | Orchestration projects | `orchestration` (targets, runs, readiness, sessions, scheduler, timeline; `target-lines` for a local checkout, or with `--registration-id` for a checkout on a remote server bound here, HS2-3D8D6V; `target-lines-push` to re-assert the lines pushed to remote targets, HS2-KB2Y51) | [26](26-orchestration-projects.md) |
 | Jobs | `job list`, `job show`, `job watch start`, `job watch stop`, `job watch status` (HS2-5TC1GQ), `job watch ci`, `job watch gate` (HS2-3R9V0R) | [33](33-jobs.md) §33.8, §33.9 |
 

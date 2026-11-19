@@ -26,6 +26,7 @@ mod orchestration_validation;
 pub(crate) mod providers;
 pub(crate) mod remotes;
 pub(crate) mod resources;
+pub(crate) mod screensaver;
 pub(crate) mod server;
 pub(crate) mod setup;
 pub(crate) mod store;
@@ -167,6 +168,7 @@ impl Cmd {
             | Settings { .. }
             | HostDisks { .. }
             | TerminalRelay { .. }
+            | Screensaver { .. }
             | PermissionHook { .. }
             | PermissionDiscard { .. }
             | HookDiagnose { .. }
@@ -200,6 +202,7 @@ impl Cmd {
                 | Cmd::Notify { .. }
                 | Cmd::Resource { .. }
                 | Cmd::TerminalRelay { .. }
+                | Cmd::Screensaver { .. }
                 | Cmd::Serve { list: true, .. }
         )
     }
@@ -238,6 +241,7 @@ impl Cmd {
                 | Cmd::Job { .. }
                 | Cmd::Guidance { .. }
                 | Cmd::TerminalRelay { .. }
+                | Cmd::Screensaver { .. }
                 | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
                 | Cmd::Ls { .. }

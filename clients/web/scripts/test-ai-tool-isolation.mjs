@@ -47,6 +47,8 @@ export const MACHINE_HOME_ENV = Object.freeze({
   HOTSHEET_CACHE_DIR: 'hotsheet-cache',
   HOTSHEET_CLAUDE_USER_CONFIG: join('claude-user-config', '.claude.json'),
   HOTSHEET_LAUNCH_AGENTS_DIR: 'launch-agents',
+  // HS2-MZM988: the macOS screen saver's container and `~/Library/Screen Savers`.
+  HOTSHEET_SCREENSAVER_HOME: 'screensaver-home',
 });
 
 export function isolateMachineHome(root, env = process.env) {

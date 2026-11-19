@@ -158,12 +158,18 @@ pub async fn spawn_notification_router(state: AppState) -> tokio::task::JoinHand
             match work {
                 Work::Change(event) => {
                     route_change_event(&state, &event);
+                    // HS2-MZM988: mirror a pushed live state for the macOS screen saver.
+                    if event.kind == crate::live_state::LIVE_STATE_KIND {
+                        crate::standby_saver::write(&state);
+                    }
                 }
                 Work::FlushHeld => {
                     flush_held(&state);
                     // HS2-MHW3SX: rebuild every hosted store's live state once a minute, so
                     // a quiet project's rates decay; only a changed snapshot is pushed.
                     crate::live_state::refresh_all(&state);
+                    // HS2-MZM988: the minute tick also keeps the screen saver's snapshot vouched for.
+                    crate::standby_saver::write(&state);
                 }
             }
         }

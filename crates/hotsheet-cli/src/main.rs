@@ -491,6 +491,12 @@ enum Cmd {
         #[command(subcommand)]
         cmd: dispatch::terminal_relay::TerminalRelayCmd,
     },
+    /// Install, inspect, or remove the macOS screen saver (HS2-MZM988): a real screen saver that
+    /// shows the standby screen, so macOS asks for the account password when it ends.
+    Screensaver {
+        #[command(subcommand)]
+        cmd: dispatch::screensaver::ScreensaverCmd,
+    },
     /// Inspect and run saved commands in a registered checkout through the local server.
     Commands {
         #[command(subcommand)]
