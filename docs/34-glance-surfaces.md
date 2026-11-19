@@ -192,6 +192,12 @@ the default) and `m1-project-sidebar-live-{light,dark}` (expanded).
   (danger), runs, or waits to run (neutral), titled with the branch, word, and short sha; the expanded row
   names any reported run (passed, failed, running, queued, cancelled) with its short sha and age. Glyphs
   match the Stats tile (HS2-E16ZEK).
+- **Remote project tabs (HS2-4R99XY).** A cross-server tab shows the same gauges and chips, from the remote
+  server's own live state. The browser's `remote:<binding>:<checkout>` id never equals the remote server's
+  checkout id, and the remote server may host a store whose id the local server also uses, so each remote
+  project owns a live store fed by its own change stream and its own `GET /live-state` resync, and the section
+  reads the stores linked to the remote checkout id. A remote snapshot never enters the local store, so it
+  cannot overwrite a local one, and closing the tab drops it. The remote host's warnings are HS2-K4DY5G.
 - **Workers badge (HS2-6B9S7P):** the live worker count is a badge on the **Workers** view button, hidden
   at 0. The button's title and accessible name carry the worker count and the time since last progress.
   The Workers button is a choice of the toolbar `SegmentedControl` view switcher, which Kerf prescribes

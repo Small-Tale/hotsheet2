@@ -11,6 +11,8 @@ import type { Project } from '../interactions/types';
 import { createLiveStateStore } from '../live-state';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createRefreshBarrier } from '../refresh-barrier';
+import { createRemoteLiveStates } from '../remote-live-states';
+import { remoteProjectId } from '../remote-projects/identity';
 import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketView } from '../ticket-views';
 import {
@@ -477,6 +479,110 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     await streams.onResync.get('/api/a')!('reconnect');
     expect(reads.filter((url) => url.endsWith('/live-state'))).toHaveLength(2);
     expect(liveStates.states.value.get('s1')).toMatchObject({ revision: 3, state: 'stalled' });
+    owner.dispose();
+  });
+
+  it('change streams: a remote project feeds its own live store, never the local one (HS2-4R99XY)', async () => {
+    const snapshot = (store: string, checkout: string, state: string) => ({
+      store,
+      root: `/work/${store}.hs2`,
+      name: store,
+      checkouts: [checkout],
+      epoch_ms: 1,
+      revision: 1,
+      state,
+      activity: {
+        word: state,
+        active_since_ms: 1,
+        stopped_at_ms: null,
+        last_progress_ms: 1,
+        idle_deadline_ms: null,
+        stalled: [],
+        halted: [],
+        causes: [],
+      },
+      claims: [],
+      workers: { live: 0, expected: 0 },
+      waiting: { count: 0, tickets: [] },
+      rates: {
+        tokens: { window_minutes: 5, minutes: [], peak_per_minute: 0 },
+        tickets_updated: { window_minutes: 60, at_ms: [], peak_per_hour: 0 },
+      },
+    });
+    const remoteId = remoteProjectId('01M7S5JGSGWFWB3A2WHJ0P2NTC', 'far-ab12cd'),
+      reads: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        reads.push(url);
+        // The remote server hosts a store with the same id as the local one.
+        const stores = url.includes('remote:')
+          ? [snapshot('s1', 'far-ab12cd', 'halted')]
+          : [snapshot('s1', 'a', 'active')];
+        return new Response(JSON.stringify({ epoch_ms: 1, stores }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    const projects = signal([project('a'), project(remoteId)]),
+      noop = vi.fn(async () => undefined),
+      liveStates = createLiveStateStore(),
+      remoteLiveStates = createRemoteLiveStates(),
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        liveStates,
+        remoteLiveStates,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onResync.get('/api/a')!('initial');
+    await streams.onResync.get(`/api/${remoteId}`)!('initial');
+    // Each server's snapshot lands in its own store, so the shared store id never overwrites.
+    expect(liveStates.forProject('a').map((state) => state.state)).toEqual(['active']);
+    expect(liveStates.states.value.size).toBe(1);
+    expect(remoteLiveStates.forProject(remoteId).map((state) => state.state)).toEqual(['halted']);
+    await streams.onEvents.get(`/api/${remoteId}`)!({
+      cursor: 4,
+      overflow: false,
+      events: [
+        {
+          kind: 'live_state',
+          store: 's1',
+          id: 's1',
+          slug: '',
+          live: { ...snapshot('s1', 'far-ab12cd', 'stalled'), revision: 2 },
+        },
+      ],
+    });
+    expect(remoteLiveStates.forProject(remoteId).map((state) => state.state)).toEqual(['stalled']);
+    expect(liveStates.forProject('a').map((state) => state.state)).toEqual(['active']);
+    // Closing the remote tab forgets its snapshots; the local project is untouched.
+    projects.value = [project('a')];
+    owner.syncProjectChangeStreams();
+    expect(remoteLiveStates.forProject(remoteId)).toEqual([]);
+    expect(liveStates.forProject('a')).toHaveLength(1);
     owner.dispose();
   });
 
