@@ -318,6 +318,21 @@ curl -fsS -X POST "https://<host-address>:<port>/resource-claim-token/renew" \
   -H "Content-Type: application/json" -d '{"duration_ms": 600000}'
 ```
 
+**Failed attempts are throttled per peer (HS2-JFEMAR).** The token route is outside server
+authentication, and each attempt took the namespace lock and read a state file on the async
+runtime. Measured on loopback in a debug build, a wrong token cost 3.4 ms; one flooding peer slowed a
+valid renewal from 9 ms to 15 ms (p99 43 ms), and eight parallel flooders held the route to about 80
+attempts a second and slowed it to 110 ms at the median, so a flood also held up unrelated requests.
+The server now keeps a failure budget per peer address: 30 failed attempts per 10-second window. A
+peer over budget is answered `429 rate_limited` with `Retry-After` and `retry_after_seconds` before
+its token is even read, so the work one peer can cause is bounded, and checking a token runs on the
+blocking pool. A valid token never counts against the budget and a peer that has not been failing is
+never delayed, so a guest keeping its lease is unaffected by another peer's flood; a peer that spent
+its own budget waits out the window (its valid token included), which is short next to a lease.
+A token that matched but whose lease lapsed (`expired`) proved itself and does not count; a missing
+or malformed bearer, a token naming no claim and one naming another claim do. Up to 1024 peers are
+remembered, the oldest window dropped first. `AppState::with_token_failure_budget` changes it.
+
 **From the CLI (HS2-7H1Y4E).** A guest with `hotsheet-cli` need not hand-write the request:
 
 ```sh

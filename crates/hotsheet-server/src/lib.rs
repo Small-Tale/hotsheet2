@@ -56,6 +56,7 @@ pub mod terminal_broker;
 pub mod terminal_broker;
 mod terminal_names;
 pub mod tls;
+mod token_throttle;
 pub mod tool_capacity_signals;
 pub mod tts;
 pub mod turn_stream;
@@ -268,6 +269,9 @@ pub struct AppState {
     primary_instance_id: Result<String, String>,
     secret: String,
     remote_listener: bool,
+    /// HS2-JFEMAR: bounds the failed attempts a peer may make on the unauthenticated
+    /// renewal-token route.
+    token_failures: Arc<token_throttle::FailureBudget>,
     /// Explicitly enabled server-owned remote browser sessions. Tests opt in with an
     /// isolated path; the real server opens the machine-local catalog at startup.
     remote_auth: Option<remote_auth::RemoteAuth>,
@@ -626,6 +630,7 @@ impl AppState {
             primary_instance_id,
             secret,
             remote_listener: false,
+            token_failures: Arc::default(),
             remote_auth: None,
             events,
             index,
@@ -869,6 +874,12 @@ impl AppState {
             })?;
         self.remote_auth = Some(remote_auth::RemoteAuth::open(path, &identity.server_id)?);
         Ok(self)
+    }
+
+    /// Change the failure budget of the renewal-token route (tests shorten the window).
+    pub fn with_token_failure_budget(mut self, budget: u32, window: std::time::Duration) -> Self {
+        self.token_failures = Arc::new(token_throttle::FailureBudget::new(budget, window));
+        self
     }
 
     /// A direct remote listener accepts the machine bearer only from an accepted loopback peer.

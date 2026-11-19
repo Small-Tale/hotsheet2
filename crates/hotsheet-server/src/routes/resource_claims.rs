@@ -6,13 +6,18 @@
 //! it and accept a renewal token as the only credential; they can renew or release that
 //! token's own claim and do nothing else.
 
-use std::time::Duration;
+use std::net::{IpAddr, SocketAddr};
+use std::time::{Duration, Instant};
 
 use axum::{
-    Json,
+    Extension, Json,
     body::Bytes,
-    extract::{OriginalUri, Path, State},
-    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
+    extract::{ConnectInfo, OriginalUri, Path, State},
+    http::{
+        HeaderMap, StatusCode,
+        header::{AUTHORIZATION, RETRY_AFTER},
+    },
+    response::{IntoResponse, Response},
 };
 use hotsheet_resource_claims::{
     ClaimError, ClaimService, MAX_RENEWAL_TOKEN_LEN, TOKEN_ROUTE_PREFIX, http_status,
@@ -109,12 +114,36 @@ pub(crate) async fn park(
 /// `POST /resource-claim-token/renew|release`, authorized by
 /// `Authorization: Bearer <renewal token>` alone. Nothing but the token's own claim is
 /// readable or writable here.
+///
+/// The route is unauthenticated by design, so each peer has a failure budget
+/// ([`crate::token_throttle`], HS2-JFEMAR): a peer that has failed too often in the window is
+/// answered `429 rate_limited` with `Retry-After` before its token is even read, and the work
+/// of checking a token runs on the blocking pool so a flood cannot hold up the async runtime.
 pub(crate) async fn token(
     State(state): State<AppState>,
     Path(action): Path<String>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     body: Bytes,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
+    let peer_ip = peer.map_or(
+        IpAddr::from([0, 0, 0, 0]),
+        |Extension(ConnectInfo(addr))| addr.ip(),
+    );
+    if let Err(retry_after) = state.token_failures.check(peer_ip, Instant::now()) {
+        let seconds = retry_after.as_secs().max(1);
+        let body = serde_json::json!({
+            "error": format!("rate_limited: too many failed attempts from this address; retry in {seconds} s"),
+            "code": "rate_limited",
+            "retry_after_seconds": seconds,
+        });
+        return Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            [(RETRY_AFTER, seconds.to_string())],
+            Json(body),
+        )
+            .into_response());
+    }
     let unauthorized = || {
         ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -127,8 +156,11 @@ pub(crate) async fn token(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::trim)
-        .filter(|token| !token.is_empty() && token.len() <= MAX_RENEWAL_TOKEN_LEN)
-        .ok_or_else(unauthorized)?;
+        .filter(|token| !token.is_empty() && token.len() <= MAX_RENEWAL_TOKEN_LEN);
+    let Some(presented) = presented else {
+        state.token_failures.failed(peer_ip, Instant::now());
+        return Err(unauthorized());
+    };
     // Only the documented field crosses from the body; a body can never name a token.
     let mut request = serde_json::Map::new();
     if !body.is_empty() {
@@ -139,12 +171,24 @@ pub(crate) async fn token(
         }
     }
     request.insert("renewal_token".into(), presented.into());
-    service(&state)
-        .request(
-            "POST",
-            &format!("{TOKEN_ROUTE_PREFIX}/{action}"),
-            &Value::Object(request),
-        )
-        .map(Json)
-        .map_err(error)
+    let claims = service(&state);
+    let path = format!("{TOKEN_ROUTE_PREFIX}/{action}");
+    let answer =
+        tokio::task::spawn_blocking(move || claims.request("POST", &path, &Value::Object(request)))
+            .await
+            .map_err(|_| {
+                error(ClaimError::Storage(std::io::Error::other(
+                    "the claim worker stopped",
+                )))
+            })?;
+    match answer {
+        Ok(value) => Ok(Json(value).into_response()),
+        Err(failure) => {
+            // A token that does not match is a failed guess; an expired one proved the token.
+            if matches!(failure, ClaimError::TokenInvalid | ClaimError::NotHolder) {
+                state.token_failures.failed(peer_ip, Instant::now());
+            }
+            Err(error(failure))
+        }
+    }
 }
