@@ -491,3 +491,87 @@ fn hs2_qgy1nn_many_stopped_waits_never_fill_the_namespace() {
     assert_eq!(timed_out.json["code"], "wait_timeout", "{}", timed_out.json);
     assert_eq!(waiters_left(&e.home, "vms"), 0);
 }
+
+// ---- HS2-SHDW2Q: the documented skill steps work against the local backend -----------
+
+/// Follow the steps the shared Hot Sheet skill teaches, as an AI session and the task it starts:
+/// acquire for the work, a contender waits with a timeout, the claim is handed to the task through
+/// its environment only, the task renews itself, the fencing token grows, and release is early.
+#[test]
+fn hs2_shdw2q_the_steps_the_skill_documents_work_against_the_local_backend() {
+    let e = env();
+    // 1. Acquire, sized to the work.
+    let held = granted(
+        &e.home,
+        &[
+            "acquire",
+            "vms/mac-1",
+            "--duration",
+            "120s",
+            "--meta",
+            "purpose=test run",
+        ],
+    );
+    assert_eq!(held["guarantee"], "exclusive_with_fencing", "{held}");
+    let first_fence = held["fencing_token"].as_u64().unwrap();
+    // A held resource fails at once naming the holder, and a wait fails `wait_timeout`, not a hang.
+    let busy = run(&e.home, &["acquire", "vms/mac-1", "--duration", "60s"]);
+    assert!(!busy.ok);
+    assert_eq!(busy.json["code"], "held_by");
+    let timed_out = run(
+        &e.home,
+        &[
+            "acquire",
+            "vms/mac-1",
+            "--duration",
+            "60s",
+            "--wait",
+            "300ms",
+        ],
+    );
+    assert_eq!(timed_out.json["code"], "wait_timeout");
+    assert_eq!(timed_out.json["holder"]["claim_id"], held["claim_id"]);
+
+    // 3. Hand the token to the task through its environment alone: the task renews itself.
+    let renewed = finish(
+        command(&e.home, &["renew", "--duration", "300s"])
+            .env(TOKEN_ENV, token(&held))
+            .output()
+            .unwrap(),
+    );
+    assert!(renewed.ok, "{}", renewed.stderr);
+    assert_eq!(renewed.json["claim"]["claim_id"], held["claim_id"]);
+    assert!(
+        renewed.json["claim"]["expires_at_ms"].as_u64().unwrap()
+            > held["expires_at_ms"].as_u64().unwrap(),
+        "the lease was extended by the task"
+    );
+    assert!(
+        !renewed.json.to_string().contains(token(&held)),
+        "the token is not echoed"
+    );
+
+    // 6. Release early; the token stops working and a contender takes over with a larger fencing token.
+    let released = finish(
+        command(&e.home, &["release"])
+            .env(TOKEN_ENV, token(&held))
+            .output()
+            .unwrap(),
+    );
+    assert!(released.ok, "{}", released.stderr);
+    let after = finish(
+        command(&e.home, &["renew", "--duration", "60s"])
+            .env(TOKEN_ENV, token(&held))
+            .output()
+            .unwrap(),
+    );
+    assert!(!after.ok, "a released token is revoked");
+    let next = granted(
+        &e.home,
+        &["acquire", "vms/mac-1", "--duration", "60s", "--wait", "5s"],
+    );
+    assert!(
+        next["fencing_token"].as_u64().unwrap() > first_fence,
+        "fencing only grows"
+    );
+}

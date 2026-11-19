@@ -352,6 +352,15 @@ host for a host-only network no other machine can reach, since the token then cr
 The reply is printed as JSON, a refusal prints its code (`token_invalid`, `expired`, `not_holder`) and
 fails the command, and the token never appears in output or an error.
 
+**AI guidance (HS2-SHDW2Q).** The shared Hot Sheet skill (version 75, installed by `hotsheet-cli setup`
+for every tool that has one) has a "Resource claims" section that teaches the pattern of this document:
+acquire for a duration sized to the work, wait with `--wait` instead of a retry loop, hand the renewal
+token to the task through its environment only, have the task renew itself (through `--server` from a
+guest with no shared home), use the fencing token and read `guarantee`, release early, and never renew
+on a stuck task's behalf. It also says how ticket claims behave when a store is bound to a Git-ref
+configuration (a refusal names the holder, `claim_backend_unreachable` means nothing was claimed, a
+provisional claim is advisory, a missing configuration key is imported with `resource backend key`).
+
 ## 36.12 Rust API for other crates
 
 A crate that schedules work, such as orchestration, treats a held resource as

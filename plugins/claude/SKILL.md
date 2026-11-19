@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 74 -->
+<!-- hotsheet-skill-version: 75 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -307,3 +307,46 @@ unresolved risk. Reuse only valid exact-input evidence. Preserve dirty local
 edits and verify the committed tree in a clean worktree; never use a bypass.
 After push, release the claim while CI runs and continue independent work.
 Complete only after successful covering CI on the shipping branch.
+
+## Resource claims (HS2-SHDW2Q)
+
+A resource claim leases one named resource for a duration, for work that must not overlap
+another session's: a macOS VM that allows one automation at a time, a shared device, a
+rate-limited account. It is not a ticket claim. Every `hotsheet-cli resource` command
+prints JSON and needs no server.
+
+1. **Acquire** with `hotsheet-cli resource acquire <namespace>/<resource> --duration <d>`.
+   Size the duration to the work, not the worst case (at most 24 hours; long work renews).
+   A held resource fails at once with `code: held_by` and names the holder.
+2. **Wait with a timeout, never a retry loop.** Add `--wait <timeout>`: it blocks on the
+   backend's release or expiry signal and fails `wait_timeout` naming the holder. Do not
+   `sleep` and retry. A wait stopped by SIGTERM or SIGINT removes its own registration.
+3. **Hand the claim to the task you start**: its claim id, fencing token and renewal token,
+   through its environment (`HOTSHEET_RESOURCE_CLAIM_TOKEN`), never argv, a note or a log.
+   The renewal token renews and releases that one claim and does nothing else.
+4. **The task renews itself** while it works: `hotsheet-cli resource renew --duration <d>`
+   (token from the environment). A task with no shared Hot Sheet home, such as one inside a
+   guest VM, adds `--server https://<host>:<port>` (and `--ca-cert <pem>` for a server
+   certificate from `hotsheet-cli cert init`); only the token is sent. Hot Sheet never renews
+   for a child process, and neither do you: do not loop a renewal around a task that hangs. A
+   stuck task must let its lease lapse.
+5. **Use the fencing token** where the protected resource can check one. Tokens only grow, so
+   a resource that remembers the highest it has seen can refuse a stale holder. Read the
+   answer's `guarantee`: `exclusive_with_fencing` is mutual exclusion; `advisory_only` (a
+   provisional claim while a remote backend was unreachable) is only a signal, never a lock.
+6. **Release early**: `hotsheet-cli resource release` as soon as the work ends, whether it
+   succeeded or failed. Release revokes the token. After `expired` the claim is gone: stop
+   using the resource and acquire again deliberately; do not renew a lapsed claim by retrying.
+
+`hotsheet-cli resource show <namespace>/<resource>` reads a claim without taking it, and
+`resource backend list` shows which backend serves a namespace.
+
+**Ticket claims through a bound backend.** When a Git store's data source is bound to a
+Git-ref claim configuration, `claim`, `claim-next` and `renew` go through the shared remote
+first. A claim refused naming another holder means another machine has the ticket: pick other
+work. `claim_backend_unreachable` (HTTP 503) means nothing was claimed: retry later and do not
+work the ticket. A claim taken while the backend was down is provisional and advisory until
+the next renew or sync confirms it; a renew refused naming another holder means stop work on
+the ticket. A holder shown as `(holder unreadable: configuration key not available)` means
+this machine lacks the configuration key: import it with
+`hotsheet-cli resource backend key <id> --import`.
