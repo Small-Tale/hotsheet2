@@ -442,6 +442,11 @@ fn hs2_bwjwwx_a_connection_attaches_every_channel_and_turns_pushes_into_hints() 
         query.contains("format=json") && query.contains("v=2"),
         "{query}"
     );
+    // The server reads the CLOSE on its own thread, a moment after the adapter returned.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fake.server.closed_by_client.load(Ordering::SeqCst) < 1 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
     assert_eq!(
         fake.server.closed_by_client.load(Ordering::SeqCst),
         1,
