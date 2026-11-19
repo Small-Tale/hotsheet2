@@ -313,6 +313,11 @@ pub struct DriveSpec {
     /// session when a session id is supplied, instead of starting a fresh one.
     #[serde(default)]
     pub resume_flag: Option<String>,
+    /// Spawn transport only (HS2-86MK1Y): the prefix of the one typed JSON line the tool
+    /// writes on stderr when a turn fails (agy `AGY_ERROR: `). The host reads its typed
+    /// members to tell a rate or usage limit from another failure; never its text.
+    #[serde(default)]
+    pub error_line: Option<String>,
     /// Plugin-owned model catalog. Clients consume this declaration rather than
     /// hard-coding provider/model names.
     #[serde(default)]

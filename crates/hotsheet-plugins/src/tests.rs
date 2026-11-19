@@ -1285,6 +1285,8 @@ fn antigravity_is_a_spawn_resume_plugin() {
     assert_eq!(drive.transport, "spawn");
     assert_eq!(drive.program, "agy");
     assert_eq!(drive.resume_flag.as_deref(), Some("--conversation"));
+    // HS2-86MK1Y: agy's typed failure line on stderr.
+    assert_eq!(drive.error_line.as_deref(), Some("AGY_ERROR: "));
     assert_eq!(drive.model_catalog_args, ["models"]);
     assert_eq!(
         drive.model_catalog_identity.as_deref(),
@@ -1863,7 +1865,7 @@ fn hs2_ahg7hw_bundled_plugins_declare_only_observed_capacity_signals() {
         ("claude", [R, R, R, R, R]),
         ("codex", [R, R, R, R, R]),
         ("opencode", [U, U, U, R, U]),
-        ("antigravity", [U, U, U, U, U]),
+        ("antigravity", [R, R, U, U, U]),
     ];
     assert_eq!(builtin_plugins().len(), declared.len());
     for (id, [rate, usage, reset, events, cost]) in declared {

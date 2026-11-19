@@ -46,6 +46,7 @@ pub mod registry;
 pub mod safe_trigger;
 pub mod session_push;
 pub mod spawn;
+pub mod structured_failure;
 pub mod system;
 pub mod tool_progress;
 #[cfg(target_os = "macos")]

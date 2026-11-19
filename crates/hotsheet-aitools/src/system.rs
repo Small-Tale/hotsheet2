@@ -1,8 +1,11 @@
 //! The real [`ProcessSpawner`] over `std::process` — the host's production adapter.
 
 use hotsheet_process_journal::{ExitReason, LaunchMeta};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::{Child, Stdio};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::ports::{ProcessSpawner, SpawnSpec, SpawnedProcess};
 use crate::procio::ProcessContext;
@@ -43,7 +46,11 @@ fn spawn(
     if spec.stdin.is_some() {
         cmd.stdin(Stdio::piped());
     }
-    let child = cmd.spawn()?;
+    if spec.stderr_tail {
+        cmd.stderr(Stdio::piped());
+    }
+    let mut child = cmd.spawn()?;
+    let stderr = child.stderr.take().map(StderrTail::start);
     let record = if let Some(context) = context {
         let record = context.journal.start(LaunchMeta {
             pid: child.id(),
@@ -67,7 +74,11 @@ fn spawn(
     } else {
         None
     };
-    let mut process = SystemProcess { child, record };
+    let mut process = SystemProcess {
+        child,
+        record,
+        stderr,
+    };
     if let (Some(data), Some(mut si)) = (&spec.stdin, process.child.stdin.take()) {
         if let Err(error) = si.write_all(data.as_bytes()) {
             process.kill();
@@ -80,6 +91,59 @@ fn spawn(
 struct SystemProcess {
     child: Child,
     record: Option<(hotsheet_process_journal::ProcessJournal, String)>,
+    stderr: Option<StderrTail>,
+}
+
+/// The most of a child's stderr a [`StderrTail`] keeps (HS2-86MK1Y): enough for a
+/// structured failure line after any amount of earlier output.
+const STDERR_TAIL_BYTES: usize = 64 * 1024;
+
+/// How long a finished child's stderr may stay open (a descendant still holding it)
+/// before the tail is read as it stands.
+const STDERR_DRAIN_GRACE: Duration = Duration::from_secs(2);
+
+/// Passes a child's stderr through to the host's stderr and keeps its last
+/// [`STDERR_TAIL_BYTES`] for a structured failure line (HS2-86MK1Y).
+struct StderrTail {
+    kept: Arc<Mutex<Vec<u8>>>,
+    closed: Receiver<()>,
+}
+
+impl StderrTail {
+    fn start(mut pipe: std::process::ChildStderr) -> Self {
+        let kept = Arc::new(Mutex::new(Vec::new()));
+        let (done, closed) = std::sync::mpsc::channel();
+        let sink = Arc::clone(&kept);
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 8 * 1024];
+            loop {
+                match pipe.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => {
+                        let _ = std::io::stderr().write_all(&chunk[..read]);
+                        let mut kept = sink.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                        kept.extend_from_slice(&chunk[..read]);
+                        let excess = kept.len().saturating_sub(STDERR_TAIL_BYTES);
+                        kept.drain(..excess);
+                    }
+                }
+            }
+            let _ = done.send(());
+        });
+        Self { kept, closed }
+    }
+
+    /// The kept tail once the stream closed, or as it stands after the drain grace.
+    fn read(&self) -> String {
+        match self.closed.recv_timeout(STDERR_DRAIN_GRACE) {
+            Ok(()) | Err(RecvTimeoutError::Disconnected | RecvTimeoutError::Timeout) => {}
+        }
+        let kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        String::from_utf8_lossy(&kept).into_owned()
+    }
 }
 
 impl SystemProcess {
@@ -125,6 +189,10 @@ impl SpawnedProcess for SystemProcess {
         let _ = self.child.wait();
         self.record_exit(ExitReason::Killed);
     }
+
+    fn stderr_tail(&mut self) -> Option<String> {
+        self.stderr.as_ref().map(StderrTail::read)
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -148,6 +216,7 @@ mod tests {
             cwd: home.to_path_buf(),
             stdin: None,
             env: Vec::new(),
+            stderr_tail: false,
         }
     }
 

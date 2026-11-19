@@ -1213,6 +1213,13 @@ Antigravity declares `["-i", "{prompt}"]` (`agy --prompt-interactive`, verified 
 1.5.10, HS2-KK3CCE), so its orchestrated sessions report `at_launch`
 ([26](26-orchestration-projects.md) §26.16).
 
+A spawn-transport `[drive]` may name **`error_line`** (HS2-86MK1Y): the prefix of the one
+typed JSON line the tool writes on stderr when a turn fails (Antigravity: `"AGY_ERROR: "`). The
+spawn drive then keeps a bounded 64 KiB stderr tail, still passed through to the host's stderr,
+and reads only that line's typed members (`status`, an HTTP or gRPC code, `retryable`,
+`short_error`). A limit becomes the failed turn's `error_type` (`rate_limit` or
+`usage_limit_exceeded`), never a search of its text.
+
 A plugin may also declare **`[capacity]`** (HS2-AHG7HW): which limit signals the host can observe
 from the tool. It is data only and selects no parser. Each of `rate_limit_errors`,
 `usage_limit_errors`, `reset_times`, `usage_events` and `cost` is `"reported"` or `"unknown"`, and
@@ -1220,7 +1227,7 @@ an omitted key or section is `unknown`. No value means that a limit never happen
 cannot report a limit is never assumed to be available. The loader refuses an unknown key or value,
 `reset_times` without a reported limit error, and `cost` without reported `usage_events`. Claude
 and Codex declare all five (Codex's request-rate limits since HS2-2BAVAM); OpenCode only
-`usage_events`; Antigravity none. Orchestration reads the declaration when it judges tool capacity
+`usage_events`; Antigravity rate and usage limit errors (HS2-86MK1Y). Orchestration reads the declaration when it judges tool capacity
 ([26](26-orchestration-projects.md) §26.11). A plugin changes its declaration in the same change
 that adds or removes the detection it describes.
 

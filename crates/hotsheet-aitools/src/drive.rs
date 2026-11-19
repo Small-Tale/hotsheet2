@@ -70,6 +70,9 @@ pub enum DoneReason {
     Failed {
         exit_code: i32,
         message: Option<String>,
+        /// A typed limit the tool reported for this failure (HS2-86MK1Y), one of the
+        /// error types `stuck_causes::is_usage_limit` accepts; `None` for any other failure.
+        error_type: Option<String>,
     },
     Interrupted,
 }
@@ -80,6 +83,7 @@ impl DoneReason {
         Self::Failed {
             exit_code,
             message: (!message.trim().is_empty()).then(|| message.trim().to_owned()),
+            error_type: None,
         }
     }
 
@@ -89,7 +93,9 @@ impl DoneReason {
         match self {
             Self::Completed => Ok(()),
             Self::Interrupted => Err("the session was interrupted".to_string()),
-            Self::Failed { exit_code, message } => Err(message
+            Self::Failed {
+                exit_code, message, ..
+            } => Err(message
                 .clone()
                 .unwrap_or_else(|| format!("the tool exited with status {exit_code}"))),
         }

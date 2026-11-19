@@ -48,6 +48,7 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
                 )
                 .with_identity_policy(spec.model_catalog_identity.clone())
             }),
+            error_line: spec.error_line.clone(),
         }))),
         "acp" => Some(if spec.model_catalog_args.is_empty() {
             Box::new(AcpDrive::default())

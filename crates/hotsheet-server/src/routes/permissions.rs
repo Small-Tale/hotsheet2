@@ -1399,6 +1399,19 @@ pub(crate) async fn send_drive_turn(
                     }
                     event.clone()
                 }
+                hotsheet_aitools::TurnEvent::Done(reason) => {
+                    // HS2-86MK1Y: a typed limit failure is a limit signal for the tool's
+                    // capacity; a client drive has no terminal, so it is unattributed.
+                    crate::tool_capacity_signals::record(
+                        &thread_state,
+                        crate::tool_capacity_signals::driven_failure_signal(
+                            &tool,
+                            reason,
+                            time::OffsetDateTime::now_utc(),
+                        ),
+                    );
+                    event.clone()
+                }
                 _ => event.clone(),
             };
             let timing = job.observe_event(&projected);

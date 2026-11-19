@@ -176,7 +176,7 @@ fn hs2_ahg7hw_each_plugins_declared_signals_drive_its_capacity_state() {
             ),
             (
                 "antigravity".to_owned(),
-                json!({"limits":false,"reset_times":false,"usage":false,"cost":false})
+                json!({"limits":true,"reset_times":false,"usage":false,"cost":false})
             ),
         ]
     );
@@ -187,7 +187,7 @@ fn hs2_ahg7hw_each_plugins_declared_signals_drive_its_capacity_state() {
             ("claude".into(), "unknown:not_observed".into()),
             ("codex".into(), "unknown:not_observed".into()),
             ("opencode".into(), "unknown:not_reported".into()),
-            ("antigravity".into(), "unknown:not_reported".into()),
+            ("antigravity".into(), "unknown:not_observed".into()),
         ]
     );
 
@@ -272,7 +272,7 @@ fn hs2_ahg7hw_each_plugins_declared_signals_drive_its_capacity_state() {
             ("claude".into(), "available".into()),
             ("codex".into(), "available".into()),
             ("opencode".into(), "unknown:not_reported".into()),
-            ("antigravity".into(), "unknown:not_reported".into()),
+            ("antigravity".into(), "unknown:not_observed".into()),
         ]
     );
     let view =

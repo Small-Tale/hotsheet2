@@ -177,7 +177,9 @@ fn project(event: &TurnEvent) -> ClientTurnEvent {
             let (reason, exit_code, message) = match reason {
                 DoneReason::Completed => ("completed", None, None),
                 DoneReason::Interrupted => ("interrupted", None, None),
-                DoneReason::Failed { exit_code, message } => (
+                DoneReason::Failed {
+                    exit_code, message, ..
+                } => (
                     "failed",
                     Some(*exit_code),
                     message.as_deref().and_then(bounded_diagnostic),

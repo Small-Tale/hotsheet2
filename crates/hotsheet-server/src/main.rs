@@ -512,6 +512,10 @@ async fn main() -> Result<()> {
             usage_sink: Some(hotsheet_server::dist_work_loop::live_state_usage_sink(
                 &state,
             )),
+            // A driven turn's typed limit failure limits its tool (HS2-86MK1Y).
+            limit_sink: Some(hotsheet_server::dist_work_loop::live_state_limit_sink(
+                &state,
+            )),
             worker_sessions: Some(Default::default()),
             persistent_home_root: Some(drive_root.join("workers")),
         };

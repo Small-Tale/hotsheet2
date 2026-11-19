@@ -29,6 +29,10 @@ pub struct SpawnConfig {
     pub model_flag: Option<String>,
     pub effort_flag: Option<String>,
     pub model_catalog: Option<CommandModelCatalog>,
+    /// The prefix of the tool's structured failure line on stderr (agy `AGY_ERROR: `,
+    /// HS2-86MK1Y). When set, a failed turn reads that line's typed members
+    /// ([`crate::structured_failure`]) into its [`DoneReason`].
+    pub error_line: Option<String>,
 }
 
 /// Where the prompt goes in the spawned command.
@@ -62,6 +66,7 @@ impl SpawnDrive {
             model_flag: None,
             effort_flag: None,
             model_catalog: None,
+            error_line: None,
         })
     }
 
@@ -85,6 +90,7 @@ impl SpawnDrive {
                 )
                 .with_identity_policy(Some("native-default-install".into())),
             ),
+            error_line: Some("AGY_ERROR: ".into()),
         })
     }
 
@@ -130,6 +136,7 @@ impl SpawnDrive {
             cwd: cwd.to_path_buf(),
             stdin,
             env: Vec::new(),
+            stderr_tail: self.cfg.error_line.is_some(),
         }
     }
 }
@@ -178,6 +185,7 @@ impl Drive for SpawnDrive {
         Ok(Box::new(SpawnTurnHandle {
             proc,
             can_interrupt: self.cfg.interrupt,
+            error_line: self.cfg.error_line.clone(),
             done: None,
         }))
     }
@@ -187,7 +195,24 @@ impl Drive for SpawnDrive {
 struct SpawnTurnHandle {
     proc: Box<dyn SpawnedProcess>,
     can_interrupt: bool,
+    error_line: Option<String>,
     done: Option<DoneReason>,
+}
+
+impl SpawnTurnHandle {
+    /// A failed turn, typed by the tool's structured failure line when it declares one
+    /// and wrote one (HS2-86MK1Y). Without a line it is the bare exit status, as before.
+    fn failed(&mut self, exit_code: i32) -> DoneReason {
+        let failure = self
+            .error_line
+            .as_deref()
+            .and_then(|prefix| crate::structured_failure::parse(&self.proc.stderr_tail()?, prefix));
+        DoneReason::Failed {
+            exit_code,
+            message: failure.as_ref().and_then(|failure| failure.message.clone()),
+            error_type: failure.and_then(|failure| failure.error_type.map(str::to_owned)),
+        }
+    }
 }
 
 impl TurnHandle for SpawnTurnHandle {
@@ -201,10 +226,7 @@ impl TurnHandle for SpawnTurnHandle {
         }
         let reason = match self.proc.wait() {
             0 => DoneReason::Completed,
-            code => DoneReason::Failed {
-                exit_code: code,
-                message: None,
-            },
+            code => self.failed(code),
         };
         self.done = Some(reason.clone());
         reason

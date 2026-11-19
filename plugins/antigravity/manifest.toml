@@ -36,6 +36,10 @@ args = ["--print"]
 content = "arg"
 interrupt = true
 resume_flag = "--conversation"
+# HS2-86MK1Y: since agy 1.5.10 a failed headless turn writes one typed JSON line on stderr,
+# `AGY_ERROR: {"status":…,"retryable":…,"short_error":…}`, and exits 3. The host reads only
+# its typed members (a RESOURCE_EXHAUSTED status, HTTP 429 or gRPC 8 is a limit).
+error_line = "AGY_ERROR: "
 # The IDE also installs an `agy` launcher. Only probe the documented native CLI
 # install at the default path; other launchers keep this bundled catalog.
 model_catalog_args = ["models"]
@@ -67,9 +71,11 @@ prompt_args = ["-i", "{prompt}"]
 
 [capacity]
 # Limit signals the host observes from Antigravity (docs/05 §5.3, docs/26 §26.11,
-# HS2-AHG7HW): none yet. Unknown is never read as "no limit".
-rate_limit_errors = "unknown"
-usage_limit_errors = "unknown"
+# HS2-AHG7HW): rate and usage limits from the `AGY_ERROR` line of a driven turn
+# (HS2-86MK1Y; the real quota-hit payload is unconfirmed, HS2-GETFE4). Reset times wait
+# for HS2-JM0GVB. Unknown is never read as "no limit".
+rate_limit_errors = "reported"
+usage_limit_errors = "reported"
 reset_times = "unknown"
 usage_events = "unknown"
 cost = "unknown"

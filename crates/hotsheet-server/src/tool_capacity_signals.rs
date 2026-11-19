@@ -64,6 +64,26 @@ pub fn halt_signal(
     })
 }
 
+/// HS2-86MK1Y: the limit signal for a driven turn that failed with a typed limit (a spawn
+/// tool's structured failure line, [`hotsheet_aitools::structured_failure`]). It goes
+/// through [`halt_signal`], so it is a limit exactly when `is_usage_limit` says so; any
+/// other ending records nothing.
+pub fn driven_failure_signal(
+    tool: &str,
+    done: &hotsheet_aitools::DoneReason,
+    at: OffsetDateTime,
+) -> Option<LimitSignal> {
+    let hotsheet_aitools::DoneReason::Failed {
+        message,
+        error_type: Some(error_type),
+        ..
+    } = done
+    else {
+        return None;
+    };
+    halt_signal(tool, error_type, message.as_deref().unwrap_or(""), at)
+}
+
 /// The limit signal for a live-state usage-limit cause. The cause no longer says which
 /// limit it was, so it maps to a usage limit.
 pub fn cause_signal(tool: &str, cause: &LiveCause) -> Option<LimitSignal> {
@@ -220,6 +240,58 @@ mod tests {
 
     /// One fixture per signal a bundled plugin declares it can report: the error type
     /// its halt source sends and a synthetic message in the provider's shape.
+    /// HS2-86MK1Y: a driven turn's typed limit failure becomes a limit signal through
+    /// the same halt path; other endings and untyped failures record nothing.
+    #[test]
+    fn hs2_86mk1y_a_driven_turn_failure_maps_through_the_halt_path() {
+        use hotsheet_aitools::DoneReason;
+        let failed = |error_type: Option<&str>, message: Option<&str>| DoneReason::Failed {
+            exit_code: 3,
+            message: message.map(str::to_owned),
+            error_type: error_type.map(str::to_owned),
+        };
+        let usage = driven_failure_signal(
+            "antigravity",
+            &failed(Some("usage_limit_exceeded"), Some("Quota reached.")),
+            halted(),
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                usage.tool.as_str(),
+                usage.kind,
+                usage.at_ms,
+                usage.resets_at_ms
+            ),
+            ("antigravity", SignalKind::UsageLimit, AT_MS, None)
+        );
+        assert_eq!(usage.account, None);
+        let rate = driven_failure_signal(
+            "antigravity",
+            &failed(Some("rate_limit"), Some("Resets in 2h 15m.")),
+            halted(),
+        )
+        .unwrap();
+        assert_eq!(rate.kind, SignalKind::RateLimit);
+        assert_eq!(rate.resets_at_ms, Some(AT_MS + 135 * 60_000));
+        for done in [
+            failed(None, Some("RESOURCE_EXHAUSTED 429 quota")),
+            failed(Some("overloaded"), None),
+            DoneReason::Completed,
+            DoneReason::Interrupted,
+        ] {
+            assert_eq!(
+                driven_failure_signal("antigravity", &done, halted()),
+                None,
+                "{done:?}"
+            );
+        }
+        assert_eq!(
+            driven_failure_signal("not a tool id", &failed(Some("rate_limit"), None), halted()),
+            None
+        );
+    }
+
     #[test]
     fn hs2_ahg7hw_each_declared_limit_error_maps_to_its_signal_and_reset_time() {
         let fixtures = [

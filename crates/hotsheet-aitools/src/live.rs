@@ -576,6 +576,7 @@ mod pump_tests {
                 DoneReason::Failed {
                     exit_code: 3,
                     message: None,
+                    error_type: None,
                 }
             }
         }
@@ -593,7 +594,8 @@ mod pump_tests {
             reason,
             DoneReason::Failed {
                 exit_code: 3,
-                message: None
+                message: None,
+                error_type: None,
             }
         );
         assert!(!reg.is_busy("c1", 1_100), "idled on the terminal wait");

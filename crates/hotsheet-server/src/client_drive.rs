@@ -1583,6 +1583,7 @@ mod tests {
             &done(hotsheet_aitools::DoneReason::Failed {
                 exit_code: 7,
                 message: None,
+                error_type: None,
             }),
         );
         assert_eq!(

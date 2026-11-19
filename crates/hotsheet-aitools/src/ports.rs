@@ -15,6 +15,10 @@ pub struct SpawnSpec {
     /// Data piped to the child's stdin (e.g. the prompt), if the tool reads it there.
     pub stdin: Option<String>,
     pub env: Vec<(String, String)>,
+    /// Keep a bounded tail of the child's stderr for [`SpawnedProcess::stderr_tail`],
+    /// still passing every byte through to the host's stderr (HS2-86MK1Y). Set when the
+    /// tool declares a structured failure line (`[drive] error_line`).
+    pub stderr_tail: bool,
 }
 
 /// A running child process the drive observes. Injected so a spawn drive can be tested
@@ -26,6 +30,11 @@ pub trait SpawnedProcess {
     fn wait(&mut self) -> i32;
     /// Best-effort terminate (backs the `interrupt` capability).
     fn kill(&mut self);
+    /// The kept tail of the child's stderr, after it exited, when the spec asked for one
+    /// (HS2-86MK1Y). Lossy UTF-8. `None` when nothing was kept.
+    fn stderr_tail(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// Spawns processes. The real impl uses `std::process`; tests inject a fake that records

@@ -217,7 +217,8 @@ fn a_nonzero_exit_is_failed() {
         turn.wait(),
         DoneReason::Failed {
             exit_code: 3,
-            message: None
+            message: None,
+            error_type: None,
         }
     );
 }
@@ -246,6 +247,7 @@ fn content_via_stdin_and_absent_interrupt_cap() {
         model_flag: None,
         effort_flag: None,
         model_catalog: None,
+        error_line: None,
     });
     // absence is the signal
     assert!(!drive.supports_interrupt());
@@ -1831,7 +1833,8 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
         reason,
         DoneReason::Failed {
             exit_code: 1,
-            message: None
+            message: None,
+            error_type: None,
         },
         "unset FOO → the check fails"
     );
@@ -1849,9 +1852,87 @@ fn run_trigger_reports_a_nonzero_exit_as_failed() {
         reason,
         DoneReason::Failed {
             exit_code: 5,
-            message: None
+            message: None,
+            error_type: None,
         }
     );
+}
+
+/// HS2-86MK1Y: a `/bin/sh` stand-in for agy, declaring agy's structured failure line,
+/// driven through `run_trigger` and the real `SystemSpawner`.
+#[cfg(unix)]
+fn write_error_line_plugin(dir: &std::path::Path, error_line: bool) -> hotsheet_plugins::Plugin {
+    let plugin = write_sh_plugin(dir);
+    if error_line {
+        let manifest = dir.join("manifest.toml");
+        let text = std::fs::read_to_string(&manifest).unwrap();
+        std::fs::write(
+            &manifest,
+            text.replace(
+                "interrupt = false\n",
+                "interrupt = false\nerror_line = \"AGY_ERROR: \"\n",
+            ),
+        )
+        .unwrap();
+        return hotsheet_plugins::Plugin::from_fs_dir(dir).unwrap();
+    }
+    plugin
+}
+
+#[cfg(unix)]
+#[test]
+fn hs2_86mk1y_a_structured_failure_line_types_a_real_spawned_turn() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugin = write_error_line_plugin(&tmp.path().join("shtool"), true);
+    assert_eq!(
+        plugin
+            .manifest
+            .drive
+            .as_ref()
+            .unwrap()
+            .error_line
+            .as_deref(),
+        Some("AGY_ERROR: ")
+    );
+    let mut reg = ConnectionRegistry::new(5_000);
+    let mut run = |script: &str| {
+        run_trigger(&plugin, &live(script, tmp.path()), &mut reg, &mut |_| {})
+            .unwrap()
+            .reason
+    };
+    let failed = |exit_code, message: Option<&str>, error_type: Option<&str>| DoneReason::Failed {
+        exit_code,
+        message: message.map(str::to_owned),
+        error_type: error_type.map(str::to_owned),
+    };
+    // Synthetic lines in the shape agy 1.5.10 writes; the quota statuses are assumed
+    // until a real one is captured (HS2-GETFE4).
+    let quota = r#"echo 'AGY_ERROR: {"short_error":"Quota reached.","status":"RESOURCE_EXHAUSTED","retryable":false}' >&2; exit 3"#;
+    assert_eq!(
+        run(quota),
+        failed(3, Some("Quota reached."), Some("usage_limit_exceeded"))
+    );
+    let rate = r#"echo 'AGY_ERROR: {"short_error":"Slow down.","status":"RESOURCE_EXHAUSTED","code":429,"retryable":true}' >&2; exit 3"#;
+    assert_eq!(run(rate), failed(3, Some("Slow down."), Some("rate_limit")));
+    // The observed print-timeout line is a failure, not a limit.
+    let timeout = r#"echo 'AGY_ERROR: {"short_error":"Timed out.","status":"DEADLINE_EXCEEDED","retryable":false,"reason":"print_timeout"}' >&2; exit 3"#;
+    assert_eq!(run(timeout), failed(3, Some("Timed out."), None));
+    // Text alone is never read as a limit.
+    let text = "echo '429 RESOURCE_EXHAUSTED: quota exceeded' >&2; exit 1";
+    assert_eq!(run(text), failed(1, None, None));
+    // A successful exit is completed, whatever stderr says.
+    let ok = r#"echo 'AGY_ERROR: {"status":"RESOURCE_EXHAUSTED"}' >&2; exit 0"#;
+    assert_eq!(run(ok), DoneReason::Completed);
+    // The line is found after 200 KB of earlier stderr (the kept tail is bounded).
+    let noisy = r#"i=0; while [ $i -lt 2000 ]; do printf '%0100d\n' 0 >&2; i=$((i+1)); done; echo 'AGY_ERROR: {"status":"RESOURCE_EXHAUSTED","retryable":true}' >&2; exit 3"#;
+    assert_eq!(run(noisy), failed(3, None, Some("rate_limit")));
+
+    // A plugin that declares no error line reads nothing from stderr.
+    let plain = write_error_line_plugin(&tmp.path().join("plain"), false);
+    let reason = run_trigger(&plain, &live(quota, tmp.path()), &mut reg, &mut |_| {})
+        .unwrap()
+        .reason;
+    assert_eq!(reason, failed(3, None, None));
 }
 
 #[test]
@@ -1905,6 +1986,7 @@ fn system_spawner_runs_a_real_process() {
         cwd: std::env::temp_dir(),
         stdin: None,
         env: Vec::new(),
+        stderr_tail: false,
     };
     assert_eq!(s.spawn(&spec("exit 0")).unwrap().wait(), 0);
     assert_eq!(s.spawn(&spec("exit 7")).unwrap().wait(), 7);
@@ -1991,7 +2073,8 @@ fn hs2_spvt6w_session_result_names_why_a_turn_did_not_complete() {
     assert_eq!(
         DoneReason::Failed {
             exit_code: 3,
-            message: None
+            message: None,
+            error_type: None,
         }
         .session_result(),
         Err("the tool exited with status 3".to_string())

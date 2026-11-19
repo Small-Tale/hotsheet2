@@ -211,6 +211,9 @@ pub struct LiveDriveCtx {
     /// Told the store a driven turn's usage was just recorded in, so the host moves that
     /// store's live tokens per minute now (HS2-P37AH7, [`live_state_usage_sink`]).
     pub usage_sink: Option<UsageSink>,
+    /// Told how each driven turn ended, so a typed limit failure becomes a tool capacity
+    /// signal (HS2-86MK1Y, [`live_state_limit_sink`]).
+    pub limit_sink: Option<LimitSink>,
     /// Per-ticket tool session ids retained across Continued work passes, with the session's
     /// cumulative cost after its last pass (the next pass's cost baseline, HS2-4JPDJA).
     pub worker_sessions:
@@ -234,6 +237,27 @@ pub fn live_state_usage_sink(state: &crate::AppState) -> UsageSink {
     std::sync::Arc::new(move |store, event| {
         crate::live_state::touch(&state, &crate::multistore::store_url_id(store));
         crate::tool_capacity_signals::usage_appended(&state, None, [event]);
+    })
+}
+
+/// Called with the driven tool's id and how its turn ended (HS2-86MK1Y).
+pub type LimitSink =
+    std::sync::Arc<dyn Fn(&str, &hotsheet_aitools::DoneReason) + Send + Sync + 'static>;
+
+/// The server host's [`LimitSink`]: a driven turn that failed with a typed limit is a
+/// limit signal for its tool's capacity (HS2-86MK1Y), unattributed like driven usage,
+/// because a driven turn has no terminal or hosted session.
+pub fn live_state_limit_sink(state: &crate::AppState) -> LimitSink {
+    let state = state.clone();
+    std::sync::Arc::new(move |tool, done| {
+        crate::tool_capacity_signals::record(
+            &state,
+            crate::tool_capacity_signals::driven_failure_signal(
+                tool,
+                done,
+                time::OffsetDateTime::now_utc(),
+            ),
+        );
     })
 }
 
@@ -445,6 +469,9 @@ fn drive_one_ticket(
         remember_worker_session(ctx, session_key, session_id, done.session_cost_usd);
     }
     let done = done.reason;
+    if let Some(sink) = &ctx.limit_sink {
+        sink(tool, &done);
+    }
     emit_coarse_activity(
         ctx,
         store,
@@ -668,7 +695,8 @@ mod tests {
             outcome_from_turn(
                 DoneReason::Failed {
                     exit_code: 1,
-                    message: None
+                    message: None,
+                    error_type: None,
                 },
                 false,
                 true
@@ -800,6 +828,55 @@ mod tests {
             .expect("the turn reached tool capacity");
         assert_eq!(claude.account, None);
         assert!(claude.last_ok_at_ms.is_some());
+    }
+
+    /// HS2-86MK1Y: through the host's limit sink, a driven turn's typed limit failure
+    /// limits its tool in this machine's capacity registry, unattributed and without its
+    /// message; other endings record nothing.
+    #[test]
+    fn hs2_86mk1y_the_limit_sink_records_a_driven_limit_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init_git(dir.path().join("t.hs2"), &StoreMetadata::new("HS")).unwrap();
+        let home = dir.path().join("machine-home");
+        let state = crate::AppState::new(store, SECRET.into())
+            .unwrap()
+            .with_machine_home(home.clone());
+        let sink = live_state_limit_sink(&state);
+        let entries = || {
+            hotsheet_ticketing::orchestration::ToolCapacityRegistry::new(&home)
+                .entries()
+                .unwrap()
+        };
+        sink("antigravity", &DoneReason::Completed);
+        sink(
+            "antigravity",
+            &DoneReason::Failed {
+                exit_code: 3,
+                message: Some("Timed out.".into()),
+                error_type: None,
+            },
+        );
+        assert!(entries().is_empty(), "no limit, no signal");
+        sink(
+            "antigravity",
+            &DoneReason::Failed {
+                exit_code: 3,
+                message: Some("Synthetic quota message.".into()),
+                error_type: Some("usage_limit_exceeded".into()),
+            },
+        );
+        let entries = entries();
+        let antigravity = entries
+            .iter()
+            .find(|entry| entry.tool == "antigravity")
+            .expect("the limit reached tool capacity");
+        assert_eq!(antigravity.account, None);
+        assert!(antigravity.limit.is_some());
+        let stored = std::fs::read_dir(&home)
+            .unwrap()
+            .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default())
+            .collect::<String>();
+        assert!(!stored.contains("Synthetic quota message"));
     }
 
     const SECRET: &str = "test-secret";

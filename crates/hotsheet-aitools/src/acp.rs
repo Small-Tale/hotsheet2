@@ -254,6 +254,7 @@ impl TurnHandle for AcpTurn {
             .unwrap_or(DoneReason::Failed {
                 exit_code: 1,
                 message: None,
+                error_type: None,
             })
     }
     fn interrupt(&mut self) -> bool {

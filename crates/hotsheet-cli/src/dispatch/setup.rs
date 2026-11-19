@@ -576,7 +576,9 @@ pub(crate) fn cmd_trigger(store_path: &Path, args: TriggerArgs) -> Result<()> {
             eprintln!("✔ {tool} turn completed");
             Ok(())
         }
-        DoneReason::Failed { exit_code, message } => bail!(
+        DoneReason::Failed {
+            exit_code, message, ..
+        } => bail!(
             "{tool} turn failed (exit {exit_code}){}",
             message
                 .map(|message| format!(": {message}"))
@@ -668,7 +670,9 @@ pub(crate) fn cmd_work(store_path: &Path, args: WorkArgs) -> Result<()> {
         }
         match done.reason {
             DoneReason::Completed => {}
-            DoneReason::Failed { exit_code, message } => eprintln!(
+            DoneReason::Failed {
+                exit_code, message, ..
+            } => eprintln!(
                 "⚠ turn {turn} failed (exit {exit_code}){}",
                 message
                     .map(|message| format!(": {message}"))

@@ -4074,6 +4074,15 @@ hs2_awb7bx` follows a remote target through the peer's wait and ends on a peer
   `tool_capacity_signals.rs # hs2_ahg7hw` maps it to a `rate_limit` signal with and
   without a reset time; `codex_rollout_watch.rs # hs2_cyhawb` reads the variant from a
   failed turn; the plugin table pins Codex's new declaration.
+- HS2-86MK1Y: `structured_failure.rs # hs2_86mk1y` reads the observed print-timeout
+  line as no limit, maps limit statuses and codes by retryability, never counts text, and
+  is strict about the prefix and JSON shape (last valid line wins); `tests.rs #
+hs2_86mk1y` drives a `/bin/sh` stand-in through `run_trigger` and the real
+  `SystemSpawner` (quota, rate, print timeout, text only, exit 0, the line after 200 KB of
+  stderr, and no `error_line`); `tool_capacity_signals.rs # hs2_86mk1y` maps the failure
+  through the halt path; `dist_work_loop.rs # hs2_86mk1y` sees the limit sink write the
+  capacity registry without the message; the plugin and CLI capacity tables pin
+  Antigravity's new declaration. The real quota payload is unconfirmed (HS2-GETFE4).
 - HS2-XFMKHQ: `http.rs # hs2_xfmkhq` records Claude transcript usage through a real
   router for a terminal started for an account: the first responses confirm a backoff
   that ended, each response adds its cost once, a repeated Stop adds nothing and nothing

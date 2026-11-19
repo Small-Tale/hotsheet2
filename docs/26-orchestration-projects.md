@@ -1199,15 +1199,31 @@ declare exactly what the existing detection observes:
 | Claude      | reported          | reported           | reported    | reported     | reported |
 | Codex       | reported          | reported           | reported    | reported     | reported |
 | OpenCode    | unknown           | unknown            | unknown     | reported     | unknown  |
-| Antigravity | unknown           | unknown            | unknown     | unknown      | unknown  |
+| Antigravity | reported          | reported           | unknown     | unknown      | unknown  |
 
 Codex reports a request-rate limit as its own `CodexErrorInfo` variant,
 `rate_limit_exceeded`, beside `usage_limit_exceeded` (HS2-2BAVAM). The rollout halt path
-accepts it as a `rate_limit` signal with the same reset-time reading. OpenCode and
-Antigravity stay `unknown`. OpenCode's ACP surface reports no typed limit error (it retries
-a 429 inside the prompt, then ends the turn without one), so its detection waits for one
-(HS2-MJZ2QV). Antigravity's one-shot `agy --print` failure carries only an exit status and
-text, and reading the text would be a second message parser (HS2-86MK1Y).
+accepts it as a `rate_limit` signal with the same reset-time reading. OpenCode stays
+`unknown`: its ACP surface reports no typed limit error (it retries a 429 inside the prompt,
+then ends the turn without one), so its detection waits for one (HS2-MJZ2QV).
+
+Antigravity reports rate and usage limits from a driven turn (HS2-86MK1Y). Since agy 1.5.10
+a headless `agy --print` turn that ends on an agent or model API failure exits with code 3
+and writes one typed JSON line on stderr, `AGY_ERROR: {...}`, with a canonical `status`,
+the HTTP or gRPC code, `retryable` and a short error. The plugin names that prefix in
+`[drive] error_line`; the spawn drive keeps a bounded stderr tail (still passed through)
+and reads only the last such line's typed members, never its text. A `RESOURCE_EXHAUSTED`
+status, HTTP 429 or gRPC 8 is a limit: `rate_limit` when `retryable` is true (agy retries
+per-minute rate and capacity limits for up to 4 minutes first), `usage_limit_exceeded`
+otherwise (daily, weekly, spend-cap and prepaid quotas stop the turn at once). The failed
+turn carries that error type, and the dist work loop's limit sink and the client-drive
+runner record it through the same halt path, unattributed like driven usage. **The real
+quota-hit payload is unconfirmed:** the observed line was a print timeout
+(`DEADLINE_EXCEEDED`), and the limit values are assumed until one is captured
+(HS2-GETFE4). Antigravity reports no reset time (agy's `/usage` buckets carry one,
+HS2-JM0GVB) and no usage events, so before anything is observed it is `unknown`
+(`not_observed`), and after a limit without a reset time it stays `degraded` until a
+`recovered` signal (HS2-WTSYQJ).
 
 ### Signals
 

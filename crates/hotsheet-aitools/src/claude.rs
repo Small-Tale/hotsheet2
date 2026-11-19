@@ -795,6 +795,7 @@ impl TurnHandle for ClaudeTurn {
                     return self.done.clone().unwrap_or(DoneReason::Failed {
                         exit_code: 1,
                         message: None,
+                        error_type: None,
                     });
                 }
             }
