@@ -25,6 +25,7 @@ mod orchestration_sessions;
 mod orchestration_validation;
 pub(crate) mod providers;
 pub(crate) mod remotes;
+pub(crate) mod resource_backends;
 pub(crate) mod resources;
 pub(crate) mod server;
 pub(crate) mod setup;

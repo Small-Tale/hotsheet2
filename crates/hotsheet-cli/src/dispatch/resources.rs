@@ -35,6 +35,8 @@ pub(crate) enum ResourceCmd {
         /// `enc:v1:` prefix on the value selects its codec; no prefix stores `plain:`.
         #[arg(long = "meta", value_name = "KEY=VALUE")]
         meta: Vec<String>,
+        #[command(flatten)]
+        scope: super::resource_backends::ScopeArg,
     },
     /// Extend a claim with its renewal token alone.
     Renew {
@@ -46,6 +48,8 @@ pub(crate) enum ResourceCmd {
         /// The new lease length from now.
         #[arg(long)]
         duration: String,
+        #[command(flatten)]
+        scope: super::resource_backends::ScopeArg,
     },
     /// End a claim early with its renewal token alone; the token stops working.
     Release {
@@ -54,6 +58,8 @@ pub(crate) enum ResourceCmd {
         /// The renewal token (default: `$HOTSHEET_RESOURCE_CLAIM_TOKEN`).
         #[arg(long)]
         token: Option<String>,
+        #[command(flatten)]
+        scope: super::resource_backends::ScopeArg,
     },
     /// Show whether `<namespace>/<resource>` is held, and by which claim.
     Show {
@@ -62,16 +68,46 @@ pub(crate) enum ResourceCmd {
         /// Wait this long for it to become free, without claiming it.
         #[arg(long)]
         wait: Option<String>,
+        #[command(flatten)]
+        scope: super::resource_backends::ScopeArg,
     },
     /// List the live claims in a namespace.
-    List { namespace: String },
+    List {
+        namespace: String,
+        #[command(flatten)]
+        scope: super::resource_backends::ScopeArg,
+    },
+    /// Claim backend configurations: add, list, show, test, remove, key (HS2-JJWESD).
+    Backend {
+        #[command(subcommand)]
+        cmd: super::resource_backends::BackendCmd,
+    },
+    /// Bind a resource namespace to a configuration, or unbind it.
+    Namespace {
+        #[command(subcommand)]
+        cmd: super::resource_backends::NamespaceCmd,
+    },
+    /// Route a ticket data source's claims through a configuration, or stop.
+    Source {
+        #[command(subcommand)]
+        cmd: super::resource_backends::SourceCmd,
+    },
 }
 
 pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
     let Cmd::Resource { cmd } = cmd else {
         misrouted("resources")
     };
-    let service = ClaimService::new(hotsheet_plugins::hotsheet_home());
+    let cmd = match cmd {
+        ResourceCmd::Backend { cmd } => return super::resource_backends::backend(cmd),
+        ResourceCmd::Namespace { cmd } => return super::resource_backends::namespace(cmd),
+        ResourceCmd::Source { cmd } => return super::resource_backends::source(cmd),
+        other => other,
+    };
+    let mut service = ClaimService::new(hotsheet_plugins::hotsheet_home());
+    if let Some(project) = cmd_project(&cmd) {
+        service = service.with_project(project);
+    }
     let (method, path, body) = request(cmd)?;
     match service.request(method, &path, &body) {
         Ok(answer) => {
@@ -90,6 +126,18 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
     }
 }
 
+/// The project whose registry a claim command also consults.
+fn cmd_project(cmd: &ResourceCmd) -> Option<std::path::PathBuf> {
+    match cmd {
+        ResourceCmd::Acquire { scope, .. }
+        | ResourceCmd::Renew { scope, .. }
+        | ResourceCmd::Release { scope, .. }
+        | ResourceCmd::Show { scope, .. }
+        | ResourceCmd::List { scope, .. } => scope.project(),
+        _ => None,
+    }
+}
+
 fn print(value: &Value) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
@@ -103,6 +151,7 @@ fn request(cmd: ResourceCmd) -> Result<(&'static str, String, Value)> {
             duration,
             wait,
             meta,
+            ..
         } => {
             let mut body = json!({
                 "duration_ms": millis(&duration)?,
@@ -117,29 +166,36 @@ fn request(cmd: ResourceCmd) -> Result<(&'static str, String, Value)> {
             target,
             token,
             duration,
+            ..
         } => {
             let body =
                 json!({ "renewal_token": token_value(token)?, "duration_ms": millis(&duration)? });
             ("POST", token_path(target.as_deref(), "renew")?, body)
         }
-        ResourceCmd::Release { target, token } => {
+        ResourceCmd::Release { target, token, .. } => {
             let body = json!({ "renewal_token": token_value(token)? });
             ("POST", token_path(target.as_deref(), "release")?, body)
         }
-        ResourceCmd::Show { target, wait: None } => {
-            ("GET", target_path(&target, None)?, Value::Null)
-        }
+        ResourceCmd::Show {
+            target, wait: None, ..
+        } => ("GET", target_path(&target, None)?, Value::Null),
         ResourceCmd::Show {
             target,
             wait: Some(wait),
+            ..
         } => (
             "POST",
             target_path(&target, Some("wait"))?,
             json!({ "wait_ms": millis(&wait)? }),
         ),
-        ResourceCmd::List { namespace } => {
+        ResourceCmd::List { namespace, .. } => {
             let namespace = Namespace::parse(&namespace).map_err(cli_error)?;
             ("GET", format!("{ROUTE_PREFIX}/{namespace}"), Value::Null)
+        }
+        ResourceCmd::Backend { .. }
+        | ResourceCmd::Namespace { .. }
+        | ResourceCmd::Source { .. } => {
+            bail!("not a claim request")
         }
     })
 }

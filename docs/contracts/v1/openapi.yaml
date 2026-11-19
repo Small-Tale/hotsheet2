@@ -36229,6 +36229,15 @@ components:
             - type: 'null'
         capabilities:
           $ref: '#/components/schemas/ResourceClaimCapabilities'
+        configuration:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: The bound claim backend configuration (HS2-JJWESD); null for the machine's local backend.
+        offline:
+          type: string
+          enum: [fail_closed, provisional]
+          description: What the configuration does while its backend is unreachable (docs/36 section 36.7).
       additionalProperties: false
     ResourceClaimList:
       type: object
@@ -36245,6 +36254,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceClaim'
+        configuration:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: The bound claim backend configuration (HS2-JJWESD); null for the machine's local backend.
+        offline:
+          type: string
+          enum: [fail_closed, provisional]
+          description: What the configuration does while its backend is unreachable (docs/36 section 36.7).
       additionalProperties: false
     ResourceClaimRenewed:
       type: object

@@ -10,6 +10,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::backend::ClaimBackend;
+use crate::config::ResolvedBackend;
 use crate::error::ClaimError;
 use crate::local::LocalBackend;
 use crate::model::{AcquireRequest, Claim, Grant, Namespace, ResourceRef, WaitOutcome};
@@ -20,17 +21,14 @@ pub const ROUTE_PREFIX: &str = "/resource-claims";
 /// Route prefix of the routes a renewal token alone authorizes.
 pub const TOKEN_ROUTE_PREFIX: &str = "/resource-claim-token";
 
-/// The backend that serves a namespace.
-///
-/// This is the single seam for backend configurations (HS2-JJWESD): today every
-/// namespace is machine-scoped and served by the built-in local backend under `home`.
-/// A configuration lookup replaces this body; no caller changes.
+/// The backend that serves a machine-scoped namespace: the configuration the machine
+/// registry binds it to (HS2-JJWESD), else the built-in local backend under `home`.
+/// [`crate::resolve`] also consults a project's registry.
 pub fn resolve_backend(
     home: &Path,
     namespace: &Namespace,
 ) -> Result<Arc<dyn ClaimBackend>, ClaimError> {
-    let _machine_scoped = namespace;
-    Ok(Arc::new(LocalBackend::machine(home)))
+    Ok(crate::config::resolve(home, None, namespace)?.backend)
 }
 
 /// HS2-YDZAFH: every namespace this machine's claim backend keeps state for, sorted.
@@ -117,6 +115,7 @@ pub fn is_path(path: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct ClaimService {
     home: PathBuf,
+    project: Option<PathBuf>,
     max_wait: Option<Duration>,
 }
 
@@ -124,8 +123,16 @@ impl ClaimService {
     pub fn new(home: impl Into<PathBuf>) -> Self {
         Self {
             home: home.into(),
+            project: None,
             max_wait: None,
         }
+    }
+
+    /// Also consult this project's registry (`<project>/.hotsheet2/resource-claims.json`),
+    /// whose bindings win over the machine's (HS2-JJWESD).
+    pub fn with_project(mut self, project: impl Into<PathBuf>) -> Self {
+        self.project = Some(project.into());
+        self
     }
 
     /// Cap how long one call may wait. A server sets this so one long-poll request is
@@ -135,8 +142,13 @@ impl ClaimService {
         self
     }
 
+    /// The backend serving a namespace, with the configuration that chose it.
+    pub fn resolve(&self, namespace: &Namespace) -> Result<ResolvedBackend, ClaimError> {
+        crate::config::resolve(&self.home, self.project.as_deref(), namespace)
+    }
+
     fn backend(&self, namespace: &Namespace) -> Result<Arc<dyn ClaimBackend>, ClaimError> {
-        resolve_backend(&self.home, namespace)
+        Ok(self.resolve(namespace)?.backend)
     }
 
     fn bounded(&self, wait: Duration) -> Duration {
@@ -216,11 +228,14 @@ impl ClaimService {
     }
 
     fn status_json(&self, target: &ResourceRef, claim: Option<Claim>) -> Result<Value, ClaimError> {
+        let resolved = self.resolve(target.namespace())?;
         Ok(json!({
             "target": target.to_string(),
             "held": claim.is_some(),
             "claim": claim,
-            "capabilities": self.backend(target.namespace())?.capabilities(),
+            "capabilities": resolved.backend.capabilities(),
+            "configuration": resolved.configuration,
+            "offline": resolved.offline,
         }))
     }
 
@@ -235,10 +250,13 @@ impl ClaimService {
         match (method, parts.as_slice()) {
             ("GET", [root, namespace]) if *root == prefix(ROUTE_PREFIX) => {
                 let namespace = Namespace::parse(namespace)?;
+                let resolved = self.resolve(&namespace)?;
                 Ok(json!({
                     "namespace": namespace,
-                    "capabilities": self.backend(&namespace)?.capabilities(),
-                    "claims": self.list(&namespace)?,
+                    "capabilities": resolved.backend.capabilities(),
+                    "configuration": resolved.configuration,
+                    "offline": resolved.offline,
+                    "claims": resolved.backend.list(&namespace)?,
                 }))
             }
             ("GET", [root, namespace, resource]) if *root == prefix(ROUTE_PREFIX) => {

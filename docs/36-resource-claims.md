@@ -11,17 +11,19 @@ Two uses drive the design (decided 2026-11-03, HS2-H3WPPY):
 2. **Non-ticket resources**, for example a local macOS VM that allows one automation
    process at a time.
 
-This document covers the contract, the built-in local machine backend, and the CLI,
-MCP, and server surfaces; the `hotsheet-resource-claims` crate implements all three.
-Backend configurations, namespace binding, and the other backends are design only;
-§36.9 names their tickets. The claim on a Git-backed
+This document covers the contract, the built-in local machine backend, the CLI, MCP,
+and server surfaces, and backend configurations with namespace and data-source binding
+(§36.13); the `hotsheet-resource-claims` crate implements them. The other backends are
+design only; §36.9 names their tickets. The claim on a Git-backed
 ticket ([10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)) is
 unchanged and is not yet routed through this contract.
 
 ## 36.1 Model
 
-- A **namespace** groups resources and is bound to one backend. A machine-scoped
-  namespace lives under `HOTSHEET_HOME` and is shared by every project on the machine.
+- A **namespace** groups resources and is bound to one backend configuration (§36.13);
+  an unbound namespace is served by the machine's local backend. A machine-scoped
+  namespace is shared by every project on the machine; a project-scoped one belongs to
+  one project.
   A namespace name is 1 to 64 characters of `a-z`, `0-9`, `.`, `_`, and `-`, starts with
   a letter or digit, and never contains `..`.
 - A **resource** is written `<namespace>/<resource>`. A resource name is 1 to 128
@@ -92,8 +94,9 @@ One 32-byte key per backend configuration keys both codecs and the renewal-token
 through separate derivations. The `KeyProvider` trait supplies it. The local machine
 backend keeps its key in `<HOTSHEET_HOME>/resource-claims/key`, created on first use
 with mode `0600`; a key file that other users can read is refused. Remote
-configurations keep their key in the OS credential store beside the access credential
-(HS2-JJWESD).
+configurations keep their key in the OS credential store under the account the
+configuration names (`resource-claims.<id>`), shared between machines by an explicit
+export and import (§36.13, HS2-JJWESD).
 
 ## 36.4 Renewal tokens
 
@@ -177,9 +180,11 @@ clock is the machine's clock (injectable in tests).
 What happens when a remote backend is unreachable is a per-configuration choice: fail
 closed (the default, `backend_unreachable`) or provisional advisory local claims that
 are reconciled and conflict-flagged on reconnect. A provisional claim is never reported
-as exclusive. The local machine backend has no remote and is never offline. Design
-only; HS2-JJWESD. The orchestration scheduler already acts on either choice when a
-machine reports it (§26.20 of
+as exclusive. The local machine backend has no remote and is never offline, so a local
+configuration refuses `provisional`. The choice is recorded in the configuration
+(§36.13, HS2-JJWESD) and read through `hotsheet_resource_claims::offline_policy(home,
+project, namespace)`, or the `offline` field of `resolve`. The orchestration
+scheduler already acts on either choice when a machine reports it (§26.20 of
 [26-orchestration-projects.md](26-orchestration-projects.md); HS2-KCEHVR connects
 the configured value).
 
@@ -193,22 +198,21 @@ has an idempotent `hotsheet-cli` path shared with the graphical client.
 
 ## 36.9 Status
 
-| Part                                                                                             | Status                                                     | Ticket     |
-| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ---------- |
-| Backend contract, error model, codecs, local machine backend                                     | Shipped                                                    | HS2-H3WPPY |
-| CLI, MCP, and server surfaces with token-only renew and release (§36.10 to §36.12)               | Shipped for machine-scoped namespaces on the local backend | HS2-FMHH9Y |
-| Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Design only                                                | HS2-JJWESD |
-| AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                | HS2-SHDW2Q |
+| Part                                                                                             | Status                                                                                      | Ticket     |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ---------- |
+| Backend contract, error model, codecs, local machine backend                                     | Shipped                                                                                     | HS2-H3WPPY |
+| CLI, MCP, and server surfaces with token-only renew and release (§36.10 to §36.12)               | Shipped for machine-scoped namespaces on the local backend                                  | HS2-FMHH9Y |
+| Backend configurations, namespace and data-source binding, offline policy, credential-store keys | Shipped in the CLI and library (§36.13); server and web settings are HS2-JJWESD's follow-up | HS2-JJWESD |
+| AI guidance for the acquire-and-hand-off pattern                                                 | Design only                                                                                 | HS2-SHDW2Q |
 
 The first consumer outside tickets is the machine-wide `browser-engines` pool that caps local
 Playwright WebKit browsers (HS2-M6TZB5,
 [12](12-code-organization-and-testing.md)): one resource per slot, acquired with a wait,
 renewed by the browser's own process, and released when the browser closes.
 
-HS2-FMHH9Y shipped ahead of HS2-JJWESD. Until configurations exist, every namespace is
-machine-scoped and served by the local machine backend. The single seam is
-`hotsheet_resource_claims::resolve_backend(home, namespace)`; HS2-JJWESD replaces its
-body with a configuration lookup, and no surface changes.
+`hotsheet_resource_claims::resolve_backend(home, namespace)` is the machine-scoped
+lookup the server and MCP use; `resolve(home, project, namespace)` also consults a
+project's registry, which the CLI does with `--project`.
 
 ## 36.10 Surfaces
 
@@ -320,3 +324,67 @@ plan step or a target declares the resources its work must hold, the scheduler
 lists a namespace's live claims and defers work whose resource is held, and it waits
 for a release with `wait_until_free`. It never acquires, renews or releases; the
 session that does the work does, as §36.1 prescribes.
+
+## 36.13 Backend configurations and bindings (HS2-JJWESD)
+
+A **configuration** names one claim backend. Namespaces and ticket data sources are
+**bound** to configurations; several may share one, and none has to.
+
+| Field        | Meaning                                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `id`         | 1 to 64 characters of `a-z`, `0-9`, `.`, `_`, `-`                                                                            |
+| `kind`       | `local` (§36.6) or `git_ref` (the Git-ref compare-and-swap, HS2-WJF0D8)                                                      |
+| `settings`   | Non-secret settings from a per-kind allow-list: none for `local`; `remote` (default `origin`) and `repository` for `git_ref` |
+| `credential` | The OS credential-store account that holds the configuration's 32-byte key (`resource-claims.<id>`), never a value           |
+| `offline`    | `fail_closed` (default) or `provisional` (§36.7); `local` takes only `fail_closed`                                           |
+
+A setting outside the allow-list is refused, so a token typed as a setting never reaches
+a file. Output never contains key material except `backend key --export`, which prints
+the key only when asked.
+
+**Scopes.** Each scope is one version-guarded file (`$hotsheetSchema` 1). A newer or
+unreadable file is refused and left untouched.
+
+| Scope   | File                                                           | Shared with                                                                                                                |
+| ------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Machine | `<HOTSHEET_HOME>/resource-claims/configurations.json` (`0600`) | Every project on this machine                                                                                              |
+| Project | `<project>/.hotsheet2/resource-claims.json`, checked in        | Everyone with the project. A Git ticket store is a project, and the CLI commits the file there, so every clone receives it |
+
+A project binding wins over a machine binding and may name a configuration from either
+scope. A binding to a configuration defined in neither is an error, not "unbound".
+
+**Namespaces.** A namespace bound in a project is **project-scoped**: a `local`
+configuration keeps its state under
+`<HOTSHEET_HOME>/resource-claims/projects/<project hash>/`, so the same namespace name
+in two projects, or in a project and on the machine, never shares a claim.
+
+**Ticket data sources.** A source is a connection id, or `store:<instanceId>` for a Git
+ticket store. A Git store's connection id is derived from its local path and differs
+between clones, so bind the store identity (`--store <path>`) to cover every clone.
+Routing ticket claims through the configuration is HS2-WJF0D8.
+
+**Commands.** All are idempotent, print JSON (`change` is `created`, `updated`,
+`unchanged`, `removed` or `absent`), and take `--project <dir>` to use the project
+scope.
+
+| Command                                                                                                                               | Effect                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hotsheet-cli resource backend add <id> --kind local\|git-ref [--setting k=v]... [--credential] [--offline fail-closed\|provisional]` | Add or update a configuration; with `--credential`, print the key next steps                                                                       |
+| `hotsheet-cli resource backend list` / `show <id>`                                                                                    | Configurations and what is bound to each                                                                                                           |
+| `hotsheet-cli resource backend test <id>`                                                                                             | One real cheap call (a namespace listing, or `git ls-remote` of the claim refs) and a key check; exits non-zero with the next steps when not ready |
+| `hotsheet-cli resource backend remove <id>`                                                                                           | Remove; refused (`in_use`) while anything in that scope is bound to it                                                                             |
+| `hotsheet-cli resource backend key <id> --generate\|--import\|--export`                                                               | Create the key, store one exported from another machine (standard input), or print it                                                              |
+| `hotsheet-cli resource namespace bind <ns> --backend <id>` / `unbind <ns>`                                                            | Serve a namespace through a configuration, or return it to the machine's local backend                                                             |
+| `hotsheet-cli resource source bind <source>\|--store <path> --backend <id>\|--like <source>` / `unbind`                               | Bind a ticket data source; `--like` reuses another source's configuration                                                                          |
+
+`acquire`, `renew`, `release`, `show` and `list` take `--project <dir>` too, and `show`
+and `list` report the namespace's `configuration` and `offline` policy.
+
+**Rust API.** `hotsheet_ticketing::claim_backends` holds the registry (`Scope`,
+`ClaimRegistry`, `Registries::namespace` and `::source`, `git_store_sources`).
+`hotsheet_resource_claims` adds `resolve(home, project, namespace) -> ResolvedBackend`
+(`backend`, `configuration`, `binding_scope`, `offline`), `offline_policy(home,
+project, namespace)`, `CredentialKeyProvider` over any `SecretStore`, `generate_key`,
+`import_key`, `export_key`, and `test_configuration`. The server and web settings call
+these functions (HS2-JJWESD follow-up); tests inject an in-memory `SecretStore` and run
+with `HOTSHEET_NATIVE_SECRETS=deny`.

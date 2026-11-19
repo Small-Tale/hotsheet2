@@ -11,6 +11,7 @@
 mod backend;
 mod clock;
 mod codec;
+mod config;
 mod error;
 mod local;
 mod model;
@@ -22,6 +23,11 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use codec::{
     ClaimKey, ENC_PREFIX, FileKeyProvider, HMAC_PREFIX, KeyProvider, MetadataCodec, MetadataCodecs,
     MetadataValue, PLAIN_PREFIX, StaticKeyProvider,
+};
+pub use config::{
+    CredentialKeyProvider, OfflinePolicy, PROJECTS_DIR, ResolvedBackend, TestReport, backend_for,
+    configuration_json, export_key, generate_key, git_remote, git_repository, import_key,
+    key_next_step, offline_policy, project_state_root, resolve, test_configuration,
 };
 pub use error::ClaimError;
 pub use local::{LOCAL_ROOT_DIR, LocalBackend};
