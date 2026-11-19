@@ -24,10 +24,10 @@ use super::storage::{Storage, decode};
 use super::{
     AdmissionConfig, AdmissionOutcome, AdmissionReason, AdmissionRequest, CapacityEntry,
     CapacitySnapshot, CapacityState, MAX_TARGETS, ORCHESTRATION_VERSION, OfflinePolicy,
-    OrchestrationError, PolicyBody, PolicyDenial, RequirementState, ResourceContention,
-    ResourceState, RoleSessionKind, SelectionRequest, SessionCount, SessionRole, SignalSupport,
-    StepRequirements, UnreadableClaims, UnreadableReason, decide_admission, requirement_misses,
-    select,
+    OrchestrationError, PolicyBody, PolicyDenial, ProjectSites, RequirementState,
+    ResourceContention, ResourceState, RoleSessionKind, SelectionRequest, SessionCount,
+    SessionRole, SignalSupport, StepRequirements, UnreadableClaims, UnreadableReason,
+    decide_admission, requirement_misses, select,
 };
 
 /// One priority band, in points. Every other term is expressed against it.
@@ -754,6 +754,10 @@ pub struct ScheduleInput<'a> {
     /// offers the capacity wait of HS2-P5GTSW). A capacity refusal there is lifted by
     /// the change, so it sets no retry time; elsewhere the backoff retry stays.
     pub capacity_streams: &'a [String],
+    /// HS2-5P112Z: which project each target is a site of. Role sessions are decided
+    /// per project and placed on its home site; an empty grouping makes every target
+    /// its own one-site project, as before sites existed.
+    pub sites: &'a ProjectSites,
 }
 
 /// HS2-AWB7BX: a refusal that says the machine had no room: a refused admission or one
@@ -1615,8 +1619,24 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
             .and_then(|state| state.capacity.as_ref())
             .and_then(|snapshot| snapshot.pool)
     };
+    // HS2-5P112Z: the targets a role session on `target_id` serves. A project's home
+    // site serves every site of its project through its one pool; any other target
+    // serves only itself, as before sites existed.
+    let served = |target_id: &str| -> Vec<String> {
+        if input.sites.home_of(target_id) == target_id {
+            input.sites.sites_of(target_id)
+        } else {
+            vec![target_id.to_owned()]
+        }
+    };
     for entry in &policy.placement.role_sessions {
         let target_id = entry.target_id.as_str();
+        // HS2-5P112Z: role sessions are started per project, on its home site only. An
+        // entry naming another site of a project starts nothing there: that site's
+        // workers join the home's pool instead.
+        if input.sites.home_of(target_id) != target_id {
+            continue;
+        }
         let Some(target) = policy.target(target_id).filter(|target| target.enabled) else {
             continue;
         };
@@ -1624,25 +1644,44 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         let Some(pool) = pool_of(target_id) else {
             continue;
         };
+        let project = served(target_id);
+        let in_project = |id: &str| project.iter().any(|site| site == id);
         let workers_running = sessions
             .iter()
-            .any(|session| session.target_id == target_id && is_worker(session));
+            .any(|session| in_project(&session.target_id) && is_worker(session));
         let ready = input
             .work
             .iter()
-            .any(|item| item.target_id == target_id && placeable(item));
+            .any(|item| in_project(&item.target_id) && placeable(item));
         for kind in RoleSessionKind::ALL {
             if !entry.roles.contains(&kind) {
                 continue;
             }
             let role = kind.role();
+            // HS2-5P112Z: another enabled site of the project with a free slot can take
+            // the worker the dispatcher assigns to.
+            let other_site_room = project.iter().any(|site| {
+                site != target_id
+                    && policy
+                        .target(site)
+                        .filter(|other| other.enabled)
+                        .is_some_and(|other| {
+                            on_target.get(site.as_str()).copied().unwrap_or(0)
+                                + planned_target.get(site.as_str()).copied().unwrap_or(0)
+                                < other.max_sessions
+                        })
+            });
             let (live, wanted, room_for) = match kind {
                 // Room for the dispatcher and a worker, unless a worker already runs:
                 // a dispatcher alone in the target's last slot assigns to nobody.
                 RoleSessionKind::Dispatcher => (
                     pool.dispatcher_live,
                     ready,
-                    if workers_running { 1 } else { 2 },
+                    if workers_running || other_site_room {
+                        1
+                    } else {
+                        2
+                    },
                 ),
                 RoleSessionKind::Integrator => (pool.integrator_live, pool.handoffs_pending > 0, 1),
             };
@@ -1932,9 +1971,12 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
         }
         let session = sessions[index];
         let target_id = session.target_id.as_str();
-        // A worker on the target still has a run: whoever serves it stays.
+        // HS2-5P112Z: a role session on a project's home serves every site of it.
+        let project = served(target_id);
+        let in_project = |id: &str| project.iter().any(|site| site == id);
+        // A worker the session serves still has a run: whoever serves it stays.
         let dependent = sessions.iter().any(|other| {
-            other.target_id == target_id && is_worker(other) && other.run_id.is_some()
+            in_project(&other.target_id) && is_worker(other) && other.run_id.is_some()
         });
         let needed = match session.role {
             Some(SessionRole::Dispatcher) => {
@@ -1942,7 +1984,7 @@ pub fn plan(input: &ScheduleInput<'_>, support: &dyn Fn(&str) -> SignalSupport) 
                     || input
                         .work
                         .iter()
-                        .any(|item| item.target_id == target_id && placeable(item))
+                        .any(|item| in_project(&item.target_id) && placeable(item))
             }
             Some(SessionRole::Integrator) => {
                 dependent || pool_of(target_id).is_some_and(|pool| pool.handoffs_pending > 0)

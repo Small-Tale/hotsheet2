@@ -3058,3 +3058,184 @@ fn hs2_9fktb3_a_step_is_placed_and_dispatched_on_the_qualifying_site() {
     assert_eq!(tick.outcomes[0].target_id, id(2));
     assert_eq!(f.m.runtime.run_list(&f.owner(), false).unwrap().len(), 1);
 }
+
+/// HS2-5P112Z: a step placed on a site that is not its project's home runs a session
+/// that waits on the home's pool, not its own: each applied pass joins it to that pool
+/// (renewing its availability there), and once the home's authority offers it the
+/// run's exact ticket, the session is told so once. Both sites are bound to one
+/// checkout here, so the home's pool is real and readable; HS2-RCR4A6 runs the same
+/// across two servers.
+#[test]
+fn hs2_5p112z_a_session_on_another_site_joins_the_homes_pool_and_is_told_its_assignment() {
+    use crate::coordination::{Assignment, Coordinator, Phase, ReturnRoute, Role};
+    clocked!(clock, tx);
+    let f = Placed::new(&BOTH, &mut tx);
+    // Target 2 is a site of target 1, the project's home.
+    bind_and_allow(&f.m, 2, &[], &mut tx);
+    allow_on(
+        &f.m.runtime,
+        &f.m.owner.id,
+        &id(2),
+        &BOTH,
+        &["codex"],
+        &mut tx,
+    );
+    let revision = f.m.runtime.declarations(&f.owner()).unwrap().revision;
+    f.m.runtime
+        .request(
+            "PATCH",
+            &format!("/checkouts/{}/orchestration/targets/{}", f.owner(), id(2)),
+            &json!({"expected_revision": revision, "label": "Target", "site_of": id(1)}),
+            &mut tx,
+        )
+        .unwrap();
+    let mut body = policy();
+    body.targets.push(TargetPolicy {
+        target_id: id(2),
+        ..body.targets[0].clone()
+    });
+    f.set_policy(body, &mut tx);
+    // A step named on the site: placed there, its run queued for a dispatcher.
+    let ticket = ops::create(
+        &f.m.target_store,
+        ulid::Ulid::new(),
+        "TGT",
+        NOW.into(),
+        NewTicket {
+            title: "On the site".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let step =
+        f.m.runtime
+            .readiness_define(
+                &f.owner(),
+                serde_json::from_value(json!({
+                    "ticket": {"connection_id": f.m.owner_connection(),
+                        "native_id": f.orchestration.id.to_string()},
+                    "target_id": id(2), "connection_id": f.m.target_connection(),
+                    "native_id": ticket.slug, "prerequisites": [],
+                }))
+                .unwrap(),
+                Some(&worker()),
+                &mut tx,
+            )
+            .unwrap()
+            .readiness
+            .step
+            .step_id;
+    // The home's pool, set up by its dispatcher, with a live legacy integrator.
+    let now_s = i64::try_from(START / 1000).unwrap();
+    let pool = Coordinator::open_with_registry_home(
+        Path::new(&f.m.target.root),
+        f.m.target_store.root(),
+        f.m.home.clone(),
+    )
+    .unwrap();
+    pool.register(
+        Role::Integrator,
+        "integrator-1",
+        "ig1",
+        now_s,
+        3600,
+        ReturnRoute::HumanRelay,
+    )
+    .unwrap();
+
+    let tick = f.tick(&mut tx);
+    assert_eq!(outcomes(&tick), [("started", None)]);
+    let session = f.record(&format!("sched-start-{step}"));
+    assert_eq!(session.target_id, id(2));
+    let run = f.run_of(&step);
+    let worker_id = session.hosted.as_ref().unwrap().worker_id.clone();
+    // The pass after the start joined the session's worker to the home's pool, under
+    // the session as its generation.
+    let joined = pool.state().unwrap();
+    assert_eq!(
+        joined
+            .workers
+            .get(&worker_id)
+            .map(|w| w.generation.as_str()),
+        Some(session.session_id.as_str())
+    );
+    // It waits on the home's pool, whose integrator assigns: no claim for itself.
+    let tick = f.tick(&mut tx);
+    let [waiting] = &tick.view.assignments[..] else {
+        panic!("one waiting run: {:?}", tick.view.assignments);
+    };
+    assert_eq!(
+        (
+            waiting.home_target_id.as_deref(),
+            waiting.state.code(),
+            waiting.integrator_live
+        ),
+        (Some(id(1).as_str()), "awaiting_dispatcher", Some(true))
+    );
+    let told = |f: &Placed| {
+        f.host
+            .pushes()
+            .iter()
+            .filter(|(_, text)| text.contains("home site assigned you"))
+            .count()
+    };
+    assert_eq!(told(&f), 0);
+
+    // The home's authority offers the run's exact ticket to the session's worker: the
+    // next pass tells the session, and later passes do not tell it again.
+    pool.assign(
+        "integrator-1",
+        "ig1",
+        now_s,
+        Assignment {
+            id: "home-assignment-1".into(),
+            worker: worker_id.clone(),
+            generation: session.session_id.clone(),
+            ticket: hotsheet_ticketing::TicketRef {
+                connection_id: run.target.connection_id.clone(),
+                native_id: run.target.native_id.clone(),
+            },
+            slug: ticket.slug.clone(),
+            base: "0".repeat(40),
+            phase: Phase::Offered,
+            commit: None,
+            handoff: None,
+            return_route: ReturnRoute::HumanRelay,
+            recovery_note: None,
+            suspension: None,
+            suspension_history: Vec::new(),
+            scope: Vec::new(),
+            transitions: Vec::new(),
+            retirement_note: None,
+            worktree: None,
+        },
+    )
+    .unwrap();
+    f.at(&clock, START + MINUTE);
+    f.tick(&mut tx);
+    assert_eq!(told(&f), 1);
+    for _ in 0..2 {
+        f.tick(&mut tx);
+    }
+    assert_eq!(told(&f), 1);
+    assert_eq!(
+        f.m.runtime.run(&f.owner(), &run.run_id).unwrap().state,
+        RunState::Queued
+    );
+    // Its claim of the ticket in the shared store is what the home records as accepted.
+    ops::claim_with_eta(
+        &f.m.target_store,
+        &ticket.id,
+        &hotsheet_model::Timestamp::new(NOW),
+        hotsheet_model::Timestamp::new("2099-01-01T00:00:00Z"),
+        &worker_id,
+        None,
+        None,
+    )
+    .unwrap();
+    f.tick(&mut tx);
+    assert_eq!(
+        pool.state().unwrap().assignments["home-assignment-1"].phase,
+        Phase::Accepted
+    );
+}

@@ -421,6 +421,8 @@ mod planning_tests;
 #[cfg(test)]
 mod policy_tests;
 #[cfg(test)]
+mod project_role_session_tests;
+#[cfg(test)]
 mod project_type_tests;
 #[cfg(test)]
 mod provisional_tests;

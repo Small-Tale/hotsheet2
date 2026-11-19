@@ -1065,6 +1065,10 @@ pub enum RequestKind {
     /// HS2-2K0DM8: the base gate the run's provisional work rests on failed and its fix
     /// is the request's `commit`: rebase onto it and rerun the affected gates.
     Rebase,
+    /// HS2-5P112Z: the dispatcher of the project's home site assigned the ticket to
+    /// this session on another site: claim it, work it, push a branch and hand off by
+    /// note; Hot Sheet relays the handoff to the home's integrator.
+    SiteAssigned,
 }
 
 impl RequestKind {
@@ -1074,6 +1078,7 @@ impl RequestKind {
             Self::Claimed => "claimed",
             Self::Cancelled => "cancelled",
             Self::Rebase => "rebase",
+            Self::SiteAssigned => "site_assigned",
         }
     }
 }

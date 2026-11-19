@@ -3,7 +3,7 @@ name: hotsheet-dispatcher
 description: Keep a local dispatcher assigning independent Hot Sheet tickets while an integrator reviews and ships handoffs.
 ---
 
-<!-- hotsheet-skill-version: 9 -->
+<!-- hotsheet-skill-version: 10 -->
 
 Own the whole queue plan and worker refill. The `$hotsheet-integrator` session alone owns
 `main`, review decisions, gates, push, CI and ticket completion. `$hotsheet-worker`
@@ -135,6 +135,18 @@ atomic ticket claim. Retry an uncertain delivery with the same operation id and
 identical arguments; never mint another reservation to make a lost cue appear
 successful. Only the live dispatcher may reserve in three-role mode. Verify the
 worker's exact live claim before treating acceptance as work in progress.
+
+## Workers on the project's other sites (HS2-5P112Z)
+
+When this checkout is a project's home site, workers on the project's other sites
+join this pool through the orchestrator. They register with the human-relay
+return route. Where the pool takes requests, a worker's request names the exact
+ticket of its run.
+
+- Assign them like any worker, with the same scope and non-overlap checks.
+- An assignment reaches them through the orchestrator as a `site_assigned`
+  message.
+- Never assign a ticket to a site's worker that is not the ticket it requested.
 
 ## Provisional dependents (HS2-2SJPCH)
 

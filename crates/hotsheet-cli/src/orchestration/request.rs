@@ -103,6 +103,8 @@ pub fn is_path(path: &str) -> bool {
             | ["checkouts", _, "orchestration", "sessions", _, _]
             | ["checkouts", _, "orchestration", "session-sync"]
             | ["checkouts", _, "target-sessions"]
+            // HS2-5P112Z: a project's home pool, joined by workers on its other sites.
+            | ["checkouts", _, "target-pool"]
             // HS2-ECWG50: the scheduler's plan, explanation, decision log and tick.
             | ["checkouts", _, "orchestration", "scheduler", _]
             // HS2-HCW7MD: Propose Plan and where planning stands.
@@ -728,6 +730,16 @@ impl OrchestrationRuntime {
             // HS2-R7QH35: tell a running hosted session its exact ticket.
             ("PUT", ["checkouts", checkout, "target-sessions"]) => {
                 value(self.hosted_session_request(checkout, hosted(body)?, tx)?)
+            }
+            // HS2-5P112Z: the home's pool, read or joined for a worker on another site.
+            ("GET", ["checkouts", checkout, "target-pool"]) => value(self.hosted_pool_read(
+                checkout,
+                query_text(path, "worker_id")?.as_deref(),
+                query_text(path, "generation")?.as_deref(),
+                tx,
+            )?),
+            ("POST", ["checkouts", checkout, "target-pool"]) => {
+                value(self.hosted_pool_join(checkout, hosted(body)?, tx)?)
             }
             // HS2-GDJXGZ orchestrating half.
             ("GET", ["checkouts", owner, "orchestration", "sessions"]) => {

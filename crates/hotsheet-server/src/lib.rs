@@ -2435,6 +2435,12 @@ pub fn app(state: AppState) -> Router {
                 .patch(routes::orchestration::write)
                 .delete(routes::orchestration::write),
         )
+        // HS2-5P112Z: a project's home pool, read or joined for a worker on another
+        // site of the project by the orchestrator that reaches both.
+        .route(
+            "/checkouts/{checkout}/target-pool",
+            get(routes::orchestration::read).post(routes::orchestration::write),
+        )
         // Resource claims (HS2-FMHH9Y): leases on named machine resources. `acquire` and
         // `wait` may park on the backend's release signal (a long poll).
         .route(

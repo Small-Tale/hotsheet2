@@ -39,6 +39,7 @@ mod session_executor;
 mod session_worktrees;
 mod sessions;
 mod shared_plan;
+mod site_pool;
 mod sites;
 #[cfg(unix)]
 mod step_process;

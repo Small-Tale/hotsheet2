@@ -438,8 +438,8 @@ fn hs2_5egbth_workers_record_working_and_initial_testing_even_for_t0_work() {
             "../../../.agents/skills/hotsheet-integrator/SKILL.md"
         ))
     );
-    assert!(worker.contains("<!-- hotsheet-skill-version: 52 -->")); // HS2-2SJPCH, HS2-7YSKXE, HS2-K3W691
-    assert!(integrator.contains("<!-- hotsheet-skill-version: 29 -->")); // HS2-2SJPCH, HS2-K3W691
+    assert!(worker.contains("<!-- hotsheet-skill-version: 53 -->")); // HS2-2SJPCH, HS2-7YSKXE, HS2-K3W691, HS2-5P112Z
+    assert!(integrator.contains("<!-- hotsheet-skill-version: 30 -->")); // HS2-2SJPCH, HS2-K3W691, HS2-5P112Z
     // HS2-K3W691: long gates and pushes run in the background, never under a foreground
     // tool timeout that stops them mid-run: once per integrator push step, once for the worker.
     assert_eq!(
@@ -520,7 +520,7 @@ fn hs2_ney1qh_role_skills_select_and_read_the_integration_strategy() {
     ] {
         assert!(dispatcher.contains(phrase), "dispatcher missing {phrase}");
     }
-    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 9 -->")); // HS2-2SJPCH
+    assert!(dispatcher.contains("<!-- hotsheet-skill-version: 10 -->")); // HS2-2SJPCH, HS2-5P112Z
     assert!(dispatcher.contains("development-strategy-resolve"));
     assert!(dispatcher.contains("A policy change does not rewrite an accepted assignment"));
 }

@@ -243,6 +243,8 @@ pub(super) struct Gathered {
     /// HS2-JSF985: the provisional rule's answer per provisional step. Empty while
     /// the policy does not opt in.
     pub(super) standings: BTreeMap<String, ProvisionalStanding>,
+    /// HS2-5P112Z: the active grouping of targets into projects, for role sessions.
+    pub(super) sites: hotsheet_ticketing::orchestration::ProjectSites,
 }
 
 impl Gathered {
@@ -541,9 +543,14 @@ impl OrchestrationRuntime {
             item.level == WorkLevel::Confirmed
                 || (speculates && policy.speculation_allowed(&item.target_id))
         };
+        // HS2-5P112Z: role sessions are decided per project, on its home site.
+        let sites = hotsheet_ticketing::orchestration::ProjectSites::active(
+            &self.declarations(owner_id)?.targets,
+        );
         // HS2-TK9ADC: a target that lists role sessions is read every pass, so its pool
         // (a handoff waiting for an integrator) is known without work there.
         // HS2-9FKTB3: every site the work may run on is read too.
+        // HS2-5P112Z: only a project's home site places role sessions.
         let wanted: BTreeSet<&str> = work
             .iter()
             .filter(|item| places(item))
@@ -556,7 +563,8 @@ impl OrchestrationRuntime {
                     .placement
                     .role_sessions
                     .iter()
-                    .map(|entry| entry.target_id.as_str()),
+                    .map(|entry| entry.target_id.as_str())
+                    .filter(|target_id| sites.home_of(target_id) == *target_id),
             )
             .filter(|target_id| {
                 policy
@@ -748,6 +756,7 @@ impl OrchestrationRuntime {
             held,
             unreadable,
             memory,
+            sites,
         }))
     }
 
@@ -770,6 +779,7 @@ impl OrchestrationRuntime {
                 unreadable: &gathered.unreadable,
                 memory: &gathered.memory,
                 capacity_streams: &self.capacity_streams(owner_id),
+                sites: &gathered.sites,
             },
             &|tool| gathered.supports.get(tool).copied().unwrap_or_default(),
         );
@@ -1221,6 +1231,8 @@ impl OrchestrationRuntime {
             assignments =
                 self.scheduler_assignments(owner_id, &gathered.policy, &gathered.memory, actor, tx);
             self.assignment_apply(owner_id, &mut assignments, actor, &mut applied, tx);
+            // HS2-5P112Z: workers on a project's other sites join its home's pool.
+            let _relays = self.site_pool_relay(owner_id, actor, tx);
             // HS2-AH8CRS: what reconciliation found is acted on, through the gate.
             reconciled = self.scheduler_dispositions(owner_id, actor, tx);
             // A machine that had no room, or could not be read, is left alone for a

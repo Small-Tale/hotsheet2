@@ -291,6 +291,9 @@ pub fn request_prompt_text(
         RequestKind::Cancelled => format!(
             "A person cancelled the orchestration run for the ticket `{ticket}`. Stop working it: commit or set aside what you have, release your claim on it as the worker `{worker_id}`, and finish your turn. Hot Sheet will wind this session down."
         ),
+        RequestKind::SiteAssigned => format!(
+            "The dispatcher of this project's home site assigned you the ticket `{ticket}`. Claim it as the worker `{worker_id}` and work it with the `hotsheet-worker` skill in a worktree of this checkout, but do not run `coordination worker` for it: this checkout's pool is not the one that assigned it. To hand off, push your branch to `origin`, add a regular note that starts with `## Integration handoff` and has the lines `Branch: <the branch you pushed>` and `Commit: <its full commit SHA>`, and only then release your claim. Hot Sheet relays that handoff to the home site's integrator."
+        ),
         RequestKind::Rebase => format!(
             "Your work on the ticket `{ticket}` was started ahead of a prerequisite's CI gate, which failed. Its fix is the commit `{}`. Rebase your work onto that commit, rerun the gates the change affects, and keep the work off the shipping branch until they pass. Continue as the worker `{worker_id}`.",
             commit.unwrap_or("unknown")
@@ -943,7 +946,7 @@ fn dirty_worktrees(root: &Path, role: SessionRole, worker: &str) -> Option<u32> 
 
 /// The checkout's coordination pool, read without creating or upgrading it.
 /// `Ok(None)` when the project has no pool.
-fn coordination_state(root: &Path) -> Result<Option<crate::coordination::State>, ()> {
+pub(super) fn coordination_state(root: &Path) -> Result<Option<crate::coordination::State>, ()> {
     let common = git(
         root,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -2623,6 +2626,8 @@ impl OrchestrationRuntime {
             RequestKind::Cancelled
         } else if cancelled == Some(RequestKind::Rebase) {
             RequestKind::Rebase
+        } else if cancelled == Some(RequestKind::SiteAssigned) {
+            RequestKind::SiteAssigned
         } else if run.state == hotsheet_ticketing::orchestration::RunState::Dispatched
             && run.worker_id.as_deref() == worker
         {

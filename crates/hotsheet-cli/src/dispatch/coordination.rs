@@ -1039,7 +1039,8 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         } => {
             for path in &shared {
                 anyhow::ensure!(
-                    git_blob(&args.project, &base, path)?.is_some(),
+                    hotsheet_cli::coordination::scope::git_blob(&args.project, &base, path)?
+                        .is_some(),
                     "shared document {path} is not a file at the published base {base}"
                 );
             }
@@ -2016,60 +2017,16 @@ fn git_output(project: &std::path::Path, args: &[&str]) -> Result<std::process::
         .output()?)
 }
 
-/// A file's content at `rev`, or `None` where that revision has no file at `path`.
-fn git_blob(project: &std::path::Path, rev: &str, path: &str) -> Result<Option<String>> {
-    let spec = format!("{rev}:{path}");
-    let kind = git_output(project, &["cat-file", "-t", &spec])?;
-    if !kind.status.success() || kind.stdout.trim_ascii() != b"blob" {
-        return Ok(None);
-    }
-    let blob = git_output(project, &["cat-file", "blob", &spec])?;
-    anyhow::ensure!(blob.status.success(), "could not read {spec}");
-    Ok(Some(String::from_utf8(blob.stdout)?))
-}
-
 /// A dispatcher-scoped code handoff must descend from its assignment base and change only
-/// what its scope declares, sections included (HS2-YHYNJ6).
+/// what its scope declares, sections included (HS2-YHYNJ6). HS2-5P112Z: the library's
+/// [`hotsheet_cli::coordination::scope::review_commit`], which a hosted pool shares.
 fn review_commit_scope(
     project: &std::path::Path,
     base: &str,
     commit: &str,
     scope: &[String],
 ) -> Result<()> {
-    let ancestor = git_output(project, &["merge-base", "--is-ancestor", base, commit])?;
-    anyhow::ensure!(
-        ancestor.status.success(),
-        "handoff commit {commit} does not descend from the assignment base {base}"
-    );
-    let diff = git_output(
-        project,
-        &["diff", "--name-only", "-z", "--no-renames", base, commit],
-    )?;
-    anyhow::ensure!(
-        diff.status.success(),
-        "could not diff {base}..{commit}: {}",
-        String::from_utf8_lossy(&diff.stderr)
-    );
-    let mut changed = Vec::new();
-    for path in String::from_utf8(diff.stdout)?
-        .split('\0')
-        .filter(|p| !p.is_empty())
-    {
-        let (before, after) = if hotsheet_cli::coordination::scope::sectioned(scope, path) {
-            (
-                git_blob(project, base, path)?,
-                git_blob(project, commit, path)?,
-            )
-        } else {
-            (None, None)
-        };
-        changed.push(hotsheet_cli::coordination::scope::ChangedPath {
-            path: path.to_owned(),
-            before,
-            after,
-        });
-    }
-    hotsheet_cli::coordination::scope::review_handoff(scope, &changed)
+    hotsheet_cli::coordination::scope::review_commit(project, base, commit, scope)
 }
 
 #[cfg(test)]

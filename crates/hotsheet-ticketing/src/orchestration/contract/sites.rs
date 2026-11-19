@@ -116,6 +116,31 @@ impl ProjectSites {
             .map_or(target_id, String::as_str)
     }
 
+    /// HS2-5P112Z: the home site of `target_id`'s project, the one site whose
+    /// coordination pool assigns and integrates the whole project's work: the
+    /// project's own target. There is no fallback to another site while the home is
+    /// offline, since a second home would be a second pool and a second assignment
+    /// authority for the same tickets.
+    pub fn home_of<'a>(&'a self, target_id: &'a str) -> &'a str {
+        self.project_of(target_id)
+    }
+
+    /// HS2-5P112Z: whether the project of `target_id` has a site other than its home.
+    pub fn has_sites(&self, target_id: &str) -> bool {
+        let home = self.home_of(target_id);
+        self.project_of
+            .iter()
+            .any(|(site, project)| project == home && site != home)
+    }
+
+    /// HS2-5P112Z: the same grouping with `site` declared a site of `project`, for a
+    /// caller that holds no declarations (the pure scheduler's tests).
+    #[must_use]
+    pub fn with_site(mut self, site: &str, project: &str) -> Self {
+        self.project_of.insert(site.to_owned(), project.to_owned());
+        self
+    }
+
     pub fn same_project(&self, left: &str, right: &str) -> bool {
         self.project_of(left) == self.project_of(right)
     }

@@ -9,19 +9,40 @@ use std::collections::BTreeMap;
 use hotsheet_ticketing::actor::MutationActor;
 use hotsheet_ticketing::orchestration::{
     AssignmentInput, AssignmentState, DispatchMode, OrchestratedSession, PlacementAction,
-    PlacementMemory, PlacementOutcome, PolicyBody, Run, RunState, RunUpdate, SessionOwner,
-    SessionRole, SessionState, TargetAction, TargetOpError, decide_assignment,
+    PlacementMemory, PlacementOutcome, PolicyBody, ProjectSites, RequestKind, Run, RunState,
+    RunUpdate, SessionOwner, SessionRole, SessionState, TargetAction, TargetOpError,
+    decide_assignment,
 };
 use serde::Serialize;
 
 use super::runs::field_ms;
 use super::sessions::{HostedRoles, HostedSessionList};
+use super::site_pool::{HostedPoolMember, HostedPoolReply, MAX_MEMBER_LEASE_SECONDS};
 use super::tickets::encode;
 use super::*;
 
 /// The run reason when a session claimed its run's ticket because no dispatcher
 /// would assign it.
 pub const CLAIMED_FOR_SESSION: &str = "claimed_for_session";
+
+/// HS2-5P112Z: what one pass's relay did for a worker session on a site that is not
+/// its project's home: what the home's pool answered, and whether the session was
+/// told its assignment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SiteRelay {
+    pub session_id: String,
+    pub run_id: String,
+    /// The site the session runs on.
+    pub target_id: String,
+    /// The project's home site, whose pool it joined.
+    pub home_target_id: String,
+    /// The home's answer; absent when it could not be asked (offline, refused, an
+    /// older host).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool: Option<HostedPoolReply>,
+    /// The session was told the home assigned it the run's ticket (`site_assigned`).
+    pub told: bool,
+}
 
 /// One placed step's run that a running scheduler session waits on, with who will
 /// assign it and what the pass did.
@@ -30,6 +51,10 @@ pub struct Assignment {
     pub run_id: String,
     pub session_id: String,
     pub target_id: String,
+    /// HS2-5P112Z: the project's home site whose pool assigns the run, when the
+    /// session runs on another site of the project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_target_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step_id: Option<String>,
     pub state: AssignmentState,
@@ -133,6 +158,9 @@ impl OrchestrationRuntime {
         let now_ms = tx.clock.now_ms();
         let wait_ms = u64::from(policy.placement.dispatcher_wait_minutes) * 60 * 1000;
         let mut roles: BTreeMap<String, Option<HostedRoles>> = BTreeMap::new();
+        // HS2-5P112Z: a run on a site that is not its project's home waits on the home's
+        // pool, the one that assigns the whole project's work.
+        let sites = self.active_project_sites(owner_id);
         let mut found = Vec::new();
         for session in sessions.iter().filter(|session| {
             session.state == SessionState::Running
@@ -155,11 +183,19 @@ impl OrchestrationRuntime {
             {
                 continue;
             }
-            let pool = match roles.get(&session.target_id) {
+            let home = sites.home_of(&session.target_id).to_owned();
+            let pool = match roles.get(&home) {
                 Some(known) => *known,
                 None => {
-                    let read = actor.and_then(|actor| self.pool_roles(session, actor, tx));
-                    roles.insert(session.target_id.clone(), read);
+                    let read = actor.and_then(|actor| {
+                        if home == session.target_id {
+                            self.pool_roles(session, actor, tx)
+                        } else {
+                            self.home_pool(session, &home, None, actor, tx)
+                                .map(|reply| reply.roles)
+                        }
+                    });
+                    roles.insert(home.clone(), read);
                     read
                 }
             };
@@ -182,6 +218,7 @@ impl OrchestrationRuntime {
                 run_id: run.run_id.clone(),
                 session_id: session.session_id.clone(),
                 target_id: session.target_id.clone(),
+                home_target_id: (home != session.target_id).then_some(home),
                 step_id: step_of(run),
                 state: decided.state,
                 dispatcher_live: input.dispatcher_live,
@@ -201,6 +238,154 @@ impl OrchestrationRuntime {
             });
         }
         found
+    }
+
+    /// HS2-5P112Z: the active grouping of the owner's targets into projects. An
+    /// unreadable manifest groups nothing, so every target is its own home.
+    pub(super) fn active_project_sites(&self, owner_id: &str) -> ProjectSites {
+        self.declarations(owner_id)
+            .map(|view| ProjectSites::active(&view.targets))
+            .unwrap_or_default()
+    }
+
+    /// HS2-5P112Z: the home site's pool as it answers for `session`, a worker on another
+    /// site of the project. With `run` the session joins (or renews in) that pool and
+    /// its assignment is synced from the ticket's evidence, through the gate as
+    /// `work_start` continuing the run's dispatch; without one it is only read, as
+    /// `gates_observe`, like a capacity read. `None` when the home could not be asked.
+    fn home_pool(
+        &self,
+        session: &OrchestratedSession,
+        home: &str,
+        run: Option<&Run>,
+        actor: &MutationActor,
+        tx: &mut Transaction<'_>,
+    ) -> Option<HostedPoolReply> {
+        let worker = session.hosted.as_ref()?.worker_id.clone();
+        let target = Self::target_ref(&session.owner_checkout_id, home).ok()?;
+        // Joining continues the run's own dispatch, as a claim for its session does.
+        let request = match run {
+            Some(run) => ActionRequest::new(TargetAction::WorkStart)
+                .operation(run.operation_id.clone())
+                .continuing(),
+            None => ActionRequest::new(TargetAction::GatesObserve),
+        };
+        let authorized = self.authorize(&target, Some(actor), request, tx).ok()?;
+        let outcome = (|| {
+            let reply = match run {
+                Some(run) => {
+                    let body = serde_json::to_value(HostedPoolMember {
+                        worker_id: worker.clone(),
+                        generation: session.session_id.clone(),
+                        lease_seconds: MAX_MEMBER_LEASE_SECONDS,
+                        site_target_id: session.target_id.clone(),
+                        connection_id: Some(run.target.connection_id.clone()),
+                        native_id: Some(run.target.native_id.clone()),
+                        actor: Some(actor.clone()),
+                    })
+                    .map_err(|_| OrchestrationError::Corrupt)?;
+                    self.hosted_call_at(
+                        Self::destination(&authorized)?,
+                        "/target-pool",
+                        "POST",
+                        "",
+                        Some(&body),
+                        tx,
+                    )?
+                }
+                None => self.hosted_call_at(
+                    Self::destination(&authorized)?,
+                    "/target-pool",
+                    "GET",
+                    &format!(
+                        "?worker_id={}&generation={}",
+                        encode(&worker),
+                        encode(&session.session_id)
+                    ),
+                    None,
+                    tx,
+                )?,
+            };
+            serde_json::from_value::<HostedPoolReply>(reply)
+                .map_err(|_| OrchestrationError::Observation(TargetFailure::InvalidResponse))
+        })();
+        self.finish(&target, &authorized, &outcome, tx).ok()?;
+        outcome.ok()
+    }
+
+    /// HS2-5P112Z: an applied pass relays every running worker session the owner's
+    /// orchestrator owns on a site that is not its project's home: it joins the
+    /// home's pool (renewing its availability), the home records what the shared
+    /// ticket says the worker did (accepted, or handed off over a pushed branch), and
+    /// a session whose run's ticket the home's dispatcher offered it is told so
+    /// (`site_assigned`; the host pushes the same request only once).
+    pub(super) fn site_pool_relay(
+        &self,
+        owner_id: &str,
+        actor: Option<&MutationActor>,
+        tx: &mut Transaction<'_>,
+    ) -> Vec<SiteRelay> {
+        let Some(actor) = actor else {
+            return Vec::new();
+        };
+        let sites = self.active_project_sites(owner_id);
+        if sites.is_empty() {
+            return Vec::new();
+        }
+        let (Ok(sessions), Ok(runs)) = (
+            self.session_list(owner_id, true),
+            self.run_list(owner_id, true),
+        ) else {
+            return Vec::new();
+        };
+        let mut relays = Vec::new();
+        for session in sessions.iter().filter(|session| {
+            session.state == SessionState::Running
+                && session.owner == SessionOwner::Orchestrator
+                && session.role == SessionRole::Worker
+                && session.hosted.is_some()
+        }) {
+            let home = sites.home_of(&session.target_id);
+            if home == session.target_id {
+                continue;
+            }
+            let Some(run) = session
+                .run_id
+                .as_ref()
+                .and_then(|run_id| runs.iter().find(|run| &run.run_id == run_id))
+                .filter(|run| !run.state.is_terminal())
+            else {
+                continue;
+            };
+            let pool = self.home_pool(session, home, Some(run), actor, tx);
+            let offered = pool
+                .as_ref()
+                .and_then(|reply| reply.assignment.as_ref())
+                .is_some_and(|assigned| {
+                    assigned.phase == crate::coordination::Phase::Offered
+                        && assigned.connection_id == run.target.connection_id
+                        && assigned.native_id == run.target.native_id
+                });
+            let told = offered
+                && self
+                    .session_tell(
+                        owner_id,
+                        &session.session_id,
+                        Some((RequestKind::SiteAssigned, None)),
+                        Some(actor),
+                        tx,
+                    )
+                    .is_ok();
+            relays.push(SiteRelay {
+                session_id: session.session_id.clone(),
+                run_id: run.run_id.clone(),
+                target_id: session.target_id.clone(),
+                home_target_id: home.to_owned(),
+                pool,
+                told,
+            });
+        }
+        relays
     }
 
     /// An applied pass claims each run that is due for its session, records what

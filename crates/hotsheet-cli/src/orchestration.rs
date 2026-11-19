@@ -35,6 +35,7 @@ mod session_control;
 mod session_executor;
 mod session_worktrees;
 mod sessions;
+mod site_pool;
 mod step_job;
 mod step_process;
 mod step_program;

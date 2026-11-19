@@ -7,6 +7,7 @@
 //! checked against the commit's actual changes, so a declaration cannot hide an edit.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use anyhow::{Result, ensure};
 
@@ -343,4 +344,63 @@ pub fn review_handoff(scope: &[String], changed: &[ChangedPath]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn git_output(project: &Path, args: &[&str]) -> Result<std::process::Output> {
+    Ok(hotsheet_ticketing::git::launch("git")
+        .arg("-C")
+        .arg(project)
+        .args(args)
+        .output()?)
+}
+
+/// A file's content at `rev`, or `None` where that revision has no file at `path`.
+pub fn git_blob(project: &Path, rev: &str, path: &str) -> Result<Option<String>> {
+    let spec = format!("{rev}:{path}");
+    let kind = git_output(project, &["cat-file", "-t", &spec])?;
+    if !kind.status.success() || kind.stdout.trim_ascii() != b"blob" {
+        return Ok(None);
+    }
+    let blob = git_output(project, &["cat-file", "blob", &spec])?;
+    anyhow::ensure!(blob.status.success(), "could not read {spec}");
+    Ok(Some(String::from_utf8(blob.stdout)?))
+}
+
+/// A dispatcher-scoped code handoff must descend from its assignment base and change only
+/// what its scope declares, sections included (HS2-YHYNJ6).
+pub fn review_commit(project: &Path, base: &str, commit: &str, scope: &[String]) -> Result<()> {
+    let ancestor = git_output(project, &["merge-base", "--is-ancestor", base, commit])?;
+    anyhow::ensure!(
+        ancestor.status.success(),
+        "handoff commit {commit} does not descend from the assignment base {base}"
+    );
+    let diff = git_output(
+        project,
+        &["diff", "--name-only", "-z", "--no-renames", base, commit],
+    )?;
+    anyhow::ensure!(
+        diff.status.success(),
+        "could not diff {base}..{commit}: {}",
+        String::from_utf8_lossy(&diff.stderr)
+    );
+    let mut changed = Vec::new();
+    for path in String::from_utf8(diff.stdout)?
+        .split('\0')
+        .filter(|p| !p.is_empty())
+    {
+        let (before, after) = if sectioned(scope, path) {
+            (
+                git_blob(project, base, path)?,
+                git_blob(project, commit, path)?,
+            )
+        } else {
+            (None, None)
+        };
+        changed.push(ChangedPath {
+            path: path.to_owned(),
+            before,
+            after,
+        });
+    }
+    review_handoff(scope, &changed)
 }

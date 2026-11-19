@@ -224,6 +224,8 @@ pub(super) struct World {
     pub(super) unreadable: Vec<UnreadableClaims>,
     /// HS2-AWB7BX
     pub(super) capacity_streams: Vec<String>,
+    /// HS2-5P112Z
+    pub(super) sites: ProjectSites,
 }
 
 impl World {
@@ -249,6 +251,7 @@ impl World {
                 unreadable: &self.unreadable,
                 memory: &self.memory,
                 capacity_streams: &self.capacity_streams,
+                sites: &self.sites,
             },
             &|_| FULL,
         )

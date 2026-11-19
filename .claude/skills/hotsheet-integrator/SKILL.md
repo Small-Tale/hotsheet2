@@ -4,7 +4,7 @@ description: Keep a local main-branch integrator reviewing, shipping and complet
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 29 -->
+<!-- hotsheet-skill-version: 30 -->
 
 Stay in the shipping `main` checkout. In three-role mode, `$hotsheet-dispatcher`
 owns queue review, safe-base selection and exact worker reservations; this session
@@ -523,6 +523,21 @@ If a handoff is missing, a claim conflicts, integration fails, or the main check
 cannot be used safely, leave the ticket Started with a note naming the exact branch,
 SHA, worktree, and blocker. Release your claim whenever you stop. Before ending,
 check `hotsheet-cli ls --claimed` and release every claim you still hold.
+
+## Handoffs from another site (HS2-5P112Z)
+
+When this checkout is the home site of a project with several sites, workers on
+the other sites join this pool through the orchestrator. Their handoffs reach you
+like any other, with one difference: the work was pushed to `origin` from another
+machine.
+
+- Before recording the handoff, this machine fetched the branch the worker's
+  `## Integration handoff` note names into `refs/hotsheet/site-handoffs/<assignment>`.
+  It also checked that the commit is on that branch and inside the assignment's scope.
+- Review and integrate that commit as usual. If the worker pushed more since, fetch
+  the branch from `origin` again.
+- Return a correction through the ticket as usual. The worker picks it up on its
+  own site.
 
 ## Provisional work and its base gate (HS2-2SJPCH)
 

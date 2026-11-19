@@ -3266,6 +3266,87 @@ paths:
           minLength: 1
           maxLength: 160
           pattern: ^[A-Za-z0-9._-]+$
+  /checkouts/{checkout}/target-pool:
+    description: A project's home coordination pool, hosted on the machine of the project's home site (HS2-5P112Z). The
+      orchestrator, which reaches every site, relays a worker running on another site of the project into this pool,
+      so the home's one dispatcher assigns and its one integrator integrates the whole project's work. Ordinary
+      authenticated project data, like the other hosted routes.
+    get:
+      operationId: readHostedTargetPool
+      description: The pool's role flags and one member's unfinished assignment. Reads only; joins and records nothing.
+      parameters:
+        - name: worker_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+        - name: generation
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 160
+      responses:
+        '200':
+          description: The pool as it answers this member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetPool'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: joinHostedTargetPool
+      description:
+        Register or renew a worker of another site in this pool (human-relay return route), then record what the
+        shared ticket says it did with its assignment. A live claim of the exact ticket by the worker records
+        `accepted`. A released claim plus a regular `## Integration handoff` note naming `Branch:` and `Commit:` makes
+        this machine fetch that branch from `origin` into `refs/hotsheet/site-handoffs/<assignment>`, check the commit
+        is on it and inside the assignment's scope, and record `handoff` with that commit. A checkout without a pool
+        joins nothing (`pool` false). Repeating it changes nothing that did not change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostedTargetPoolMember'
+      responses:
+        '200':
+          description: The pool as it answers this member after the join.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostedTargetPool'
+        default:
+          description:
+            Stable content-free error code; authentication/device-role/locality denial may return a fixed text
+            diagnostic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+            text/plain:
+              schema:
+                type: string
+    parameters:
+      - name: checkout
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+          pattern: ^[A-Za-z0-9._-]+$
   /checkouts/{owner}/orchestration/scheduler/{operation}:
     description:
       Machine-local throughput scheduler (HS2-ECWG50). It decides where and how many AI sessions run, per target,
@@ -23677,6 +23758,115 @@ components:
                 - 'null'
           additionalProperties: false
       additionalProperties: false
+    HostedTargetPoolMember:
+      description: A worker on another site of the project, joining the home's pool (HS2-5P112Z).
+      type: object
+      required:
+        - worker_id
+        - generation
+        - lease_seconds
+        - site_target_id
+      properties:
+        worker_id:
+          type: string
+          maxLength: 160
+        generation:
+          description: The worker's session generation in the pool, the orchestrator's session id.
+          type: string
+          maxLength: 160
+        lease_seconds:
+          type: integer
+          minimum: 10
+          maximum: 3600
+        site_target_id:
+          description: The site the worker runs on.
+          type: string
+          maxLength: 160
+        connection_id:
+          description: The run's ticket, stated as the member's request where the pool already takes requests.
+          type: string
+          maxLength: 160
+        native_id:
+          type: string
+          maxLength: 160
+        actor:
+          $ref: '#/components/schemas/OrchestrationActor'
+      additionalProperties: false
+    HostedTargetPool:
+      description: What a project's home pool says to one member (HS2-5P112Z).
+      type: object
+      required:
+        - pool
+        - joined
+        - roles
+      properties:
+        pool:
+          description: The home checkout has a coordination pool.
+          type: boolean
+        joined:
+          description: The member holds a live registration.
+          type: boolean
+        roles:
+          type: object
+          required:
+            - integrator_live
+            - dispatcher_live
+          properties:
+            integrator_live:
+              type:
+                - boolean
+                - 'null'
+            dispatcher_live:
+              type:
+                - boolean
+                - 'null'
+          additionalProperties: false
+        assignment:
+          type: object
+          required:
+            - assignment_id
+            - connection_id
+            - native_id
+            - slug
+            - phase
+            - base
+          properties:
+            assignment_id:
+              type: string
+            connection_id:
+              type: string
+            native_id:
+              type: string
+            slug:
+              type: string
+            phase:
+              enum:
+                - offered
+                - accepted
+                - handoff
+                - verifying
+                - integrating
+                - suspended_integration
+                - ci
+                - done
+                - blocked
+            base:
+              type: string
+            commit:
+              type: string
+            recorded:
+              description: What this call recorded from the ticket's evidence.
+              enum:
+                - accepted
+                - handoff
+            waiting:
+              description:
+                Why the next phase is not recorded yet - `claim_not_taken`, `claim_held`, `worker_holds_another_claim`,
+                `handoff_note_missing`, `handoff_branch_invalid`, `handoff_fetch_failed`, `handoff_commit_not_on_branch`,
+                `handoff_out_of_scope`, `ticket_unreadable` or `source_unsupported`.
+              type: string
+          additionalProperties: false
+      additionalProperties: false
     SchedulerOperation:
       description: Body of a scheduler operation (HS2-ECWG50). `plan` takes nothing; `explain` takes `step_id`, or
         `target_id`, `connection_id` and `native_id`; `decisions` takes `after` and `limit`, or `newest` with an
@@ -25413,12 +25603,14 @@ components:
         Why a running session is told about one exact ticket (HS2-R7QH35). `assigned` - it was given the ticket's
         run; `claimed` - no dispatcher is live, so the ticket is claimed under its worker id; `cancelled` - a person
         cancelled the ticket's run (HS2-HV9ED3); `rebase` - the base gate of its provisional work failed, and `commit`
-        is the fix to rebase onto (HS2-2K0DM8).
+        is the fix to rebase onto (HS2-2K0DM8); `site_assigned` - the dispatcher of the project's home site assigned
+        it the ticket, to hand off by a pushed branch and a note (HS2-5P112Z).
       enum:
         - assigned
         - claimed
         - cancelled
         - rebase
+        - site_assigned
     PlanningOperation:
       description:
         Body of a planning operation (HS2-HCW7MD). `propose` takes `tool` and optionally `model`, `effort`, one

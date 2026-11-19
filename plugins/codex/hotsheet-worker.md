@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Keep a local worker session receiving exact dispatcher or legacy assignments and handing verified work to the main-branch integrator.
 ---
 
-<!-- hotsheet-skill-version: 52 -->
+<!-- hotsheet-skill-version: 53 -->
 
 Work one assigned ticket at a time. In three-role mode, the dispatcher owns queue
 selection and exact reservations; the integrator owns `main`, review, integration,
@@ -288,6 +288,27 @@ the orchestrator and the scheduler only read who holds what.
    `hotsheet-cli resource release --token <token>`.
 
 Record only the resource name and timings in notes, never a token.
+
+## Assigned by the project's home site (HS2-5P112Z)
+
+A project can be checked out on several machines (sites). Its home site's
+dispatcher assigns all of the project's work, and its integrator integrates it.
+When the orchestrator started you on another site, your checkout's own pool does
+not assign your ticket. A `site_assigned` message names the ticket the home's
+dispatcher gave you instead. For that ticket:
+
+1. Claim it as your worker id, then work and verify it in a worktree of this
+   checkout as usual. Do not run `coordination worker` for it: the home's pool
+   records your acceptance from your claim.
+2. Push your branch to `origin`.
+3. Add a regular note that starts with `## Integration handoff`. Give it the lines
+   `Branch: <the branch you pushed>` and `Commit: <its full SHA>`.
+4. Only then release your claim. The release is what tells the orchestrator to
+   relay the handoff, so the note must already be there.
+
+The home fetches that branch and checks that the commit is on it and inside your
+scope. Only then does it record your handoff for its integrator. Keep the branch
+until the ticket completes.
 
 ## Provisional assignments (HS2-2SJPCH)
 

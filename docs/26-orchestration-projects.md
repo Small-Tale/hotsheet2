@@ -66,7 +66,8 @@
 > Settings (HS2-7WF6JD), and changes a CLI process writes are announced live (HS2-SHHGC6).
 > A target may opt in to role sessions: the scheduler starts its dispatcher for ready
 > work and its integrator for handed-off work, and keeps each while the target needs it
-> (§26.30, HS2-TK9ADC).
+> (§26.30, HS2-TK9ADC). A project with several sites runs one pool on its home site,
+> which workers on its other sites join through the orchestrator (§26.30, HS2-5P112Z).
 
 ## 26.1 Boundary and existing foundations
 
@@ -208,7 +209,9 @@ they name; comparisons go through the project key:
 A step names one site, and the scheduler may place it on any active site of its
 project by capacity and capabilities (HS2-9FKTB3, "Which site runs a step" under
 Packing); the step's run is dispatched on the chosen site. Each site's OS and tools
-come from its machine's capacity snapshot (HS2-ZY4Z4G).
+come from its machine's capacity snapshot (HS2-ZY4Z4G). The project's **home site**, its
+own target, runs its one dispatcher and integrator; workers on the other sites join the
+home's pool (§26.30, "One pool per project", HS2-5P112Z).
 
 **Migration.** Existing manifests, plans and runs are read through the grouping and
 never rewritten. A grouping change that would make existing records ambiguous, two
@@ -3521,8 +3524,8 @@ start as `site_run_conflict`, and a session start is looked up by its operation 
 every site, so an operation id is never reused on another one. One active run per
 ticket of the project still holds (§26.2).
 
-Role sessions (§26.24) are still decided per target from the work that names that
-target.
+Role sessions are decided per project and started only on its home site, from the work
+of every site of the project (§26.30, "One pool per project", HS2-B2N8EH).
 
 A session is **free** when it is idle with no unfinished run, or when its run waits
 on CI, a deployment or a person's answer: time spent waiting on an external system is
@@ -4752,7 +4755,8 @@ role sessions gets its dispatcher or integrator started by the scheduler (§26.3
 HS2-TK9ADC); this wait stays for every other target.
 
 **Which runs.** A run waits on its target's pool when a running worker session the
-orchestrator owns is linked to it, and the run is in dispatcher mode, `queued`, not
+orchestrator owns is linked to it (a run on a site that is not its project's home waits
+on the home's pool instead, §26.30, HS2-5P112Z), and the run is in dispatcher mode, `queued`, not
 paused and not being cancelled. Each pass reads the pool once per target with such a
 run, through the hosted session listing (its `roles`: `dispatcher_live`,
 `integrator_live`), as the pass's actor through the gate (`sessions_manage`
@@ -5897,6 +5901,127 @@ The whole sequence runs end to end across two servers in
 `remote_servers/e2e_roles.rs` (HS2-1NJ04Q): a dispatcher started on a remote target
 before its worker and seen to join, an integrator started for the handoff, and all
 three sessions wound down when nothing is left.
+
+### One pool per project (HS2-5P112Z, HS2-B2N8EH)
+
+A project with several sites (§26.2) has **one** coordination pool. Its dispatcher
+assigns all of the project's work and its integrator integrates all of it, so the
+pool's own non-overlap check of scopes stays the only scope reservation. Workers on
+every site join that pool.
+
+**The home site** is the project's own target, the one the others name in `site_of`
+(`ProjectSites::home_of`). A one-site project is its own home, so nothing changes for
+it. There is **no fallback**. While the home's machine is offline, unbound, disabled in
+the policy or its pool unreadable, no role session starts for the project anywhere,
+because a second home would be a second pool and a second assignment authority for
+the same tickets. Work is still placed on the other sites. Their runs keep the bounded
+wait of §26.24 and then claim the ticket for their own session, as any run with no
+live dispatcher does. A failover home is HS2-EX594V; saying so when an entry names a site is HS2-SYZB33.
+
+**Placing role sessions per project.** The scheduler's input carries the active
+grouping (`ScheduleInput.sites`):
+
+- A `placement.role_sessions` entry counts only when it names a home. An entry naming
+  another site starts nothing there; it applies again once that site is separated
+  into its own project.
+- The home's **dispatcher** starts when placeable work exists on any site of the
+  project and the home's pool shows no live dispatcher. It needs room on the home for
+  itself and a worker, unless a worker of the project already runs, or another enabled
+  site of the project has a free slot under its cap.
+- The home's **integrator** starts when the home's pool shows handoffs pending. A
+  handoff another site's own pool shows starts nothing.
+- **Keeping:** a role session on the home is kept while a worker on any site of the
+  project has a run, while any site has placeable work (dispatcher), or while handoffs
+  are pending in the home's pool (integrator). A role session on another site, for
+  example a person's, keeps the per-target rule above, because it serves that site's
+  own pool.
+
+**Joining the home's pool.** Site machines never call each other, and a site holds no
+credential for the home. The orchestrator already reaches every site over the reviewed
+hosted routes, so it relays. The home's machine hosts
+`/checkouts/{checkout}/target-pool`:
+
+- `GET` reads the pool's role flags and one member's unfinished assignment, as a
+  capacity read (`gates_observe`).
+- `POST` registers or renews a member (worker id, the session id as its generation, a
+  lease of 10 to 3600 seconds, the site it runs on), with the human-relay return route.
+  It then records what the shared ticket says the member did. Where the pool already
+  takes worker requests (schema nine), the run's exact ticket is the member's request.
+  A join never upgrades a pool its other members may not read.
+- A checkout without a pool joins nothing (`pool: false`). The home's dispatcher
+  creates the pool with its own setup.
+
+Each applied pass relays every running worker session the orchestrator owns on a
+site that is not its project's home and whose run is unfinished
+(`site_pool_relay`). It joins that session to the home's pool, through the gate as
+`work_start` continuing the run's dispatch, and renews it for an hour. When the home
+offered the run's exact ticket to it, the session is told with the request kind
+`site_assigned` (§26.16). The host pushes the same request only once. The session's
+waiting run reads the home's pool in `scheduler_assignments`. Its assignment names
+`home_target_id`, and the waiting rules of §26.24 apply to the home's dispatcher.
+
+**Handing off over a pushed branch.** The worker on the site:
+
+1. claims the ticket in the shared store under its worker id;
+2. works it in a worktree of its own checkout;
+3. pushes its branch to `origin`;
+4. adds the handoff record, a regular note (shown below);
+5. only then releases its claim.
+
+The release changes the run's observed claim, and that run event wakes the loop. The
+note therefore has to be in place before the release, because adding a note alone wakes
+nothing. The note:
+
+```text
+## Integration handoff
+Branch: <the branch pushed to origin>
+Commit: <its full commit SHA>
+Site: <the site's target id>
+```
+
+On the next relay, the home records each step from that evidence. A live claim of the
+exact ticket by the member records `accepted`. A released claim and the note make the
+home do the following:
+
+1. check the branch name, and run `git fetch origin
++refs/heads/<branch>:refs/hotsheet/site-handoffs/<assignment>` in its checkout;
+2. check that the commit is on the fetched branch and, for a scoped assignment, that it
+   descends from the assignment's base and changes only its scope;
+3. record mailbox `handoff` with that commit.
+
+The integrator then finds the commit locally and integrates it as usual. A member
+that claimed, worked and released between two relays is recorded `accepted` and then
+handed off, because its release proves it held the ticket. Until a step can be
+recorded, the answer names why in `waiting`:
+
+- `claim_not_taken`, `claim_held` or `worker_holds_another_claim`;
+- `handoff_note_missing` or `handoff_branch_invalid`;
+- `handoff_fetch_failed`: not pushed yet, so the assignment stays `accepted`;
+- `handoff_commit_not_on_branch` or `handoff_out_of_scope`;
+- `ticket_unreadable` or `source_unsupported`.
+
+The pool schema is unchanged. Every site of a project declares the same repository
+identity (§26.2), so `origin` names one repository on every site.
+
+**Compatibility.** An older home host has no `target-pool` route. The relay then reads
+the home as unknown: the run reports `pool_unknown`, nothing is claimed for it and no
+time is named. An older site host refuses the `site_assigned` request kind, so the
+session is not told. The relay reports both, and nothing else changes.
+
+**Covered by:**
+
+- `project_role_session_tests.rs` (pure): the home rule, a project from site work to
+  wound down, an entry naming a site, sites removed and added again, an offline,
+  unknown or disabled home, two projects, room on another site, and the keep rules.
+- `tests/site_pool.rs`: a real home checkout with a bare `origin` and a second clone. A
+  member joins, takes the offered assignment, is recorded accepted from its claim and
+  stays accepted while its branch is unpushed. Once pushed, it is handed off with the
+  commit fetched into the home.
+- `tests/session_executor.rs`: a session on a site waits on and joins the home's pool
+  and is told its assignment once.
+
+The two-server proof is HS2-RCR4A6. It can drive the same route through a remote
+binding and the relay of an applied pass.
 
 ## 26.31 Orchestration details in the inspector (HS2-2XJSJK)
 
