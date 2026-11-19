@@ -337,8 +337,17 @@ impl TargetObserver for Stores {
 }
 /// A checkout of the ticket store `store` (one letter of its synthetic identity).
 fn checkout(name: &str, store: char) -> (CheckoutProjection, TargetDestination) {
+    checkout_on(name, store, "tickets")
+}
+/// HS2-RDBMVM: the same, with the store under the connection id `connection`, as
+/// each machine names one store by its own local path.
+fn checkout_on(
+    name: &str,
+    store: char,
+    connection: &str,
+) -> (CheckoutProjection, TargetDestination) {
     let sources = vec![TargetSource {
-        connection_id: "tickets".into(),
+        connection_id: connection.into(),
         provider: "git".into(),
         identity: Some(store.to_string().repeat(64)),
         state: SourceState::Available,
@@ -1226,4 +1235,126 @@ fn hs2_eprwb6_a_plan_written_with_site_ids_keeps_reading() {
     assert_eq!(document.steps.len(), 1);
     assert_eq!(document.steps[0].target, on(1, "home-conn", "T-1"));
     assert_eq!(document.schema_version, ORCHESTRATION_VERSION);
+}
+
+/// HS2-RDBMVM: a grouping change is checked through the sources this machine's
+/// bindings confirmed, as the plan registry reads the plan (HS2-EPRWB6). Steps and
+/// runs written before the ids were shared, naming one ticket through the site's own
+/// connection id and through the home's, are refused; once one is gone the grouping
+/// is accepted and the records keep the ids they were written with.
+#[test]
+fn hs2_rdbmvm_grouping_joins_site_connection_ids_by_bound_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    // One ticket store, reached under another connection id by each checkout.
+    let (local, at_local) = checkout_on("widgets-local", 'a', "home-conn");
+    let (remote, at_remote) = checkout_on("widgets-remote", 'a', "site-conn");
+    let stores = Stores {
+        root: root.path().into(),
+        projections: Mutex::new(vec![local, remote]),
+    };
+    let flow = Orchestration::new(
+        OWNER.into(),
+        ManifestStore::new(root.path()),
+        BindingRegistry::new(home.path()),
+    )
+    .unwrap();
+    for (number, label) in [(1, "Widgets"), (2, "Widgets remote")] {
+        flow.add(
+            AddTarget {
+                expected_revision: flow.declarations().unwrap().revision,
+                target_id: Some(id(number)),
+                label: label.into(),
+                expected_repository_identity: None,
+                site_of: None,
+            },
+            &stores,
+            &mut tx,
+        )
+        .unwrap();
+    }
+    bind(&flow, &stores, 1, &at_local, &mut tx).unwrap();
+    bind(&flow, &stores, 2, &at_remote, &mut tx).unwrap();
+    let group = |tx: &mut Transaction<'_>| {
+        flow.rename(
+            &TargetRef {
+                owner_checkout_id: OWNER.into(),
+                target_id: id(2),
+            },
+            RenameTarget {
+                site_of: Some(id(1)),
+                ..rename(flow.declarations().unwrap().revision, "Widgets remote")
+            },
+            &stores,
+            tx,
+        )
+    };
+
+    // Two separate projects, so a plan written then has a step through each.
+    let registry = machine(root.path(), home.path(), false);
+    let (on_home, _) = define(&registry, on(1, "home-conn", "T-1"), Vec::new(), &mut tx).unwrap();
+    let (on_site, _) = define(&registry, on(2, "site-conn", "T-1"), Vec::new(), &mut tx).unwrap();
+    assert_ne!(on_home.step_id, on_site.step_id);
+    let revision = flow.declarations().unwrap().revision;
+    // Joined by the store both bindings confirmed, that is two steps on one ticket.
+    for _ in 0..2 {
+        assert_eq!(site_error(group(&mut tx)), SiteError::PlanConflict);
+        assert_eq!(flow.declarations().unwrap().revision, revision);
+        assert_eq!(version(root.path()), 1);
+    }
+
+    // With one step left, two active runs on one ticket are refused the same way.
+    registry.remove(OWNER, &on_site.step_id, &mut tx).unwrap();
+    let runs = RunRegistry::new(home.path());
+    let ungrouped = ProjectSites::default();
+    let run = |operation: &str, target: RunTarget, worker: &str| NewRun {
+        target,
+        ..new_run(operation, 1, "T-2", worker)
+    };
+    runs.begin_in(
+        OWNER,
+        run("op-a", on(1, "home-conn", "T-2"), "worker-a"),
+        &ungrouped,
+        None,
+        &mut tx,
+    )
+    .unwrap();
+    let (on_remote, _) = runs
+        .begin_in(
+            OWNER,
+            run("op-b", on(2, "site-conn", "T-2"), "worker-b"),
+            &ungrouped,
+            None,
+            &mut tx,
+        )
+        .unwrap();
+    assert_eq!(site_error(group(&mut tx)), SiteError::RunConflict);
+    runs.update(
+        OWNER,
+        &on_remote.run_id,
+        RunUpdate {
+            to: Some(RunState::Completed),
+            reason: Some("target_completed".into()),
+            ..RunUpdate::default()
+        },
+        &mut tx,
+    )
+    .unwrap();
+
+    // Now the grouping holds, and the records keep the ids they were written with.
+    let view = group(&mut tx).unwrap();
+    assert_eq!(view.targets[1].site_of, Some(id(1)));
+    let document = SharedPlanStore::new(root.path()).read().unwrap().unwrap();
+    assert_eq!(document.steps.len(), 1);
+    assert_eq!(document.steps[0].target, on(1, "home-conn", "T-1"));
+    assert_eq!(
+        runs.list(OWNER, false).unwrap()[1].target,
+        on(2, "site-conn", "T-2")
+    );
 }

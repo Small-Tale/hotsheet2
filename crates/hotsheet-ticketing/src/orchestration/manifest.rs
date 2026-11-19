@@ -233,11 +233,52 @@ impl ManifestStore {
     /// ticket of a project with at most one plan step and one active run, and every
     /// bound site of a project on the same ticket store. Existing records keep the
     /// site they name; they are read through the new grouping, never rewritten.
+    ///
+    /// HS2-RDBMVM: on a machine, the new grouping is joined by source identity with
+    /// the sources this machine's bindings last confirmed, as the plan registry joins
+    /// it (HS2-EPRWB6). A plan written before the ids were shared, naming one ticket
+    /// through a site's own connection id and through the home's, is then two steps
+    /// on one ticket and refused. Without a machine, ids compare as they are.
     fn check_grouping(
         &self,
         sites: &ProjectSites,
         targets: &[TargetDeclaration],
     ) -> Result<(), OrchestrationError> {
+        let machine = match &self.machine {
+            Some((home, owner)) => {
+                valid_identifier(owner)?;
+                Some((
+                    home.as_path(),
+                    owner.as_str(),
+                    BindingRegistry::new(home).read_file()?,
+                ))
+            }
+            None => None,
+        };
+        let joined;
+        let sites = match &machine {
+            Some((_, owner, file)) => {
+                joined = sites.clone().with_sources(
+                    file.bindings
+                        .iter()
+                        .filter(|binding| binding.target.owner_checkout_id == **owner)
+                        .map(|binding| {
+                            (
+                                binding.target.target_id.as_str(),
+                                binding
+                                    .sources
+                                    .iter()
+                                    .map(|source| {
+                                        (source.connection_id.as_str(), source.identity.as_str())
+                                    })
+                                    .collect(),
+                            )
+                        }),
+                );
+                &joined
+            }
+            None => sites,
+        };
         let plan = SharedPlanStore::new(self.storage.anchor()).read()?;
         let mut steps = std::collections::BTreeSet::new();
         for step in plan.iter().flat_map(|plan| &plan.steps) {
@@ -245,10 +286,9 @@ impl ManifestStore {
                 return Err(OrchestrationError::Site(SiteError::PlanConflict));
             }
         }
-        let Some((home, owner)) = &self.machine else {
+        let Some((home, owner, file)) = &machine else {
             return Ok(());
         };
-        valid_identifier(owner)?;
         let mut active = std::collections::BTreeSet::new();
         for run in RunRegistry::new(home).list(owner, true)? {
             if !active.insert(sites.ticket_key(&run.target)) {
@@ -261,7 +301,6 @@ impl ManifestStore {
                 .any(|target| target.target_id == id && target.state == DeclarationState::Active)
         };
         let mut stores: BTreeMap<&str, String> = BTreeMap::new();
-        let file = BindingRegistry::new(home).read_file()?;
         for binding in &file.bindings {
             let Some(destination) = &binding.destination else {
                 continue;

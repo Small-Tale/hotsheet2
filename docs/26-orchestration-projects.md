@@ -242,7 +242,12 @@ home's pool (§26.30, "One pool per project", HS2-5P112Z).
 never rewritten. A grouping change that would make existing records ambiguous, two
 plan steps or two active runs on one ticket of the new project, or bound sites on
 different stores, is refused with the codes above and writes nothing; finish or remove
-one of them and repeat the change. A grouping that arrives through a merge of the
+one of them and repeat the change. The check joins the new grouping's connection ids by
+the sources this machine's bindings last confirmed, as plan reads do (HS2-RDBMVM), so a
+plan checked in before HS2-EPRWB6 that names one ticket through a site's own id and
+through the home's id is two steps on that ticket and is refused, and so are two active
+runs named that way. A grouping change made without this machine's bindings compares
+ids as they are. A grouping that arrives through a merge of the
 checked-in manifest from another machine is read as it is: a plan with two steps on one
 ticket of a project keeps both, and a new run or step is refused until one is removed.
 
