@@ -5,6 +5,7 @@ import {
   bundleClientBuildId,
   clientBuildIdPlugin,
   developmentClientBuildId,
+  sourceWatchPlugin,
   stableDevHmr,
   stableDevInjectClientScript,
   stripStableDevClientTag,
@@ -49,6 +50,20 @@ describe('Vite dependency isolation', () => {
   it('disables HMR only in the frozen stable-dev snapshot (HS2-8JV12R)', () => {
     expect(stableDevHmr({ HOTSHEET_WEB_STABLE_DEV: '1' })).toBe(false);
     expect(stableDevHmr({})).toBeUndefined();
+  });
+
+  it('turns the source watcher off only when a server asks to keep its port through tree writes (HS2-1AYVAZ)', () => {
+    const resolvedWatch = (environment: NodeJS.ProcessEnv) => {
+      // A plugin's merged watch options, as the resolved config carries them.
+      const config = { server: { watch: { ignored: ['**/target/**'] } } };
+      const hook = sourceWatchPlugin(environment).configResolved as (resolved: unknown) => void;
+      hook(config);
+      return config.server.watch;
+    };
+    expect(resolvedWatch({ HOTSHEET_VITE_SOURCE_WATCH: 'off' })).toBeNull();
+    expect(resolvedWatch({})).toEqual({ ignored: ['**/target/**'] });
+    expect(resolvedWatch({ HOTSHEET_VITE_SOURCE_WATCH: '' })).toEqual({ ignored: ['**/target/**'] });
+    expect(resolvedWatch({ HOTSHEET_VITE_SOURCE_WATCH: 'on' })).toEqual({ ignored: ['**/target/**'] });
   });
 
   it('skips the @hono/vite-dev-server client injection only in stable-dev so nothing auto-reloads (HS2-8JV12R)', () => {

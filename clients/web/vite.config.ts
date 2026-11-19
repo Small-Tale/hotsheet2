@@ -44,6 +44,25 @@ export function stableDevHmr(environment: NodeJS.ProcessEnv = process.env): fals
 }
 
 /**
+ * Vite restarts its server whenever the config file or any module it imports changes, and a restart
+ * closes the listener until the config is bundled again. A server that must keep one port answering
+ * whatever happens in the working tree (the HS2-BJ00D1 identity fixture, which a mid-run source write
+ * otherwise turned into "refused", HS2-1AYVAZ) sets `HOTSHEET_VITE_SOURCE_WATCH=off`, so its file
+ * watcher, and with it config restarts and HMR, is off. Every other server keeps watching.
+ *
+ * It is applied to the resolved config: plugin `config` hooks merge their own watch options over a
+ * user `server.watch: null`, which would leave the watcher on.
+ */
+export function sourceWatchPlugin(environment: NodeJS.ProcessEnv = process.env): Plugin {
+  return {
+    name: 'hotsheet-source-watch',
+    configResolved(config) {
+      if (environment.HOTSHEET_VITE_SOURCE_WATCH === 'off') (config.server as { watch: unknown }).watch = null;
+    },
+  };
+}
+
+/**
  * Whether `@hono/vite-dev-server` should inject its `<script>import("/@vite/client")</script>`.
  * `server.hmr:false` alone does not stop that client from connecting a websocket and full-reloading
  * the page on connection loss ("[vite] server connection lost. Polling for restart…") — the "web
@@ -232,6 +251,7 @@ export default defineConfig(({ command, isSsrBuild }) => {
         ? [
             // First, so no later middleware or SPA fallback can answer a foreign identity (HS2-BJ00D1).
             testServerIdentityPlugin(),
+            sourceWatchPlugin(),
             clientDiscoveryPlugin(),
             // Serves `__ux-review/project.json` so the UX demo catalog can offer Kerf's Capture region link
             // (HS2-41YZSB); registered before the Hono dev server so its middleware answers first.

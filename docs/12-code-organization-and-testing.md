@@ -1599,6 +1599,14 @@ server, including one with no id, answers 404. Before this check, a run that los
 to another run's starting server tested that server's worktree and lost its connection when the
 other run ended (`ERR_CONNECTION_REFUSED`).
 
+Vite restarts a hot dev server whenever its config or a module the config imports changes, and
+the restart closes the port until the config is bundled again. Playwright's stable-dev server
+has HMR off, so it does not restart. The identity fixture
+(`scripts/playwright-server-identity.e2e.test.mjs`) runs hot servers. It sets
+`HOTSHEET_VITE_SOURCE_WATCH=off`, which turns the file watcher off through `sourceWatchPlugin`
+in `vite.config.ts`, so a source write during a loaded gate no longer turns its run-b probe
+into "refused" (HS2-1AYVAZ).
+
 In the frozen stable-dev snapshot Playwright uses, the first request for the run's own identity
 also transforms the client module graph once (`src/vite-module-warmup.ts`, about 900 modules in
 under a second on an idle host). The identity answers 503 until that finishes, so Playwright's

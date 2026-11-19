@@ -11,7 +11,9 @@ import { stopServerProcess, trackServerProcess, windowsDescendants } from './pla
 
 // Two real Vite servers launched the way Playwright's webServer launches them: each answers only its
 // own test-server identity, a second server on a taken port refuses instead of sharing it, and
-// stopping one run's server leaves the other serving (HS2-BJ00D1).
+// stopping one run's server leaves the other serving (HS2-BJ00D1). The servers do not watch the working
+// tree: Vite restarts on any write to its config or a module the config imports, and the restart closes
+// the port, so a source write during a loaded gate made run-b answer "refused" (HS2-1AYVAZ).
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vite = resolve(webRoot, 'node_modules/vite/bin/vite.js');
 const owned = [];
@@ -37,7 +39,12 @@ async function launch(port, id) {
   directories.push(cacheDir);
   const child = spawn(process.execPath, [vite, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
     cwd: webRoot,
-    env: { ...process.env, HOTSHEET_VITE_CACHE_DIR: cacheDir, HOTSHEET_WEB_TEST_SERVER_ID: id },
+    env: {
+      ...process.env,
+      HOTSHEET_VITE_CACHE_DIR: cacheDir,
+      HOTSHEET_VITE_SOURCE_WATCH: 'off',
+      HOTSHEET_WEB_TEST_SERVER_ID: id,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const lifetime = trackServerProcess(child);
@@ -55,8 +62,10 @@ async function launch(port, id) {
 async function identity(port, id) {
   try {
     return (await fetch(`http://127.0.0.1:${port}/__hotsheet-test-server/${id}`)).status;
-  } catch {
-    return 'refused';
+  } catch (error) {
+    // Only a refused connection means no server holds the port; any other failure is reported as itself.
+    if (error?.cause?.code === 'ECONNREFUSED') return 'refused';
+    throw error;
   }
 }
 
@@ -106,7 +115,7 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   await stopServerProcess(first);
   if (process.platform === 'win32') expect(windowsDescendants(first.child.pid)).toEqual([]);
   expect(await identity(shared, 'run-a')).toBe('refused');
-  expect(await identity(separate, 'run-b')).toBe(200);
+  expect(await identity(separate, 'run-b'), second.output()).toBe(200);
 }, 60_000);
 
 it.each(['already exited', 'running'])(
