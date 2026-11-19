@@ -1,10 +1,20 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { closePopupMenu, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
+import { wirePinnablePopover } from '@kerfjs/ui/surface-scaffold';
 import { delegate, type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { Radio } from 'lucide';
 
-import { ANNOUNCER_DOCK_REGION_ID, loadAnnouncerDockSize, saveAnnouncerDockSize } from '../announcer-layout';
+import {
+  ANNOUNCER_DOCK_REGION_ID,
+  ANNOUNCER_FLOATING_ID,
+  loadAnnouncerDetached,
+  loadAnnouncerDockSize,
+  loadAnnouncerFloatingPlacement,
+  saveAnnouncerDetached,
+  saveAnnouncerDockSize,
+  saveAnnouncerFloatingPlacement,
+} from '../announcer-layout';
 import {
   announcerDigest,
   announcerItem,
@@ -23,11 +33,10 @@ import { AnnouncerOverlay } from '../components/announcer-overlay';
 import type { Project } from '../interactions/types';
 import { regionCommitRoutes } from '../resizable-region-commits';
 
-/** The open announcer in both of its places; AppShell shows the one that fits the rail (HS2-BS0XFK). */
-export interface AnnouncerPlacements {
-  docked: SafeHtml;
-  corner: SafeHtml;
-}
+/** The open announcer's places. Attached, it has both `docked` and `corner` and AppShell shows the one
+ * that fits the rail (HS2-BS0XFK); detached, it has only its `floating` surface (HS2-51X25Z). */
+export type AnnouncerPlacements =
+  { docked: SafeHtml; corner: SafeHtml; floating?: never } | { floating: SafeHtml; docked?: never; corner?: never };
 
 export interface AnnouncerController {
   trigger: () => SafeHtml;
@@ -95,6 +104,34 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
   const unrouteDock = regionCommitRoutes.route(ANNOUNCER_DOCK_REGION_ID, (size) => {
     dockSize.value = saveAnnouncerDockSize(localStorage, size);
   });
+  // HS2-51X25Z: popped out of the sidebar, the announcer is a persistent floating surface whose detached
+  // state, position, and size this device remembers.
+  const detached = signal(loadAnnouncerDetached(localStorage));
+  const setDetached = (next: boolean) => {
+    detached.value = next;
+    saveAnnouncerDetached(localStorage, next);
+  };
+  let floating: { element: HTMLElement; dispose: () => void } | undefined;
+  /** Wire each rendered floating surface once: Kerf moves, resizes, and clamps it, and this device stores
+   * what it reports. */
+  const syncFloating = () => {
+    const element = document.getElementById(ANNOUNCER_FLOATING_ID);
+    if (floating && floating.element !== element) {
+      floating.dispose();
+      floating = undefined;
+    }
+    if (!element || floating) return;
+    const dispose = wirePinnablePopover(element, {
+      placement: loadAnnouncerFloatingPlacement(localStorage),
+      onChange: (change) => {
+        if (change.placement) saveAnnouncerFloatingPlacement(localStorage, change.placement);
+      },
+    });
+    floating = { element, dispose };
+    if (!element.matches(':popover-open')) element.showPopover();
+  };
+  const floatingObserver = new MutationObserver(syncFloating);
+  floatingObserver.observe(document.body, { childList: true, subtree: true });
   let requestGeneration = 0;
   let diffGeneration = 0;
   let speechGeneration = 0;
@@ -285,8 +322,25 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           cancelSpeech();
         }
         break;
-      case 'expand':
+      case 'expand': {
+        // The new size preset replaces any size the person dragged to, from where they put the surface:
+        // reopening it under fresh wiring lets Kerf apply the preset and clamp it inside the viewport.
+        const placement = loadAnnouncerFloatingPlacement(localStorage);
+        if (placement) saveAnnouncerFloatingPlacement(localStorage, { x: placement.x, y: placement.y });
+        const reopen = floating?.element;
+        floating?.dispose();
+        floating = undefined;
+        if (reopen?.matches(':popover-open')) reopen.hidePopover();
         expanded.value = !expanded.peek();
+        requestAnimationFrame(syncFloating);
+        break;
+      }
+      case 'detach':
+        setDetached(true);
+        break;
+      case 'reattach':
+        expanded.value = false;
+        setDetached(false);
         break;
       case 'play':
         if (speaking.peek()) cancelSpeech();
@@ -380,7 +434,7 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
     ),
     panel: () => {
       if (!open.value) return undefined;
-      const overlay = (presentation: 'docked' | 'corner') => (
+      const overlay = (presentation: 'docked' | 'corner' | 'floating') => (
         <AnnouncerOverlay
           open
           presentation={presentation}
@@ -406,10 +460,15 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
           rate={rate.value}
         />
       );
-      return { docked: overlay('docked'), corner: overlay('corner') };
+      return detached.value
+        ? { floating: overlay('floating') }
+        : { docked: overlay('docked'), corner: overlay('corner') };
     },
     onActivity,
     dispose: () => {
+      floatingObserver.disconnect();
+      floating?.dispose();
+      floating = undefined;
       unrouteDock();
       unbind();
       unbindSettings();

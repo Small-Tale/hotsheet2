@@ -225,7 +225,10 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
   if (!card || !bar) throw new Error('Announcer card must be measurable');
   expect(bar.y + bar.height).toBeLessThanOrEqual(card.y + card.height + 0.5);
   expect(corner.playback).toBe(docked.playback);
-  await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
+  // Expand belongs to the detached surface (HS2-51X25Z): pop out, then expand.
+  await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
+  await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
+  await page.locator('#announcer-floating').getByRole('button', { name: 'Expand Announcer' }).click();
   await expect(overlay).toHaveAttribute('data-expanded', 'true');
   const expanded = await measure();
   expect(expanded.gap).toBeGreaterThan(docked.gap + 200);
@@ -236,6 +239,7 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
     expect(layout.end).toBeLessThanOrEqual(16);
   }
   if (captureDir) await overlay.screenshot({ path: `${captureDir}/hs2-yf8p38-expanded-groups.png` });
+  await page.locator('#announcer-floating').getByRole('button', { name: 'Reattach Announcer' }).click();
 });
 
 test('HS2-PRCC6V sets voice, speed, and clears history from the settings menu', async ({ page }) => {
@@ -517,7 +521,9 @@ test('HS2-7YD7S9 grows the current item instead of listing history', async ({ pa
   await expect(overlay).toContainText('synthetic choice one');
   const screen = overlay.locator('.announcer__screen');
   const compact = await screen.boundingBox();
-  await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
+  // Expand belongs to the detached surface (HS2-51X25Z): pop out, then expand.
+  await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
+  await page.locator('#announcer-floating').getByRole('button', { name: 'Expand Announcer' }).click();
   await expect(overlay).toHaveAttribute('data-expanded', 'true');
   await expect(overlay.getByRole('list')).toHaveCount(0);
   await expect(overlay.getByRole('button', { name: /synthetic choice/ })).toHaveCount(0);
@@ -758,12 +764,15 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
   // Shown beside an open sidebar, the announcer docks in its footer without an expand control (HS2-BS0XFK).
   expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(true);
   await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
-  // Hiding the sidebar keeps the announcer visible as its corner card, which still expands.
+  // Hiding the sidebar keeps the announcer visible as its corner card; popped out, it expands (HS2-51X25Z).
   await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
   await expect(overlay).toHaveCount(1);
   expect(await overlay.evaluate((node) => Boolean(node.closest('[data-region-id="app-left-rail"]')))).toBe(false);
   await expect(overlay).toHaveAttribute('data-presentation', 'corner');
-  await overlay.getByRole('button', { name: 'Expand Announcer' }).click();
+  await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
+  await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
+  const floating = page.locator('#announcer-floating');
+  await floating.getByRole('button', { name: 'Expand Announcer' }).click();
   // The expanded card has no voice rows; the engine is chosen in the settings menu (HS2-PRCC6V).
   await expect(overlay.getByRole('combobox')).toHaveCount(0);
   await expect(overlay.getByRole('textbox')).toHaveCount(0);
@@ -778,7 +787,8 @@ test('HS2-5PSQJQ plays a retained cross-project digest in the real shell across 
     .toContain('server:blob:synthetic-speech');
   // HS2-7YD7S9: no history list; the expanded card gives its height to the current item.
   await expect(overlay.getByRole('list')).toHaveCount(0);
-  await overlay.getByRole('button', { name: 'Shrink Announcer' }).click();
+  await floating.getByRole('button', { name: 'Shrink Announcer' }).click();
+  await floating.getByRole('button', { name: 'Reattach Announcer' }).click();
   await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(overlay).toHaveAttribute('data-presentation', 'docked');
   await settleViewport(false);
@@ -902,4 +912,149 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __announcerSpoken: string[] }).__announcerSpoken))
     .toEqual(['Changed the synthetic live file']);
+});
+
+// HS2-51X25Z: attached, the former expand control pops the announcer out into a persistent, movable,
+// resizable Kerf floating surface; detached, it shows Expand and a Reattach control and no Pin or
+// Close. The detached state, position, and size survive reloads on this device.
+test('HS2-51X25Z pops the announcer out to a floating dialog and reattaches it to the sidebar', async ({ page }) => {
+  const captureDir = 'target/visual-captures';
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) =>
+    route.fulfill({
+      json: ['one', 'two'].map((id, at) => ({
+        store_id: 'synthetic-store',
+        event: {
+          id,
+          ts: `2026-11-01T01:0${at}:00Z`,
+          tool: 'codex',
+          kind: 'decision',
+          summary: `codex decided: synthetic choice ${id}`,
+          importance: 'high',
+        },
+      })),
+    }),
+  );
+  const launch = page.locator('[data-announcer-action="open"]');
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  const surface = page.locator('#announcer-floating');
+  await launch.click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
+  // Attached: a pop-out control, no expand, no close.
+  await expect(overlay.getByRole('button', { name: 'Expand Announcer' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Close Announcer' })).toHaveCount(0);
+  await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
+
+  await expect(overlay).toHaveAttribute('data-presentation', 'floating');
+  await expect(surface).toHaveJSProperty('popover', 'manual');
+  await expect.poll(() => surface.evaluate((node) => node.matches(':popover-open'))).toBe(true);
+  await expect(page.getByRole('region', { name: 'Announcer Dock' })).toHaveCount(0);
+  await expect(surface.getByRole('button', { name: 'Reattach Announcer' })).toBeVisible();
+  await expect(surface.getByRole('button', { name: 'Expand Announcer' })).toBeVisible();
+  await expect(surface.getByRole('button', { name: 'Pop Out Announcer' })).toHaveCount(0);
+  await expect(surface.getByRole('button', { name: /^(Pin|Close)$/ })).toHaveCount(0);
+  await expect(surface).toContainText('synthetic choice one');
+  await expect(surface).toContainText('1 / 2');
+  // The reel's controls still work in the floating surface.
+  await surface.getByRole('button', { name: 'Next Activity' }).click();
+  await expect(surface).toContainText('synthetic choice two');
+
+  // Move it by its title; the position is stored for this device.
+  const before = await surface.boundingBox();
+  const title = surface.getByRole('button', { name: 'Announcer', exact: true });
+  const handle = await title.boundingBox();
+  if (!before || !handle) throw new Error('Floating announcer must be measurable');
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 - 200, handle.y + handle.height / 2 + 120, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await surface.boundingBox())?.x ?? 0)).toBe(Math.round(before.x - 200));
+  const moved = await surface.boundingBox();
+  if (!moved) throw new Error('Moved announcer must be measurable');
+  expect(Math.round(moved.y)).toBe(Math.round(before.y + 120));
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.layout.announcer-floating.placement')))
+    .toContain(`"x":${Math.round(moved.x)}`);
+  // Keyboard moves on the focused title also move it.
+  await title.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => Math.round((await surface.boundingBox())?.x ?? 0)).toBe(Math.round(moved.x + 8));
+  await page.screenshot({ path: `${captureDir}/hs2-51x25z-floating-1440.png` });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.getAnimations().filter((motion) => motion instanceof CSSTransition).length),
+    )
+    .toBe(0);
+  await page.screenshot({ path: `${captureDir}/hs2-51x25z-floating-dark-1440.png` });
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // The toolbar toggle hides and shows it, still detached and where it was.
+  await launch.click();
+  await expect(surface).toHaveCount(0);
+  await launch.click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'floating');
+  await expect.poll(async () => Math.round((await surface.boundingBox())?.x ?? 0)).toBe(Math.round(moved.x + 8));
+
+  // Expand and shrink apply only here, and keep the position.
+  const compact = await surface.boundingBox();
+  await surface.getByRole('button', { name: 'Expand Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  await expect.poll(async () => (await surface.boundingBox())?.width ?? 0).toBeGreaterThan((compact?.width ?? 0) + 200);
+  // The larger preset stays inside the window from where the person put it.
+  await expect
+    .poll(() =>
+      surface.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.bottom <= window.innerHeight + 0.5 && box.right <= window.innerWidth + 0.5;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: `${captureDir}/hs2-51x25z-floating-expanded-1440.png` });
+  await surface.getByRole('button', { name: 'Shrink Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-expanded', 'false');
+  await expect
+    .poll(async () => Math.round((await surface.boundingBox())?.width ?? 0))
+    .toBe(Math.round(compact?.width ?? 0));
+
+  // Detached state and position survive a reload.
+  await page.reload();
+  await launch.click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'floating');
+  await expect.poll(async () => Math.round((await surface.boundingBox())?.x ?? 0)).toBe(Math.round(moved.x + 8));
+
+  // It stays inside a narrower window, and returns when the window widens again.
+  for (const [width, height] of [
+    [1024, 768],
+    [390, 844],
+    [1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(() =>
+        surface.evaluate((node) => {
+          const box = node.getBoundingClientRect();
+          return box.right <= window.innerWidth + 0.5 && box.bottom <= window.innerHeight + 0.5;
+        }),
+      )
+      .toBe(true);
+    // Captures wait for the Workbench's rail motion across the desktop/phone boundary to settle.
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.getAnimations().filter((motion) => motion instanceof CSSTransition).length),
+      )
+      .toBe(0);
+    await page.screenshot({ path: `${captureDir}/hs2-51x25z-floating-after-${width}.png` });
+  }
+
+  // Reattach returns it to the sidebar footer, and that also survives a reload.
+  await surface.getByRole('button', { name: 'Reattach Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
+  await expect(surface).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Announcer Dock' })).toBeVisible();
+  await page.screenshot({ path: `${captureDir}/hs2-51x25z-reattached-1440.png` });
+  await page.reload();
+  await launch.click();
+  await expect(overlay).toHaveAttribute('data-presentation', 'docked');
 });

@@ -1,10 +1,14 @@
 import './announcer-overlay.css';
 
+import { Button } from '@kerfjs/ui/button';
+import { remify } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
+import { PinnablePopoverSurface } from '@kerfjs/ui/surface-scaffold';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import {
   AudioLines,
   ChevronLeft,
@@ -13,6 +17,8 @@ import {
   ListX,
   Maximize2,
   Minimize2,
+  PictureInPicture,
+  PictureInPicture2,
   Play,
   Radio,
   Settings,
@@ -21,14 +27,15 @@ import {
   VolumeX,
 } from 'lucide';
 
-import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID } from '../announcer-layout';
+import { ANNOUNCER_DOCK_BOUNDS, ANNOUNCER_DOCK_REGION_ID, ANNOUNCER_FLOATING_ID } from '../announcer-layout';
 import type { AnnouncerReelItem } from '../announcer-reel';
 import { announcerSettingsMenu } from '../announcer-settings';
 import { MarkdownPreview } from './markdown-preview';
 
 /** Where the open announcer shows (HS2-BS0XFK): `docked` in the left sidebar's footer under a resizable
- * separator, or `corner` as a card over the work area while that sidebar is not shown. */
-export type AnnouncerPresentation = 'docked' | 'corner';
+ * separator, or `corner` as a card over the work area while that sidebar is not shown. `floating` is the
+ * detached announcer (HS2-51X25Z): a persistent, movable, resizable Kerf PinnablePopoverSurface. */
+export type AnnouncerPresentation = 'docked' | 'corner' | 'floating';
 
 export interface AnnouncerOverlayProps {
   open: boolean;
@@ -52,6 +59,8 @@ export interface AnnouncerOverlayProps {
   presentation?: AnnouncerPresentation;
   /** The docked section's height, as the device last stored it. */
   dockSize?: number;
+  /** `embedded` draws the floating surface in flow, for the catalog only. */
+  surfacePresentation?: 'overlay' | 'embedded';
 }
 
 const action = (name: string) => ({ 'data-announcer-action': name });
@@ -77,12 +86,15 @@ export function AnnouncerOverlay({
   rate = 1,
   presentation = 'corner',
   dockSize = ANNOUNCER_DOCK_BOUNDS.fallback,
+  surfacePresentation = 'overlay',
 }: AnnouncerOverlayProps) {
   if (!open) return <></>;
   const selected = items.at(index);
   const docked = presentation === 'docked';
-  // The dock's height is the region's, so only the corner card grows when expanded.
-  const expanded = expandedRequest && !docked;
+  const floating = presentation === 'floating';
+  // Expand is a detached-only control (HS2-51X25Z #10); attached placements keep their own size.
+  const expanded = expandedRequest && floating;
+  const count = items.length ? `${index + 1} / ${items.length}` : 'No activity';
   const announcer = (
     <aside
       class="announcer"
@@ -91,15 +103,17 @@ export function AnnouncerOverlay({
       data-expanded={String(expanded)}
     >
       <section class="announcer__panel" aria-label="Announcer">
-        <header class="announcer__header">
-          <strong>Announcer</strong>
-          <span class="announcer__count">{items.length ? `${index + 1} / ${items.length}` : 'No activity'}</span>
-          {!docked && (
-            <button type="button" aria-label={expanded ? 'Shrink Announcer' : 'Expand Announcer'} {...action('expand')}>
-              <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
+        {/* Detached, the floating surface's own header carries the title and controls. Attached, the
+            former expand control is the pop-out (HS2-51X25Z #3); the toolbar toggle hides it, so no X. */}
+        {!floating && (
+          <header class="announcer__header">
+            <strong>Announcer</strong>
+            <span class="announcer__count">{count}</span>
+            <button type="button" aria-label="Pop Out Announcer" title="Pop out announcer" {...action('detach')}>
+              <LucideIcon icon={PictureInPicture2} name="picture-in-picture-2" />
             </button>
-          )}
-        </header>
+          </header>
+        )}
         <div class="announcer__screen" aria-live="polite">
           {selected ? (
             <>
@@ -211,6 +225,53 @@ export function AnnouncerOverlay({
       </section>
     </aside>
   );
+  if (floating)
+    return (
+      <PinnablePopoverSurface
+        id={ANNOUNCER_FLOATING_ID}
+        label="Announcer"
+        presentation={surfacePresentation}
+        pinnable={false}
+        closable={false}
+        // Kerf's default description says moving pins it; a persistent surface is always pinned (KF-4T907F).
+        moveDescription="Drag the title or press the arrow keys to move it; hold Shift to move farther."
+        preferredWidth={expanded ? remify(960) : remify(320)}
+        height={expanded ? remify(560) : remify(320)}
+        minHeight={remify(200)}
+        bodyLayout="fill"
+        bodyInset="none"
+        rootAttributes={{
+          'data-announcer-floating': '',
+          'data-expanded': String(expanded),
+        }}
+        headerActions={
+          <>
+            <ToolbarText text={count} size="small" />
+            {/* Icon-only Kerf Buttons: the composition rule keeps ToolbarControlGroup inside a Toolbar
+                (KUI-L201), though Kerf's persistent-panel example puts one here (KF-SMTCPZ). */}
+            <Button
+              emphasis="plain"
+              size="compact"
+              ariaLabel={expanded ? 'Shrink Announcer' : 'Expand Announcer'}
+              icon={
+                <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
+              }
+              rootAttributes={action('expand')}
+            />
+            <Button
+              emphasis="plain"
+              size="compact"
+              ariaLabel="Reattach Announcer"
+              title="Reattach to the sidebar"
+              icon={<LucideIcon icon={PictureInPicture} name="picture-in-picture" />}
+              rootAttributes={action('reattach')}
+            />
+          </>
+        }
+      >
+        {announcer}
+      </PinnablePopoverSurface>
+    );
   if (!docked) return announcer;
   // Kerf's region owns the separator line above the section and its pointer and keyboard resizing.
   return (

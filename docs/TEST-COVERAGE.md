@@ -547,6 +547,14 @@ height bounds and the root region-commit routing; `announcer.spec.ts` checks the
 separator sits between the drive row and the section, keyboard and pointer resize,
 reopen and reload persistence, reachable views at 1280×600, and the phone drawer and
 corner card across wide, narrow, and returned-wide sizes.
+HS2-51X25Z pins the pop-out: `announcer-layout.test.ts` covers the per-device detached
+state and floating placement (round trips, unusable reports, a corrupt or throwing store);
+`announcer-overlay.test.ts` checks Pop Out without Expand or Close while attached and the
+persistent surface with Expand and Reattach but no Pin or Close while detached;
+`announcer.spec.ts` pops out from the dock, steps the reel, drags and arrow-keys the
+surface, hides and reshows it from the toggle, expands and shrinks inside the window,
+reloads into the same place, clamps at 1024 and 390 px and back, and reattaches across a
+reload.
 HS2-EYW4H8 and HS2-YF8P38 are covered in `announcer-overlay.test.ts` (group order and
 zones, pressed state and Audio icon in both directions, no app CSS on the toolbar's
 buttons) and `announcer.spec.ts` (painted on/off chrome swapping after a toggle and

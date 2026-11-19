@@ -88,18 +88,26 @@ The `activity` capability turns native signals → events; the host owns the str
 
 ## 15.6 Consumers
 
-- **Announcer (HS2-5PSQJQ, HS2-A93BHS, HS2-6PZ35D, HS2-BS0XFK)** — a toggle in the left sidebar
+- **Announcer (HS2-5PSQJQ, HS2-A93BHS, HS2-6PZ35D, HS2-BS0XFK, HS2-51X25Z)** — a toggle in the left sidebar
   toolbar opens and closes the announcer. While the sidebar is shown, the open
   announcer docks in its footer below the drive row, under a separator that drags
   or arrow-keys its height (144–480 px, kept per device in local storage). While the
   sidebar is hidden (collapsed, a closed phone drawer, or a mode without the rail),
-  it shows as a compact or expanded picture-in-picture card instead. Its controls are
+  it shows as a compact picture-in-picture card instead. Either attached place has a
+  Pop Out control and no close button (the toolbar toggle hides it). Popped out
+  (HS2-51X25Z), the announcer is a persistent floating Kerf `PinnablePopoverSurface`
+  (no Pin toggle, no Close) that drags by its title, moves with the arrow keys,
+  resizes from its corner, and stays inside the window; its header has Expand/Shrink,
+  shown only while detached, and Reattach, which returns it to the sidebar. The
+  detached state and the floating position and size are kept per device in local
+  storage and survive reloads; Expand applies a larger size preset from the current
+  position. Its controls are
   two Kerf toolbar groups (HS2-EYW4H8, HS2-YF8P38): playback (previous, play, next)
   at the start and the icon-only Live and Audio toggles at the end, with any extra
   width between them. The toggles show on and off through pressed chrome and
   `aria-pressed`, and Audio's icon switches between volume and muted. Both carry the retained
   cross-project digest, live narration over the change stream, a bounded reel stepped
-  with previous and next (the expanded card shows no history list and gives its height
+  with previous and next (the expanded surface shows no history list and gives its height
   to the current item, HS2-7YD7S9). The shown item renders as Markdown through the
   shared note renderer, so commands and code are monospaced (HS2-YJK0G9). Speech
   never reads a literal command (HS2-R5Q2GY): the client derives a deterministic spoken

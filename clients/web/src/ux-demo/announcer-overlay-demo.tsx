@@ -21,13 +21,27 @@ export const demoModule: DemoModule = {
       Demo: () => (
         <>
           <CatalogExample label="Announcer Reel" viewport={{ width: 'full', height: 'tall' }}>
-            <AnnouncerOverlay open expanded live={false} speaking={false} audible items={[item]} index={0} />
+            <AnnouncerOverlay open expanded={false} live={false} speaking={false} audible items={[item]} index={0} />
           </CatalogExample>
           {/* HS2-BS0XFK: the sidebar-footer placement under its resizable separator. */}
           <CatalogExample label="Docked Announcer" viewport={{ width: 'sidebar', height: 'tall' }}>
             <AnnouncerOverlay
               open
               presentation="docked"
+              expanded={false}
+              live={false}
+              speaking={false}
+              audible
+              items={[item]}
+              index={0}
+            />
+          </CatalogExample>
+          {/* HS2-51X25Z: popped out, a persistent floating surface with Expand and Reattach. */}
+          <CatalogExample label="Detached Announcer" viewport={{ width: 'full', height: 'tall' }}>
+            <AnnouncerOverlay
+              open
+              presentation="floating"
+              surfacePresentation="embedded"
               expanded={false}
               live={false}
               speaking={false}

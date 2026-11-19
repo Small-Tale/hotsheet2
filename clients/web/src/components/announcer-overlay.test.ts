@@ -92,6 +92,47 @@ describe('AnnouncerOverlay expanded card (HS2-7YD7S9)', () => {
   });
 });
 
+describe('AnnouncerOverlay pop-out and reattach (HS2-51X25Z)', () => {
+  it('offers Pop Out, and no expand or close, while attached', () => {
+    for (const presentation of ['docked', 'corner'] as const) {
+      for (const expanded of [false, true]) {
+        const html = render({ presentation, expanded });
+        expect(toggle(html, 'detach').label).toBe('Pop Out Announcer');
+        expect(toggle(html, 'detach').icon).toBe('picture-in-picture-2');
+        expect(html).not.toContain('data-announcer-action="expand"');
+        expect(html).not.toContain('data-announcer-action="reattach"');
+        expect(html).not.toContain('Close Announcer');
+        expect(html).toContain('data-expanded="false"');
+        expect(html).not.toContain('data-announcer-floating');
+      }
+    }
+  });
+
+  it('floats on a persistent Kerf surface with Expand and Reattach and no Pin or Close', () => {
+    const html = render({ presentation: 'floating', surfacePresentation: 'embedded' });
+    expect(html).toContain('data-component="pinnable-popover-surface"');
+    expect(html).toContain('id="announcer-floating"');
+    expect(html).toContain('data-announcer-floating');
+    expect(html).toContain('data-persistent');
+    expect(html).toContain('data-closable="false"');
+    expect(html).not.toMatch(/aria-label="(?:Pin|Close)"/);
+    expect(html).not.toContain('data-announcer-action="detach"');
+    expect(toggle(html, 'reattach').label).toBe('Reattach Announcer');
+    expect(toggle(html, 'reattach').icon).toBe('picture-in-picture');
+    expect(toggle(html, 'expand')).toMatchObject({ label: 'Expand Announcer', icon: 'maximize-2' });
+    expect(html).toContain('1 / 2');
+    expect(html).toContain('data-presentation="floating"');
+    // The surface carries the title; the section adds no second header.
+    expect(html).not.toContain('class="announcer__header"');
+  });
+
+  it('expands and shrinks only while detached', () => {
+    const html = render({ presentation: 'floating', surfacePresentation: 'embedded', expanded: true });
+    expect(toggle(html, 'expand')).toMatchObject({ label: 'Shrink Announcer', icon: 'minimize-2' });
+    expect(html).toContain('data-expanded="true"');
+  });
+});
+
 describe('AnnouncerOverlay Markdown item (HS2-YJK0G9)', () => {
   const command = announcerItem('demo', 'Demo project', 'demo-store', {
     id: 'cmd',

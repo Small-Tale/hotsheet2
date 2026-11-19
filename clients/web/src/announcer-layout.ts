@@ -37,3 +37,78 @@ export function saveAnnouncerDockSize(storage: Pick<Storage, 'setItem'>, size: n
   }
   return normalized;
 }
+
+/** The detached announcer's PinnablePopoverSurface id (HS2-51X25Z). */
+export const ANNOUNCER_FLOATING_ID = 'announcer-floating';
+
+const DETACHED_KEY = 'hotsheet.layout.announcer-detached';
+const FLOATING_PLACEMENT_KEY = 'hotsheet.layout.announcer-floating.placement';
+
+/** Where the person last left the detached announcer: its top-left corner in viewport px and, once
+ * resized, its size. Kerf's wirePinnablePopover reports it and takes it back to restore. */
+export interface AnnouncerFloatingPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly width?: number;
+  readonly height?: number;
+}
+
+/** Whether this device last popped the announcer out of the sidebar into its floating dialog. */
+export function loadAnnouncerDetached(storage: Pick<Storage, 'getItem'>): boolean {
+  try {
+    return storage.getItem(DETACHED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveAnnouncerDetached(storage: Pick<Storage, 'setItem'>, detached: boolean): void {
+  try {
+    storage.setItem(DETACHED_KEY, String(detached));
+  } catch {
+    // A full or blocked store still detaches or reattaches for this session.
+  }
+}
+
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const positive = (value: unknown): value is number => finite(value) && value > 0;
+
+/** Keep only a usable placement: finite coordinates and, when present, a positive size. */
+export function normalizeAnnouncerFloatingPlacement(value: unknown): AnnouncerFloatingPlacement | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  if (!finite(x) || !finite(y)) return undefined;
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    ...(positive(width) ? { width: Math.round(width) } : {}),
+    ...(positive(height) ? { height: Math.round(height) } : {}),
+  };
+}
+
+/** The device's remembered floating placement, or none (Kerf then centers the panel). */
+export function loadAnnouncerFloatingPlacement(
+  storage: Pick<Storage, 'getItem'>,
+): AnnouncerFloatingPlacement | undefined {
+  try {
+    const stored = storage.getItem(FLOATING_PLACEMENT_KEY);
+    return stored === null ? undefined : normalizeAnnouncerFloatingPlacement(JSON.parse(stored));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Store a reported placement for this device; returns what was kept (nothing for an unusable value). */
+export function saveAnnouncerFloatingPlacement(
+  storage: Pick<Storage, 'setItem'>,
+  placement: unknown,
+): AnnouncerFloatingPlacement | undefined {
+  const normalized = normalizeAnnouncerFloatingPlacement(placement);
+  if (!normalized) return undefined;
+  try {
+    storage.setItem(FLOATING_PLACEMENT_KEY, JSON.stringify(normalized));
+  } catch {
+    // A full or blocked store still keeps the placement for this session.
+  }
+  return normalized;
+}

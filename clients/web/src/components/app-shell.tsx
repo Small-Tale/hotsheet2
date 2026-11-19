@@ -49,7 +49,7 @@ export interface AppShellProps {
   announcerTrigger?: SafeHtml;
   /** The open announcer (HS2-BS0XFK): docked in the left sidebar's footer while that sidebar shows,
    * otherwise its corner card, so the pressed toggle always has a visible announcer. */
-  announcer?: { docked: SafeHtml; corner: SafeHtml };
+  announcer?: { docked?: SafeHtml; corner?: SafeHtml; floating?: SafeHtml };
   /** Expanded workspace search uses the whole available toolbar row. */
   workspaceSearchOpen?: boolean;
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
@@ -196,7 +196,7 @@ export function AppShell({
               : sidebarPanel.toolbar,
           // The announcer docks below the rail's own footer (the drive row), under its own separator.
           footer:
-            announcer && sidebarVisible ? (
+            announcer?.docked && sidebarVisible ? (
               <>
                 {sidebarPanel.footer}
                 {announcer.docked}
@@ -387,7 +387,9 @@ export function AppShell({
           </main>
         }
       />
-      {announcer && !(leftRail && sidebarVisible) && announcer.corner}
+      {announcer?.corner && !(leftRail && sidebarVisible) && announcer.corner}
+      {/* Detached, the announcer floats in the top layer whatever the rails show (HS2-51X25Z). */}
+      {announcer?.floating}
       {/* One keyed slot at every width: a top-layer popup here keeps its node, and so its presentation,
           when the layout crosses between phone and desktop or the corner announcer above it toggles
           (HS2-7VRFX0). Moving a node, even within the DOM, closes an open popover. */}

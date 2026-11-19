@@ -123,6 +123,44 @@ describe('application shell components', () => {
     expect(closed).not.toContain('announcer-corner');
   });
 
+  it('shows a detached announcer only as its floating surface, whatever the rails show (HS2-51X25Z)', () => {
+    const render = ({
+      sidebarVisible = true,
+      mobile = false,
+      mode = 'project' as const,
+      gridFullscreen = false,
+    } = {}) =>
+      String(
+        AppShell({
+          tabs: [],
+          sidebar: { ...sidebarParts('Project Sidebar'), footer: 'drive-row' as never },
+          sidebarVisible,
+          mobile,
+          mode,
+          gridFullscreen,
+          announcerTrigger: 'announcer-control' as never,
+          announcer: { floating: 'announcer-floating' as never },
+          header: 'head' as never,
+          workspace: 'work' as never,
+        }),
+      );
+    for (const html of [
+      render(),
+      render({ sidebarVisible: false }),
+      render({ mobile: true }),
+      render({ sidebarVisible: false, mobile: true }),
+      render({ gridFullscreen: true, mode: 'terminals' as never }),
+    ]) {
+      expect(html.split('announcer-floating').length - 1).toBe(1);
+      expect(html).not.toContain('announcer-docked');
+      expect(html).not.toContain('announcer-corner');
+    }
+    // The rail footer keeps only its own content while the announcer floats.
+    const shown = render();
+    expect(shown.indexOf('drive-row')).toBeGreaterThan(-1);
+    expect(shown.indexOf('announcer-floating')).toBeGreaterThan(shown.indexOf('data-component="project-tab-bar"'));
+  });
+
   it('delegates terminal-drawer motion and restore placement to ResizableRegion policies', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
