@@ -134,7 +134,9 @@ jobs:
         run: |
           python -m pip install meson ninja
           $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
-          & $vcpkg install "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
+          # HS2-GY4938: the pinned dav1d port with the MSVC 14.52 compat-header fix.
+          $ports = Join-Path $env:GITHUB_WORKSPACE '.github/vcpkg-ports'
+          & $vcpkg install "--overlay-ports=$ports" "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed'
           $pkgconf = Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe"
@@ -422,7 +424,9 @@ jobs:
         run: |
           python -m pip install meson ninja
           $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
-          & $vcpkg install "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
+          # HS2-GY4938: the pinned dav1d port with the MSVC 14.52 compat-header fix.
+          $ports = Join-Path $env:GITHUB_WORKSPACE '.github/vcpkg-ports'
+          & $vcpkg install "--overlay-ports=$ports" "dav1d:$env:TRIPLET" "pkgconf:$env:HOST_TRIPLET"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed'
           "PKG_CONFIG=$(Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe")" >> $env:GITHUB_ENV
