@@ -15269,6 +15269,15 @@ interface RenderMetricsSnapshot {
 type InstrumentedWindow = typeof window & {
   __hotsheetRenderMetrics?: { reset(): void; snapshot(): RenderMetricsSnapshot };
 };
+type SearchProbeWindow = typeof window & {
+  __searchProbe?: {
+    rowGeometryReads: number;
+    rowClones: number;
+    ghosts: number;
+    inputMs: number;
+  };
+  __searchProbeRestore?: () => void;
+};
 const resetRenderMetrics = (page: import('@playwright/test').Page) =>
   page.evaluate(() => {
     (window as InstrumentedWindow).__hotsheetRenderMetrics?.reset();
@@ -31883,7 +31892,52 @@ test('switches and searches large ticket views without cloning every row into mo
     if (view === 'Archive') {
       await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
       const editor = page.getByRole('searchbox', { name: 'Search tickets' });
+      // HS2-X0A331: pin the search's work by structure, not by a wall-clock budget a loaded CI runner
+      // misses (284-344 ms on the 2-vCPU shard). HS2-E76C4K locked the page for over 30 s because search
+      // sent every rendered row through motion capture: a geometry read, a DOM clone and a ghost layer
+      // per row. Count exactly those, and the app's render passes, from the keystroke to the match.
       await editor.evaluate((element) => {
+        const isRow = (node: unknown) =>
+            node instanceof Element &&
+            node.matches('[data-component="ticket-list-row-container"], [data-component="summary-row"]'),
+          probe = { rowGeometryReads: 0, rowClones: 0, ghosts: 0, inputMs: 0 },
+          rect = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect') as TypedPropertyDescriptor<
+            (this: Element) => DOMRect
+          >,
+          clone = Object.getOwnPropertyDescriptor(Node.prototype, 'cloneNode') as TypedPropertyDescriptor<
+            (this: Node, deep?: boolean) => Node
+          >,
+          readRect = rect.value!,
+          cloneNode = clone.value!,
+          ghosts = new MutationObserver((records) => {
+            for (const record of records)
+              for (const node of record.addedNodes)
+                if (
+                  node instanceof Element &&
+                  (node.matches('[data-ticket-motion-ghost]') || node.querySelector('[data-ticket-motion-ghost]'))
+                )
+                  probe.ghosts += 1;
+          });
+        Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
+          ...rect,
+          value(this: Element) {
+            if (isRow(this)) probe.rowGeometryReads += 1;
+            return readRect.call(this);
+          },
+        });
+        Object.defineProperty(Node.prototype, 'cloneNode', {
+          ...clone,
+          value(this: Node, deep?: boolean) {
+            if (isRow(this)) probe.rowClones += 1;
+            return cloneNode.call(this, deep);
+          },
+        });
+        ghosts.observe(document, { childList: true, subtree: true });
+        (window as SearchProbeWindow).__searchProbeRestore = () => {
+          Object.defineProperty(Element.prototype, 'getBoundingClientRect', rect);
+          Object.defineProperty(Node.prototype, 'cloneNode', clone);
+          ghosts.disconnect();
+        };
         let started = 0;
         window.addEventListener(
           'input',
@@ -31893,16 +31947,29 @@ test('switches and searches large ticket views without cloning every row into mo
           true,
         );
         window.addEventListener('input', (event) => {
-          if (event.target === element) {
-            document.documentElement.dataset.searchInputMs = String(performance.now() - started);
-          }
+          if (event.target === element) probe.inputMs = performance.now() - started;
         });
+        (window as SearchProbeWindow).__searchProbe = probe;
+        (window as InstrumentedWindow).__hotsheetRenderMetrics?.reset();
       });
       await editor.fill('2074');
-      const searchInputMs = await page.evaluate(() => Number(document.documentElement.dataset.searchInputMs));
-      expect(searchInputMs).toBeLessThan(250);
-      await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
       await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
+      const search = await page.evaluate(() => {
+        const state = window as SearchProbeWindow & InstrumentedWindow;
+        state.__searchProbeRestore?.();
+        return { ...state.__searchProbe!, passes: state.__hotsheetRenderMetrics?.snapshot().passes };
+      });
+      // The fix: a collection above the capture limit (100 rows) renders directly. Motion may still fade in the
+      // one match as it arrives, but it never measures or clones the 2,075 rows being replaced: at most the
+      // incoming-animation cap (12) of clones and ghosts, and fewer row geometry reads than the capture limit.
+      expect(search.rowClones).toBeLessThanOrEqual(12);
+      expect(search.ghosts).toBeLessThanOrEqual(12);
+      expect(search.rowGeometryReads).toBeLessThan(100);
+      // Typing renders a handful of app passes (7 measured), never one per row.
+      expect(search.passes).toBeLessThanOrEqual(20);
+      // A coarse lockup guard only: the regression took over 30 s, CI's loaded shard measured up to 344 ms.
+      expect(search.inputMs).toBeLessThan(2_000);
+      await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
       await page.screenshot({ path: 'target/visual-captures/hs2-e76c4k-large-search.png', fullPage: true });
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
       await expect(page.locator('[data-component="summary-row"]')).toHaveCount(count, { timeout: 20_000 });
