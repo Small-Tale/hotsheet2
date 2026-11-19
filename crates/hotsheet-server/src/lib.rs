@@ -11,6 +11,7 @@ mod api_error;
 pub mod auto_group;
 mod blocking_offload;
 pub mod ci_status;
+pub mod claim_conflict_push;
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;

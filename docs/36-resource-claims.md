@@ -527,6 +527,16 @@ machine sharing the remote; `provisional` grants come from a local fallback unde
 `<HOTSHEET_HOME>/resource-claims/provisional/<configuration>/` and report
 `advisory_only`; reconciling them when the remote returns is HS2-1SXBK9.
 
+**Telling the losing session (HS2-1639Q0).** After every sync pass that reaches the remote, the
+server reads the conflicts `reconcile` recorded (`claim_gate::pending_conflicts`) and pushes each into
+the live terminal whose claim worker id is the loser, through the session-push path every
+server-initiated prompt uses: "your claim on `<slug>` was lost; another machine holds it now
+(`<holder>`); stop work on it". The holder is the readable label (or the unreadable marker of §36.15),
+never a worker id or a key. A delivered conflict is acknowledged, so a session is told once; one whose
+session is not reachable, or whose push failed, stays pending (the record keeps its last 256) and is
+tried again after the next pass. Showing lost and provisional claims in the web client and on the wire
+is HS2-ZR8B4N.
+
 ## 36.15 Holder fields and per-configuration keys (HS2-EWGPTZ)
 
 The codecs of §36.3 live in `hotsheet_ticketing::claim_codec` (re-exported by

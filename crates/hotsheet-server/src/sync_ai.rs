@@ -53,6 +53,11 @@ fn project_for(state: &AppState, store_root: &Path) -> Project {
     }
 }
 
+/// The project root a store's lost-claim notices go to (HS2-1639Q0).
+pub(crate) fn project_root(state: &AppState, store_root: &Path) -> PathBuf {
+    project_for(state, store_root).root
+}
+
 /// Ask for help with the store's stall after a sync pass, if it has one (see the module
 /// docs). Cheap when the store is healthy: a few local reads.
 pub fn ask_after_pass(state: &AppState, store_id: &str, store_root: &Path) -> AskOutcome {

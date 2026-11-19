@@ -524,6 +524,32 @@ fn record_conflict(store: &FsStore, conflict: ClaimConflict) {
     let _ = write_json(&path, &conflicts);
 }
 
+/// The claim conflicts recorded and not yet acknowledged, oldest first, without forgetting them
+/// (HS2-1639Q0): a conflict stays pending until the losing session has been told.
+pub fn pending_conflicts(store: &FsStore) -> Vec<ClaimConflict> {
+    git_path(store, CONFLICTS_FILE)
+        .map(|path| read_json(&path))
+        .unwrap_or_default()
+}
+
+/// Forget the conflicts recorded for `tickets`, after their losing sessions were told.
+pub fn acknowledge_conflicts(store: &FsStore, tickets: &[Ulid]) {
+    let Some(path) = git_path(store, CONFLICTS_FILE) else {
+        return;
+    };
+    let mut conflicts: Vec<ClaimConflict> = read_json(&path);
+    let before = conflicts.len();
+    conflicts.retain(|c| !tickets.contains(&c.ticket));
+    if conflicts.len() == before {
+        return;
+    }
+    if conflicts.is_empty() {
+        let _ = std::fs::remove_file(&path);
+    } else {
+        let _ = write_json(&path, &conflicts);
+    }
+}
+
 /// The claim conflicts recorded since the last call, oldest first, and forget them.
 pub fn take_conflicts(store: &FsStore) -> Vec<ClaimConflict> {
     let Some(path) = git_path(store, CONFLICTS_FILE) else {
