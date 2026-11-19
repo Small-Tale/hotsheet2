@@ -20,6 +20,13 @@
 //!   that holder and recorded as a conflict the losing session reads
 //!   ([`take_conflicts`]), and its next renew is refused naming the holder.
 //!
+//! - **holder fields** (HS2-EWGPTZ): when the configuration keeps a key in the OS
+//!   credential store, the backend never sees a plain worker id. The marker's `worker`
+//!   is its `hmac-sha256:` digest (comparable by anyone with the key, readable by no
+//!   one) and a display label rides in the marker metadata as `enc:v1:`. A reader
+//!   without the key sees [`UNREADABLE_HOLDER`]; it cannot tell its own claim from
+//!   another's until the key is imported.
+//!
 //! An unbound store, or one bound to a `local` configuration, behaves exactly as before.
 
 use std::collections::BTreeMap;
@@ -30,9 +37,39 @@ use serde::{Deserialize, Serialize};
 use hotsheet_model::{ClaimEvent, ClaimEventKind, Ticket, Timestamp, Ulid};
 
 use crate::claim_backends::{BackendKind, Registries, git_store_sources};
+use crate::claim_codec::{ClaimKey, KEY_LEN, MetadataCodec, MetadataCodecs, MetadataValue};
 use crate::gitref_cas::{Acquired, CasError, GitRefCas, RefMarker, millis};
 use crate::orchestration::OfflinePolicy;
 use crate::{FsStore, StoreError};
+
+/// The metadata key a claim's display label is stored under.
+pub const LABEL_KEY: &str = "label";
+
+/// Shown for a holder whose label this machine cannot read (the key is not here, or it
+/// is another key).
+pub const UNREADABLE_HOLDER: &str = "(holder unreadable: configuration key not available)";
+
+/// How a gate encodes the holder fields it writes.
+#[derive(Clone)]
+pub enum HolderKey {
+    /// The configuration names no credential: holder fields are written plain, as before.
+    Plain,
+    /// The configuration's key is available: worker ids are keyed digests.
+    Keyed(std::sync::Arc<MetadataCodecs>),
+    /// The configuration names a key that is not in the credential store. Nothing is
+    /// written (a plain id must never reach the backend) and holders read as unreadable.
+    Missing { configuration: String },
+}
+
+impl std::fmt::Debug for HolderKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Plain => f.write_str("Plain"),
+            Self::Keyed(_) => f.write_str("Keyed(..)"),
+            Self::Missing { configuration } => write!(f, "Missing({configuration})"),
+        }
+    }
+}
 
 /// The claim backend a store's tickets go through.
 #[derive(Debug, Clone)]
@@ -40,6 +77,99 @@ pub struct TicketGate {
     pub configuration: String,
     pub cas: GitRefCas,
     pub offline: OfflinePolicy,
+    pub holder: HolderKey,
+}
+
+impl TicketGate {
+    /// The `worker` field a marker for `worker` carries.
+    pub fn worker_field(&self, worker: &str) -> Result<String, StoreError> {
+        match &self.holder {
+            HolderKey::Plain => Ok(worker.to_owned()),
+            HolderKey::Keyed(codecs) => codecs
+                .encode(MetadataCodec::HmacSha256, worker)
+                .map_err(config_error),
+            HolderKey::Missing { configuration } => Err(missing_key(configuration)),
+        }
+    }
+
+    /// The metadata a marker for a claim labelled `label` carries.
+    pub fn marker_metadata(&self, label: &str) -> Result<BTreeMap<String, String>, StoreError> {
+        let mut metadata = BTreeMap::new();
+        if let HolderKey::Keyed(codecs) = &self.holder {
+            metadata.insert(
+                LABEL_KEY.to_owned(),
+                codecs
+                    .encode(MetadataCodec::EncV1, label)
+                    .map_err(config_error)?,
+            );
+        }
+        Ok(metadata)
+    }
+
+    /// Whether a marker's `worker` field names the local `worker`. A plain marker (taken
+    /// before the key existed, or by the distributed work loop) compares plain.
+    pub fn owns(&self, marker_worker: &str, worker: &str) -> bool {
+        match &self.holder {
+            HolderKey::Keyed(codecs)
+                if marker_worker.starts_with(crate::claim_codec::HMAC_PREFIX) =>
+            {
+                codecs.hmac_matches(marker_worker, worker)
+            }
+            _ => marker_worker == worker,
+        }
+    }
+
+    /// The holder a marker names, for people: the plain worker, the decrypted label, or
+    /// [`UNREADABLE_HOLDER`].
+    pub fn holder_name(&self, marker: &RefMarker) -> String {
+        if !marker.worker.starts_with(crate::claim_codec::HMAC_PREFIX) {
+            return marker.worker.clone();
+        }
+        let HolderKey::Keyed(codecs) = &self.holder else {
+            return UNREADABLE_HOLDER.to_owned();
+        };
+        match marker.metadata.get(LABEL_KEY).map(|v| codecs.decode(v)) {
+            Some(Ok(MetadataValue::Decrypted(label))) => label,
+            _ => UNREADABLE_HOLDER.to_owned(),
+        }
+    }
+}
+
+fn missing_key(configuration: &str) -> StoreError {
+    config_error(format!(
+        "no key for configuration '{configuration}' in the OS credential store; run `hotsheet-cli resource backend key {configuration} --generate` on the first machine, then `--export` there and `--import` (key on standard input) here"
+    ))
+}
+
+/// A configuration key as stored: base64url of 32 bytes.
+pub fn decode_key(stored: &str) -> Option<ClaimKey> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(stored.trim())
+        .ok()?;
+    let bytes: [u8; KEY_LEN] = bytes.try_into().ok()?;
+    Some(ClaimKey::from_bytes(bytes))
+}
+
+fn holder_key(
+    secrets: &dyn crate::secrets::SecretStore,
+    configuration: &crate::claim_backends::BackendConfiguration,
+) -> HolderKey {
+    let Some(account) = &configuration.credential else {
+        return HolderKey::Plain;
+    };
+    let key = secrets
+        .get(account)
+        .ok()
+        .flatten()
+        .and_then(|stored| decode_key(&stored))
+        .and_then(|key| MetadataCodecs::new(&key).ok());
+    key.map_or_else(
+        || HolderKey::Missing {
+            configuration: configuration.id.clone(),
+        },
+        |codecs| HolderKey::Keyed(std::sync::Arc::new(codecs)),
+    )
 }
 
 fn config_error(error: impl std::fmt::Display) -> StoreError {
@@ -55,6 +185,19 @@ pub fn ticket_gate(store: &FsStore) -> Result<Option<TicketGate>, StoreError> {
 
 /// [`ticket_gate`] with an explicit machine home.
 pub fn ticket_gate_at(home: &Path, store: &FsStore) -> Result<Option<TicketGate>, StoreError> {
+    #[cfg(test)]
+    if let Some(secrets) = tests::injected_secrets() {
+        return ticket_gate_with(home, store, secrets.as_ref());
+    }
+    ticket_gate_with(home, store, &crate::secrets::OsKeychain::at(home))
+}
+
+/// [`ticket_gate_at`] reading configuration keys from `secrets` (tests inject one).
+pub fn ticket_gate_with(
+    home: &Path,
+    store: &FsStore,
+    secrets: &dyn crate::secrets::SecretStore,
+) -> Result<Option<TicketGate>, StoreError> {
     let registries = Registries::load(home, Some(store.root())).map_err(config_error)?;
     let Some(resolved) = registries
         .source(&git_store_sources(store))
@@ -73,6 +216,7 @@ pub fn ticket_gate_at(home: &Path, store: &FsStore) -> Result<Option<TicketGate>
             Some(TicketGate {
                 cas: GitRefCas::new(repository, remote),
                 offline: configuration.offline,
+                holder: holder_key(secrets, &configuration),
                 configuration: configuration.id,
             })
         }
@@ -138,7 +282,13 @@ pub fn gate_claim(
         .ok_or_else(|| config_error("a claim write without a claim event"))?;
     let lease = ticket.claim_lease_expires_at.as_ref().map_or(0, millis);
     let now_ms = millis(now);
-    let mut marker = RefMarker::new(worker, &attempt.to_string(), now_ms, lease);
+    let mut marker = RefMarker::new(
+        &gate.worker_field(worker)?,
+        &attempt.to_string(),
+        now_ms,
+        lease,
+    );
+    marker.metadata = gate.marker_metadata(ticket.worker_label.as_deref().unwrap_or(worker))?;
     marker.host.clone_from(&ticket.claim_host);
     match gate
         .cas
@@ -195,9 +345,17 @@ pub fn gate_renew(
 /// Repair `ticket`'s frontmatter to name the backend's holder: the local claim (if any)
 /// ends and the holder's claim attempt is recorded with the marker's own id, so the
 /// holder's renewals keep matching.
-pub fn adopt_holder(ticket: &mut Ticket, holder: &RefMarker, now: &Timestamp) {
-    if ticket.claimed_by.as_deref() == Some(holder.worker.as_str())
-        && attempt_id(ticket, &holder.worker).map(|id| id.to_string())
+pub fn adopt_holder(gate: &TicketGate, ticket: &mut Ticket, holder: &RefMarker, now: &Timestamp) {
+    let own = ticket
+        .claimed_by
+        .as_deref()
+        .is_some_and(|local| gate.owns(&holder.worker, local));
+    if own
+        && ticket
+            .claimed_by
+            .as_deref()
+            .and_then(|local| attempt_id(ticket, local))
+            .map(|id| id.to_string())
             == Some(holder.claim_id.clone())
     {
         ticket.claim_lease_expires_at = Some(holder.expires_at.clone());
@@ -209,7 +367,9 @@ pub fn adopt_holder(ticket: &mut Ticket, holder: &RefMarker, now: &Timestamp) {
     ticket.claimed_by = Some(holder.worker.clone());
     ticket.claim_lease_expires_at = Some(holder.expires_at.clone());
     ticket.claim_eta_at = None;
-    ticket.worker_label = None;
+    let name = gate.holder_name(holder);
+    let label = (name != holder.worker).then_some(name);
+    ticket.worker_label.clone_from(&label);
     ticket.claim_host.clone_from(&holder.host);
     let id = Ulid::from_string(&holder.claim_id).unwrap_or_else(|_| Ulid::new());
     if !ticket.claim_history.iter().any(|event| event.id == id) {
@@ -220,7 +380,7 @@ pub fn adopt_holder(ticket: &mut Ticket, holder: &RefMarker, now: &Timestamp) {
             at: holder.claimed_at.clone(),
             lease_expires_at: Some(holder.expires_at.clone()),
             eta_at: None,
-            worker_label: None,
+            worker_label: label,
             host: holder.host.clone(),
         });
     }
@@ -395,7 +555,7 @@ pub fn reconcile(store: &FsStore, now: &Timestamp) -> Result<Vec<ClaimConflict>,
         if let GateOutcome::HeldBy(holder) = outcome {
             store.with_ticket_transaction(|| {
                 let mut current = store.read_ticket(&ticket.id)?;
-                adopt_holder(&mut current, &holder, now);
+                adopt_holder(&gate, &mut current, &holder, now);
                 store.write_ticket_committing(&current)?;
                 Ok::<_, StoreError>(())
             })?;
@@ -404,7 +564,7 @@ pub fn reconcile(store: &FsStore, now: &Timestamp) -> Result<Vec<ClaimConflict>,
                 ticket: ticket.id,
                 slug: ticket.slug.clone(),
                 worker,
-                holder: holder.worker.clone(),
+                holder: gate.holder_name(&holder),
                 detected_at: now.clone(),
             };
             record_conflict(store, conflict.clone());

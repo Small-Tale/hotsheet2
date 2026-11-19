@@ -472,3 +472,40 @@ a notification is HS2-1639Q0.
 machine sharing the remote; `provisional` grants come from a local fallback under
 `<HOTSHEET_HOME>/resource-claims/provisional/<configuration>/` and report
 `advisory_only`; reconciling them when the remote returns is HS2-1SXBK9.
+
+## 36.15 Holder fields and per-configuration keys (HS2-EWGPTZ)
+
+The codecs of §36.3 live in `hotsheet_ticketing::claim_codec` (re-exported by
+`hotsheet-resource-claims`), because ticket claims on a Git-ref backend use them too.
+
+A configuration that names a credential keeps a 32-byte key in the OS credential store.
+`hotsheet-cli resource backend add <id> --credential` generates it when the configuration
+is created on this machine (`key.status: ready`), keeps an existing key when the same add
+repeats (`kept`), and skips it with `--no-key` for a machine that will import the key
+another machine exported (`skipped`). An unavailable credential store never fails the add:
+the answer says `unavailable` and names the commands that finish it. `resource backend key
+<id> --export` and `--import` move the key between machines headlessly.
+
+A ticket claim taken through a keyed `git_ref` configuration never writes a plain id to
+the backend:
+
+| Marker field     | Value                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `worker`         | `hmac-sha256:` digest of the worker id: comparable by anyone with the key, readable by no one |
+| `metadata.label` | `enc:v1:` ciphertext of the claim's display label (the worker label, else the worker id)      |
+
+- **Ownership** compares by digest (`TicketGate::owns`), so the holder's retries, renewals
+  and releases keep matching its own marker. A plain `worker` (a claim taken before the key
+  existed, or by the distributed work loop) still compares plain.
+- **Display** decrypts the label with the key. A machine without the key, or with another
+  key, shows `(holder unreadable: configuration key not available)`, and cannot tell its own
+  claim from another's until the key is imported.
+- **Missing key.** A configuration that names a credential whose key is absent refuses every
+  claim before anything reaches the backend, naming `--generate` on the first machine and
+  `--export` / `--import` on the others. A configuration with no credential keeps plain
+  holder fields exactly as before.
+- **Rotation shape.** The `enc:v1:` prefix versions the ciphertext, and the key is not
+  stored with the claim. Replacing the key (`--import` of a new key everywhere) makes
+  existing markers unreadable and foreign; they keep excluding other claimants until their
+  lease lapses, and the next claim is written under the new key. There is no in-place
+  re-encryption of live claims.

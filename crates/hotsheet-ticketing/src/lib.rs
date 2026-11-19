@@ -20,6 +20,7 @@ pub mod calibration;
 pub mod checkout_order;
 pub mod checkout_page;
 pub mod claim_backends;
+pub mod claim_codec;
 pub mod claim_gate;
 pub mod claim_host;
 pub mod corrupt_cache;

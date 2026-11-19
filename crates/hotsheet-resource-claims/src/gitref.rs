@@ -166,7 +166,7 @@ impl ClaimBackend for GitRefBackend {
                 self.configuration
             ))
         })?;
-        MetadataCodecs::new(&keys.key()?)
+        Ok(MetadataCodecs::new(&keys.key()?)?)
     }
 
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError> {

@@ -206,7 +206,7 @@ impl ClaimBackend for LocalBackend {
     }
 
     fn codecs(&self) -> Result<MetadataCodecs, ClaimError> {
-        MetadataCodecs::new(&self.keys.key()?)
+        Ok(MetadataCodecs::new(&self.keys.key()?)?)
     }
 
     fn acquire(&self, target: &ResourceRef, request: &AcquireRequest) -> Result<Grant, ClaimError> {

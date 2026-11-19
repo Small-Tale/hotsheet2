@@ -44,6 +44,10 @@ pub(crate) enum BackendCmd {
         /// `resource-claims.<id>` (see `resource backend key`).
         #[arg(long)]
         credential: bool,
+        /// With `--credential`, do not generate the key when the configuration is created:
+        /// this machine will import the key another machine exported (HS2-EWGPTZ).
+        #[arg(long, requires = "credential")]
+        no_key: bool,
         /// While the backend is unreachable: `fail-closed` (default) or `provisional`.
         #[arg(long, default_value = "fail-closed")]
         offline: String,
@@ -213,6 +217,7 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             kind,
             settings,
             credential,
+            no_key,
             offline,
             scope,
         } => {
@@ -237,17 +242,15 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             configuration.offline = parse_offline(&offline)?;
             let target = scope_of(&scope);
             let change = mutate(&target, |r| r.upsert_configuration(configuration.clone()))?;
-            let next_steps: Vec<String> = if credential {
-                vec![format!(
-                    "unless this machine already has the key: {}",
-                    key_next_step(&id)
-                )]
+            let (key, next_steps) = if credential {
+                created_key(&OsKeychain::at(home()), &configuration, change, no_key)
             } else {
-                Vec::new()
+                (json!(null), Vec::new())
             };
             print(&json!({
                 "change": change,
                 "configuration": configuration_json(target.name(), &configuration, &[]),
+                "key": key,
                 "next_steps": next_steps,
             }))
         }
@@ -328,6 +331,47 @@ pub(crate) fn backend(cmd: BackendCmd) -> Result<()> {
             };
             print(&json!({ "change": change, "configuration": id }))
         }
+    }
+}
+
+/// HS2-EWGPTZ: a configuration created with `--credential` gets its key at once, so the
+/// first machine can claim without a second step. A configuration that already existed
+/// keeps its key (it may have been imported), and an unavailable credential store does
+/// not fail the add: the answer names the commands that finish it.
+pub(crate) fn created_key<S: hotsheet_ticketing::secrets::SecretStore>(
+    secrets: &S,
+    configuration: &BackendConfiguration,
+    change: hotsheet_ticketing::claim_backends::Change,
+    skipped: bool,
+) -> (Value, Vec<String>) {
+    use hotsheet_ticketing::claim_backends::Change;
+    let id = &configuration.id;
+    if skipped {
+        return (
+            json!({ "status": "skipped" }),
+            vec![format!("import the key: {}", key_next_step(id))],
+        );
+    }
+    if change != Change::Created {
+        return (
+            json!({ "status": "kept" }),
+            vec![format!(
+                "unless this machine already has the key: {}",
+                key_next_step(id)
+            )],
+        );
+    }
+    match generate_key(secrets, configuration) {
+        Ok(change) => (
+            json!({ "status": "ready", "change": change }),
+            vec![format!(
+                "copy the key to every other machine that shares this configuration: `hotsheet-cli resource backend key {id} --export` here, `hotsheet-cli resource backend key {id} --import` there"
+            )],
+        ),
+        Err(error) => (
+            json!({ "status": "unavailable", "error": format!("{}: {error}", error.code()) }),
+            vec![key_next_step(id)],
+        ),
     }
 }
 
@@ -421,5 +465,83 @@ pub(crate) fn source(cmd: SourceCmd) -> Result<()> {
             let change = mutate(&scope_of(&scope), |r| Ok(r.unbind_source(&key)))?;
             print(&json!({ "change": change, "source": key }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    use hotsheet_ticketing::claim_backends::Change;
+    use hotsheet_ticketing::secrets::{SecretError, SecretStore};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Memory(Mutex<BTreeMap<String, String>>);
+
+    impl SecretStore for Memory {
+        fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
+            self.0.lock().unwrap().insert(account.into(), secret.into());
+            Ok(())
+        }
+        fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
+            Ok(self.0.lock().unwrap().get(account).cloned())
+        }
+        fn delete(&self, account: &str) -> Result<bool, SecretError> {
+            Ok(self.0.lock().unwrap().remove(account).is_some())
+        }
+    }
+
+    struct Unavailable;
+
+    impl SecretStore for Unavailable {
+        fn set(&self, _: &str, _: &str) -> Result<(), SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+        fn get(&self, _: &str) -> Result<Option<String>, SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+        fn delete(&self, _: &str) -> Result<bool, SecretError> {
+            Err(SecretError::Unavailable("no store".into()))
+        }
+    }
+
+    fn keyed(id: &str) -> BackendConfiguration {
+        let mut configuration = BackendConfiguration::new(id, BackendKind::GitRef).unwrap();
+        configuration.credential = Some(BackendConfiguration::default_credential(id));
+        configuration
+    }
+
+    #[test]
+    fn hs2_ewgptz_a_created_configuration_gets_its_key_once() {
+        let store = Memory::default();
+        let configuration = keyed("shared");
+        let (key, steps) = created_key(&store, &configuration, Change::Created, false);
+        assert_eq!(key["status"], "ready");
+        assert!(steps[0].contains("--export"));
+        let first = store.get("resource-claims.shared").unwrap().unwrap();
+        // The same add again keeps the key rather than replacing it.
+        let (key, _) = created_key(&store, &configuration, Change::Unchanged, false);
+        assert_eq!(key["status"], "kept");
+        assert_eq!(store.get("resource-claims.shared").unwrap().unwrap(), first);
+    }
+
+    #[test]
+    fn hs2_ewgptz_no_key_leaves_the_store_empty_and_names_the_import() {
+        let store = Memory::default();
+        let (key, steps) = created_key(&store, &keyed("shared"), Change::Created, true);
+        assert_eq!(key["status"], "skipped");
+        assert!(steps[0].contains("--import"));
+        assert!(store.get("resource-claims.shared").unwrap().is_none());
+    }
+
+    #[test]
+    fn hs2_ewgptz_an_unavailable_credential_store_does_not_fail_the_add() {
+        let (key, steps) = created_key(&Unavailable, &keyed("shared"), Change::Created, false);
+        assert_eq!(key["status"], "unavailable");
+        assert!(key["error"].as_str().unwrap().contains("no store"));
+        assert!(steps[0].contains("--generate"));
     }
 }
