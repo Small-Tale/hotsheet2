@@ -8,14 +8,16 @@
 //! and running them is [`hub`]; the idempotent headless workflow the CLI and server share is
 //! [`workflow`]; the first adapter is [`ably`] (HS2-BWJWWX).
 
+pub mod ably;
+pub mod github;
 pub mod hub;
 pub mod model;
 pub mod registry;
 pub mod workflow;
 
-/// The adapters this build ships. The first is Ably (HS2-BWJWWX).
+/// The adapters this build ships: Ably Realtime (HS2-BWJWWX).
 pub fn builtin_adapters() -> Vec<std::sync::Arc<dyn ChangeAdapter>> {
-    Vec::new()
+    vec![std::sync::Arc::new(ably::AblyAdapter::new())]
 }
 
 pub use hub::{Backoff, ChangeListener, Hub, Ignored, RecheckReason, RemoteChange, Router};

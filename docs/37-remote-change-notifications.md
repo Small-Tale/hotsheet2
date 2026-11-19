@@ -1,7 +1,7 @@
 # 37. Remote-change notifications
 
 Status: partial. The contract, connections, bindings, router, hub and headless workflow ship
-with HS2-8X2S08; the Ably adapter is HS2-BWJWWX; waking Git ticket-source sync from a hint is
+with HS2-8X2S08, and the Ably adapter with HS2-BWJWWX; waking Git ticket-source sync from a hint is
 HS2-HY8ZPG; server routes and client settings are HS2-9DHKTF.
 
 A Hot Sheet server learns that a Git remote advanced by running its own sync. An external event
@@ -124,9 +124,67 @@ outage never affects Git sync, which keeps its own schedule.
 
 ## 37.8 Status
 
-| Piece                                                          | Status               |
-| -------------------------------------------------------------- | -------------------- |
-| Contract, registry, router, hub, workflow, CLI                 | shipped (HS2-8X2S08) |
-| Ably adapter                                                   | HS2-BWJWWX           |
-| Wake Git ticket-source sync from a hint; server startup wiring | HS2-HY8ZPG           |
-| Server routes and client settings                              | HS2-9DHKTF           |
+| Piece                                                                     | Status                                                               |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Contract, registry, router, hub, workflow, CLI                            | shipped (HS2-8X2S08)                                                 |
+| Ably adapter and the GitHub push mapping                                  | shipped (HS2-BWJWWX); the live service is checked by hand, see below |
+| Start the hub with the server and wake Git ticket-source sync from a hint | HS2-HY8ZPG and its follow-up for server startup                      |
+| Server routes and client settings                                         | HS2-9DHKTF                                                           |
+
+## 37.9 The Ably adapter (HS2-BWJWWX)
+
+`--plugin ably` subscribes to [Ably Realtime](https://ably.com/docs/protocols) channels and turns
+a GitHub `push` webhook delivered through an Ably incoming webhook into a hint. One connection can
+serve a project's code repository and several Git ticket stores: each binds its own channel (or
+shares one), expected repository and refs, and one WebSocket attaches every channel the bindings
+name. Ably is optional: no other part of Hot Sheet needs an account.
+
+**Setup.** Create an Ably app and an API key whose capability is _subscribe only_ on the bound
+channels; then
+
+```sh
+hotsheet-cli remote-change connection add shared --plugin ably
+hotsheet-cli remote-change connection secret shared      # the key, on standard input
+hotsheet-cli remote-change connection test shared        # connects, expects CONNECTED, closes
+hotsheet-cli remote-change bind checkout:<checkout id> --connection shared \
+  --channel repo-events --repository owner/name
+```
+
+The optional `endpoint` setting (`wss://host[:port]`, or `ws://` to a loopback address in
+development) overrides `wss://main.realtime.ably.net`. The webhook's _publish_ URL and key belong
+to GitHub and Ably only: Hot Sheet never stores them, and the subscribe key never reaches a browser.
+
+**The connection.** Blocking `tungstenite` over `wss` (TLS built with the ring provider and the
+bundled web PKI roots), JSON protocol version 2 with heartbeats. The key goes in the connect URL's
+`key` parameter once, over TLS, and every error message has it stripped. The adapter waits for
+`CONNECTED`, sends `ATTACH` for each channel, announces the connection (`resumed: false`, so each
+reconnect asks every bound source for a check) once every channel is `ATTACHED`, then reads
+`MESSAGE` frames. A refused handshake (401, 403), an `ERROR` with an authorization code
+(40100–40199, 40300–40399) or a channel the key may not attach is an **auth failure**, which stops the
+hub retrying until the connection changes; a drop, a `DISCONNECTED`, `CLOSED` or `DETACHED`, a
+connection that is not confirmed within 15 s, or 60 s of silence (Ably heartbeats every 15 s) is
+**transient** and the hub reconnects with its bounded backoff. A read timeout of one second only
+lets the thread notice a stop request; nothing is requested on a timer.
+
+**The mapping** (`github::map_push`) reads only `ref`, `after` and `repository.{id,full_name}`, takes
+the Ably message id as the event id (the GitHub delivery id is not in the body), and never keeps or
+forwards the payload. Outcomes are counted, not logged: a push becomes a hint (a tag push too; a
+binding decides whether it follows tags); `ping` (`zen`, `hook_id`), a delivery for another event
+(no `ref`), a deleted branch or tag (`deleted`, or an all-zero `after`), a payload over 256 KiB, one
+that is not JSON or not an object, and one missing a usable `ref`, `after` or repository are skipped.
+A GitHub retry arrives as a new Ably message and collapses on (ref, tip) in the router.
+
+**Limits of the direct GitHub to Ably path.** A raw push payload can exceed Ably's message size on
+the free plan, and Ably does not verify GitHub's `X-Hub-Signature-256` on a direct incoming webhook:
+anyone who learns the webhook URL can publish. The hint model keeps that harmless (a hint can only
+cause a check of the real remote, and a bound repository identity and ref are required), but it can
+still be used to cause extra checks. A relay that verifies the signature and publishes a small
+message is the stronger setup; the adapter accepts such a message as long as it carries `ref`,
+`after` and `repository`.
+
+**Verification.** `crates/hotsheet-notify/tests/ably.rs` runs the adapter and the hub against a
+scripted fake Ably Realtime server (a WebSocket server on loopback that speaks CONNECTED, ATTACH and
+ATTACHED, MESSAGE, ERROR, DISCONNECTED and DETACHED, refuses handshakes, and drops sockets). The live
+service, the real TLS handshake and the protocol constants (taken from Ably's protocol v2 as
+documented by its client libraries) are checked by hand:
+[manual-test-plan.md](manual-test-plan.md), "Ably remote-change connection".

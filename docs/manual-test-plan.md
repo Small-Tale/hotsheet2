@@ -1501,3 +1501,26 @@ vms/one --duration 30s --wait 60s` in the second; release the first and confirm 
 5. Watch the database's command count while a wait is parked: it must not climb on a timer.
 6. Record the date and the Upstash plan in the ticket. Flush the database when done: each run leaves
    its fencing counters and name sets (claim keys expire on their own).
+
+## Ably remote-change connection against the real service (HS2-BWJWWX)
+
+CI uses a scripted fake of Ably Realtime on loopback. This checks the real TLS handshake, the
+protocol constants and the GitHub to Ably webhook path (`docs/37` §37.9). Use a throwaway Ably app
+and a repository you can push to. Never use a key that can publish or manage the app.
+
+1. In Ably, create an app, an API key with only the subscribe capability on one channel
+   (`repo-events`), and an incoming webhook integration that publishes to that channel. In the
+   repository, add a webhook for push events to the integration URL (content type JSON).
+2. With a throwaway `HOTSHEET_HOME`: `hotsheet-cli remote-change connection add shared --plugin ably`,
+   `connection secret shared` (key on standard input), `connection test shared` (expect `ok: true`).
+   A wrong key must fail with `auth_failed` and the output must not contain the key.
+3. Bind a checkout or store: `bind checkout:<id> --connection shared --channel repo-events --repository
+<owner/name>`. Start a server (or the hub in a test harness) and confirm the connection reads
+   `connected` and the bound source is asked to recheck once.
+4. Push a commit to the bound branch: within a few seconds the source receives one change hint naming
+   the ref and the new tip. Push to a tag and to a branch the binding does not follow: neither is
+   delivered. Redeliver the same webhook from GitHub: it is not delivered twice.
+5. Disable the network for a minute and restore it: health shows `reconnecting` with a growing delay,
+   then `connected`, and every bound source is asked to recheck.
+6. Revoke the key in Ably: health becomes `auth_failed` and the connection stops retrying.
+7. Record the date and the Ably plan in the ticket.
