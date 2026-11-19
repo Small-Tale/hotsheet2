@@ -9,7 +9,10 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+// HS2-MZM988: only the macOS tests build and read saver bundles.
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
 
 fn cli(home: &Path) -> Command {
     let mut command = Command::new(workspace_bin::path("hotsheet-cli"));
@@ -28,6 +31,7 @@ fn json(home: &Path, args: &[&str]) -> Value {
 }
 
 /// A bundle with the files the engine needs.
+#[cfg(target_os = "macos")]
 fn bundle(root: &Path, marker: &str) -> PathBuf {
     let bundle = root.join("build").join("HotSheet.saver");
     fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
