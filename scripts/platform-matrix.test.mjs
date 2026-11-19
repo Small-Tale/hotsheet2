@@ -123,6 +123,21 @@ test('HS2-GY4938 installs dav1d from the pinned overlay port with the MSVC 14.52
   assert.match(patch, /\+#ifndef __has_include_next\n\+#define __has_include_next\(x\) 0\n\+#endif/);
 });
 
+test('HS2-ZW0PVE force-includes the __has_include_next fallback into x64 Windows C builds', () => {
+  for (const job of [
+    workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),
+    workflow.slice(workflow.indexOf('\n  tauri:')),
+  ]) {
+    const avif = job.indexOf('Install the AVIF decoder for the native build (Windows)');
+    const step = job.slice(avif, job.indexOf('- name:', avif + 1));
+    assert.match(step, /if \(\$env:TRIPLET -like 'x64-\*'\) \{/);
+    assert.match(step, /'\.github\/msvc\/has-include-next-fallback\.h'/);
+    assert.match(step, /"CFLAGS=\/FI\$fallback" >> \$env:GITHUB_ENV/);
+  }
+  const header = readFileSync(new URL('../.github/msvc/has-include-next-fallback.h', import.meta.url), 'utf8');
+  assert.match(header, /#ifndef __has_include_next\n#define __has_include_next\(x\) 0\n#endif/);
+});
+
 test('HS2-XW91TJ selects a verified ARM64 assembler for aws-lc-sys', () => {
   for (const job of [
     workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:')),

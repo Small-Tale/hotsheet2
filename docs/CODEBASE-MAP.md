@@ -978,6 +978,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .github/scripts/free-runner-disk.sh # Removes unused preinstalled toolchains and logs `df -h /` before the check/coverage jobs restore their bounded Swatinem/rust-cache (HS2-CTC6BA; tests: platform-matrix.test.mjs)
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
+  .github/msvc/has-include-next-fallback.h # Forced-include C fallback for MSVC 14.52's C7780 on the vendored libdav1d-sys dav1d in x64 Windows Platforms jobs (HS2-ZW0PVE; tests: platform-matrix.test.mjs)
   .github/vcpkg-ports/dav1d/ # Overlay of vcpkg's fixed dav1d port (MSVC 14.52 compat-header patch vendored) for every Windows Platforms job's AVIF decoder install (HS2-GY4938; tests: platform-matrix.test.mjs)
   .github/workflows/platforms.yml # `Platforms`: daily/manual/workflow_call full suite per target (Linux x86_64/arm64, Windows x86_64/arm64, macOS arm64) + `tauri-<target>` desktop shell fmt, `cargo lint-desktop` clippy (HS2-H37V5P), tests and unsigned build; never per commit, never a ci-gate run (HS2-31RGRK)
   scripts/platform-matrix.mjs # Platform target ids, runners and target selection for platforms.yml's plan job (HS2-31RGRK; tests: platform-matrix.test.mjs)

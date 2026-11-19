@@ -147,6 +147,13 @@ jobs:
           "PKG_CONFIG=$pkgconf" >> $env:GITHUB_ENV
           "PKG_CONFIG_PATH=$pkgconfig" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
+          # HS2-ZW0PVE: MSVC 14.52 rejects the compat stdatomic.h of the dav1d that libdav1d-sys
+          # vendors and builds with cl here; force-include upstream's fallback. ARM64 builds it
+          # with clang-cl (HS2-HK3RMC), which never uses that header.
+          if ($env:TRIPLET -like 'x64-*') {
+            $fallback = (Join-Path $env:GITHUB_WORKSPACE '.github/msvc/has-include-next-fallback.h') -replace '\\', '/'
+            "CFLAGS=/FI$fallback" >> $env:GITHUB_ENV
+          }
 
       - name: Install gas-preprocessor for MSVC ARM assembly (Windows arm64)
         if: matrix.os == 'windows' && matrix.arch == 'arm64'
@@ -432,6 +439,13 @@ jobs:
           "PKG_CONFIG=$(Join-Path $installed "$env:HOST_TRIPLET/tools/pkgconf/pkgconf.exe")" >> $env:GITHUB_ENV
           "PKG_CONFIG_PATH=$(Join-Path $installed "$env:TRIPLET/lib/pkgconfig")" >> $env:GITHUB_ENV
           "CC=cl" >> $env:GITHUB_ENV
+          # HS2-ZW0PVE: MSVC 14.52 rejects the compat stdatomic.h of the dav1d that libdav1d-sys
+          # vendors and builds with cl here; force-include upstream's fallback. ARM64 builds it
+          # with clang-cl (HS2-HK3RMC), which never uses that header.
+          if ($env:TRIPLET -like 'x64-*') {
+            $fallback = (Join-Path $env:GITHUB_WORKSPACE '.github/msvc/has-include-next-fallback.h') -replace '\\', '/'
+            "CFLAGS=/FI$fallback" >> $env:GITHUB_ENV
+          }
 
       - name: Install gas-preprocessor for MSVC ARM assembly (Windows arm64)
         if: matrix.os == 'windows' && matrix.arch == 'arm64'
