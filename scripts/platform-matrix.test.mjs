@@ -131,8 +131,10 @@ test('HS2-ZW0PVE force-includes the __has_include_next fallback into x64 Windows
     const avif = job.indexOf('Install the AVIF decoder for the native build (Windows)');
     const step = job.slice(avif, job.indexOf('- name:', avif + 1));
     assert.match(step, /if \(\$env:TRIPLET -like 'x64-\*'\) \{/);
-    assert.match(step, /'\.github\/msvc\/has-include-next-fallback\.h'/);
-    assert.match(step, /"CFLAGS=\/FI\$fallback" >> \$env:GITHUB_ENV/);
+    // MSYS path conversion in the Git Bash steps mangles a leading `/` and a `:/` (run 44549602429).
+    assert.match(step, /'\.github\\msvc\\has-include-next-fallback\.h'/);
+    assert.match(step, /"CFLAGS=-FI\$fallback" >> \$env:GITHUB_ENV/);
+    assert.doesNotMatch(step, /CFLAGS=\/FI|has-include-next-fallback\.h'\) -replace/);
   }
   const header = readFileSync(new URL('../.github/msvc/has-include-next-fallback.h', import.meta.url), 'utf8');
   assert.match(header, /#ifndef __has_include_next\n#define __has_include_next\(x\) 0\n#endif/);
