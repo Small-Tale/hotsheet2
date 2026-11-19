@@ -48,6 +48,18 @@ pub(crate) enum ResourceCmd {
         /// The new lease length from now.
         #[arg(long)]
         duration: String,
+        /// Renew through this Hot Sheet server's token route instead of the machine home:
+        /// `https://<host>[:<port>]`. Only the token is sent. For a task with no shared home.
+        #[arg(long, value_name = "URL")]
+        server: Option<String>,
+        /// With --server: trust exactly this CA certificate (PEM), such as the one
+        /// `hotsheet-cli cert init` writes, instead of the public web PKI.
+        #[arg(long, value_name = "FILE", requires = "server")]
+        ca_cert: Option<std::path::PathBuf>,
+        /// With --server: allow plain http:// to a non-loopback address (a host-only network
+        /// no other machine can reach); the token crosses in clear text.
+        #[arg(long, requires = "server")]
+        allow_insecure_http: bool,
         #[command(flatten)]
         scope: super::resource_backends::ScopeArg,
     },
@@ -58,6 +70,15 @@ pub(crate) enum ResourceCmd {
         /// The renewal token (default: `$HOTSHEET_RESOURCE_CLAIM_TOKEN`).
         #[arg(long)]
         token: Option<String>,
+        /// Release through this Hot Sheet server's token route; see `renew --server`.
+        #[arg(long, value_name = "URL")]
+        server: Option<String>,
+        /// With --server: trust exactly this CA certificate (PEM).
+        #[arg(long, value_name = "FILE", requires = "server")]
+        ca_cert: Option<std::path::PathBuf>,
+        /// With --server: allow plain http:// to a non-loopback address.
+        #[arg(long, requires = "server")]
+        allow_insecure_http: bool,
         #[command(flatten)]
         scope: super::resource_backends::ScopeArg,
     },
@@ -104,6 +125,44 @@ pub(crate) fn run(cmd: Cmd, _ctx: &Ctx) -> Result<()> {
         misrouted("resources")
     };
     let cmd = match cmd {
+        // HS2-7H1Y4E: through a server's token route, with the token alone.
+        ResourceCmd::Renew {
+            target,
+            token,
+            duration,
+            server: Some(server),
+            ca_cert,
+            allow_insecure_http,
+            ..
+        } => {
+            return super::resource_remote::call(
+                &server,
+                ca_cert.as_deref(),
+                allow_insecure_http,
+                "renew",
+                target.as_deref(),
+                &token_value(token)?,
+                Some(millis(&duration)?),
+            );
+        }
+        ResourceCmd::Release {
+            target,
+            token,
+            server: Some(server),
+            ca_cert,
+            allow_insecure_http,
+            ..
+        } => {
+            return super::resource_remote::call(
+                &server,
+                ca_cert.as_deref(),
+                allow_insecure_http,
+                "release",
+                target.as_deref(),
+                &token_value(token)?,
+                None,
+            );
+        }
         ResourceCmd::Backend { cmd } => return super::resource_backends::backend(cmd),
         ResourceCmd::Plugin { cmd } => return super::resource_backends::plugin(cmd),
         ResourceCmd::Namespace { cmd } => return super::resource_backends::namespace(cmd),

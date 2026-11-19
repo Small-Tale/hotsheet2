@@ -27,6 +27,7 @@ pub(crate) mod providers;
 pub(crate) mod remote_change;
 pub(crate) mod remotes;
 pub(crate) mod resource_backends;
+pub(crate) mod resource_remote;
 pub(crate) mod resources;
 pub(crate) mod server;
 pub(crate) mod setup;

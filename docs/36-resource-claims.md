@@ -318,6 +318,25 @@ curl -fsS -X POST "https://<host-address>:<port>/resource-claim-token/renew" \
   -H "Content-Type: application/json" -d '{"duration_ms": 600000}'
 ```
 
+**From the CLI (HS2-7H1Y4E).** A guest with `hotsheet-cli` need not hand-write the request:
+
+```sh
+hotsheet-cli resource renew   --server https://<host-address>:<port> --duration 10m
+hotsheet-cli resource release --server https://<host-address>:<port>
+```
+
+The token comes from `--token` or `$HOTSHEET_RESOURCE_CLAIM_TOKEN`, and an optional
+`<namespace>/<resource>` argument must name the claim the token is for (checked before any
+request). `--server` calls the token route with the token as the bearer and nothing else: no
+`HOTSHEET_HOME`, no server secret, which is never read or sent on this path. The URL is
+`https://host[:port]` with no credentials, path, query or fragment. A certificate is checked against
+the public web PKI, or against exactly the authority given with `--ca-cert <PEM>` (the CA that
+`hotsheet-cli cert init` writes; any other issuer is refused and the error names `--ca-cert`).
+Plain `http://` is accepted only to a loopback address; `--allow-insecure-http` allows it to another
+host for a host-only network no other machine can reach, since the token then crosses in clear text.
+The reply is printed as JSON, a refusal prints its code (`token_invalid`, `expired`, `not_holder`) and
+fails the command, and the token never appears in output or an error.
+
 ## 36.12 Rust API for other crates
 
 A crate that schedules work, such as orchestration, treats a held resource as
