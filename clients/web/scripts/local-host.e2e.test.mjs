@@ -702,6 +702,20 @@ it.concurrent(
       expect(devFirst.status, JSON.stringify(devFirst.body)).toBe(201);
       const devLaunched = await machineServer(home);
       expect(devLaunched?.launcher).toBe('stable-dev');
+      // HS2-ZY7YZH: the open scheduled a setup refresh in the server. The pinned host restarts only
+      // an idle server and otherwise defers silently for the same build (HS2-46BKH7), keeping the
+      // dev launcher until a later open. Under CI load that refresh outlived the pinned host's
+      // startup, so wait until the dev-launched server reports no blocker before the host starts.
+      await expect
+        .poll(
+          async () => {
+            const response = await fetch(`${devOrigin}${devFirst.body.apiPath}/lifecycle/quiescence`);
+            expect(response.status).toBe(200);
+            return (await response.json()).report.blockers;
+          },
+          { timeout: 60_000 },
+        )
+        .toEqual([]);
 
       // The pinned host then takes ownership: the idle dev-launched server restarts onto its snapshot.
       pinned = spawn(
