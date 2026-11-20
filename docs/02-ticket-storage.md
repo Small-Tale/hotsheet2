@@ -235,6 +235,17 @@ path order. The persistent `.hotsheet-note-mutation.lock` file retains its origi
 name for compatibility and is Git-ignored; a crashed writer releases the OS lock,
 and the next writer reads the current ticket after acquiring it.
 
+The store's managed `.gitignore` keeps machine-local files out of its history
+(HS2-457FGS). Every opened store, and every sync pass before it stages anything, makes
+sure it lists Finder's `.DS_Store`, the two lasting store-root locks
+(`.hotsheet-note-mutation.lock` and `providers.json.lock`, the sibling lock every
+provider-configuration writer takes), and `.*.tmp`, the staged sibling of an atomic
+replace that exists only between its write and rename. A lasting lock an older client
+committed is removed from the index (never from disk) by the next sync pass or
+repository-wide commit, so a process that holds it keeps its inode on every clone that
+runs this version. `providers.json` itself is still committed; whether it should be is
+an open decision recorded on HS2-457FGS.
+
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
 healthy ticket **plus** a separate report of the files that failed to parse

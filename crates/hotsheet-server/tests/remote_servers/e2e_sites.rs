@@ -72,11 +72,35 @@ fn home_pool(fleet: &Fleet) -> Coordinator {
         .unwrap()
 }
 
+/// How many passes one machine's sync loop may take when each push loses a race.
+const RACED_PASSES: usize = 5;
+
+/// One pass of a machine's sync loop, repeated at once (as the product's next pass
+/// would) while its push loses the documented race to another pusher in the fleet: a
+/// peer server's own sync or claim push may land between this clone's fetch and push
+/// (HS2-457FGS). Any other outcome ends the repetition.
+fn sync_pass(store: &Path) -> hotsheet_ticketing::sync::SyncReport {
+    use hotsheet_ticketing::sync::{PUSH_RACE_REASON, SyncReport, sync_once};
+    let mut report = sync_once(store);
+    for _ in 1..RACED_PASSES {
+        let raced = report == SyncReport::Offline
+            && hotsheet_ticketing::sync_health::read_record(store)
+                .and_then(|record| record.reason)
+                .as_deref()
+                == Some(PUSH_RACE_REASON);
+        if !raced {
+            break;
+        }
+        report = sync_once(store);
+    }
+    report
+}
+
 /// One pass of each machine's sync loop, the home's last, so both clones hold every
 /// commit either published.
 fn converge(fleet: &Fleet) {
     for store in [&fleet.a_store, &fleet.b_store, &fleet.a_store] {
-        let report = hotsheet_ticketing::sync::sync_once(store);
+        let report = sync_pass(store);
         assert!(
             matches!(
                 report,

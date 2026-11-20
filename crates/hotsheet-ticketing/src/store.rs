@@ -35,6 +35,26 @@ const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
 const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
+/// The lasting sibling lock every provider-configuration writer takes beside the store's
+/// `providers.json` ([`crate::ProviderConfigRegistry`], HS2-457FGS).
+pub(crate) const PROVIDER_CONFIG_LOCK_FILE: &str = "providers.json.lock";
+/// Staged siblings of an atomic replace ([`write_file_atomically`] and the provider
+/// configuration publication): a dot-file ending in `.tmp` that exists only between the
+/// write and the rename, or after a crash in that window (HS2-457FGS).
+const STAGED_WRITE_PATTERN: &str = ".*.tmp";
+/// Every pattern the managed store `.gitignore` carries: host metadata, lasting
+/// machine-local locks, and staged atomic writes. None of them is ticket data.
+pub(crate) const MANAGED_IGNORES: [&str; 4] = [
+    FINDER_METADATA_FILE,
+    NOTE_MUTATION_LOCK_FILE,
+    PROVIDER_CONFIG_LOCK_FILE,
+    STAGED_WRITE_PATTERN,
+];
+/// Lasting machine-local lock files at the store root that an older client may already
+/// have committed. Sync and repository-wide commits remove them from the index while
+/// keeping the working file, so a lock holder's inode is never replaced (HS2-457FGS).
+pub(crate) const LOCAL_ONLY_ROOT_FILES: [&str; 2] =
+    [NOTE_MUTATION_LOCK_FILE, PROVIDER_CONFIG_LOCK_FILE];
 
 struct AttachmentWriteOptions {
     metadata: hotsheet_model::AttachmentMetadata,
@@ -473,14 +493,15 @@ impl FsStore {
         &self.root
     }
 
-    /// Keep host-generated Finder metadata out of every store directory. The plain
-    /// filename pattern applies recursively, including inside legacy and current
+    /// Keep host-generated Finder metadata, lasting machine-local locks, and staged
+    /// atomic writes out of every store directory ([`MANAGED_IGNORES`]). The plain
+    /// filename patterns apply recursively, including inside legacy and current
     /// attachment layouts.
-    fn ensure_managed_gitignore(&self) -> Result<(), StoreError> {
+    pub(crate) fn ensure_managed_gitignore(&self) -> Result<(), StoreError> {
         let path = self.root.join(".gitignore");
         let existing = fs::read_to_string(&path).unwrap_or_default();
         let mut content = existing.clone();
-        for managed in [FINDER_METADATA_FILE, NOTE_MUTATION_LOCK_FILE] {
+        for managed in MANAGED_IGNORES {
             if content.lines().any(|line| line.trim() == managed) {
                 continue;
             }
@@ -972,20 +993,19 @@ impl FsStore {
             None
         };
         if bounded_paths.is_some() && !designated {
-            let has_tracked_finder_metadata = git_stdout(
-                &self.root,
-                &[
-                    "ls-files",
-                    "--",
-                    FINDER_METADATA_FILE,
-                    ":(glob)**/.DS_Store",
-                ],
-            )
-            .unwrap_or_default()
-            .lines()
-            .next()
-            .is_some();
-            if has_tracked_finder_metadata {
+            let mut tracked_query = vec![
+                "ls-files",
+                "--",
+                FINDER_METADATA_FILE,
+                ":(glob)**/.DS_Store",
+            ];
+            tracked_query.extend(LOCAL_ONLY_ROOT_FILES);
+            let has_tracked_local_files = git_stdout(&self.root, &tracked_query)
+                .unwrap_or_default()
+                .lines()
+                .next()
+                .is_some();
+            if has_tracked_local_files {
                 // This one-time legacy repair needs a repository-wide commit so Git
                 // records the cached deletion while leaving the ignored local file.
                 bounded_paths = None;
@@ -1000,21 +1020,21 @@ impl FsStore {
         if let Some(paths) = &bounded_paths {
             git_paths(&self.root, &["add", "-A", "--"], paths)?;
         } else {
-            // Older clients may already have committed Finder's metadata. Remove only
-            // those exact generated paths from the index while leaving local files intact.
-            git(
-                &self.root,
-                &[
-                    "rm",
-                    "-q",
-                    "-f",
-                    "--cached",
-                    "--ignore-unmatch",
-                    "--",
-                    FINDER_METADATA_FILE,
-                    ":(glob)**/.DS_Store",
-                ],
-            )?;
+            // Older clients may already have committed Finder's metadata or a lasting
+            // lock (HS2-457FGS). Remove only those exact generated paths from the index
+            // while leaving local files intact.
+            let mut untrack = vec![
+                "rm",
+                "-q",
+                "-f",
+                "--cached",
+                "--ignore-unmatch",
+                "--",
+                FINDER_METADATA_FILE,
+                ":(glob)**/.DS_Store",
+            ];
+            untrack.extend(LOCAL_ONLY_ROOT_FILES);
+            git(&self.root, &untrack)?;
             git(&self.root, &["add", "-A"])?;
         }
         // Nothing staged → nothing to commit (idempotent re-writes, no-op edits).
@@ -3852,6 +3872,98 @@ mod tests {
         );
         assert!(!tracked.lines().any(|path| path == NOTE_MUTATION_LOCK_FILE));
         assert!(attachment_dir.join(FINDER_METADATA_FILE).is_file());
+    }
+
+    /// HS2-457FGS: the managed ignore list names every lasting root lock and the staged
+    /// sibling of an atomic write, once each, and keeps ticket data and attachments.
+    #[test]
+    fn hs2_457fgs_managed_gitignore_lists_local_locks_and_staged_writes_once() {
+        let (dir, _store) = temp_store();
+        fs::write(dir.path().join(".gitignore"), "worklist.md").unwrap();
+        for _ in 0..2 {
+            FsStore::open(dir.path()).unwrap();
+        }
+        let ignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(ignore.lines().any(|line| line == "worklist.md"));
+        for managed in MANAGED_IGNORES {
+            assert_eq!(
+                ignore.lines().filter(|line| *line == managed).count(),
+                1,
+                "{managed} in {ignore:?}"
+            );
+        }
+        for local in LOCAL_ONLY_ROOT_FILES {
+            assert!(MANAGED_IGNORES.contains(&local), "{local}");
+        }
+        // The provider registry's own lock is the file the list names.
+        let registry = crate::ProviderConfigRegistry::new(dir.path().join("providers.json"));
+        registry.save(&[]).unwrap();
+        assert!(dir.path().join(PROVIDER_CONFIG_LOCK_FILE).is_file());
+
+        git(dir.path(), &["init", "-q"]).unwrap();
+        let ignored = |path: &str| git_ok(dir.path(), &["check-ignore", "-q", "--no-index", path]);
+        for path in [
+            PROVIDER_CONFIG_LOCK_FILE,
+            NOTE_MUTATION_LOCK_FILE,
+            ".providers-a1B2c3.tmp",
+            ".hotsheet-store.json.41.0.tmp",
+            "tickets/.01ARZ3NDEKTSV4RRFFQ69G5FAV.md.41.1.tmp",
+        ] {
+            assert!(ignored(path), "{path} should be ignored");
+        }
+        for path in [
+            "providers.json",
+            "hotsheet-store.json",
+            "tickets/01ARZ3NDEKTSV4RRFFQ69G5FAV.md",
+            "attachments/report.tmp",
+            "attachments/build.lock",
+        ] {
+            assert!(!ignored(path), "{path} should stay shareable");
+        }
+    }
+
+    /// HS2-457FGS: a path-scoped store commit repairs a provider lock an older client
+    /// committed, keeping the working file and every other tracked file.
+    #[test]
+    fn hs2_457fgs_a_store_commit_untracks_a_committed_provider_lock() {
+        let (dir, store) = temp_store();
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket(&ticket).unwrap();
+        fs::write(dir.path().join(PROVIDER_CONFIG_LOCK_FILE), b"").unwrap();
+        fs::write(dir.path().join("providers.json"), b"{\"connections\":[]}\n").unwrap();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        git(dir.path(), &["add", "-A"]).unwrap();
+        git(dir.path(), &["add", "-f", PROVIDER_CONFIG_LOCK_FILE]).unwrap();
+        let ident = [
+            "-c",
+            "user.name=Hot Sheet Test",
+            "-c",
+            "user.email=test@localhost",
+        ];
+        let mut commit = ident.to_vec();
+        commit.extend(["commit", "-q", "-m", "older client"]);
+        git(dir.path(), &commit).unwrap();
+
+        let mut edited = ticket.clone();
+        edited.title = "Edited".into();
+        store.write_ticket_committing(&edited).unwrap();
+        let tracked = git_stdout(dir.path(), &["ls-files"]).unwrap();
+        assert!(
+            !tracked
+                .lines()
+                .any(|path| path == PROVIDER_CONFIG_LOCK_FILE)
+        );
+        assert!(tracked.lines().any(|path| path == "providers.json"));
+        assert!(tracked.lines().any(|path| path.ends_with(".md")));
+        assert!(dir.path().join(PROVIDER_CONFIG_LOCK_FILE).is_file());
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .trim()
+                .is_empty()
+        );
+        // Repeating finds nothing left to repair.
+        assert!(!store.autocommit("again").unwrap());
     }
 
     #[test]

@@ -427,6 +427,11 @@ pub fn push_was_refused(stderr: &str) -> bool {
     refused && !push_raced(&lower)
 }
 
+/// The recorded reason of a pass whose push lost a race to another pusher (HS2-457FGS
+/// names it so callers that drive passes themselves can tell it from an outage).
+pub const PUSH_RACE_REASON: &str =
+    "the remote moved during the push; the next sync integrates it and retries";
+
 /// Another pusher moved the remote branch first; a re-fetch and retry fixes it.
 fn push_raced(lower: &str) -> bool {
     lower.contains("fetch first")
@@ -485,7 +490,7 @@ fn transport_reason(step: &str, stderr: &str) -> String {
     {
         format!("the remote refused authentication during {step}")
     } else if push_raced(&lower) {
-        "the remote moved during the push; the next sync integrates it and retries".to_string()
+        PUSH_RACE_REASON.to_string()
     } else {
         let detail = stderr
             .lines()
@@ -894,6 +899,23 @@ pub(crate) fn commit_pending(store_path: &Path) {
 /// [`commit_pending`], stopping with [`SyncReport::Blocked`] when a Git lock refused the
 /// stage or the commit (HS2-6ACT5Y). Other failures stay best-effort, as before.
 fn commit_pending_checked(store_path: &Path) -> Result<(), (SyncReport, CycleDetail)> {
+    // HS2-457FGS: an older client may have committed a lasting machine-local lock. Drop
+    // it from the index only; the working file stays, so a holder keeps its inode, and
+    // the managed `.gitignore` keeps `add -A` from staging it again. A store last
+    // opened by an older client gets the current list before anything is staged.
+    if let Ok(store) = crate::FsStore::open_without_maintenance(store_path)
+        && let Err(error) = store.ensure_managed_gitignore()
+    {
+        eprintln!("warning: could not maintain store .gitignore: {error}");
+    }
+    let mut untrack = vec!["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--"];
+    untrack.extend(crate::store::LOCAL_ONLY_ROOT_FILES);
+    let untracked = git_run(store_path, &untrack);
+    if !untracked.ok
+        && let Some(blocked) = lock_failure(store_path, "the local commit", &untracked.stderr)
+    {
+        return Err(blocked);
+    }
     let add = git_run(store_path, &["add", "-A"]);
     if !add.ok
         && let Some(blocked) = lock_failure(store_path, "the local commit", &add.stderr)
@@ -1074,6 +1096,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(test)]
+mod local_lock_tests;
 #[cfg(test)]
 mod lock_tests;
 #[cfg(test)]
