@@ -39,16 +39,23 @@ export async function installTerminalFixture(
     nativeSocket = false,
     openDelayMs = 0,
     warmLimit,
+    redrawOnlyOnResize = false,
   }: {
     nativeSocket?: boolean;
     /** Delay before a fake socket opens, like a real server round trip (HS2-6179FV). */
     openDelayMs?: number;
     /** Force the lightweight overflow preview for tests of that presentation. */
     warmLimit?: number;
+    /**
+     * Redraw only when a claim changes the PTY size, as a real PTY signals its program (SIGWINCH)
+     * only then. By default every claim redraws, which some specs rely on; a spec that reads output
+     * across a heartbeat claim opts in (HS2-D4DVG8).
+     */
+    redrawOnlyOnResize?: boolean;
   } = {},
 ) {
   await page.addInitScript(
-    ({ leadingZshMarker, ticketLinks, nativeSocket, openDelayMs }) => {
+    ({ leadingZshMarker, ticketLinks, nativeSocket, openDelayMs, redrawOnlyOnResize }) => {
       if (nativeSocket) return;
       const nano = (cols = 80, rows = 24) => {
         const bar = (value: string) => `\u001b[7m${value.padEnd(cols).slice(0, cols)}\u001b[0m`,
@@ -66,6 +73,8 @@ export async function installTerminalFixture(
         readyState = 0;
         binaryType = 'blob';
         sent: unknown[] = [];
+        // The PTY size the program last drew for; the open below draws at nano()'s default.
+        ptySize = '80x24';
         constructor(public url: string) {
           super();
           sockets.push(this);
@@ -97,7 +106,12 @@ export async function installTerminalFixture(
                   }),
                 }),
               );
-              if (!leadingZshMarker)
+              // With redrawOnlyOnResize, a claim at the current size, such as each heartbeat, never
+              // redraws over output (HS2-D4DVG8).
+              const size = `${resize.cols}x${resize.rows}`,
+                resized = size !== this.ptySize;
+              this.ptySize = size;
+              if (!leadingZshMarker && (resized || !redrawOnlyOnResize))
                 this.dispatchEvent(
                   new MessageEvent('message', {
                     data: new TextEncoder().encode(nano(resize.cols, resize.rows)).buffer,
@@ -115,7 +129,7 @@ export async function installTerminalFixture(
       }
       Object.assign(window, { WebSocket: FakeSocket, __terminalFeedbackSockets: sockets });
     },
-    { leadingZshMarker, ticketLinks, nativeSocket, openDelayMs },
+    { leadingZshMarker, ticketLinks, nativeSocket, openDelayMs, redrawOnlyOnResize },
   );
   let createdTerminal = false;
   const ticketRow = (id: string, slug: string, title: string) => ({

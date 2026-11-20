@@ -1315,7 +1315,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
     }),
     page = await context.newPage(),
     cdp = await context.newCDPSession(page);
-  await installTerminalFixture(page);
+  await installTerminalFixture(page, false, false, { redrawOnlyOnResize: true });
   await page.goto('/');
   await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -1409,6 +1409,26 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
       Number((node.querySelector('.xterm-rows')?.textContent ?? '').match(/magnified line (\d+)/)?.[1] ?? NaN),
     );
   await expect.poll(firstVisibleMagnifiedLine).toBeGreaterThanOrEqual(0);
+  // HS2-D4DVG8: a heartbeat claims the unchanged 80×24 size every few seconds. Once landed between
+  // the output and these reads, the fake PTY redrew nano over it; like a real PTY, it now redraws
+  // only on a size change. Wait for the next claim, then read.
+  const claimsSent = () =>
+    magnifiedViewport.evaluate(
+      () =>
+        (
+          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalFeedbackSockets
+          .filter((item) => item.url.includes('/terminals/terminal-new/attach'))
+          .flatMap((item) => item.sent)
+          .filter((value) => typeof value === 'string' && value.includes('"resize"')).length,
+    );
+  const claimsBefore = await claimsSent();
+  await expect.poll(claimsSent, { timeout: 15_000 }).toBeGreaterThan(claimsBefore);
+  // The terminal renders on animation frames; read after the claim's reply could have drawn.
+  await magnifiedViewport.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  expect(await firstVisibleMagnifiedLine()).toBeGreaterThanOrEqual(0);
   const firstLineAtBottom = await firstVisibleMagnifiedLine();
   await swipe(magnifiedViewport, 0.3, 0.8);
   await expect.poll(() => sliderTop(magnifiedViewport)).toBeLessThan(magnifiedBottom);
