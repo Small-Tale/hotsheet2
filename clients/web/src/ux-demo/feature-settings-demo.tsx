@@ -19,7 +19,7 @@ function view(configured: Readonly<Record<string, boolean | null>>): FeatureSett
   };
 }
 
-/** The live example's choices; its checkboxes and Restore Defaults change them as the server would. */
+/** The live example's choices; its switches and Restore Defaults change them as the server would. */
 const choices = signal<Readonly<Record<string, boolean | null>>>({});
 
 /** Restore the live example to its defaults. */
@@ -33,7 +33,7 @@ export function FeatureSettingsDemo() {
     <CatalogExampleStack>
       <CatalogExample
         label="Defaults, Live"
-        note="Experimental areas are off and optional ones on. A checkbox changes its feature at once; Restore Defaults clears every choice."
+        note="Experimental areas are off and optional ones on. A switch changes its feature at once; Restore Defaults clears every choice."
       >
         <FeatureSettings settings={view(choices.value)} />
       </CatalogExample>

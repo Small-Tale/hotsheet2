@@ -1,7 +1,7 @@
 import { Button } from '@kerfjs/ui/button';
-import { Checkbox } from '@kerfjs/ui/checkbox';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 
 import {
@@ -25,15 +25,15 @@ export const ALWAYS_ON_AREAS =
   'Always on: tickets, search, notes, notifications, permissions, the terminal drawer, ticket sources, and settings.';
 
 /**
- * App Settings › Features (HS2-3GJZGG, docs/06-clients.md §6.12): one checkbox per feature area,
- * saved machine-wide the moment it changes, like the neighbouring App Settings › General checkboxes.
- * Each checkbox's List takes the 8px control inset so its box lines up with the headings' text.
+ * App Settings › Features (HS2-3GJZGG, docs/06-clients.md §6.12): one Kerf Switch per feature area,
+ * saved machine-wide the moment it changes (the maintainer chose Switch for settings that apply at
+ * once). Each switch's List takes the 8px control inset so its track lines up with the headings' text.
  */
 export function FeatureSettings({ settings, message = '' }: FeatureSettingsProps) {
   const rows = (group: FeatureGroup) => (
     <List gap="xs" controlInsets="l">
       {FEATURE_AREAS.filter((area) => area.group === group).map((area) => (
-        <Checkbox
+        <Switch
           action={SHELL_AND_GLOBAL_ACTIONS.setFeature.value}
           name={`feature-${area.id}`}
           value={area.id}

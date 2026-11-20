@@ -55,6 +55,8 @@ const CORE = {
     'gallery-previous',
     'gallery-next',
     'gallery-toggle-playback',
+    // Minimizing a ticket reader is core reader behavior (HS2-Q8WF64).
+    'minimize-ticket-reader',
   ],
   // Orchestration is shown only for an Orchestration project (HS2-J89JC7), not a feature area.
   viewModes: ['list', 'board', 'orchestration', 'notifications', 'settings'],

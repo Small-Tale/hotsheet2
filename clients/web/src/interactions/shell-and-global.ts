@@ -146,7 +146,7 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly magnifiedTerminalKey: Signal<string | undefined>;
   readonly completePointerDetailsFinish: () => void;
   readonly schedulePointerDetailsFinish: () => void;
-  /** App Settings › Features (HS2-3GJZGG): a checkbox saves its feature at once; Restore Defaults clears all. */
+  /** App Settings › Features (HS2-3GJZGG): a switch saves its feature at once; Restore Defaults clears all. */
   readonly features?: {
     setFeature: (id: string, on: boolean) => void;
     restoreDefaults: () => void;
@@ -265,7 +265,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   );
   lifetime.add(
     delegate(document.body, 'change', SHELL_AND_GLOBAL_ACTIONS.setFeature.selector, (_event, target) => {
-      // Each checkbox submits its feature id as its value.
+      // Each switch submits its feature id as its value.
       const input = target as HTMLInputElement;
       if (input.value) features?.setFeature(input.value, input.checked);
     }),

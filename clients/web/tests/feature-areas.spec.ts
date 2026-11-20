@@ -10,7 +10,7 @@ import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
  * App Settings › Features (HS2-3GJZGG) in the real app against a private real server with the shipped
- * defaults: experimental areas are hidden and their shortcut ignored; a checkbox turns one on at once;
+ * defaults: experimental areas are hidden and their shortcut ignored; a switch turns one on at once;
  * a headless `hotsheet-cli settings set features.<id>` reaches the open client without a reload; Ticket
  * groups off shows grouped tickets ungrouped; Restore Defaults clears every choice. Synthetic tickets
  * only. The captures are the ticket's after images, named by state, width and color scheme.
@@ -118,7 +118,7 @@ for (const scheme of ['light', 'dark'] as const)
       await acrossWidths(page, () => shot(page, 'shell-defaults-project', scheme));
       await page.setViewportSize({ width: 1440, height: 1100 });
 
-      // App Settings › Features is the last category; a checkbox applies at once.
+      // App Settings › Features is the last category; a switch applies at once.
       await page.getByLabel('Settings View').click();
       const categories = page.locator('nav[aria-label="App Settings"] [data-action="select-settings-category"]');
       await expect(categories.last()).toHaveAttribute('data-item-id', 'features');
@@ -132,18 +132,18 @@ for (const scheme of ['light', 'dark'] as const)
         await shot(page, 'features-bottom', scheme);
       });
       await page.setViewportSize({ width: 1440, height: 1100 });
-      // The checkbox boxes line up with the headings' text (the maintainer's v1 annotation).
+      // The switch tracks line up with the headings' text (the maintainer's v1 annotation).
       const headingX = await features.getByRole('heading', { name: 'Experimental' }).evaluate((node) => {
         const range = document.createRange();
         range.selectNodeContents(node);
         return range.getBoundingClientRect().left;
       });
       const boxX = await features
-        .locator('[data-feature-row="drive"] input[type="checkbox"]')
+        .locator('[data-feature-row="drive"] input[role="switch"]')
         .evaluate((node) => node.getBoundingClientRect().left);
       expect(Math.abs(boxX - headingX)).toBeLessThanOrEqual(2);
 
-      const drive = features.getByRole('checkbox', { name: 'Drive with AI' });
+      const drive = features.getByRole('switch', { name: 'Drive with AI' });
       await expect(drive).not.toBeChecked();
       await drive.check();
       await expect
@@ -158,7 +158,7 @@ for (const scheme of ['light', 'dark'] as const)
       execFileSync(server.cli, ['settings', 'set', 'features.workers-view', 'off'], { env: server.env });
       await server.request('/feature-settings/changed', 'POST');
       await expect(page.getByLabel(/^Workers View/)).toHaveCount(0);
-      await expect(features.getByRole('checkbox', { name: 'Workers view' })).not.toBeChecked();
+      await expect(features.getByRole('switch', { name: 'Workers view' })).not.toBeChecked();
 
       // The quiet workspace: every optional area off; Ticket groups off shows grouped tickets ungrouped.
       for (const name of [
@@ -170,7 +170,7 @@ for (const scheme of ['light', 'dark'] as const)
         'Announcer',
         'Standby',
       ])
-        await features.getByRole('checkbox', { name }).uncheck();
+        await features.getByRole('switch', { name }).uncheck();
       await expect
         .poll(
           async () =>
@@ -201,7 +201,7 @@ for (const scheme of ['light', 'dark'] as const)
               .drive,
         )
         .toBeNull();
-      await expect(features.getByRole('checkbox', { name: 'Standby' })).toBeChecked();
+      await expect(features.getByRole('switch', { name: 'Standby' })).toBeChecked();
       await page.getByLabel('List View').click();
       await expect(page.locator('[data-component="ticket-list"] [data-ticket-group]').first()).toBeVisible();
       await expect(sidebar.locator('[data-component="drive-control"]')).toHaveCount(0);

@@ -115,14 +115,16 @@ describe('feature-area gating through the shipped components (HS2-3GJZGG)', () =
     expect(items.at(-1)).toBe('features');
   });
 
-  it('renders one checkbox per area, checked from the settings, in the Kerf control inset', () => {
+  it('renders one switch per area, on from the settings, in the Kerf control inset', () => {
     let page = String(FeatureSettings({}));
     for (const area of FEATURE_AREAS) expect(page).toContain(`data-feature-row="${area.id}"`);
     const checked = (markup: string, id: string) =>
       new RegExp(`value="${id}"[^>]*checked|checked[^>]*value="${id}"`).test(markup);
     expect(checked(page, 'drive')).toBe(false);
     expect(checked(page, 'standby')).toBe(true);
-    // Each checkbox list carries the 8px control inset that lines its box up with the headings' text.
+    // Each switch list carries the 8px control inset that lines its track up with the headings' text.
+    expect(page).toContain('role="switch"');
+    expect(page).not.toContain('kui-checkbox');
     expect(page.match(/data-control-insets="l"/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
     page = String(FeatureSettings({ settings: featureSettingsView({ drive: true, standby: false }) }));
     expect(checked(page, 'drive')).toBe(true);

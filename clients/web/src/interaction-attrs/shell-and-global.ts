@@ -25,7 +25,7 @@ export const SHELL_AND_GLOBAL_ACTIONS = {
   openAddHostDisk: action('open-add-host-disk'),
   submitAddHostDisk: action('submit-add-host-disk'),
   cancelAddHostDisk: action('cancel-add-host-disk'),
-  /** App Settings › Features (HS2-3GJZGG): a feature's checkbox, and Restore Defaults. */
+  /** App Settings › Features (HS2-3GJZGG): a feature's switch, and Restore Defaults. */
   setFeature: action('set-feature'),
   restoreFeatureDefaults: action('restore-feature-defaults'),
 } as const;

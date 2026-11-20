@@ -47,7 +47,7 @@ export interface FeatureArea {
   group: FeatureGroup;
   defaultOn: boolean;
   label: string;
-  /** What the checkbox turns on or off, in the words of the entry points it hides. */
+  /** What the switch turns on or off, in the words of the entry points it hides. */
   hint: string;
 }
 

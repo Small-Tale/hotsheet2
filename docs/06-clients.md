@@ -5721,7 +5721,7 @@ until it can be delivered. See
 
 ### Rules
 
-- **One checkbox per area.** App Settings › Features is the last App Settings category.
+- **One switch per area.** App Settings › Features is the last App Settings category. The maintainer chose one control per area, and Kerf `Switch` because each choice applies the moment it changes (HS2-1MSTXP carries the same change for the General pages).
   - **Experimental** areas are off by default.
   - **Optional** areas are on by default, so a person can turn them off for a quieter workspace.
   - Core areas are never listed. The foot of the page names them in one line.
@@ -5787,4 +5787,4 @@ Always on: tickets, search, notes, notifications, permissions, the terminal draw
 
 ### Page layout
 
-The page uses Kerf `List`, `Text` (h2/h3), `Checkbox` with hint, `Row` and `Button`, and no application CSS. Each list of checkboxes takes the List's 8px left control inset, so the checkbox boxes line up with the headings' text, as the maintainer asked on the v1 design.
+The page uses Kerf `List`, `Text` (h2/h3), `Switch` with hint, `Row` and `Button`, and no application CSS. Each list of switches takes the List's 8px left control inset, so the switch tracks line up with the headings' text, as the maintainer asked on the v1 design.

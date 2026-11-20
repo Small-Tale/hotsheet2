@@ -2752,7 +2752,7 @@
       "id": "feature-settings",
       "name": "FeatureSettings",
       "kind": "component",
-      "purpose": "App Settings › Features (HS2-3GJZGG): one checkbox per non-core feature area, saved machine-wide at once, with Restore Defaults.",
+      "purpose": "App Settings › Features (HS2-3GJZGG): one switch per non-core feature area, saved machine-wide at once, with Restore Defaults.",
       "publicExports": [
         {
           "name": "FeatureSettings"
