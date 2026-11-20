@@ -2,7 +2,7 @@ import { CatalogExample } from '@kerfjs/ui/catalog';
 
 import { OrchestrationSettings } from '../components/orchestration-settings';
 import { wireOrchestrationSettings } from '../components/orchestration-settings-interactions';
-import { addChoices, policyDraftFrom, projectRows } from '../orchestration-settings-model';
+import { addChoices, policyDraftFrom, projectRows, siteChoicesByProject } from '../orchestration-settings-model';
 import type { DemoModule } from './demo-module';
 import {
   createDemoOrchestrationSettings,
@@ -22,13 +22,25 @@ const demo = createDemoOrchestrationSettings();
  */
 export function OrchestrationSettingsDemo() {
   const state = demo.settings.settings.value[DEMO_OWNER],
-    labels = demo.settings.remoteLabels.value;
+    labels = demo.settings.remoteLabels.value,
+    rows = projectRows(state?.manifest, state?.bindings ?? {}, labels),
+    choices = addChoices(DEMO_OPEN_PROJECTS, DEMO_OWNER, state?.bindings ?? {}, state?.manifest, labels);
   return (
     <>
       <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+        {/* HS2-E9VVQF: API's Add a Site offers Mobile, a clone of the same ticket store. */}
         <OrchestrationSettings
-          rows={projectRows(state?.manifest, state?.bindings ?? {}, labels)}
-          choices={addChoices(DEMO_OPEN_PROJECTS, DEMO_OWNER, state?.bindings ?? {}, state?.manifest, labels)}
+          rows={rows}
+          choices={choices}
+          siteChoices={siteChoicesByProject(
+            rows,
+            choices,
+            state?.stores ?? {},
+            state?.manifest,
+            state?.bindings ?? {},
+            Boolean(state?.showAllSites),
+          )}
+          showAllSites={Boolean(state?.showAllSites)}
           openTabs={DEMO_OPEN_PROJECTS.map((project) => project.id)}
           selectedTarget={demo.settings.selected.value[DEMO_OWNER]}
           loading={state?.loading ?? true}

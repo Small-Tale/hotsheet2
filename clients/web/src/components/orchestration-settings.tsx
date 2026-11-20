@@ -10,17 +10,19 @@ import { Text } from '@kerfjs/ui/text';
 import {
   Cloud,
   FolderOpen,
+  Group,
   Laptop,
   MoreHorizontal,
   Plus,
   SquareArrowOutUpRight,
   Trash2,
+  Ungroup,
   Unlink,
   Workflow,
 } from 'lucide';
 
 import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/orchestration-settings';
-import type { AddChoice, OrchestrationProjectRow } from '../orchestration-settings-model';
+import type { AddChoice, OrchestrationProjectRow, SiteChoice } from '../orchestration-settings-model';
 import { OrchestrationPolicySettings, type OrchestrationPolicySettingsProps } from './orchestration-policy-settings';
 
 /** HS2-92FJXM: one checkout the serving machine has open. */
@@ -53,6 +55,13 @@ export interface OrchestrationSettingsProps {
   /** The name of that server, for the menu's heading. */
   hostedServer?: string;
   policy?: OrchestrationPolicySettingsProps;
+  /**
+   * HS2-E9VVQF: each project row's Add a Site choices, by the project's target id. Absent for a
+   * project open from another server, which offers no Add a Site.
+   */
+  siteChoices?: Readonly<Record<string, readonly SiteChoice[]>>;
+  /** Add a Site lists every open project, not only those of the same ticket store. */
+  showAllSites?: boolean;
 }
 
 const menuIcon = <LucideIcon icon={MoreHorizontal} name="more-horizontal" />;
@@ -93,6 +102,64 @@ function addMenuItems(choices: readonly AddChoice[], busy: boolean): PopupMenuEn
   ];
 }
 
+/**
+ * HS2-E9VVQF: a project row's Add a Site submenu: the open projects of its ticket store, Show All
+ * Projects for the edge cases, and the regular open flow.
+ */
+function siteMenuItems(
+  row: OrchestrationProjectRow,
+  choices: readonly SiteChoice[],
+  showAll: boolean,
+  busy: boolean,
+): PopupMenuEntry[] {
+  const attributes = { 'data-target-id': row.targetId };
+  return [
+    { kind: 'heading', label: showAll ? 'Open Projects' : 'Open Projects in the Same Ticket Store' },
+    ...(choices.length
+      ? choices.map((choice) => ({
+          label: choice.name,
+          action: ACTIONS.addSite.value,
+          icon: placeIcon(choice.location),
+          disabled: busy,
+          details: (
+            <Text variant="span" tone="quiet" size="compact">
+              {[
+                `${choice.location === 'remote' ? 'Remote' : 'Local'} · ${choice.machine}`,
+                choice.sameStore === false
+                  ? 'Another ticket store'
+                  : choice.sameStore === undefined
+                    ? 'Ticket store unknown'
+                    : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          ),
+          attributes: { ...attributes, 'data-project-id': choice.projectId },
+        }))
+      : [
+          {
+            label: showAll ? 'No other projects are open' : 'No open project uses this ticket store',
+            disabled: true,
+          },
+        ]),
+    { kind: 'divider' },
+    {
+      label: 'Show All Projects',
+      action: ACTIONS.showAllSites.value,
+      checked: showAll,
+      attributes,
+    },
+    {
+      label: 'Open Another Project…',
+      action: ACTIONS.openAnotherSite.value,
+      icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+      disabled: busy,
+      attributes,
+    },
+  ];
+}
+
 /** HS2-92FJXM: + Add Project for a project open from another server: only that server's open projects. */
 function hostedMenuItems(choices: readonly HostedProjectChoiceView[], server: string, busy: boolean): PopupMenuEntry[] {
   return [
@@ -128,8 +195,11 @@ export function OrchestrationSettings({
   hostedChoices,
   hostedServer = 'the server',
   policy = {},
+  siteChoices,
+  showAllSites = false,
 }: OrchestrationSettingsProps) {
   const adding = busy.includes('add');
+  const labels = new Map(rows.map((row) => [row.targetId, row.label]));
   return (
     <section data-component="orchestration-settings">
       <List gap="l">
@@ -227,6 +297,27 @@ export function OrchestrationSettings({
                             disabledReason: tabOpen ? undefined : 'Open this project in a tab first.',
                             attributes: { ...attributes, 'data-project-id': row.tabProjectId },
                           },
+                          // HS2-E9VVQF: a project adds a site; a site separates from its project.
+                          ...(row.siteOf
+                            ? [
+                                {
+                                  label: `Separate from ${labels.get(row.siteOf) ?? 'Project'}`,
+                                  action: ACTIONS.separateSite.value,
+                                  icon: <LucideIcon icon={Ungroup} name="ungroup" />,
+                                  disabled: busy.includes(row.targetId),
+                                  attributes,
+                                },
+                              ]
+                            : siteChoices
+                              ? [
+                                  {
+                                    label: 'Add a Site',
+                                    icon: <LucideIcon icon={Group} name="group" />,
+                                    attributes,
+                                    submenu: siteMenuItems(row, siteChoices[row.targetId] ?? [], showAllSites, adding),
+                                  },
+                                ]
+                              : []),
                           { kind: 'divider' },
                           {
                             label: 'Stop Orchestrating…',

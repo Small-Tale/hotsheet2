@@ -9,6 +9,8 @@ import { ORCHESTRATION_SETTINGS_ACTIONS as ACTIONS } from '../interaction-attrs/
 const PROJECT_ROW = '[data-orchestration-project]';
 const SESSION_ROW = '[data-orchestration-session]';
 const ROW_MENU = '[data-component="popup-menu"]';
+/** Kerf's `kui-menu-select`; cancelling it keeps the menu open. */
+const POPUP_MENU_SELECT = 'kui-menu-select';
 const PROJECT_TYPE = '[data-component="project-general-settings"] [name="project-type"]';
 const POLICY_FIELD = '[data-component="orchestration-policy-settings"] [name]';
 const LIMITS_FIELD = '[data-component="orchestration-project-limits"] [name]';
@@ -97,6 +99,44 @@ export function wireOrchestrationSettings(
     delegate(root, 'click', ACTIONS.removeProject.selector, (_event, target) => {
       const id = attribute(target, 'data-target-id');
       if (id) withProject((projectId) => void settings.removeProject(projectId, id));
+    }),
+  );
+  // HS2-E9VVQF: Add a Site on a project row, Separate from <project> on a site row.
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.addSite.selector, (_event, target) => {
+      const site = attribute(target, 'data-target-id'),
+        open = attribute(target, 'data-project-id');
+      if (site && open) withProject((projectId) => void settings.addSite(projectId, site, open));
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.showAllSites.selector, () => {
+      withProject((projectId) => {
+        settings.toggleAllSites(projectId);
+      });
+    }),
+  );
+  // Show All Projects changes the list it sits in, so the row's menu stays open to show the result. The
+  // submenu itself closes on the re-render until Kerf keeps it open (KF-8QBJWN).
+  lifetime.add(
+    delegate(root, POPUP_MENU_SELECT, ROW_MENU, (event) => {
+      const item = (event as CustomEvent<{ item?: Element }>).detail.item;
+      if (item?.matches(ACTIONS.showAllSites.selector)) event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.openAnotherSite.selector, (_event, target) => {
+      const site = attribute(target, 'data-target-id');
+      if (site)
+        withProject((projectId) => {
+          settings.openAnother(projectId, site);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ACTIONS.separateSite.selector, (_event, target) => {
+      const id = attribute(target, 'data-target-id');
+      if (id) withProject((projectId) => void settings.separateSite(projectId, id));
     }),
   );
   for (const [spec, run] of [

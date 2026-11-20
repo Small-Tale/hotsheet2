@@ -9,6 +9,12 @@ export const ORCHESTRATION_SETTINGS_ACTIONS = {
   openProjectDetail: action('open-orchestration-project'),
   showProjectTab: action('show-orchestration-project-tab'),
   removeProject: action('remove-orchestration-project'),
+  /** HS2-E9VVQF: a project row's Add a Site → an open project, and its Show All Projects choice. */
+  addSite: action('add-orchestration-site'),
+  showAllSites: action('show-all-orchestration-site-choices'),
+  openAnotherSite: action('open-another-orchestration-site'),
+  /** HS2-E9VVQF: a site row's Separate from <project>. */
+  separateSite: action('separate-orchestration-site'),
   openSessionActions: action('open-orchestration-session-actions'),
   showSession: action('show-orchestration-session'),
   takeOverSession: action('take-over-orchestration-session'),

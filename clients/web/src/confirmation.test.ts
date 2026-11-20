@@ -205,5 +205,49 @@ describe('shared in-app confirmation (HS2-6S1346)', () => {
     );
     expect(plain).not.toContain('aria-describedby');
     expect(plain).toContain('Keep');
+    expect(plain).not.toContain('alternate-confirmation');
+  });
+
+  it('HS2-E9VVQF: choose answers confirm, alternate or cancel; a plain request never shows the alternate', async () => {
+    registrations.length = 0;
+    const confirmation = createConfirmation({ focused: () => undefined });
+    const dispose = wireConfirmation({} as HTMLElement, confirmation);
+    const handler = (selector: string) =>
+      registrations.find((item) => item.event === 'click' && item.selector === selector && item.attached)!;
+    const confirm = handler(CONFIRMATION_ACTIONS.confirm.selector),
+      alternate = handler(CONFIRMATION_ACTIONS.alternate.selector),
+      cancel = handler(CONFIRMATION_ACTIONS.cancel.selector);
+    const question = { title: 'Is it a site?', confirmLabel: 'Add as a Site', alternateLabel: 'Add Separately' };
+
+    const site = confirmation.choose(question);
+    expect(confirmation.current.value?.alternateLabel).toBe('Add Separately');
+    confirm.handle({} as Event, element(confirmation.current.value!.id));
+    await expect(site).resolves.toBe('confirm');
+
+    const separate = confirmation.choose(question);
+    alternate.handle({} as Event, element(confirmation.current.value!.id));
+    await expect(separate).resolves.toBe('alternate');
+
+    const dismissed = confirmation.choose(question);
+    cancel.handle({} as Event, element(confirmation.current.value!.id));
+    await expect(dismissed).resolves.toBe('cancel');
+
+    // A plain request drops an alternate label, and an alternate click cannot answer it.
+    const plain = confirmation.request(question);
+    expect(confirmation.current.value?.alternateLabel).toBeUndefined();
+    alternate.handle({} as Event, element(confirmation.current.value!.id));
+    expect(confirmation.current.value).toBeDefined();
+    confirm.handle({} as Event, element(confirmation.current.value!.id));
+    await expect(plain).resolves.toBe(true);
+
+    // The dialog orders Cancel, the negative alternate, then the positive action.
+    const markup = String(ConfirmationDialog({ request: { id: 9, ...question } }));
+    const cancelAt = markup.indexOf('data-action="cancel-confirmation"'),
+      alternateAt = markup.indexOf('data-action="alternate-confirmation"'),
+      confirmAt = markup.indexOf('data-action="confirm-confirmation"');
+    expect(cancelAt).toBeGreaterThan(-1);
+    expect(alternateAt).toBeGreaterThan(cancelAt);
+    expect(confirmAt).toBeGreaterThan(alternateAt);
+    dispose();
   });
 });

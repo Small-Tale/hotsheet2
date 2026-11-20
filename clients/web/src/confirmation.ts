@@ -18,6 +18,11 @@ export interface ConfirmationOptions {
   confirmLabel: string;
   /** The declining action's label; defaults to Cancel. */
   cancelLabel?: string;
+  /**
+   * HS2-E9VVQF: a second, negative way to go ahead, shown between Cancel and the confirming action
+   * ("Add as a Separate Project"). Only `choose` offers it; `request` ignores it.
+   */
+  alternateLabel?: string;
   /** `danger` marks a destructive or safety-removing action; `brand` (the default) an ordinary one. */
   tone?: 'danger' | 'brand';
 }
@@ -29,6 +34,11 @@ export interface ConfirmationRequest extends ConfirmationOptions {
 
 /** Ask the person; resolves `true` on confirm and `false` on cancel or dismissal. */
 export type Confirm = (options: ConfirmationOptions) => Promise<boolean>;
+
+/** HS2-E9VVQF: the answer to a question with two ways ahead. Dismissal is `cancel`. */
+export type ConfirmationAnswer = 'confirm' | 'alternate' | 'cancel';
+/** Ask the person with `alternateLabel` offered as well. */
+export type Choose = (options: ConfirmationOptions & { alternateLabel: string }) => Promise<ConfirmationAnswer>;
 
 /** The element focus returns to: the one focused when the request was made. */
 export interface FocusReturnTarget {
@@ -60,7 +70,7 @@ function nextFrame(run: () => void) {
 
 interface Pending {
   request: ConfirmationRequest;
-  resolve: (confirmed: boolean) => void;
+  resolve: (answer: ConfirmationAnswer) => void;
   opener: FocusReturnTarget | undefined;
 }
 
@@ -76,13 +86,13 @@ export function createConfirmation(environment: ConfirmationEnvironment = {}) {
   const queue: Pending[] = [];
   const current = signal<ConfirmationRequest | undefined>(undefined);
   let nextId = 1;
-  function settle(confirmed: boolean, id?: number) {
+  function settle(answer: ConfirmationAnswer, id?: number) {
     // An answer names the request it was given for, so a repeated click cannot answer the next one.
     if (id !== undefined && queue[0]?.request.id !== id) return;
     const head = queue.shift();
     if (!head) return;
     current.value = queue[0]?.request;
-    head.resolve(confirmed);
+    head.resolve(answer);
     const opener = head.opener;
     // A request made in the meantime (or still queued) keeps focus in its dialog.
     if (opener && !queue.length)
@@ -90,8 +100,8 @@ export function createConfirmation(environment: ConfirmationEnvironment = {}) {
         if (!queue.length && opener.isConnected) opener.focus({ preventScroll: true });
       });
   }
-  const request: Confirm = (options) =>
-    new Promise<boolean>((resolve) => {
+  const ask = (options: ConfirmationOptions) =>
+    new Promise<ConfirmationAnswer>((resolve) => {
       // A request made while another is on screen would capture a dialog button; it inherits the
       // opener of the request it queues behind instead.
       const pending: Pending = {
@@ -110,21 +120,30 @@ export function createConfirmation(environment: ConfirmationEnvironment = {}) {
       queue.push(pending);
       if (queue.length === 1) current.value = pending.request;
     });
+  // A plain question never shows the alternate action, so its answer stays a boolean.
+  const request: Confirm = (options) =>
+    ask({ ...options, alternateLabel: undefined }).then((answer) => answer === 'confirm');
+  const choose: Choose = (options) => ask(options);
   return {
     /** The request on screen, if any. */
     current,
     request,
+    choose,
     /** Confirm the request on screen, or only request `id` when given. */
     confirm(id?: number) {
-      settle(true, id);
+      settle('confirm', id);
+    },
+    /** Take the alternate action of the request on screen, or only of request `id` when given. */
+    alternate(id?: number) {
+      if (queue[0]?.request.alternateLabel) settle('alternate', id);
     },
     /** Decline the request on screen, or only request `id` when given. */
     cancel(id?: number) {
-      settle(false, id);
+      settle('cancel', id);
     },
     /** Decline every queued request, such as when the owning surface is torn down. */
     cancelAll() {
-      while (queue.length) settle(false);
+      while (queue.length) settle('cancel');
     },
   };
 }

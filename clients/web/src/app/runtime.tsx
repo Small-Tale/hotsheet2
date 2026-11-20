@@ -5402,6 +5402,7 @@ export async function startHotSheetWebClient() {
     viewMode,
     selectedSettingsCategory,
     confirm: confirmation.request,
+    choose: confirmation.choose,
     openProjectPicker: () => {
       openProjectPicker('form');
     },

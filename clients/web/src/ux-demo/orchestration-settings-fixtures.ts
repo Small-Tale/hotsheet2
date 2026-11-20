@@ -53,6 +53,15 @@ export const demoTime = (ms: number) => {
 
 export const demoToolLabel = (tool: string) => ({ claude: 'Claude', codex: 'Codex' })[tool] ?? tool;
 
+/**
+ * HS2-E9VVQF: the synthetic ticket store each checkout reaches. Mobile is another clone of the API
+ * project, so it reaches the API's store; every other checkout has a store of its own.
+ */
+const DEMO_STORES: Readonly<Record<string, string>> = { api: 'a', mobile: 'a', web: 'b', docs: 'd', billing: 'e' };
+export function demoStore(checkoutId: string): string {
+  return (DEMO_STORES[checkoutId.split('-')[0]] ?? 'f').repeat(64);
+}
+
 export function demoBinding(target: keyof typeof DEMO_TARGETS): OrchestrationBinding {
   const checkout = `${target}-0000000000ab`;
   return {
@@ -64,9 +73,9 @@ export function demoBinding(target: keyof typeof DEMO_TARGETS): OrchestrationBin
             registration_id: DEMO_REMOTE,
             identity: { server_id: SERVER },
             checkout_id: checkout,
-            checkout_authority: 'a'.repeat(64),
+            checkout_authority: demoStore(checkout),
           }
-        : { kind: 'local', server_id: SERVER, checkout_id: checkout, checkout_authority: 'b'.repeat(64) },
+        : { kind: 'local', server_id: SERVER, checkout_id: checkout, checkout_authority: demoStore(checkout) },
     checked_at_ms: DEMO_NOW - 120_000,
     confirmed_at_ms: DEMO_NOW - 120_000,
     last_failure: null,
@@ -261,10 +270,47 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
           })),
       });
     },
+    // HS2-E9VVQF: which synthetic store an open project reaches; binds nothing.
+    inspectOrchestrationTarget: (_owner, destination) =>
+      Promise.resolve({
+        destination:
+          destination.kind === 'remote'
+            ? {
+                ...destination,
+                identity: { server_id: SERVER },
+                checkout_authority: demoStore(destination.checkout_id),
+              }
+            : { ...destination, server_id: SERVER, checkout_authority: demoStore(destination.checkout_id) },
+        stale: false,
+        usable: true,
+      }),
+    separateOrchestrationSite: (_owner, target, expectedRevision) => {
+      if (expectedRevision !== manifest.revision)
+        return Promise.reject(new ApiHttpError('orchestration declaration changed', 409, 'conflict'));
+      counter += 1;
+      manifest = {
+        ...manifest,
+        revision: `01JSYNTHREVISION00000000${String(counter)}`,
+        targets: manifest.targets.map((item) => (item.target_id === target ? { ...item, site_of: undefined } : item)),
+      };
+      return Promise.resolve(structuredClone(manifest));
+    },
     addOrchestrationProject: (_owner, request) => {
       const existing = Object.entries(bindings).find(
         ([, binding]) => binding.destination?.checkout_id === request.destination.checkout_id,
       );
+      // HS2-E9VVQF: a site must reach the store of its project's bound sites, as the server checks.
+      const projectStore = request.site_of
+        ? Object.entries(bindings).find(
+            ([id]) =>
+              id === request.site_of ||
+              manifest.targets.some((item) => item.target_id === id && item.site_of === request.site_of),
+          )?.[1].destination?.checkout_authority
+        : undefined;
+      if (!existing && projectStore && projectStore !== demoStore(request.destination.checkout_id))
+        return Promise.reject(
+          new ApiHttpError('the site is bound to another ticket store than its project', 409, 'site_store_mismatch'),
+        );
       if (existing)
         return Promise.resolve({
           target_id: existing[0],
@@ -276,7 +322,15 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
       const id = `01JSYNTHTARGET0000000000${String(counter)}`;
       manifest = {
         ...manifest,
-        targets: [...manifest.targets, { target_id: id, state: 'active', label: request.label }],
+        targets: [
+          ...manifest.targets,
+          {
+            target_id: id,
+            state: 'active',
+            label: request.label,
+            ...(request.site_of ? { site_of: request.site_of } : {}),
+          },
+        ],
       };
       bindings = {
         ...bindings,
@@ -289,13 +343,13 @@ export function createDemoOrchestrationApi({ empty = false }: { empty?: boolean 
                   registration_id: request.destination.registration_id,
                   identity: { server_id: SERVER },
                   checkout_id: request.destination.checkout_id,
-                  checkout_authority: 'c'.repeat(64),
+                  checkout_authority: demoStore(request.destination.checkout_id),
                 }
               : {
                   kind: 'local',
                   server_id: SERVER,
                   checkout_id: request.destination.checkout_id,
-                  checkout_authority: 'c'.repeat(64),
+                  checkout_authority: demoStore(request.destination.checkout_id),
                 },
         },
       };
@@ -367,6 +421,8 @@ export function createDemoOrchestrationSettings(options: { empty?: boolean } = {
     api: () => demo.api,
     openProjects: () => DEMO_OPEN_PROJECTS,
     confirm: () => Promise.resolve(true),
+    // HS2-E9VVQF: a duplicate from + Add Project is added as a site, deterministically.
+    choose: () => Promise.resolve('confirm'),
     openProjectPicker: () => undefined,
     openFlowBusy: () => false,
     activateProject: () => undefined,
@@ -384,6 +440,7 @@ export function createDemoOrchestrationSettings(options: { empty?: boolean } = {
     reset: async () => {
       demo = createDemoOrchestrationApi(options);
       settings.closeDetail(DEMO_OWNER);
+      settings.settings.value = { ...settings.settings.value, [DEMO_OWNER]: undefined };
       await settings.loadType(DEMO_OWNER);
       await settings.loadSettings(DEMO_OWNER);
     },

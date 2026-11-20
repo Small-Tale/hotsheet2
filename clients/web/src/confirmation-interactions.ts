@@ -22,6 +22,11 @@ export function wireConfirmation(root: HTMLElement, confirmation: ConfirmationWo
     }),
   );
   scope.add(
+    delegate(root, 'click', actions.alternate.selector, (_event, target) => {
+      confirmation.alternate(requestId(target));
+    }),
+  );
+  scope.add(
     delegate(root, 'click', actions.cancel.selector, (_event, target) => {
       confirmation.cancel(requestId(target));
     }),

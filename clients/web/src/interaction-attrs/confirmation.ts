@@ -5,6 +5,8 @@ import { action } from 'kerfjs/actions';
 export const CONFIRMATION_ACTIONS = {
   confirm: action('confirm-confirmation'),
   cancel: action('cancel-confirmation'),
+  /** HS2-E9VVQF: the second way ahead of a `choose` question. */
+  alternate: action('alternate-confirmation'),
 } as const;
 
 export const CONFIRMATION_TARGETS = {

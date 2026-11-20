@@ -220,6 +220,99 @@ export function addChoices(
     });
 }
 
+/**
+ * HS2-E9VVQF: the ticket store each added project reaches, as this machine's bindings of its sites
+ * name it (`checkout_authority`). A project with no bound site has no known store.
+ */
+export function projectStores(
+  manifest: OrchestrationManifest | undefined,
+  bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
+): Map<string, string> {
+  const active = (manifest?.targets ?? []).filter((target) => target.state === 'active'),
+    projects = new Set(active.filter((target) => !target.site_of).map((target) => target.target_id)),
+    stores = new Map<string, string>();
+  // The project's own binding first, then its sites in declaration order.
+  for (const target of [...active].sort(
+    (left, right) => Number(Boolean(left.site_of)) - Number(Boolean(right.site_of)),
+  )) {
+    const project = target.site_of && projects.has(target.site_of) ? target.site_of : target.target_id,
+      authority = bindings[target.target_id]?.destination?.checkout_authority;
+    if (authority && !stores.has(project)) stores.set(project, authority);
+  }
+  return stores;
+}
+
+/** HS2-E9VVQF: one open project a project row's Add a Site offers. */
+export interface SiteChoice {
+  projectId: string;
+  name: string;
+  location: 'local' | 'remote';
+  machine: string;
+  /** Reaches the project's ticket store; `false` for another store, `undefined` when not known. */
+  sameStore: boolean | undefined;
+}
+
+/**
+ * HS2-E9VVQF: Add a Site's open projects for one added project: by default only those that reach its
+ * ticket store; with Show All Projects every open project not added yet, so the server's refusal can
+ * explain an edge case. `stores` maps an open tab to the store it reaches, `null` when it could not
+ * be inspected.
+ */
+export function siteChoices(
+  choices: readonly AddChoice[],
+  stores: Readonly<Record<string, string | null | undefined>>,
+  projectStore: string | undefined,
+  showAll: boolean,
+): SiteChoice[] {
+  return choices
+    .filter((choice) => !choice.added)
+    .map((choice) => {
+      const store = stores[choice.projectId];
+      return {
+        projectId: choice.projectId,
+        name: choice.name,
+        location: choice.location,
+        machine: choice.machine,
+        sameStore: store && projectStore ? store === projectStore : undefined,
+      };
+    })
+    .filter((choice) => showAll || choice.sameStore === true);
+}
+
+/** HS2-E9VVQF: every project row's Add a Site choices, by the project's target id. */
+export function siteChoicesByProject(
+  rows: readonly OrchestrationProjectRow[],
+  choices: readonly AddChoice[],
+  stores: Readonly<Record<string, string | null | undefined>>,
+  manifest: OrchestrationManifest | undefined,
+  bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
+  showAll: boolean,
+): Record<string, SiteChoice[]> {
+  const known = projectStores(manifest, bindings);
+  return Object.fromEntries(
+    rows
+      .filter((row) => !row.siteOf)
+      .map((row) => [row.targetId, siteChoices(choices, stores, known.get(row.targetId), showAll)]),
+  );
+}
+
+/**
+ * HS2-E9VVQF: + Add Project's duplicate check. The added project that reaches the same ticket store as
+ * the chosen open project, if any, so the person can say whether it is another site of that project.
+ */
+export function duplicateProject(
+  store: string | null | undefined,
+  manifest: OrchestrationManifest | undefined,
+  bindings: Readonly<Record<string, OrchestrationBinding | undefined>>,
+): { targetId: string; label: string } | undefined {
+  if (!store) return undefined;
+  const stores = projectStores(manifest, bindings);
+  return (manifest?.targets ?? [])
+    .filter((target) => target.state === 'active' && stores.get(target.target_id) === store)
+    .sort((left, right) => left.label.localeCompare(right.label))
+    .map((target) => ({ targetId: target.target_id, label: target.label }))[0];
+}
+
 /** A canonical ULID for an add the person may retry (docs/26 §26.4: retain the id before setup). */
 export function newUlid(now = Date.now(), random: (bytes: Uint8Array) => Uint8Array = defaultRandom): string {
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

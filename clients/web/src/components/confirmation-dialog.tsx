@@ -26,7 +26,8 @@ export function ConfirmationDialog({ request }: { request?: ConfirmationRequest 
         label={request.title}
         alert
         describedBy={request.message ? MESSAGE_ID : undefined}
-        size="small"
+        // HS2-E9VVQF: three actions need the default width; a phone wraps them.
+        size={request.alternateLabel ? 'medium' : 'small'}
         bodyInset="none"
         viewportGutter={remify(16)}
         rootAttributes={{
@@ -37,7 +38,7 @@ export function ConfirmationDialog({ request }: { request?: ConfirmationRequest 
         }}
         footer={
           // The footer row fills the footer so the Spacer separates Cancel from the trailing action.
-          <Row vAlign="middle" gap="xs" flex>
+          <Row vAlign="middle" gap="xs" flex wrap={Boolean(request.alternateLabel)}>
             <Button
               type="button"
               emphasis="secondary"
@@ -47,6 +48,17 @@ export function ConfirmationDialog({ request }: { request?: ConfirmationRequest 
               {request.cancelLabel ?? 'Cancel'}
             </Button>
             <Spacer flex />
+            {/* HS2-E9VVQF: a negative way ahead precedes the positive one. */}
+            {request.alternateLabel ? (
+              <Button
+                type="button"
+                emphasis="secondary"
+                action={CONFIRMATION_ACTIONS.alternate.value}
+                rootAttributes={{ 'data-confirmation-id': String(request.id) }}
+              >
+                {request.alternateLabel}
+              </Button>
+            ) : null}
             <Button
               type="button"
               tone={request.tone ?? 'brand'}

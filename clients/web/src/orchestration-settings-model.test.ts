@@ -8,6 +8,7 @@ import {
   changeTargetLimits,
   connectionStatus,
   destinationOf,
+  duplicateProject,
   formatCents,
   formatMegabytes,
   newUlid,
@@ -18,11 +19,14 @@ import {
   policyFromDraft,
   policyWithTargetLimits,
   projectRows,
+  projectStores,
   removePolicyAccount,
   roleSessionsHint,
   roleSessionsLocked,
   sessionDescription,
   sessionStatus,
+  siteChoices,
+  siteChoicesByProject,
   siteReadFailure,
   tabProjectIdOf,
   targetLimitsDraftFrom,
@@ -787,5 +791,70 @@ describe("a site's coordination sessions (HS2-SYZB33)", () => {
       "Coordination sessions start only on Widgets, this project's home site. Set them there. The roles checked here have no effect; clear them.",
     );
     expect(roleSessionsLocked('Widgets', ['dispatcher'])).toBe(false);
+  });
+});
+
+describe('Add a Site and the duplicate check (HS2-E9VVQF)', () => {
+  const bound = (checkout: string, store: string): OrchestrationBinding => ({
+    ...local(checkout),
+    destination: { kind: 'local', server_id: 'server', checkout_id: checkout, checkout_authority: store },
+  });
+  const grouped: OrchestrationManifest = {
+    enabled: true,
+    revision: 'r2',
+    targets: [
+      { target_id: 'W', state: 'active', label: 'Widgets' },
+      { target_id: 'S', state: 'active', label: 'Widgets laptop', site_of: 'W' },
+      { target_id: 'D', state: 'active', label: 'Docs' },
+      { target_id: 'U', state: 'active', label: 'Unbound' },
+      { target_id: 'X', state: 'removed', label: 'Old' },
+    ],
+  };
+  // The project's own binding is missing; its site names the store.
+  const bindings = { S: bound('laptop', 'w'), D: bound('docs', 'd'), X: bound('old', 'x') };
+  const open = [
+    { id: 'owner', name: 'Owner' },
+    { id: 'laptop', name: 'Widgets laptop' },
+    { id: 'clone', name: 'Widgets clone' },
+    { id: 'other', name: 'Other' },
+    { id: 'unknown', name: 'Unknown' },
+  ];
+  const stores = { clone: 'w', other: 'o', unknown: null };
+
+  it('knows each project by the store any bound site of it reaches', () => {
+    expect([...projectStores(grouped, bindings)]).toEqual([
+      ['D', 'd'],
+      ['W', 'w'],
+    ]);
+    expect(projectStores(undefined, {}).size).toBe(0);
+  });
+
+  it('offers the open projects of the same store, or all of them with Show All Projects', () => {
+    const choices = addChoices(open, 'owner', bindings, grouped, {});
+    expect(siteChoices(choices, stores, 'w', false).map((choice) => choice.projectId)).toEqual(['clone']);
+    expect(siteChoices(choices, stores, 'w', true).map((choice) => [choice.projectId, choice.sameStore])).toEqual([
+      ['clone', true],
+      ['other', false],
+      ['unknown', undefined],
+    ]);
+    // A project with no known store offers nothing by default, everything not added with Show All.
+    expect(siteChoices(choices, stores, undefined, false)).toEqual([]);
+    expect(siteChoices(choices, stores, undefined, true)).toHaveLength(3);
+    const rows = projectRows(grouped, bindings, {});
+    const byProject = siteChoicesByProject(rows, choices, stores, grouped, bindings, false);
+    // Only project rows get choices; a site row separates instead.
+    expect(Object.keys(byProject).sort()).toEqual(['D', 'U', 'W']);
+    expect(byProject.W.map((choice) => choice.name)).toEqual(['Widgets clone']);
+    expect(byProject.D).toEqual([]);
+  });
+
+  it('finds the added project a chosen open project duplicates by its store', () => {
+    expect(duplicateProject('w', grouped, bindings)).toEqual({ targetId: 'W', label: 'Widgets' });
+    expect(duplicateProject('d', grouped, bindings)).toEqual({ targetId: 'D', label: 'Docs' });
+    expect(duplicateProject('o', grouped, bindings)).toBeUndefined();
+    // A removed project is not a duplicate, and an unknown store never is.
+    expect(duplicateProject('x', grouped, bindings)).toBeUndefined();
+    expect(duplicateProject(null, grouped, bindings)).toBeUndefined();
+    expect(duplicateProject(undefined, grouped, bindings)).toBeUndefined();
   });
 });

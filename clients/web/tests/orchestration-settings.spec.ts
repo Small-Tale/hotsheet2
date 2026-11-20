@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { expect, type Page, test } from '@playwright/test';
 
@@ -11,22 +13,52 @@ import { proxyFetch, realTicketServer, routeProjectChangeSocket } from './real-t
  * isolated server with three registered checkouts. Only the bridge's project-open answer is
  * routed; every orchestration read and write reaches the real Rust workflows.
  */
-async function openProjects(page: Page) {
-  const server = await realTicketServer();
+async function openProjects(
+  page: Page,
+  options: {
+    /** More checkouts of the same ticket store, after Web and Docs. */
+    names?: readonly string[];
+    /** HS2-E9VVQF: checkouts of a second, separate ticket store. */
+    otherStore?: readonly string[];
+    /** How many projects open as tabs at first; Launch and Web by default. */
+    open?: number;
+  } = {},
+) {
+  const other = { store: '' };
+  const server = await realTicketServer(
+    options.otherStore?.length
+      ? {
+          // A second standalone store, initialised from a directory of its own so nothing else is linked.
+          seed: async ({ root, env, cli }) => {
+            const directory = join(dirname(root), 'other');
+            await mkdir(directory, { recursive: true });
+            other.store = join(dirname(root), 'other-tickets');
+            await promisify(execFile)(
+              cli,
+              ['--test-fixture-credentials', 'init', '--standalone', '--at', other.store, '--prefix', 'OTH'],
+              { cwd: directory, env },
+            );
+          },
+        }
+      : {},
+  );
   const projects: { id: string; root: string; name: string }[] = [
     { id: server.checkoutId, root: server.root, name: 'Launch' },
   ];
-  for (const name of ['Web', 'Docs']) {
+  for (const [name, store] of [
+    ...['Web', 'Docs', ...(options.names ?? [])].map((name) => [name, server.store] as const),
+    ...(options.otherStore ?? []).map((name) => [name, other.store] as const),
+  ]) {
     const root = join(dirname(server.root), name.toLowerCase());
     await mkdir(root, { recursive: true });
-    const checkout = await server.request<{ id: string }>('/checkouts', 'POST', { root, stores: [server.store] });
+    const checkout = await server.request<{ id: string }>('/checkouts', 'POST', { root, stores: [store] });
     projects.push({ id: checkout.id, root, name });
   }
   await page.addInitScript(
     (roots) => {
       localStorage.setItem('hotsheet.open-projects', JSON.stringify(roots));
     },
-    projects.slice(0, 2).map((project) => project.root),
+    projects.slice(0, options.open ?? 2).map((project) => project.root),
   );
   await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, async (route) => {
     const { root } = route.request().postDataJSON() as { root: string };
@@ -174,7 +206,8 @@ test('HS2-W27N1D Project Type adds the Orchestration category, which adds, detai
     // Remove from the detail, after the shared confirmation.
     await detail.getByRole('button', { name: 'Stop Orchestrating…' }).click();
     await page.getByRole('button', { name: 'Stop Orchestrating', exact: true }).click();
-    await expect(webRow).toHaveCount(0);
+    // By its id: Docs' Add a Site menu now offers the open Web tab, so the text alone matches its row too (HS2-E9VVQF).
+    await expect(settings.locator(`[data-orchestration-project="${webTarget}"]`)).toHaveCount(0);
     expect(
       (await server.request<{ targets: { label: string; state: string }[] }>(`${base}/targets`)).targets.map(
         (target) => `${target.label}:${target.state}`,
@@ -1230,6 +1263,208 @@ test('HS2-D4G81Q Settings shows each site OS and tools', async ({ page, browserN
   }
 });
 
+/**
+ * HS2-E9VVQF: Add a Site on a project row, Separate from <project> on a site row, and + Add Project's
+ * duplicate question, through the real shell and the real workflows. Launch orchestrates; Web, Docs and
+ * Clone are checkouts of one ticket store and Other of a second one.
+ */
+test('HS2-E9VVQF adds and separates sites from Settings and asks only for a duplicate', async ({
+  page,
+  browserName,
+}) => {
+  test.setTimeout(300_000);
+  const { server, projects } = await openProjects(page, { names: ['Clone'], otherStore: ['Other'], open: 5 });
+  try {
+    const [owner, web] = projects;
+    const base = `/checkouts/${owner.id}/orchestration`;
+    await server.request(`${base}/project-type`, 'PUT', { project_type: 'orchestration', actor: { role: 'human' } });
+    const widgets = (
+      await server.request<{ target_id: string }>(`${base}/projects`, 'POST', {
+        destination: { kind: 'local', checkout_id: web.id },
+        label: 'Widgets',
+        actor: { role: 'human' },
+      })
+    ).target_id;
+    const declared = async () =>
+      (
+        await server.request<{ targets: { label: string; state: string; site_of?: string }[] }>(`${base}/targets`)
+      ).targets
+        .filter((target) => target.state === 'active')
+        .map(
+          (target) =>
+            `${target.label}${target.site_of ? ` < ${target.site_of === widgets ? 'Widgets' : target.site_of}` : ''}`,
+        );
+
+    const wide = { width: 1440, height: 900 };
+    await page.setViewportSize(wide);
+    await openOrchestrationProject(page);
+    await showProjectSettings(page, 'Orchestration');
+    const settings = page.locator('[data-component="orchestration-settings"]');
+    const rows = settings.locator('[data-orchestration-project]');
+    await expect(rows).toHaveCount(1);
+    const directory = join('target', 'visual-captures', 'hs2-e9vvqf');
+    await mkdir(directory, { recursive: true });
+
+    // A project row's "…" → Add a Site: the open projects of its ticket store only.
+    const openSites = async (row = rows.nth(0)) => {
+      await row.getByRole('button', { name: /^Actions for / }).click();
+      await page.getByRole('menuitem', { name: 'Add a Site' }).click();
+      const submenu = page.getByRole('menu', { name: 'Add a Site' });
+      await expect(submenu).toBeVisible();
+      return submenu;
+    };
+    let submenu = await openSites();
+    await expect(submenu.getByRole('group', { name: 'Open Projects in the Same Ticket Store' })).toBeVisible();
+    await expect(submenu.getByRole('menuitem', { name: /Docs/ })).toBeVisible();
+    await expect(submenu.getByRole('menuitem', { name: /Clone/ })).toBeVisible();
+    await expect(submenu.getByRole('menuitem', { name: /Other/ })).toHaveCount(0);
+    // Web is already added, so it is not offered.
+    await expect(submenu.getByRole('menuitem', { name: /Web/ })).toHaveCount(0);
+    await page.screenshot({
+      path: join(directory, `hs2-e9vvqf-add-site-1440-light-${browserName}.png`),
+      animations: 'disabled',
+    });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(submenu).toBeHidden();
+    // Visual QA: the Add a Site submenu at each width, and back, in both schemes.
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [index, size] of [wide, { width: 1100, height: 900 }, { width: 390, height: 844 }, wide].entries()) {
+        await page.setViewportSize(size);
+        if (size.width === 390)
+          for (const name of ['Hide Settings Sidebar', 'Hide Project Detail']) {
+            const hide = page.getByRole('button', { name, exact: true });
+            if (await hide.isVisible()) await hide.click({ timeout: 3_000 }).catch(() => undefined);
+          }
+        const name = `${String(size.width)}${index === 3 ? '-after-390' : ''}-${scheme}-${browserName}`;
+        await expect(rows.first()).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.screenshot({ path: join(directory, `hs2-e9vvqf-rows-${name}.png`), animations: 'disabled' });
+        submenu = await openSites();
+        // The submenu stays inside the viewport.
+        const box = await submenu.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(size.width + 1);
+        await page.screenshot({ path: join(directory, `hs2-e9vvqf-add-site-${name}.png`), animations: 'disabled' });
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(submenu).toBeHidden();
+      }
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize(wide);
+    submenu = await openSites();
+    // Show All Projects keeps the row's menu open; Add a Site then lists the other store's project, marked.
+    await submenu.getByRole('menuitemcheckbox', { name: 'Show All Projects' }).click();
+    const rowMenu = page.getByRole('menu', { name: 'Actions for Widgets' });
+    await expect(rowMenu).toBeVisible();
+    await rowMenu.getByRole('menuitem', { name: 'Add a Site' }).click();
+    await expect(submenu.getByRole('menuitemcheckbox', { name: 'Show All Projects' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(submenu.getByRole('menuitem', { name: /Other/ })).toContainText('Another ticket store');
+    await page.screenshot({
+      path: join(directory, `hs2-e9vvqf-show-all-1440-light-${browserName}.png`),
+      animations: 'disabled',
+    });
+    // Another store is refused by the server, before anything is declared, in the message line.
+    await submenu.getByRole('menuitem', { name: /Other/ }).click();
+    await expect(settings.getByRole('alert')).toHaveText(
+      'Could not add Other as a site of Widgets. It reaches a different ticket store than this project.',
+    );
+    expect(await declared()).toEqual(['Widgets']);
+
+    // Docs, of the same store: declared and bound as a site of Widgets in one step.
+    submenu = await openSites();
+    await submenu.getByRole('menuitem', { name: /Docs/ }).click();
+    await expect(settings.getByRole('status')).toHaveText('Docs added as a site of Widgets.');
+    await expect(settings.getByRole('alert')).toHaveCount(0);
+    expect(await declared()).toEqual(['Widgets', 'Docs < Widgets']);
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('Site of Widgets');
+
+    // A site row offers Separate from Widgets, not Add a Site; its context menu has the same entries.
+    await rows.nth(1).click({ button: 'right' });
+    const siteMenu = page.getByRole('menu', { name: 'Actions for Docs' });
+    await expect(siteMenu.getByRole('menuitem', { name: 'Separate from Widgets' })).toBeVisible();
+    await expect(siteMenu.getByRole('menuitem', { name: 'Add a Site' })).toHaveCount(0);
+    await page.screenshot({
+      path: join(directory, `hs2-e9vvqf-separate-1440-light-${browserName}.png`),
+      animations: 'disabled',
+    });
+    await siteMenu.getByRole('menuitem', { name: 'Separate from Widgets' }).click();
+    // No confirmation: the grouping is undone at once.
+    await expect(settings.getByRole('status')).toHaveText('Docs is its own project again.');
+    // Neither row is a site any more, so neither lists a site's machine.
+    await expect(rows.filter({ hasText: /arm64|x86_64/ })).toHaveCount(0);
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    expect(await declared()).toEqual(['Widgets', 'Docs']);
+    await expect(rows.nth(0)).not.toContainText('sites');
+
+    // + Add Project → Clone, a duplicate of an added project's store: asked, and Cancel adds nothing.
+    const addClone = async () => {
+      await settings.getByRole('button', { name: 'Add Project' }).click();
+      await page.getByRole('menu', { name: 'Add Project' }).getByRole('menuitemcheckbox', { name: /Clone/ }).click();
+      const question = page.getByRole('alertdialog', { name: 'Is Clone another site of Docs?' });
+      await expect(question).toBeVisible();
+      return question;
+    };
+    let question = await addClone();
+    const buttons = question.getByRole('button');
+    await expect(buttons.filter({ hasText: /^(Cancel|Add as a Separate Project|Add as a Site of Docs)$/ })).toHaveText([
+      'Cancel',
+      'Add as a Separate Project',
+      'Add as a Site of Docs',
+    ]);
+    await page.screenshot({
+      path: join(directory, `hs2-e9vvqf-duplicate-1440-light-${browserName}.png`),
+      animations: 'disabled',
+    });
+    {
+      const confirmBox = await question
+        .getByRole('button', { name: 'Add as a Site of Docs', exact: true })
+        .boundingBox();
+      const dialogBox = await question.boundingBox();
+      expect(confirmBox!.x + confirmBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const confirmBox = await question.getByRole('button', { name: 'Add as a Site of Docs', exact: true }).boundingBox();
+    const dialogBox = await question.boundingBox();
+    expect(confirmBox!.x + confirmBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+    await page.screenshot({
+      path: join(directory, `hs2-e9vvqf-duplicate-390-light-${browserName}.png`),
+      animations: 'disabled',
+    });
+    await page.setViewportSize(wide);
+    await question.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(question).toHaveCount(0);
+    expect(await declared()).toEqual(['Widgets', 'Docs']);
+    // Add as a Site of Docs.
+    question = await addClone();
+    await question.getByRole('button', { name: 'Add as a Site of Docs', exact: true }).click();
+    await expect(settings.getByRole('status')).toHaveText('Clone added as a site of Docs.');
+    expect((await declared()).sort()).toEqual(['Clone < ' + (await docsId()), 'Docs', 'Widgets'].sort());
+
+    // + Add Project → Other, whose store no added project uses: added at once, no question.
+    await settings.getByRole('button', { name: 'Add Project' }).click();
+    await page.getByRole('menu', { name: 'Add Project' }).getByRole('menuitemcheckbox', { name: /Other/ }).click();
+    await expect(settings.getByRole('status')).toHaveText('Other added.');
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  } finally {
+    await server.stop(page);
+  }
+
+  async function docsId() {
+    const { targets } = await server.request<{ targets: { target_id: string; label: string }[] }>(
+      `/checkouts/${projects[0].id}/orchestration/targets`,
+    );
+    return targets.find((target) => target.label === 'Docs')!.target_id;
+  }
+});
+
 test('HS2-W27N1D catalog demos render the production components and run their controller', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -1250,7 +1485,9 @@ test('HS2-W27N1D catalog demos render the production components and run their co
   await interactive.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('menu').getByText('Mobile').click();
   await expect(interactive.locator('[data-orchestration-project]')).toHaveCount(4);
-  await expect(interactive.getByRole('status')).toHaveText('Mobile added.');
+  // HS2-E9VVQF: Mobile reaches API's ticket store, so the demo's duplicate question adds it as a site.
+  await expect(interactive.getByRole('status')).toHaveText('Mobile added as a site of API.');
+  await expect(interactive.locator('[data-orchestration-project]').filter({ hasText: 'Site of API' })).toHaveCount(1);
   await page.screenshot({ path: test.info().outputPath('orchestration-settings-demo.png'), fullPage: true });
   expect(errors).toEqual([]);
 });

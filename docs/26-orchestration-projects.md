@@ -172,6 +172,13 @@ several machines (HS2-ZKJX16). Each declaration is a **site** of one project:
   `target add --site-of`, `target rename --site-of` (also to move a site to another
   project) and `target rename --clear-site-of`. A removed site keeps its `site_of` in
   its tombstone, so its history still counts for its project.
+- **Adding an open project as a site (HS2-E9VVQF)** declares and binds it in one step:
+  `POST …/orchestration/projects` with `site_of` (`orchestration project add
+--site-of`), the same workflow as Settings › Orchestration's Add a Site. The candidate
+  is inspected first, and one that reaches another ticket store than a bound site of
+  the project is refused with `site_store_mismatch` **before** it is declared, so a
+  refused add leaves nothing behind. A checkout already added and bound is the same
+  target (`added: false`), whatever `site_of` the repeat names.
 
 Refusals have their own codes:
 
@@ -5522,12 +5529,32 @@ the type changes to Software while it shows.
 
 - **Projects.** One row per active declaration with its name, where it is bound (local
   on this computer, or remote on the reviewed server's name), and a connection badge from
-  the cached binding. Its "…" menu has Show Project Tab (enabled while that project's tab
-  is open) and Stop Orchestrating…. An empty project shows _No projects yet._
+  the cached binding. Its "…" menu (and its context menu) has Show Project Tab (enabled
+  while that project's tab is open) and Stop Orchestrating…. An empty project shows _No
+  projects yet._
+- **Add a Site and Separate (HS2-E9VVQF).** A project row's menu has **Add a Site**, a
+  submenu of the open projects that reach the same ticket store as that project, by
+  default. Each open tab is inspected once through the machine-local `POST
+…/orchestration/inspect`, which binds nothing, and its `checkout_authority` is compared
+  with the store a bound site of the project reaches. **Show All Projects**, a checked
+  choice that keeps the submenu open, lists every open project not added yet for the
+  edge cases, each marked _Another ticket store_ or _Ticket store unknown_ where it
+  applies; the server's refusal (`site_store_mismatch` and the other site codes) shows in
+  the message line. **Open Another Project…** there runs the regular open flow and adds
+  the project it opens as a site. A site row's menu has **Separate from <project>**,
+  which clears `site_of` at the stored manifest revision without asking: adding it as a
+  site again undoes it. Both are offered only for an orchestration project served on this
+  machine; one open from another server adds through the hosted route, which cannot
+  inspect a store (HS2-89YNGN).
 - **+ Add Project.** The other open projects first, local and remote with their machine,
   checked when already added; then **Open Another Project…**, which runs the regular
   open-project flow (HS2-BT4KN6). The project it opens appears in its own tab, is added,
   and the orchestration project's settings show again. A cancelled flow adds nothing.
+  HS2-E9VVQF: it stays the regular add, except that when the chosen project reaches the
+  same ticket store as a project already added (a duplicate), the shared confirmation
+  asks _Is <name> another site of <project>?_ with Cancel, **Add as a Separate Project**
+  and **Add as a Site of <project>**. Cancel adds nothing. A project already added and
+  bound is not a duplicate.
 - **Detail.** Selecting a row opens its detail in the inspector. Each part is its own read
   through an existing route, so a part the gate refuses says so in place and hides
   nothing else: binding and connection (a fresh `resolve` first, because the reads after
@@ -5643,15 +5670,15 @@ server stops. The watched paths are `orchestration_watch_paths`.
 
 ```sh
 hotsheet-cli -C <host-source> orchestration project-type --project <owner> [--set software|orchestration [--keep-projects]]
-hotsheet-cli --actor-role human -C <host-source> orchestration project add <checkout-id> --project <owner> [--registration-id <id>] [--label <name>] [--target-id <ULID>]
+hotsheet-cli --actor-role human -C <host-source> orchestration project add <checkout-id> --project <owner> [--registration-id <id>] [--label <name>] [--target-id <ULID>] [--site-of <project-target-id>]
 hotsheet-cli -C <host-source> orchestration project remove <target-id> --project <owner>
 ```
 
-| Route                                                | Methods and purpose                                                     |
-| ---------------------------------------------------- | ----------------------------------------------------------------------- |
-| `/checkouts/{owner}/orchestration/project-type`      | GET the type, declaration and active project count; PUT switch the type |
-| `/checkouts/{owner}/orchestration/projects`          | POST add a project (declare and bind); machine-local                    |
-| `/checkouts/{owner}/orchestration/projects/{target}` | DELETE remove a project (unbind and tombstone); machine-local           |
+| Route                                                | Methods and purpose                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `/checkouts/{owner}/orchestration/project-type`      | GET the type, declaration and active project count; PUT switch the type               |
+| `/checkouts/{owner}/orchestration/projects`          | POST add a project (declare and bind), with `site_of` as a site of one; machine-local |
+| `/checkouts/{owner}/orchestration/projects/{target}` | DELETE remove a project (unbind and tombstone); machine-local                         |
 
 MCP `hotsheet_targets` adds `project_type` and `project_type_set` (with `keep_projects`).
 Adding a project is a person's act and has no MCP action.

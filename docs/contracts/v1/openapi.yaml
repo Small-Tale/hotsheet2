@@ -3693,7 +3693,8 @@ paths:
       the checkout on this machine or on a reviewed remote registration. Adding is a person's consent to read and follow
       it; an `ai` actor is refused with 403 `forbidden`. The project type must be orchestration. Idempotent - a project
       already bound to the same checkout is returned with `added` false, and a retained `target_id` binds that declared
-      target after a failed attempt.
+      target after a failed attempt. With `site_of` the project is added as another site of that project
+      (HS2-E9VVQF).
     x-hotsheet-machine-local: true
     post:
       operationId: addOrchestrationProject
@@ -26270,6 +26271,15 @@ components:
           description: A canonical ULID kept across retries of this add.
           type: string
           pattern: ^[0-9A-HJKMNP-TV-Z]{26}$
+        site_of:
+          description:
+            HS2-E9VVQF. Add it as another site of this active project target. A checkout that reaches another ticket
+            store than a bound site of that project is refused with 409 `site_store_mismatch` before anything is
+            declared; the other site codes of HS2-SHH7WW apply. An older host refuses the field as unknown.
+          anyOf:
+            - type: string
+              pattern: ^[0-7][0-9A-HJKMNP-TV-Z]{25}$
+            - type: 'null'
         actor:
           type: object
     OrchestrationProjectView:

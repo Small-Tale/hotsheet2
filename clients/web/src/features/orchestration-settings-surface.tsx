@@ -6,9 +6,9 @@ import type { OrchestrationSettingsProps } from '../components/orchestration-set
 import type { ProjectGeneralSettingsProps } from '../components/project-general-settings';
 import type { SettingsCategory } from '../components/settings-navigation';
 import type { SidebarPanelParts } from '../components/sidebar-panel';
-import type { Confirm } from '../confirmation';
+import type { Choose, Confirm } from '../confirmation';
 import type { Project } from '../interactions/types';
-import { addChoices, projectRows, siteReadFailure } from '../orchestration-settings-model';
+import { addChoices, projectRows, siteChoicesByProject, siteReadFailure } from '../orchestration-settings-model';
 import { isRemoteProjectId } from '../remote-projects/identity';
 import { createOrchestrationSettings } from './orchestration-settings';
 
@@ -19,6 +19,8 @@ export interface OrchestrationSettingsSurfaceDependencies {
   viewMode: { readonly value: string };
   selectedSettingsCategory: Signal<SettingsCategory>;
   confirm: Confirm;
+  /** HS2-E9VVQF: + Add Project's duplicate question. */
+  choose?: Choose;
   openProjectPicker: () => void;
   openFlowBusy: () => boolean;
   /** Show an open project's tab. */
@@ -49,6 +51,7 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
     },
     openProjects: () => projects.value.map((item) => ({ id: item.id, name: item.name })),
     confirm: dependencies.confirm,
+    choose: dependencies.choose,
     openProjectPicker: dependencies.openProjectPicker,
     openFlowBusy: dependencies.openFlowBusy,
     activateProject: (projectId) => {
@@ -138,16 +141,32 @@ export function createOrchestrationSettingsSurface(dependencies: OrchestrationSe
 
   function orchestration(current: Project): OrchestrationSettingsProps {
     const state = settings.settings.value[current.id],
-      labels = settings.remoteLabels.value;
-    return {
-      rows: projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
-      choices: addChoices(
+      labels = settings.remoteLabels.value,
+      rows = projectRows(state?.manifest, state?.bindings ?? {}, labels, state?.sites),
+      choices = addChoices(
         projects.value.map((item) => ({ id: item.id, name: item.name })),
         current.id,
         state?.bindings ?? {},
         state?.manifest,
         labels,
-      ),
+      );
+    return {
+      rows,
+      choices,
+      // HS2-E9VVQF: a project served here offers Add a Site on each project row.
+      ...(isRemoteProjectId(current.id)
+        ? {}
+        : {
+            siteChoices: siteChoicesByProject(
+              rows,
+              choices,
+              state?.stores ?? {},
+              state?.manifest,
+              state?.bindings ?? {},
+              Boolean(state?.showAllSites),
+            ),
+            showAllSites: Boolean(state?.showAllSites),
+          }),
       openTabs: projects.value.map((item) => item.id),
       selectedTarget: settings.selected.value[current.id],
       loading: state?.loading ?? true,

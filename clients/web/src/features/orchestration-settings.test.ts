@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiHttpError, type OrchestrationSession } from '../api';
-import type { ConfirmationOptions } from '../confirmation';
+import { OrchestrationSettings } from '../components/orchestration-settings';
+import type { ConfirmationAnswer, ConfirmationOptions } from '../confirmation';
 import { remoteProjectId } from '../remote-projects/identity';
 import { remoteTerminalList } from '../remote-projects/terminals';
 import { terminalProjectOwner } from '../terminal-project-scope';
@@ -14,7 +15,7 @@ import {
 } from '../ux-demo/orchestration-settings-fixtures';
 import { createOrchestrationSettings, type OrchestrationApi } from './orchestration-settings';
 
-function setup({ empty = false, answers = [] as boolean[] } = {}) {
+function setup({ empty = false, answers = [] as boolean[], choices = [] as ConfirmationAnswer[] } = {}) {
   const fake = createDemoOrchestrationApi({ empty });
   const api: OrchestrationApi = Object.fromEntries(
     Object.entries(fake.api).map(([name, call]) => [name, vi.fn(call as (...args: unknown[]) => unknown)]),
@@ -31,6 +32,11 @@ function setup({ empty = false, answers = [] as boolean[] } = {}) {
     confirm: (options) => {
       asked.push(options);
       return Promise.resolve(answers.shift() ?? true);
+    },
+    // HS2-E9VVQF: unanswered duplicate questions add a separate project, as before.
+    choose: (options) => {
+      asked.push(options);
+      return Promise.resolve(choices.shift() ?? 'alternate');
     },
     openProjectPicker: vi.fn(),
     openFlowBusy: () => busy,
@@ -716,5 +722,211 @@ describe('removing a project from another machine (HS2-0G80WD)', () => {
     await t.settings.removeProject(DEMO_OWNER, DEMO_TARGETS.docs);
     expect(t.api.removeOrchestrationProject).toHaveBeenCalledWith(DEMO_OWNER, DEMO_TARGETS.docs);
     expect(t.api.removeHostedOrchestrationProject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Add a Site and Separate from <project> (HS2-E9VVQF)', () => {
+  const MOBILE = `remote:${DEMO_REMOTE}:mobile-0000000000ab`;
+  const stores = (t: ReturnType<typeof setup>) => state(t).stores ?? {};
+
+  it('inspects each open tab once for its ticket store, waiting for one already in flight', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    await t.settings.loadStores(DEMO_OWNER);
+    // Every other open tab is inspected once: API, Web, Docs and Mobile.
+    expect(t.api.inspectOrchestrationTarget).toHaveBeenCalledTimes(4);
+    expect(stores(t)[MOBILE]).toBe('a'.repeat(64));
+    // Read again (an orchestration_changed event): nothing is inspected twice.
+    await t.settings.loadSettings(DEMO_OWNER);
+    await t.settings.loadStores(DEMO_OWNER);
+    expect(t.api.inspectOrchestrationTarget).toHaveBeenCalledTimes(4);
+    // A new tab is inspected on its own; a failed inspection is remembered as unknown.
+    t.openTab({ id: 'billing-0000000000ab', name: 'Billing' });
+    (t.api.inspectOrchestrationTarget as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('gone'));
+    await t.settings.loadStores(DEMO_OWNER, 'billing-0000000000ab');
+    expect(stores(t)['billing-0000000000ab']).toBeNull();
+    expect(t.api.inspectOrchestrationTarget).toHaveBeenCalledTimes(5);
+  });
+
+  it('reads no stores for a project open from another server', async () => {
+    const t = setup();
+    const owner = remoteProjectId(DEMO_REMOTE, 'launch-0000000000ab');
+    await t.settings.loadStores(owner);
+    expect(t.api.inspectOrchestrationTarget).not.toHaveBeenCalled();
+  });
+
+  it('adds an open project as a site of a project, and shows a refused store in the message line', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    // Billing reaches another store than API: the refusal says so and nothing is added.
+    t.openTab({ id: 'billing-0000000000ab', name: 'Billing' });
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'billing-0000000000ab');
+    expect(t.api.addOrchestrationProject).toHaveBeenLastCalledWith(
+      DEMO_OWNER,
+      expect.objectContaining({ site_of: DEMO_TARGETS.api, label: 'Billing' }),
+    );
+    expect(state(t).message).toBe(
+      'Could not add Billing as a site of API. It reaches a different ticket store than this project.',
+    );
+    expect(state(t).manifest?.targets).toHaveLength(3);
+    // Mobile reaches API's store: it is added as a site of API.
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, MOBILE);
+    expect(state(t).message).toBe('');
+    expect(state(t).status).toBe('Mobile added as a site of API.');
+    const site = state(t).manifest?.targets.find((target) => target.label === 'Mobile');
+    expect(site?.site_of).toBe(DEMO_TARGETS.api);
+    // An unknown tab or project is a no-op.
+    await t.settings.addSite(DEMO_OWNER, 'missing', MOBILE);
+    await t.settings.addSite(DEMO_OWNER, DEMO_TARGETS.api, 'closed-0000000000ab');
+    expect(t.api.addOrchestrationProject).toHaveBeenCalledTimes(2);
+
+    // A stale revision: the refusal shows with the project's name, and the site stays.
+    (t.api.separateOrchestrationSite as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new ApiHttpError('orchestration declaration changed', 409, 'conflict'),
+    );
+    await t.settings.separateSite(DEMO_OWNER, site!.target_id);
+    expect(state(t).message).toBe('Could not separate Mobile from API. orchestration declaration changed');
+    expect(state(t).busy).not.toContain(site!.target_id);
+    // Separate from API: no question, and the site is a project of its own again.
+    const asked = t.asked.length;
+    await t.settings.separateSite(DEMO_OWNER, site!.target_id);
+    expect(t.asked).toHaveLength(asked);
+    expect(t.api.separateOrchestrationSite).toHaveBeenLastCalledWith(
+      DEMO_OWNER,
+      site!.target_id,
+      expect.any(String),
+      'Mobile',
+    );
+    expect(state(t).message).toBe('');
+    expect(state(t).status).toBe('Mobile is its own project again.');
+    expect(state(t).manifest?.targets.find((target) => target.label === 'Mobile')?.site_of).toBeUndefined();
+    // A project that is not a site: nothing to separate.
+    await t.settings.separateSite(DEMO_OWNER, DEMO_TARGETS.web);
+    expect(t.api.separateOrchestrationSite).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks only for a duplicate from + Add Project: site, separate project, or nothing', async () => {
+    const t = setup({ choices: ['cancel', 'confirm', 'alternate'] });
+    await t.settings.loadSettings(DEMO_OWNER);
+    // Billing reaches a store no added project uses: added at once, no question.
+    t.openTab({ id: 'billing-0000000000ab', name: 'Billing' });
+    await t.settings.addOpenProject(DEMO_OWNER, 'billing-0000000000ab');
+    expect(t.asked).toHaveLength(0);
+    expect(state(t).status).toBe('Billing added.');
+    // An open project that is already added is not a duplicate: no question either.
+    await t.settings.addOpenProject(DEMO_OWNER, 'web-0000000000ab');
+    expect(t.asked).toHaveLength(0);
+    expect(state(t).status).toBe('Web is already added.');
+    // Mobile reaches API's store. Cancel adds nothing.
+    const before = (t.api.addOrchestrationProject as ReturnType<typeof vi.fn>).mock.calls.length;
+    await t.settings.addOpenProject(DEMO_OWNER, MOBILE);
+    expect(t.asked[0]).toMatchObject({
+      title: 'Is Mobile another site of API?',
+      confirmLabel: 'Add as a Site of API',
+      alternateLabel: 'Add as a Separate Project',
+    });
+    expect(t.api.addOrchestrationProject).toHaveBeenCalledTimes(before);
+    // Add as a Site of API.
+    await t.settings.addOpenProject(DEMO_OWNER, MOBILE);
+    expect(t.api.addOrchestrationProject).toHaveBeenLastCalledWith(
+      DEMO_OWNER,
+      expect.objectContaining({ site_of: DEMO_TARGETS.api }),
+    );
+    expect(state(t).status).toBe('Mobile added as a site of API.');
+  });
+
+  it('adds a duplicate as a separate project when the person says so', async () => {
+    const t = setup({ choices: ['alternate'] });
+    await t.settings.loadSettings(DEMO_OWNER);
+    await t.settings.addOpenProject(DEMO_OWNER, MOBILE);
+    expect(t.asked).toHaveLength(1);
+    const sent = (t.api.addOrchestrationProject as ReturnType<typeof vi.fn>).mock.lastCall![1] as object;
+    expect(sent).not.toHaveProperty('site_of');
+    expect(state(t).status).toBe('Mobile added.');
+  });
+
+  it('Open Another Project… from Add a Site adds the opened tab as a site', async () => {
+    const t = setup();
+    await t.settings.loadSettings(DEMO_OWNER);
+    t.settings.openAnother(DEMO_OWNER, DEMO_TARGETS.api);
+    t.setBusy(true);
+    t.openTab({ id: `remote:${DEMO_REMOTE}:mobile2-0000000000ab`, name: 'API Clone' });
+    t.setBusy(false);
+    t.flush();
+    await vi.waitFor(() => {
+      expect(t.api.addOrchestrationProject).toHaveBeenCalledWith(
+        DEMO_OWNER,
+        expect.objectContaining({ label: 'API Clone', site_of: DEMO_TARGETS.api }),
+      );
+    });
+    expect(t.activated).toEqual([DEMO_OWNER]);
+  });
+
+  it('Show All Projects toggles per project', () => {
+    const t = setup();
+    expect(t.settings.settings.value[DEMO_OWNER]?.showAllSites).toBeUndefined();
+    t.settings.toggleAllSites(DEMO_OWNER);
+    expect(state(t).showAllSites).toBe(true);
+    t.settings.toggleAllSites(DEMO_OWNER);
+    expect(state(t).showAllSites).toBe(false);
+  });
+});
+
+describe('the Add a Site and Separate menus (HS2-E9VVQF)', () => {
+  const row = (targetId: string, label: string, siteOf?: string) => ({
+    targetId,
+    label,
+    location: 'local' as const,
+    where: '',
+    place: '',
+    connection: { label: 'Bound', tone: 'neutral' as const },
+    ...(siteOf ? { siteOf } : {}),
+  });
+  const rows = [row('W', 'Widgets'), row('S', 'Widgets laptop', 'W'), row('D', 'Docs')];
+  const clone = { projectId: 'clone', name: 'Widgets clone', location: 'local' as const, machine: 'This Computer' };
+
+  it('offers Add a Site on a project row and Separate from <project> on a site row', () => {
+    const markup = String(
+      OrchestrationSettings({
+        rows,
+        siteChoices: { W: [{ ...clone, sameStore: true }], D: [] },
+      }),
+    );
+    expect(markup.match(/>Add a Site</g)).toHaveLength(2);
+    expect(markup).toContain('Open Projects in the Same Ticket Store');
+    expect(markup).toContain('data-action="add-orchestration-site"');
+    expect(markup).toContain('data-project-id="clone"');
+    expect(markup).toContain('No open project uses this ticket store');
+    expect(markup).toContain('>Show All Projects<');
+    expect(markup).toContain('data-action="open-another-orchestration-site"');
+    // One Separate entry, on the site row, naming its project.
+    expect(markup.match(/Separate from Widgets/g)).toHaveLength(1);
+    expect(markup).toContain('data-action="separate-orchestration-site"');
+    expect(markup).toContain('data-lucide="group"');
+    expect(markup).toContain('data-lucide="ungroup"');
+  });
+
+  it('marks another or an unknown store under Show All Projects, and offers no Add a Site from another server', () => {
+    const all = String(
+      OrchestrationSettings({
+        rows,
+        showAllSites: true,
+        siteChoices: {
+          W: [
+            { ...clone, sameStore: true },
+            { ...clone, projectId: 'other', name: 'Other', sameStore: false },
+            { ...clone, projectId: 'unknown', name: 'Unknown', sameStore: undefined },
+          ],
+        },
+      }),
+    );
+    expect(all).toContain('>Open Projects<');
+    expect(all).toContain('Another ticket store');
+    expect(all).toContain('Ticket store unknown');
+    expect(all).toContain('aria-checked="true"');
+    const hosted = String(OrchestrationSettings({ rows, hostedChoices: [] }));
+    expect(hosted).not.toContain('Add a Site');
+    // A site row still separates there.
+    expect(hosted).toContain('Separate from Widgets');
   });
 });

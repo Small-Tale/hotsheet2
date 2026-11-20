@@ -35,6 +35,11 @@ pub struct AddProject {
     /// after a failed bind binds the same target instead of declaring another.
     #[serde(default)]
     pub target_id: Option<String>,
+    /// HS2-E9VVQF: add it as another site of this active project target (§26.2,
+    /// HS2-SHH7WW). A checkout that reaches another ticket store than the project's
+    /// bound sites is refused with `site_store_mismatch` before anything is declared.
+    #[serde(default)]
+    pub site_of: Option<String>,
 }
 
 /// HS2-92FJXM: add a checkout this server already has open, as a client on another
@@ -329,6 +334,7 @@ impl OrchestrationRuntime {
                 },
                 label: request.label,
                 target_id: request.target_id,
+                site_of: None,
             },
             actor,
             tx,
@@ -389,6 +395,10 @@ impl OrchestrationRuntime {
         }
         // Inspect before declaring, so an unreachable or unknown checkout adds nothing.
         let candidate = observer.inspect(inspect)?;
+        // HS2-E9VVQF: a site of another ticket store is refused before it is declared.
+        if let Some(project) = &request.site_of {
+            flow.check_site_candidate(project, &candidate.destination)?;
+        }
         let label = request
             .label
             .clone()
@@ -417,7 +427,7 @@ impl OrchestrationRuntime {
                         target_id: request.target_id.clone(),
                         label,
                         expected_repository_identity: None,
-                        site_of: None,
+                        site_of: request.site_of.clone(),
                     },
                     &observer,
                     tx,

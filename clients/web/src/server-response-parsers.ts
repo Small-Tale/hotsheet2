@@ -56,6 +56,7 @@ import type {
   OrchestrationBinding,
   OrchestrationCapabilities,
   OrchestrationCapacity,
+  OrchestrationInspection,
   OrchestrationLink,
   OrchestrationManifest,
   OrchestrationPolicyView,
@@ -1763,6 +1764,12 @@ export const parseOrchestrationResolution = shape<OrchestrationResolution>('orch
     'identity_changed',
   ),
   reason: isNullableString,
+  stale: isBoolean,
+  usable: isBoolean,
+});
+/** HS2-E9VVQF: `POST …/orchestration/inspect`; only the fresh destination is read. */
+export const parseOrchestrationInspection = shape<OrchestrationInspection>('orchestration inspection', {
+  destination: orchestrationDestination,
   stale: isBoolean,
   usable: isBoolean,
 });

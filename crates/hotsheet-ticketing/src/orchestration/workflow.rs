@@ -158,6 +158,41 @@ impl Orchestration {
         }
     }
 
+    /// HS2-E9VVQF: before declaring a new site of `project`, refuse a destination that
+    /// reaches another ticket store than a bound site of that project on this machine,
+    /// so a refused add leaves no declaration behind. Binding checks it again.
+    pub fn check_site_candidate(
+        &self,
+        project: &str,
+        destination: &TargetDestination,
+    ) -> Result<(), OrchestrationError> {
+        let Some(manifest) = self.manifest.document()? else {
+            return Err(OrchestrationError::Site(SiteError::ProjectUnknown));
+        };
+        let sites = ProjectSites::of(&manifest.targets);
+        let file = self.bindings.read_file()?;
+        let live = |id: &str| {
+            manifest
+                .targets
+                .iter()
+                .any(|entry| entry.target_id == id && entry.state == DeclarationState::Active)
+        };
+        let mismatch = file.bindings.iter().any(|binding| {
+            binding.target.owner_checkout_id == self.owner_checkout_id
+                && live(&binding.target.target_id)
+                && sites.project_of(&binding.target.target_id) == project
+                && binding
+                    .destination
+                    .as_ref()
+                    .is_some_and(|other| other.authority() != destination.authority())
+        });
+        if mismatch {
+            Err(OrchestrationError::Site(SiteError::StoreMismatch))
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn declarations(&self) -> Result<ManifestView, OrchestrationError> {
         self.manifest.read()
     }

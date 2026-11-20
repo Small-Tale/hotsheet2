@@ -391,6 +391,129 @@ fn hs2_w27n1d_removing_a_project_unbinds_and_tombstones_once() {
     assert_ne!(fresh["target_id"], target_id.as_str());
 }
 
+/// HS2-E9VVQF: Settings › Orchestration › Add a Site and `project add --site-of` add an
+/// open checkout as another site of an added project in one step. A checkout of another
+/// ticket store is refused with `site_store_mismatch` before anything is declared, and
+/// the grouping is separated again with `clear_site_of`.
+#[test]
+fn hs2_e9vvqf_adding_a_site_declares_it_grouped_and_refuses_another_store_first() {
+    let f = fixture();
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    orchestration(&f, &mut tx);
+    let path = format!("/checkouts/{}/orchestration/projects", f.owner.id);
+    let project = call(
+        &f,
+        &mut tx,
+        "POST",
+        &path,
+        json!({"destination":local(&f),"label":"Widgets","actor":person()}),
+    );
+    let project_id = project["target_id"].as_str().unwrap().to_owned();
+    // A second checkout of the same ticket store, such as another clone.
+    let laptop_root = f._root.path().join("laptop");
+    std::fs::create_dir(&laptop_root).unwrap();
+    let laptop = f
+        .runtime
+        .checkouts
+        .register_registered_sources(
+            &f.runtime.providers,
+            &laptop_root,
+            None,
+            None,
+            vec![TicketSource {
+                connection_id: "synthetic-source".into(),
+                provider: "github".into(),
+                locator: "synthetic/repo".into(),
+            }],
+            None,
+        )
+        .unwrap();
+    // A site of a project that is not added: refused with its own code.
+    let unknown = refused(
+        &f,
+        &mut tx,
+        "POST",
+        &path,
+        json!({"destination":{"kind":"local","checkout_id":laptop.id},"site_of":id(9),"actor":person()}),
+    );
+    assert_eq!(unknown.code(), "site_project_unknown");
+    // Another ticket store (the reviewed remote peer): refused before it is declared.
+    register(&f);
+    let other_store = refused(
+        &f,
+        &mut tx,
+        "POST",
+        &path,
+        json!({"destination":{"kind":"remote","registration_id":id(20),"checkout_id":f.peer.projection.checkout_id},"site_of":project_id,"actor":person()}),
+    );
+    assert_eq!(other_store.code(), "site_store_mismatch");
+    assert_eq!(
+        f.runtime.declarations(&f.owner.id).unwrap().targets.len(),
+        1
+    );
+    // The same store: declared as a site of the project and bound in one step.
+    let site = call(
+        &f,
+        &mut tx,
+        "POST",
+        &path,
+        json!({"destination":{"kind":"local","checkout_id":laptop.id},"label":"Widgets laptop","site_of":project_id,"actor":person()}),
+    );
+    assert_eq!(site["added"], true);
+    assert_eq!(site["resolution"]["usable"], true);
+    assert_eq!(
+        site["resolution"]["declaration"]["site_of"],
+        project_id.as_str()
+    );
+    let site_id = site["target_id"].as_str().unwrap().to_owned();
+    let sites = call(
+        &f,
+        &mut tx,
+        "GET",
+        &format!("/checkouts/{}/orchestration/sites", f.owner.id),
+        Value::Null,
+    );
+    assert_eq!(sites["projects"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        sites["projects"][0]["sites"][1]["target_id"],
+        site_id.as_str()
+    );
+    // Repeated: the same site, nothing declared twice.
+    let repeated = call(
+        &f,
+        &mut tx,
+        "POST",
+        &path,
+        json!({"destination":{"kind":"local","checkout_id":laptop.id},"site_of":project_id,"actor":person()}),
+    );
+    assert_eq!(repeated["added"], false);
+    assert_eq!(repeated["target_id"], site_id.as_str());
+    // Separate from Widgets: the site is a project of its own again.
+    let revision = f.runtime.declarations(&f.owner.id).unwrap().revision;
+    let separated = call(
+        &f,
+        &mut tx,
+        "PATCH",
+        &format!("/checkouts/{}/orchestration/targets/{site_id}", f.owner.id),
+        json!({"expected_revision":revision,"label":"Widgets laptop","clear_site_of":true}),
+    );
+    assert!(
+        separated["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|target| target.get("site_of").is_none_or(Value::is_null))
+    );
+    assert_eq!(
+        audit_actions(&f),
+        vec!["project_type_set", "project_add", "project_add"]
+    );
+}
+
 #[test]
 fn hs2_w27n1d_project_paths_route_and_only_add_and_remove_are_machine_local() {
     for path in [

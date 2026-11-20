@@ -16,13 +16,14 @@ import type {
   ProjectTypeView,
 } from '../api';
 import { ApiHttpError } from '../api';
-import type { Confirm } from '../confirmation';
+import type { Choose, Confirm } from '../confirmation';
 import {
   type AddDestination,
   addPolicyAccount,
   changePolicyDraft,
   changeTargetLimits,
   destinationOf,
+  duplicateProject,
   newUlid,
   type PolicyDraft,
   policyDraftFrom,
@@ -44,6 +45,8 @@ export type OrchestrationApi = Pick<
   | 'orchestrationBinding'
   | 'orchestrationResolve'
   | 'addOrchestrationProject'
+  | 'inspectOrchestrationTarget'
+  | 'separateOrchestrationSite'
   | 'removeOrchestrationProject'
   | 'hostedOrchestrationProjects'
   | 'addHostedOrchestrationProject'
@@ -99,6 +102,13 @@ export interface OrchestrationSettingsState {
    * project has more than one site.
    */
   sites?: OrchestrationSitesView;
+  /**
+   * HS2-E9VVQF: the ticket store (`checkout_authority`) each open tab reaches, inspected once per tab
+   * for Add a Site and + Add Project's duplicate check; `null` when it could not be inspected.
+   */
+  stores?: Readonly<Record<string, string | null>>;
+  /** HS2-E9VVQF: Add a Site lists every open project, not only those of the same ticket store. */
+  showAllSites?: boolean;
 }
 
 /** A selected project's detail, shown in the inspector. Each part is read on its own. */
@@ -129,6 +139,11 @@ export interface OrchestrationSettingsDependencies {
   api: (projectId: string) => OrchestrationApi | undefined;
   openProjects: () => readonly OrchestrationOpenProject[];
   confirm: Confirm;
+  /**
+   * HS2-E9VVQF: ask with two ways ahead, for + Add Project's duplicate question. Without it a
+   * duplicate is added as a project of its own.
+   */
+  choose?: Choose;
   /** The regular open-project flow (HS2-BT4KN6). */
   openProjectPicker: () => void;
   /** Whether that flow is still showing a dialog or opening a project. */
@@ -166,6 +181,17 @@ const readFailure = (reason: unknown) => {
     return `Its machine did not answer (${reason.code ?? 'unreachable'}).`;
   return messageOf(reason);
 };
+/** HS2-E9VVQF: a refused site in words, by the refusal's code; the server's own words otherwise. */
+const SITE_REFUSALS: Readonly<Record<string, string>> = {
+  site_store_mismatch: 'It reaches a different ticket store than this project.',
+  site_project_unknown: 'That project is no longer added.',
+  site_chain: 'A site cannot have sites of its own.',
+  site_repository_mismatch: 'It declares a different repository than this project.',
+  site_plan_conflict: 'The plan would have two steps on one ticket of the project.',
+  site_run_conflict: 'Two active runs would work on one ticket of the project.',
+};
+const siteFailure = (reason: unknown) =>
+  (reason instanceof ApiHttpError ? SITE_REFUSALS[reason.code ?? ''] : undefined) ?? messageOf(reason);
 const EMPTY: OrchestrationSettingsState = { bindings: {}, loading: false, message: '', status: '', busy: [] };
 
 /**
@@ -295,7 +321,12 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       if (target && active.every((item) => item.target_id !== target)) closeDetail(projectId);
       else if (target) syncLimits(projectId, target);
       if (active.some((item) => item.site_of)) void loadSites(projectId);
-      else if (stateOf(projectId).sites) put(projectId, { sites: undefined });
+      else {
+        // HS2-E9VVQF: a sites read still in flight from before a separation must not bring its rows back.
+        next(`sites:${projectId}`);
+        if (stateOf(projectId).sites) put(projectId, { sites: undefined });
+      }
+      void loadStores(projectId);
     } catch (reason) {
       if (current(`settings:${projectId}`, generation))
         put(projectId, { loading: false, message: `Could not read the orchestration settings. ${messageOf(reason)}` });
@@ -319,6 +350,47 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     }
   }
 
+  /** HS2-E9VVQF: the inspections in flight by owner and tab, so one tab is inspected once. */
+  const inspecting = new Map<string, Promise<void>>();
+  /**
+   * HS2-E9VVQF: the ticket store each open tab reaches, for Add a Site and the duplicate check. Each
+   * tab is inspected once (the machine-local inspect binds nothing); a project open from another
+   * server adds through that server's hosted route, which has no inspect, so it reads nothing here.
+   * With `only`, just that tab, waiting for an inspection already in flight.
+   */
+  async function loadStores(ownerId: string, only?: string) {
+    const api = dependencies.api(ownerId);
+    if (!api || isRemoteProjectId(ownerId)) return;
+    const known = stateOf(ownerId).stores ?? {};
+    const reads = dependencies
+      .openProjects()
+      .map((project) => project.id)
+      .filter((id) => id !== ownerId && !(id in known) && (!only || id === only))
+      .map((id) => {
+        const key = `${ownerId}:${id}`;
+        let read = inspecting.get(key);
+        if (!read) {
+          read = api
+            .inspectOrchestrationTarget(ownerId, destinationOf(id))
+            .then(
+              (inspection) => inspection.destination.checkout_authority,
+              () => null,
+            )
+            .then((store) => {
+              inspecting.delete(key);
+              put(ownerId, { stores: { ...stateOf(ownerId).stores, [id]: store } });
+            });
+          inspecting.set(key, read);
+        }
+        return read;
+      });
+    await Promise.all(reads);
+  }
+  /** HS2-E9VVQF: Add a Site → Show All Projects, a per-project view choice. */
+  function toggleAllSites(ownerId: string) {
+    put(ownerId, { showAllSites: !stateOf(ownerId).showAllSites });
+  }
+
   /** Remote server names for the rows and the + menu; read once per showing, never polled. */
   async function loadRemoteLabels(read: () => Promise<Record<string, string>>) {
     try {
@@ -328,19 +400,72 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     }
   }
 
-  async function addDestination(projectId: string, destination: AddDestination, label: string) {
+  async function addDestination(
+    projectId: string,
+    destination: AddDestination,
+    label: string,
+    site?: { targetId: string; label: string },
+  ) {
     const api = dependencies.api(projectId);
     if (!api || stateOf(projectId).busy.includes('add')) return;
     busy(projectId, 'add', true);
     put(projectId, { message: '', status: '' });
     try {
-      const added = await api.addOrchestrationProject(projectId, { destination, label, target_id: newUlid() });
-      put(projectId, { status: added.added ? `${added.label} added.` : `${added.label} is already added.` });
+      const added = await api.addOrchestrationProject(projectId, {
+        destination,
+        label,
+        target_id: newUlid(),
+        ...(site ? { site_of: site.targetId } : {}),
+      });
+      put(projectId, {
+        status: !added.added
+          ? `${added.label} is already added.`
+          : site
+            ? `${added.label} added as a site of ${site.label}.`
+            : `${added.label} added.`,
+      });
       await loadSettings(projectId);
     } catch (reason) {
-      put(projectId, { message: `Could not add ${label}. ${messageOf(reason)}` });
+      put(projectId, {
+        message: site
+          ? `Could not add ${label} as a site of ${site.label}. ${siteFailure(reason)}`
+          : `Could not add ${label}. ${messageOf(reason)}`,
+      });
     } finally {
       busy(projectId, 'add', false);
+    }
+  }
+
+  const targetLabel = (ownerId: string, targetId: string) =>
+    stateOf(ownerId).manifest?.targets.find((target) => target.target_id === targetId)?.label;
+
+  /** HS2-E9VVQF: a project row's Add a Site → an open project, added as another site of that project. */
+  function addSite(ownerId: string, projectTargetId: string, projectId: string) {
+    const open = dependencies.openProjects().find((project) => project.id === projectId),
+      label = targetLabel(ownerId, projectTargetId);
+    if (!open || !label || projectId === ownerId) return Promise.resolve();
+    return addDestination(ownerId, destinationOf(projectId), open.name, { targetId: projectTargetId, label });
+  }
+
+  /** HS2-E9VVQF: a site row's Separate from <project>. Undoable by adding it as a site again, so it does not ask. */
+  async function separateSite(ownerId: string, targetId: string) {
+    const api = dependencies.api(ownerId),
+      state = stateOf(ownerId),
+      declaration = state.manifest?.targets.find((target) => target.target_id === targetId),
+      project = declaration?.site_of ? targetLabel(ownerId, declaration.site_of) : undefined;
+    if (!api || !declaration?.site_of || !state.manifest?.revision || state.busy.includes(targetId)) return;
+    busy(ownerId, targetId, true);
+    put(ownerId, { message: '', status: '' });
+    try {
+      await api.separateOrchestrationSite(ownerId, targetId, state.manifest.revision, declaration.label);
+      put(ownerId, { status: `${declaration.label} is its own project again.` });
+      await loadSettings(ownerId);
+    } catch (reason) {
+      put(ownerId, {
+        message: `Could not separate ${declaration.label} from ${project ?? 'its project'}. ${siteFailure(reason)}`,
+      });
+    } finally {
+      busy(ownerId, targetId, false);
     }
   }
 
@@ -369,20 +494,46 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     }
   }
 
-  /** + Add Project → an open project. */
-  function addOpenProject(ownerId: string, projectId: string) {
+  /**
+   * + Add Project → an open project. HS2-E9VVQF: only when it reaches the same ticket store as a
+   * project already added (a duplicate) does it ask whether it is another site of that project.
+   */
+  async function addOpenProject(ownerId: string, projectId: string) {
     const open = dependencies.openProjects().find((project) => project.id === projectId);
-    if (!open || projectId === ownerId) return Promise.resolve();
+    if (!open || projectId === ownerId || stateOf(ownerId).busy.includes('add')) return;
+    const choose = dependencies.choose;
+    if (choose && !isRemoteProjectId(ownerId)) {
+      await loadStores(ownerId, projectId);
+      const state = stateOf(ownerId),
+        bound = Object.values(state.bindings).some(
+          (binding) => binding?.destination && tabProjectIdOf(binding.destination) === projectId,
+        ),
+        duplicate = bound ? undefined : duplicateProject(state.stores?.[projectId], state.manifest, state.bindings);
+      if (duplicate) {
+        const answer = await choose({
+          title: `Is ${open.name} another site of ${duplicate.label}?`,
+          message: `${open.name} uses the same ticket store as ${duplicate.label}. A site is the same project in another place, such as another computer, and shares its tickets, plan and runs.`,
+          confirmLabel: `Add as a Site of ${duplicate.label}`,
+          alternateLabel: 'Add as a Separate Project',
+        });
+        if (answer === 'cancel') return;
+        if (answer === 'confirm') return addDestination(ownerId, destinationOf(projectId), open.name, duplicate);
+      }
+    }
     return addDestination(ownerId, destinationOf(projectId), open.name);
   }
 
-  let pendingOpen: { ownerId: string; before: Set<string>; armed: boolean } | undefined;
-  /** + Add Project → Open Another Project…: the regular open flow, then the new tab is added. */
-  function openAnother(ownerId: string) {
+  let pendingOpen: { ownerId: string; before: Set<string>; armed: boolean; siteOf?: string } | undefined;
+  /**
+   * + Add Project → Open Another Project…: the regular open flow, then the new tab is added. HS2-E9VVQF:
+   * from a project row's Add a Site, it is added as another site of that project.
+   */
+  function openAnother(ownerId: string, siteOf?: string) {
     pendingOpen = {
       ownerId,
       before: new Set(dependencies.openProjects().map((project) => project.id)),
       armed: false,
+      siteOf,
     };
     dependencies.openProjectPicker();
     noteOpenFlow();
@@ -407,7 +558,9 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
       const opened = dependencies.openProjects().find((project) => !pending.before.has(project.id));
       if (!opened || opened.id === pending.ownerId) return;
       dependencies.activateProject(pending.ownerId);
-      void addOpenProject(pending.ownerId, opened.id);
+      void (pending.siteOf
+        ? addSite(pending.ownerId, pending.siteOf, opened.id)
+        : addOpenProject(pending.ownerId, opened.id));
     });
   }
 
@@ -745,6 +898,10 @@ export function createOrchestrationSettings(dependencies: OrchestrationSettingsD
     loadRemoteLabels,
     addOpenProject,
     addHostedProject,
+    addSite,
+    separateSite,
+    toggleAllSites,
+    loadStores,
     openAnother,
     noteOpenFlow,
     removeProject,

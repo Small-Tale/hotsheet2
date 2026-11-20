@@ -46,6 +46,12 @@ enum ProjectCmd {
         /// A canonical ULID you keep for retries of this add.
         #[arg(long)]
         target_id: Option<String>,
+        /// HS2-E9VVQF: add it as another site of this added project target (the same
+        /// code project on another machine or checkout). It must reach the same ticket
+        /// store as the project's bound sites, or the add is refused with
+        /// `site_store_mismatch` and nothing is declared.
+        #[arg(long)]
+        site_of: Option<String>,
     },
     /// Stop orchestrating one project: remove this machine's binding and tombstone its
     /// declaration. Sessions already running there keep running until stopped.
@@ -103,6 +109,7 @@ pub(super) fn project_route(
             registration_id,
             label,
             target_id,
+            site_of,
         } => (
             "POST",
             prefix,
@@ -113,6 +120,7 @@ pub(super) fn project_route(
                 },
                 "label": label,
                 "target_id": target_id,
+                "site_of": site_of,
             }),
         ),
         ProjectCmd::Remove { target_id } => ("DELETE", format!("{prefix}/{target_id}"), json!({})),
@@ -137,4 +145,42 @@ pub(super) fn project_route(
         ),
     };
     Ok((owner, request))
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(flatten)]
+        project: ProjectArgs,
+    }
+
+    /// HS2-E9VVQF: `project add --site-of` sends the same request as Settings' Add a Site.
+    #[test]
+    fn project_add_site_of_reaches_the_shared_add() {
+        let cli = Cli::parse_from([
+            "x",
+            "--project",
+            "owner",
+            "add",
+            "laptop",
+            "--label",
+            "Widgets laptop",
+            "--site-of",
+            "01HZZZZZZZZZZZZZZZZZZZZZZZ",
+        ]);
+        let (owner, (method, path, body)) = project_route(cli.project).unwrap();
+        assert_eq!(owner, "owner");
+        assert_eq!(method, "POST");
+        assert_eq!(path, "/checkouts/owner/orchestration/projects");
+        assert_eq!(body["site_of"], "01HZZZZZZZZZZZZZZZZZZZZZZZ");
+        assert_eq!(body["destination"]["kind"], "local");
+        let plain = Cli::parse_from(["x", "--project", "owner", "add", "laptop"]);
+        let (_, (_, _, body)) = project_route(plain.project).unwrap();
+        assert_eq!(body["site_of"], Value::Null);
+    }
 }

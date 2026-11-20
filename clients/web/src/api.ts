@@ -88,6 +88,7 @@ import {
   parseOrchestrationAdmission,
   parseOrchestrationBinding,
   parseOrchestrationCapacity,
+  parseOrchestrationInspection,
   parseOrchestrationManifest,
   parseOrchestrationPolicyView,
   parseOrchestrationProjectView,
@@ -1142,6 +1143,15 @@ export interface OrchestrationResolution {
   state:
     'unbound' | 'connecting' | 'reachable' | 'unreachable' | 'unauthorized' | 'source_missing' | 'identity_changed';
   reason: string | null;
+  stale: boolean;
+  usable: boolean;
+}
+/**
+ * HS2-E9VVQF: `POST /checkouts/{owner}/orchestration/inspect`: a fresh, machine-local check of a
+ * candidate checkout. It binds nothing; its `checkout_authority` names the ticket store it reaches.
+ */
+export interface OrchestrationInspection {
+  destination: OrchestrationDestination;
   stale: boolean;
   usable: boolean;
 }
@@ -3171,12 +3181,34 @@ export class Api {
         { kind: 'local'; checkout_id: string } | { kind: 'remote'; registration_id: string; checkout_id: string };
       label: string;
       target_id: string;
+      /** HS2-E9VVQF: add it as another site of this added project target. */
+      site_of?: string;
     },
   ) =>
     this.parsed(parseOrchestrationProjectView, `/checkouts/${encodeURIComponent(owner)}/orchestration/projects`, {
       method: 'POST',
       body: JSON.stringify({ ...request, actor: { role: 'human' } }),
     });
+  /** HS2-E9VVQF: which ticket store an open project reaches, before it is added. Binds nothing. */
+  inspectOrchestrationTarget = (
+    owner: string,
+    destination:
+      { kind: 'local'; checkout_id: string } | { kind: 'remote'; registration_id: string; checkout_id: string },
+  ) =>
+    this.parsed(parseOrchestrationInspection, `/checkouts/${encodeURIComponent(owner)}/orchestration/inspect`, {
+      method: 'POST',
+      body: JSON.stringify({ destination }),
+    });
+  /** HS2-E9VVQF: Separate from <project>: the site becomes a project of its own again. */
+  separateOrchestrationSite = (owner: string, target: string, expectedRevision: string, label: string) =>
+    this.parsed(
+      parseOrchestrationManifest,
+      `/checkouts/${encodeURIComponent(owner)}/orchestration/targets/${encodeURIComponent(target)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ expected_revision: expectedRevision, label, clear_site_of: true }),
+      },
+    );
   /** HS2-92FJXM: the serving machine's open checkouts, which a client on another machine may add. */
   hostedOrchestrationProjects = (owner: string) =>
     this.parsed(
