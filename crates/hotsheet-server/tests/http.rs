@@ -19955,6 +19955,53 @@ async fn hs2_em6ywp_checkout_claim_lifecycle_uses_sibling_store() {
     );
 }
 
+/// HS2-JP6ENC: publishing the instance record reads only the embedded build revision. A
+/// local build's monitor would otherwise hash the whole source tree between bind and the
+/// record, which delayed discovery past the readiness window on loaded macOS runners.
+#[tokio::test]
+async fn hs2_jp6enc_publishing_the_instance_record_does_not_hash_the_source_tree() {
+    let home = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init_git(dir.path(), &StoreMetadata::new("AA")).unwrap();
+    // A readable synthetic source tree, so a hash would succeed and fill the cache.
+    let source = tempfile::tempdir().unwrap();
+    std::fs::create_dir(source.path().join("src")).unwrap();
+    std::fs::write(
+        source.path().join("Cargo.toml"),
+        "[package]\nname='server'\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source.path().join("src/lib.rs"),
+        "pub const VALUE: u8 = 1;\n",
+    )
+    .unwrap();
+    let monitor = SourceRevisionMonitor::for_source_root("synthetic-build", source.path());
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_machine_home(home.path())
+        .with_source_revision_monitor(monitor.clone());
+
+    st.publish_instances("http://127.0.0.1:0".into(), "2026-11-20T00:00:00Z".into());
+
+    let record = st
+        .instance_registry()
+        .find_instance(dir.path())
+        .expect("the primary store's instance record is published");
+    assert_eq!(record.pid, std::process::id());
+    assert_eq!(record.build_revision.as_deref(), Some("synthetic-build"));
+    assert!(
+        !monitor.has_hashed_source(),
+        "publishing must not hash the source tree"
+    );
+    // The probe does see a hash: the routes that report staleness still compute one.
+    assert_eq!(
+        monitor.status().build_revision.as_deref(),
+        Some("synthetic-build")
+    );
+    assert!(monitor.has_hashed_source());
+}
+
 #[tokio::test]
 async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     // Inject the machine home so the lock files land in a temp dir without mutating the

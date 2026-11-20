@@ -324,7 +324,10 @@ impl AppState {
                 url,
                 secret: self.secret.clone(),
                 started_at,
-                build_revision: self.source_revision.status().build_revision,
+                // Only the embedded revision: `status()` would hash the whole source tree of
+                // a local build between bind and the instance record, which held back
+                // discovery by seconds on loaded macOS runners (HS2-JP6ENC).
+                build_revision: self.source_revision.build_revision().map(str::to_owned),
                 executable: self.executable(),
                 launcher: self.launcher(),
             });

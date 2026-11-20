@@ -57,7 +57,11 @@ impl TestServer {
     }
 
     fn ready(&mut self) -> InstanceInfo {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        // A hang detector, not a startup budget (HS2-JP6ENC): three servers, their brokers and
+        // the rest of the suite share a three-core macOS runner, where one healthy start took
+        // more than 15 s. The sibling real-server fixtures allow 30 s too.
+        let started = Instant::now();
+        let deadline = started + Duration::from_secs(30);
         loop {
             assert!(
                 self.child.try_wait().unwrap().is_none(),
@@ -72,10 +76,24 @@ impl TestServer {
             }
             assert!(
                 Instant::now() < deadline,
-                "server did not start: {}",
+                "server did not start within {:?} (instance record: {}): {}",
+                started.elapsed(),
+                self.instance_state(),
                 fs::read_to_string(&self.log).unwrap()
             );
             std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    /// Whether the record `ready()` waits for is missing, unreadable or another process's,
+    /// so a timeout says which part of the registration failed (HS2-JP6ENC).
+    fn instance_state(&self) -> String {
+        match fs::read_to_string(&self.instance) {
+            Err(error) => format!("{} unreadable: {error}", self.instance.display()),
+            Ok(text) => match serde_json::from_str::<InstanceInfo>(&text) {
+                Err(error) => format!("unparseable: {error}"),
+                Ok(info) => format!("pid {} (server pid {})", info.pid, self.child.id()),
+            },
         }
     }
 
@@ -295,6 +313,8 @@ fn the_detached_broker_inherits_no_descriptor_from_the_server() {
     let _socket_files = SocketFiles(socket);
     let binary = fixture.path().join("hotsheet-server");
     fs::copy(workspace_bin::path("hotsheet-server"), &binary).unwrap();
+    // A fresh copy is a new executable to macOS: launch it once before `ready()` times it.
+    first_launch::launched(&binary, &["--version"]);
     let (read, write) = leaked_pipe();
     let mut server = TestServer::start(&binary, &home, &store, fixture.path().join("server.log"));
     drop(write);
