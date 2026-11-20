@@ -834,9 +834,21 @@ fn hs2_8x2s08_a_connection_serves_every_bound_source_with_one_subscription_and_r
             ("store:tickets", "shared", "acme/app"),
         ],
     );
-    r.recorder.wait("two deliveries", |rec| {
-        rec.changes.lock().unwrap().len() >= 2
-    });
+    // HS2-DWEY5R: the two deliveries can arrive before the session's later hints (the repeat,
+    // the unbound channel, the wrong repository) are routed, so wait for the whole session.
+    let hub = &r.hub;
+    r.recorder.wait(
+        "two deliveries, both rechecks and every ignored hint",
+        |rec| {
+            let ignored = hub.ignored();
+            rec.changes.lock().unwrap().len() >= 2
+                && rec.rechecks.lock().unwrap().len() >= 2
+                && ignored.get("unknown_channel") == Some(&1)
+                && ignored.get("wrong_repository") == Some(&1)
+                && ignored.get("duplicate") == Some(&2)
+                && matches!(hub.health().get("c1"), Some(Health::Connected { .. }))
+        },
+    );
     let mut sources: Vec<String> = r
         .recorder
         .changes
