@@ -2686,8 +2686,9 @@ fn mcp_command_for(explicit: Option<&Path>, exe_dir: Option<&Path>, fallback: &s
         .filter(|p| p.is_absolute() && p.is_file())
         .map(Path::to_path_buf)
         .or_else(|| {
+            // HS2-KTDE12: the sibling is `hotsheet-mcp.exe` on Windows.
             exe_dir
-                .map(|d| d.join("hotsheet-mcp"))
+                .map(|d| d.join(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX)))
                 .filter(|p| p.is_file())
         })
         .map(|p| p.to_string_lossy().into_owned())
@@ -2708,6 +2709,29 @@ fn binary_on_path(name: &str) -> bool {
     };
     let extensions = executable_extensions();
     binary_in_paths(name, std::env::split_paths(&paths), &extensions)
+}
+
+/// Whether `command` names an existing executable: a path-qualified command is checked
+/// in place, a bare name is looked up on `PATH`. On Windows both forms also try each
+/// `PATHEXT` extension, as the shell does (HS2-KTDE12), so `hotsheet-mcp` resolves to
+/// `hotsheet-mcp.exe`. The setup detector, `setup --diagnose`, and the CLI share it.
+pub fn command_on_path(command: &str) -> bool {
+    let extensions = executable_extensions();
+    let path = Path::new(command);
+    if path.is_absolute() || path.components().count() > 1 {
+        return command_file_exists(path, &extensions);
+    }
+    std::env::var_os("PATH")
+        .is_some_and(|paths| binary_in_paths(command, std::env::split_paths(&paths), &extensions))
+}
+
+fn command_file_exists(path: &Path, extensions: &[String]) -> bool {
+    path.is_file()
+        || extensions.iter().any(|extension| {
+            let mut candidate = path.as_os_str().to_os_string();
+            candidate.push(extension);
+            Path::new(&candidate).is_file()
+        })
 }
 
 fn binary_in_paths(
@@ -6529,7 +6553,9 @@ args = []
             "hotsheet-mcp"
         );
         assert_eq!(mcp_command_for(None, None, "hotsheet-mcp"), "hotsheet-mcp");
-        let sib = dir.path().join("hotsheet-mcp");
+        let sib = dir
+            .path()
+            .join(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&sib, "x").unwrap();
         assert_eq!(
             mcp_command_for(None, Some(dir.path()), "hotsheet-mcp"),
@@ -6550,7 +6576,8 @@ args = []
             shim_str
         );
         // The override beats an existing sibling too.
-        std::fs::write(snapshot.path().join("hotsheet-mcp"), "x").unwrap();
+        let sibling_name = format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX);
+        std::fs::write(snapshot.path().join(&sibling_name), "x").unwrap();
         assert_eq!(
             mcp_command_for(Some(&shim), Some(snapshot.path()), "hotsheet-mcp"),
             shim_str
@@ -6558,7 +6585,7 @@ args = []
         // A relative or missing override is ignored rather than persisted.
         let sibling = snapshot
             .path()
-            .join("hotsheet-mcp")
+            .join(&sibling_name)
             .to_string_lossy()
             .into_owned();
         for ignored in [Path::new("hotsheet-mcp"), &stable.path().join("missing")] {
@@ -6919,6 +6946,42 @@ args = []
             git(&linked, &["status", "--porcelain"]),
             "?? opencode.json\n"
         );
+    }
+
+    #[test]
+    fn hs2_ktde12_path_qualified_commands_try_each_executable_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let bare = dir.path().join("hotsheet-mcp");
+        let extensions = [".com".to_string(), ".exe".to_string()];
+        assert!(!command_file_exists(&bare, &extensions));
+        std::fs::write(dir.path().join("hotsheet-mcp.exe"), "x").unwrap();
+        assert!(command_file_exists(&bare, &extensions));
+        assert!(!command_file_exists(&bare, &[]));
+        assert!(binary_in_paths(
+            "hotsheet-mcp",
+            [dir.path().to_path_buf()],
+            &extensions
+        ));
+        assert!(command_on_path(
+            &dir.path().join("hotsheet-mcp.exe").to_string_lossy()
+        ));
+        // Windows resolves the extension-less path through PATHEXT; Unix does not.
+        assert_eq!(command_on_path(&bare.to_string_lossy()), cfg!(windows));
+        assert!(!command_on_path(
+            &dir.path().join("missing").to_string_lossy()
+        ));
+    }
+
+    #[test]
+    fn hs2_ktde12_mcp_command_finds_the_platform_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let sibling = dir
+            .path()
+            .join(format!("hotsheet-mcp{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&sibling, "x").unwrap();
+        let command = mcp_command_for(None, Some(dir.path()), "hotsheet-mcp");
+        assert_eq!(command, sibling.to_string_lossy());
+        assert!(command_on_path(&command));
     }
 
     #[test]

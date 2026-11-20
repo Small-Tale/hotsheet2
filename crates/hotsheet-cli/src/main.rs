@@ -1675,11 +1675,10 @@ fn confirm(prompt: &str) -> Result<bool> {
     ))
 }
 
-/// Whether `name` is an executable file on `PATH` (mirrors the setup detector).
+/// Whether `name` is an executable on `PATH`, with Windows `PATHEXT` lookup: the shared
+/// setup detector (HS2-KTDE12).
 fn binary_on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
-        .unwrap_or(false)
+    hotsheet_plugins::command_on_path(name)
 }
 
 // ---- helpers ---------------------------------------------------------------------

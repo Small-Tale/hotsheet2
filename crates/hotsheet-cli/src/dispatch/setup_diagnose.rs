@@ -63,7 +63,7 @@ pub(super) fn run(
         let plugin = hotsheet_plugins::find(&finding.tool)
             .with_context(|| format!("plugin '{}' disappeared during diagnosis", finding.tool))?;
         let command = hotsheet_plugins::mcp_command(&plugin.manifest.mcp.command);
-        let command_available = command_on_path(&command);
+        let command_available = hotsheet_plugins::command_on_path(&command);
         let expected_args = plugin
             .manifest
             .mcp
@@ -330,16 +330,6 @@ fn path_label(project: &Path, path: &Path) -> String {
             .or_else(|_| path.strip_prefix(&canonical))
             .unwrap_or(path),
     )
-}
-
-fn command_on_path(command: &str) -> bool {
-    let path = Path::new(command);
-    if path.components().count() > 1 || path.is_absolute() {
-        return path.is_file();
-    }
-    std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(command).is_file()))
-        .unwrap_or(false)
 }
 
 fn registry_status(store: &Path, project: &Path) -> Value {

@@ -34,8 +34,8 @@ pub mod shared_host;
 pub use setup::{
     ArtifactFinding, ArtifactKind, ArtifactStatus, PlannedAction, PlannedChange, RefreshReport,
     RemovalReport, SetupError, SetupPlan, SetupReport, ToolSetupFindings, apply_setup_plan,
-    enabled_plugins_from_setting, mcp_command, plan_refresh_setup_in, refresh_setup_in, run_setup,
-    run_setup_in,
+    command_on_path, enabled_plugins_from_setting, mcp_command, plan_refresh_setup_in,
+    refresh_setup_in, run_setup, run_setup_in,
 };
 
 /// The bundled first-party plugins, embedded from the repo's `plugins/` tree at build
