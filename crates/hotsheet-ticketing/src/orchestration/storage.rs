@@ -176,8 +176,7 @@ impl Storage {
         hook(PublishStage::Staged)?;
         self.check_directories()?;
         reject_nonregular(&self.path)?;
-        file.persist(&self.path)
-            .map_err(|error| OrchestrationError::Storage(error.error))?;
+        hotsheet_sync::files::persist(file, &self.path).map_err(OrchestrationError::Storage)?;
         hook(PublishStage::Published)?;
         #[cfg(unix)]
         File::open(parent)?.sync_all()?;

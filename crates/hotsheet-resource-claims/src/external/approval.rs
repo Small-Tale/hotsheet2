@@ -84,9 +84,8 @@ fn write(home: &Path, file: &File) -> Result<(), ClaimError> {
         .tempfile_in(&root)?;
     std::io::Write::write_all(&mut staged, text.as_bytes())?;
     staged.as_file().sync_all()?;
-    staged
-        .persist(root.join(APPROVALS_FILE))
-        .map_err(|e| ClaimError::Storage(e.error))?;
+    hotsheet_sync::files::persist(staged, root.join(APPROVALS_FILE))
+        .map_err(ClaimError::Storage)?;
     Ok(())
 }
 

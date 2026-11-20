@@ -791,7 +791,7 @@ impl ProcessJournal {
         serde_json::to_writer(&mut temp, &record)?;
         temp.flush()?;
         temp.as_file().sync_all()?;
-        temp.persist(path).map_err(|e| e.error)?;
+        hotsheet_sync::files::persist(temp, path)?;
         Ok(record)
     }
 

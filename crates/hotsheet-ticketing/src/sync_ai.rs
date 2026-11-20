@@ -285,7 +285,7 @@ fn write_ai_record(store: &Path, record: &AiHelpRecord) {
         return;
     };
     if serde_json::to_writer_pretty(&mut temp, record).is_ok() {
-        let _ = temp.persist(dir.join(RECORD_FILE));
+        let _ = hotsheet_sync::files::persist(temp, dir.join(RECORD_FILE));
     }
 }
 

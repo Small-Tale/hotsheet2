@@ -741,9 +741,7 @@ pub fn save(project: &Path, config: &GuidanceConfig) -> Result<(), GuidanceSourc
     let mut staged = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
     std::io::Write::write_all(&mut staged, &bytes)?;
     std::io::Write::write_all(&mut staged, b"\n")?;
-    staged
-        .persist(&path)
-        .map_err(|error| GuidanceSourceError::Io(error.error))?;
+    hotsheet_sync::files::persist(staged, &path).map_err(GuidanceSourceError::Io)?;
     Ok(())
 }
 

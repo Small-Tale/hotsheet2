@@ -858,8 +858,8 @@ impl ClientDriveManager {
                 .map_err(|error| ClientDriveError::Persistence(error.to_string()))?;
             temp.write_all((body + "\n").as_bytes())
                 .map_err(|error| ClientDriveError::Persistence(error.to_string()))?;
-            temp.persist(path)
-                .map_err(|error| ClientDriveError::Persistence(error.error.to_string()))?;
+            hotsheet_sync::files::persist(temp, path)
+                .map_err(|error| ClientDriveError::Persistence(error.to_string()))?;
         }
         *catalog = next;
         Ok(())

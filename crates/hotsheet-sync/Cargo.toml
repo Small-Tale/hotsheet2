@@ -1,6 +1,6 @@
 [package]
 name = "hotsheet-sync"
-description = "Hot Sheet 2 shared synchronization helpers: one mutex-poisoning policy and one blank-as-unset path-override rule, and one path spelling (canonical, never Windows verbatim) for every crate."
+description = "Hot Sheet 2 shared synchronization helpers: one mutex-poisoning policy and one blank-as-unset path-override rule, one path spelling (canonical, never Windows verbatim), and one atomic file replacement that works while readers hold the file, for every crate."
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -9,3 +9,4 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+tempfile.workspace = true

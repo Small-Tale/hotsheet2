@@ -107,6 +107,14 @@ rewrite that would duplicate another entry's root, or another Git locator in the
 checkout, is skipped. The rewrite is idempotent; a registry without such spellings is
 never written by it.
 
+Hot Sheet publishes every file it rewrites (registries, settings, ledgers, caches) by
+writing a sibling temporary file and renaming it over the target, so a reader sees the
+complete previous file or the complete new one. On Windows that rename uses POSIX
+semantics and succeeds while other handles hold the target open; readers keep the
+previous contents. A sharing failure from a handle that does not allow deletion is retried
+briefly before it is reported. `hotsheet_sync::files::persist` is the one publication path
+for temporary files (HS2-J5DCJH).
+
 Registry mutations take an operating-system file lock across CLI and server processes,
 then replace the JSON through a uniquely named, flushed temporary file. This preserves
 every checkout when project opens overlap and prevents one writer from continuing through

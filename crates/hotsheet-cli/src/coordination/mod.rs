@@ -212,7 +212,7 @@ impl Coordinator {
             serde_json::to_writer_pretty(&mut temporary, &state)?;
             temporary.write_all(b"\n")?;
             temporary.as_file().sync_all()?;
-            temporary.persist(&path)?;
+            hotsheet_sync::files::persist(temporary, &path)?;
         }
         Ok(result)
     }

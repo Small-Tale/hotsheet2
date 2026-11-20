@@ -88,7 +88,7 @@ pub fn verify_backup(store: &Path) -> Result<String> {
     )?;
     staged.write_all(b"\n")?;
     staged.as_file().sync_all()?;
-    staged.persist(path)?;
+    hotsheet_sync::files::persist(staged, path)?;
     Ok(revision.to_string())
 }
 
@@ -223,7 +223,7 @@ pub fn record(store_path: &Path, source: &Path) -> Result<()> {
     )?;
     staged.write_all(b"\n")?;
     staged.as_file().sync_all()?;
-    staged.persist(path)?;
+    hotsheet_sync::files::persist(staged, path)?;
     Ok(())
 }
 

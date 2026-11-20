@@ -504,7 +504,7 @@ fn write_locked_version(
     serde_json::to_writer(&mut temp, &envelope).map_err(io::Error::other)?;
     temp.write_all(b"\n")?;
     temp.as_file().sync_all()?;
-    temp.persist(path).map_err(|error| error.error)?;
+    hotsheet_sync::files::persist(temp, path)?;
     #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())

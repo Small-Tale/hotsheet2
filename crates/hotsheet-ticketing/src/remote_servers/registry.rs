@@ -372,9 +372,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), RemoteError> {
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     temporary.write_all(bytes)?;
     temporary.as_file().sync_all()?;
-    temporary
-        .persist(path)
-        .map_err(|error| RemoteError::Storage(error.error))?;
+    hotsheet_sync::files::persist(temporary, path).map_err(RemoteError::Storage)?;
     #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())

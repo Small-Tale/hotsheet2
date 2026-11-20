@@ -143,7 +143,7 @@ pub(crate) fn apply(path: &Path, write: FeedWrite) -> io::Result<()> {
             let mut temp = tempfile::NamedTempFile::new_in(dir)?;
             temp.write_all(&bytes)?;
             temp.flush()?;
-            temp.persist(path).map_err(|error| error.error)?;
+            hotsheet_sync::files::persist(temp, path)?;
             Ok(())
         }
     }

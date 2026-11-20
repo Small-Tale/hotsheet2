@@ -10,6 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 hotsheet-process-journal.workspace = true
+hotsheet-sync.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ulid.workspace = true
@@ -30,5 +31,4 @@ libc.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]
-hotsheet-sync.workspace = true
 tempfile.workspace = true

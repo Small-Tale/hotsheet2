@@ -1059,7 +1059,7 @@ fn write_atomic(dir: &Path, name: &str, bytes: &[u8], sync: bool) -> io::Result<
     if sync {
         temp.as_file().sync_all()?;
     }
-    temp.persist(dir.join(name)).map_err(|error| error.error)?;
+    hotsheet_sync::files::persist(temp, dir.join(name))?;
     Ok(())
 }
 

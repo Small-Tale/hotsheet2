@@ -118,7 +118,10 @@ mod tests {
         for (index, name) in [key('a'), key('b'), key('c')].iter().enumerate() {
             let path = dir.join(name);
             fs::write(&path, [index as u8; 4]).unwrap();
-            fs::File::open(path)
+            // HS2-J5DCJH: Windows needs write access to change a file's times.
+            fs::OpenOptions::new()
+                .write(true)
+                .open(path)
                 .unwrap()
                 .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(index as u64 + 1))
                 .unwrap();
@@ -142,7 +145,9 @@ mod tests {
         store(root.path(), &first, &[1; 32]);
         store(root.path(), &second, &[2; 32]);
         let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
-        fs::File::open(path(root.path(), &first))
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path(root.path(), &first))
             .unwrap()
             .set_modified(old)
             .unwrap();

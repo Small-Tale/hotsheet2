@@ -591,9 +591,7 @@ fn write_record(store_path: &Path, record: &SyncRecord) -> std::io::Result<()> {
         .ok_or_else(|| std::io::Error::other("store is not a Git repository"))?;
     let mut temp = tempfile::NamedTempFile::new_in(&dir)?;
     serde_json::to_writer_pretty(&mut temp, record)?;
-    temp.persist(dir.join(RECORD_FILE))
-        .map(|_| ())
-        .map_err(|error| error.error)
+    hotsheet_sync::files::persist(temp, dir.join(RECORD_FILE)).map(|_| ())
 }
 
 fn git_dir(store_path: &Path) -> Option<PathBuf> {

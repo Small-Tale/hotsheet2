@@ -8,9 +8,11 @@
 //! to an HTTP 500.
 //!
 //! [`env_path`] holds the other cross-crate leaf rule: a blank path-valued environment
-//! override counts as unset (HS2-15ZN8E).
+//! override counts as unset (HS2-15ZN8E). [`files`] holds the one atomic file
+//! replacement that works on Windows while readers hold the target open (HS2-J5DCJH).
 
 pub mod env_path;
+pub mod files;
 pub mod paths;
 
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};

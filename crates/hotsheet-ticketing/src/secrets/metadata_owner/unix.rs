@@ -218,7 +218,7 @@ impl Directories {
         stage: tempfile::NamedTempFile,
         target: &Path,
     ) -> Result<File, SecretError> {
-        Ok(stage.persist(target).map_err(|error| error.error)?)
+        Ok(hotsheet_sync::files::persist(stage, target)?)
     }
     pub(super) fn finish(
         &self,

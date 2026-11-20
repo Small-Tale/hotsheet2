@@ -73,8 +73,7 @@ impl MonitorSlot {
         let mut temp = tempfile::NamedTempFile::new_in(&self.dir)?;
         temp.write_all(&bytes)?;
         temp.flush()?;
-        temp.persist(self.dir.join(INFO_FILE))
-            .map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(temp, self.dir.join(INFO_FILE))?;
         Ok(Some(MonitorClaim {
             slot: self.clone(),
             owner: info.owner.clone(),
@@ -99,8 +98,7 @@ impl MonitorSlot {
         let mut temp = tempfile::NamedTempFile::new_in(&self.dir)?;
         temp.write_all(owner.as_bytes())?;
         temp.flush()?;
-        temp.persist(self.dir.join(STOP_FILE))
-            .map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(temp, self.dir.join(STOP_FILE))?;
         Ok(())
     }
 

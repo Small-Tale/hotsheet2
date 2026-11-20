@@ -303,9 +303,8 @@ impl Registry {
             }
             std::io::Write::write_all(&mut staged, text.as_bytes())?;
             staged.as_file().sync_all()?;
-            staged
-                .persist(registry_path(home))
-                .map_err(|e| RegistryError::Io(e.error))?;
+            hotsheet_sync::files::persist(staged, registry_path(home))
+                .map_err(RegistryError::Io)?;
         }
         Ok(value)
     }

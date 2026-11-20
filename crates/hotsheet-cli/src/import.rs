@@ -198,7 +198,7 @@ impl PendingImport {
             serde_json::to_writer_pretty(&mut staged, self)?;
             staged.write_all(b"\n")?;
             staged.as_file().sync_all()?;
-            staged.persist(directory.join(format!("{id}.json")))?;
+            hotsheet_sync::files::persist(staged, directory.join(format!("{id}.json")))?;
             Ok(())
         })
     }

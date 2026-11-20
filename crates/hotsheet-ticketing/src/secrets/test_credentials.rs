@@ -59,7 +59,7 @@ pub(super) fn set(account: &str, value: &str) -> Result<(), SecretError> {
                 .as_bytes(),
         )?;
         temporary.as_file().sync_all()?;
-        temporary.persist(path).map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(temporary, path)?;
         Ok(())
     })
 }

@@ -143,9 +143,7 @@ fn write_atomically(dir: &Path, text: &str) -> io::Result<()> {
         .tempfile_in(dir)?;
     staged.write_all(text.as_bytes())?;
     staged.as_file().sync_all()?;
-    staged
-        .persist(dir.join(SNAPSHOT_FILE))
-        .map_err(|e| e.error)?;
+    hotsheet_sync::files::persist(staged, dir.join(SNAPSHOT_FILE))?;
     Ok(())
 }
 

@@ -192,9 +192,7 @@ impl ProviderConfigRegistry {
         }
         staged.write_all(bytes).map_err(StoreError::Io)?;
         staged.as_file().sync_all().map_err(StoreError::Io)?;
-        staged
-            .persist(&self.path)
-            .map_err(|error| StoreError::Io(error.error))?;
+        hotsheet_sync::files::persist(staged, &self.path).map_err(StoreError::Io)?;
         Ok(())
     }
 

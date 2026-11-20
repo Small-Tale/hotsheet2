@@ -168,9 +168,7 @@ impl NamespaceStore {
         }
         staged.write_all(&bytes)?;
         staged.as_file().sync_all()?;
-        staged
-            .persist(self.state_path())
-            .map_err(|error| ClaimError::Storage(error.error))?;
+        hotsheet_sync::files::persist(staged, self.state_path()).map_err(ClaimError::Storage)?;
         #[cfg(unix)]
         File::open(&self.dir)?.sync_all()?;
         Ok(())

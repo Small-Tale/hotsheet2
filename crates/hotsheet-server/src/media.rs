@@ -158,7 +158,7 @@ pub fn cache_video_poster(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<()
     if path.exists() {
         fs::remove_file(&path)?;
     }
-    staged.persist(&path).map_err(|error| error.error)?;
+    hotsheet_sync::files::persist(staged, &path)?;
     Ok(())
 }
 

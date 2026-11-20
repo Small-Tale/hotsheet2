@@ -87,7 +87,7 @@ impl Omissions {
         serde_json::to_writer_pretty(&mut staged, self)?;
         staged.write_all(b"\n")?;
         staged.as_file().sync_all()?;
-        staged.persist(store.root().join(OMISSIONS_FILE))?;
+        hotsheet_sync::files::persist(staged, store.root().join(OMISSIONS_FILE))?;
         Ok(())
     }
 }

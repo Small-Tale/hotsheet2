@@ -129,9 +129,7 @@ impl<S: SecretStore> MachineSecrets<S> {
         }
         staged.write_all(&bytes)?;
         staged.as_file().sync_all()?;
-        staged
-            .persist(directory.join("revision"))
-            .map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(staged, directory.join("revision"))?;
         #[cfg(unix)]
         File::open(directory)?.sync_all()?;
         Ok(bytes)
@@ -318,7 +316,7 @@ impl<S: SecretStore> MachineSecrets<S> {
             .map_err(|error| SecretError::Backend(error.to_string()))?;
         staged.write_all(b"\n")?;
         staged.as_file().sync_all()?;
-        staged.persist(path).map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(staged, path)?;
         #[cfg(unix)]
         File::open(parent)?.sync_all()?;
         Ok(())

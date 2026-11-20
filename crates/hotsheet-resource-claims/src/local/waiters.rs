@@ -44,7 +44,7 @@ impl Waiter {
             .suffix(".tmp")
             .tempfile_in(dir)?;
         write!(staged, "{port} {deadline_ms}")?;
-        staged.persist(&path).map_err(|error| error.error)?;
+        hotsheet_sync::files::persist(staged, &path)?;
         Ok(Some(Self { socket, path }))
     }
 

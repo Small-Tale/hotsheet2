@@ -72,7 +72,7 @@ pub fn mark_reviewed(project: &Path, home: &Path) -> std::io::Result<()> {
     let mut staged = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
     use std::io::Write;
     writeln!(staged, "{current}")?;
-    staged.persist(&path).map_err(|error| error.error)?;
+    hotsheet_sync::files::persist(staged, &path)?;
     Ok(())
 }
 
