@@ -5755,19 +5755,21 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .success()
         .stdout(predicate::str::contains("github.com/acme/web"));
 
-    let mut resolve = Command::new(workspace_bin::path("hotsheet-cli"));
-    resolve
+    let resolved = Command::new(workspace_bin::path("hotsheet-cli"))
         .env("HOTSHEET_HOME", home.path())
         .args(["checkout", "resolve", "web"])
-        .assert()
-        .success()
-        // HS2-CTV942: the registered root is the canonical spelling (long, never `\\?\`).
-        .stdout(predicate::str::contains(
-            hotsheet_sync::paths::canonicalize(checkout.path())
-                .unwrap()
-                .to_str()
-                .unwrap(),
-        ));
+        .output()
+        .unwrap();
+    assert!(resolved.status.success());
+    // HS2-CTV942: the registered root is the canonical spelling (long, never `\\?\`),
+    // read from the JSON so Windows backslashes compare unescaped.
+    let resolved: serde_json::Value = serde_json::from_slice(&resolved.stdout).unwrap();
+    assert_eq!(
+        resolved["root"].as_str(),
+        hotsheet_sync::paths::canonicalize(checkout.path())
+            .unwrap()
+            .to_str()
+    );
 
     let mut add_source = Command::new(workspace_bin::path("hotsheet-cli"));
     add_source
