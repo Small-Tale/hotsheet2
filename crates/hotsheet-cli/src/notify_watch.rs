@@ -41,21 +41,9 @@ fn same_path(a: &Path, b: &Path) -> bool {
     canonical(a) == canonical(b)
 }
 
-#[cfg(unix)]
+/// Whether a recorded server's process still runs (shared native probe, HS2-W7E2MJ).
 fn process_is_alive(pid: u64) -> bool {
-    pid > 0
-        && pid <= i32::MAX as u64
-        && std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .is_ok_and(|status| status.success())
-}
-
-/// Without a cheap liveness probe, a recorded server is assumed alive: skipping a send is
-/// safer than sending twice.
-#[cfg(not(unix))]
-fn process_is_alive(_pid: u64) -> bool {
-    true
+    u32::try_from(pid).is_ok_and(crate::process_liveness::pid_alive)
 }
 
 /// Whether a live server registered itself as hosting `root` (`${HOTSHEET_HOME}/instances`).

@@ -720,6 +720,9 @@ the store it **prints how to attach and exits** instead of duplicating. E2E-veri
 On native Windows (HS2-AMAQSV), liveness opens the process and polls its exit state, the
 registry mutex is a `LockFileEx` lock, and stop terminates the process, because a
 windowless server has no SIGTERM. The terminated server's instance file then reads as stale.
+The CLI and the server share this probe (`hotsheet_cli::process_liveness::pid_alive`,
+HS2-W7E2MJ). The CLI once had copies that called every Windows server dead, so
+`checkout remove` skipped the running server and its open-project refusal.
 
 The web host has a separate discovery record, `${HOTSHEET_HOME:-~/.hotsheet2}/client.json`,
 containing its local `url`, `pid`, and start identity. It points to the browser client, while

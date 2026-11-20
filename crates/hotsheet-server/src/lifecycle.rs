@@ -419,39 +419,20 @@ impl Drop for InstanceGuard {
     }
 }
 
-/// Whether a process is alive (`kill -0`).
+/// Whether a process is alive (`kill -0`). The CLI and the server share one native probe
+/// (HS2-W7E2MJ); MCP presence sweeps call it on every heartbeat, so it never spawns a process
+/// (HS2-7RRAA8).
 pub fn pid_alive(pid: u32) -> bool {
-    // A direct `kill(pid, 0)`, not a spawned `kill -0`: MCP presence sweeps check every lease's
-    // pid each heartbeat, and a process spawn per check showed up as steady idle CPU (HS2-7RRAA8).
-    // Same answer as the command: only a signalable process (not EPERM) counts as alive.
-    #[cfg(unix)]
-    {
-        if pid == 0 || pid > i32::MAX as u32 {
-            return false;
-        }
-        // SAFETY: signal 0 performs only the existence and permission check; it delivers nothing.
-        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
-    }
-    #[cfg(windows)]
-    {
-        windows_process::alive(pid)
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        signal(pid, "0")
-    }
+    hotsheet_cli::process_liveness::pid_alive(pid)
 }
 
-/// Native Windows liveness and stop (HS2-AMAQSV). Without these, every registration read
-/// as a dead server on Windows: a second starter reclaimed a live writer lock, discovery
-/// never found a running server, and `stop` signalled nothing.
+/// Native Windows stop (HS2-AMAQSV); liveness is the shared probe in [`pid_alive`]. Without
+/// these, every registration read as a dead server on Windows: a second starter reclaimed a
+/// live writer lock, discovery never found a running server, and `stop` signalled nothing.
 #[cfg(windows)]
 mod windows_process {
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, WAIT_TIMEOUT};
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-        TerminateProcess, WaitForSingleObject,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
     /// An owned process handle, closed on drop.
     struct Process(HANDLE);
@@ -475,18 +456,10 @@ mod windows_process {
         }
     }
 
-    /// A process that can be opened and has not yet signalled exit. As with `kill -0`, a
-    /// process this user may not query (access denied) does not count as alive.
-    pub(super) fn alive(pid: u32) -> bool {
-        Process::open(pid, PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE)
-            // SAFETY: a zero timeout only polls the live handle's signalled state.
-            .is_some_and(|process| unsafe { WaitForSingleObject(process.0, 0) } == WAIT_TIMEOUT)
-    }
-
     /// Windows has no SIGTERM for a windowless server, so a stop terminates the process;
     /// its instance file then reads as stale and the next start replaces it.
     pub(super) fn terminate(pid: u32) -> bool {
-        alive(pid)
+        super::pid_alive(pid)
             && Process::open(pid, PROCESS_TERMINATE)
                 // SAFETY: the handle was opened with PROCESS_TERMINATE access.
                 .is_some_and(|process| unsafe { TerminateProcess(process.0, 1) } != 0)
@@ -514,7 +487,7 @@ fn signal(pid: u32, sig: &str) -> bool {
 #[cfg(windows)]
 fn signal(pid: u32, sig: &str) -> bool {
     match sig {
-        "0" => windows_process::alive(pid),
+        "0" => pid_alive(pid),
         _ => windows_process::terminate(pid),
     }
 }

@@ -277,19 +277,9 @@ pub fn tool_launch_context(
     }
 }
 
-#[cfg(unix)]
+/// Whether a recorded server's process still runs (shared native probe, HS2-W7E2MJ).
 fn process_is_alive(pid: u32) -> bool {
-    pid > 0
-        && pid <= i32::MAX as u32
-        && std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .is_ok_and(|status| status.success())
-}
-
-#[cfg(not(unix))]
-fn process_is_alive(_pid: u32) -> bool {
-    true
+    crate::process_liveness::pid_alive(pid)
 }
 
 #[cfg(test)]

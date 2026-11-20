@@ -638,20 +638,10 @@ pub(crate) fn prune_stale_records(stale_records: &[PathBuf]) -> usize {
         .count()
 }
 
-#[cfg(unix)]
+/// Whether a registered server's process still runs, natively on every platform
+/// (HS2-W7E2MJ: this once answered "dead" for every Windows server).
 pub(crate) fn process_is_alive(pid: u32) -> bool {
-    if pid == 0 || pid > i32::MAX as u32 {
-        return false;
-    }
-    std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-#[cfg(not(unix))]
-pub(crate) fn process_is_alive(_pid: u32) -> bool {
-    false
+    hotsheet_cli::process_liveness::pid_alive(pid)
 }
 
 pub(crate) fn resolve_server_binary(
