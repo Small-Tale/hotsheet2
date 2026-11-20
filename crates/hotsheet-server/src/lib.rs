@@ -2718,6 +2718,17 @@ pub fn app(state: AppState) -> Router {
             "/standby-settings/changed",
             post(routes::standby::standby_settings_changed),
         )
+        // Machine-wide feature-area choices (HS2-3GJZGG): which non-core areas clients show.
+        .route(
+            "/feature-settings",
+            get(routes::features::get_feature_settings).put(routes::features::put_feature_settings),
+        )
+        // The CLI announces its headless feature writes here; a `PUT` announces itself. Both push a
+        // `feature_settings` change event.
+        .route(
+            "/feature-settings/changed",
+            post(routes::features::feature_settings_changed),
+        )
         // A CLI write asks the host to sync the one store it committed to (HS2-D9ZGAE).
         .route("/sync/kick", post(routes::sync_kick::post_sync_kick))
         // Inside authentication: an authenticated response names the change cursor it was

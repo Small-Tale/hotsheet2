@@ -36,6 +36,7 @@ export const PEER_GATEWAY_PREFIXES = [
   'confidence-report',
   'connections',
   'drive',
+  'feature-settings',
   'github-auth',
   'groups',
   'health',

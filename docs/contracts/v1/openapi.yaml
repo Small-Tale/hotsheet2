@@ -18,6 +18,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Compatibility'
+  /feature-settings:
+    get:
+      operationId: get_feature_settings
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureSettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      operationId: put_feature_settings
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureSettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfiguredFeatureSettings'
+  /feature-settings/changed:
+    post:
+      operationId: feature_settings_changed
+      responses:
+        '200':
+          description: Server-owned response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureSettingsView'
+        '400':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: The request failed; code is present for errors with a stable machine-readable identifier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /remote-identity:
     get:
       operationId: getRemoteIdentity
@@ -32427,6 +32552,35 @@ components:
           $ref: '#/components/schemas/ConfiguredHostHealthThresholds'
         effective:
           $ref: '#/components/schemas/HostHealthThresholds'
+      additionalProperties: false
+    FeatureSettingsMap:
+      type: object
+      description: Effective or default feature-area choices by registered feature id (HS2-3GJZGG).
+      additionalProperties:
+        type: boolean
+    ConfiguredFeatureSettings:
+      type: object
+      description: Explicit machine-wide feature-area choices by feature id; null clears a choice to its default. A
+        PUT merges, so features left out keep their choice. Unknown ids are rejected.
+      additionalProperties:
+        anyOf:
+          - type: boolean
+          - type: 'null'
+    FeatureSettingsView:
+      type: object
+      description: The machine-wide feature-area choices (HS2-3GJZGG). Every change pushes a feature_settings change
+        event, and clients re-read this on each one and on resync.
+      required:
+        - defaults
+        - configured
+        - effective
+      properties:
+        defaults:
+          $ref: '#/components/schemas/FeatureSettingsMap'
+        configured:
+          $ref: '#/components/schemas/ConfiguredFeatureSettings'
+        effective:
+          $ref: '#/components/schemas/FeatureSettingsMap'
       additionalProperties: false
     StandbySettings:
       type: object

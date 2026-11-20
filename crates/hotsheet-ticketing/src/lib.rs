@@ -26,6 +26,7 @@ pub mod claim_host;
 pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;
+pub mod features;
 pub mod git;
 pub mod github_endpoint;
 pub mod gitref_cas;

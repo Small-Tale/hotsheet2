@@ -154,12 +154,32 @@ fn eligible(ticket: &hotsheet_model::Ticket, now: time::OffsetDateTime) -> bool 
         && age <= time::Duration::try_from(NEW_TICKET_WINDOW).unwrap_or(time::Duration::ZERO)
 }
 
+/// Whether the machine-wide Automatic ticket grouping feature is on (HS2-3GJZGG). A settings file
+/// that cannot be read leaves it at its default, off.
+fn auto_grouping_feature_on(state: &AppState, store_root: &std::path::Path) -> bool {
+    use hotsheet_ticketing::features::{AUTO_GROUPING, is_on, setting_key};
+    let settings = hotsheet_ticketing::Settings::with_global_home(store_root, state.machine_home());
+    let stored = settings
+        .get(
+            &setting_key(AUTO_GROUPING),
+            hotsheet_ticketing::Scope::Global,
+        )
+        .ok()
+        .flatten();
+    is_on(AUTO_GROUPING, stored.as_ref())
+}
+
 /// Ask once for a store's batch and apply every usable choice.
 fn group_batch(state: &AppState, store_id: &str, ids: &[Ulid], ask: &Ask) {
     let Some(entry) = state.host.get(store_id) else {
         return;
     };
     let store_root = entry.store.root().to_path_buf();
+    // The machine-wide Automatic ticket grouping feature (HS2-3GJZGG) gates the AI turn; the
+    // project setting keeps its value while the feature is off.
+    if !auto_grouping_feature_on(state, &store_root) {
+        return;
+    }
     let Some((project_root, settings)) = project_for(state, &store_root) else {
         return;
     };
@@ -376,7 +396,10 @@ mod tests {
             .unwrap();
         let state = AppState::new(store, "secret".into())
             .unwrap()
+            .with_machine_home(dir.path().join("home"))
             .with_checkout_registry(&registry);
+        // The Automatic ticket grouping feature is experimental (off by default, HS2-3GJZGG).
+        set_feature(&state, true);
         state.host.register(state.default_entry());
         let entry = state.default_entry();
         let prompts = Arc::new(Mutex::new(Vec::new()));
@@ -395,6 +418,16 @@ mod tests {
             code,
             prompts,
         }
+    }
+
+    fn set_feature(state: &AppState, on: bool) {
+        Settings::with_global_home(state.store.root(), state.machine_home())
+            .set(
+                "features.auto-grouping",
+                serde_json::json!(on),
+                hotsheet_ticketing::Scope::Global,
+            )
+            .unwrap();
     }
 
     fn create(harness: &Harness, title: &str, group: Option<&str>) -> hotsheet_model::Ticket {
@@ -521,6 +554,35 @@ mod tests {
                 .group
                 .is_none()
         );
+    }
+
+    /// HS2-3GJZGG: with the machine-wide Automatic ticket grouping feature off no turn runs,
+    /// even though the project setting stays on; turning the feature back on resumes grouping.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hs2_3gjzgg_feature_off_spends_no_turn_and_keeps_the_project_setting() {
+        let harness = harness(|_| "I would rather not.".into());
+        set_feature(&harness.state, false);
+        let off = create(&harness, "Feature off", None);
+        harness.state.changed_in(&harness.entry, "created", &off);
+        tokio::time::sleep(COALESCE + Duration::from_millis(500)).await;
+        assert!(harness.prompts.lock().unwrap().is_empty());
+        assert!(
+            Settings::for_project(&harness.code)
+                .auto_group_new_tickets()
+                .unwrap(),
+            "the project setting keeps its value"
+        );
+
+        set_feature(&harness.state, true);
+        let on = create(&harness, "Feature on", None);
+        harness.state.changed_in(&harness.entry, "created", &on);
+        for _ in 0..200 {
+            if !harness.prompts.lock().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert_eq!(harness.prompts.lock().unwrap().len(), 1);
     }
 
     #[test]

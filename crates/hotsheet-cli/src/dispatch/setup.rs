@@ -1473,6 +1473,22 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
     match cmd {
         SettingsCmd::Get { key, scope } => {
             let requested_scope = parse_scope(&scope)?;
+            // A feature area (HS2-3GJZGG) prints its effective `on`/`off`, default included.
+            if hotsheet_ticketing::features::is_feature_key(&key) {
+                if !matches!(requested_scope, None | Some(Scope::Global)) {
+                    bail!("{key} is machine-wide; use --scope global");
+                }
+                let id = key.trim_start_matches(hotsheet_ticketing::features::SETTING_PREFIX);
+                if hotsheet_ticketing::features::definition(id).is_none() {
+                    bail!(hotsheet_ticketing::features::FeatureSettingError::Unknown(
+                        id.to_owned()
+                    ));
+                }
+                let stored = settings.get(&key, Scope::Global)?;
+                let on = hotsheet_ticketing::features::is_on(id, stored.as_ref());
+                println!("{}", if on { "on" } else { "off" });
+                return Ok(());
+            }
             if key == hotsheet_ticketing::permission_automation::SETTING
                 && !matches!(requested_scope, None | Some(Scope::Local))
             {
@@ -1491,6 +1507,27 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             }
         }
         SettingsCmd::Set { key, value, scope } => {
+            // Feature areas are machine-wide (HS2-3GJZGG): `on`, `off`, or `default` (clear), the
+            // headless twin of App Settings › Features. Repeating a write changes nothing.
+            if hotsheet_ticketing::features::is_feature_key(&key) {
+                if !matches!(parse_scope(&scope)?, None | Some(Scope::Global)) {
+                    bail!("{key} is machine-wide; use --scope global");
+                }
+                match hotsheet_ticketing::features::parse_setting(&key, &value)? {
+                    Some(on) => settings.set(&key, serde_json::Value::Bool(on), Scope::Global)?,
+                    None => {
+                        settings.unset(&key, Scope::Global)?;
+                    }
+                }
+                // Running clients re-read the choices on the event this announcement pushes.
+                if let Err(error) = notify_running_servers("feature-settings/changed") {
+                    eprintln!(
+                        "warning: saved {key}, but open clients were not told about it: {error}"
+                    );
+                }
+                println!("Set {key} in global (machine-wide)");
+                return Ok(());
+            }
             // Terminal memory limits are machine-wide (HS2-Y5DYC0): they default to the global
             // scope, refuse a project scope, and are range-checked like the Settings UI.
             let terminal_limit = hotsheet_ticketing::terminal_limits::is_terminal_limit_key(&key);

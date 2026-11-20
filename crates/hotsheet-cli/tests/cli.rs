@@ -12061,6 +12061,88 @@ fn standby_settings_are_set_headlessly_as_validated_machine_wide_settings() {
 }
 
 #[test]
+fn feature_areas_are_set_headlessly_as_idempotent_machine_wide_settings() {
+    // HS2-3GJZGG headless parity with PUT /feature-settings and App Settings › Features.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let read_global = || -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap()
+    };
+    let get = |key: &str, expected: &str| {
+        hs(p)
+            .env("HOTSHEET_HOME", home.path())
+            .args(["settings", "get", key])
+            .assert()
+            .success()
+            .stdout(predicate::eq(format!("{expected}\n")));
+    };
+    // Unset features report their default.
+    get("features.drive", "off");
+    get("features.standby", "on");
+    // Setting twice is idempotent and stores a machine-wide boolean.
+    for _ in 0..2 {
+        for (key, value) in [("features.drive", "on"), ("features.standby", "off")] {
+            hs(p)
+                .env("HOTSHEET_HOME", home.path())
+                .args(["settings", "set", key, value])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("global (machine-wide)"));
+        }
+    }
+    let global = read_global();
+    assert_eq!(global["features.drive"], true);
+    assert_eq!(global["features.standby"], false);
+    get("features.drive", "on");
+    get("features.standby", "off");
+    // `default` clears the choice, so the default applies again.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "features.drive", "default"])
+        .assert()
+        .success();
+    assert!(read_global().get("features.drive").is_none());
+    get("features.drive", "off");
+    for (args, message) in [
+        (
+            vec!["settings", "set", "features.drive", "maybe"],
+            "on, off, or default",
+        ),
+        (
+            vec!["settings", "set", "features.teleport", "on"],
+            "unknown feature 'teleport'",
+        ),
+        (
+            vec!["settings", "get", "features.teleport"],
+            "unknown feature 'teleport'",
+        ),
+        (
+            vec![
+                "settings",
+                "set",
+                "features.drive",
+                "on",
+                "--scope",
+                "shared",
+            ],
+            "machine-wide",
+        ),
+    ] {
+        hs(p)
+            .env("HOTSHEET_HOME", home.path())
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(message));
+    }
+    assert!(read_global().get("features.teleport").is_none());
+    assert_eq!(read_global()["features.standby"], false);
+}
+
+#[test]
 fn headless_standby_settings_changes_notify_running_servers() {
     // HS2-A5BTTK: each `settings set standby.*` announces itself to every running server, which
     // pushes the `standby_settings` event open clients re-read on.
