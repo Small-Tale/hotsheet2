@@ -1610,8 +1610,50 @@ fn claude_live_turn_over_the_channel() {
 
 use crate::live::{LiveError, LiveTrigger, run_trigger};
 
-/// Write a minimal on-disk plugin whose `[drive]` is a real spawn of `/bin/sh -c <prompt>`
+#[path = "../../test-support/fixture_program.rs"]
+mod fixture_program;
+
+/// Write a minimal on-disk plugin whose `[drive]` is a real spawn of
+/// `hs-fake-agent --run <prompt>` (HS2-6EW369), the portable stand-in for `sh -c <prompt>`
 /// — a genuine live trigger (SystemSpawner + host::trigger + registry) with no AI tool.
+fn write_fixture_plugin(dir: &std::path::Path) -> hotsheet_plugins::Plugin {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        format!(
+            r#"id = "shtool"
+display_name = "Sh Tool"
+product_name = "Sh Tool"
+tier = "cli-agent"
+[detection]
+binaries = ["hs-fake-agent"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[drive]
+transport = "spawn"
+program = '{}'
+args = ["--run"]
+content = "arg"
+interrupt = false
+"#,
+            fixture_program::path()
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    hotsheet_plugins::Plugin::from_fs_dir(dir).unwrap()
+}
+
+/// Write a minimal on-disk plugin whose `[drive]` is a real spawn of `/bin/sh -c <prompt>`,
+/// for the shell-scripted stderr cases below.
+#[cfg(unix)]
 fn write_sh_plugin(dir: &std::path::Path) -> hotsheet_plugins::Plugin {
     std::fs::create_dir_all(dir).unwrap();
     std::fs::write(
@@ -1779,13 +1821,16 @@ interrupt = true
 #[test]
 fn run_trigger_drives_a_real_spawn_tool_and_tracks_the_connection() {
     let tmp = tempfile::tempdir().unwrap();
-    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let plugin = write_fixture_plugin(&tmp.path().join("shtool"));
     let mut reg = ConnectionRegistry::new(5_000);
 
     let mut events = Vec::new();
-    let reason = run_trigger(&plugin, &live("exit 0", tmp.path()), &mut reg, &mut |ev| {
-        events.push(format!("{ev:?}"))
-    })
+    let reason = run_trigger(
+        &plugin,
+        &live("--exit 0", tmp.path()),
+        &mut reg,
+        &mut |ev| events.push(format!("{ev:?}")),
+    )
     .unwrap()
     .reason;
 
@@ -1801,14 +1846,14 @@ fn run_trigger_drives_a_real_spawn_tool_and_tracks_the_connection() {
 
 #[test]
 fn run_trigger_threads_env_into_a_spawn_tool() {
-    // The sh drive runs `/bin/sh -c <prompt>`; the prompt exits 0 only if FOO reached the
-    // process env — proving LiveTrigger.env is threaded through SpawnDrive (HS2-0TWTZ4,
-    // the HS2-103 safety PATH shim rides the same path).
+    // The fixture drive runs `hs-fake-agent --run <prompt>`; the prompt exits 0 only if FOO
+    // reached the process env — proving LiveTrigger.env is threaded through SpawnDrive
+    // (HS2-0TWTZ4, the HS2-103 safety PATH shim rides the same path).
     let tmp = tempfile::tempdir().unwrap();
-    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let plugin = write_fixture_plugin(&tmp.path().join("shtool"));
     let mut reg = ConnectionRegistry::new(5_000);
 
-    let mut t = live(r#"[ "$FOO" = bar ]"#, tmp.path());
+    let mut t = live("--require-env FOO bar", tmp.path());
     t.env = vec![("FOO".to_string(), "bar".to_string())];
     let reason = run_trigger(&plugin, &t, &mut reg, &mut |_| {})
         .unwrap()
@@ -1823,7 +1868,7 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
     // env being threaded, not the prompt always succeeding.
     let reason = run_trigger(
         &plugin,
-        &live(r#"[ "$FOO" = bar ]"#, tmp.path()),
+        &live("--require-env FOO bar", tmp.path()),
         &mut reg,
         &mut |_| {},
     )
@@ -1843,11 +1888,16 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
 #[test]
 fn run_trigger_reports_a_nonzero_exit_as_failed() {
     let tmp = tempfile::tempdir().unwrap();
-    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let plugin = write_fixture_plugin(&tmp.path().join("shtool"));
     let mut reg = ConnectionRegistry::new(5_000);
-    let reason = run_trigger(&plugin, &live("exit 5", tmp.path()), &mut reg, &mut |_| {})
-        .unwrap()
-        .reason;
+    let reason = run_trigger(
+        &plugin,
+        &live("--exit 5", tmp.path()),
+        &mut reg,
+        &mut |_| {},
+    )
+    .unwrap()
+    .reason;
     assert_eq!(
         reason,
         DoneReason::Failed {
@@ -1980,16 +2030,16 @@ args = ["--path", "{store}"]
 #[test]
 fn system_spawner_runs_a_real_process() {
     let s = SystemSpawner;
-    let spec = |script: &str| SpawnSpec {
-        program: "/bin/sh".into(),
-        args: vec!["-c".into(), script.into()],
+    let spec = |code: &str| SpawnSpec {
+        program: fixture_program::path(),
+        args: vec!["--exit".into(), code.into()],
         cwd: std::env::temp_dir(),
         stdin: None,
         env: Vec::new(),
         stderr_tail: false,
     };
-    assert_eq!(s.spawn(&spec("exit 0")).unwrap().wait(), 0);
-    assert_eq!(s.spawn(&spec("exit 7")).unwrap().wait(), 7);
+    assert_eq!(s.spawn(&spec("0")).unwrap().wait(), 0);
+    assert_eq!(s.spawn(&spec("7")).unwrap().wait(), 7);
 }
 
 // ---- BackingService accessor (HS2-V5Z2EY) ----------------------------------------

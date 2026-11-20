@@ -1,5 +1,7 @@
 //! HTTP E2E for the server, driven through the router in-process (no real socket).
 
+#[path = "../../test-support/fixture_program.rs"]
+mod fixture_program;
 #[path = "../../test-support/workspace_bin.rs"]
 mod workspace_bin;
 
@@ -14821,7 +14823,7 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     run(&["config", "user.email", "test@example.com"]);
     run(&["config", "diff.tool", "hs2-test"]);
     let record = format!(
-        "echo \"$PPID $REMOTE\" >> '{}'; echo --- >> '{}'",
+        "echo \"$GIT_DIFF_PATH_COUNTER $REMOTE\" >> '{}'; echo --- >> '{}'",
         log.display(),
         log.display()
     );
@@ -14871,7 +14873,7 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     assert_eq!(text.matches("---").count(), 2, "one file each: {text}");
     assert!(text.contains("a.txt") && text.contains("b.txt") && !text.contains("c.txt"));
     assert!(!text.contains("--dir-diff"));
-    assert_eq!(launch_parents(&text).len(), 1, "one git launch: {text}");
+    assert_eq!(launches(&text), 1, "one git launch: {text}");
 
     // A path outside the changed set rejects the whole request.
     let unknown = app
@@ -14920,7 +14922,7 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     let text = wait_for_runs(2);
     assert_eq!(text.matches("---").count(), 2, "one file each: {text}");
     assert!(text.contains("b.txt") && text.contains("c.txt") && !text.contains("a.txt"));
-    assert_eq!(launch_parents(&text).len(), 1, "one git launch: {text}");
+    assert_eq!(launches(&text), 1, "one git launch: {text}");
 }
 
 #[tokio::test]
@@ -14949,7 +14951,7 @@ async fn hs2_f10y9p_interleaved_ticket_files_summarize_and_launch_per_run() {
     run(&["config", "user.email", "test@example.com"]);
     run(&["config", "diff.tool", "hs2-test"]);
     let record = format!(
-        "echo \"$PPID $(tr '\\n' ' ' < \"$LOCAL\")-> $(tr '\\n' ' ' < \"$REMOTE\")\" >> '{}'; echo --- >> '{}'",
+        "echo \"$GIT_DIFF_PATH_COUNTER $(tr '\\n' ' ' < \"$LOCAL\")-> $(tr '\\n' ' ' < \"$REMOTE\")\" >> '{}'; echo --- >> '{}'",
         log.display(),
         log.display()
     );
@@ -15041,7 +15043,7 @@ async fn hs2_f10y9p_interleaved_ticket_files_summarize_and_launch_per_run() {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
-    assert_eq!(launch_parents(&text).len(), 2, "one launch per run: {text}");
+    assert_eq!(launches(&text), 2, "one launch per run: {text}");
     assert!(text.contains("seed -> seed mine-1 \n"), "first run: {text}");
     assert!(
         text.contains("seed mine-1 other -> seed mine-1 other mine-2 \n"),
@@ -15053,12 +15055,14 @@ async fn hs2_f10y9p_interleaved_ticket_files_summarize_and_launch_per_run() {
     );
 }
 
-/// Distinct parent pids recorded by the test difftool: one per `git difftool` launch.
-fn launch_parents(log: &str) -> std::collections::HashSet<&str> {
+/// `git difftool` launches recorded by the test difftool. Git numbers the files of each launch
+/// from 1 in `GIT_DIFF_PATH_COUNTER`, so every launch starts one line numbered 1. HS2-6EW369:
+/// the launch's parent pid cannot tell launches apart, because Git for Windows' shell reports
+/// `$PPID` 1 for every launch.
+fn launches(log: &str) -> usize {
     log.lines()
-        .filter(|line| *line != "---")
-        .filter_map(|line| line.split_whitespace().next())
-        .collect()
+        .filter(|line| line.split_whitespace().next() == Some("1"))
+        .count()
 }
 
 #[tokio::test]
@@ -15259,8 +15263,8 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             id: "echo".into(),
             title: "Echo".into(),
             kind: Default::default(),
-            program: "/bin/echo".into(),
-            args: vec!["hello".into()],
+            program: fixture_program::path(),
+            args: vec!["--print".into(), "hello".into()],
             cwd: None,
             group: None,
             confirmation: None,
@@ -15276,8 +15280,8 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             id: "sleep".into(),
             title: "Sleep".into(),
             kind: Default::default(),
-            program: "/bin/sleep".into(),
-            args: vec!["10".into()],
+            program: fixture_program::path(),
+            args: vec!["--hold-ms".into(), "10000".into()],
             cwd: None,
             group: None,
             confirmation: None,
@@ -15344,10 +15348,16 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     let (_d, st) = state();
     let mut events = st.subscribe();
     let app = app(st);
-    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"cwd":".","group":"AI"},{"id":"ai-review","title":"AI review","kind":"ai","prompt":"Review the change","tool":"claude","model":"opus","effort":"high"}]"#;
+    let definitions = serde_json::json!([
+        {"id":"review","title":"Ask for review","program":fixture_program::path(),
+            "args":["--print","review"],"cwd":".","group":"AI"},
+        {"id":"ai-review","title":"AI review","kind":"ai","prompt":"Review the change",
+            "tool":"claude","model":"opus","effort":"high"}
+    ])
+    .to_string();
     let saved = app
         .clone()
-        .oneshot(command_replace("/commands", definitions))
+        .oneshot(command_replace("/commands", &definitions))
         .await
         .unwrap();
     assert_eq!(saved.status(), StatusCode::OK);
@@ -15390,10 +15400,15 @@ async fn shell_and_ai_command_launches_join_the_run_history() {
     let (_d, st) = state();
     let mut events = st.subscribe();
     let app = app(st);
-    let definitions = r#"[{"id":"build","title":"Build","kind":"shell","command":"make"},{"id":"everything","title":"Everything","kind":"ai","prompt":"Do everything"},{"id":"echo","title":"Echo","program":"/bin/echo","args":["hi"]}]"#;
+    let definitions = serde_json::json!([
+        {"id":"build","title":"Build","kind":"shell","command":"make"},
+        {"id":"everything","title":"Everything","kind":"ai","prompt":"Do everything"},
+        {"id":"echo","title":"Echo","program":fixture_program::path(),"args":["--print","hi"]}
+    ])
+    .to_string();
     assert_eq!(
         app.clone()
-            .oneshot(command_replace("/commands", definitions))
+            .oneshot(command_replace("/commands", &definitions))
             .await
             .unwrap()
             .status(),
@@ -20580,7 +20595,8 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
 
 async fn assert_exited_ai_terminal_reregisters(application: axum::Router) {
     let exited = serde_json::json!({
-        "command": "/bin/sh", "args": ["-c", "exit 0"], "connect": "claude", "id": "reopened-ai"
+        "command": fixture_program::path(), "args": ["--exit", "0"], "connect": "claude",
+        "id": "reopened-ai"
     })
     .to_string();
     let resp = application
@@ -20700,7 +20716,8 @@ async fn connect_only_terminal_runs_setup_and_the_interactive_manifest_launch() 
     std::fs::write(fake.join("instructions.md"), "Fake setup marker\n").unwrap();
     std::fs::write(
         fake.join("manifest.toml"),
-        r#"
+        format!(
+            r#"
 id = "fake-interactive"
 display_name = "Fake"
 product_name = "Fake Interactive"
@@ -20713,11 +20730,13 @@ target = ".mcp.json"
 format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--path", "{{store}}"]
 [launch]
-program = "/bin/sh"
-args = ["-c", "printf 'auto-launched:%s' \"$HOTSHEET_SECRET\""]
+program = '{}'
+args = ["--print-template", "auto-launched:{{env:HOTSHEET_SECRET}}"]
 "#,
+            fixture_program::path()
+        ),
     )
     .unwrap();
     let app = app(st.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
@@ -20782,7 +20801,8 @@ async fn a_connect_terminal_releases_its_sessions_claims_when_it_exits() {
     std::fs::write(fake.join("instructions.md"), "Fake setup marker\n").unwrap();
     std::fs::write(
         fake.join("manifest.toml"),
-        r#"
+        format!(
+            r#"
 id = "fake-session"
 display_name = "Fake"
 product_name = "Fake Session"
@@ -20795,11 +20815,13 @@ target = ".mcp.json"
 format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
-args = ["--path", "{store}"]
+args = ["--path", "{{store}}"]
 [launch]
-program = "/bin/sh"
-args = ["-c", "printf 'worker:%s:end actor:%s:%s:end' \"$HOTSHEET_WORKER_ID\" \"$HOTSHEET_ACTOR_ROLE\" \"$HOTSHEET_ACTOR_ID\"; sleep 2"]
+program = '{}'
+args = ["--print-template", "worker:{{env:HOTSHEET_WORKER_ID}}:end actor:{{env:HOTSHEET_ACTOR_ROLE}}:{{env:HOTSHEET_ACTOR_ID}}:end", "--hold-ms", "2000"]
 "#,
+            fixture_program::path()
+        ),
     )
     .unwrap();
     let app = app(st.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
@@ -20869,11 +20891,17 @@ async fn shell_and_command_terminals_carry_the_permission_route_back() {
     let (store_dir, st) = state();
     let app = app(st);
     let project = store_dir.path().display().to_string();
+    // The user's own shell runs `shell_command` (HS2-6EW369: `cmd.exe` on Windows).
+    #[cfg(windows)]
+    let print = "echo route:%HOTSHEET_SECRET%:%HOTSHEET_PROJECT%:end";
+    #[cfg(not(windows))]
     let print = r#"printf 'route:%s:%s:end' "$HOTSHEET_SECRET" "$HOTSHEET_PROJECT""#;
+    let template = "route:{env:HOTSHEET_SECRET}:{env:HOTSHEET_PROJECT}:end";
     let requests = [
         (
             "cmd",
-            serde_json::json!({"id":"cmd","command":"/bin/sh","args":["-c", print]}),
+            serde_json::json!({"id":"cmd","command":fixture_program::path(),
+                "args":["--print-template", template]}),
         ),
         (
             "shell",
@@ -20929,8 +20957,8 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_project() {
         .to_string();
     let request = serde_json::json!({
         "id": "project-route",
-        "command": "/bin/sh",
-        "args": ["-c", "printf 'project:%s:end' \"$HOTSHEET_PROJECT\""],
+        "command": fixture_program::path(),
+        "args": ["--print-template", "project:{env:HOTSHEET_PROJECT}:end"],
         "cwd": checkout,
     });
     let response = app

@@ -15,6 +15,9 @@ use super::tickets::{
 };
 use super::*;
 
+#[path = "../../../../test-support/fixture_program.rs"]
+mod fixture_program;
+
 fn target_ticket(m: &Machine, title: &str) -> Ticket {
     ops::create(
         &m.target_store,
@@ -1184,7 +1187,7 @@ fn hs2_42tara_validation_evidence_gates_a_step_and_its_result_reevaluates() {
     std::fs::write(
         directory.join("validation-profiles.json"),
         json!({"schema_version": 1, "profiles": [
-            {"name": "smoke", "program": "/bin/sh", "args": ["-c", "exit 0"]}]})
+            {"name": "smoke", "program": fixture_program::path(), "args": ["--exit", "0"]}]})
         .to_string(),
     )
     .unwrap();

@@ -23,7 +23,17 @@
 //!   --serve-opencode 1500 # after this many ms, answer as an OpenCode session API (HS2-2DPGDY)
 //!   --prompt "text"       # a first prompt given at launch, recorded like a pushed one
 //!   -i "text"             # the same, spelled as Antigravity's `agy -i` (HS2-KK3CCE)
+//!   --print-template "t"  # write t without a newline, expanding {env:NAME} and {arg:N} (HS2-6EW369)
+//!   --require-env N v     # exit 1 at once unless environment variable N equals v (HS2-6EW369)
+//!   --run "--exit 3"      # run the whitespace-separated flags of one argument (HS2-6EW369)
+//!   --                    # end of the script; later arguments are positional ({arg:1}, …)
 //! ```
+//!
+//! HS2-6EW369: tests that spawned `/bin/sh -c …`, `/bin/echo` or `/bin/sleep` use this program
+//! instead, through `crates/test-support/fixture_program.rs`, so they run unchanged on Windows.
+//! `--run` stands in for `sh -c <script>` where a host appends one argument (a spawn drive's
+//! prompt), and `--` stands in for `"$@"`, the arguments a host appends after the configured
+//! ones (a push mechanism's `--port <p>`).
 //!
 //! `--serve-opencode` makes the agent push-capable the way the `opencode-http` mechanism
 //! expects: it listens on the `--port` its host appends, behind HTTP Basic auth with
@@ -35,16 +45,21 @@ use std::io::Write;
 use std::time::Duration;
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let all = expand_runs(std::env::args().skip(1).collect());
+    // HS2-6EW369: everything after `--` is positional, like a shell's `"$@"`.
+    let (args, positional) = match all.iter().position(|arg| arg == "--") {
+        Some(end) => (all[..end].to_vec(), all[end + 1..].to_vec()),
+        None => (all.clone(), Vec::new()),
+    };
     // Not held locked: a `--serve-opencode` thread writes to the terminal too.
     let mut w = std::io::stdout();
     let mut exit_code = 0;
     let mut probes: Vec<String> = Vec::new();
     // Flags its host appends after the script are read up front.
     let flag_value = |name: &str| {
-        args.iter()
+        all.iter()
             .position(|arg| arg == name)
-            .and_then(|index| args.get(index + 1).cloned())
+            .and_then(|index| all.get(index + 1).cloned())
     };
     let prompts = flag_value("--report-dir").map(|dir| {
         let id = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
@@ -145,6 +160,18 @@ fn main() {
                 exit_code = val(i).parse::<i32>().unwrap_or(0);
                 i += 1;
             }
+            "--print-template" => {
+                let _ = write!(w, "{}", expand_template(val(i), &positional));
+                i += 1;
+            }
+            "--require-env" => {
+                let expected = args.get(i + 2).map(String::as_str).unwrap_or("");
+                if std::env::var(val(i)).ok().as_deref() != Some(expected) {
+                    let _ = w.flush();
+                    std::process::exit(1);
+                }
+                i += 2;
+            }
             other => {
                 eprintln!("hs-fake-agent: unknown flag {other}");
             }
@@ -154,6 +181,54 @@ fn main() {
     }
     let _ = w.flush();
     std::process::exit(exit_code);
+}
+
+/// HS2-6EW369: replace each `--run <text>` with the whitespace-separated words of `<text>`.
+fn expand_runs(args: Vec<String>) -> Vec<String> {
+    let mut expanded = Vec::with_capacity(args.len());
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg == "--run" {
+            let text = args.next().unwrap_or_default();
+            expanded.extend(text.split_whitespace().map(str::to_owned));
+        } else {
+            expanded.push(arg);
+        }
+    }
+    expanded
+}
+
+/// HS2-6EW369: expand `{env:NAME}` (empty when unset) and `{arg:N}` (the Nth positional
+/// argument, from 1; empty when absent) in `template`.
+fn expand_template(template: &str, positional: &[String]) -> String {
+    let mut out = String::new();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let Some(end) = tail.find('}') else {
+            out.push_str(tail);
+            return out;
+        };
+        let key = &tail[1..end];
+        if let Some(name) = key.strip_prefix("env:") {
+            out.push_str(&std::env::var(name).unwrap_or_default());
+        } else if let Some(index) = key
+            .strip_prefix("arg:")
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            let value = index
+                .checked_sub(1)
+                .and_then(|index| positional.get(index))
+                .map(String::as_str);
+            out.push_str(value.unwrap_or(""));
+        } else {
+            out.push_str(&tail[..=end]);
+        }
+        rest = &tail[end + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// HS2-WEFJV8: what a launched tool sees at its start: its working directory, the

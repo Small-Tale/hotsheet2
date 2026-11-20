@@ -5,6 +5,9 @@
 //! session's API (a loopback fake of OpenCode's server here). Tools without a mechanism, an
 //! unreachable session, and ended terminals fail explicitly.
 
+#[path = "../../test-support/fixture_program.rs"]
+mod fixture_program;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
@@ -60,7 +63,8 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir, axum::Router) {
     let store_dir = tempfile::tempdir().unwrap();
     let store = FsStore::init_git(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
     let plugins = tempfile::tempdir().unwrap();
-    // The fake "TUI" prints the wiring it was launched with: `sh -c <script> fake --port <p>`.
+    // The fake "TUI" prints the wiring it was launched with: the push mechanism's appended
+    // `--port <p>` and the password from its environment (HS2-6EW369: the portable fixture).
     write_plugin(
         plugins.path(),
         "fake-push",
@@ -100,9 +104,10 @@ server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--path", "{{store}}"]
 [launch]
-program = "/bin/sh"
-args = ["-c", "printf 'wired:%s:%s:%s:end' \"$1\" \"$2\" \"$OPENCODE_SERVER_PASSWORD\"; sleep 30", "fake"]
-{extra}"#
+program = '{program}'
+args = ["--print-template", "wired:{{arg:1}}:{{arg:2}}:{{env:OPENCODE_SERVER_PASSWORD}}:end", "--hold-ms", "30000", "--"]
+{extra}"#,
+            program = fixture_program::path(),
         ),
     )
     .unwrap();
@@ -124,7 +129,11 @@ async fn launch_in(
     assert_eq!(status, StatusCode::OK, "{json}");
     for _ in 0..100 {
         let (_, terminal) = send(router, "GET", &format!("/terminals/{id}"), None).await;
-        let scrollback = terminal["scrollback"].as_str().unwrap_or_default();
+        // A Windows pseudo console may break a long line; the wiring is one logical line.
+        let scrollback = terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .replace(['\r', '\n'], "");
         if let Some(start) = scrollback.find("wired:") {
             if let Some(end) = scrollback[start..].find(":end") {
                 let fields: Vec<&str> = scrollback[start + 6..start + end].split(':').collect();
@@ -536,7 +545,7 @@ async fn a_push_capable_terminal_reopens_after_exit_with_a_fresh_adapter() {
     let (_store, plugins, router) = fixture();
     let manifest = plugins.path().join("fake-push/manifest.toml");
     let original = std::fs::read_to_string(&manifest).unwrap();
-    std::fs::write(&manifest, original.replace("sleep 30", "sleep 0.1")).unwrap();
+    std::fs::write(&manifest, original.replace("\"30000\"", "\"100\"")).unwrap();
     let (_, first_port, first_password) = launch(&router, "fake-push", "push-reopen").await;
     for _ in 0..100 {
         let (_, terminal) = send(&router, "GET", "/terminals/push-reopen", None).await;
@@ -1395,7 +1404,7 @@ async fn hs2_db2fq2_an_exited_push_session_is_announced_so_clients_show_the_new_
     let (_store, plugins, router) = fixture();
     let manifest = plugins.path().join("fake-push/manifest.toml");
     let original = std::fs::read_to_string(&manifest).unwrap();
-    std::fs::write(&manifest, original.replace("sleep 30", "sleep 0.1")).unwrap();
+    std::fs::write(&manifest, original.replace("\"30000\"", "\"100\"")).unwrap();
     let (_, start) = send(&router, "GET", "/ws/poll?timeout_ms=0", None).await;
     let since = start["cursor"].as_u64().unwrap();
     launch(&router, "fake-push", "exits").await;
