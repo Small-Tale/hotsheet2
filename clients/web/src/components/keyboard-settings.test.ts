@@ -1,9 +1,18 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { KEYBOARD_SHORTCUTS } from '../keyboard-shortcuts';
 import { KeyboardSettings } from './keyboard-settings';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('KeyboardSettings', () => {
   it('renders each shortcut group as a base-surface Kerf FramedList with a highlighted recording row (HS2-4GX2YS)', () => {

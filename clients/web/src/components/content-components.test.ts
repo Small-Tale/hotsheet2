@@ -1,13 +1,22 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownPreview } from './markdown-preview';
 import { NoteComposer } from './note-composer';
 import { nestAiFeedback, TicketNotes } from './ticket-notes';
 import { TicketReader } from './ticket-reader';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('content components', () => {
   it('nests multiple note ratings while keeping orphaned and other-target feedback visible', () => {

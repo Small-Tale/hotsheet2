@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { clampRegionSize, ResizableRegion, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import {
   addDemoProject,
   closeProjectTab,
@@ -29,6 +30,14 @@ import {
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 import type { SidebarPanelParts } from './sidebar-panel';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 /** Minimal left-rail panel parts: the Workbench composes the toolbar and its collapse toggle. */
 const sidebarParts = (name: string): SidebarPanelParts => ({

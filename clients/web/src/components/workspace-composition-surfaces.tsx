@@ -6,6 +6,7 @@ import { Pane } from '@kerfjs/ui/pane';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import { featureOn } from '../feature-areas';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
@@ -149,7 +150,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
           {props.overnight && <StatsOvernight {...props.overnight} />}
           {props.thisMac && <StatsThisMac {...props.thisMac} />}
           <StatsDashboard projects={props.analytics} />
-          <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
+          {featureOn('confidence') && <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />}
           <RepositorySize state={props.repositorySize ?? { status: 'loading' }} compaction={props.compaction} />
         </div>
       </Pane>

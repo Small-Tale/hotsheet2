@@ -1,13 +1,22 @@
 import { signal } from 'kerfjs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Capabilities, CheckoutTicketCounts, TicketRow as WireTicketRow } from '../api';
 import type { TicketStatus } from '../components/status-badge';
 import type { TicketPriority } from '../components/ticket-row';
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import type { Project } from '../interactions/types';
 import type { TicketView } from '../ticket-views';
 import { createTerminalOperationsSurface } from './terminal-operations-surface';
 import { createTicketViewSurface } from './ticket-view-surface';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 const row = (slug: string, status: string) => ({ slug, status, connection_id: 'git' }) as WireTicketRow;
 

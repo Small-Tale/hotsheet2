@@ -14,6 +14,7 @@ import {
   Bot,
   CircleUserRound,
   Database,
+  FlaskConical,
   FolderKanban,
   Folders,
   GitBranch,
@@ -27,6 +28,7 @@ import {
   X,
 } from 'lucide';
 
+import { type FeatureId, featureOn } from '../feature-areas';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
@@ -48,7 +50,8 @@ export type SettingsCategory =
   | 'terminal-memory'
   | 'devices'
   | 'projects'
-  | 'keyboard';
+  | 'keyboard'
+  | 'features';
 
 /**
  * Project-scoped settings, followed by app-scoped (device-local) settings. The project-scoped General
@@ -83,6 +86,8 @@ const appCategories = [
   // Projects registered on this computer, with removal (HS2-R806FZ).
   { id: 'projects', label: 'Projects', icon: Folders, iconName: 'folders' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
+  // Feature areas a person turns on or off, machine-wide; last by the maintainer's choice (HS2-3GJZGG).
+  { id: 'features', label: 'Features', icon: FlaskConical, iconName: 'flask-conical' },
 ] as const;
 
 const allCategories = [...projectCategories, ...appCategories];
@@ -153,6 +158,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   devices: [{ control: 'Pairing requests, paired devices, and their access', server: '/remote-auth/owner' }],
   projects: [{ control: 'Registered projects and removal', server: '/checkouts' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
+  features: [{ control: 'Feature areas on or off', server: '/feature-settings' }],
 };
 
 /** Whether a settings category is app-scoped (device-local) rather than project-scoped. */
@@ -166,8 +172,22 @@ export function settingsCategoryTitle(category: SettingsCategory): string {
   return category === 'keyboard' ? 'Keyboard Shortcuts' : item.label;
 }
 
-/** Whether a project category shows for this project: Orchestration only for an Orchestration project. */
+/**
+ * The settings category that belongs to a feature area (HS2-3GJZGG); it is hidden while the feature
+ * is off. Every other category is core.
+ */
+export const SETTINGS_CATEGORY_FEATURES: Partial<Record<SettingsCategory, FeatureId>> = {
+  commands: 'commands',
+  groups: 'ticket-groups',
+};
+
+/**
+ * Whether a category shows: Orchestration only for an Orchestration project, and a feature area's
+ * category only while that feature is on.
+ */
 export function settingsCategoryShown(category: SettingsCategory, orchestration: boolean): boolean {
+  const feature = SETTINGS_CATEGORY_FEATURES[category];
+  if (feature !== undefined && !featureOn(feature)) return false;
   return category !== 'orchestration' || orchestration;
 }
 
@@ -250,7 +270,10 @@ export function settingsNavigationPanel({
           projectCategories.filter((item) => settingsCategoryShown(item.id, orchestration)),
           projectActions,
         )}
-        {renderGroup('App Settings', appCategories)}
+        {renderGroup(
+          'App Settings',
+          appCategories.filter((item) => settingsCategoryShown(item.id, orchestration)),
+        )}
       </List>
     ),
     pane: { contentElement: 'nav', contentLabel: 'Settings categories' },

@@ -11,6 +11,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import { Pencil, RotateCcw, TriangleAlert, X } from 'lucide';
 
+import { featureOn } from '../feature-areas';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import {
   findChordConflict,
@@ -61,7 +62,10 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
           </Button>
         </Row>
         {KEYBOARD_SHORTCUT_GROUPS.map((group) => {
-          const shortcuts = KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.group === group);
+          // A feature that is off lists none of its shortcuts (HS2-3GJZGG).
+          const shortcuts = KEYBOARD_SHORTCUTS.filter(
+            (shortcut) => shortcut.group === group && (shortcut.feature === undefined || featureOn(shortcut.feature)),
+          );
           if (!shortcuts.length) return undefined;
           return (
             <List gap="2xs">

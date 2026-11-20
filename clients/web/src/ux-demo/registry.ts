@@ -22,6 +22,7 @@ import { demoModule as cpuCoreMeter } from './cpu-core-meter-demo';
 import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as desktopRemoteDialog } from './desktop-remote-dialog-demo';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
+import { demoModule as featureSettings } from './feature-settings-demo';
 import { demoModule as glanceGauge } from './glance-gauge-demo';
 import { demoModule as glanceSparkline } from './glance-sparkline-demo';
 import { demoModule as gridSidebar } from './grid-sidebar-demo';
@@ -150,6 +151,7 @@ export const demoModules: readonly DemoModule[] = [
   glanceSparkline,
   cpuCoreMeter,
   hostDiskSettings,
+  featureSettings,
   statsRightNow,
   statsProjectsTable,
   statsThisMac,

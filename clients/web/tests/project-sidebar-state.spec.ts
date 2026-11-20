@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject } from './open-mocked-project';
 
 const capabilities = {
@@ -149,6 +150,7 @@ test('never renders one project sidebar with another Project Statistics', async 
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
@@ -282,6 +284,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();
@@ -417,6 +420,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   await openMockedProject(page);
   const summary = page.locator('#app-left-rail [data-component="project-summary"]'),

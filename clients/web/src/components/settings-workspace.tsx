@@ -9,6 +9,7 @@ import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs';
 
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
+import { featureOn } from '../feature-areas';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import {
@@ -22,6 +23,7 @@ import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { DevelopmentStrategySettings, type DevelopmentStrategySettingsProps } from './development-strategy-settings';
+import { FeatureSettings, type FeatureSettingsProps } from './feature-settings';
 import { GuidanceSettings, type GuidanceSettingsProps } from './guidance-settings';
 import { HostDiskSettings, type HostDiskSettingsProps } from './host-disk-settings';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
@@ -99,6 +101,8 @@ export interface SettingsWorkspaceProps {
     hostDisks?: HostDiskSettingsProps;
   };
   keyboard: KeyboardSettingsProps;
+  /** App Settings › Features (HS2-3GJZGG). */
+  features?: FeatureSettingsProps;
 }
 
 export function SettingsWorkspace({
@@ -122,6 +126,7 @@ export function SettingsWorkspace({
   developmentStrategy = {},
   general,
   keyboard,
+  features = {},
 }: SettingsWorkspaceProps) {
   return (
     <section
@@ -215,13 +220,18 @@ export function SettingsWorkspace({
           )}
           {category === 'project-general' && (
             <List gap="m">
-              <Checkbox
-                action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
-                checked={columns.autoGroupNewTickets ?? true}
-                hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
-                label="Group new tickets automatically"
-              />
-              {columns.autoGroupMessage ? (
+              {/* Hidden while the Automatic ticket grouping feature is off; the setting keeps its value
+                  (HS2-3GJZGG). */}
+              {featureOn('auto-grouping') && (
+                <Checkbox
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
+                  checked={columns.autoGroupNewTickets ?? true}
+                  hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
+                  label="Group new tickets automatically"
+                  rootAttributes={{ 'data-feature': 'auto-grouping' }}
+                />
+              )}
+              {featureOn('auto-grouping') && columns.autoGroupMessage ? (
                 <Text tone="danger" role="alert">
                   {columns.autoGroupMessage}
                 </Text>
@@ -243,11 +253,12 @@ export function SettingsWorkspace({
                 hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
                 label="Show loading activity"
               />
-              {general.standby && <StandbySettings {...general.standby} />}
+              {general.standby && featureOn('standby') && <StandbySettings {...general.standby} />}
               {general.hostDisks && <HostDiskSettings {...general.hostDisks} />}
             </>
           )}
           {category === 'keyboard' && <KeyboardSettings {...keyboard} />}
+          {category === 'features' && <FeatureSettings {...features} />}
         </List>
       )}
     </section>

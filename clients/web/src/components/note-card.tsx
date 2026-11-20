@@ -26,6 +26,7 @@ import {
 } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
+import { featureOn } from '../feature-areas';
 import { parseFeedbackChoices } from '../feedback-choices';
 import { type InlineFeedbackReply, splitFeedbackPrompt } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -488,12 +489,17 @@ export function NoteCard({
               size="compact"
               rootAttributes={{ 'data-note-actions-menu': '', 'data-note-id': id }}
               items={[
-                {
-                  label: 'AI Fix This Note',
-                  action: INSPECTOR_AND_EDITOR_ACTIONS.repairNote.value,
-                  icon: <LucideIcon icon={Sparkles} name="sparkles" />,
-                  attributes: { 'data-note-id': id },
-                },
+                // Note repair and Completion confidence are feature areas (HS2-3GJZGG).
+                ...(featureOn('note-repair')
+                  ? [
+                      {
+                        label: 'AI Fix This Note',
+                        action: INSPECTOR_AND_EDITOR_ACTIONS.repairNote.value,
+                        icon: <LucideIcon icon={Sparkles} name="sparkles" />,
+                        attributes: { 'data-note-id': id, 'data-feature': 'note-repair' },
+                      },
+                    ]
+                  : []),
                 {
                   label: `Change Type (${presentations[storedKind].label})`,
                   action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
@@ -523,13 +529,17 @@ export function NoteCard({
                       ? 'Only activity and status notes have timeline summaries.'
                       : undefined,
                 },
-                {
-                  label: 'Correct Confidence',
-                  action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
-                  attributes: { 'data-note-id': id, 'data-mode': 'confidence' },
-                  disabled: !confidenceEditable,
-                  disabledReason: !confidenceEditable ? 'This source cannot edit note confidence.' : undefined,
-                },
+                ...(featureOn('confidence')
+                  ? [
+                      {
+                        label: 'Correct Confidence',
+                        action: INSPECTOR_AND_EDITOR_ACTIONS.editNoteMetadata.value,
+                        attributes: { 'data-note-id': id, 'data-mode': 'confidence', 'data-feature': 'confidence' },
+                        disabled: !confidenceEditable,
+                        disabledReason: !confidenceEditable ? 'This source cannot edit note confidence.' : undefined,
+                      },
+                    ]
+                  : []),
               ]}
             />
           )}
@@ -559,7 +569,7 @@ export function NoteCard({
               )}
             </span>
           )}
-          {confidence !== undefined && <ConfidenceBadge value={confidence} />}
+          {confidence !== undefined && featureOn('confidence') && <ConfidenceBadge value={confidence} />}
           <time class="note-card__time">
             <Text variant="span" size="compact" tone="quiet">
               {time}

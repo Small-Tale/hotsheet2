@@ -487,6 +487,8 @@ shell-and-global	delegate	document.body	'click'	'[data-action="toggle-project-si
 shell-and-global	delegate	document.body	'click'	'[data-action="enter-standby"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="exit-standby"]'
 shell-and-global	delegate	document.body	'change'	'[data-action="save-standby-settings"]'
+shell-and-global	delegate	document.body	'change'	'[data-action="set-feature"]'
+shell-and-global	delegate	document.body	'click'	'[data-action="restore-feature-defaults"]'
 shell-and-global	delegate	document.body	'click'	'[data-action="dismiss-away-digest"]'
 shell-and-global	delegate	document.body	'kui-request-close'	'[data-away-digest]'
 shell-and-global	delegate	document.body	'click'	'[data-action="show-what-needs-me"]'

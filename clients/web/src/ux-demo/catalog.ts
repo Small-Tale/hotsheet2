@@ -379,6 +379,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('terminal-memory-settings'),
       cataloged('standby-settings'),
       cataloged('host-disk-settings', ['checkbox', 'button', 'list', 'text']),
+      cataloged('feature-settings', ['checkbox', 'button', 'list', 'row', 'text']),
       cataloged('add-host-disk-dialog', ['surface-scaffold', 'text-field', 'button', 'state-banner']),
       cataloged('theme-picker'),
       cataloged('notification-settings', ['notification-channel-dialog', 'notification-rule-dialog']),

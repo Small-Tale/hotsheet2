@@ -97,7 +97,7 @@ import { type AppTabMenuState } from '../components/project-tab-context-menu';
 import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
 import type { CompactionPreviewState, RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
-import { type SettingsCategory } from '../components/settings-navigation';
+import { type SettingsCategory, settingsCategoryShown } from '../components/settings-navigation';
 import type { StatsDashboardState } from '../components/stats-dashboard';
 import type { TicketStatus } from '../components/status-badge';
 import {
@@ -133,6 +133,7 @@ import { developmentStrategyTagSuggestions } from '../development-strategy-tags'
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type PendingDrawerTab } from '../drawer-tab-order';
+import { featureOn, featureSettings, shellModeEnabled, viewModeShown } from '../feature-areas';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createAnnouncerController } from '../features/announcer-controller';
 import { createAutomaticTicketGrouping } from '../features/automatic-ticket-grouping';
@@ -143,6 +144,7 @@ import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
 import { createCorruptTicketRecoveryController } from '../features/corrupt-ticket-recovery';
 import { createDriveConversationsController } from '../features/drive-conversations';
+import { createFeatureAreasController } from '../features/feature-areas';
 import { createFollowUpLinkController } from '../features/follow-up-link';
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
@@ -1839,7 +1841,11 @@ export async function startHotSheetWebClient() {
   ];
   // HS2-W27N1D: Orchestration shows only for an Orchestration project; its surface is created below.
   const orchestrationSurfaceRef: { current?: OrchestrationSettingsSurface } = {};
-  const settingsCategory = () => orchestrationSurfaceRef.current?.settingsCategory() ?? selectedSettingsCategory.value;
+  const settingsCategory = (): SettingsCategory => {
+    const category = orchestrationSurfaceRef.current?.settingsCategory() ?? selectedSettingsCategory.value;
+    // A feature area's category whose feature was turned off shows the default category (HS2-3GJZGG).
+    return settingsCategoryShown(category, true) ? category : 'sources';
+  };
   let developmentRequestKey = '';
   const developmentReadVersions = new Map<string, number>();
   function invalidateDevelopmentReads(id: string): number {
@@ -2558,7 +2564,13 @@ export async function startHotSheetWebClient() {
         };
     }
   }
-  const customViewsFor = (projectId = selectedProjectId.value) => customViewsByProject.value[projectId] ?? [];
+  // Custom saved views belong to the Ticket groups and saved views feature area (HS2-3GJZGG); off, none
+  // is offered and a selected one falls back to the Queue.
+  const customViewsFor = (projectId = selectedProjectId.value) =>
+    featureOn('ticket-groups') ? (customViewsByProject.value[projectId] ?? []) : [];
+  effect(() => {
+    if (!featureOn('ticket-groups') && customTicketViewKey(selectedView.value)) selectedView.value = 'all';
+  });
   function customViewFor(view: TicketView, projectId = selectedProjectId.value) {
     const id = customTicketViewKey(view);
     return id ? customViewsFor(projectId).find((item) => item.id === id) : undefined;
@@ -2841,6 +2853,11 @@ export async function startHotSheetWebClient() {
     closeProjectIds,
   });
   function setShellMode(mode: ProjectTabBarMode) {
+    // A dashboard whose feature area is off is ignored, however it was asked for (HS2-3GJZGG).
+    if (!shellModeEnabled(mode, statsProjectId.value)) {
+      if (shellMode.value !== 'stats') statsProjectId.value = undefined;
+      return;
+    }
     if (terminalPreviewClickTimer !== undefined) {
       window.clearTimeout(terminalPreviewClickTimer);
       terminalPreviewClickTimer = undefined;
@@ -2862,6 +2879,20 @@ export async function startHotSheetWebClient() {
       observeTerminalDashboard();
     } else terminalDashboardSizeObserver.disconnect();
   }
+  // A view whose feature area is off (the Workers view) falls back to the list (HS2-3GJZGG).
+  effect(() => {
+    const settings = featureSettings.value;
+    if (!viewModeShown(viewMode.value, settings)) viewMode.value = 'list';
+    if (!viewModeShown(ticketViewMode.value, settings)) ticketViewMode.value = 'list';
+  });
+  // Turning a dashboard's feature off while it shows returns to the project (HS2-3GJZGG).
+  effect(() => {
+    const settings = featureSettings.value;
+    if (!shellModeEnabled(shellMode.peek(), statsProjectId.peek(), settings))
+      queueMicrotask(() => {
+        setShellMode('project');
+      });
+  });
   // Switch the workspace to a list/board/notifications/settings view from anywhere (a keyboard shortcut
   // may fire while a terminal grid or stats overlay is active), so return to the project shell first and
   // mirror the set-view-mode click handler's progressive-render reset + preference persistence (HS2-9SHYWD).
@@ -3652,8 +3683,9 @@ export async function startHotSheetWebClient() {
     ),
     showSourceIcon: (defaultProviders.value[project()?.id ?? '']?.sources.length ?? 0) > 1,
     tags: ticket.tags,
-    group: ticketGroupValue(ticket),
-    groupName: rowGroupName(ticket),
+    // With Ticket groups and saved views off, grouped tickets show ungrouped (HS2-3GJZGG).
+    group: featureOn('ticket-groups') ? ticketGroupValue(ticket) : undefined,
+    groupName: featureOn('ticket-groups') ? rowGroupName(ticket) : undefined,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
     feedbackNeeded: ticket.needs_review ?? ticket.feedback_needed,
@@ -3771,7 +3803,7 @@ export async function startHotSheetWebClient() {
       sorted = result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
     // A list gathers each group where its first ticket sorts, so selection and keyboard order
     // follow the rows as drawn; each board column gathers its own members instead (HS2-WZ3JGZ).
-    return viewMode.value === 'board' ? sorted : clusterTicketsByGroup(sorted);
+    return viewMode.value === 'board' || !featureOn('ticket-groups') ? sorted : clusterTicketsByGroup(sorted);
   }
   const {
     searchBarActive,
@@ -4660,6 +4692,14 @@ export async function startHotSheetWebClient() {
       };
     },
   });
+  // App Settings › Features (HS2-3GJZGG): the machine-wide feature-area choices of the server the
+  // active project talks to, kept current by `feature_settings` events.
+  const featureAreas = createFeatureAreasController({
+    api: () => {
+      const current = project();
+      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+    },
+  });
   let standbySettingsServer: string | undefined;
   effect(() => {
     const current = project();
@@ -4669,6 +4709,7 @@ export async function startHotSheetWebClient() {
     standbySettingsServer = server;
     queueMicrotask(() => {
       void standby.refreshSettings();
+      void featureAreas.refresh();
     });
   });
   const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
@@ -4699,7 +4740,10 @@ export async function startHotSheetWebClient() {
     loadAnalytics,
     refreshClientNotifications: clientNotifications.refresh,
     removeClientNotifications: clientNotifications.removeProject,
-    onActivity: announcerController.onActivity,
+    // The Announcer is an optional feature area: off, nothing is narrated or spoken (HS2-3GJZGG).
+    onActivity: (...args: Parameters<typeof announcerController.onActivity>) => {
+      if (featureOn('announcer')) announcerController.onActivity(...args);
+    },
     claimTurnEvent: (envelope) => automaticTicketGrouping.claimTurnEvent(envelope),
     loadRepositorySize,
     loadTicketStoreSync: ticketStoreSync.load,
@@ -4720,6 +4764,7 @@ export async function startHotSheetWebClient() {
     hostHealth,
     remoteHostHealth,
     standbySettings: { applyEvents: standby.applySettingsEvents, resync: standby.resyncSettings },
+    featureSettings: { applyEvents: featureAreas.applyEvents, resync: featureAreas.resync },
     browserGrants,
     pairingRequests,
     onStreamHealth: standby.streamHealth,
@@ -5560,6 +5605,7 @@ export async function startHotSheetWebClient() {
     showLoadingActivity,
     themePreference,
     standbySettings: () => ({ settings: standby.settings.value, message: standby.settingsMessage.value }),
+    featureSettings: () => ({ settings: featureSettings.value, message: featureAreas.settingsMessage.value }),
     // App Settings → General → Host health disks (HS2-KBVZV1), from the pushed host-health snapshot.
     hostDiskSettings: () => {
       const snapshot = hostHealth.state.value.snapshot;
@@ -7336,6 +7382,14 @@ export async function startHotSheetWebClient() {
     openCommandHistory,
     completePointerDetailsFinish,
     schedulePointerDetailsFinish,
+    features: {
+      setFeature: (id, on) => {
+        void featureAreas.setFeature(id, on);
+      },
+      restoreDefaults: () => {
+        void featureAreas.restoreDefaults();
+      },
+    },
     standby: {
       enter: standby.enter,
       exit: standby.exit,

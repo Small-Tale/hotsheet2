@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from './feature-areas';
 import {
   chordFromEvent,
   chordsEqual,
@@ -15,6 +16,14 @@ import {
   type ShortcutChord,
   type ShortcutKeyEvent,
 } from './keyboard-shortcuts';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 function fakeStorage(initial: Record<string, string> = {}) {
   const map = new Map(Object.entries(initial));

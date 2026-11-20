@@ -8,6 +8,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
 import { MessageSquare } from 'lucide';
 
+import { featureOn } from '../feature-areas';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
@@ -75,6 +76,8 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
     `${props.driveTool.slice(0, 1).toUpperCase()}${props.driveTool.slice(1)}`;
   const unread = Math.max(0, Math.floor(props.conversationUnread ?? 0)),
     unreadLabel = unread ? `${unread} unread message${unread === 1 ? '' : 's'}` : '';
+  const drive = featureOn('drive'),
+    chat = featureOn('ai-chat');
   // Kerf's Pane owns its footer's (safe-area) edges since beta.51, so the footer's own inset lives on
   // this inner List rather than on the pane footer (HS2-KMDJRH).
   const footer = (
@@ -101,46 +104,55 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
       >
         {`${props.openCount} open, ${props.upNextCount} up next, ${props.activeCount} active`}
       </Text>
-      <div class="project-sidebar__drive-row">
-        <DriveControl
-          running={props.driveRunning}
-          tool={driveToolLabel}
-          disabled={props.driveDisabled}
-          disabledReason={props.driveDisabledReason}
-          optionsOpen={props.driveOptionsOpen}
-        />
-        {props.driveOptionsOpen && (
-          <DriveOptionsMenu
-            tools={props.driveTools ?? []}
-            selection={props.driveSelection ?? { tool: props.driveTool }}
-            defaultSelection={props.driveDefaultSelection ?? { tool: props.driveTool }}
-            loading={props.driveToolsLoading}
-            error={props.driveToolsError}
-            destination={props.driveDestination}
-            x={props.driveOptionsAnchor?.x}
-            y={props.driveOptionsAnchor?.y}
-          />
-        )}
-        <span class="project-sidebar__conversation-anchor">
-          <Button
-            action={COMMANDS_AND_AI_ACTIONS.openConversation.value}
-            ariaLabel={`Open ${driveToolLabel} Conversation${unreadLabel ? `, ${unreadLabel}` : ''}`}
-            title="Open chat without starting the Hot Sheet workflow"
-            icon={<LucideIcon size="s" icon={MessageSquare} name="message-square" />}
-            shape="rounded"
-            pressed={Boolean(props.conversationOpen)}
-            disabled={props.conversationDisabled}
-          />
-          {unread > 0 && (
-            // The button's accessible name already announces the count, so the badge is decorative.
-            <span class="project-sidebar__conversation-badge" data-unread-count={String(unread)}>
-              <Badge tone="danger" appearance="solid" shape="pill" size="compact" ariaHidden>
-                {unread > 99 ? '99+' : unread}
-              </Badge>
+      {/* Drive with AI and AI chat are experimental feature areas (HS2-3GJZGG). */}
+      {(drive || chat) && (
+        <div class="project-sidebar__drive-row">
+          {drive && (
+            <>
+              <DriveControl
+                running={props.driveRunning}
+                tool={driveToolLabel}
+                disabled={props.driveDisabled}
+                disabledReason={props.driveDisabledReason}
+                optionsOpen={props.driveOptionsOpen}
+              />
+              {props.driveOptionsOpen && (
+                <DriveOptionsMenu
+                  tools={props.driveTools ?? []}
+                  selection={props.driveSelection ?? { tool: props.driveTool }}
+                  defaultSelection={props.driveDefaultSelection ?? { tool: props.driveTool }}
+                  loading={props.driveToolsLoading}
+                  error={props.driveToolsError}
+                  destination={props.driveDestination}
+                  x={props.driveOptionsAnchor?.x}
+                  y={props.driveOptionsAnchor?.y}
+                />
+              )}
+            </>
+          )}
+          {chat && (
+            <span class="project-sidebar__conversation-anchor" data-feature="ai-chat">
+              <Button
+                action={COMMANDS_AND_AI_ACTIONS.openConversation.value}
+                ariaLabel={`Open ${driveToolLabel} Conversation${unreadLabel ? `, ${unreadLabel}` : ''}`}
+                title="Open chat without starting the Hot Sheet workflow"
+                icon={<LucideIcon size="s" icon={MessageSquare} name="message-square" />}
+                shape="rounded"
+                pressed={Boolean(props.conversationOpen)}
+                disabled={props.conversationDisabled}
+              />
+              {unread > 0 && (
+                // The button's accessible name already announces the count, so the badge is decorative.
+                <span class="project-sidebar__conversation-badge" data-unread-count={String(unread)}>
+                  <Badge tone="danger" appearance="solid" shape="pill" size="compact" ariaHidden>
+                    {unread > 99 ? '99+' : unread}
+                  </Badge>
+                </span>
+              )}
             </span>
           )}
-        </span>
-      </div>
+        </div>
+      )}
     </List>
   );
   const content = (
@@ -152,19 +164,27 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           trend={props.completionTrend}
           partial={props.countsPartial}
           pressed={props.statsSelected}
+          interactive={featureOn('project-stats')}
         />
       </List>
-      {props.live && <ProjectLiveSection {...props.live} />}
-      <RepositorySummary
-        branch={props.branch}
-        unpushed={props.unpushed}
-        behind={props.behind}
-        uncommitted={props.uncommitted}
-        conflicted={props.conflicted}
-        error={props.repositoryError}
+      {props.live && featureOn('live-activity') && <ProjectLiveSection {...props.live} />}
+      {featureOn('repository-status') && (
+        <RepositorySummary
+          branch={props.branch}
+          unpushed={props.unpushed}
+          behind={props.behind}
+          uncommitted={props.uncommitted}
+          conflicted={props.conflicted}
+          error={props.repositoryError}
+        />
+      )}
+      <ViewNavigation
+        items={props.views}
+        selectedId={props.selectedViewId}
+        dropTargetId={props.dropTargetViewId}
+        addView={featureOn('ticket-groups')}
       />
-      <ViewNavigation items={props.views} selectedId={props.selectedViewId} dropTargetId={props.dropTargetViewId} />
-      {props.commands.length > 0 ? (
+      {props.commands.length > 0 && featureOn('commands') ? (
         <CommandNavigation
           label={props.commandGroupLabel}
           commands={props.commands}

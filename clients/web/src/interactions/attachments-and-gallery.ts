@@ -42,6 +42,7 @@ import { wireTicketAttachmentActions } from '../components/ticket-attachments-in
 import { copyText } from '../copy-text';
 import { AUTOSAVE_DELAY_MS } from '../debounced-autosave';
 import { listenForDesktopRecovery } from '../desktop-recovery-flush';
+import { featureOn } from '../feature-areas';
 import {
   clampAnnotationCoordinate,
   drawGalleryAnnotation,
@@ -1333,6 +1334,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       dependencies.attachmentSwipeGesture = undefined;
     },
     toggleMarkup: () => {
+      // Starting markup belongs to the Attachment annotations feature area (HS2-3GJZGG).
+      if (!attachmentGalleryMarkup.value && !featureOn('annotations')) return;
       toggleGalleryMarkupSession({
         saving: attachmentGallerySaveState?.value === 'saving',
         markup: attachmentGalleryMarkup,

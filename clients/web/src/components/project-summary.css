@@ -23,6 +23,13 @@
 .project-summary:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
+/* Without Project statistics (HS2-3GJZGG) the tile is a plain summary: no pointer, no hover. */
+.project-summary[data-interactive='false'] {
+  cursor: default;
+}
+.project-summary[data-interactive='false']:hover {
+  background: transparent;
+}
 .project-summary[aria-pressed='true'] {
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);

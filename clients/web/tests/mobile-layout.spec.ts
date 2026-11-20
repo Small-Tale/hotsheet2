@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 import { capabilities, DEFAULT_TERMINALS, openDemoProject, project, ticket } from './mobile-project-fixture';
 
 type ToastEntranceWindow = Window & {
@@ -704,6 +705,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();

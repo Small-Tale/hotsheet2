@@ -2,6 +2,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
+import { featureOn } from '../feature-areas';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 
@@ -21,6 +22,10 @@ export function ProjectDashboardModes({
   mode: ProjectStripMode;
   projectStats?: boolean;
 }) {
+  // Each dashboard belongs to a feature area and leaves the strip while it is off (HS2-3GJZGG).
+  const grid = featureOn('workspace-grid'),
+    stats = featureOn('cross-project-stats');
+  if (!grid && !stats) return <></>;
   return (
     <ToolbarControlGroup
       label="Global Dashboards"
@@ -30,24 +35,30 @@ export function ProjectDashboardModes({
       selectedChrome="raised"
       selectedTone="brand"
     >
-      <button
-        type="button"
-        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
-        data-shell-mode="terminals"
-        aria-label="Workspace Grid"
-        aria-pressed={String(mode === 'terminals')}
-      >
-        <LucideIcon size="s" icon={Grid3X3} name="grid-3x3" />
-      </button>
-      <button
-        type="button"
-        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
-        data-shell-mode="stats"
-        aria-label="Cross-Project Stats"
-        aria-pressed={String(mode === 'stats' && !projectStats)}
-      >
-        <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
-      </button>
+      {grid && (
+        <button
+          type="button"
+          {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
+          data-shell-mode="terminals"
+          aria-label="Workspace Grid"
+          aria-pressed={String(mode === 'terminals')}
+          data-feature="workspace-grid"
+        >
+          <LucideIcon size="s" icon={Grid3X3} name="grid-3x3" />
+        </button>
+      )}
+      {stats && (
+        <button
+          type="button"
+          {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
+          data-shell-mode="stats"
+          aria-label="Cross-Project Stats"
+          aria-pressed={String(mode === 'stats' && !projectStats)}
+          data-feature="cross-project-stats"
+        >
+          <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
+        </button>
+      )}
     </ToolbarControlGroup>
   );
 }

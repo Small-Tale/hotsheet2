@@ -6,6 +6,7 @@ import { type TicketStatus } from '../components/status-badge';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type TicketPriority } from '../components/ticket-row';
 import { type TicketViewActionSpec } from '../components/workspace-header';
+import { featureOn } from '../feature-areas';
 import { canBulkUpdate, ticketGroupDisabledReason, ticketGroupMenuModel } from '../ticket-bulk-operations';
 import { isTicketDropTarget, NEW_TICKET_LAUNCHER_DROP_KEY } from '../ticket-drop-target';
 import { ticketGroupKey, type TicketGroupOption, ticketGroupValue } from '../ticket-groups';
@@ -91,8 +92,13 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
           }
         : undefined;
   }
+  // The Automatic choice belongs to the Automatic ticket grouping feature (HS2-3GJZGG).
   const withAutomaticBusy = (model: ReturnType<typeof ticketGroupMenuModel>) =>
-    model && automaticGroupBusy() ? { ...model, automaticBusy: true } : model;
+    model && {
+      ...model,
+      automatic: featureOn('auto-grouping'),
+      ...(automaticGroupBusy() ? { automaticBusy: true } : {}),
+    };
   function ticketContextMenuSurface() {
     const menu = ticketContextMenu.value;
     let props: TicketContextMenuSurfaceProps['menu'];
@@ -138,7 +144,7 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         }),
         hideUpNext: menu.hideUpNext,
         verifyAction: allCompleted && (capabilities?.update ?? true),
-        notWorkingAction: onlyCompleted && (capabilities?.not_working_report ?? false),
+        notWorkingAction: onlyCompleted && (capabilities?.not_working_report ?? false) && featureOn('not-working'),
         reopenAction: reopenable && (capabilities?.not_working_report ?? false),
         closeAction: slugs.length === 1 && Boolean(capabilities?.close && capabilities.close_reasons),
         selectionCount: slugs.length,
@@ -147,7 +153,10 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
         allInBacklog: selected.length > 0 && selected.every((item) => item.status === 'backlog'),
         allInArchive: selected.length > 0 && selected.every(isArchivedTicket),
         allInTrash: selected.length > 0 && selected.every(isTrashedTicket),
-        group: withAutomaticBusy(ticketGroupMenuModel(selected, ticketGroups(), capabilitiesFor)),
+        // Ticket groups and saved views is an optional feature area (HS2-3GJZGG).
+        group: featureOn('ticket-groups')
+          ? withAutomaticBusy(ticketGroupMenuModel(selected, ticketGroups(), capabilitiesFor))
+          : undefined,
       };
     }
     return <TicketContextMenuSurface menu={props} closeDialog={ticketCloseDialog.value} />;

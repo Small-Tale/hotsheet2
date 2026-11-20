@@ -119,6 +119,14 @@ export interface ProjectChangeStreamsDependencies {
     resync: () => Promise<void>;
   };
   /**
+   * Machine-wide feature-area choices (HS2-3GJZGG): `feature_settings` events trigger one coalesced
+   * re-read and each stream resync re-reads them. No timer reads them.
+   */
+  featureSettings?: {
+    applyEvents: (events: readonly ChangeEvent[]) => Promise<void> | undefined;
+    resync: () => Promise<void>;
+  };
+  /**
    * This page's browser-session grants on a remote-mode host (HS2-A3TDNH): `browser_grants` events
    * trigger one coalesced re-read of `/remote-auth/me` and each stream resync re-reads it. No timer reads it.
    */
@@ -311,6 +319,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     hostHealth,
     remoteHostHealth,
     standbySettings,
+    featureSettings,
     browserGrants,
     pairingRequests,
     liveHistory,
@@ -456,6 +465,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               ...(projectLiveStore ? [projectLiveStore.resync(new Api(current.apiPath))] : []),
               ...(projectHostHealth ? [projectHostHealth.resync()] : []),
               ...(standbySettings ? [standbySettings.resync()] : []),
+              ...(featureSettings ? [featureSettings.resync()] : []),
               ...(browserGrants ? [browserGrants.resync()] : []),
               ...(pairingRequests ? [pairingRequests.resync()] : []),
               ...(liveHistory ? [liveHistory.resync()] : []),
@@ -474,6 +484,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             projectLiveStore?.applyEvents(response.events);
             void projectHostHealth?.applyEvents(response.events);
             void standbySettings?.applyEvents(response.events);
+            void featureSettings?.applyEvents(response.events);
             void browserGrants?.applyEvents(response.events);
             void pairingRequests?.applyEvents(response.events);
             const acceptedTurns = new Set(turnStreamEvents(response));

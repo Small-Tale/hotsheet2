@@ -5677,6 +5677,7 @@ even when multiple disjoint ticket ranges are present.
 - Remote/mTLS + mobile pairing: [08-distributed-and-remote.md](08-distributed-and-remote.md)
 - Leased-claim pattern reused for size claims: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7
 - Why clients don't embed the core / language rationale: [09-technology-decisions.md](09-technology-decisions.md) §9.2
+- Feature areas a person turns on or off: §6.12
 
 ### Composition and stylesheet ownership (HS2-JMYRT3)
 
@@ -5713,3 +5714,77 @@ Setup failures use the separate **Project setup needs attention** warning, inclu
 review instructions if a partial setup changed hooks. Failed opens retain that warning
 until it can be delivered. See
 [05](05-ai-tool-plugins.md) §5.7 for the shared CLI/server report and trust boundary.
+
+## 6.12 Feature areas: App Settings › Features (HS2-3GJZGG)
+
+**Status: shipped.** A person can turn each non-core part of Hot Sheet on or off.
+
+### Rules
+
+- **One checkbox per area.** App Settings › Features is the last App Settings category.
+  - **Experimental** areas are off by default.
+  - **Optional** areas are on by default, so a person can turn them off for a quieter workspace.
+  - Core areas are never listed. The foot of the page names them in one line.
+  - Restore Defaults clears every choice.
+- **One machine-wide choice.** Each choice is a server setting, `features.<id>` in `${HOTSHEET_HOME}/settings.json`. It applies to every client of the host, phones included.
+  - REST: `GET`/`PUT /feature-settings`. A PUT merges, and `null` clears a choice to its default. `POST /feature-settings/changed` announces a headless write.
+  - CLI: `hotsheet-cli settings set features.<id> on|off|default` sets or clears a choice. Repeating it changes nothing. `settings get features.<id>` prints the effective `on` or `off`.
+  - Every change pushes a cursored `feature_settings` change event. Clients re-read on that event and on each stream resync, never on a timer.
+- **New defaults reach everyone.** A choice that was never set takes the registered default. On upgrade, every install gets the new defaults with no migration and no notice.
+- **Turning an area off hides it.** Its buttons, view-switcher choices, menu items, shortcuts and settings controls go away.
+  - A shortcut, a dashboard request or a restored view, tab or category for an area that is off is ignored. The client falls back to the project, the List view, the Info tab, the Ticket sources category or the Queue.
+  - Its data is kept. Work that is already running continues: open AI chat tabs stay.
+  - The CLI and MCP are unaffected.
+- **The server consults one area itself.** With Automatic ticket grouping off, the server spends no AI turn on new tickets. The per-project "Group new tickets automatically" setting keeps its value and its checkbox is hidden.
+
+### Registry
+
+The list below is pinned in two places:
+
+- the server, in `crates/hotsheet-ticketing/src/features.rs`;
+- the client, in `clients/web/src/feature-areas.ts`, which adds labels and hints.
+
+`feature-areas-policy.test.ts` (HS2-3GJZGG) checks both:
+
+- The two lists name the same ids, groups and defaults.
+- Every strip button, view-switcher choice, settings category, inspector tab and keyboard shortcut is either on its core list or tagged with a registered feature, through `data-feature="<id>"` or its kind's feature map.
+
+A new non-core entry point fails that test until it is registered.
+
+### The areas
+
+Experimental (off by default):
+
+| Id                    | Area                      | What it hides                                                                                              |
+| --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `ai-chat`             | AI chat                   | The sidebar chat button, and the drawer's AI Chat and Saved Conversation… items                            |
+| `drive`               | Drive with AI             | The Drive split button and its options menu                                                                |
+| `project-stats`       | Project statistics        | Opening statistics from the completion chart, which stays but cannot be clicked, and from the grid sidebar |
+| `cross-project-stats` | Cross-project stats       | The strip's Stats button, the All-Project Stats shortcut, and Show What Needs Me                           |
+| `auto-grouping`       | Automatic ticket grouping | The row menu's Automatic group choice, the Project General checkbox, and the server's AI turn              |
+| `note-repair`         | Note repair               | AI Fix This Note                                                                                           |
+| `ai-recommendations`  | AI recommendations        | The guidance toolbar's AI Recommendations action                                                           |
+| `code-review`         | Code review tab           | The inspector's Code Review tab                                                                            |
+
+Optional (on by default):
+
+| Group     | Id                  | Area                          | What it hides                                                                                                                |
+| --------- | ------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Workspace | `workspace-grid`    | Workspace Grid                | The strip's Grid button and its shortcut                                                                                     |
+| Workspace | `workers-view`      | Workers view                  | The Workers choice in the view switcher and the overflow menu                                                                |
+| Workspace | `commands`          | Commands                      | Sidebar command buttons and Project Settings › Commands                                                                      |
+| Workspace | `repository-status` | Repository status             | The sidebar branch summary and its changes popover                                                                           |
+| Workspace | `live-activity`     | Live activity                 | The sidebar Live section                                                                                                     |
+| Tickets   | `ticket-groups`     | Ticket groups and saved views | Group sections and Group menus, Project Settings › Ticket groups, custom views and Add view. Grouped tickets show ungrouped. |
+| Tickets   | `ticket-timeline`   | Ticket timeline               | The inspector's Timeline tab                                                                                                 |
+| Tickets   | `confidence`        | Completion confidence         | Confidence badges, Correct Confidence, and the calibration table                                                             |
+| Tickets   | `annotations`       | Attachment annotations        | Starting markup in the gallery, which also holds crop                                                                        |
+| Tickets   | `not-working`       | Not Working reports           | The row menu's Not Working… action                                                                                           |
+| Ambient   | `announcer`         | Announcer                     | The announcer control, reel and spoken narration                                                                             |
+| Ambient   | `standby`           | Standby                       | The moon button, idle entry (and so the away digest), and the Standby settings                                               |
+
+Always on: tickets, search, notes, notifications, permissions, the terminal drawer, ticket sources and accounts, trash, theme, keyboard, projects, and settings. Orchestration shows only for an Orchestration project, and HS1 migration only when an HS1 database is found, so neither is listed.
+
+### Page layout
+
+The page uses Kerf `List`, `Text` (h2/h3), `Checkbox` with hint, `Row` and `Button`, and no application CSS. Each list of checkboxes takes the List's 8px left control inset, so the checkbox boxes line up with the headings' text, as the maintainer asked on the v1 design.

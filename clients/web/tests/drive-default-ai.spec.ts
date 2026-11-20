@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 
 // Regression for HS2-BECC2T: the sidebar Drive control must reflect the *active*
 // project's default AI tool immediately — on boot restore and on tab switch —
@@ -165,6 +166,7 @@ async function mockTwoProjects(page: import('@playwright/test').Page) {
     if (path.startsWith('/__hotsheet/')) return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
 }
 
 test('the Drive control reflects each project default AI on boot restore and tab switch', async ({ page }) => {

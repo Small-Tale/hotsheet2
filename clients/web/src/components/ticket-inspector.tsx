@@ -41,6 +41,7 @@ import type {
 } from '../api';
 import type { AttachmentFilenameEditing } from '../attachment-filename-editing';
 import type { AttachmentReferenceContext } from '../attachment-references';
+import { type FeatureId, featureOn } from '../feature-areas';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { ticketCloseReasonLabel } from '../ticket-close';
@@ -163,12 +164,27 @@ export interface TicketInspectorProps {
   contentLoading?: boolean;
 }
 
-const tabs = [
+const allTabs = [
   { id: 'info', label: 'Info', icon: Info, iconName: 'info' },
   { id: 'timeline', label: 'Timeline', icon: ListTree, iconName: 'list-tree' },
   { id: 'code-review', label: 'Code Review', icon: MessageSquareCode, iconName: 'message-square-code' },
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
+
+/** The inspector tabs that belong to a feature area (HS2-3GJZGG); Info and Attachments are core. */
+export const INSPECTOR_TAB_FEATURES: Readonly<Partial<Record<InspectorTab, FeatureId>>> = {
+  timeline: 'ticket-timeline',
+  'code-review': 'code-review',
+};
+
+/** Whether the inspector offers `tab`: a feature area's tab only while its feature is on. */
+export function inspectorTabShown(tab: InspectorTab): boolean {
+  const feature = INSPECTOR_TAB_FEATURES[tab];
+  return feature === undefined || featureOn(feature);
+}
+
+/** The tab the inspector shows: a tab whose feature is off shows Info instead (HS2-3GJZGG). */
+export const shownInspectorTab = (tab: InspectorTab): InspectorTab => (inspectorTabShown(tab) ? tab : 'info');
 
 /**
  * The ticket inspector's panel parts (HS2-QQW6CT): the toolbar carries the ticket number and actions,
@@ -200,7 +216,7 @@ export function ticketInspectorPanel({
   details,
   detailsMode,
   detailsDirty,
-  activeTab = 'info',
+  activeTab: requestedTab = 'info',
   upNext = false,
   upNextEligible = status === 'not_started' || status === 'started',
   feedbackNeeded = false,
@@ -248,6 +264,7 @@ export function ticketInspectorPanel({
   fieldConflictResolution = fieldConflict?.mine ?? '',
   contentLoading = false,
 }: TicketInspectorProps): SidebarPanelParts {
+  const activeTab = shownInspectorTab(requestedTab);
   // While the detail loads nothing is actionable: the row-backed chrome is shown for continuity only.
   const loadingAttributes = contentLoading ? { inert: true, 'aria-busy': 'true', 'data-content-loading': 'true' } : {};
   const star = (
@@ -461,20 +478,22 @@ export function ticketInspectorPanel({
           />
         </div>
       )}
-      {(status === 'completed' || status === 'verified') && latestConfidence !== undefined && (
-        <div
-          class="ticket-inspector__notice ticket-inspector__confidence"
-          role="status"
-          data-confidence={String(latestConfidence)}
-        >
-          <Row wrap gap="xs" vAlign="middle" controlInsets="rl">
-            <ConfidenceBadge value={latestConfidence} appearance="labeled" />
-            <Text variant="span" tone="quiet" size="compact" border="none" flush>
-              Reported by the completing AI
-            </Text>
-          </Row>
-        </div>
-      )}
+      {(status === 'completed' || status === 'verified') &&
+        latestConfidence !== undefined &&
+        featureOn('confidence') && (
+          <div
+            class="ticket-inspector__notice ticket-inspector__confidence"
+            role="status"
+            data-confidence={String(latestConfidence)}
+          >
+            <Row wrap gap="xs" vAlign="middle" controlInsets="rl">
+              <ConfidenceBadge value={latestConfidence} appearance="labeled" />
+              <Text variant="span" tone="quiet" size="compact" border="none" flush>
+                Reported by the completing AI
+              </Text>
+            </Row>
+          </div>
+        )}
       {closeReason && closeReason !== 'duplicate' && (
         <div class="ticket-inspector__notice" data-close-reason={closeReason}>
           <StateBanner title={`Closed as ${ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}`} />
@@ -509,32 +528,34 @@ export function ticketInspectorPanel({
           // The reader keeps segmented names and lets Kerf switch them to icon-only below 832px.
           iconOnlyAt={presentation === 'reader' ? 'wide' : undefined}
         >
-          {tabs.map((tab) => (
-            <TabBarItem
-              id={tab.id}
-              name={tab.label}
-              selected={activeTab === tab.id}
-              closable={false}
-              selectAction="set-inspector-tab"
-              // Sidebar and rail inspectors are too narrow for names; icon-only keeps `name` accessible.
-              presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
-              size="compact"
-              rootAttributes={{ 'data-inspector-tab': tab.id }}
-              leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
-              trailing={
-                tab.id === 'attachments' && attachments?.length ? (
-                  <span class="ticket-inspector__tab-count">
-                    {/* A generic span cannot carry an accessible name, so the badge is decorative and a
+          {allTabs
+            .filter((tab) => inspectorTabShown(tab.id))
+            .map((tab) => (
+              <TabBarItem
+                id={tab.id}
+                name={tab.label}
+                selected={activeTab === tab.id}
+                closable={false}
+                selectAction="set-inspector-tab"
+                // Sidebar and rail inspectors are too narrow for names; icon-only keeps `name` accessible.
+                presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
+                size="compact"
+                rootAttributes={{ 'data-inspector-tab': tab.id }}
+                leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
+                trailing={
+                  tab.id === 'attachments' && attachments?.length ? (
+                    <span class="ticket-inspector__tab-count">
+                      {/* A generic span cannot carry an accessible name, so the badge is decorative and a
                         visually hidden label speaks the count (HS2-MMHS28). */}
-                    <Badge size="compact" ariaHidden>
-                      {attachments.length}
-                    </Badge>
-                    <span class="wa-visually-hidden">{attachments.length} attachments</span>
-                  </span>
-                ) : undefined
-              }
-            />
-          ))}
+                      <Badge size="compact" ariaHidden>
+                        {attachments.length}
+                      </Badge>
+                      <span class="wa-visually-hidden">{attachments.length} attachments</span>
+                    </span>
+                  ) : undefined
+                }
+              />
+            ))}
         </TabBar>
       </div>
     </div>
@@ -768,18 +789,20 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
             allocation="fill"
             presentation="inspector"
           >
-            {tabs.map((tab) => (
-              <TabBarItem
-                id={tab.id}
-                name={tab.label}
-                selected={tab.id === 'info'}
-                closable={false}
-                placeholder
-                presentation="icon-only"
-                size="compact"
-                leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
-              />
-            ))}
+            {allTabs
+              .filter((tab) => inspectorTabShown(tab.id))
+              .map((tab) => (
+                <TabBarItem
+                  id={tab.id}
+                  name={tab.label}
+                  selected={tab.id === 'info'}
+                  closable={false}
+                  placeholder
+                  presentation="icon-only"
+                  size="compact"
+                  leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
+                />
+              ))}
           </TabBar>
         </div>
       </div>

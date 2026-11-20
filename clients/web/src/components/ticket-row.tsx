@@ -9,6 +9,7 @@ import { Bot, CircleAlert, Cloud, Goal, Star } from 'lucide';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
+import { featureOn } from '../feature-areas';
 import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { ticketDisplayNumber } from '../ticket-display-number';
@@ -381,7 +382,7 @@ export function TicketRow(raw: TicketRowProps) {
                 </span>
               ))}
             {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
-            {confidence !== undefined && <ConfidenceBadge value={confidence} />}
+            {confidence !== undefined && featureOn('confidence') && <ConfidenceBadge value={confidence} />}
             {props.orchestration && <OrchestrationLine line={props.orchestration} />}
             {props.tags.length > 0 ? (
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>

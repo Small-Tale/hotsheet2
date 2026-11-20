@@ -1,6 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import type { Api, Capabilities, TicketRow as WireTicketRow } from '../api';
+import { featureOn } from '../feature-areas';
 import type { Project } from '../interactions/types';
 import type { CheckoutGroupSummary } from '../server-response-parsers';
 import { type BulkTicketAction, ticketGroupDisabledReason } from '../ticket-bulk-operations';
@@ -195,7 +196,9 @@ export function createTicketGroupsController(dependencies: TicketGroupsControlle
     if (current) toggleTicketGroupCollapsed(current.id, view(), group);
   }
   /** Rows a person can reach: members of a collapsed group are hidden (HS2-WZ3JGZ). */
-  const navigable = (rows: readonly WireTicketRow[]) => withoutCollapsedGroupMembers(rows, isCollapsed);
+  const navigable = (rows: readonly WireTicketRow[]) =>
+    // With Ticket groups and saved views off nothing is grouped, so nothing is collapsed (HS2-3GJZGG).
+    withoutCollapsedGroupMembers(rows, (group) => featureOn('ticket-groups') && isCollapsed(group));
   const disabledReason = (slugs: readonly string[]) => ticketGroupDisabledReason(rowsFor(slugs), capabilitiesFor);
 
   /**

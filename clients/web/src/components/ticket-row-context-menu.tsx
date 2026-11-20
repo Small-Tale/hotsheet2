@@ -184,6 +184,8 @@ export interface TicketGroupMenuModel {
   disabledReason?: string;
   /** An Automatic request is already running, so another one waits (HS2-4C32A0). */
   automaticBusy?: boolean;
+  /** Offer the Automatic choice; false while the Automatic ticket grouping feature is off (HS2-3GJZGG). */
+  automatic?: boolean;
 }
 
 export const ADD_TO_GROUP_CONTEXT_ACTION = { label: 'Add to Group', icon: Group, iconName: 'group' } as const;
@@ -219,13 +221,21 @@ function groupSubmenu(model: TicketGroupMenuModel): PopupMenuItem {
         icon: <LucideIcon size="s" icon={Plus} name="plus" color={uiColor('neutral-on-quiet')} />,
         attributes: { 'data-context-group': NEW_TICKET_GROUP_CHOICE, 'data-context-group-new': 'true' },
       },
-      {
-        label: 'Automatic',
-        disabled: model.automaticBusy === true,
-        disabledReason: model.automaticBusy === true ? 'The AI is already choosing a group.' : undefined,
-        icon: <LucideIcon size="s" icon={Sparkles} name="sparkles" color={uiColor('neutral-on-quiet')} />,
-        attributes: { 'data-context-group': AUTOMATIC_TICKET_GROUP_CHOICE, 'data-context-group-automatic': 'true' },
-      },
+      ...(model.automatic === false
+        ? []
+        : [
+            {
+              label: 'Automatic',
+              disabled: model.automaticBusy === true,
+              disabledReason: model.automaticBusy === true ? 'The AI is already choosing a group.' : undefined,
+              icon: <LucideIcon size="s" icon={Sparkles} name="sparkles" color={uiColor('neutral-on-quiet')} />,
+              attributes: {
+                'data-context-group': AUTOMATIC_TICKET_GROUP_CHOICE,
+                'data-context-group-automatic': 'true',
+                'data-feature': 'auto-grouping',
+              },
+            } satisfies PopupMenuItem,
+          ]),
       ...(model.groups.length ? [{ kind: 'divider' } as const] : []),
       ...model.groups.map((group): PopupMenuItem => ({
         label: group.label,

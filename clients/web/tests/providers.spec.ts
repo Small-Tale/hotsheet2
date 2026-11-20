@@ -18,6 +18,7 @@ import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject, projectTab, ticketListLoaded } from './open-mocked-project';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { holdReaderReturnFocus } from './reader-return-focus-delivery';
@@ -3770,6 +3771,7 @@ async function mockProject(
     }
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   return patches;
 }
 
@@ -8288,6 +8290,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
     terminals.push(info);
     return route.fulfill({ json: info });
   });
+  await routeAllFeaturesOn(page);
   await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto('/');
   await openMockedProject(page);
@@ -13745,6 +13748,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
         : rows,
     });
   });
+  await routeAllFeaturesOn(page);
   const polls: import('@playwright/test').Route[] = [];
   await page.route('**/ws/poll*', (route) => {
     if (new URL(route.request().url()).searchParams.get('since') === null)
@@ -24771,6 +24775,7 @@ for (const width of [390, 1280] as const)
       if (path.endsWith('/drive/connections') && request.method() === 'POST') driveCreates.push(request.postDataJSON());
       return route.fallback();
     });
+    await routeAllFeaturesOn(page);
     await page.goto('/');
     await openMockedProject(page);
     const sidebar = page.locator('#app-left-rail'),
@@ -24825,6 +24830,7 @@ test('omits the removed terminal message action across viewport transitions (HS2
     }
     return route.fallback();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -27042,6 +27048,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
     }
     return route.fallback();
   });
+  await routeAllFeaturesOn(page);
   await page.goto('/');
   const portableVideo = await page.evaluate(async () => {
     const canvas = document.createElement('canvas');
@@ -35635,6 +35642,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     }
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.setViewportSize({ width: 1400, height: 820 });
   await page.goto('/');
   await openMockedProject(page);
@@ -36121,6 +36129,7 @@ test('preserves list and every board-column scroll position across ticket mutati
     }
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
   await page.setViewportSize({ width: 1400, height: 760 });
   await page.goto('/');
   await openMockedProject(page);

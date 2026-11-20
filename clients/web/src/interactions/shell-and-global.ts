@@ -146,6 +146,11 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly magnifiedTerminalKey: Signal<string | undefined>;
   readonly completePointerDetailsFinish: () => void;
   readonly schedulePointerDetailsFinish: () => void;
+  /** App Settings › Features (HS2-3GJZGG): a checkbox saves its feature at once; Restore Defaults clears all. */
+  readonly features?: {
+    setFeature: (id: string, on: boolean) => void;
+    restoreDefaults: () => void;
+  };
   /** Standby (HS2-EQVZTZ): forced entry from the moon button, exit by click or tap, and its settings. */
   readonly standby?: {
     enter: () => void;
@@ -228,6 +233,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     schedulePointerDetailsFinish,
     standby,
     minimizedReaderControls,
+    features,
   } = dependencies;
   // Every right-rail surface shares the Workbench's standard toggle, in the open rail's toolbar or
   // relocated to the workspace toolbar while the rail is collapsed (HS2-QQW6CT).
@@ -255,6 +261,18 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(
     delegate(document.body, 'change', SHELL_AND_GLOBAL_ACTIONS.saveStandbySettings.selector, (_event, target) => {
       standby?.saveSettings(target as HTMLElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', SHELL_AND_GLOBAL_ACTIONS.setFeature.selector, (_event, target) => {
+      // Each checkbox submits its feature id as its value.
+      const input = target as HTMLInputElement;
+      if (input.value) features?.setFeature(input.value, input.checked);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.restoreFeatureDefaults.selector, () => {
+      features?.restoreDefaults();
     }),
   );
   lifetime.add(

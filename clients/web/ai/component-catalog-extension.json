@@ -916,6 +916,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "feature-settings",
+      "name": "FeatureSettings",
+      "kind": "component",
+      "purpose": "App Settings › Features (HS2-3GJZGG): one checkbox per non-core feature area, saved machine-wide at once, with Restore Defaults.",
+      "useWhen": [
+        "Hot Sheet needs the machine-wide feature-area choices."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific FeatureSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/feature-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "fixed-aspect-terminal-card",
       "name": "FixedAspectTerminalCard",
       "kind": "component",

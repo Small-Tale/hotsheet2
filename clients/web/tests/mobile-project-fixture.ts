@@ -1,3 +1,4 @@
+import { allFeaturesOn } from '../src/feature-areas';
 import { appRequests } from './app-requests';
 /**
  * A mocked single-project phone/desktop app fixture shared by the mobile layout and touch field
@@ -191,6 +192,8 @@ export async function openDemoProject(
     if (path.endsWith('/live-state') && populated.liveState) return route.fulfill({ json: populated.liveState() });
     if (path.startsWith('/__hotsheet/remote-auth/owner') && populated.remoteAuthOwner)
       return populated.remoteAuthOwner(route);
+    // HS2-3GJZGG: these specs exercise the features themselves, so every feature area is on.
+    if (path.endsWith('/feature-settings')) return route.fulfill({ json: allFeaturesOn() });
     if (path.endsWith('/standby-settings') && populated.standbySettings)
       return route.fulfill({
         json:

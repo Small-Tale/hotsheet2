@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject } from './open-mocked-project';
 import { ticketsJson } from './ticket-page-fixture';
 
@@ -134,6 +135,7 @@ async function installFixture(page: import('@playwright/test').Page) {
       });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
 }
 
 test('a project restores only its own AI chats from the machine-wide connection list', async ({ page }) => {

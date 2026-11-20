@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 
 // HS2-WGTQ6X: switching back to a project keeps its drawer terminal alive — the same emulator
 // and socket, painted on the first frame — instead of rebuilding it and replaying scrollback.
@@ -156,6 +157,7 @@ async function installWorkspace(page: Page, movedShell = false) {
     if (request.method() === 'GET') return route.fulfill({ json: [] });
     return route.fulfill({ status: 204 });
   });
+  await routeAllFeaturesOn(page);
 }
 
 const tab = (page: Page, id: string) =>

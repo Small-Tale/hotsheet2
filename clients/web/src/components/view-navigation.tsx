@@ -42,6 +42,8 @@ export interface ViewNavigationProps {
   selectedId: string;
   /** The view row a dragged ticket is over (HS2-G8EK08), rendered so a re-render mid-drag keeps it. */
   dropTargetId?: string;
+  /** Offer Add view; false while the Ticket groups and saved views feature is off (HS2-3GJZGG). */
+  addView?: boolean;
 }
 export interface SavedViewContextMenuState {
   id: string;
@@ -58,16 +60,20 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
   errors: [FileWarning, 'file-warning'],
   custom: [Search, 'search'],
 };
-export function ViewNavigation({ items, selectedId, dropTargetId }: ViewNavigationProps) {
+export function ViewNavigation({ items, selectedId, dropTargetId, addView = true }: ViewNavigationProps) {
   return (
     <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket Views">
       <List gap="2xs">
-        <ListHeader
-          label="Views"
-          action="add-view"
-          actionLabel="Add view"
-          actionIcon={<LucideIcon icon={Plus} name="plus" />}
-        />
+        {addView ? (
+          <ListHeader
+            label="Views"
+            action="add-view"
+            actionLabel="Add view"
+            actionIcon={<LucideIcon icon={Plus} name="plus" />}
+          />
+        ) : (
+          <ListHeader label="Views" />
+        )}
         <List gap="none" className="view-navigation__list">
           {items.map((item) => {
             const [icon, name] = icons[item.icon],

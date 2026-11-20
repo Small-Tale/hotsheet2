@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { KEYBOARD_SHORTCUTS, shortcutDef } from '../src/keyboard-shortcuts';
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 
 // End-to-end coverage for the view/panel and tab-cycling keyboard shortcuts (HS2-9SHYWD). `ControlOrMeta`
 // maps to Cmd on macOS and Ctrl elsewhere — exactly the app's `mod` modifier — so the same presses
@@ -130,6 +131,7 @@ async function installFixture(page: import('@playwright/test').Page) {
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  await routeAllFeaturesOn(page);
 }
 
 test('drives views, panels, tab cycling, and the composer from the keyboard (HS2-9SHYWD)', async ({ page }) => {

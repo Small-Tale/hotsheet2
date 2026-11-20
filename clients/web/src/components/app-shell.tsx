@@ -12,6 +12,7 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
+import { featureOn } from '../feature-areas';
 import { SHELL_AND_GLOBAL_ACTIONS } from '../interaction-attrs/shell-and-global';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { STANDBY_ICON } from '../live-state-icons';
@@ -167,16 +168,19 @@ export function AppShell({
   // A phone's one-row workspace toolbar has no room to spare (HS2-RDFY4A, HS2-C5Y899), so there the
   // announcer, like Standby, stays in the overlay rail. Switching relocation with search state instead
   // rebuilds the toolbar and drops keyboard focus (HS2-GRAQ2K); Kerf gap KF-ZX9Q0X.
-  const announcerControl = announcerTrigger && (
+  // The Announcer and Standby are optional feature areas (HS2-3GJZGG).
+  const announcerOn = featureOn('announcer');
+  const announcerControl = announcerOn && announcerTrigger && (
     <ToolbarControlGroup appearance="borderless" single label="Announcer" relocateOnCollapse={!mobile}>
       {announcerTrigger}
     </ToolbarControlGroup>
   );
-  const standbyButton = standbyControl && (
+  const standbyButton = standbyControl && featureOn('standby') && (
     <ToolbarControlGroup appearance="borderless" single label="Standby" relocateOnCollapse={!mobile}>
       <button
         type="button"
         {...SHELL_AND_GLOBAL_ACTIONS.enterStandby.attrs}
+        data-feature="standby"
         aria-label="Enter Standby"
         title="Enter standby"
       >
@@ -200,7 +204,7 @@ export function AppShell({
               : sidebarPanel.toolbar,
           // The announcer docks below the rail's own footer (the drive row), under its own separator.
           footer:
-            announcer?.docked && sidebarVisible ? (
+            announcerOn && announcer?.docked && sidebarVisible ? (
               <>
                 {sidebarPanel.footer}
                 {announcer.docked}
@@ -404,9 +408,9 @@ export function AppShell({
           </main>
         }
       />
-      {announcer?.corner && !(leftRail && sidebarVisible) && announcer.corner}
+      {announcerOn && announcer?.corner && !(leftRail && sidebarVisible) && announcer.corner}
       {/* Detached, the announcer floats in the top layer whatever the rails show (HS2-51X25Z). */}
-      {announcer?.floating}
+      {announcerOn && announcer?.floating}
       {/* One keyed slot at every width: a top-layer popup here keeps its node, and so its presentation,
           when the layout crosses between phone and desktop or the corner announcer above it toggles
           (HS2-7VRFX0). Moving a node, even within the DOM, closes an open popover. */}

@@ -1,8 +1,17 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { ProjectTabBar } from './project-tab-bar';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
   it('renders a drag target from tab state so a later render keeps it (HS2-6KNWYT)', () => {

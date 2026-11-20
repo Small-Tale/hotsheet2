@@ -15,6 +15,7 @@ import { AwayDigestDialog } from '../components/away-digest-dialog';
 import { StandbyScreen } from '../components/standby-screen';
 import { STANDBY_SETTING_FIELDS } from '../components/standby-settings';
 import { withControlledOpen } from '../controlled-open';
+import { featureOn } from '../feature-areas';
 import type { HostHealthSnapshot } from '../host-health';
 import type { LiveStateStore } from '../live-state';
 import {
@@ -122,12 +123,13 @@ export function createStandbyController(dependencies: StandbyControllerDependenc
     generation = 0;
 
   const idle = createStandbyIdleTimer({
+    // Idle entry belongs to the Standby feature area (HS2-3GJZGG): off, it never arms or enters.
     idleMs: () => {
       const effective = settings.value?.effective;
-      return effective?.enabled ? effective.idle_minutes * 60_000 : undefined;
+      return effective?.enabled && featureOn('standby') ? effective.idle_minutes * 60_000 : undefined;
     },
     onIdle: () => {
-      enter();
+      if (featureOn('standby')) enter();
     },
     now,
   });

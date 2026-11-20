@@ -4,14 +4,23 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, Plus } from 'lucide';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { CommandNavigation, isCommandNavigationIcon } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { ProjectSidebar } from './project-sidebar';
 import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
 import { SavedViewContextMenu, ViewNavigation } from './view-navigation';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('ProjectSidebar component slice', () => {
   it('uses one stable menu-item grid for icon, label, trailing content, and selection', () => {

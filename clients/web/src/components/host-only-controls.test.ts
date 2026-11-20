@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CodeReview, CorruptTicket } from '../api';
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { hostOnlyActionMessage, hostOnlyDisabledReason } from '../host-only-actions';
 import { AIConversation } from './ai-conversation';
 import { AttachmentContextMenu } from './attachment-context-menu';
@@ -11,6 +12,14 @@ import { ChangeEvidenceDialog, RepositoryStatusPopover } from './repository-stat
 import { TerminalDrawer } from './terminal-drawer';
 import { TicketCodeReview } from './ticket-code-review';
 import { TicketSourceSetupDialog } from './ticket-source-setup-dialog';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 /** HS2-TYS5SS: host-only controls render disabled, with the reason, before a remote user clicks. */
 const escape = (text: string) => text.replaceAll("'", '&#39;');

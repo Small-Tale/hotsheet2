@@ -2,6 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import type { Attachment } from '../src/api';
 import { appRequests } from './app-requests';
+import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject } from './open-mocked-project';
 import { attachmentRevealLabel } from './platform-labels';
 import { ticketsJson } from './ticket-page-fixture';
@@ -243,6 +244,7 @@ async function mockLayeredProjects(
     if (!path.startsWith('/__hotsheet/')) return route.continue();
     return route.fulfill({ status: 404, json: { error: `Unhandled ${request.method()} ${path}` } });
   });
+  await routeAllFeaturesOn(page);
 }
 
 for (const surface of ['workspace', 'linked'] as const)

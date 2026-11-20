@@ -2,11 +2,20 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from './ai-conversation';
 import type { TerminalDashboardSession } from './terminal-dashboard';
 import { aiShellMenuItem, TerminalDrawer } from './terminal-drawer';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 const sessions = [
   {

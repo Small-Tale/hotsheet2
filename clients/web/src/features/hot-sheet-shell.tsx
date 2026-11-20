@@ -84,6 +84,7 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { featureOn } from '../feature-areas';
 import { type Project } from '../interactions/types';
 import type { MigrationJob } from '../migration-progress';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
@@ -637,7 +638,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           <WorkspaceControls
             mode={viewMode.value}
             guidanceSearch={viewMode.value === 'settings' && settingsCategory() === 'guidance'}
-            guidanceRecommendations={viewMode.value === 'settings' && settingsCategory() === 'guidance'}
+            guidanceRecommendations={
+              viewMode.value === 'settings' && settingsCategory() === 'guidance' && featureOn('ai-recommendations')
+            }
             searchOpen={
               viewMode.value === 'settings' && settingsCategory() === 'guidance'
                 ? guidanceSearchOpen.value

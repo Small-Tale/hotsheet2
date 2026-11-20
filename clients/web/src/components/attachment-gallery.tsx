@@ -41,6 +41,7 @@ import {
 import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
 import type { AnnotationArrowHead, Attachment, MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
+import { featureOn } from '../feature-areas';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
@@ -613,14 +614,18 @@ export function AttachmentGallery({
                 />
               </ToolbarControlGroup>
               <ToolbarControlGroup label="Media Actions" tone="dark" selectedChrome="filled" selectedTone="brand">
-                <GalleryButton
-                  action="toggle-gallery-markup"
-                  label={markup ? 'Finish markup' : 'Annotate media'}
-                  icon={Pencil}
-                  disabled={!annotationEnabled || saveState === 'saving'}
-                  pressed={markup}
-                  count={annotations.length}
-                />
+                {/* Drawing and commenting belong to the Attachment annotations feature area (HS2-3GJZGG);
+                    a markup session already open can still be finished. */}
+                {(markup || featureOn('annotations')) && (
+                  <GalleryButton
+                    action="toggle-gallery-markup"
+                    label={markup ? 'Finish markup' : 'Annotate media'}
+                    icon={Pencil}
+                    disabled={!annotationEnabled || saveState === 'saving'}
+                    pressed={markup}
+                    count={annotations.length}
+                  />
+                )}
                 <GalleryButton
                   action="open-gallery-attachment-menu"
                   label={`More ${noun} actions`}

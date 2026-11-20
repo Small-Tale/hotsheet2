@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketInspectorSkeleton } from './ticket-inspector';
 import { TicketNotes } from './ticket-notes';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('TicketInspectorSkeleton', () => {
   it('renders the real inspector chrome in a busy, value-free placeholder state', () => {

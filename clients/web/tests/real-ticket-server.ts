@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { assertFixtureCli, assertFixtureServer } from '../scripts/test-fixture-capabilities.mjs';
+import { FEATURE_AREAS } from '../src/feature-areas';
 
 const execute = promisify(execFile);
 const fixtureCleanup = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
@@ -66,6 +67,15 @@ export interface RealTicketFixtureContext {
   cli: string;
 }
 
+/** Turn every feature area on in an isolated home's machine settings (HS2-3GJZGG). */
+async function enableAllFeatures(home: string): Promise<void> {
+  const path = resolve(home, 'settings.json');
+  await mkdir(home, { recursive: true });
+  const current = existsSync(path) ? (JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>) : {};
+  for (const area of FEATURE_AREAS) current[`features.${area.id}`] = true;
+  await writeFile(path, `${JSON.stringify(current, null, 2)}\n`);
+}
+
 /** Real ticket storage, index, and HTTP mutations, isolated from the developer's registry. */
 export async function realTicketServer(
   options: {
@@ -82,6 +92,11 @@ export async function realTicketServer(
      * provider's API root (HS2-8KV14Y). It cannot replace the isolated home.
      */
     env?: NodeJS.ProcessEnv;
+    /**
+     * HS2-3GJZGG: the fixture turns every feature area on, because most specs exercise a feature
+     * itself. `defaults` keeps the shipped defaults (experimental areas off).
+     */
+    features?: 'all' | 'defaults';
   } = {},
 ) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
@@ -120,6 +135,7 @@ export async function realTicketServer(
       env,
     });
     await options.seed?.({ store, root, env, cli });
+    if (options.features !== 'defaults') await enableAllFeatures(resolve(directory, 'home'));
   } catch (error) {
     await rm(directory, fixtureCleanup);
     throw error;

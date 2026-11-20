@@ -41,6 +41,7 @@ import {
   type PendingDrawerTab,
   visiblePendingDrawerTabs,
 } from '../drawer-tab-order';
+import { featureOn } from '../feature-areas';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
@@ -465,23 +466,30 @@ export function TerminalDrawer({
                         attributes: { 'data-item-id': 'default-shell' },
                       },
                       aiShellMenuItem(aiProviders, defaultAiProvider),
-                      {
-                        label: 'AI Chat',
-                        action: 'create-terminal-drawer-item',
-                        icon: <LucideIcon icon={MessageSquare} name="message-square" />,
-                        attributes: { 'data-item-id': 'ai-chat' },
-                      },
-                      {
-                        label: 'Saved Conversation…',
-                        action: 'open-saved-conversation',
-                        ...(hostActionsAvailable
-                          ? {}
-                          : {
-                              disabled: true,
-                              disabledReason: hostOnlyDisabledReason('conversation-open', false),
-                            }),
-                        icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
-                      },
+                      // New chats belong to the AI chat feature area; chats already open keep their tabs
+                      // (HS2-3GJZGG).
+                      ...(featureOn('ai-chat')
+                        ? [
+                            {
+                              label: 'AI Chat',
+                              action: 'create-terminal-drawer-item',
+                              icon: <LucideIcon icon={MessageSquare} name="message-square" />,
+                              attributes: { 'data-item-id': 'ai-chat', 'data-feature': 'ai-chat' },
+                            },
+                            {
+                              label: 'Saved Conversation…',
+                              action: 'open-saved-conversation',
+                              ...(hostActionsAvailable
+                                ? {}
+                                : {
+                                    disabled: true,
+                                    disabledReason: hostOnlyDisabledReason('conversation-open', false),
+                                  }),
+                              icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
+                              attributes: { 'data-feature': 'ai-chat' },
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 </ToolbarControlGroup>

@@ -40,6 +40,7 @@ import { TERMINAL_VISIBILITY_SCROLL_TARGET } from '../components/terminal-visibi
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
+import { allFeaturesOn, featureSettings } from '../feature-areas';
 import { closedPopupMenuRoot, isPopupMenuOpen } from '../popup-menu-state';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { wireTicketRailToolbarVisibility, wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
@@ -63,6 +64,10 @@ import {
 import { DEMO_ACTIONS } from './demo-actions';
 import { listen } from './demo-module';
 import { demoEntry, wireDemoModules } from './registry';
+
+// The catalog reviews every production component, so every feature area is on here (HS2-3GJZGG); the
+// Features demo shows the defaults and the quiet workspace.
+featureSettings.value = allFeaturesOn();
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 // Every delegated demo listener on `root` registers its disposer here, so the catalog's wiring has one

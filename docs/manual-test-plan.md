@@ -633,6 +633,14 @@ scrolling inside a column is not hijacked by the horizontal snap, that tapping a
 opens the inspector overlay, and that rotating the device re-snaps to a column. Playwright
 covers wheel/trackpad snapping in Chromium; real touch momentum is manual.
 
+### Feature areas on a second device (HS2-3GJZGG)
+
+With a phone paired to this host, open App Settings › Features on the desktop and turn Drive with
+AI on. Within a few seconds, and without a reload, the phone's project sidebar shows the Drive
+button too. Turn it off again from a terminal with `hotsheet-cli settings set features.drive off`;
+both clients drop the button. Playwright covers one client and the headless path against a real
+server; two real devices on one host are manual.
+
 ### Standby on a real phone or tablet (HS2-EQVZTZ)
 
 On a **physical phone and tablet** (iOS Safari, the installed PWA, and Android Chrome), open a

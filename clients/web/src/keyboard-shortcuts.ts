@@ -11,6 +11,7 @@
  * gallery, control activation, dismissal) — listed for reference but not rebindable, since
  * rebinding ARIA navigation would break screen-reader and platform expectations.
  */
+import { type FeatureId, featureOn } from './feature-areas';
 
 export interface ShortcutChord {
   /** Normalized key: a lowercase character (`k`), or a named key exactly as `KeyboardEvent.key` (`ArrowUp`, `Enter`, `Escape`). */
@@ -32,6 +33,11 @@ export interface ShortcutDef {
   group: string;
   defaultChord: ShortcutChord;
   editable: boolean;
+  /**
+   * The feature area this shortcut belongs to (HS2-3GJZGG). While that feature is off the shortcut is
+   * ignored, as if it were unbound, and the Keyboard settings page does not list it.
+   */
+  feature?: FeatureId;
 }
 
 export const KEYBOARD_SHORTCUT_STORAGE_KEY = 'hotsheet.keyboard-shortcuts';
@@ -151,6 +157,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
     group: 'Views & panels',
     defaultChord: { key: 'g', mod: true, shift: true },
     editable: true,
+    feature: 'workspace-grid',
   },
   {
     id: 'view-all-stats',
@@ -159,6 +166,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
     group: 'Views & panels',
     defaultChord: { key: 'd', mod: true, shift: true },
     editable: true,
+    feature: 'cross-project-stats',
   },
   // Ticket clipboard & select-all — app-level chords, rebindable (resolved via matchesShortcut).
   {
@@ -498,6 +506,8 @@ export function matchesShortcut(
   overrides: Record<string, ShortcutChord>,
   apple = isAppleShortcutPlatform(),
 ): boolean {
+  const feature = shortcutDef(id)?.feature;
+  if (feature !== undefined && !featureOn(feature)) return false;
   return matchesChord(event, resolveChord(id, overrides), apple);
 }
 

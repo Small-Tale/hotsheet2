@@ -41,6 +41,7 @@ import {
 import { draftFiles } from '../draft-file-recovery';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { finishDraftSubmission } from '../draft-submission-state';
+import { featureOn } from '../feature-areas';
 import {
   DETAILS_FEEDBACK_ID,
   isStaleDescriptionFeedbackDismissal,
@@ -2043,8 +2044,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   /** Visible tickets a person can reach: a collapsed group hides its members (HS2-WZ3JGZ). */
   function navigableTickets() {
     const current = project();
+    // With Ticket groups and saved views off nothing is grouped, so nothing is collapsed (HS2-3GJZGG).
     return withoutCollapsedGroupMembers(visibleTickets(), (group) =>
-      Boolean(current && ticketGroupCollapsed(current.id, selectedView.value, group)),
+      Boolean(current && featureOn('ticket-groups') && ticketGroupCollapsed(current.id, selectedView.value, group)),
     );
   }
   function presentTicket(ticket: FullTicket) {

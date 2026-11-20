@@ -1,9 +1,18 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { allFeaturesOn, featureSettings, resetFeatureSettings } from '../feature-areas';
 import { ConfidenceBadge, confidenceBand, NoteCard, NoteEditor, RespondToFeedbackButton } from './note-card';
+
+// These tests exercise the features themselves, so every feature area is on (HS2-3GJZGG).
+beforeEach(() => {
+  featureSettings.value = allFeaturesOn();
+});
+afterEach(() => {
+  resetFeatureSettings();
+});
 
 describe('NoteCard', () => {
   it('HS2-5E8Y9R exposes a visible repair action on stored cards without hiding the kind', () => {

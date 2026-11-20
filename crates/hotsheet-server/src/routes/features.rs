@@ -1,5 +1,5 @@
 //! `GET`/`PUT /feature-settings` (HS2-3GJZGG): the machine-wide feature-area choices every client
-//! of this host reads to decide which non-core areas to show (`docs/06-clients.md` §6.24). The CLI
+//! of this host reads to decide which non-core areas to show (`docs/06-clients.md` §6.12). The CLI
 //! writes the same keys with `hotsheet-cli settings set features.<id> on|off|default`.
 //!
 //! Every change is pushed as a cursored `feature_settings` change event: a `PUT` emits it directly,

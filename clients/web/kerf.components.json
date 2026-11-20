@@ -10758,6 +10758,69 @@
       }
     },
     {
+      "id": "feature-settings",
+      "name": "FeatureSettings",
+      "kind": "component",
+      "purpose": "App Settings \u203a Features (HS2-3GJZGG): one checkbox per non-core feature area, saved machine-wide at once, with Restore Defaults.",
+      "source": "src/components/feature-settings.tsx",
+      "publicExports": [
+        {
+          "name": "FeatureSettings"
+        }
+      ],
+      "sourceLinks": ["src/components/feature-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/feature-settings.tsx",
+        "composition": "src/components/feature-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the machine-wide feature-area choices."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific FeatureSettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "add-host-disk-dialog",
       "name": "AddHostDiskDialog",
       "kind": "component",

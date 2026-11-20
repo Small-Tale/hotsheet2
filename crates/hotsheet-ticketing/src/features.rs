@@ -1,4 +1,4 @@
-//! Feature areas (HS2-3GJZGG, `docs/06-clients.md` §6.24): the non-core parts of Hot Sheet a
+//! Feature areas (HS2-3GJZGG, `docs/06-clients.md` §6.12): the non-core parts of Hot Sheet a
 //! person can turn on or off in App Settings › Features.
 //!
 //! Each choice is a machine-wide setting (`${HOTSHEET_HOME}/settings.json`, key

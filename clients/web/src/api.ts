@@ -1,5 +1,6 @@
 import { browserRandomId } from './browser-id';
 import { isTicketCollectionRead, responseChangeCursor, ticketReadCursors } from './change-read-gap';
+import { type FeatureSettingsChange, parseFeatureSettings } from './feature-areas';
 import { parseHostCpuFrame } from './host-cpu-feed';
 import { type HostHealthConfiguredThresholds, parseHostHealth, parseHostHealthThresholds } from './host-health';
 import {
@@ -3112,6 +3113,11 @@ export class Api {
   standbySettings = () => this.parsed(parseStandbySettings, '/standby-settings');
   saveStandbySettings = (value: StandbySettingsView['configured']) =>
     this.parsed(parseStandbySettings, '/standby-settings', { method: 'PUT', body: JSON.stringify(value) });
+  /** Machine-wide feature-area choices (HS2-3GJZGG). */
+  featureSettings = () => this.parsed(parseFeatureSettings, '/feature-settings');
+  /** Merge feature choices; `null` clears one to its default. */
+  saveFeatureSettings = (change: FeatureSettingsChange) =>
+    this.parsed(parseFeatureSettings, '/feature-settings', { method: 'PUT', body: JSON.stringify(change) });
   // Notifier plugins (HS2-DPBJJA): machine-wide channels, rules, and delivery log.
   notifiers = () => this.parsed(parseNotifierList, '/notifiers');
   notificationConfig = () => this.parsed(parseNotificationConfig, '/notification-config');

@@ -36,6 +36,7 @@ import {
   Workflow,
 } from 'lucide';
 
+import { viewModeShown } from '../feature-areas';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TICKET_GROUP_SETTINGS_ACTIONS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -287,6 +288,8 @@ function workspaceModeChoices(
       .filter(({ value }) => presentation !== 'rail' || value !== 'settings')
       // Only an orchestration project has an Orchestration view, and the rail has none (HS2-J89JC7).
       .filter(({ value }) => value !== 'orchestration' || (orchestration && presentation !== 'rail'))
+      // A view that belongs to a feature area that is off is not offered (HS2-3GJZGG).
+      .filter(({ value }) => viewModeShown(value))
       .map(({ value, label, icon, iconName }) => {
         const badge = value === 'notifications' ? count : value === 'settings' ? settingsCount : 0,
           live = value === 'workers' ? workers : undefined,
@@ -398,7 +401,9 @@ function WorkspaceOverflowControls({
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
     { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
-    { value: 'workers', label: 'Show Workers View', icon: UsersRound, iconName: 'users-round' },
+    ...(viewModeShown('workers')
+      ? [{ value: 'workers' as const, label: 'Show Workers View', icon: UsersRound, iconName: 'users-round' }]
+      : []),
     ...(orchestration && presentation !== 'rail'
       ? [{ value: 'orchestration' as const, label: 'Show Orchestration View', icon: Workflow, iconName: 'workflow' }]
       : []),
