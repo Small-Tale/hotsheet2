@@ -2645,6 +2645,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `clients/web/tests/ux-demo.spec.ts` covers setting, resetting, and editing demo checkboxes plus wide and phone claim states; `clients/web/tests/providers.spec.ts` covers provider default toggles, permission-rule selection, shell-history and Verified-column settings, and live claim ETA.
 - Manual: Inspect matching wide and phone captures attached to HS2-SKD293.
 
+### Instant-apply settings use Kerf Switch (HS2-1MSTXP)
+
+- Behavior: A settings toggle that saves the moment it changes renders Kerf `Switch` (`role="switch"`): App Settings › General (Show loading activity, Enter standby when idle, each host health disk), Project Settings › General (Group new tickets automatically, Hide Verified column), Project Settings › Terminals (Use my global shell history), and App Settings › Features (HS2-3GJZGG). Options a form submits later, and AI Guidance rule and skill selection applied by Apply Selected Guidance, stay Kerf `Checkbox`.
+- Unit: `clients/web/src/components/instant-apply-switch-policy.test.ts` (policy: each listed toggle is a `Switch`; a `Checkbox` with a change action fails unless its action only stages a choice), `clients/web/src/components/{settings-workspace,host-disk-settings}.test.ts`.
+- End to end: `clients/web/tests/instant-apply-switches.spec.ts` (real server, Chromium and WebKit, light and dark: each toggle is a switch and saves at once, across 1440, 1100, 390 and back to 1440); `clients/web/tests/providers.spec.ts` (project General, Verified column, shell history, host disks), `clients/web/tests/standby.spec.ts` (standby settings), `clients/web/tests/ux-demo.spec.ts` (settings captures) address the controls by role `switch`.
+- Manual: Inspect the Chromium and WebKit, light and dark, 1440 → 1100 → 390 → 1440 captures attached to HS2-1MSTXP.
+
 ### Live terminal history limits (HS2-ZWVDTZ)
 
 - Behavior: A saved terminal history limit updates mounted dedicated, magnified, and static xterm scrollback without remounting; disposed emulators stop receiving changes. Server replay capacity is covered separately by HS2-56G204.

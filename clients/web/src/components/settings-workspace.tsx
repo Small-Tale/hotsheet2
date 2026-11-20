@@ -1,10 +1,10 @@
 import './settings-workspace.css';
 
-import { Checkbox } from '@kerfjs/ui/checkbox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs';
 
@@ -158,7 +158,7 @@ export function SettingsWorkspace({
           )}
           {category === 'terminals' && (
             <List gap="xs">
-              <Checkbox
+              <Switch
                 action={COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.value}
                 checked={terminals.inheritGlobalShellHistory}
                 hint="By default, each terminal keeps private, machine-local command recall for this project and terminal. This opt-out applies only on this machine and affects newly created terminals."
@@ -223,7 +223,7 @@ export function SettingsWorkspace({
               {/* Hidden while the Automatic ticket grouping feature is off; the setting keeps its value
                   (HS2-3GJZGG). */}
               {featureOn('auto-grouping') && (
-                <Checkbox
+                <Switch
                   action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
                   checked={columns.autoGroupNewTickets ?? true}
                   hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
@@ -236,7 +236,7 @@ export function SettingsWorkspace({
                   {columns.autoGroupMessage}
                 </Text>
               ) : null}
-              <Checkbox
+              <Switch
                 action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
                 checked={columns.hideVerified}
                 hint="Verified tickets appear in Completed."
@@ -247,7 +247,7 @@ export function SettingsWorkspace({
           {category === 'general' && (
             <>
               <ThemePicker value={general.theme} />
-              <Checkbox
+              <Switch
                 action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
                 checked={general.showLoadingActivity}
                 hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."

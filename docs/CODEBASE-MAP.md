@@ -355,7 +355,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows; explicit local feedback-dismissal intent and response-append retry routing (HS2-VBFSZJ)
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
-      feature-areas.ts       # Feature areas controller (HS2-3GJZGG): reads /feature-settings once, re-reads on pushed `feature_settings` events and resync, saves a Features checkbox at once
+      feature-areas.ts       # Feature areas controller (HS2-3GJZGG): reads /feature-settings once, re-reads on pushed `feature_settings` events and resync, saves a Features switch at once
       standby.tsx            # Standby controller (HS2-EQVZTZ): settings load/save (re-read on pushed `standby_settings` events and resync, HS2-A5BTTK), idle and forced entry, key/click exit, top-layer display root, change-stream freshness with reconnect grace, Wake Lock on touch devices
       notification-settings.ts # App Settings → Notifications controller: notifiers, channels, rules, deliveries, editors, and every change through the notifier REST admin routes (HS2-DPBJJA)
       terminal-viewports.ts   # Observed viewport identity, one live instance moved between drawer and grid tiles (HS2-EYD24K), progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)

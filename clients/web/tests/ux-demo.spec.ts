@@ -3857,7 +3857,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await shot('guidance-registered', workspace.locator('[data-guidance-rule="hotsheet-visual-qa"]'));
 
     await choose(category, 'terminals');
-    await shot('terminals', workspace.getByRole('checkbox', { name: /global shell history/ }));
+    await shot('terminals', workspace.getByRole('switch', { name: /global shell history/ }));
     await expect(category).toHaveJSProperty('value', 'terminals');
 
     await choose(category, 'permissions');
@@ -3871,9 +3871,9 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await shot('permissions-allow');
 
     await choose(category, 'project-general');
-    await shot('project-general', workspace.getByRole('checkbox', { name: /Hide Verified column/ }));
+    await shot('project-general', workspace.getByRole('switch', { name: /Hide Verified column/ }));
     await choose(category, 'general');
-    await shot('general', workspace.getByRole('checkbox', { name: /Show loading activity/ }));
+    await shot('general', workspace.getByRole('switch', { name: /Show loading activity/ }));
 
     // Reset restores the sources category and Off automation in the render and both live controls.
     await setDemoSettingsOpen(page, true);

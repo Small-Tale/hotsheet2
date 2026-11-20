@@ -1,9 +1,9 @@
 import { Button } from '@kerfjs/ui/button';
-import { Checkbox } from '@kerfjs/ui/checkbox';
 import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 
 import type { AddHostDiskDialogState } from '../host-disk-choices';
@@ -60,7 +60,7 @@ export function HostDiskSettings({ disks, hostName, dialog, message = '' }: Host
             {disks.map((disk) => (
               <FramedListRow rootAttributes={{ 'data-host-disk': disk.id }}>
                 <Row gap="xs" vAlign="middle">
-                  <Checkbox
+                  <Switch
                     action={SHELL_AND_GLOBAL_ACTIONS.toggleHostDisk.value}
                     name={`host-disk:${disk.id}`}
                     checked={disk.store || disk.decision === 'included'}

@@ -2483,11 +2483,11 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
 - `ToolPluginSettings`
 - `NotificationSettings`
 - `StandbySettings` — **demo built** (HS2-EQVZTZ): App Settings → General → Standby. A Kerf
-  `Checkbox` turns idle entry on or off and a `Select` picks the idle threshold (presets plus any
+  `Switch` turns idle entry on or off and a `Select` picks the idle threshold (presets plus any
   value set from the CLI); both save at once to the machine-wide `PUT /standby-settings`.
 - `HostDiskSettings` — **demo built** (`components/host-disk-settings.tsx`, HS2-KBVZV1): App Settings →
-  General → Host health disks. A Kerf `FramedList` row per disk with a Monitor `Checkbox` (the
-  store's disk checked and disabled), its mount, size, and state as the hint, and a Forget `Button`
+  General → Host health disks. A Kerf `FramedList` row per disk with a Monitor `Switch` (the
+  store's disk on and disabled), its mount, size, and state as the hint, and a Forget `Button`
   for a disconnected or added disk. **Add Disk…** opens `AddHostDiskDialog`.
 - `AddHostDiskDialog` — **demo built** (`components/add-host-disk-dialog.tsx`, HS2-KBVZV1): a Kerf
   `DialogSurface` with one path `TextField`; a refused path keeps the dialog and shows the reason in a
@@ -2669,7 +2669,9 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   `QuickTicketLauncher` and `TicketViewAction` use Kerf `Button` in TabBar's `end` zone since
   beta.109 accepted it (`KF-535H1M`, HS2-H2ASWT), removing the two exact `KUI-L301`
   exceptions. HS2-SKD293 adopted Kerf `Checkbox` for boolean settings, provider defaults, and
-  demo controls, and `ProgressRing` for the live-claim ETA. HS2-CQ1TZN adopted Kerf
+  demo controls; HS2-3GJZGG and HS2-1MSTXP then moved every settings toggle that saves the moment
+  it changes to Kerf `Switch` (Features, App and Project General, Terminals), keeping `Checkbox`
+  for options a form submits or a separate Apply installs, and `ProgressRing` for the live-claim ETA. HS2-CQ1TZN adopted Kerf
   `TextField` for the remaining Web Awesome single-line and multiline fields. The native
   ticket draft editors and date/time helper retain their separate contracts.
   The `KUI-L203` exception for Kerf's stale `MessageComposer` composition zone (KF-Z00DKT) was

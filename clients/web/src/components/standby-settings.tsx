@@ -1,8 +1,8 @@
-import { Checkbox } from '@kerfjs/ui/checkbox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { Switch } from '@kerfjs/ui/switch';
 import { Text } from '@kerfjs/ui/text';
 
 import { SHELL_AND_GLOBAL_ACTIONS } from '../interaction-attrs/shell-and-global';
@@ -45,7 +45,7 @@ export function StandbySettings({ settings, message = '' }: StandbySettingsProps
       <List gap="xs">
         <Text variant="h2">Standby</Text>
         <Grid minColumnWidth={rem(15)} gap="m">
-          <Checkbox
+          <Switch
             name={STANDBY_SETTING_FIELDS.enabled}
             checked={effective?.enabled ?? false}
             disabled={loading}

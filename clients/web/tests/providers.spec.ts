@@ -1113,9 +1113,9 @@ test('puts General first in Project Settings and saves Group new tickets automat
     await projectNav.getByRole('button', { name: 'General' }).click();
     if (width === 390) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
     const region = page.getByRole('region', { name: 'General Settings' }),
-      autoGroup = region.getByRole('checkbox', { name: 'Group New Tickets Automatically' });
+      autoGroup = region.getByRole('switch', { name: 'Group New Tickets Automatically' });
     await expect(region).toBeVisible();
-    await expect(region.getByRole('checkbox', { name: 'Hide Verified Column' })).toBeVisible();
+    await expect(region.getByRole('switch', { name: 'Hide Verified Column' })).toBeVisible();
     if (pass === 0) {
       // Checked by default; unchecking saves the shared project setting.
       await expect(autoGroup).toBeChecked();
@@ -1130,7 +1130,7 @@ test('puts General first in Project Settings and saves Group new tickets automat
       await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
       const reloaded = page
         .getByRole('region', { name: 'General Settings' })
-        .getByRole('checkbox', { name: 'Group New Tickets Automatically' });
+        .getByRole('switch', { name: 'Group New Tickets Automatically' });
       await expect(reloaded).not.toBeChecked();
       await reloaded.check();
       await expect.poll(() => writes).toEqual([{ auto_group_new_tickets: false }, { auto_group_new_tickets: true }]);
@@ -26619,7 +26619,7 @@ test('App Settings manages the disks host health monitors, by switch, path, and 
     (snapshot.disks ?? []).map((disk) => disk.id),
   );
   // The store's disk is always monitored; the switch says so and cannot change it.
-  const store = section.getByRole('checkbox', { name: 'Ticket store (store)' });
+  const store = section.getByRole('switch', { name: 'Ticket store (store)' });
   await expect(store).toBeChecked();
   await expect(store).toBeDisabled();
   await expect(section.locator(`[data-host-disk="${archive}"]`)).toContainText('not connected');
@@ -26641,7 +26641,7 @@ test('App Settings manages the disks host health monitors, by switch, path, and 
   await page.emulateMedia({ colorScheme: 'light' });
 
   // A switch saves at once, and the list follows the server's answer.
-  const backupSwitch = section.getByRole('checkbox', { name: 'Backup' });
+  const backupSwitch = section.getByRole('switch', { name: 'Backup' });
   await expect(backupSwitch).toBeChecked();
   await backupSwitch.uncheck();
   await expect.poll(() => requests.at(-1)).toBe(`PUT {"id":"${backup}","monitor":false}`);
@@ -30463,7 +30463,7 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   await openMockedProject(page);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Terminals', exact: true }).click();
-  const option = page.getByRole('checkbox', { name: 'Use my global shell history' });
+  const option = page.getByRole('switch', { name: 'Use my global shell history' });
   await expect(option).not.toBeChecked();
   await expect(page.getByText(/each terminal keeps private/)).toBeVisible();
   await option.check();
@@ -31866,7 +31866,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings View').click();
   await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
-  await page.getByRole('checkbox', { name: 'Hide Verified Column' }).check();
+  await page.getByRole('switch', { name: 'Hide Verified Column' }).check();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column')))
     .toBe('true');
@@ -31877,7 +31877,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings View').click();
   await page.getByRole('navigation', { name: 'Project Settings' }).getByRole('button', { name: 'General' }).click();
-  await page.getByRole('checkbox', { name: 'Hide Verified Column' }).uncheck();
+  await page.getByRole('switch', { name: 'Hide Verified Column' }).uncheck();
   await page.getByLabel('Columns View').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText([
     'Not Started',

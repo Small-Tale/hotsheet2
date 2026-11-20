@@ -5738,7 +5738,7 @@ until it can be delivered. See
   - A shortcut, a dashboard request or a restored view, tab or category for an area that is off is ignored. The client falls back to the project, the List view, the Info tab, the Ticket sources category or the Queue.
   - Its data is kept. Work that is already running continues: open AI chat tabs stay.
   - The CLI and MCP are unaffected.
-- **The server consults one area itself.** With Automatic ticket grouping off, the server spends no AI turn on new tickets. The per-project "Group new tickets automatically" setting keeps its value and its checkbox is hidden.
+- **The server consults one area itself.** With Automatic ticket grouping off, the server spends no AI turn on new tickets. The per-project "Group new tickets automatically" setting keeps its value and its switch is hidden.
 
 ### Registry
 

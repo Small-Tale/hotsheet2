@@ -277,7 +277,7 @@ test.describe('standby (HS2-EQVZTZ)', () => {
       .click(); // HS2-W27N1D: Project Settings has its own General
     const section = page.locator('[data-component="standby-settings"]');
     await expect(section.getByRole('heading', { name: 'Standby' })).toBeVisible();
-    const enabled = section.getByRole('checkbox', { name: 'Enter standby when idle' });
+    const enabled = section.getByRole('switch', { name: 'Enter standby when idle' });
     await expect(enabled).toBeChecked();
     const idle = section.locator('kui-select[name="standby-idle-minutes"]');
     await expect(idle).toHaveJSProperty('value', '15');
