@@ -120,6 +120,8 @@ pub(super) fn runtime(home: &Path, memory: &Arc<Memory>) -> RemoteRuntime {
 }
 
 /// HS2-RCR4A6: the owned `hotsheet-cli` snapshot, as a sibling of the server binary.
+/// Its only caller, `e2e.rs`, is a Unix-only module.
+#[cfg(unix)]
 pub(super) fn cli_binary() -> std::path::PathBuf {
     workspace_bin::path("hotsheet-server")
         .with_file_name(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX))
