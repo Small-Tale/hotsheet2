@@ -120,3 +120,36 @@ fn fake_agent_reports_a_nonzero_exit() {
     );
     assert!(String::from_utf8_lossy(&term.scrollback()).contains("boom"));
 }
+
+/// HS2-YM55P3: a program's own OSC-133 output markers drive busy and idle on every PTY,
+/// Windows' pseudo console included. Busy holds until a typed line lets the program end its
+/// turn.
+#[test]
+fn hs2_ym55p3_output_markers_hold_busy_until_a_typed_line_ends_the_turn() {
+    let mut spec = TermSpec::new(fake_agent());
+    spec.args = vec![
+        "--busy".into(),
+        "--wait-line".into(),
+        "--idle".into(),
+        "--hold-ms".into(),
+        "30000".into(),
+    ];
+    let term = Terminal::spawn(spec).expect("spawn hs-fake-agent");
+    assert!(
+        wait_until(|| term.activity() == Activity::Busy, 5),
+        "OSC-133 command-start output should mark the terminal busy"
+    );
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        term.activity(),
+        Activity::Busy,
+        "busy until a line is typed"
+    );
+    term.write(b"done\r").expect("type a line");
+    assert!(
+        wait_until(|| term.activity() == Activity::Idle, 5),
+        "OSC-133 command-finished output should mark the terminal idle"
+    );
+    assert!(term.is_alive(), "the program is still running, only idle");
+    let _ = term.kill();
+}

@@ -20499,16 +20499,23 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
     let (_d, st) = state();
     let app = app(st);
 
-    // A `cat` terminal registered as a claude connection. `cat` echoes its input, so writing
-    // OSC-133 markers drives the terminal's BusyDetector, which the feed task mirrors into the
-    // connection registry (GET /connections).
+    // A fixture terminal registered as a claude connection. Like an AI tool, the program itself
+    // writes the OSC-133 markers: command start, then, once a line is typed, command finished.
+    // They drive the terminal's BusyDetector, which the feed task mirrors into the connection
+    // registry (GET /connections). HS2-YM55P3: the markers come from the program's output,
+    // not from an echo of typed input. A Unix tty echoes typed bytes back, but Windows' pseudo
+    // console drops an OSC sequence that arrives as input, so an echo-based test never saw
+    // busy there although output markers work.
+    let launch = serde_json::json!({
+        "command": fixture_program::path(),
+        "args": ["--busy", "--wait-line", "--idle", "--hold-ms", "60000"],
+        "connect": "claude",
+        "id": "tc1",
+    })
+    .to_string();
     let resp = app
         .clone()
-        .oneshot(authed(
-            "POST",
-            "/terminals",
-            Some(r#"{"command":"cat","connect":"claude","id":"tc1"}"#),
-        ))
+        .oneshot(authed("POST", "/terminals", Some(&launch)))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -20547,16 +20554,8 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
             .unwrap_or(false)
     };
 
-    // Write OSC-133 C (command output begins → busy). The trailing newline flushes the tty
-    // line so `cat` echoes the raw sequence; the feed task polls every 500ms.
-    app.clone()
-        .oneshot(authed(
-            "POST",
-            "/terminals/tc1/input",
-            Some("{\"data\":\"\\u001b]133;C\\u0007\\n\"}"),
-        ))
-        .await
-        .unwrap();
+    // The program starts with OSC-133 C (command output begins → busy); the feed task polls
+    // every 500ms.
     let mut saw_busy = false;
     for _ in 0..40 {
         if is_busy(app.clone()).await {
@@ -20570,12 +20569,13 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
         "an OSC-133 command-start should mark the connection busy"
     );
 
-    // Write OSC-133 D (command finished → idle) — the feed set_idles the connection.
+    // Typing a line (Enter) lets the program write OSC-133 D (command finished → idle); the
+    // feed set_idles the connection.
     app.clone()
         .oneshot(authed(
             "POST",
             "/terminals/tc1/input",
-            Some("{\"data\":\"\\u001b]133;D\\u0007\\n\"}"),
+            Some(r#"{"data":"done\r"}"#),
         ))
         .await
         .unwrap();

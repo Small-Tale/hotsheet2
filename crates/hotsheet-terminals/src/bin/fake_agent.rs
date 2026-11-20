@@ -26,6 +26,7 @@
 //!   --print-template "t"  # write t without a newline, expanding {env:NAME} and {arg:N} (HS2-6EW369)
 //!   --require-env N v     # exit 1 at once unless environment variable N equals v (HS2-6EW369)
 //!   --run "--exit 3"      # run the whitespace-separated flags of one argument (HS2-6EW369)
+//!   --wait-line           # block until one line (or end of input) arrives on stdin (HS2-YM55P3)
 //!   --                    # end of the script; later arguments are positional ({arg:1}, …)
 //! ```
 //!
@@ -163,6 +164,12 @@ fn main() {
             "--print-template" => {
                 let _ = write!(w, "{}", expand_template(val(i), &positional));
                 i += 1;
+            }
+            "--wait-line" => {
+                // HS2-YM55P3: a test decides when a turn ends by typing a line, on any OS.
+                let _ = w.flush();
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
             }
             "--require-env" => {
                 let expected = args.get(i + 2).map(String::as_str).unwrap_or("");

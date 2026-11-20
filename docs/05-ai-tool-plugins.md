@@ -1338,6 +1338,11 @@ declarative.
   2. **Byte-stream inference** — the PTY manager watches for the tool's animated
      spinner glyph; recent spinner output ⇒ busy even mid-single-tool-call, N
      seconds of silence ⇒ idle. This backstops a dropped Stop hook.
+     OSC 133 command markers (`C` busy, `A`/`D` idle) count only when the program
+     writes them to its output. On Windows, the pseudo console (ConPTY) passes output
+     markers through unchanged, but it drops an OSC sequence that arrives as typed
+     input. Windows has no tty echo that would turn input back into output
+     (HS2-YM55P3, confirmed on Windows 11 ARM64).
      The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is
