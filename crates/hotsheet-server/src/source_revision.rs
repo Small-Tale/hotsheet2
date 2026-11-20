@@ -64,6 +64,13 @@ impl SourceRevisionMonitor {
         self.build_revision.as_deref()
     }
 
+    /// Whether this monitor (or a clone sharing its cache) has hashed its source tree yet.
+    /// Tests use it to pin that a path never pays for the hash (HS2-JP6ENC).
+    #[doc(hidden)]
+    pub fn has_hashed_source(&self) -> bool {
+        lock_or_recover(&self.cache).fingerprint.is_some()
+    }
+
     pub fn status(&self) -> SourceRevisionStatus {
         let (source_revision, source_unavailable_reason) = match self.source_root.as_deref() {
             None => (
