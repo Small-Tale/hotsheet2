@@ -139,6 +139,9 @@ export function sweepAbandonedBridgeHomes({
 }) {
   /** @type {string[]} */
   const released = [];
+  // HS2-41WX3Q: compare resolved paths. A raw string match drops every recorded run directory
+  // when they and `root` differ only in separators (Windows) or normal form.
+  const base = resolve(root);
   let names;
   try {
     names = list(root);
@@ -159,7 +162,7 @@ export function sweepAbandonedBridgeHomes({
     const directories = listed.filter(
       (directory) =>
         typeof directory === 'string' &&
-        dirname(directory) === root &&
+        resolve(dirname(directory)) === base &&
         basename(directory).startsWith(RUN_DIRECTORY_PREFIX),
     );
     if (!directories.includes(home)) directories.push(home);

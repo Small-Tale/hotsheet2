@@ -83,6 +83,36 @@ describe('abandoned Playwright bridge homes (HS2-P69XHN)', () => {
     ]);
   });
 
+  it('keeps recorded run directories when the root is not in normal form (HS2-41WX3Q)', () => {
+    // A Windows `join` rewrites separators, so a raw string match against `root` dropped every
+    // recorded directory there; a trailing separator or `.` segment does the same on any platform.
+    const normal = join('/tmp', 'root');
+    for (const root of [`${normal}/`, '/tmp/./root']) {
+      const released = [];
+      const swept = sweepAbandonedBridgeHomes({
+        root,
+        list: () => ['hotsheet-playwright-home-dead'],
+        read: () =>
+          JSON.stringify({
+            pid: 7,
+            directories: [
+              join(normal, 'hotsheet-playwright-vite-dead'),
+              join(normal, 'nested', 'hotsheet-playwright-vite-y'),
+            ],
+          }),
+        alive: () => false,
+        release: (input) => released.push(input),
+      });
+      expect(swept).toEqual([join(root, 'hotsheet-playwright-home-dead')]);
+      expect(released).toEqual([
+        {
+          home: join(root, 'hotsheet-playwright-home-dead'),
+          directories: [join(normal, 'hotsheet-playwright-vite-dead'), join(root, 'hotsheet-playwright-home-dead')],
+        },
+      ]);
+    }
+  });
+
   it('does nothing when the root cannot be listed', () => {
     expect(
       sweepAbandonedBridgeHomes({
