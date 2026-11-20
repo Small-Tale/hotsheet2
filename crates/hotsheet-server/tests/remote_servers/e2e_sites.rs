@@ -11,7 +11,7 @@
 //! plays an agent (the dispatcher assigning, a worker claiming, committing, pushing,
 //! noting and releasing, the integrator landing commits), it does what the role skills
 //! do, through the hosting server's own routes and the shared remotes. Each machine's
-//! sync loop is played by one `sync_once` of its store clone. Nothing is waited for by
+//! sync loop is played by one `sync_pass` of its store clone. Nothing is waited for by
 //! time: every wait is woken by an event stream or a file change, with a deadline.
 use super::e2e::{ACTIONS, ACTOR, Fleet, Side, TARGET_A, TARGET_B, TOOL_A};
 use super::orchestration::api;
@@ -96,25 +96,36 @@ fn sync_pass(store: &Path) -> hotsheet_ticketing::sync::SyncReport {
     report
 }
 
+/// One machine's sync loop publishing what its clone holds and taking what the shared
+/// remote holds: [`sync_pass`], which must end synced or up to date.
+///
+/// HS2-7FGY44: every pass the test plays goes through here. A bare `sync_once` whose
+/// push lost the race to the home's own pull-and-push (the relay's `freshen`) left the
+/// peer's release only in the peer's clone. A real sync loop pushes it on its next
+/// pass; the test has no next pass, so the home waited on `claim_held` until the
+/// deadline.
+fn sync_published(store: &Path) {
+    let report = sync_pass(store);
+    assert!(
+        matches!(
+            report,
+            hotsheet_ticketing::sync::SyncReport::Synced { .. }
+                | hotsheet_ticketing::sync::SyncReport::UpToDate
+        ),
+        "{}: {report:?}\n{}\n{}\n{}\n{}",
+        store.display(),
+        git(store, &["status", "--short"]),
+        git(store, &["log", "--oneline", "--stat", "-6", "--all"]),
+        std::fs::read_to_string(store.join(".git/hotsheet-sync-health.json")).unwrap_or_default(),
+        git(store, &["diff", "HEAD", "origin/main"]),
+    );
+}
+
 /// One pass of each machine's sync loop, the home's last, so both clones hold every
 /// commit either published.
 fn converge(fleet: &Fleet) {
     for store in [&fleet.a_store, &fleet.b_store, &fleet.a_store] {
-        let report = sync_pass(store);
-        assert!(
-            matches!(
-                report,
-                hotsheet_ticketing::sync::SyncReport::Synced { .. }
-                    | hotsheet_ticketing::sync::SyncReport::UpToDate
-            ),
-            "{}: {report:?}\n{}\n{}\n{}\n{}",
-            store.display(),
-            git(store, &["status", "--short"]),
-            git(store, &["log", "--oneline", "--stat", "-6", "--all"]),
-            std::fs::read_to_string(store.join(".git/hotsheet-sync-health.json"))
-                .unwrap_or_default(),
-            git(store, &["diff", "HEAD", "origin/main"]),
-        );
+        sync_published(store);
     }
 }
 
@@ -593,7 +604,7 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
     // 6. The peer's worker is told by its own host that the home assigned it its ticket.
     received_prompt(&fleet.reports, &w.terminal, "home site assigned you");
     assert_eq!(claim(&fleet, Side::Peer, &windows, &w.worker).await, 200);
-    hotsheet_ticketing::sync::sync_once(&fleet.b_store);
+    sync_published(&fleet.b_store);
     // It works in its own clone, pushes its branch, notes the handoff and only then
     // releases its claim, through its own server.
     let peer = &fleet.b_project;
@@ -615,7 +626,7 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
     .await;
     let released_at = now_ms();
     release(&fleet, Side::Peer, &windows, &w.worker).await;
-    hotsheet_ticketing::sync::sync_once(&fleet.b_store);
+    sync_published(&fleet.b_store);
 
     // 7. The release reaches the controller on the peer's change feed; that run event
     //    wakes the home's loop, whose relay records the handoff with the pushed commit,
@@ -907,7 +918,7 @@ async fn hs2_rcr4a6_a_peer_outage_takes_no_second_claim() {
     assert_eq!(run["state"], "dispatched", "{run}");
     assert_eq!(fleet.sessions().await.len(), 2);
     // The shared store still names one holder, claimed once.
-    hotsheet_ticketing::sync::sync_once(&fleet.a_store);
+    sync_published(&fleet.a_store);
     let read = ticket_in(&fleet.a_store, &free);
     assert_eq!(
         read.claimed_by.as_deref(),
