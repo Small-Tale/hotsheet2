@@ -25,6 +25,14 @@ pub fn is_broken_pipe_print_panic(message: &str) -> bool {
     printing && mentions_broken_pipe(message)
 }
 
+/// Windows reports a closed pipe as `ERROR_NO_DATA` (232, "The pipe is being closed") when
+/// the reader is gone before a write, and as `ERROR_BROKEN_PIPE` (109) otherwise. Neither
+/// message says "Broken pipe" (HS2-14GCGH). It sits above
+/// `mentions_broken_pipe` so that function stays the last item before the panic hook, the
+/// private body `scripts/gate-edge-plan.mjs` (HS2-55MWQ9) locates (HS2-3RTF0G).
+#[cfg(windows)]
+const WINDOWS_CLOSED_PIPE_ERRORS: [u32; 2] = [109, 232];
+
 fn mentions_broken_pipe(message: &str) -> bool {
     if message.contains("Broken pipe") {
         return true;
@@ -44,12 +52,6 @@ fn mentions_broken_pipe(message: &str) -> bool {
         false
     }
 }
-
-/// Windows reports a closed pipe as `ERROR_NO_DATA` (232, "The pipe is being closed") when
-/// the reader is gone before a write, and as `ERROR_BROKEN_PIPE` (109) otherwise. Neither
-/// message says "Broken pipe" (HS2-14GCGH).
-#[cfg(windows)]
-const WINDOWS_CLOSED_PIPE_ERRORS: [u32; 2] = [109, 232];
 
 /// Install a panic hook that turns std's broken-pipe print panic into a quiet exit, delegating
 /// every other panic to the previously installed hook unchanged.
