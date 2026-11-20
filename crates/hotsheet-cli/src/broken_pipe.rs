@@ -5,6 +5,8 @@
 //! pipelines must never show that, so a closed output pipe is treated as a normal, successful
 //! end of output.
 //!
+//! Windows names the same condition with error 232 or 109 instead (HS2-14GCGH).
+//!
 //! Only std's print panic is intercepted. An `io::Error` of kind `BrokenPipe` returned from a
 //! command is left alone, because it may come from a child process or socket rather than our
 //! own stdout, and silencing it there would hide a real failure.
@@ -31,11 +33,23 @@ fn mentions_broken_pipe(message: &str) -> bool {
     {
         message.contains(&format!("(os error {})", libc::EPIPE))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        WINDOWS_CLOSED_PIPE_ERRORS
+            .iter()
+            .any(|code| message.contains(&format!("(os error {code})")))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         false
     }
 }
+
+/// Windows reports a closed pipe as `ERROR_NO_DATA` (232, "The pipe is being closed") when
+/// the reader is gone before a write, and as `ERROR_BROKEN_PIPE` (109) otherwise. Neither
+/// message says "Broken pipe" (HS2-14GCGH).
+#[cfg(windows)]
+const WINDOWS_CLOSED_PIPE_ERRORS: [u32; 2] = [109, 232];
 
 /// Install a panic hook that turns std's broken-pipe print panic into a quiet exit, delegating
 /// every other panic to the previously installed hook unchanged.
@@ -71,6 +85,20 @@ mod tests {
             "failed printing to stdout: localized text (os error {})",
             libc::EPIPE
         )));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hs2_14gcgh_recognizes_windows_closed_pipe_errors() {
+        assert!(is_broken_pipe_print_panic(
+            "failed printing to stdout: The pipe is being closed. (os error 232)"
+        ));
+        assert!(is_broken_pipe_print_panic(
+            "failed printing to stdout: The pipe has been ended. (os error 109)"
+        ));
+        assert!(!is_broken_pipe_print_panic(
+            "failed printing to stdout: Access is denied. (os error 5)"
+        ));
     }
 
     #[test]
