@@ -568,6 +568,8 @@ persistent surface with Expand and Reattach but no Pin or Close while detached;
 surface, hides and reshows it from the toggle, expands and shrinks inside the window,
 reloads into the same place, clamps at 1024 and 390 px and back, and reattaches across a
 reload.
+HS2-F880FN: `announcer.spec.ts` moves the open floating surface's node in place and
+checks that it reopens and still expands, since moving a node closes an open popover.
 HS2-EYW4H8 and HS2-YF8P38 are covered in `announcer-overlay.test.ts` (group order and
 zones, pressed state and Audio icon in both directions, no app CSS on the toolbar's
 buttons) and `announcer.spec.ts` (painted on/off chrome swapping after a toggle and

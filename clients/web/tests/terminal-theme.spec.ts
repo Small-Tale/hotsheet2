@@ -6,6 +6,10 @@ const xtermColors = (page: Page) =>
     .locator('[data-component="terminal-viewport"] .xterm')
     .first()
     .evaluate((xterm) => {
+      // xterm pauses rendering while its terminal is outside the viewport. The demo's interactive terminal
+      // takes focus once its geometry settles and scrolls the catalog preview, so on a slow host the
+      // measured terminal can leave the viewport before its first paint and keep empty rows (HS2-F880FN).
+      xterm.scrollIntoView({ block: 'nearest' });
       // xterm paints the theme foreground on its rows and, for the fixture's inverse nano title bar, swaps
       // the theme pair: that cell's text is the theme background.
       const rows = xterm.querySelector('.xterm-rows')!,

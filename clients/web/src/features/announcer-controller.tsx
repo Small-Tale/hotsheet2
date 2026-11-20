@@ -120,15 +120,21 @@ export function createAnnouncerController(projects: Signal<Project[]>): Announce
       floating.dispose();
       floating = undefined;
     }
-    if (!element || floating) return;
-    const dispose = wirePinnablePopover(element, {
-      placement: loadAnnouncerFloatingPlacement(localStorage),
-      onChange: (change) => {
-        if (change.placement) saveAnnouncerFloatingPlacement(localStorage, change.placement);
-      },
-    });
-    floating = { element, dispose };
-    if (!element.matches(':popover-open')) element.showPopover();
+    if (!element) return;
+    if (!floating) {
+      const dispose = wirePinnablePopover(element, {
+        placement: loadAnnouncerFloatingPlacement(localStorage),
+        onChange: (change) => {
+          if (change.placement) saveAnnouncerFloatingPlacement(localStorage, change.placement);
+        },
+      });
+      floating = { element, dispose };
+    }
+    // The surface is persistent: only app state removes it. Moving its node, even within the DOM, closes
+    // an open popover, and a re-render that reorders the shell's unkeyed slots keeps the same node, so
+    // reopen it after every mutation rather than only when it is first wired (HS2-F880FN).
+    if (element.isConnected && element.hasAttribute('popover') && !element.matches(':popover-open'))
+      element.showPopover();
   };
   const floatingObserver = new MutationObserver(syncFloating);
   floatingObserver.observe(document.body, { childList: true, subtree: true });

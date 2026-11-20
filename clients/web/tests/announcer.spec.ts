@@ -914,6 +914,31 @@ test('HS2-5PSQJQ narrates a new live activity once after a replayable stream eve
     .toEqual(['Changed the synthetic live file']);
 });
 
+// HS2-F880FN: moving an open popover's node, even within the DOM, closes it. A re-render that reorders
+// the shell's slots keeps the floating announcer's node, so the controller reopens it on that mutation.
+test('HS2-F880FN reopens the floating announcer after its node moves', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDemoProject(page);
+  await page.route('**/checkouts/demo-checkout/activity**', (route) => route.fulfill({ json: [] }));
+  const overlay = page.locator('[data-component="announcer-overlay"]');
+  const surface = page.locator('#announcer-floating');
+  await page.locator('[data-announcer-action="open"]').click();
+  await overlay.getByRole('button', { name: 'Pop Out Announcer' }).click();
+  await expect.poll(() => surface.evaluate((node) => node.matches(':popover-open'))).toBe(true);
+  const moved = await surface.evaluate((node) => {
+    const before = node.isConnected;
+    // The same node, removed and inserted at its place, as a reordering render does.
+    node.parentElement!.insertBefore(node, node.nextSibling);
+    return before && node.isConnected;
+  });
+  expect(moved).toBe(true);
+  await expect.poll(() => surface.evaluate((node) => node.matches(':popover-open'))).toBe(true);
+  await expect(surface.getByRole('button', { name: 'Expand Announcer' })).toBeVisible();
+  await surface.getByRole('button', { name: 'Expand Announcer' }).click();
+  await expect(overlay).toHaveAttribute('data-expanded', 'true');
+  await expect(overlay.locator('.announcer__panel')).toBeVisible();
+});
+
 // HS2-51X25Z: attached, the former expand control pops the announcer out into a persistent, movable,
 // resizable Kerf floating surface; detached, it shows Expand and a Reattach control and no Pin or
 // Close. The detached state, position, and size survive reloads on this device.
