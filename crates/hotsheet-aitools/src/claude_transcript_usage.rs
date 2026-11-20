@@ -945,16 +945,39 @@ mod tests {
                 pair[1] - pair[0]
             );
         }
+        // HS2-MGX6CW: assert on the drop's acknowledgment, not on wall time. A read that
+        // started before the drop may still arrive afterwards; of the reads that start after
+        // it, at most two can: one already past its burst check and one whose wake was queued
+        // ahead of the drop.
+        let dropped = std::time::Instant::now();
         drop(watch);
+        // The follower thread owns `on_change` and with it the only sender, so the channel
+        // closes exactly when that thread has ended. The bound only stops a hang.
+        let mut late = 0;
+        loop {
+            match received.recv_timeout(std::time::Duration::from_secs(30)) {
+                Ok(read) if read > dropped => late += 1,
+                Ok(_) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    panic!("the follower kept running after its watch was dropped")
+                }
+            }
+        }
+        assert!(late <= 2, "{late} reads after the drop");
+        // The follower dropped its watcher before `on_change`, so the retry thread already
+        // sees a closed command channel: at most an attempt in flight still runs. The retry
+        // thread owns the start closure and with it the other `attempts` handle, so once that
+        // handle is gone no attempt can start.
         let before = attempts.lock().unwrap().len();
-        // The retry thread sees the drop on its next wait and ends; nothing else wakes.
-        assert!(
-            received
-                .recv_timeout(
-                    hotsheet_jobs::watch::START_RETRY_MAX + std::time::Duration::from_secs(2)
-                )
-                .is_err()
-        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::sync::Arc::strong_count(&attempts) > 1 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the start was still retried after the drop"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         assert!(attempts.lock().unwrap().len() <= before + 1);
     }
 
