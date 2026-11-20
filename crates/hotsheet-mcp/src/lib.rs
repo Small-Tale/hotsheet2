@@ -1842,7 +1842,7 @@ mod core_backend {
                 .map_err(resource_claim_tools::backend_error)
         }
 
-        /// This machine's provider configuration for the store (HS2-1M8E9D), under the
+        /// This machine's one provider configuration (HS2-7QPJ05), under the
         /// home that holds the injected checkout registry.
         fn provider_config(
             &self,
@@ -1882,7 +1882,7 @@ mod core_backend {
                     .request_now(method, path, body)
                     .map_err(orchestration_tools::backend_error);
             }
-            // HS2-1M8E9D: this machine's provider configuration for the store.
+            // HS2-7QPJ05: this machine's one provider configuration.
             hotsheet_ticketing::ProviderConfigRegistry::for_store_in(home, self.store.root())
                 .map_err(|error| {
                     hotsheet_ticketing::orchestration::OrchestrationError::Storage(
@@ -2227,7 +2227,7 @@ mod core_backend {
             if source.is_some_and(|source| source != "git") {
                 return Err(bad_request("source must be git"));
             }
-            // HS2-1M8E9D: this machine's provider configuration for the store.
+            // HS2-7QPJ05: this machine's one provider configuration.
             let registry = self.provider_config().ok();
             hotsheet_ticketing::checkout_page::merged_external_sources(
                 checkout,

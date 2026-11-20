@@ -143,51 +143,44 @@ fn hs2_1m8e9d_one_machines_cleanup_never_removes_another_machines_providers() {
 }
 
 #[test]
-fn hs2_1m8e9d_migration_is_idempotent_and_never_replaces_a_machine_copy() {
+fn hs2_7qpj05_store_root_migration_is_idempotent_and_shared_by_both_clones() {
     let (_dir, store, peer) = remote_with_two_clones();
     legacy_shared_store(&store, &peer, &[connection("github-one")]);
     let home = tempfile::tempdir().unwrap();
-    let key = crate::store_config_key(&store).unwrap();
-    let local = crate::machine_provider_config_path(home.path(), &key);
-    assert_eq!(
-        local,
-        home.path()
-            .join(crate::MACHINE_STORE_CONFIG_DIR)
-            .join(&key)
-            .join(crate::PROVIDER_CONFIG_FILE)
-    );
+    let local = crate::machine_provider_config_path(home.path());
+    assert_eq!(local, home.path().join(crate::PROVIDER_CONFIG_FILE));
 
-    let registry = ProviderConfigRegistry::new(&local);
-    assert_eq!(
-        registry.seed_from_store(&store).unwrap(),
-        ProviderConfigSeed::StoreFile
-    );
-    assert_eq!(
-        std::fs::read(&local).unwrap(),
-        std::fs::read(store.join(LEGACY_PROVIDER_CONFIG_FILE)).unwrap()
-    );
-    // Re-running, and a later change to the legacy file, leave the machine copy alone.
+    let registry = ProviderConfigRegistry::for_store_in(home.path(), &store).unwrap();
+    assert_eq!(registry.path(), local);
+    assert_eq!(ids(&registry), ["github-one"]);
+    let key = crate::store_config_key(&store).unwrap();
+    let ledger = crate::ProviderMigrationLedger::load(home.path()).unwrap();
+    assert_eq!(ledger.stores[&key].source, ProviderConfigSeed::StoreFile);
+    // Re-running, and a later change to the legacy file, leave the registry alone.
     std::fs::write(
         store.join(LEGACY_PROVIDER_CONFIG_FILE),
         "{\"connections\":[]}\n",
     )
     .unwrap();
     for _ in 0..2 {
-        assert_eq!(
-            registry.seed_from_store(&store).unwrap(),
-            ProviderConfigSeed::Existing
-        );
+        let report = crate::migrate_machine_provider_config(
+            home.path(),
+            Some(crate::ProviderMigrationStore {
+                key: &key,
+                root: &store,
+            }),
+        )
+        .unwrap();
+        assert!(report.merged.is_empty());
         let resolved = ProviderConfigRegistry::for_store_in(home.path(), &store).unwrap();
         assert_eq!(resolved.path(), local);
         assert_eq!(ids(&resolved), ["github-one"]);
     }
-    // The other clone of the same store on the same machine shares the copy.
-    assert_eq!(
-        ProviderConfigRegistry::for_store_in(home.path(), &peer)
-            .unwrap()
-            .path(),
-        local
-    );
+    // The other clone of the same store on the same machine shares the registry and is
+    // already merged under the same identity.
+    let other = ProviderConfigRegistry::for_store_in(home.path(), &peer).unwrap();
+    assert_eq!(other.path(), local);
+    assert_eq!(ids(&other), ["github-one"]);
 }
 
 #[test]
@@ -206,31 +199,36 @@ fn hs2_1m8e9d_a_clone_that_lost_its_working_file_restores_from_history() {
     // Upgrading the peer restores its configuration from the last committed version.
     let home = tempfile::tempdir().unwrap();
     let key = crate::store_config_key(&peer).unwrap();
-    let registry =
-        ProviderConfigRegistry::new(crate::machine_provider_config_path(home.path(), &key));
+    let current = Some(crate::ProviderMigrationStore {
+        key: &key,
+        root: &peer,
+    });
+    let report = crate::migrate_machine_provider_config(home.path(), current).unwrap();
     assert_eq!(
-        registry.seed_from_store(&peer).unwrap(),
-        ProviderConfigSeed::StoreHistory
+        report.merged,
+        [(key.clone(), ProviderConfigSeed::StoreHistory)]
     );
+    let registry = ProviderConfigRegistry::for_machine(home.path());
     assert_eq!(ids(&registry), ["github-peer"]);
-    assert_eq!(
-        registry.seed_from_store(&peer).unwrap(),
-        ProviderConfigSeed::Existing
-    );
+    let report = crate::migrate_machine_provider_config(home.path(), current).unwrap();
+    assert!(report.merged.is_empty());
 }
 
 #[test]
-fn hs2_1m8e9d_a_store_without_provider_configuration_seeds_an_empty_list() {
+fn hs2_1m8e9d_a_store_without_provider_configuration_merges_nothing() {
     let (_dir, store, _peer) = remote_with_two_clones();
     FsStore::init(&store, &StoreMetadata::new("HS")).unwrap();
     let home = tempfile::tempdir().unwrap();
     let registry = ProviderConfigRegistry::for_store_in(home.path(), &store).unwrap();
-    assert!(registry.path().is_file());
     assert!(ids(&registry).is_empty());
     assert!(!store.join(LEGACY_PROVIDER_CONFIG_FILE).exists());
+    let key = crate::store_config_key(&store).unwrap();
     assert_eq!(
-        registry.seed_from_store(&store).unwrap(),
-        ProviderConfigSeed::Existing
+        crate::ProviderMigrationLedger::load(home.path())
+            .unwrap()
+            .stores[&key]
+            .source,
+        ProviderConfigSeed::Empty
     );
 }
 

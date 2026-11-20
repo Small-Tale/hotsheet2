@@ -1110,8 +1110,9 @@ and hyphens; unique names; a non-empty query). Notification rules name views by 
 ([32](32-notifier-plugins.md) §32.5).
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
-commands they read this machine's provider configuration for the `-C` store
-([02](02-ticket-storage.md) §2.11.1, HS2-1M8E9D). `providers` prints that file's path on its
+commands they read this machine's one provider configuration, the same file the desktop
+app reads, after merging any legacy copy of the `-C` store
+([02](02-ticket-storage.md) §2.11.1, HS2-1M8E9D, HS2-7QPJ05). `providers` prints that file's path on its
 last line (`# configuration: …`).
 
 `checkout remove` takes a checkout out of the machine registry (`HOTSHEET_HOME/checkouts.json`,

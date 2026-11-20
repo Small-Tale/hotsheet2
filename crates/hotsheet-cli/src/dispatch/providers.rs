@@ -276,7 +276,7 @@ pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
                 }
             );
         }
-        // HS2-1M8E9D: where this machine keeps the store's provider configuration.
+        // HS2-7QPJ05: the machine's one provider configuration, which the desktop app shares.
         println!("# configuration: {}", config.path().display());
     }
     Ok(())

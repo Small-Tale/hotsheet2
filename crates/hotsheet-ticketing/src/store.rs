@@ -36,7 +36,8 @@ const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
 /// The lasting sibling lock every provider-configuration writer takes beside the store's
-/// `providers.json` ([`crate::ProviderConfigRegistry`], HS2-457FGS).
+/// `providers.json` ([`crate::ProviderConfigRegistry`], HS2-457FGS), and beside the machine
+/// registry in the home (HS2-7QPJ05).
 pub(crate) const PROVIDER_CONFIG_LOCK_FILE: &str = "providers.json.lock";
 /// Staged siblings of an atomic replace ([`write_file_atomically`] and the provider
 /// configuration publication): a dot-file ending in `.tmp` that exists only between the

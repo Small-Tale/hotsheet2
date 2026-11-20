@@ -502,18 +502,22 @@ impl Coordinator {
     ) -> anyhow::Result<Snapshot> {
         let (sender, receiver) = mpsc::channel();
         std::fs::create_dir_all(&self.registry_home)?;
+        // HS2-7QPJ05: platform events name canonical paths (`/private/var` on macOS), and
+        // the provider registry now lives directly in the home, so compare against it.
+        let registry_home = self
+            .registry_home
+            .canonicalize()
+            .unwrap_or_else(|_| self.registry_home.clone());
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
-        // HS2-1M8E9D: provider configuration is this machine's copy in the home.
-        let providers = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
-            &self.registry_home,
-            &self.source,
-        )?
-        .path()
-        .to_path_buf();
+        // HS2-7QPJ05: provider configuration is the machine's one registry in the home.
+        let providers =
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&registry_home, &self.source)?
+                .path()
+                .to_path_buf();
         let providers_directory = providers
             .parent()
-            .map_or_else(|| self.registry_home.clone(), std::path::Path::to_path_buf);
+            .map_or_else(|| registry_home.clone(), std::path::Path::to_path_buf);
         // Every path is registered before the platform watcher starts once
         // (HS2-N1QDZW). HS2-F6F42W: it starts on its own thread, so the first read below
         // happens at once; going live, or a refused start while it is retried, is a
@@ -525,7 +529,7 @@ impl Coordinator {
             &[
                 (self.directory.as_path(), RecursiveMode::NonRecursive),
                 (self.source.as_path(), RecursiveMode::Recursive),
-                (self.registry_home.as_path(), RecursiveMode::NonRecursive),
+                (registry_home.as_path(), RecursiveMode::NonRecursive),
                 (providers_directory.as_path(), RecursiveMode::NonRecursive),
                 if settings_directory_watched {
                     (settings_directory.as_path(), RecursiveMode::NonRecursive)
@@ -586,7 +590,7 @@ impl Coordinator {
                 Ok(Wake::Status) => Some(WatchStep::StreamStatus),
                 Ok(Wake::Event(Ok(event))) => {
                     let tickets = self.source.join("tickets");
-                    let checkouts = self.registry_home.join("checkouts.json");
+                    let checkouts = registry_home.join("checkouts.json");
                     let state = self.directory.join("state.json");
                     let settings = settings_directory.join("settings.json");
                     let relevant = event.need_rescan()
@@ -940,8 +944,12 @@ mod tests {
         let (root, coordinator) = crate::coordination::tests::fixture();
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let initial = coordinator.snapshot(now).unwrap();
-        let observer =
-            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let observer = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("store"),
+            root.path().join("home"),
+        )
+        .unwrap();
         let cursor = WorkerView::worker_state_cursor(&initial);
         let wait = ObservedWait::start(observer, cursor, CHANGE_WAIT, None);
         // Registering only after the watcher is armed proves the event wake-up
@@ -1001,8 +1009,12 @@ mod tests {
                 .goal_minutes,
             360
         );
-        let observer =
-            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let observer = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("store"),
+            root.path().join("home"),
+        )
+        .unwrap();
         let wait = ObservedWait::start(
             observer,
             WorkerView::worker_state_cursor(&first),
@@ -1039,8 +1051,12 @@ mod tests {
         let initial = coordinator
             .snapshot(time::OffsetDateTime::now_utc().unix_timestamp())
             .unwrap();
-        let observer =
-            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let observer = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("store"),
+            root.path().join("home"),
+        )
+        .unwrap();
         let wait = ObservedWait::start(
             observer,
             WorkerView::worker_state_cursor(&initial),
@@ -1092,8 +1108,12 @@ mod tests {
             .unwrap();
         let first = coordinator.snapshot(now).unwrap();
         let first_cursor = WorkerView::worker_state_cursor(&first);
-        let observer =
-            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let observer = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("store"),
+            root.path().join("home"),
+        )
+        .unwrap();
         let waiting = ObservedWait::start(observer, first_cursor, CHANGE_WAIT, None);
         assert_eq!(waiting.next_step(), WatchStep::Armed);
         coordinator
@@ -1160,8 +1180,12 @@ mod tests {
             .unwrap();
         let cursor = WorkerView::worker_state_cursor(&initial);
         let cancelled = std::sync::Arc::new(AtomicBool::new(false));
-        let observer =
-            Coordinator::open(&root.path().join("project"), &root.path().join("store")).unwrap();
+        let observer = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &root.path().join("store"),
+            root.path().join("home"),
+        )
+        .unwrap();
         // An hour-long wait can return with an unchanged cursor within the hang
         // guard only through cancellation, so no wall-clock bound is needed to
         // tell cancellation from timeout under host load (HS2-QVWZDP).

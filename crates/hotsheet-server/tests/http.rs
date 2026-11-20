@@ -101,10 +101,15 @@ fn state() -> (tempfile::TempDir, AppState) {
     let store = FsStore::init_git(dir.path(), &StoreMetadata::new("HS")).unwrap();
     // The Codex rollout watch must never read the real ~/.codex sessions (HS2-CYHAWB).
     let codex_home = dir.path().join("no-codex-home");
+    // HS2-7QPJ05: provider configuration is one file per machine home, so every state
+    // gets its own home instead of the test process's shared one. It sits inside the
+    // store's Git directory, so it lives as long as the fixture and never shows as a change.
+    let machine_home = dir.path().join(".git").join("hotsheet-test-home");
     (
         dir,
         AppState::new(store, SECRET.into())
             .unwrap()
+            .with_machine_home(machine_home)
             .with_default_codex_home(codex_home),
     )
 }

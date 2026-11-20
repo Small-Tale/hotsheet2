@@ -1609,9 +1609,9 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             );
         }
         let registry = CheckoutRegistry::new(home.join("checkouts.json"));
-        // HS2-1M8E9D: this machine's provider configuration for the -C source. A seeded
-        // machine copy always exists, so "configured" means it holds a connection; an
-        // unreadable one still counts, so its error is reported below.
+        // HS2-7QPJ05: the machine's one provider configuration, resolved through the -C
+        // source. "Configured" means it holds a connection; an unreadable one still
+        // counts, so its error is reported below.
         let config = ProviderConfigRegistry::for_store_in(&home, &source)?;
         let configured = config.path().is_file()
             && config

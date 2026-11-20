@@ -48,11 +48,18 @@ impl Fixture {
         }
     }
 
+    /// This fixture's own machine home. HS2-7QPJ05: provider configuration is one file per
+    /// machine home, so fixtures never share the test process's home.
+    pub(super) fn home(&self) -> PathBuf {
+        self.root.path().join("home")
+    }
+
     pub(super) fn command(&self, args: &[&str]) -> Command {
         let mut cmd = Command::new(cli_binary());
         cmd.arg("-C")
             .arg(self.store.root())
             .args(args)
+            .env("HOTSHEET_HOME", self.home())
             .env("HOTSHEET_ACTOR_ROLE", "system")
             .env_remove("HOTSHEET_ACTOR_ID")
             .env_remove("HOTSHEET_WORKER_ID");

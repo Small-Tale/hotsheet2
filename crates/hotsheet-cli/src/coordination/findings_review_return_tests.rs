@@ -79,7 +79,12 @@ fn hs2_aebjyn_findings_return_survives_restart_replay_and_correction_completion(
         let original = c.state().unwrap().assignments["original"].clone();
         c.review_return("i", "generation-1", at(), "original", &review.to_string())
             .unwrap();
-        let c = Coordinator::open(&root.path().join("project"), store.root()).unwrap();
+        let c = Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            store.root(),
+            root.path().join("home"),
+        )
+        .unwrap();
         let returned = c.state().unwrap().assignments["original"].clone();
         assert!(returned.returned_for_review());
         assert_eq!(returned.handoff, original.handoff);
@@ -362,7 +367,12 @@ fn hs2_aebjyn_schema_two_migration_preserves_findings_code_ci_and_returned_evide
     let mut legacy = before.clone();
     legacy.version = 2;
     fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-    let c = Coordinator::open(&root.path().join("project"), &c.source).unwrap();
+    let c = Coordinator::open_with_registry_home(
+        &root.path().join("project"),
+        &c.source,
+        root.path().join("home"),
+    )
+    .unwrap();
     let migrated = c.state().unwrap();
     assert_eq!(migrated.version, 3);
     assert_eq!(migrated.assignments, before.assignments);
@@ -384,6 +394,13 @@ fn hs2_aebjyn_schema_two_migration_preserves_findings_code_ci_and_returned_evide
     future.version = 10;
     let bytes = serde_json::to_vec(&future).unwrap();
     fs::write(&path, &bytes).unwrap();
-    assert!(Coordinator::open(&root.path().join("project"), &c.source).is_err());
+    assert!(
+        Coordinator::open_with_registry_home(
+            &root.path().join("project"),
+            &c.source,
+            root.path().join("home")
+        )
+        .is_err()
+    );
     assert_eq!(fs::read(path).unwrap(), bytes);
 }

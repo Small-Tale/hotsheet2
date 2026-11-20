@@ -1256,8 +1256,8 @@ fn hs2_cp6gwa_next_without_flags_re_registers_with_cli_defaults() {
     drop(waiting);
 }
 
-/// HS2-1M8E9D: this machine's provider configuration for the fixture store, under the
-/// inherited test home the CLI children use too.
+/// HS2-7QPJ05: the machine's provider configuration under the fixture's own home, which
+/// the CLI children use too.
 fn machine_providers(f: &Fixture) -> hotsheet_ticketing::ProviderConfigRegistry {
-    hotsheet_ticketing::ProviderConfigRegistry::for_store(f.store.root()).unwrap()
+    hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&f.home(), f.store.root()).unwrap()
 }

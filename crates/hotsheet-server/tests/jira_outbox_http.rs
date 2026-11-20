@@ -155,7 +155,7 @@ async fn queued_jira_batch_reads_provisionally_and_survives_server_restart() {
     let checkout = tempfile::tempdir().unwrap();
     let registry = dir.path().join("checkouts.json");
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry)
         .with_ticket_provider(Arc::new(provider(fake.clone())))
@@ -199,7 +199,7 @@ async fn queued_jira_batch_reads_provisionally_and_survives_server_restart() {
     );
 
     let gated = app(
-        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        isolated_state(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
             .with_ticket_provider(Arc::new(provider(fake.clone()))),
     );
@@ -337,7 +337,7 @@ async fn queued_jira_batch_reads_provisionally_and_survives_server_restart() {
 
     drop(server);
     let restarted = app(
-        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        isolated_state(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
             .with_checkout_registry(&registry)
             .with_ticket_provider(Arc::new(provider(fake)))
@@ -358,7 +358,7 @@ async fn queued_jira_batch_reads_provisionally_and_survives_server_restart() {
 async fn queued_jira_batch_rejects_over_capacity_without_partial_overlay() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(Arc::new(FakeJira::default()))))
         .with_jira_outbox(dir.path().join("outbox.sqlite"), 1)
@@ -409,7 +409,7 @@ async fn dispatch_rebases_remote_edit_and_confirms_in_ticket_order_for_two_clien
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.path().join("dispatch.sqlite"), 3)
@@ -511,7 +511,7 @@ async fn compacted_jira_operation_rejects_a_late_http_retry_after_restart() {
     let path = dir.path().join("outbox.sqlite");
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(&path, 2)
@@ -533,7 +533,7 @@ async fn compacted_jira_operation_rejects_a_late_http_retry_after_restart() {
     assert_eq!(outbox.compact_terminal_before(i64::MAX).unwrap(), 1);
     drop(outbox);
     let restarted = app(
-        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        isolated_state(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
             .with_ticket_provider(Arc::new(provider(fake.clone())))
             .with_jira_outbox(&path, 2)
@@ -568,7 +568,7 @@ async fn pruned_v2_jira_operation_rejects_a_late_http_retry_after_restart() {
     let path = dir.path().join("outbox.sqlite");
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(&path, 2)
@@ -608,7 +608,7 @@ async fn pruned_v2_jira_operation_rejects_a_late_http_retry_after_restart() {
     assert_eq!(outbox.prune_terminal_rows().unwrap(), 1);
     drop(outbox);
     let restarted = app(
-        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        isolated_state(FsStore::open(dir.path()).unwrap(), SECRET.into())
             .unwrap()
             .with_ticket_provider(Arc::new(provider(fake.clone())))
             .with_jira_outbox(&path, 2)
@@ -642,7 +642,7 @@ async fn timeout_after_success_and_rate_limit_reconcile_without_duplicate_write(
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.path().join("dispatch.sqlite"), 3)
@@ -714,7 +714,7 @@ async fn attention_retry_and_discard_keep_the_remote_and_projection_honest() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.path().join("dispatch.sqlite"), 3)
@@ -813,7 +813,7 @@ async fn offline_dispatch_keeps_provisional_intent_until_reconnect() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.path().join("dispatch.sqlite"), 2)
@@ -870,7 +870,7 @@ async fn manual_retry_gets_a_new_bounded_attempt_window_after_attention() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.path().join("dispatch.sqlite"), 2)
@@ -950,7 +950,7 @@ fn put_count(fake: &FakeJira) -> usize {
 
 fn outbox_state(dir: &std::path::Path, fake: &Arc<FakeJira>) -> AppState {
     let store = FsStore::open(dir).unwrap();
-    AppState::new(store, SECRET.into())
+    isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(fake.clone())))
         .with_jira_outbox(dir.join("dispatch.sqlite"), 4)
@@ -1163,7 +1163,7 @@ async fn write_behind_unavailable_refusal_carries_a_typed_code_hs2_deveye() {
     // stable code; clients branch on the code, not the human-readable message.
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state = AppState::new(store, SECRET.into())
+    let state = isolated_state(store, SECRET.into())
         .unwrap()
         .with_ticket_provider(Arc::new(provider(Arc::new(FakeJira::default()))));
     let (status, body) = queue(&app(state), json!([edit("op-1", "Queued")])).await;
@@ -1190,4 +1190,15 @@ async fn unrelated_queued_conflict_has_no_write_behind_unavailable_code_hs2_deve
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_ne!(body["code"], "write_behind_unavailable", "{body}");
     assert!(body.get("code").is_none(), "{body}");
+}
+
+/// `AppState::new` with a machine home of its own beside the store (HS2-7QPJ05). Provider
+/// configuration is one file per machine home, so tests never share the test process's
+/// home; a restart over the same store finds the same home.
+fn isolated_state(
+    store: FsStore,
+    secret: String,
+) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
+    let home = store.root().join("machine-home");
+    Ok(AppState::new(store, secret)?.with_machine_home(home))
 }

@@ -33,10 +33,15 @@ impl Coordinator {
         let _waiter = FileLock::try_acquire(file)?
             .ok_or_else(|| anyhow::anyhow!("another active wait owns this session"))?;
         let (sender, receiver) = mpsc::channel();
-        let registry_home = self.registry_home.clone();
-        std::fs::create_dir_all(&registry_home)?;
+        std::fs::create_dir_all(&self.registry_home)?;
+        // HS2-7QPJ05: platform events name canonical paths (`/private/var` on macOS), and
+        // the provider registry now lives directly in the home, so compare against it.
+        let registry_home = self
+            .registry_home
+            .canonicalize()
+            .unwrap_or_else(|_| self.registry_home.clone());
         let registry_file = registry_home.join("checkouts.json");
-        // HS2-1M8E9D: provider configuration is this machine's copy in the home.
+        // HS2-7QPJ05: provider configuration is the machine's one registry in the home.
         let providers_file =
             hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&registry_home, &self.source)?
                 .path()
@@ -49,8 +54,10 @@ impl Coordinator {
             (self.directory.as_path(), RecursiveMode::NonRecursive),
             (self.source.as_path(), RecursiveMode::NonRecursive),
             (registry_home.as_path(), RecursiveMode::NonRecursive),
-            (providers_directory.as_path(), RecursiveMode::NonRecursive),
         ];
+        if !watched.iter().any(|(path, _)| *path == providers_directory) {
+            watched.push((providers_directory.as_path(), RecursiveMode::NonRecursive));
+        }
         if tickets.is_dir() {
             watched.push((tickets.as_path(), RecursiveMode::Recursive));
         }

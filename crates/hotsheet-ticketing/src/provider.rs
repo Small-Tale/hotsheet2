@@ -7,8 +7,11 @@ mod machine_config;
 mod source_observation;
 pub(crate) use machine_config::seed_before_untrack;
 pub use machine_config::{
-    MACHINE_STORE_CONFIG_DIR, PROVIDER_CONFIG_FILE, ProviderConfigSeed,
-    machine_provider_config_path, store_config_key,
+    MACHINE_STORE_CONFIG_DIR, PROVIDER_CONFIG_FILE, PROVIDER_MIGRATION_FILE, ProviderConfigSeed,
+    ProviderMigrationEntry, ProviderMigrationLedger, ProviderMigrationReport,
+    ProviderMigrationStore, ProviderMigrationWarning, ProviderMigrationWarningKind,
+    legacy_store_provider_config_path, machine_provider_config_path,
+    migrate_machine_provider_config, provider_migration_ledger_path, store_config_key,
 };
 pub use source_observation::ProviderConfigurationProof;
 

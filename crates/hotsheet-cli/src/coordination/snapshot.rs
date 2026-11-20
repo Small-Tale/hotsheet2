@@ -125,11 +125,19 @@ impl Coordinator {
         };
         live_claims.sort_by_key(|claim| claim.ticket.qualified());
         live_workers.retain(|worker| !live_claims.iter().any(|claim| &claim.worker == worker));
-        let connections = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
-            &self.registry_home,
-            &self.source,
-        )?
-        .load()?;
+        let registry = checkouts::CheckoutRegistry::new(self.registry_home.join("checkouts.json"));
+        let all_checkouts = registry.list()?;
+        // HS2-7QPJ05: the provider registry is shared by every project on the machine, so
+        // a source that only other projects' checkouts link is not this project's.
+        let connections = super::source_support::project_connections(
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+                &self.registry_home,
+                &self.source,
+            )?
+            .load()?,
+            &all_checkouts,
+            &self.project_id,
+        );
         let disabled: std::collections::HashSet<_> = connections
             .iter()
             .filter(|s| s.disabled)
@@ -140,9 +148,7 @@ impl Coordinator {
             .filter(|s| !s.disabled)
             .map(|s| s.id.clone())
             .collect();
-        let registry = checkouts::CheckoutRegistry::new(self.registry_home.join("checkouts.json"));
-        let checkouts: Vec<_> = registry
-            .list()?
+        let checkouts: Vec<_> = all_checkouts
             .into_iter()
             .filter(|c| c.id == self.project_id)
             .collect();

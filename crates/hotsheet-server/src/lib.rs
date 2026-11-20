@@ -960,22 +960,33 @@ impl AppState {
         &self.machine_home
     }
 
-    /// This machine's provider configuration for the primary store (HS2-1M8E9D):
-    /// `<machine home>/stores/<instance id>/providers.json`, seeded once from the store's
-    /// legacy root file. A failed seed is logged; the registry still names the machine
-    /// copy, never the store file that sync used to share.
+    /// This machine's provider configuration (HS2-7QPJ05): the one registry
+    /// `<machine home>/providers.json` that every store on the machine and every
+    /// `hotsheet-cli` share. Each call first merges any pending legacy copy, including the
+    /// primary store's HS2-1M8E9D per-store file or store-root file. A failed migration is
+    /// logged; the registry still names the machine file, never a store file.
     pub fn provider_config(&self) -> ProviderConfigRegistry {
         let key = self
             .primary_instance_id
             .clone()
             .unwrap_or_else(|_| hotsheet_ticketing::git_connection_id(&self.store));
-        let registry = ProviderConfigRegistry::new(
-            hotsheet_ticketing::machine_provider_config_path(&self.machine_home, &key),
-        );
-        if let Err(error) = registry.seed_from_store(self.store.root()) {
-            tracing::warn!(%error, "providers: could not seed this machine's configuration");
+        match hotsheet_ticketing::migrate_machine_provider_config(
+            &self.machine_home,
+            Some(hotsheet_ticketing::ProviderMigrationStore {
+                key: &key,
+                root: self.store.root(),
+            }),
+        ) {
+            Ok(report) => {
+                for warning in report.warnings {
+                    tracing::warn!(%warning, "providers: configuration migration");
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, "providers: could not migrate this machine's configuration");
+            }
         }
-        registry
+        ProviderConfigRegistry::for_machine(&self.machine_home)
     }
 
     /// The instance-file / index-writer-lock registry under [`Self::machine_home`].

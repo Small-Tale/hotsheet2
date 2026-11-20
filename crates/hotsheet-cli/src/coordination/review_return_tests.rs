@@ -53,7 +53,12 @@ fn hs2_65etrj_return_replays_after_restart_and_refill_without_losing_handoff() {
     let before = c.state().unwrap().assignments["original"].clone();
     c.review_return("i", "generation-1", at(), "original", &note)
         .unwrap();
-    let reopened = Coordinator::open(&root.path().join("project"), &c.source).unwrap();
+    let reopened = Coordinator::open_with_registry_home(
+        &root.path().join("project"),
+        &c.source,
+        root.path().join("home"),
+    )
+    .unwrap();
     let mut returned = before.clone();
     returned.phase = Phase::Blocked;
     returned.recovery_note = Some(note.clone());

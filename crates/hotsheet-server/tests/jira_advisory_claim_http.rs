@@ -142,7 +142,7 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     let ledger = dir.path().join("advisory.sqlite");
     let registry = dir.path().join("checkouts.json");
     let fake = Arc::new(FakeJira::default());
-    let state = AppState::new(store, "synthetic-secret".into())
+    let state = isolated_state(store, "synthetic-secret".into())
         .unwrap()
         .with_checkout_registry(&registry)
         .with_ticket_provider(Arc::new(provider(fake.clone())))
@@ -217,7 +217,7 @@ async fn hs2_bpkm76_provisional_claim_replays_after_restart_and_reconciles() {
     fake.offline.store(false, Ordering::SeqCst);
     fake.timeout_after_property_write
         .store(true, Ordering::SeqCst);
-    let restarted = app(AppState::new(
+    let restarted = app(isolated_state(
         FsStore::open(dir.path()).unwrap(),
         "synthetic-secret".into(),
     )
@@ -320,7 +320,7 @@ async fn hs2_htyzag_http_claim_prunes_fenced_v2_properties_before_remote_write()
     assert_eq!(fake.properties.lock().unwrap().len(), 2);
     *fake.clock_override_ms.lock().unwrap() = None;
 
-    let server = app(AppState::new(store, "synthetic-secret".into())
+    let server = app(isolated_state(store, "synthetic-secret".into())
         .unwrap()
         .with_checkout_registry(dir.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(jira))
@@ -468,4 +468,15 @@ async fn hs2_htyzag_http_claim_prunes_fenced_v2_properties_before_remote_write()
         "advisory_claim_changed"
     );
     assert_eq!(release_events["events"][0]["store"], checkout_id);
+}
+
+/// `AppState::new` with a machine home of its own beside the store (HS2-7QPJ05). Provider
+/// configuration is one file per machine home, so tests never share the test process's
+/// home; a restart over the same store finds the same home.
+fn isolated_state(
+    store: FsStore,
+    secret: String,
+) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
+    let home = store.root().join("machine-home");
+    Ok(AppState::new(store, secret)?.with_machine_home(home))
 }

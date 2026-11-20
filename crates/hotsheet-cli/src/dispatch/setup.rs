@@ -1225,18 +1225,18 @@ pub(crate) fn cmd_setup(
     };
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
         .open_registered_sources(
-            // HS2-1M8E9D: the anchor's machine-local provider configuration. An anchor
-            // that is not a store yet has none, so its never-shared legacy path reads empty.
+            // HS2-7QPJ05: the machine's one provider configuration, which the desktop
+            // host also reads. Resolving it through the anchor merges the anchor's legacy
+            // copy; an anchor that is not a store yet still names the machine registry.
             &hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
                 &home,
                 &home.join("server-bootstrap.hs2"),
             )
-            .unwrap_or_else(|_| {
-                hotsheet_ticketing::ProviderConfigRegistry::new(
-                    home.join("server-bootstrap.hs2")
-                        .join(hotsheet_ticketing::PROVIDER_CONFIG_FILE),
-                )
-            }),
+            .ok()
+            .filter(|registry| {
+                registry.path() == hotsheet_ticketing::machine_provider_config_path(&home)
+            })
+            .unwrap_or_else(|| hotsheet_ticketing::ProviderConfigRegistry::for_machine(&home)),
             &project_dir,
             None,
             repository,

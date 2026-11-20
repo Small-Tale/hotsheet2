@@ -10,18 +10,23 @@ use super::contract::{CoverageGap, CoverageGapReason, SourceConfiguration, Sourc
 impl super::Coordinator {
     /// Explain an existing foreign-source rejection without resolving its tickets or secrets.
     pub fn unsupported_source(&self, connection_id: &str) -> anyhow::Result<String> {
-        let connections = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
-            &self.registry_home,
-            &self.source,
-        )?
-        .load()?;
-        let checkouts: Vec<_> = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
-            hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+        let all_checkouts = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            self.registry_home.join("checkouts.json"),
         )
-        .list()?
-        .into_iter()
-        .filter(|c| c.id == self.project_id)
-        .collect();
+        .list()?;
+        let connections = project_connections(
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+                &self.registry_home,
+                &self.source,
+            )?
+            .load()?,
+            &all_checkouts,
+            &self.project_id,
+        );
+        let checkouts: Vec<_> = all_checkouts
+            .into_iter()
+            .filter(|c| c.id == self.project_id)
+            .collect();
         let reports = reports(None, &self.source, &connections, &checkouts);
         Ok(
             match reports.iter().find(|r| r.connection_id == connection_id) {
@@ -36,6 +41,29 @@ impl super::Coordinator {
             },
         )
     }
+}
+
+/// The machine's provider connections that belong to `project_id` (HS2-7QPJ05): every
+/// connection except one that only other projects' checkouts link. A connection no
+/// checkout links stays, so an unowned source still fences a project's drain.
+pub(super) fn project_connections(
+    connections: Vec<ProviderConnection>,
+    checkouts: &[Checkout],
+    project_id: &str,
+) -> Vec<ProviderConnection> {
+    let linked = |id: &str, own: bool| {
+        checkouts.iter().any(|checkout| {
+            (checkout.id == project_id) == own
+                && checkout
+                    .sources
+                    .iter()
+                    .any(|source| source.connection_id == id)
+        })
+    };
+    connections
+        .into_iter()
+        .filter(|connection| linked(&connection.id, true) || !linked(&connection.id, false))
+        .collect()
 }
 
 fn describe(connection: &ProviderConnection) -> SourceSupport {

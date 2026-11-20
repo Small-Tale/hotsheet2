@@ -1100,10 +1100,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   bundle origins before connection/link writes; server `routes/providers/mod.rs` propagates
   strict metadata inference through both create routes, retaining explicit endpoint priority.
   Origin/account unit, CLI provider-read, and server source-create regressions cover this path.
-- **Provider configuration (HS2-1M8E9D):** external connections live per machine in
-  `${HOTSHEET_HOME}/stores/<instanceId>/providers.json`, resolved only through
-  `ProviderConfigRegistry::for_store[_in]` (server: `AppState::provider_config`); the legacy
-  store-root file is ignored, untracked by sync, and kept as a seed ([02](02-ticket-storage.md) §2.11.1).
+- **Provider configuration (HS2-1M8E9D, HS2-7QPJ05):** one registry per machine,
+  `${HOTSHEET_HOME}/providers.json`, shared by the desktop host and every CLI. It is resolved
+  only through `ProviderConfigRegistry::for_store[_in]` / `for_machine` (server:
+  `AppState::provider_config`). `provider/machine_config.rs` merges HS2-1M8E9D's
+  `stores/<instanceId>/providers.json` copies and legacy store-root files once per identity
+  and records them and any conflict warnings in `${HOTSHEET_HOME}/providers.migration.json`.
+  The store-root file is ignored, untracked by sync, and kept ([02](02-ticket-storage.md) §2.11.1).
 - **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` is version-guarded (legacy
   unversioned files remain readable) and maps readable path-derived
   checkout ids to optional repository identities and any number of ticket stores.

@@ -15639,8 +15639,8 @@ fn hs2_shh7ww_actual_cli_declares_lists_and_separates_sites_of_one_project() {
     assert_eq!(sites["projects"].as_array().unwrap().len(), 2);
 }
 
-/// HS2-1M8E9D: this machine's provider configuration file for `store` under `home`, the
-/// file the CLI reads and writes, seeded once like the CLI's own first resolve.
+/// HS2-7QPJ05: the machine's provider configuration file under `home`, which the CLI
+/// reads and writes, after the same migration as the CLI's own first resolve of `store`.
 fn machine_providers(home: &std::path::Path, store: &std::path::Path) -> std::path::PathBuf {
     hotsheet_ticketing::ProviderConfigRegistry::for_store_in(home, store)
         .unwrap()

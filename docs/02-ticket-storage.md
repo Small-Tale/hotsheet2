@@ -244,7 +244,7 @@ replace that exists only between its write and rename. A lasting lock an older c
 committed is removed from the index (never from disk) by the next sync pass or
 repository-wide commit, so a process that holds it keeps its inode on every clone that
 runs this version. The list also names the legacy store-root `providers.json`, which is
-per machine now (§2.11.1, HS2-1M8E9D) and leaves the index the same way.
+per machine now (§2.11.1, HS2-1M8E9D, HS2-7QPJ05) and leaves the index the same way.
 
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
@@ -988,48 +988,84 @@ marks read, `hotsheet ls` shows an unread `●`). Feedback-draft persistence, UI
 state, and machine-pref reconciliation slot into the same overlay next
 (**HS2-AWTHJE**).
 
-### 2.11.1 Provider configuration is per machine (HS2-1M8E9D)
+### 2.11.1 One provider configuration per machine (HS2-1M8E9D, HS2-7QPJ05)
 
-A store's external provider connections (GitHub, GitLab, Jira; see
+External provider connections (GitHub, GitLab, Jira; see
 [16](16-external-sync-interface.md)) are machine-local. They hold keychain references, a
-signed-in account, and endpoint operations that name this machine's checkouts, and the
-orphan cleanup that removes a record no checkout links consults only this machine's
-`checkouts.json`. Sharing them through the store's history let one machine's cleanup
-delete another machine's sources.
+signed-in account, and endpoint operations that name this machine's checkouts. The orphan
+cleanup that removes a record no checkout links reads only this machine's
+`checkouts.json`. When these connections were shared through the store's history, one
+machine's cleanup could delete another machine's sources.
 
-- **Where it lives.** `${HOTSHEET_HOME}/stores/<instanceId>/providers.json`, keyed by the
-  store's `instanceId` (§2.3), beside its lasting `providers.json.lock` and staged
-  `.providers-*.tmp` siblings. The key survives a move or re-clone; two clones of one store
-  on one machine share the copy. A legacy store without an `instanceId` is assigned one
-  through the existing idempotent identity path. Two machines sharing a store (the sites
-  model of [26](26-orchestration-projects.md)) each keep their own copy, and neither can
-  change or delete the other's.
-- **How readers find it.** Every server route, CLI command, MCP tool, and coordination
-  watcher resolves it through `ProviderConfigRegistry::for_store` (or the server's
-  `AppState::provider_config`), never by joining a path to the store root. A `-C`
-  host-configuration directory that is not a store keeps its `providers.json` beside it,
-  as before; Hot Sheet never syncs such a directory.
-- **One-time migration.** The first resolve on a machine with no copy seeds it once, under
-  the configuration lock: from the store-root `providers.json` working file when present;
-  otherwise, in a Git store, from the last committed version in history (a machine whose
-  older client lost its working file when it pulled the untrack); otherwise as an empty
-  list. The bytes are copied as they are. An existing copy is never replaced, so the
-  migration is idempotent and a later change to the legacy file has no effect.
-- **Untracking.** The managed `.gitignore` lists `providers.json`, and sync and
-  repository-wide commits remove it from the index only. Sync seeds the machine copy first.
-  When an older client's commit changed the file, the replay (or the `git rebase`
+- **Where it lives.** There is one registry per machine, `${HOTSHEET_HOME}/providers.json`,
+  with its lasting `providers.json.lock` and staged `.providers-*.tmp` siblings.
+  - Every store and project on the machine shares it. The desktop host serves the
+    metadata-only anchor `server-bootstrap.hs2`, and a `hotsheet-cli` run inside any project
+    resolves that project's store, yet both read and write the same file. So a source
+    connected in the app is visible to `hotsheet-cli providers`, and the reverse holds too.
+  - Connection ids are already machine-scoped in `checkouts.json`.
+  - Two machines that share a store (the sites model of [26](26-orchestration-projects.md))
+    each keep their own registry, and neither can change or delete the other's.
+  - The maintainer chose this model over keying the file by store identity (HS2-7QPJ05).
+- **How readers find it.**
+  - Every server route, CLI command, MCP tool, and coordination watcher resolves the
+    registry through `ProviderConfigRegistry::for_store` (or the server's
+    `AppState::provider_config`, or setup's machine registry). None of them joins a path to
+    the store root.
+  - Resolving through a store first runs any pending migration.
+  - A `-C` host-configuration directory that is not a store keeps its `providers.json`
+    beside it, as before. Hot Sheet never syncs such a directory.
+- **Migration.** Two older layouts merge into the registry once per store identity
+  (`instanceId`, §2.3). A legacy store without an `instanceId` is assigned one through the
+  existing idempotent identity path.
+  - HS2-1M8E9D's per-store copies, `${HOTSHEET_HOME}/stores/<instanceId>/providers.json`,
+    all merge on the first resolve that finds them, in `instanceId` order.
+  - The resolved store also merges when it has no per-store copy. Its source is the
+    store-root `providers.json` working file when present. Otherwise, in a Git store, it is
+    the last committed version in history, for a machine whose older client lost its working
+    file when it pulled the untrack. A store with neither is recorded as empty.
+  - The ledger `${HOTSHEET_HOME}/providers.migration.json` records each merged identity and
+    its source. A merged identity is never merged again, so a removed connection stays
+    removed, and a later change to a legacy file has no effect.
+  - The migration runs under the configuration lock. Its fast path reads the ledger and
+    lists `stores/` without the lock.
+- **Conflicts.** Merging is by connection id and never replaces an entry the registry
+  already holds, so the earliest merged store wins:
+  - An identical record, ignoring the default flag, is skipped.
+  - A different record with the same id is a `conflict`. The registry keeps its entry, and
+    the ledger keeps the dropped record verbatim with a warning.
+  - `default` is now machine-wide. A second default connection is merged without its flag,
+    and a `default_cleared` warning is recorded.
+  - A source that cannot be read, parsed, or validated is skipped with an `invalid_source`
+    warning. It never blocks other stores, and the next resolve tries it again.
+  - Each warning is recorded once and printed to standard error (the server logs it) the
+    first time it is recorded.
+- **Failure safety.**
+  - A registry or ledger that does not parse fails the resolve. It is never overwritten:
+    forgetting the ledger would bring back removed connections. Removing the ledger
+    deliberately merges every legacy copy again.
+  - The registry is written before the ledger. A crash between the two writes merges
+    identical records again, which changes nothing.
+  - Source files are never changed or removed.
+- **Untracking.** The managed `.gitignore` lists `providers.json`. Sync and repository-wide
+  commits remove it from the index only, and sync merges it into the machine registry
+  first. When an older client's commit changed the file, the replay (or the `git rebase`
   fallback) resolves a conflict confined to these machine-local root files by keeping the
   file untracked, so a new client never stops in `Conflict`.
-- **Rollback.** The legacy working file stays on disk, untracked, as the snapshot taken at
-  migration time; an older build reads it again after a downgrade. Changes made after the
-  upgrade live only in the machine copy: copy it over the store-root file before
-  downgrading to keep them.
-- **Mixed versions.** An older client on another machine that pulls the untrack commit loses
-  its working file; upgrading it restores the configuration from history. If that older
-  client changed the file after the untrack reached it, its own sync reports a conflict
-  until it is upgraded, so upgrade every machine that shares a store.
+- **Rollback.** Every legacy file stays on disk as the snapshot taken at migration time, and
+  an older build reads it again after a downgrade. Changes made after the upgrade live only
+  in the machine registry. To keep them, copy the relevant entries into the older layout
+  before downgrading.
+- **Mixed versions.**
+  - An older client on another machine that pulls the untrack commit loses its working
+    file. Upgrading it restores the configuration from history.
+  - If that older client changed the file after the untrack reached it, its own sync reports
+    a conflict until it is upgraded, so upgrade every machine that shares a store.
+  - A per-store copy that an older build writes on this machine after its identity was
+    merged is ignored.
 - **Headless.** The migration runs inside the shared resolver, so `hotsheet-cli providers`
-  (which prints the configuration path), the server, and MCP behave identically.
+  (which prints the configuration path), the server, the desktop host, setup, and MCP
+  behave identically.
 
 ## 2.12 Automatic repo syncing — aggressive, hands-off
 

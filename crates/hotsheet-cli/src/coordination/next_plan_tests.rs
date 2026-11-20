@@ -152,7 +152,12 @@ fn hs2_xcmavt_restart_replacement_and_dispatch_preserve_exact_plan() {
     coordinator
         .replace_next_plan("integrator", "generation-1", &|| now, 0, vec![entry], true)
         .unwrap();
-    let reopened = Coordinator::open(&root.path().join("project"), &coordinator.source).unwrap();
+    let reopened = Coordinator::open_with_registry_home(
+        &root.path().join("project"),
+        &coordinator.source,
+        root.path().join("home"),
+    )
+    .unwrap();
     assert_eq!(reopened.state().unwrap().next_plan.len(), 1);
     assert!(
         reopened

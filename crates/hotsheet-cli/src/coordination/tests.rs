@@ -19,7 +19,10 @@ pub(super) fn fixture() -> (tempfile::TempDir, Coordinator) {
     );
     let store = root.path().join("store");
     FsStore::init_git(&store, &StoreMetadata::new("HS")).unwrap();
-    let coordinator = Coordinator::open(&project, &store).unwrap();
+    // HS2-7QPJ05: provider configuration is one file per machine home, so each fixture
+    // gets its own home instead of sharing the test process's.
+    let coordinator =
+        Coordinator::open_with_registry_home(&project, &store, root.path().join("home")).unwrap();
     (root, coordinator)
 }
 
@@ -881,8 +884,7 @@ fn hs2_76vmyg_additional_enabled_sources_prevent_false_drained() {
         disabled: false,
     };
     registry.save(&[source.clone()]).unwrap();
-    let checkouts =
-        checkouts::CheckoutRegistry::new(hotsheet_plugins::hotsheet_home().join("checkouts.json"));
+    let checkouts = checkouts::CheckoutRegistry::new(c.registry_home.join("checkouts.json"));
     let project = c.directory.parent().unwrap().parent().unwrap();
     checkouts
         .register_registered_sources(
@@ -957,4 +959,55 @@ fn hs2_76vmyg_live_claim_outside_up_next_is_neither_idle_nor_drained() {
     ops::release(&store, &t.id, at(NOW), "a", false).unwrap();
     assert_eq!(c.snapshot(NOW).unwrap().live_workers, ["a"]);
     c.finish("i", "generation-1", NOW, "drained").unwrap();
+}
+
+#[test]
+fn hs2_7qpj05_sources_only_other_projects_link_do_not_fence_this_project() {
+    let (root, c) = fixture();
+    register(&c, Role::Integrator, "i", "generation-1", NOW);
+    let registry =
+        hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&c.registry_home, &c.source)
+            .unwrap();
+    let source = |id: &str| hotsheet_ticketing::ProviderConnection {
+        id: id.into(),
+        provider: "github".into(),
+        locator: format!("synthetic/{id}"),
+        name: None,
+        default: false,
+        settings: serde_json::json!({}),
+        disabled: false,
+    };
+    // One machine registry: a source of another project, and one no checkout links.
+    registry
+        .save(&[source("elsewhere-source"), source("unowned-source")])
+        .unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    checkouts::CheckoutRegistry::new(c.registry_home.join("checkouts.json"))
+        .register_registered_sources(
+            &registry,
+            &elsewhere,
+            Some("elsewhere"),
+            None,
+            vec![checkouts::TicketSource {
+                connection_id: "elsewhere-source".into(),
+                provider: "github".into(),
+                locator: "synthetic/elsewhere-source".into(),
+            }],
+            None,
+        )
+        .unwrap();
+    let snapshot = c.snapshot(NOW).unwrap();
+    assert_eq!(snapshot.uncovered_sources, ["unowned-source"]);
+    assert!(
+        !snapshot
+            .coverage_gaps
+            .iter()
+            .any(|gap| gap.connection_id == "elsewhere-source")
+    );
+    assert!(
+        c.unsupported_source("elsewhere-source")
+            .unwrap()
+            .contains("unknown to the configured source metadata")
+    );
 }
