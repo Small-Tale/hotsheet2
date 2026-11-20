@@ -30,6 +30,7 @@ import {
   Hs1RegistrationRepairBanner,
 } from '../components/hs1-migration';
 import { MainShell } from '../components/main-shell';
+import { MinimizedTicketsControl, type MinimizedTicketSummary } from '../components/minimized-tickets-control';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
 import type { ProjectRestoreFailure } from '../components/project-restore-error';
@@ -190,6 +191,8 @@ export interface HotSheetShellDependencies {
   sidebarSurfaceProps: (statsSelected?: boolean) => SidebarSurfaceProps;
   sort: { value: WorkspaceSort };
   sortDirection: { value: WorkspaceSortDirection };
+  /** The current project tab's minimized ticket readers (HS2-Q8WF64). */
+  minimizedTickets: () => readonly MinimizedTicketSummary[];
   terminalDrawerMax: Signal<number>;
   terminalDrawerMin: Signal<number>;
   terminalDrawerMounted: Signal<boolean>;
@@ -294,6 +297,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     sidebarSurfaceProps,
     sort,
     sortDirection,
+    minimizedTickets,
     terminalDrawerMax,
     terminalDrawerMin,
     terminalDrawerMounted,
@@ -607,6 +611,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return viewMode.value satisfies never;
       }
     })();
+    const minimizedTicketList = minimizedTickets();
     return (
       <MainShell
         tabs={tabs}
@@ -730,6 +735,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           ticketWorkspace && allTicketsSearchAvailable() ? (
             <SearchScopeToolbar allTickets={allTickets} viewLabel={ticketViewTitle(selectedView.value)} />
           ) : undefined
+        }
+        minimizedTickets={
+          minimizedTicketList.length > 0 ? <MinimizedTicketsControl tickets={minimizedTicketList} /> : undefined
         }
         workspacePresentation={
           (viewMode.value === 'board' && selectedView.value !== 'errors') ||

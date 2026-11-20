@@ -32,6 +32,7 @@ import { demoModule as inputDialogs } from './input-dialogs-demo';
 import { demoModule as list } from './list-demo';
 import { demoModule as listHeader } from './list-header-demo';
 import { demoModule as listItem } from './list-item-demo';
+import { demoModule as minimizedTicketsControl } from './minimized-tickets-control-demo';
 import { demoModule as notWorkingDialog } from './not-working-dialog-demo';
 import { demoModule as notificationCard } from './notification-card-demo';
 import { demoModule as notificationSettings } from './notification-settings-demo';
@@ -140,6 +141,7 @@ export const demoModules: readonly DemoModule[] = [
   providerIcon,
   select,
   searchScopeToolbar,
+  minimizedTicketsControl,
   list,
   listItem,
   listHeader,

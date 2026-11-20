@@ -1377,6 +1377,14 @@ with search disabled in Notifications (HS2-TNSD4K).
   restore control does. While it shows, the workspace's ticket scrollers add its height to their
   end inset so the last row scrolls clear. `wireSearchScopeToolbar` reports the chosen scope; its
   demo exposes both scopes and long view names.
+- `MinimizedTicketsControl` — **built, demo built** (HS2-Q8WF64): the current project tab's
+  minimized ticket readers as one Kerf `ToolbarControlGroup` (Lucide `layers-2`) for a
+  `FloatingToolbar`. AppShell's `minimizedTickets` slot places it in the terminal drawer's
+  restore corner while the drawer is collapsed and in its own bottom-end `FloatingToolbar`
+  otherwise. One ticket restores on click; several use a `PopupMenu` trigger with a corner
+  `Badge` count, one item per ticket with a draft `Badge`, then Restore All and Close All. The app
+  handles its delegated actions; its demo shows none, one, three, and four tickets with and
+  without drafts.
 
 Saved views are created and managed from the Views section rather than from a separate
 search overlay. The controlled open state and native dialog autofocus own initial name

@@ -61,6 +61,12 @@ the provider. For HS2-15PE59, repeat the add and remove from the modal reader's 
 and from a linked reader opened from the blocker row. Confirm the dialog opens above
 the reader and the change shows in that reader.
 
+For HS2-Q8WF64 in the packaged desktop app, open a synthetic ticket's reader, start a
+note and a feedback reply, and press Minimize; confirm ⌘M still minimizes the window while
+⌥⇧⌘M minimizes the reader. Quit and relaunch the app, then restore the ticket from the
+floating control and confirm the note and reply text return. Repeat with VoiceOver to hear
+the control's name, its draft indicator, and the list's Restore All and Close All.
+
 For the macOS Tauri host (HS2-5R706Q), build the `.app` with
 `npm run desktop:build` from `clients/web` using a Developer ID identity.
 Launch a fresh signed copy, approve the first Keychain access if requested,

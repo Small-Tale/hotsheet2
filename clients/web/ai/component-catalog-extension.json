@@ -1254,6 +1254,30 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "minimized-tickets-control",
+      "name": "MinimizedTicketsControl",
+      "kind": "component",
+      "purpose": "Floating control for the current project tab's minimized ticket readers: one restores on click; several open a list with draft indicators, Restore All, and Close All.",
+      "useWhen": [
+        "The current project tab has minimized ticket readers to restore or close (HS2-Q8WF64)."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific MinimizedTicketsControl behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/minimized-tickets-control.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "A ToolbarControlGroup for a FloatingToolbar; the owner supplies the FloatingToolbar and its corner."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "not-working-dialog",
       "name": "NotWorkingDialog",
       "kind": "component",

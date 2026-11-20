@@ -5,6 +5,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
+import { wireMinimizedTicketsControl } from '../components/minimized-tickets-control';
 import type { NoteMetadataMode } from '../components/note-metadata-dialog';
 import { codeReviewTarget } from '../components/ticket-code-review';
 import {
@@ -29,6 +30,7 @@ import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
 import { readerScopeOf } from '../features/linked-reader-subject';
+import type { MinimizedReadersController } from '../features/minimized-readers';
 import type { TicketBlockersController } from '../features/ticket-blockers';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
@@ -167,6 +169,11 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly codeReview: Signal<CodeReview | undefined>;
   /** The Info tab's Blocked By section and Add Blocker dialog (HS2-CHH28E). */
   readonly ticketBlockers: TicketBlockersController;
+  /** Minimizing and restoring ticket readers (HS2-Q8WF64). */
+  readonly minimizedReaderControls: Pick<
+    MinimizedReadersController,
+    'minimize' | 'restore' | 'restoreAll' | 'closeAll'
+  >;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -252,6 +259,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     inspectorTab,
     codeReviewMessage,
     codeReview,
+    minimizedReaderControls,
   } = dependencies;
   // Field edits target the top linked ticket reader when one is open, exactly like the workspace
   // reader otherwise (HS2-KRVWKF): updateSelected/updateSelectedTracked already route patches there,
@@ -1565,6 +1573,33 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleReaderTextSize.selector, () => {
       readerLargeText.value = !readerLargeText.value;
       localStorage.setItem('hotsheet.reader.large-text', String(readerLargeText.value));
+    }),
+  );
+  // Minimized ticket readers (HS2-Q8WF64): Minimize in a reader, and the floating control's commands.
+  // A pointer press on Minimize keeps focus in the editor, so the note composer is not finished
+  // (submitted) on its way to being minimized; WebKit never focuses a pressed button.
+  lifetime.add(
+    delegate(document.body, 'mousedown', INSPECTOR_AND_EDITOR_ACTIONS.minimizeTicketReader.selector, (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.minimizeTicketReader.selector, (_event, target) => {
+      const frameId = target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
+      if (frameId) void minimizedReaderControls.minimize(frameId);
+    }),
+  );
+  lifetime.add(
+    wireMinimizedTicketsControl(document.body, {
+      restore: (id) => {
+        void minimizedReaderControls.restore(id);
+      },
+      restoreAll: () => {
+        void minimizedReaderControls.restoreAll();
+      },
+      closeAll: () => {
+        void minimizedReaderControls.closeAll();
+      },
     }),
   );
   lifetime.add(

@@ -91,6 +91,26 @@ async function installFixture(page: import('@playwright/test').Page) {
       });
     if (path.endsWith('/tickets'))
       return route.fulfill({ json: { items: [ticket(other ? 'HS2-OTHER1' : 'HS2-DEMO1', 'started')], counts } });
+    // One ticket's detail, for the reader the minimize chord takes off the modal stack (HS2-Q8WF64).
+    const detail = /\/tickets\/([^/]+)$/.exec(path)?.[1];
+    if (detail && request.method() === 'GET') {
+      const slug = decodeURIComponent(detail).split(':').at(-1) ?? detail;
+      return route.fulfill({
+        json: {
+          ...ticket(slug, 'started'),
+          store: 'git-local',
+          category: 'task',
+          priority: 'default',
+          created_at: '2026-11-01T00:00:00Z',
+          updated_at: '2026-11-01T00:00:00Z',
+          details: '',
+          blocked_reason: null,
+          concurrency_token: `token-${slug}`,
+          notes: [],
+          attachments: [],
+        },
+      });
+    }
     if (path.endsWith('/repository/status'))
       return route.fulfill({
         json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
@@ -359,6 +379,22 @@ test('every editable default command shortcut reaches its handler from a macOS k
   await expect(composer).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(composer).toBeHidden();
+
+  // The minimize chord takes the open reader off the modal stack and brings it back (HS2-Q8WF64).
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO1"]').dblclick();
+  const reader = page.getByRole('dialog', { name: /^Read and edit HS2-DEMO1 in / });
+  await expect(reader).toBeVisible();
+  await press('minimize-ticket-reader');
+  await expect(reader).toHaveCount(0);
+  await expect(page.locator('[data-minimized-tickets-control]')).toBeVisible();
+  await press('minimize-ticket-reader');
+  await expect(page.getByRole('dialog', { name: /^Read and edit HS2-DEMO1 in / })).toBeVisible();
+  await expect(page.locator('[data-minimized-tickets-control]')).toHaveCount(0);
+  await page
+    .getByRole('dialog', { name: /^Read and edit HS2-DEMO1 in / })
+    .getByRole('button', { name: 'Close Ticket Reader' })
+    .click();
+  await expect(page.locator('dialog[data-reader-dialog][open]')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('button', { name: 'Local Project' }).click();

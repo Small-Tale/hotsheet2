@@ -1324,8 +1324,10 @@ same explanation (HS2-CGXGWY).
   adds rebindable chords to toggle the left sidebar (⌘/Ctrl+B), right sidebar/inspector
   (⌘/Ctrl+⌥+⇧+B), and bottom terminal drawer (⌘/Ctrl+J); switch the workspace to the list
   (⌘/Ctrl+⇧+L), column (⌘/Ctrl+⇧+B), notifications (⌘/Ctrl+⇧+M), and settings (⌘/Ctrl+⌥+S)
-  views; and toggle the all-project terminal grid (⌘/Ctrl+⇧+G) or stats dashboard
-  (⌘/Ctrl+⇧+D) against the last selected project. A **New ticket** chord (a bare `c`, in the
+  views; minimize the open ticket reader or restore the minimized one (⌘/Ctrl+⌥+⇧+M, since ⌘M is
+  the OS window's minimize and ⌘⇧M is the notifications view; HS2-Q8WF64); and toggle the
+  all-project terminal grid (⌘/Ctrl+⇧+G) or stats dashboard (⌘/Ctrl+⇧+D) against the last
+  selected project. A **New ticket** chord (a bare `c`, in the
   spirit of GitHub/Linear "create") opens the composer, and **Navigation & tabs** adds
   previous/next cycling for the project tabs (⌘/Ctrl+⌥+⇧+←/→) and drawer tabs
   (⌘/Ctrl+⌥+⇧+↑/↓). Defaults follow VS Code where it has an equivalent except when
@@ -2078,6 +2080,31 @@ same explanation (HS2-CGXGWY).
   Page and dialog titles compose a divider-free Kerf Toolbar with extra-large ToolbarText;
   page titles expose a level-one heading and dialog hosts retain their title/summary naming
   relationships. Supporting copy belongs to the application below the toolbar.
+  **Minimized ticket readers (HS2-Q8WF64).** A reader's toolbar has a Minimize control (Lucide
+  `minus`) beside Close. Minimizing keeps the reader's frame and every draft (its new-note
+  composer, a feedback reply in progress, inline replies and choices, edit modes, and its tab) but
+  takes it off the modal stack, so nothing is modal while it waits; restoring pushes it back on top
+  and makes it modal again. The workspace reader follows the selection, so minimizing it detaches
+  it into a frame of its own: its drafts, response purpose, and composer move to that frame, and
+  the workspace reader and inspector composer return to rest. Pressing Minimize keeps focus in the
+  editor, so an unsent note is kept as a draft rather than finished; pending focus-loss field saves
+  commit as they would on any focus change (HS2-RE1PS6), and an edit a save could not commit stays
+  in the frame and the ticket draft store. Minimized readers belong to the project tab they were
+  minimized from. That tab shows one Kerf `ToolbarControlGroup` button (Lucide `layers-2`) in the
+  workspace's floating cluster: inside the terminal drawer's restore corner, before the Terminal
+  Drawer button, while the drawer is collapsed, and alone at the work area's bottom-end corner while
+  it is open. One minimized ticket restores on click; several show a corner `Badge` count and open a
+  `PopupMenu` listing each ticket (category icon, number, title, and a draft `Badge`: _Unsaved
+  edit_, _Unsent note_, or _Reply in progress_), then **Restore All** and **Close All**. Close All
+  asks first (and shows an ellipsis) only when a draft would be lost. Minimizing and restoring
+  animate an app-owned stand-in card between the reader and the control for 200 ms; under
+  `prefers-reduced-motion` it cross-fades in place. The list survives a reload or restart: each
+  record (identity, tab, title, composer and reply drafts) is kept in `localStorage`
+  (`hotsheet.minimized-readers.v1`), field drafts stay in the ticket draft store, and restoring a
+  reloaded record reads the ticket again and rebuilds its frame. Closing a project tab drops its
+  minimized readers. The model is `minimized-readers.ts`, the workflow
+  `features/minimized-readers.ts`, the control `components/minimized-tickets-control.tsx`, and the
+  motion `reader-minimize-motion.ts`.
   Ticket readers are persistent Web Awesome dialogs opened through the native modal lifecycle,
   so focus is trapped by the platform, Escape closes only the top reader after nested controls,
   backdrop clicks do not dismiss it, and focus returns to the live opener or workspace fallback.

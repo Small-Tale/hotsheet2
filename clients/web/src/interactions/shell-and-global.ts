@@ -23,6 +23,7 @@ import {
 } from '../context-menu-position';
 import { dragLeftElement } from '../drag-leave';
 import type { TicketGroupsController } from '../features/ticket-groups';
+import { INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TICKET_GROUP_TARGETS } from '../interaction-attrs/ticket-groups';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -62,6 +63,8 @@ export function galleryKeyTargetsTextField(event: Event): boolean {
 /** Live application bindings used by this handler group. */
 export interface ShellAndGlobalInteractionsDependencies {
   readonly viewportMobile: Signal<boolean>;
+  /** The keyboard command that minimizes the active ticket reader or restores one (HS2-Q8WF64). */
+  readonly minimizedReaderControls: { toggle: (activeReaderId: string | undefined) => void };
   /** The rails' Workbench `collapsed` signals, driven by `wireWorkbench` on a phone (HS2-Y1B1Y1). */
   readonly sidebarCollapsed: Signal<boolean>;
   readonly inspectorCollapsed: Signal<boolean>;
@@ -224,6 +227,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     completePointerDetailsFinish,
     schedulePointerDetailsFinish,
     standby,
+    minimizedReaderControls,
   } = dependencies;
   // Every right-rail surface shares the Workbench's standard toggle, in the open rail's toolbar or
   // relocated to the workspace toolbar while the rail is collapsed (HS2-QQW6CT).
@@ -723,6 +727,16 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     'keydown',
     (event) => {
       if (capturingShortcutId.value !== undefined) return;
+      // Minimizing works from inside a ticket reader, so it runs before the modal guard below, but
+      // only while every open modal is a ticket reader (HS2-Q8WF64).
+      if (matchesShortcut('minimize-ticket-reader', event, keyboardShortcutOverrides.value, appleShortcutPlatform)) {
+        const modals = [...document.querySelectorAll<HTMLElement>('wa-dialog[open], dialog:modal')];
+        if (modals.some((modal) => !modal.matches(INSPECTOR_AND_EDITOR_TARGETS.ticketReaderDialog.selector))) return;
+        event.preventDefault();
+        const active = modals.find((modal) => modal.dataset.readerActive === 'true');
+        minimizedReaderControls.toggle(active?.dataset.readerFrameId);
+        return;
+      }
       // While a modal dialog is open these app-level shortcuts (search focus, ticket undo/redo/clipboard)
       // would reach the workspace behind the modal — suppress them so e.g. Cmd-K cannot focus the background
       // search from inside a dialog (HS2-FW4PYZ). The modal keeps its own text-field editing and shortcuts.

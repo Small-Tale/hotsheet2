@@ -27,6 +27,17 @@ does not fork Kerf's guidance.
   finish, merged against that value. Reopening restores an unsaved copy; discrete
   edits such as tag chips save immediately. See [06-clients.md](06-clients.md)
   §6.3 for the full contract.
+- Minimized ticket readers (HS2-Q8WF64, signed off as design C) follow Kerf's Actions,
+  feedback, and dialogs defaults: a reader is modal only while it is restored, and Close All
+  confirms only when a draft would be lost. Minimized tickets sit in the workspace's existing
+  floating cluster (`FloatingToolbar` with a `ToolbarControlGroup`, a corner `Badge`, and a
+  `PopupMenu`), per project tab, with Lucide `minus` for Minimize and `layers-2` for minimized
+  tickets everywhere. Pressing Minimize keeps an unsent note as a draft instead of finishing it,
+  the one exception to the note composer's finish-on-blur. Motion is an app-owned stand-in card,
+  because the reader dialog is Kerf's and lives in the top layer. ⌥⇧⌘M minimizes or restores,
+  since ⌘M is the OS window's. Interim decision waiting on Kerf `KF-HZTE26`:
+  `PopupMenu` items have no second line, so a long title wraps at phone width. See
+  [06-clients.md](06-clients.md) §6.3.
 - Permission decisions remain visible across projects. Their automatic timers are
   explicit per-project choices and pause when hidden. See
   [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.

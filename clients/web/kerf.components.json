@@ -1240,6 +1240,83 @@
       }
     },
     {
+      "id": "minimized-tickets-control",
+      "name": "MinimizedTicketsControl",
+      "kind": "component",
+      "purpose": "Floating control for the current project tab's minimized ticket readers: one restores on click; several open a list with draft indicators, Restore All, and Close All.",
+      "source": "src/components/minimized-tickets-control.tsx",
+      "publicExports": [
+        {
+          "name": "MinimizedTicketsControl"
+        },
+        {
+          "name": "wireMinimizedTicketsControl"
+        }
+      ],
+      "sourceLinks": ["src/components/minimized-tickets-control.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": true,
+          "helpers": ["wireMinimizedTicketsControl"],
+          "sources": [
+            {
+              "export": "wireMinimizedTicketsControl",
+              "source": "src/components/minimized-tickets-control.tsx"
+            }
+          ],
+          "obligations": [
+            "Wire restore, Restore All, and Close All with wireMinimizedTicketsControl, render it only while the current project tab has a minimized ticket, and place it in a FloatingToolbar beside the terminal drawer control."
+          ]
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child",
+            "notes": [
+              "A ToolbarControlGroup for a FloatingToolbar; the owner supplies the FloatingToolbar and its corner."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/minimized-tickets-control.tsx",
+        "composition": "src/components/minimized-tickets-control.tsx"
+      },
+      "selection": {
+        "useWhen": ["The current project tab has minimized ticket readers to restore or close (HS2-Q8WF64)."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific MinimizedTicketsControl behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "project-tab",
       "name": "ProjectTab",
       "kind": "component",

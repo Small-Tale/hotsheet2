@@ -775,6 +775,13 @@ HS2-15PE59 extends the blocker editor to the modal reader. `features/ticket-bloc
 
 `ticket-blockers.spec.ts` also drives the real reader against a real server. The dialog opens inside the reader, and Escape closes only the dialog. It adds a blocker with captures at 1440, 1024, 390, and 1440 px. A linked reader opened from the blocker row shows the cycle refusal in its own dialog, and the blocker is removed from the reader row.
 
+HS2-Q8WF64 minimized ticket readers are covered at three layers:
+
+- `minimized-readers.test.ts` walks the model's transitions: minimize, re-minimize, restore one and all, an empty-then-refilled list, per-tab lists, project-tab disposal, the Close All draft question, draft labels, and a reload's parse, storage failures, and rebuilt edit state.
+- `features/minimized-readers.test.ts` drives the workflow with fake bindings: linked and workspace minimize (the composer, replies, and response move to the frame), failed saves kept in the ticket draft store, repeated minimize, live and reloaded restore, a closed project or failed read, Restore All order across tabs, Close All with and without drafts, the keyboard command, and disposal.
+- `components/minimized-tickets-control.test.ts` pins the single and menu markup and AppShell's restore-corner and standalone placement.
+- `minimized-readers.spec.ts` drives the shipped app in Chromium and WebKit: the workspace reader and its reply, several tickets with draft badges, Restore All, Close All with Cancel and confirm, a tab switch, a reload, the keyboard chord, the motion stand-in with reduced motion, and no server write while typing or minimizing.
+
 HS2-HYGBAQ covers plain-text ticket linking in `markdown-preview-ticket-links.test.ts`,
 the blocked-reason edit guards in `ticket-field-editor-interactions.test.ts`, and the
 `providers.spec.ts` browser flow that links both slugs in an inspector blocked reason,

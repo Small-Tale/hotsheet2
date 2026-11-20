@@ -3810,6 +3810,86 @@
       }
     },
     {
+      "key": "hotsheet-web:minimized-tickets-control",
+      "package": "hotsheet-web",
+      "id": "minimized-tickets-control",
+      "name": "MinimizedTicketsControl",
+      "kind": "component",
+      "purpose": "Floating control for the current project tab's minimized ticket readers: one restores on click; several open a list with draft indicators, Restore All, and Close All.",
+      "publicExports": [
+        {
+          "name": "MinimizedTicketsControl"
+        },
+        {
+          "name": "wireMinimizedTicketsControl"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/minimized-tickets-control.tsx"
+      ],
+      "source": "src/components/minimized-tickets-control.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": true,
+        "helpers": [
+          "wireMinimizedTicketsControl"
+        ],
+        "sources": [
+          {
+            "export": "wireMinimizedTicketsControl",
+            "source": "src/components/minimized-tickets-control.tsx"
+          }
+        ],
+        "obligations": [
+          "Wire restore, Restore All, and Close All with wireMinimizedTicketsControl, render it only while the current project tab has a minimized ticket, and place it in a FloatingToolbar beside the terminal drawer control."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "A ToolbarControlGroup for a FloatingToolbar; the owner supplies the FloatingToolbar and its corner."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/minimized-tickets-control.tsx",
+        "composition": "src/components/minimized-tickets-control.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:not-working-dialog",
       "package": "hotsheet-web",
       "id": "not-working-dialog",

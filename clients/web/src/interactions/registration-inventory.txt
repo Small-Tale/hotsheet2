@@ -468,6 +468,9 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="respond-to-fe
 inspector-and-editor	delegateCapture	document.body	'kui-request-close'	'[data-reader-dialog=""]'
 inspector-and-editor	delegateCapture	document.body	'close'	'[data-reader-dialog=""]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-reader-text-size"]'
+inspector-and-editor	delegate	document.body	'mousedown'	'[data-action="minimize-ticket-reader"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="minimize-ticket-reader"]'
+inspector-and-editor	wireMinimizedTicketsControl	document.body
 inspector-and-editor	delegate	document.body	'click'	'[data-action="set-inspector-tab"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-code-review"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-blocker-dialog"]'

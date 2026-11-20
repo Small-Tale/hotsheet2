@@ -56,6 +56,8 @@ export interface ProjectTeardownDependencies {
   commandRuns: Signal<CommandRun[]>;
   readerOpen: Signal<boolean>;
   linkedReaderStack: Signal<TicketReaderFrame[]>;
+  /** Drop the closing tabs' minimized readers (HS2-Q8WF64). */
+  disposeMinimizedReaders?: (projectIds: readonly string[]) => void;
   /** Per-project records dropped as soon as their projects leave the tab list. */
   projectRecords: ReadonlyArray<Signal<Record<string, unknown>>>;
   /** Per-project source and tool-connection records, dropped after the next tab is chosen. */
@@ -104,6 +106,7 @@ export function createProjectTeardown(dependencies: ProjectTeardownDependencies)
     commandRuns,
     readerOpen,
     linkedReaderStack,
+    disposeMinimizedReaders,
     projectRecords,
     connectionRecords,
     histories,
@@ -146,6 +149,7 @@ export function createProjectTeardown(dependencies: ProjectTeardownDependencies)
       readerApprovedClose.delete(frame.id);
     }
     linkedReaderStack.value = result.retained;
+    disposeMinimizedReaders?.(ids);
     if (closing.has(selectedProjectId.value)) {
       readerDetailsAutosave.cancel();
       readerNoteAutosave.cancel();

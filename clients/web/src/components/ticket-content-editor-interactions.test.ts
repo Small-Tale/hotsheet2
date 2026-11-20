@@ -63,6 +63,23 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps an unsent note as a draft when focus moves to Minimize (HS2-Q8WF64)', () => {
+    vi.stubGlobal('Node', function Node() {});
+    const finish = vi.fn();
+    wireNoteComposer({} as HTMLElement, { open: vi.fn(), setDraft: vi.fn(), cancel: vi.fn(), submit: vi.fn(), finish });
+    const NodeType = (globalThis as unknown as { Node: new () => object }).Node,
+      minimize = Object.assign(new NodeType(), {
+        closest: (selector: string) => (selector === '[data-action="minimize-ticket-reader"]' ? {} : null),
+      }),
+      elsewhere = Object.assign(new NodeType(), { closest: () => null }),
+      field = { closest: () => ({ contains: () => false }) };
+    handler('focusout', 'new-note-body')({ relatedTarget: minimize }, field);
+    expect(finish).not.toHaveBeenCalled();
+    handler('focusout', 'new-note-body')({ relatedTarget: elsewhere }, field);
+    expect(finish).toHaveBeenCalledExactlyOnceWith(field);
+    vi.unstubAllGlobals();
+  });
+
   it('begins note edits only when the click or key qualifies and the note has an id', () => {
     const bindings = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
     wireNoteEditor({} as HTMLElement, bindings);

@@ -42,6 +42,13 @@ export function wireNoteComposer(root: HTMLElement, bindings: NoteComposerBindin
       delegate(root, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.newNoteBodyField.selector, (event, target) => {
         const next = (event as FocusEvent).relatedTarget;
         if (next instanceof Node && target.closest('[data-component="note-composer"]')?.contains(next)) return;
+        // Minimizing keeps the reader's unsent note as a draft instead of finishing it (HS2-Q8WF64).
+        if (
+          next instanceof Node &&
+          'closest' in next &&
+          (next as Element).closest(INSPECTOR_AND_EDITOR_ACTIONS.minimizeTicketReader.selector)
+        )
+          return;
         bindings.finish?.(target as HTMLElement);
       }),
     );

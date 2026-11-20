@@ -35,6 +35,11 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   openTicketReader: action('open-ticket-reader'),
   respondToFeedback: action('respond-to-feedback'),
   toggleReaderTextSize: action('toggle-reader-text-size'),
+  /** Minimized ticket readers (HS2-Q8WF64): the reader's Minimize control and the floating control's commands. */
+  minimizeTicketReader: action('minimize-ticket-reader'),
+  restoreMinimizedTicket: action('restore-minimized-ticket'),
+  restoreAllMinimizedTickets: action('restore-all-minimized-tickets'),
+  closeAllMinimizedTickets: action('close-all-minimized-tickets'),
   setInspectorTab: action('set-inspector-tab'),
   openInspectorStatusMenu: action('open-inspector-status-menu'),
   setInspectorStatus: action('set-inspector-status'),

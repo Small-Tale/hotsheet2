@@ -125,6 +125,17 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
     defaultChord: { key: 'm', mod: true, shift: true },
     editable: true,
   },
+  // ⌘M belongs to the OS window and ⇧⌘M is the Notifications View, so minimizing a ticket reader
+  // takes ⌥⇧⌘M (Ctrl+Alt+Shift+M elsewhere), like the right sidebar's three-modifier chord (HS2-Q8WF64).
+  {
+    id: 'minimize-ticket-reader',
+    label: 'Minimize or Restore Ticket Reader',
+    description:
+      'Minimize the open ticket reader, keeping its drafts; with no reader open, restore the minimized ticket or list them.',
+    group: 'Views & panels',
+    defaultChord: { key: 'm', mod: true, alt: true, shift: true },
+    editable: true,
+  },
   {
     id: 'view-settings',
     label: 'Settings View',

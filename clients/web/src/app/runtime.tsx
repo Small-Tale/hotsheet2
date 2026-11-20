@@ -1,5 +1,6 @@
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
+import { openPopupMenu } from '@kerfjs/ui/popup-menu';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { placeSearchFieldCaret } from '@kerfjs/ui/search-field';
 import { createSearchFieldModel } from '@kerfjs/ui/search-field-model';
@@ -149,6 +150,7 @@ import { createHotSheetApp } from '../features/hot-sheet-app';
 import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createLinkedReaderSubjects } from '../features/linked-reader-subject';
+import { createMinimizedReaders } from '../features/minimized-readers';
 import { createNotificationSettings } from '../features/notification-settings';
 import {
   createOrchestrationSettingsSurface,
@@ -222,6 +224,7 @@ import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } fr
 import { createLiveStateStore } from '../live-state';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
+import { loadMinimizedReaders, type MinimizedReader } from '../minimized-readers';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
@@ -1045,6 +1048,8 @@ export async function startHotSheetWebClient() {
   let detailsEditGeneration = 0;
   const readerOpen = signal(false),
     linkedReaderStack = signal<TicketReaderFrame[]>([]),
+    // Minimized ticket readers, per project tab, restored across reloads (HS2-Q8WF64).
+    minimizedReaders = signal<MinimizedReader[]>(loadMinimizedReaders(localStorage)),
     readerLargeText = signal(localStorage.getItem('hotsheet.reader.large-text') === 'true');
   const readerReturnFocus = new Map<string, HTMLElement>();
   const readerClosing = new Set<string>(),
@@ -1687,6 +1692,12 @@ export async function startHotSheetWebClient() {
       ...linkedReaderStack.value
         .filter((frame) => frame.open)
         .map((frame) => ({ projectId: frame.projectId, qualifiedId: frame.ticket.qualified_id, surface: frame.id })),
+      // A minimized reader keeps its response in progress (HS2-Q8WF64).
+      ...minimizedReaders.value.map((entry) => ({
+        projectId: entry.projectId,
+        qualifiedId: entry.qualifiedId,
+        surface: entry.id,
+      })),
     ]);
   });
 
@@ -4968,6 +4979,87 @@ export async function startHotSheetWebClient() {
     ago,
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
   });
+  // Minimizing ticket readers without closing them (HS2-Q8WF64).
+  const minimizedReaderControls = createMinimizedReaders({
+    minimizedReaders,
+    linkedReaderStack,
+    linkedReaderAutosaves,
+    selectedProjectId,
+    projects,
+    project: () => project(),
+    selectedTicket,
+    readerOpen,
+    readerTab,
+    workspaceReaderEdit: () => ({
+      detailsMode: readerDetailsMode.value,
+      detailsDraft: readerDetailsDraft.value,
+      detailsBase: readerDetailsDraftBase,
+      detailsGeneration: 0,
+      editingNoteId: readerEditingNoteId.value,
+      noteDraft: readerNoteDraft.value,
+      noteBase: readerNoteDraftBase,
+      noteGeneration: 0,
+      blockedReasonEditing: readerBlockedReasonEditing.value,
+      blockedReasonDraft: readerBlockedReasonDraft.value,
+      blockedReasonBase: readerBlockedReasonDraftBase,
+      blockedReasonGeneration: 0,
+      composingNote: composingNote.value,
+      newNoteDraft: composingNote.value ? newNoteDraft.value : '',
+      inlineFeedbackReplies: readerInlineFeedbackReplies.value,
+      feedbackChoiceSelections: readerFeedbackChoiceSelections.value,
+    }),
+    resetWorkspaceReader: () => {
+      const ticket = selectedTicket.value;
+      readerDetailsAutosave.cancel();
+      readerNoteAutosave.cancel();
+      readerBlockedReasonAutosave.cancel();
+      readerDetailsEditGeneration += 1;
+      readerDetailsMode.value = 'preview';
+      readerDetailsDraft.value = ticket?.details ?? '';
+      readerDetailsDraftBase = ticket?.details ?? '';
+      readerEditingNoteId.value = undefined;
+      readerNoteDraft.value = '';
+      readerNoteDraftBase = '';
+      readerBlockedReasonEditing.value = false;
+      readerBlockedReasonDraft.value = ticket?.blocked_reason ?? '';
+      readerBlockedReasonDraftBase = ticket?.blocked_reason ?? '';
+      readerInlineFeedbackReplies.value = {};
+      readerFeedbackChoiceSelections.value = {};
+      readerFeedbackChoiceAnchors.clear();
+      // The composer moved to the minimized frame, so the workspace never submits it a second time.
+      composingNote.value = false;
+      newNoteDraft.value = '';
+      if (titleEditingSurface.value === 'reader') titleEditingSurface.value = undefined;
+      scheduleProjectSessionPersistence();
+    },
+    flushDraftInputs,
+    flushWorkspaceReader: async () => {
+      const results = await Promise.all([
+        titleAutosave.flush(),
+        tagsAutosave.flush(),
+        readerDetailsAutosave.flush(),
+        readerNoteAutosave.flush(),
+        readerBlockedReasonAutosave.flush(),
+      ]);
+      return results.every(Boolean);
+    },
+    flushLinkedReader,
+    replaceLinkedReaderFrame,
+    feedbackResponseDrafts,
+    capabilitiesFor,
+    fetchTicket: async (owner, qualifiedId) =>
+      (await new Api(owner.apiPath).checkoutTicket(owner.id, qualifiedId)).ticket,
+    presentTicketReaderDialog,
+    readerDialog,
+    confirm: (options) => confirmation.request(options),
+    showToast,
+    storage: () => (typeof localStorage === 'undefined' ? undefined : localStorage),
+    newId: browserRandomId,
+    openMinimizedMenu: () => {
+      const menu = document.querySelector<HTMLElement>('[data-minimized-tickets-control="menu"]');
+      if (menu) openPopupMenu(menu);
+    },
+  });
   // A linked reader frame's own ticket, project, and Code Review for reader edits (HS2-NXSMC7).
   const linkedReaderSubject = createLinkedReaderSubjects({
     linkedReaderStack: () => linkedReaderStack.value,
@@ -5005,6 +5097,9 @@ export async function startHotSheetWebClient() {
     commandRuns,
     readerOpen,
     linkedReaderStack,
+    disposeMinimizedReaders: (ids) => {
+      minimizedReaderControls.disposeProjects(ids);
+    },
     projectRecords: [
       ticketRowsByProject,
       ticketCursorsByProject,
@@ -6123,6 +6218,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    minimizedTickets: () => minimizedReaderControls.summaries(),
     settingsInspector: (current) => orchestrationSurfaceRef.current?.inspector(current),
     desktopRemoteServers,
     announcerTrigger: announcerController.trigger,
@@ -7218,6 +7314,7 @@ export async function startHotSheetWebClient() {
     approveTicketReaderClose,
     finishTicketReaderClose,
     readerLargeText,
+    minimizedReaderControls,
     linkedReaderStack,
     inspectorTab,
     setSidebarVisible,

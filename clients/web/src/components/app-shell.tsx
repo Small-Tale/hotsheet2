@@ -61,6 +61,9 @@ export interface AppShellProps {
   /** Controls floating over the bottom of the ticket workspace, outside its scroller, such as the search
    * scope toolbar (HS2-4J6764). The workspace's ticket scrollers reserve end space while it is present. */
   workspaceFloating?: SafeHtml;
+  /** The minimized ticket readers' control group (HS2-Q8WF64). It joins the terminal drawer's restore
+   * corner while that corner shows, and otherwise floats alone at the work area's bottom-end corner. */
+  minimizedTickets?: SafeHtml;
   composer?: SafeHtml;
   /** The right rail's panel parts; the Workbench composes its toolbar, header, and collapse toggle and
    * relocates the toggle to the trailing edge of the workspace toolbar while the rail is collapsed. */
@@ -127,6 +130,7 @@ export function AppShell({
   mobileView,
   workspace,
   workspaceFloating,
+  minimizedTickets,
   composer,
   inspector,
   inspectorVisible = true,
@@ -238,6 +242,17 @@ export function AppShell({
   // those flags; otherwise it covers the whole UI with nothing to dismiss it (HS2-S2XQP8).
   const scrimVisible =
     mobile && ((leftRail !== undefined && sidebarVisible) || (rightRail !== undefined && inspectorVisible));
+  // The restore corner shows while the drawer is collapsed and not animating; the minimized tickets
+  // control joins it there and floats alone otherwise, so it never flashes mid-motion either.
+  const restoreCornerShown = mode === 'project' && Boolean(terminalDrawer) && !terminalDrawerTransitioning;
+  const minimizedTicketsAlone =
+    minimizedTickets && !(restoreCornerShown && !terminalDrawerVisible) && !terminalDrawerTransitioning ? (
+      <div class="app-shell__restore-control-theme">
+        <FloatingToolbar label="Minimized Tickets" position="bottom-end">
+          {minimizedTickets}
+        </FloatingToolbar>
+      </div>
+    ) : undefined;
   const bottomDrawer: WorkbenchStaticPanel | undefined =
     mode === 'project' && terminalDrawer
       ? {
@@ -254,9 +269,10 @@ export function AppShell({
           restorePosition: 'bottom-end',
           // The restore corner is Kerf's; the toolbar inside it is the app's control (no inset: the
           // corner owns it). It is withheld while the drawer animates so it never flashes mid-motion.
-          restoreControl: !terminalDrawerTransitioning ? (
+          restoreControl: restoreCornerShown ? (
             <div class="app-shell__restore-control-theme">
               <FloatingToolbar label="Terminal Drawer Controls" position="bottom-end">
+                {minimizedTickets}
                 <ToolbarControlGroup single>
                   <button
                     type="button"
@@ -378,6 +394,7 @@ export function AppShell({
                 {workspace}
               </section>
               {workspaceFloating}
+              {minimizedTicketsAlone}
             </div>
             {/* Passive backdrop inside the Workbench's stacking context, so it paints under its overlay
             rails (z 41) and over everything else in the main column; Kerf's Workbench overlays have no

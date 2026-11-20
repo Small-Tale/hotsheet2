@@ -24,6 +24,7 @@ import {
   Info,
   ListTree,
   MessageSquareCode,
+  Minus,
   Paperclip,
   Star,
   X,
@@ -294,7 +295,16 @@ export function ticketInspectorPanel({
             <LucideIcon icon={ALargeSmall} name="a-large-small" />
           </button>
         </ToolbarControlGroup>
-        <ToolbarControlGroup appearance="borderless" single>
+        {/* Minimize keeps the reader and its drafts off the modal stack (HS2-Q8WF64); it sits beside Close. */}
+        <ToolbarControlGroup appearance="borderless" label="Reader Window">
+          <button
+            type="button"
+            {...INSPECTOR_AND_EDITOR_ACTIONS.minimizeTicketReader.attrs}
+            aria-label="Minimize Ticket Reader"
+            title="Minimize"
+          >
+            <LucideIcon icon={Minus} name="minus" />
+          </button>
           {close}
         </ToolbarControlGroup>
       </>
