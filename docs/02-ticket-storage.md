@@ -1190,7 +1190,12 @@ exists`. Before any Git step a cycle checks for the locks it needs (`index.lock`
   rebase, or push) and is also `blocked`. The remote's own locks (`remote:` lines) are
   not. A rebase a lock interrupts is never aborted, because an abort that cannot lock
   the branch detaches `HEAD`; a later cycle continues it once the lock is gone. The
-  reason names each lock file (store-relative when inside the store) and its age. A
+  reason names each lock file (store-relative when inside the store) and its age.
+  A store- or repository-relative path in any shown or exchanged text (sync and lock
+  reasons, stale-lock recovery, setup plans and labels, AI-help store references) uses
+  `/` on every platform, as Git prints it: `.git/index.lock`, never `.git\index.lock`
+  (`hotsheet_ticketing::slash_path`, HS2-T6YXN0). Absolute paths and filesystem access
+  keep the platform's form. A
   recorded `blocked` outranks a live unfinished rebase in the health read, because that
   rebase cannot continue until the lock is gone.
 - **A provably stale lock is moved aside, never deleted (HS2-T0V269).** The file looks

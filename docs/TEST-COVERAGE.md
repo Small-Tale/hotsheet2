@@ -18,6 +18,18 @@ and worker view suites cover the migrated callers through the built CLI. Only
 macOS was measured; see
 [file-watcher-start-cost-2026-11-12.md](file-watcher-start-cost-2026-11-12.md).
 
+Windows Platforms fixes from run 44690376755: `hotsheet-cli/src/process_liveness.rs`
+unit tests pin the shared process probe (this process alive, an exited child dead, a
+running child alive until stopped, out-of-range pids; HS2-W7E2MJ), and the
+`checkout_remove` suites cover its callers. `src/broken_pipe.rs` pins the Windows
+closed-pipe codes 232 and 109 (HS2-14GCGH) beside `tests/broken_pipe.rs`.
+`hotsheet-jobs/tests/waiter.rs` keeps one waiter on Windows through its directory
+identity (HS2-H6E3RB). `hotsheet-server/tests/json_body_policy.rs` rejects
+`format!`-built JSON with a displayed path (HS2-CSXZ7K).
+`hotsheet-ticketing/src/slash_path.rs` pins the `/` display form of store-relative
+paths on both platforms (HS2-T6YXN0). Windows evidence comes from the `Platforms`
+workflow; an ARM64 VM run supports it.
+
 HS2-F6F42W: `hotsheet-jobs/src/watch.rs # hs2_f6f42w_*` covers the shared
 `BackgroundWatcher`: a start the platform holds up holds up neither its owner nor
 its drop, a refused start reported and retried with a backoff that never

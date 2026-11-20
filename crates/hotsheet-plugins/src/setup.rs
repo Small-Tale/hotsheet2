@@ -382,11 +382,9 @@ impl PlanFs {
                 if original == current {
                     return None;
                 }
-                let label = path
-                    .strip_prefix(project)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .into_owned();
+                // HS2-T6YXN0: a project-relative label uses `/` on every platform.
+                let label =
+                    hotsheet_ticketing::slash_path(path.strip_prefix(project).unwrap_or(path));
                 Some(PlannedChange {
                     path: label,
                     action: if current.is_some() {
@@ -5615,10 +5613,7 @@ section = "instructions.md"
                     visit(root, &path, files);
                 } else {
                     files.insert(
-                        path.strip_prefix(root)
-                            .unwrap()
-                            .to_string_lossy()
-                            .into_owned(),
+                        hotsheet_ticketing::slash_path(path.strip_prefix(root).unwrap()),
                         std::fs::read(path).unwrap(),
                     );
                 }

@@ -13062,9 +13062,11 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
     }
 
     let primary_bad_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    // Built from parts, as the store builds it: no `/` inside a Windows path (HS2-T6YXN0).
     let primary_bad_path = primary
         .path()
-        .join("tickets/01")
+        .join("tickets")
+        .join("01")
         .join(format!("{primary_bad_id}.md"));
     std::fs::create_dir_all(primary_bad_path.parent().unwrap()).unwrap();
     std::fs::write(

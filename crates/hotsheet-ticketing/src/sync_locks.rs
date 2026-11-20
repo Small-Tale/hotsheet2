@@ -135,7 +135,8 @@ fn blocked_reason_at(store_path: &Path, step: &str, locks: &[PathBuf], now: Syst
 }
 
 /// A lock path relative to the store when it is inside it (`.git/index.lock`), else as Git
-/// printed it (a linked worktree's Git directory lives elsewhere).
+/// printed it (a linked worktree's Git directory lives elsewhere). A store-relative path
+/// uses `/` on every platform (HS2-T6YXN0).
 pub(crate) fn display_path(store_path: &Path, lock: &Path) -> String {
     let canonical_store = store_path.canonicalize().ok();
     let canonical_lock = lock
@@ -146,7 +147,8 @@ pub(crate) fn display_path(store_path: &Path, lock: &Path) -> String {
     match (canonical_store, canonical_lock) {
         (Some(store), Some(lock)) => lock.strip_prefix(&store).map_or_else(
             |_| lock.display().to_string(),
-            |relative| relative.display().to_string(),
+            // HS2-T6YXN0: the same `/` form on every platform, as Git prints it.
+            crate::slash_path,
         ),
         _ => lock.display().to_string(),
     }

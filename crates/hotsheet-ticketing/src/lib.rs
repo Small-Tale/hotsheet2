@@ -60,6 +60,7 @@ pub mod saved_views;
 pub mod screensaver;
 pub mod secrets;
 pub mod settings;
+pub mod slash_path;
 pub mod standby;
 pub mod store;
 pub mod store_git;
@@ -113,6 +114,7 @@ pub use settings::{
     AUTO_GROUP_NEW_TICKETS_SETTING, DEFAULT_AUTO_GROUP_NEW_TICKETS, DEFAULT_TRASH_CLEANUP_DAYS,
     Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING, parse_trash_cleanup_days,
 };
+pub use slash_path::slash_path;
 pub use store::{
     AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,
     StoreError, StoreListing, StoreMetadata, flush_background_commits, normalize_ticket_prefix,

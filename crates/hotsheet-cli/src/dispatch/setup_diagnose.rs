@@ -327,11 +327,12 @@ fn path_label(project: &Path, path: &Path) -> String {
     let canonical = project
         .canonicalize()
         .unwrap_or_else(|_| project.to_path_buf());
-    path.strip_prefix(project)
-        .or_else(|_| path.strip_prefix(&canonical))
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned()
+    // HS2-T6YXN0: a project-relative label uses `/` on every platform.
+    hotsheet_ticketing::slash_path(
+        path.strip_prefix(project)
+            .or_else(|_| path.strip_prefix(&canonical))
+            .unwrap_or(path),
+    )
 }
 
 fn command_on_path(command: &str) -> bool {

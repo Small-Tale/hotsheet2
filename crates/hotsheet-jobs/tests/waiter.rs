@@ -237,6 +237,12 @@ fn hs2_n1qdzw_two_threads_waiting_through_one_kept_waiter_both_wake() {
     assert!(kept.waiters_started() <= 1);
 }
 
+/// A crate-relative path with `/` on every platform (HS2-T6YXN0).
+fn slashed(path: &Path) -> String {
+    let parts: Vec<_> = path.iter().map(|part| part.to_string_lossy()).collect();
+    parts.join("/")
+}
+
 fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
@@ -275,7 +281,7 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
             let source = std::fs::read_to_string(file).unwrap();
             needles.iter().any(|needle| source.contains(needle))
         })
-        .map(|file| file.strip_prefix(crates).unwrap().display().to_string())
+        .map(|file| slashed(file.strip_prefix(crates).unwrap()))
         .collect();
     assert!(
         offenders.is_empty(),
@@ -294,7 +300,7 @@ fn hs2_n1qdzw_waiters_start_the_platform_watcher_only_through_the_shared_one() {
         .iter()
         .flat_map(|file| {
             let source = std::fs::read_to_string(file).unwrap();
-            let name = file.strip_prefix(crates).unwrap().display().to_string();
+            let name = slashed(file.strip_prefix(crates).unwrap());
             std::iter::repeat_n(name, source.matches("recommended_watcher(").count())
         })
         .collect();

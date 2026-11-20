@@ -342,6 +342,8 @@ fn hs2_t0v269_a_lock_that_changes_or_vanishes_mid_move_is_not_moved() {
     assert_ne!(again, stash);
 }
 
+/// `lsof` and its absolute `/` paths exist only on Unix; the Windows scan is HS2-8D34QV.
+#[cfg(unix)]
 #[test]
 fn hs2_t0v269_reads_lsof_field_output() {
     let output = "p100\ncgit\nfcwd\nn/repo/store\nf3\nn/repo/store/.git/index.lock\nftxt\n\

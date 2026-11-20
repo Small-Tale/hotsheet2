@@ -444,7 +444,7 @@ fn scan_processes() -> Result<Vec<ProcessFiles>, String> {
 }
 
 /// Parse `lsof -F pcfn` output: `p<pid>`, `c<command>`, then `f<fd>` and `n<name>` per file.
-#[cfg(any(test, all(unix, not(target_os = "linux"))))]
+#[cfg(all(unix, any(test, not(target_os = "linux"))))]
 fn parse_lsof(output: &str) -> Vec<ProcessFiles> {
     let mut processes: Vec<ProcessFiles> = Vec::new();
     let mut fd = String::new();

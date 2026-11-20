@@ -355,11 +355,12 @@ pub fn store_reference(project: &Path, store: &Path) -> String {
     };
     let (project, store) = (canonical(project), canonical(store));
     if let Ok(inside) = store.strip_prefix(&project) {
-        let text = inside.to_string_lossy();
+        // HS2-T6YXN0: shared between machines, so `/` on every platform.
+        let text = crate::slash_path(inside);
         return if text.is_empty() {
             ".".to_string()
         } else {
-            text.into_owned()
+            text
         };
     }
     let name = store

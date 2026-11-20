@@ -360,7 +360,7 @@ fn hs2_hm0y6x_prune_unregisters_abandoned_temporary_checkouts() {
         .map(|c| c["root"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(roots.len(), 1, "{roots:?}");
-    assert!(roots[0].ends_with("/live"));
+    assert!(Path::new(&roots[0]).ends_with("live"), "{roots:?}");
 
     run(&["checkout", "prune"])
         .assert()

@@ -467,7 +467,8 @@ mod tests {
 
     #[test]
     fn command_in_pins_working_directory_and_dash_c() {
-        let dir = PathBuf::from("/some/store");
+        // An absolute path on every platform (`/some/store` is relative to a drive on Windows).
+        let dir = std::env::temp_dir().join("some").join("store");
         let cmd = command_in(&dir);
         assert_eq!(cmd.get_current_dir(), Some(dir.as_path()));
         let args: Vec<_> = cmd.get_args().collect();
@@ -476,8 +477,12 @@ mod tests {
 
     #[test]
     fn command_in_makes_a_relative_directory_absolute() {
-        let cmd = command_in("relative/store");
-        let expected = std::env::current_dir().unwrap().join("relative/store");
+        let cmd = command_in(Path::new("relative").join("store"));
+        // Built from parts: Windows normalizes a `/` in an absolute path to `\`.
+        let expected = std::env::current_dir()
+            .unwrap()
+            .join("relative")
+            .join("store");
         assert_eq!(cmd.get_current_dir(), Some(expected.as_path()));
         assert_eq!(cmd.get_args().nth(1), Some(expected.as_os_str()));
     }
