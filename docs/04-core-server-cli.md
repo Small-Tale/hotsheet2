@@ -86,6 +86,14 @@ register|list|resolve`, authenticated server `/checkouts` routes, MCP list/resol
 and `setup` registration share this registry. Only server instance records contain a
 bearer token; those files are user-readable only on Unix.
 
+A canonical path has one spelling on every platform (HS2-ECJ188, HS2-CTV942). On Windows,
+Hot Sheet resolves 8.3 short names (`RUNNER~1`) to long names and never keeps the verbatim
+`\\?\` prefix that the operating system's canonicalization returns, unless the ordinary
+spelling would name another file (a path longer than `MAX_PATH`, a device name such as
+`NUL`, or a trailing dot or space). Registered roots, store locators, checkout ids, Git
+arguments, and printed commands all use that spelling, and Git's `C:/...` output is read
+back as `C:\...`. Unix spellings are unchanged.
+
 Registry mutations take an operating-system file lock across CLI and server processes,
 then replace the JSON through a uniquely named, flushed temporary file. This preserves
 every checkout when project opens overlap and prevents one writer from continuing through

@@ -97,7 +97,7 @@ impl<S: SecretStore> MachineSecrets<S> {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))?;
         }
-        Ok(directory.canonicalize()?)
+        Ok(hotsheet_sync::paths::canonicalize(&directory)?)
     }
 
     fn envelope_path(directory: &Path, account: &str) -> PathBuf {

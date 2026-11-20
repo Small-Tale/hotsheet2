@@ -1213,8 +1213,8 @@ mod tests {
         let out = fs::read_to_string(tools.join("out")).unwrap();
         let mut lines = out.lines();
         assert_eq!(
-            fs::canonicalize(lines.next().unwrap()).unwrap(),
-            fs::canonicalize(&tools).unwrap()
+            hotsheet_sync::paths::canonicalize(lines.next().unwrap()).unwrap(),
+            hotsheet_sync::paths::canonicalize(&tools).unwrap()
         );
         let mut seen: Vec<&str> = lines
             .filter(|line| {

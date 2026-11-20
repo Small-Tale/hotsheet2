@@ -728,7 +728,10 @@ mod tests {
             if view.state == "completed" && !view.output.is_empty() {
                 assert_eq!(
                     view.output[0].text,
-                    project.path().canonicalize().unwrap().display().to_string()
+                    hotsheet_sync::paths::canonicalize(project.path())
+                        .unwrap()
+                        .display()
+                        .to_string()
                 );
                 return;
             }

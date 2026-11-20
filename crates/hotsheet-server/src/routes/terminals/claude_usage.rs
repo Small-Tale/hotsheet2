@@ -198,8 +198,7 @@ fn transcript_for_session(path: &str, session_id: &str) -> Result<PathBuf, ApiEr
     // A fresh Claude session names its transcript before creating it. Once it exists,
     // still reject a symlink that resolves outside a projects/session path.
     if path.exists() {
-        let resolved = path
-            .canonicalize()
+        let resolved = hotsheet_sync::paths::canonicalize(path)
             .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "Claude transcript unavailable"))?;
         if !resolved.is_file()
             || resolved.file_name().and_then(|name| name.to_str()) != Some(filename.as_str())

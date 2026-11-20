@@ -308,7 +308,7 @@ async fn sweep_unhosted(state: &AppState) {
         // example `/var` vs `/private/var` on macOS) or a terminal inside a checkout never matches.
         let terminal_dirs: Vec<std::path::PathBuf> = terminal_dirs
             .into_iter()
-            .map(|dir| dir.canonicalize().unwrap_or(dir))
+            .map(|dir| hotsheet_sync::paths::canonicalize(&dir).unwrap_or(dir))
             .collect();
         let in_terminal = |checkout: &hotsheet_ticketing::checkouts::Checkout| {
             terminal_dirs

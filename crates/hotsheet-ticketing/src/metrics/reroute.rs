@@ -67,7 +67,7 @@ fn settled_through(store: &FsStore) -> io::Result<String> {
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Move every raw row of `source` that `route` assigns to another store. `route` sees the

@@ -105,7 +105,7 @@ pub(super) async fn placed(fleet: &Fleet, step: &str, side: Side) -> Placed {
     let report = launch_report(&fleet.reports, &terminal);
     assert_eq!(
         std::path::Path::new(report["cwd"].as_str().unwrap()),
-        fleet.project(side).canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(fleet.project(side)).unwrap(),
         "{report}"
     );
     assert_eq!(report["env"]["HOTSHEET_WORKER_ID"], worker.as_str());

@@ -215,7 +215,10 @@ impl RelayAgent {
 }
 
 fn same_path(left: &Path, right: &Path) -> bool {
-    match (left.canonicalize(), right.canonicalize()) {
+    match (
+        hotsheet_sync::paths::canonicalize(left),
+        hotsheet_sync::paths::canonicalize(right),
+    ) {
         (Ok(left), Ok(right)) => left == right,
         _ => left == right,
     }

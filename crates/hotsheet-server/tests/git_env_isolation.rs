@@ -316,7 +316,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     let checkout = root.path().join("checkout");
     std::fs::create_dir(&checkout).unwrap();
     git(&checkout, &["init", "-q", "-b", "main"]);
-    let checkout = std::fs::canonicalize(&checkout).unwrap();
+    let checkout = hotsheet_sync::paths::canonicalize(&checkout).unwrap();
     let (server, info, _store, log) = hostile_server(root.path(), &sentinel);
     assert_sentinel_unchanged(&before, &sentinel, "server startup");
 

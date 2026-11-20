@@ -489,7 +489,7 @@ async fn hs2_4j6v46_actual_project_path_server_stdio_target_workflows_share_the_
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let instance = hotsheet_cli::external_launch::instance_path(&home, &source);
     std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
-    let record=json!({"pid":std::process::id(),"url":origin,"secret":SECRET,"store_path":source.canonicalize().unwrap()}).to_string();
+    let record=json!({"pid":std::process::id(),"url":origin,"secret":SECRET,"store_path":hotsheet_sync::paths::canonicalize(&source).unwrap()}).to_string();
     std::fs::write(&instance, &record).unwrap();
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let task = tokio::spawn(async move {
@@ -736,7 +736,7 @@ async fn hs2_4j6v46_real_remote_project_and_http_stdio_inspect_requires_explicit
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let instance = hotsheet_cli::external_launch::instance_path(&home, &source);
     std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
-    let record=json!({"pid":std::process::id(),"url":origin,"secret":SECRET,"store_path":source.canonicalize().unwrap()}).to_string();
+    let record=json!({"pid":std::process::id(),"url":origin,"secret":SECRET,"store_path":hotsheet_sync::paths::canonicalize(&source).unwrap()}).to_string();
     std::fs::write(&instance, &record).unwrap();
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let task = tokio::spawn(async move {

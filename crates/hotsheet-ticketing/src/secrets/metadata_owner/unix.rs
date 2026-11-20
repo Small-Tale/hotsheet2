@@ -136,7 +136,7 @@ fn create_tree(path: &Path, created: &mut Vec<PathBuf>) -> Result<(), SecretErro
 }
 fn sync_created(created: &[PathBuf]) -> Result<(), SecretError> {
     for path in created.iter().rev() {
-        let path = path.canonicalize()?;
+        let path = hotsheet_sync::paths::canonicalize(path)?;
         Identity::directory(&path)?;
         File::open(&path)?.sync_all()?;
         if let Some(parent) = path.parent() {
@@ -149,7 +149,7 @@ impl Directories {
     pub(super) fn prepare(requested: &Path) -> Result<(PathBuf, PathBuf, Self), SecretError> {
         let mut created = Vec::new();
         create_tree(requested, &mut created)?;
-        let root = requested.canonicalize()?;
+        let root = hotsheet_sync::paths::canonicalize(requested)?;
         let root_identity = Identity::directory(&root)?;
         let accounts = root.join("key-metadata-locks");
         create_tree(&accounts, &mut created)?;

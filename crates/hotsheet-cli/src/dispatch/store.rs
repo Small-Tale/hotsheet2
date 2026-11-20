@@ -195,8 +195,7 @@ pub(crate) fn cmd_bootstrap(
     remote: Option<&str>,
     tools: &[String],
 ) -> Result<()> {
-    let project = project_input
-        .canonicalize()
+    let project = hotsheet_sync::paths::canonicalize(project_input)
         .with_context(|| format!("project path does not exist: {}", project_input.display()))?;
     let store_candidate = store_input.map_or_else(
         || PathBuf::from(format!("{}.hs2", project.display())),
@@ -1006,9 +1005,7 @@ pub(crate) fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
     };
     // Same store_id derivation the server uses (the store root), so the rebuilt file is
     // the one the server reconciles against.
-    let store_id = store
-        .root()
-        .canonicalize()
+    let store_id = hotsheet_sync::paths::canonicalize(store.root())
         .unwrap_or_else(|_| store.root().to_path_buf())
         .display()
         .to_string();
@@ -1034,8 +1031,12 @@ pub(crate) fn cmd_worklist(path: &Path, cwd: &Path) -> Result<()> {
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
     let registered = registry.list()?.into_iter().find(|checkout| {
-        Path::new(&checkout.root).canonicalize().ok().as_ref()
-            == checkout_root.canonicalize().ok().as_ref()
+        hotsheet_sync::paths::canonicalize(Path::new(&checkout.root))
+            .ok()
+            .as_ref()
+            == hotsheet_sync::paths::canonicalize(&checkout_root)
+                .ok()
+                .as_ref()
     });
     let n = if let Some(checkout) = registered {
         hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?
@@ -1394,7 +1395,9 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                     anyhow::anyhow!("{connection_id} is not a linked Git ticket source")
                 })?;
             let root = PathBuf::from(&source.locator);
-            if root.canonicalize()? == Path::new(&checkout.root).canonicalize()? {
+            if hotsheet_sync::paths::canonicalize(&root)?
+                == hotsheet_sync::paths::canonicalize(Path::new(&checkout.root))?
+            {
                 bail!("cannot rewrite a ticket store that is also the code repository");
             }
             if recover {
@@ -1501,7 +1504,8 @@ fn review_checkout_source(
     };
     let recorded = checkout.store_instance_ids.get(connection_id).cloned();
     let destination = store.unwrap_or_else(|| PathBuf::from(&source.locator));
-    let moved = destination.canonicalize().ok() != Path::new(&source.locator).canonicalize().ok();
+    let moved = hotsheet_sync::paths::canonicalize(&destination).ok()
+        != hotsheet_sync::paths::canonicalize(Path::new(&source.locator)).ok();
     if recorded.is_some() && !moved {
         println!(
             "Source '{connection_id}' of checkout {} already has a recorded store identity; nothing to do.",

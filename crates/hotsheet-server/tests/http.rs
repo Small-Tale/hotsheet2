@@ -468,7 +468,7 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
         .as_str()
         .unwrap()
         .to_owned();
-    let checkout_root = checkout_dir.path().canonicalize().unwrap();
+    let checkout_root = hotsheet_sync::paths::canonicalize(checkout_dir.path()).unwrap();
     let created = router
         .clone()
         .oneshot(authed(
@@ -488,7 +488,10 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
     {
         let prepared = preparations.lock().unwrap();
         assert_eq!(prepared[0].0, checkout_root);
-        assert_eq!(prepared[0].1, linked_dir.path().canonicalize().unwrap());
+        assert_eq!(
+            prepared[0].1,
+            hotsheet_sync::paths::canonicalize(linked_dir.path()).unwrap()
+        );
         assert_eq!(prepared[0].2, linked_source.connection_id);
         assert!(
             prepared[0]
@@ -598,7 +601,7 @@ async fn client_drive_requires_an_explicit_source_for_an_ambiguous_checkout() {
     assert_eq!(body_json(selected).await["source"], first.connection_id);
     assert_eq!(
         preparations.lock().unwrap()[0].1,
-        first_dir.path().canonicalize().unwrap()
+        hotsheet_sync::paths::canonicalize(first_dir.path()).unwrap()
     );
 }
 
@@ -7456,9 +7459,7 @@ async fn checkout_registry_is_authenticated_and_resolvable() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
         body_json(resp).await["root"],
-        checkout
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(checkout.path())
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -8420,7 +8421,7 @@ async fn opening_project_discovers_a_linked_ticket_store_without_a_source_choice
     let opened = body_json(opened).await;
     assert_eq!(
         opened["checkout"]["stores"],
-        serde_json::json!([linked.canonicalize().unwrap()])
+        serde_json::json!([hotsheet_sync::paths::canonicalize(&linked).unwrap()])
     );
     let checkout_id = opened["checkout"]["id"].as_str().unwrap();
     let tickets = app
@@ -9119,8 +9120,7 @@ args = ["--path", "{store}"]
             .unwrap();
     assert_eq!(
         mcp["mcpServers"]["hotsheet"]["args"][1],
-        ticket_store
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(&ticket_store)
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -13266,9 +13266,7 @@ async fn repository_status_endpoint_reports_real_git_state() {
     assert_eq!(status["clean"], false);
     assert_eq!(
         status["root"],
-        checkout
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(checkout.path())
             .unwrap()
             .display()
             .to_string()
@@ -20216,8 +20214,9 @@ async fn a_broker_terminal_without_a_cwd_records_the_store_root() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let info = body_json(resp).await;
-    let root = std::fs::canonicalize(primary.path()).unwrap();
-    let recorded = std::fs::canonicalize(info["cwd"].as_str().expect("a recorded cwd")).unwrap();
+    let root = hotsheet_sync::paths::canonicalize(primary.path()).unwrap();
+    let recorded =
+        hotsheet_sync::paths::canonicalize(info["cwd"].as_str().expect("a recorded cwd")).unwrap();
     assert_eq!(recorded, root, "{info}");
     let _ = app
         .oneshot(authed("DELETE", "/terminals/quiet", None))
@@ -20924,7 +20923,10 @@ async fn shell_terminal_routes_permissions_to_its_own_checkout_project() {
         .register(&checkout, None, None, vec![store.root().to_path_buf()])
         .unwrap();
     let app = app(st.with_checkout_registry(registry_path));
-    let expected = checkout.canonicalize().unwrap().display().to_string();
+    let expected = hotsheet_sync::paths::canonicalize(&checkout)
+        .unwrap()
+        .display()
+        .to_string();
     let request = serde_json::json!({
         "id": "project-route",
         "command": "/bin/sh",
@@ -23026,7 +23028,10 @@ async fn hs2_afsf4x_discards_verified_shared_source_answers_without_checkout_gra
         .register(&second_root, None, None, vec![store_path.clone()])
         .unwrap();
     let legacy_project = store.root().display().to_string();
-    let shared_locator = store_path.canonicalize().unwrap().display().to_string();
+    let shared_locator = hotsheet_sync::paths::canonicalize(&store_path)
+        .unwrap()
+        .display()
+        .to_string();
     let source_id = first
         .sources
         .iter()
@@ -28746,8 +28751,7 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     )
     .unwrap();
     let old_id = hotsheet_ticketing::checkouts::TicketSource::git(&old_store).connection_id;
-    let old_locator = old_store
-        .canonicalize()
+    let old_locator = hotsheet_sync::paths::canonicalize(&old_store)
         .unwrap()
         .to_string_lossy()
         .into_owned();
@@ -28843,7 +28847,10 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
         assert_eq!(checkout["store_instance_ids"][new_id], store_instance_id);
         assert_eq!(
             checkout["sources"][0]["locator"],
-            new_store.canonicalize().unwrap().to_str().unwrap()
+            hotsheet_sync::paths::canonicalize(&new_store)
+                .unwrap()
+                .to_str()
+                .unwrap()
         );
         let providers = app
             .clone()
@@ -32069,9 +32076,7 @@ async fn code_review_shows_unmerged_worktree_commits_until_they_are_merged() {
             .clone()
     };
     let canonical = |path: &serde_json::Value| {
-        std::path::Path::new(path.as_str().unwrap())
-            .canonicalize()
-            .unwrap()
+        hotsheet_sync::paths::canonicalize(std::path::Path::new(path.as_str().unwrap())).unwrap()
     };
     assert!(by_sha(&merged).get("unmerged").is_none());
     assert_eq!(commits.last().unwrap()["sha"], merged.as_str());
@@ -32080,14 +32085,14 @@ async fn code_review_shows_unmerged_worktree_commits_until_they_are_merged() {
         assert_eq!(unmerged["branch"], "feature");
         assert_eq!(
             canonical(&unmerged["worktree"]),
-            feature.canonicalize().unwrap()
+            hotsheet_sync::paths::canonicalize(&feature).unwrap()
         );
     }
     let loose_source = by_sha(&loose)["unmerged"].clone();
     assert!(loose_source.get("branch").is_none());
     assert_eq!(
         canonical(&loose_source["worktree"]),
-        detached.canonicalize().unwrap()
+        hotsheet_sync::paths::canonicalize(&detached).unwrap()
     );
     // The two-commit worktree run is a reviewable range.
     let ranges = found["ranges"].as_array().unwrap();

@@ -57,7 +57,9 @@ impl InstanceInfo {
     /// primary store), not merely hosting it beside its own anchor.
     #[must_use]
     pub fn anchored_on(&self, store_path: &Path) -> bool {
-        let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canonical = |path: &Path| {
+            hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        };
         self.anchor
             .as_deref()
             .is_some_and(|anchor| canonical(Path::new(anchor)) == canonical(store_path))
@@ -115,9 +117,8 @@ pub fn pinned_stop_refusal(info: &InstanceInfo, store_path: &Path) -> String {
 
 /// A stable per-store id (hash of the canonical store path) — the same key the index uses.
 fn project_id(store_path: &Path) -> String {
-    let root = store_path
-        .canonicalize()
-        .unwrap_or_else(|_| store_path.to_path_buf());
+    let root =
+        hotsheet_sync::paths::canonicalize(store_path).unwrap_or_else(|_| store_path.to_path_buf());
     hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16].to_string()
 }
 

@@ -28,8 +28,8 @@ pub(super) fn init(path: &Path, metadata: &StoreMetadata) -> FsStore {
     assert!(output.status.success());
     let root = String::from_utf8(output.stdout).unwrap();
     assert_eq!(
-        std::fs::canonicalize(root.trim()).unwrap(),
-        std::fs::canonicalize(path).unwrap()
+        hotsheet_sync::paths::canonicalize(root.trim()).unwrap(),
+        hotsheet_sync::paths::canonicalize(path).unwrap()
     );
     store
 }

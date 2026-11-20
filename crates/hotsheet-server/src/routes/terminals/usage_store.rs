@@ -24,7 +24,7 @@ pub(crate) struct UsageTarget {
 
 /// The registered checkout whose root contains `dir` (the deepest one when roots nest).
 pub(crate) fn checkout_containing(state: &AppState, dir: &Path) -> Option<Checkout> {
-    let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let dir = hotsheet_sync::paths::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     state
         .checkout_registry
         .list()
@@ -221,12 +221,14 @@ mod tests {
         let usage_root = checkout.usage_source().unwrap().locator.clone();
         let unclaimed = target(&state);
         assert_eq!(
-            unclaimed.store.root().canonicalize().unwrap(),
+            hotsheet_sync::paths::canonicalize(unclaimed.store.root()).unwrap(),
             Path::new(&usage_root)
         );
         assert_eq!(unclaimed.ticket, None);
 
-        let other = if first.root().canonicalize().unwrap() == Path::new(&usage_root) {
+        let other = if hotsheet_sync::paths::canonicalize(first.root()).unwrap()
+            == Path::new(&usage_root)
+        {
             &second
         } else {
             &first
@@ -234,8 +236,8 @@ mod tests {
         let ticket = claim(other, "XX");
         let claimed = target(&state);
         assert_eq!(
-            claimed.store.root().canonicalize().unwrap(),
-            other.root().canonicalize().unwrap()
+            hotsheet_sync::paths::canonicalize(claimed.store.root()).unwrap(),
+            hotsheet_sync::paths::canonicalize(other.root()).unwrap()
         );
         assert_eq!(claimed.ticket.as_deref(), Some(ticket.as_str()));
 
@@ -249,7 +251,7 @@ mod tests {
         .unwrap();
         let released = target(&state);
         assert_eq!(
-            released.store.root().canonicalize().unwrap(),
+            hotsheet_sync::paths::canonicalize(released.store.root()).unwrap(),
             Path::new(&usage_root)
         );
         assert_eq!(released.ticket, None);

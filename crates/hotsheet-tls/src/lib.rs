@@ -95,9 +95,8 @@ impl Paths {
 /// The project id — a SHA-256 of the canonical store path (first 16 hex), matching
 /// `lifecycle::project_id` so the TLS dir lines up with the index/instance dirs.
 pub fn project_id(store_path: &Path) -> String {
-    let root = store_path
-        .canonicalize()
-        .unwrap_or_else(|_| store_path.to_path_buf());
+    let root =
+        hotsheet_sync::paths::canonicalize(store_path).unwrap_or_else(|_| store_path.to_path_buf());
     let mut h = Sha256::new();
     h.update(root.to_string_lossy().as_bytes());
     format!("{:x}", h.finalize())[..16].to_string()

@@ -182,8 +182,8 @@ fn hs2_wn0mxz_a_profile_step_runs_in_the_target_and_records_references_only() {
     // It ran in the target checkout, on this (the hosting) machine.
     let ran = std::fs::read_to_string(Path::new(&m.target.root).join("ran-here")).unwrap();
     assert_eq!(
-        std::fs::canonicalize(ran.trim()).unwrap(),
-        std::fs::canonicalize(&m.target.root).unwrap()
+        hotsheet_sync::paths::canonicalize(ran.trim()).unwrap(),
+        hotsheet_sync::paths::canonicalize(&m.target.root).unwrap()
     );
     assert_eq!(
         m.last_audit(),

@@ -178,17 +178,19 @@ pub fn capture_current_session(store: &FsStore, worker: &str) -> io::Result<usiz
     let Ok(project) = std::env::var("HOTSHEET_PROJECT") else {
         return Ok(0);
     };
-    let Some(store_root) = fs::canonicalize(store.root()).ok() else {
+    let Some(store_root) = hotsheet_sync::paths::canonicalize(store.root()).ok() else {
         return Ok(0);
     };
-    let direct_store = fs::canonicalize(project).ok().as_deref() == Some(store_root.as_path());
+    let direct_store =
+        hotsheet_sync::paths::canonicalize(project).ok().as_deref() == Some(store_root.as_path());
     let linked_store = std::env::var("HOTSHEET_USAGE_STORES")
         .ok()
         .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
         .is_some_and(|paths| {
-            paths
-                .iter()
-                .any(|path| fs::canonicalize(path).ok().as_deref() == Some(store_root.as_path()))
+            paths.iter().any(|path| {
+                hotsheet_sync::paths::canonicalize(path).ok().as_deref()
+                    == Some(store_root.as_path())
+            })
         });
     if worker != bound_worker || !valid_session_id(&session) || !(direct_store || linked_store) {
         return Ok(0);

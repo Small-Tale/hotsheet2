@@ -1302,7 +1302,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             // HS2-TRP2MJ: an existing directory, recorded by its resolved path.
             let worktree = worktree
                 .map(|path| {
-                    std::fs::canonicalize(&path)
+                    hotsheet_sync::paths::canonicalize(&path)
                         .ok()
                         .filter(|resolved| resolved.is_dir())
                         .and_then(|resolved| resolved.to_str().map(str::to_owned))

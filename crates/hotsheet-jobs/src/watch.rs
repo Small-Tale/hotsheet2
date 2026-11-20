@@ -416,7 +416,7 @@ mod tests {
 
     /// Paths as events report them: the temporary directory is a symlink on macOS.
     fn real(path: &Path) -> PathBuf {
-        path.canonicalize().unwrap()
+        hotsheet_sync::paths::canonicalize(path).unwrap()
     }
 
     fn watching(paths: &[(&Path, RecursiveMode)]) -> (PathWatcher, Receiver<Delivery>) {

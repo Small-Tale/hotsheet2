@@ -225,8 +225,7 @@ fn confined_diff_path(root: &FsPath, requested: &str) -> Result<PathBuf, ApiErro
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid edit path"));
     }
     let registered_root = root;
-    let root = root
-        .canonicalize()
+    let root = hotsheet_sync::paths::canonicalize(root)
         .map_err(|_| ApiError::new(StatusCode::NOT_FOUND, "checkout is unavailable"))?;
     let input = FsPath::new(requested);
     let relative = if input.is_absolute() {
@@ -251,9 +250,9 @@ fn confined_diff_path(root: &FsPath, requested: &str) -> Result<PathBuf, ApiErro
     let target = root.join(relative);
     // An existing symlink (or a deleted file under a symlinked parent) cannot escape the root.
     let resolved = if target.exists() {
-        target.canonicalize()
+        hotsheet_sync::paths::canonicalize(&target)
     } else {
-        target.parent().unwrap_or(&root).canonicalize()
+        hotsheet_sync::paths::canonicalize(target.parent().unwrap_or(&root))
     }
     .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "edit path is unavailable"))?;
     if !resolved.starts_with(&root) {

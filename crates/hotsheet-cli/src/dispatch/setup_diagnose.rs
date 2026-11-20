@@ -72,8 +72,7 @@ pub(super) fn run(
             .map(|arg| {
                 arg.replace(
                     "{store}",
-                    &store
-                        .canonicalize()
+                    &hotsheet_sync::paths::canonicalize(store)
                         .unwrap_or_else(|_| store.to_path_buf())
                         .to_string_lossy(),
                 )
@@ -228,10 +227,9 @@ fn worklist_refresh_changes(store: &Path, project: &Path) -> Result<Vec<Value>> 
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or(Value::Null);
-    let source = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
-    let project_abs = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let source = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
+    let project_abs =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let mut checkouts: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
     for checkout in registry["checkouts"].as_array().into_iter().flatten() {
         let Some(root) = checkout["root"].as_str().map(PathBuf::from) else {
@@ -249,9 +247,9 @@ fn worklist_refresh_changes(store: &Path, project: &Path) -> Result<Vec<Value>> 
             stores.push(source.clone());
         }
         if is_project
-            || stores
-                .iter()
-                .any(|path| path.canonicalize().unwrap_or_else(|_| path.clone()) == source)
+            || stores.iter().any(|path| {
+                hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.clone()) == source
+            })
         {
             checkouts.push((root, stores));
         }
@@ -324,9 +322,8 @@ fn local_git_exclude(project: &Path) -> Option<std::path::PathBuf> {
 }
 
 fn path_label(project: &Path, path: &Path) -> String {
-    let canonical = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let canonical =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     // HS2-T6YXN0: a project-relative label uses `/` on every platform.
     hotsheet_ticketing::slash_path(
         path.strip_prefix(project)
@@ -360,10 +357,9 @@ fn registry_status(store: &Path, project: &Path) -> Value {
         Ok(data) => data,
         Err(error) => return json!({"status":"invalid", "path":path, "detail":error.to_string()}),
     };
-    let root = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
-    let source = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let root =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+    let source = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let registered = data["checkouts"].as_array().is_some_and(|checkouts| {
         checkouts.iter().any(|checkout| {
             checkout["root"]
@@ -399,9 +395,8 @@ fn live_status(store: &Path, project: &Path) -> Value {
         return json!({"server":"unreachable", "connection":"unknown"});
     };
     let terminal_id = hotsheet_cli::launched_env::value("HOTSHEET_TERMINAL_ID");
-    let root = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let root =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let relevant = terminals
         .as_array()
         .into_iter()
@@ -409,8 +404,7 @@ fn live_status(store: &Path, project: &Path) -> Value {
         .filter(|entry| {
             let named = terminal_id.as_deref().is_some_and(|id| entry["id"] == id);
             let in_project = entry["cwd"].as_str().is_some_and(|cwd| {
-                Path::new(cwd)
-                    .canonicalize()
+                hotsheet_sync::paths::canonicalize(Path::new(cwd))
                     .unwrap_or_else(|_| Path::new(cwd).to_path_buf())
                     .starts_with(&root)
             });

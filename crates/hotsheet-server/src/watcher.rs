@@ -149,7 +149,8 @@ pub(crate) fn startup_bridge_config() -> notify::Config {
 
 /// Whether two paths point at the same store root (canonicalized; lexical fallback).
 pub(crate) fn same_path(a: &FsPath, b: &FsPath) -> bool {
-    let canon = |p: &FsPath| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let canon =
+        |p: &FsPath| hotsheet_sync::paths::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     canon(a) == canon(b)
 }
 
@@ -582,7 +583,7 @@ impl RepositoryEventFilter {
 /// A path as given and canonicalized (macOS reports `/private/var/...` for `/var/...`).
 fn path_spellings(path: &FsPath) -> Vec<std::path::PathBuf> {
     let mut spellings = vec![path.to_path_buf()];
-    if let Ok(canonical) = path.canonicalize()
+    if let Ok(canonical) = hotsheet_sync::paths::canonicalize(path)
         && canonical != path
     {
         spellings.push(canonical);
@@ -1306,7 +1307,9 @@ mod watcher_tests {
         assert!(filter.is_relevant(&event(root.join("src/lib.rs"))));
         assert!(filter.is_relevant(&Err(hotsheet_jobs::watch::Error::generic("dropped"))));
         // A canonical spelling of an ignored path (macOS /private/var) is still ignored.
-        let canonical = root.canonicalize().unwrap().join("target/debug/artifact");
+        let canonical = hotsheet_sync::paths::canonicalize(root)
+            .unwrap()
+            .join("target/debug/artifact");
         assert!(!filter.is_relevant(&event(canonical)));
 
         // An ignored directory created after startup is learned on refresh.

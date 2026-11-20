@@ -94,9 +94,7 @@ fn the_lint_would_catch_a_tool_id_branch() {
 
 /// The workspace root (this test's crate is `crates/hotsheet-plugins`).
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
+    hotsheet_sync::paths::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
         .expect("workspace root resolves")
 }
 

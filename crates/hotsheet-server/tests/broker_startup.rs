@@ -344,12 +344,14 @@ fn hs2_h0wfjg_a_pinned_server_keeps_a_dev_broker_with_terminals_and_replaces_it_
         fs::create_dir(binary.parent().unwrap()).unwrap();
         fs::copy(workspace_bin::path("hotsheet-server"), &binary).unwrap();
         // A fresh copy is a new executable to macOS: launch it once before `ready()` times it.
-        first_launch::launched(binary.canonicalize().unwrap(), &["--version"])
+        first_launch::launched(
+            hotsheet_sync::paths::canonicalize(&binary).unwrap(),
+            &["--version"],
+        )
     };
     let (dev, pinned) = (copy("dev"), copy("pinned"));
     let executable = |identity: &Value| {
-        Path::new(identity["executable"].as_str().unwrap())
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(Path::new(identity["executable"].as_str().unwrap()))
             .unwrap()
     };
 

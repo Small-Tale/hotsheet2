@@ -1247,7 +1247,7 @@ fn collect_findings(
         }
         if enabled_tool {
             if let Some(finding) = artifacts.iter_mut().find(|finding| finding.kind == ArtifactKind::Mcp) {
-                let store_abs = store_path.canonicalize().unwrap_or_else(|_| store_path.to_path_buf());
+                let store_abs = hotsheet_sync::paths::canonicalize(store_path).unwrap_or_else(|_| store_path.to_path_buf());
                 let (expected_command, expected_args, _) = mcp_entry(
                     &original,
                     project,
@@ -1893,8 +1893,7 @@ fn setup_plugins_with_fs(
     refresh_targets: Option<&[String]>,
 ) -> Result<Vec<SetupReport>, SetupError> {
     // Absolute store path so the MCP `--path` works from wherever the tool launches.
-    let store_abs = store_path
-        .canonicalize()
+    let store_abs = hotsheet_sync::paths::canonicalize(store_path)
         .map_err(|_| SetupError::NoStore(store_path.display().to_string()))?;
 
     for p in &plugins {
@@ -3051,9 +3050,8 @@ fn mcp_config_locally_owned(fs: &PlanFs, project: &Path, p: &Plugin) -> bool {
 /// The machine-specific launch: the absolute `hotsheet-mcp` and the absolute project (or,
 /// for a third-party plugin, store) path.
 fn absolute_mcp_launch(project: &Path, store_abs: &Path, p: &Plugin) -> (String, Vec<String>) {
-    let project_abs = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let project_abs =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let path = if p.is_builtin() {
         &project_abs
     } else {
@@ -7068,7 +7066,10 @@ args = []
         }
 
         fn entry(&self, project: &Path) -> serde_json::Value {
-            let key = project.canonicalize().unwrap().display().to_string();
+            let key = hotsheet_sync::paths::canonicalize(project)
+                .unwrap()
+                .display()
+                .to_string();
             self.read().unwrap_or_default()["projects"][&key]["mcpServers"]["hotsheet"].clone()
         }
     }
@@ -7121,7 +7122,7 @@ args = []
         assert_eq!(shared_json["mcpServers"]["other"]["command"], "other-mcp");
         assert!(!shared.contains("/opt/a"));
         // ... and Claude's local scope for this checkout carries absolute paths.
-        let project_abs = fixture.project.path().canonicalize().unwrap();
+        let project_abs = hotsheet_sync::paths::canonicalize(fixture.project.path()).unwrap();
         assert_eq!(
             layer.entry(fixture.project.path()),
             serde_json::json!({
@@ -7219,10 +7220,7 @@ args = []
         assert!(layer.read().is_none(), "no user config is created");
 
         // An override left by an earlier shared setup is kept current, not left stale.
-        let key = fixture
-            .project
-            .path()
-            .canonicalize()
+        let key = hotsheet_sync::paths::canonicalize(fixture.project.path())
             .unwrap()
             .display()
             .to_string();
@@ -7293,10 +7291,7 @@ args = []
         let fixture = Sharing::new();
         let layer = LocalLayer::new(&fake_mcp("/opt/a/hotsheet-mcp"));
         std::fs::write(fixture.project.path().join(".mcp.json"), SHARED_CLAUDE_MCP).unwrap();
-        let key = fixture
-            .project
-            .path()
-            .canonicalize()
+        let key = hotsheet_sync::paths::canonicalize(fixture.project.path())
             .unwrap()
             .display()
             .to_string();

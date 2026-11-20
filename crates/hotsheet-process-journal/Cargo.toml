@@ -22,4 +22,5 @@ libc.workspace = true
 hotsheet-ticketing.workspace = true
 
 [dev-dependencies]
+hotsheet-sync.workspace = true
 tempfile.workspace = true

@@ -245,7 +245,7 @@ impl Settings {
             missing.push(ancestor.file_name().expect("path has an existing ancestor"));
             ancestor = ancestor.parent().expect("path has an existing ancestor");
         }
-        let mut canonical = ancestor.canonicalize()?;
+        let mut canonical = hotsheet_sync::paths::canonicalize(ancestor)?;
         for component in missing.into_iter().rev() {
             canonical.push(component);
         }

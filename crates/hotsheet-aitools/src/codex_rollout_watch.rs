@@ -517,7 +517,7 @@ pub fn watch_rollout(
     let mut status = Some(status);
     // FSEvents reports resolved paths (`/private/var/...`); a symlinked home would otherwise
     // have its notifications filtered out as foreign.
-    let home = std::fs::canonicalize(codex_home)?;
+    let home = hotsheet_sync::paths::canonicalize(codex_home)?;
     let sessions = home.join("sessions");
     let mut reader = RolloutReader::new(session, live_after);
     let session = session.to_owned();

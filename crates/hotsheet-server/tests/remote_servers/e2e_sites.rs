@@ -158,7 +158,7 @@ async fn placed_from(fleet: &Fleet, start: &Value, site: &str) -> Placed {
     let report = launch_report(&fleet.reports, &terminal);
     assert_eq!(
         Path::new(report["cwd"].as_str().unwrap()),
-        fleet.project(side).canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(fleet.project(side)).unwrap(),
         "{report}"
     );
     assert!(

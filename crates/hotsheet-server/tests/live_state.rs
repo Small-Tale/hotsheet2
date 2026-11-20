@@ -1214,8 +1214,7 @@ async fn hs2_bhppas_expected_workers_come_from_the_coordination_worker_plan() {
     let source = format!(
         "{:x}",
         sha2::Sha256::digest(
-            store_root
-                .canonicalize()
+            hotsheet_sync::paths::canonicalize(&store_root)
                 .unwrap()
                 .to_string_lossy()
                 .as_bytes()

@@ -64,7 +64,9 @@ async fn hs2_bnghkm_dedicated_test_broker_exits_with_its_runner() {
 
 #[tokio::test]
 async fn hs2_gdcmxe_broker_pty_records_launcher_and_session() {
-    let home = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
+    let home =
+        tempfile::tempdir_in(hotsheet_sync::paths::canonicalize(std::env::temp_dir()).unwrap())
+            .unwrap();
     std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = home.path().join("broker.sock");
     let broker = BrokerChild(

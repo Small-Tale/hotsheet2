@@ -169,11 +169,13 @@ impl Fixture {
     }
 
     fn hosts_project(&self) -> bool {
-        let project = self.project.canonicalize().unwrap();
-        self.state
-            .hosted_store_roots()
-            .iter()
-            .any(|(_, root)| Path::new(root).canonicalize().ok().as_ref() == Some(&project))
+        let project = hotsheet_sync::paths::canonicalize(&self.project).unwrap();
+        self.state.hosted_store_roots().iter().any(|(_, root)| {
+            hotsheet_sync::paths::canonicalize(Path::new(root))
+                .ok()
+                .as_ref()
+                == Some(&project)
+        })
     }
 }
 
@@ -314,9 +316,7 @@ async fn hs2_d9zgae_sync_kick_accepts_only_an_authenticated_request_for_a_regist
     assert_eq!(body["accepted"], true);
     assert_eq!(
         body["store"],
-        fixture
-            .project
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(&fixture.project)
             .unwrap()
             .display()
             .to_string()
@@ -378,9 +378,7 @@ fn hs2_d9zgae_the_regular_pass_syncs_registered_stores_that_are_not_hosted() {
     assert!(!fixture.remote_contains(&written));
 
     let reports = sync_registered(&fixture.state, &PassScope::All);
-    let project = fixture
-        .project
-        .canonicalize()
+    let project = hotsheet_sync::paths::canonicalize(&fixture.project)
         .unwrap()
         .display()
         .to_string();

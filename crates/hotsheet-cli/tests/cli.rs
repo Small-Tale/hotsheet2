@@ -237,7 +237,7 @@ fn hs2_b14hyw_control_commands_ignore_startup_owner_sentinel() {
     let home = fixture.path().join("home");
     let store = fixture.path().join("store");
     std::fs::create_dir(&store).unwrap();
-    let store = store.canonicalize().unwrap();
+    let store = hotsheet_sync::paths::canonicalize(&store).unwrap();
     let server = workspace_bin::path("hotsheet-cli")
         .with_file_name(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
 
@@ -1317,7 +1317,13 @@ fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
     let source_id = checkout
         .sources
         .iter()
-        .find(|source| source.locator == extra.canonicalize().unwrap().display().to_string())
+        .find(|source| {
+            source.locator
+                == hotsheet_sync::paths::canonicalize(&extra)
+                    .unwrap()
+                    .display()
+                    .to_string()
+        })
         .unwrap()
         .connection_id
         .clone();
@@ -1336,7 +1342,7 @@ fn hs2_54ebk3_permission_discard_routes_extra_source_through_its_host() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "synthetic-secret",
-            "store_path": anchor.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&anchor).unwrap(),
         })
         .to_string(),
     )
@@ -1443,7 +1449,7 @@ fn hs2_54ebk3_permission_discard_fails_closed_for_unavailable_host() {
             "pid": std::process::id(),
             "url": "http://127.0.0.1:0",
             "secret": "synthetic-secret",
-            "store_path": store_path.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store_path).unwrap(),
         })
         .to_string(),
     )
@@ -1847,8 +1853,7 @@ fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
             .stdout,
     )
     .unwrap();
-    let canonical_other_worklist = project_two
-        .canonicalize()
+    let canonical_other_worklist = hotsheet_sync::paths::canonicalize(&project_two)
         .unwrap()
         .join(".hotsheet2/worklist.md");
     assert!(
@@ -1987,7 +1992,7 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "command-test-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -2118,7 +2123,7 @@ fn terminal_message_cli_uses_authenticated_session_push_route() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "message-test-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -2223,7 +2228,7 @@ fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "feed-test-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -2379,7 +2384,7 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "live-test-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -2388,7 +2393,7 @@ fn hs2_jttqmy_live_state_reads_the_local_server_snapshot() {
         "epoch_ms": 1,
         "stores": [
             {"store": "other", "root": "/elsewhere/other.hs2", "state": "stopped"},
-            {"store": "mine", "root": store.canonicalize().unwrap(), "state": "waiting_on_you"},
+            {"store": "mine", "root": hotsheet_sync::paths::canonicalize(&store).unwrap(), "state": "waiting_on_you"},
         ],
     })
     .to_string();
@@ -2463,7 +2468,10 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
     std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
     std::fs::write(
         project.join(hotsheet_cli::STORE_LINK),
-        store.canonicalize().unwrap().to_string_lossy().as_bytes(),
+        hotsheet_sync::paths::canonicalize(&store)
+            .unwrap()
+            .to_string_lossy()
+            .as_bytes(),
     )
     .unwrap();
     let elsewhere = root.path().join("elsewhere");
@@ -2477,13 +2485,12 @@ fn hs2_m8hhea_ci_report_posts_the_run_to_the_local_server() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "ci-test-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
     .unwrap();
-    let encoded: String = project
-        .canonicalize()
+    let encoded: String = hotsheet_sync::paths::canonicalize(&project)
         .unwrap()
         .to_string_lossy()
         .bytes()
@@ -2769,7 +2776,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
             "pid": std::process::id(),
             "url": current_url,
             "secret": "current-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -6053,7 +6060,12 @@ fn launch_opens_the_project_and_injects_the_running_server() {
         assert!(fields[0].starts_with("http://127.0.0.1:"), "{output}");
         assert!(!fields[1].is_empty(), "{output}");
         assert_eq!(fields[2], arg);
-        assert_eq!(fields[3], project.canonicalize().unwrap().to_string_lossy());
+        assert_eq!(
+            fields[3],
+            hotsheet_sync::paths::canonicalize(project)
+                .unwrap()
+                .to_string_lossy()
+        );
         assert_eq!(fields[4], identity);
         let stores: Vec<String> = serde_json::from_str(fields[5]).unwrap();
         assert_eq!(stores.len(), 1);
@@ -6118,7 +6130,7 @@ command = "hotsheet-cli permission-hook"
             "pid": std::process::id(),
             "url": "http://127.0.0.1:4567",
             "secret": "route-back",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -6160,7 +6172,7 @@ command = "hotsheet-cli permission-hook"
         adjacent_instance,
         serde_json::json!({
             "pid": std::process::id(), "url": "http://127.0.0.1:4567",
-            "secret": "route-back", "store_path": adjacent_store.canonicalize().unwrap(),
+            "secret": "route-back", "store_path": hotsheet_sync::paths::canonicalize(&adjacent_store).unwrap(),
         })
         .to_string(),
     )
@@ -6212,7 +6224,7 @@ command = "hotsheet-cli permission-hook"
         registered_instance,
         serde_json::json!({
             "pid": std::process::id(), "url": "http://127.0.0.1:4567",
-            "secret": "route-back", "store_path": registered_store.canonicalize().unwrap(),
+            "secret": "route-back", "store_path": hotsheet_sync::paths::canonicalize(&registered_store).unwrap(),
         })
         .to_string(),
     )
@@ -6238,9 +6250,7 @@ command = "hotsheet-cli permission-hook"
     );
 
     let created_project = root.path().join("created");
-    let created_store = root
-        .path()
-        .canonicalize()
+    let created_store = hotsheet_sync::paths::canonicalize(root.path())
         .unwrap()
         .join("chosen-ticket-store");
     std::fs::create_dir(&created_project).unwrap();
@@ -6377,7 +6387,7 @@ command = "hotsheet-cli permission-hook"
         instance,
         serde_json::json!({
             "pid": std::process::id(), "url": "http://127.0.0.1:4567",
-            "secret": "route-back", "store_path": store_path.canonicalize().unwrap(),
+            "secret": "route-back", "store_path": hotsheet_sync::paths::canonicalize(&store_path).unwrap(),
         })
         .to_string(),
     )
@@ -6488,7 +6498,9 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
         String::from_utf8(zero_output).unwrap(),
         format!(
             "{}|{}\n",
-            empty.canonicalize().unwrap().display(),
+            hotsheet_sync::paths::canonicalize(&empty)
+                .unwrap()
+                .display(),
             empty_checkout.permission_identity()
         )
     );
@@ -6563,7 +6575,9 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
         String::from_utf8(mixed_output).unwrap(),
         format!(
             "{}|{}\n",
-            mixed.canonicalize().unwrap().display(),
+            hotsheet_sync::paths::canonicalize(&mixed)
+                .unwrap()
+                .display(),
             mixed_checkout.permission_identity()
         )
     );
@@ -6579,7 +6593,9 @@ fn launch_requires_only_the_project_with_zero_or_mixed_sources() {
         .success()
         .stdout(format!(
             "{}|{}\n",
-            mixed.canonicalize().unwrap().display(),
+            hotsheet_sync::paths::canonicalize(&mixed)
+                .unwrap()
+                .display(),
             identity
         ));
     assert_eq!(
@@ -6614,9 +6630,7 @@ fn setup_registers_a_source_free_code_project_without_a_server() {
     assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--project");
     assert_eq!(
         mcp["mcpServers"]["hotsheet"]["args"][1],
-        project
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(project.path())
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -6825,7 +6839,10 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
     let linked = std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK)).unwrap();
     assert_eq!(
         linked.trim(),
-        store.canonicalize().unwrap().to_str().unwrap()
+        hotsheet_sync::paths::canonicalize(&store)
+            .unwrap()
+            .to_str()
+            .unwrap()
     );
     let ignore = std::fs::read_to_string(project.join(".gitignore")).unwrap();
     // HS2-61ZMVA: the managed `.hotsheet2/` block ignores the link.
@@ -6925,7 +6942,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         user_bytes = Some(bytes);
     }
     let user: serde_json::Value = serde_json::from_slice(&user_bytes.unwrap()).unwrap();
-    let project_abs = project.canonicalize().unwrap();
+    let project_abs = hotsheet_sync::paths::canonicalize(&project).unwrap();
     let entry = &user["projects"][project_abs.to_str().unwrap()]["mcpServers"]["hotsheet"];
     assert_eq!(entry["command"], mcp_bin.to_str().unwrap());
     assert_eq!(
@@ -6967,7 +6984,10 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK))
             .unwrap()
             .trim(),
-        store.canonicalize().unwrap().to_str().unwrap()
+        hotsheet_sync::paths::canonicalize(&store)
+            .unwrap()
+            .to_str()
+            .unwrap()
     );
     let instructions = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
     assert!(instructions.contains("Keep this text."));
@@ -7038,12 +7058,18 @@ fn bootstrap_prints_exact_remote_instructions_when_origin_is_absent() {
         ))
         .stdout(predicate::str::contains(format!(
             "--project '{}' --store '{}' --remote <url>",
-            project.canonicalize().unwrap().display(),
-            store.canonicalize().unwrap().display()
+            hotsheet_sync::paths::canonicalize(&project)
+                .unwrap()
+                .display(),
+            hotsheet_sync::paths::canonicalize(&store)
+                .unwrap()
+                .display()
         )))
         .stdout(predicate::str::contains(format!(
             "git -C '{}' push -u origin HEAD",
-            store.canonicalize().unwrap().display()
+            hotsheet_sync::paths::canonicalize(&store)
+                .unwrap()
+                .display()
         )));
 }
 
@@ -7118,7 +7144,10 @@ fn init_standalone_defaults_under_hs2_home_not_hs1_home() {
         std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK))
             .unwrap()
             .trim(),
-        store.canonicalize().unwrap().to_str().unwrap()
+        hotsheet_sync::paths::canonicalize(&store)
+            .unwrap()
+            .to_str()
+            .unwrap()
     );
     assert!(!root.path().join(".hotsheet").join("stores").exists());
 }
@@ -7302,7 +7331,7 @@ fn trigger_preflight_blocks_hs1_and_requires_setup() {
         store.join("hotsheet-hs1-import.json"),
         serde_json::json!({
             "$hotsheetSchema": 1,
-            "sourceProject": project.canonicalize().unwrap(),
+            "sourceProject": hotsheet_sync::paths::canonicalize(&project).unwrap(),
             "tickets": 0,
             "attachments": 0,
         })
@@ -14198,7 +14227,7 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "lifecycle-secret",
-            "store_path": store.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
         })
         .to_string(),
     )
@@ -14308,7 +14337,7 @@ fn hs2_vg3e8n_cli_reaches_the_machine_host_from_a_project_store() {
             "pid": std::process::id(),
             "url": format!("http://{}", listener.local_addr().unwrap()),
             "secret": "machine-secret",
-            "store_path": machine.canonicalize().unwrap(),
+            "store_path": hotsheet_sync::paths::canonicalize(&machine).unwrap(),
         })
         .to_string(),
     )
@@ -14514,7 +14543,7 @@ fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation(
     let home = tempfile::tempdir().unwrap();
     let stores = tempfile::tempdir().unwrap();
     std::fs::create_dir(stores.path().join("tickets")).unwrap();
-    let store = stores.path().join("tickets").canonicalize().unwrap();
+    let store = hotsheet_sync::paths::canonicalize(stores.path().join("tickets")).unwrap();
     hotsheet_ticketing::FsStore::init_git(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
         .unwrap();
     let cli = || {
@@ -14579,7 +14608,10 @@ fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation(
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            moved.canonicalize().unwrap().to_str().unwrap(),
+            hotsheet_sync::paths::canonicalize(&moved)
+                .unwrap()
+                .to_str()
+                .unwrap(),
         ));
 
     cli()

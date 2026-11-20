@@ -312,7 +312,7 @@ fn source_checkout(
 ) -> Result<(PathBuf, Option<tempfile::TempDir>), GuidanceSourceError> {
     let local = Path::new(repository);
     if local.is_dir() {
-        return Ok((local.canonicalize()?, None));
+        return Ok((hotsheet_sync::paths::canonicalize(local)?, None));
     }
     if !(repository.starts_with("https://")
         || repository.starts_with("ssh://")

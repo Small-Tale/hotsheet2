@@ -23,7 +23,7 @@ impl CheckoutRegistry {
         if !Path::new(&checkout.root).is_dir() {
             return Err(CheckoutError::Missing(checkout.root.clone()));
         }
-        let root_identity = Path::new(&checkout.root).canonicalize()?;
+        let root_identity = hotsheet_sync::paths::canonicalize(Path::new(&checkout.root))?;
         let proof = CheckoutSourceProof {
             root_identity,
             registry: self.path.clone(),
@@ -64,7 +64,9 @@ impl CheckoutRegistry {
         }
         let locked = self.lock_source_links()?;
         let owner = locked.resolve(owner_reference)?;
-        if Path::new(&owner.root).canonicalize()? != expected_owner_root.canonicalize()? {
+        if hotsheet_sync::paths::canonicalize(Path::new(&owner.root))?
+            != hotsheet_sync::paths::canonicalize(expected_owner_root)?
+        {
             return Err(CheckoutError::Invalid(
                 "checkout owner changed; observe again".into(),
             ));
@@ -78,7 +80,8 @@ impl CheckoutRegistry {
             let current = locked.resolve(&proof.checkout.id)?;
             if current != proof.checkout
                 || !Path::new(&current.root).is_dir()
-                || Path::new(&current.root).canonicalize()? != proof.root_identity
+                || hotsheet_sync::paths::canonicalize(Path::new(&current.root))?
+                    != proof.root_identity
                 || proof.git_sources != current.git_source_observations()?
             {
                 return Err(CheckoutError::Invalid(

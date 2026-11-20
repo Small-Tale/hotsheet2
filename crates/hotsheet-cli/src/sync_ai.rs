@@ -37,7 +37,9 @@ struct Project {
 }
 
 fn project_for(store: &Path, home: &Path) -> Project {
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical = |path: &Path| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
     let store_canonical = canonical(store);
     let registry =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));

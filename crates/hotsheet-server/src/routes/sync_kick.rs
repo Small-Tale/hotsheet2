@@ -62,9 +62,7 @@ pub(crate) async fn post_sync_kick(
                 StatusCode::ACCEPTED,
                 Json(SyncKickAccepted {
                     accepted: true,
-                    store: request
-                        .store
-                        .canonicalize()
+                    store: hotsheet_sync::paths::canonicalize(&request.store)
                         .unwrap_or(request.store)
                         .display()
                         .to_string(),
@@ -88,7 +86,7 @@ pub(crate) async fn post_sync_kick(
 /// `ticket_store_sync` event per checkout linking it, from a few local reads. A client
 /// re-reads the store's health on that event, so a sync the CLI ran itself is shown at once.
 fn announce_current_health(state: &AppState, store: &std::path::Path) {
-    let root = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let root = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let id = state
         .hosted_store_roots()
         .into_iter()

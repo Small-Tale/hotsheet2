@@ -1855,7 +1855,10 @@ fn legacy_source_rule(rule: &StoredRule, legacy_project: &str, canonical: Option
     !rule.project.is_empty()
         && (rule.project == legacy_project
             || canonical.is_some_and(|expected| {
-                Path::new(&rule.project).canonicalize().ok().as_deref() == Some(expected)
+                hotsheet_sync::paths::canonicalize(Path::new(&rule.project))
+                    .ok()
+                    .as_deref()
+                    == Some(expected)
             }))
 }
 
@@ -1869,7 +1872,7 @@ pub fn discard_legacy_rules(path: &Path, legacy_project: &str) -> io::Result<usi
             "legacy project identity required",
         ));
     }
-    let canonical = Path::new(legacy_project).canonicalize().ok();
+    let canonical = hotsheet_sync::paths::canonicalize(Path::new(legacy_project)).ok();
     crate::permission_vault::mutate_existing(path, |rules| {
         let before = rules.len();
         rules.retain(|rule| !legacy_source_rule(rule, legacy_project, canonical.as_deref()));
@@ -1885,7 +1888,7 @@ pub fn count_legacy_rules(path: &Path, legacy_project: &str) -> io::Result<usize
             "legacy project identity required",
         ));
     }
-    let canonical = Path::new(legacy_project).canonicalize().ok();
+    let canonical = hotsheet_sync::paths::canonicalize(Path::new(legacy_project)).ok();
     let (_, rules) = crate::permission_vault::load_existing_with_key(path)?;
     Ok(rules
         .iter()

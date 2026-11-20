@@ -78,8 +78,7 @@ impl PassScope {
     pub fn covers(&self, root: &Path) -> bool {
         match self {
             Self::All => true,
-            Self::Stores(stores) => root
-                .canonicalize()
+            Self::Stores(stores) => hotsheet_sync::paths::canonicalize(root)
                 .is_ok_and(|canonical| stores.contains(&canonical)),
         }
     }
@@ -207,7 +206,7 @@ pub fn sync_registered(state: &AppState, scope: &PassScope) -> Vec<(String, Sync
     let hosted: Vec<PathBuf> = state
         .hosted_store_roots()
         .into_iter()
-        .filter_map(|(_, root)| Path::new(&root).canonicalize().ok())
+        .filter_map(|(_, root)| hotsheet_sync::paths::canonicalize(Path::new(&root)).ok())
         .collect();
     state
         .registered_git_store_roots()

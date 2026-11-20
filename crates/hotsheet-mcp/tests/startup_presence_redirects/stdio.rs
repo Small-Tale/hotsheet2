@@ -44,7 +44,7 @@ impl Project {
         let instance = hotsheet_cli::external_launch::instance_path(&home, &bootstrap);
         std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
         let record = json!({"pid":std::process::id(), "url":origin, "secret":SECRET,
-            "store_path":bootstrap.canonicalize().unwrap()})
+            "store_path":hotsheet_sync::paths::canonicalize(&bootstrap).unwrap()})
         .to_string();
         std::fs::write(&instance, &record).unwrap();
         assert_eq!(

@@ -219,7 +219,7 @@ pub fn absolute_git_dir(root: &Path) -> std::io::Result<Option<std::path::PathBu
     use std::sync::{Mutex, OnceLock};
     static KNOWN: OnceLock<Mutex<HashMap<PathBuf, PathBuf>>> = OnceLock::new();
     // One key per directory however it is spelled (`/var` and `/private/var` on macOS).
-    let key = std::fs::canonicalize(root).or_else(|_| std::path::absolute(root))?;
+    let key = hotsheet_sync::paths::canonicalize(root).or_else(|_| std::path::absolute(root))?;
     let known = KNOWN.get_or_init(Default::default);
     if let Some(dir) = known
         .lock()
@@ -237,10 +237,9 @@ pub fn absolute_git_dir(root: &Path) -> std::io::Result<Option<std::path::PathBu
     if !out.status.success() {
         return Ok(None);
     }
-    let dir = PathBuf::from(
-        String::from_utf8_lossy(&out.stdout)
-            .trim_end_matches(['\n', '\r'])
-            .to_string(),
+    // HS2-ECJ188: Git for Windows prints `C:/...`; keep the native spelling.
+    let dir = hotsheet_sync::paths::from_git(
+        String::from_utf8_lossy(&out.stdout).trim_end_matches(['\n', '\r']),
     );
     known
         .lock()
@@ -252,11 +251,13 @@ pub fn absolute_git_dir(root: &Path) -> std::io::Result<Option<std::path::PathBu
 /// [`command`] run in `dir`: sets both the working directory and `-C <dir>`.
 ///
 /// A relative `dir` is made absolute first, so `-C` cannot resolve it a second time
-/// against the new working directory.
+/// against the new working directory. A Windows verbatim directory (`\\?\C:\...`) is
+/// passed in its ordinary spelling, which Git for Windows accepts (HS2-ECJ188).
 #[must_use]
 pub fn command_in(dir: impl AsRef<Path>) -> Command {
     let dir = std::path::absolute(dir.as_ref()).unwrap_or_else(|_| dir.as_ref().to_owned());
-    let dir = dir.as_path();
+    let dir = hotsheet_sync::paths::simplified(&dir);
+    let dir = dir.as_ref();
     let mut cmd = command();
     cmd.current_dir(dir).arg("-C").arg(dir);
     cmd
@@ -309,7 +310,10 @@ mod tests {
                 .success()
         );
         let first = absolute_git_dir(&repo).unwrap().unwrap();
-        assert_eq!(first, std::fs::canonicalize(repo.join(".git")).unwrap());
+        assert_eq!(
+            first,
+            hotsheet_sync::paths::canonicalize(repo.join(".git")).unwrap()
+        );
         // The same directory spelled differently is the same answer.
         let spelled = repo.join(".").join("..").join("repo");
         assert_eq!(absolute_git_dir(&spelled).unwrap().unwrap(), first);
@@ -473,6 +477,26 @@ mod tests {
         assert_eq!(cmd.get_current_dir(), Some(dir.as_path()));
         let args: Vec<_> = cmd.get_args().collect();
         assert_eq!(args, vec![std::ffi::OsStr::new("-C"), dir.as_os_str()]);
+    }
+
+    /// HS2-ECJ188: Git never sees a verbatim directory on Windows; elsewhere a name
+    /// that merely begins with `\\?\` is an ordinary relative file name and is kept.
+    #[test]
+    fn hs2_ecj188_command_in_never_passes_a_verbatim_directory_to_git() {
+        let verbatim = PathBuf::from(r"\\?\C:\Users\runneradmin\store");
+        let cmd = command_in(&verbatim);
+        let args: Vec<_> = cmd.get_args().collect();
+        if cfg!(windows) {
+            let ordinary = Path::new(r"C:\Users\runneradmin\store");
+            assert_eq!(cmd.get_current_dir(), Some(ordinary));
+            assert_eq!(args[1], ordinary.as_os_str());
+        } else {
+            assert!(
+                args[1]
+                    .to_string_lossy()
+                    .ends_with(r"\\?\C:\Users\runneradmin\store")
+            );
+        }
     }
 
     #[test]

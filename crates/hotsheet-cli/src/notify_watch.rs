@@ -37,7 +37,8 @@ fn wants_ticket_events(config: &NotificationConfig) -> bool {
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
-    let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let canonical =
+        |p: &Path| hotsheet_sync::paths::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     canonical(a) == canonical(b)
 }
 

@@ -66,11 +66,9 @@ impl ProviderConfigRegistry {
             }
             // Each captured proof already acquired/created its stable lock file.
             // Missing/replaced aliases fail rather than invent a new proof identity.
-            let path = registry
-                .path
-                .with_extension("json.lock")
-                .canonicalize()
-                .map_err(StoreError::Io)?;
+            let path =
+                hotsheet_sync::paths::canonicalize(registry.path.with_extension("json.lock"))
+                    .map_err(StoreError::Io)?;
             registries.entry(path).or_insert(*registry);
         }
         let mut guards = Vec::with_capacity(registries.len());

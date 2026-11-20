@@ -281,7 +281,7 @@ pub fn temporary_roots() -> Vec<PathBuf> {
     }
     let resolved: Vec<PathBuf> = roots
         .iter()
-        .filter_map(|root| root.canonicalize().ok())
+        .filter_map(|root| hotsheet_sync::paths::canonicalize(root).ok())
         .collect();
     roots.extend(resolved);
     roots.sort();
@@ -292,9 +292,9 @@ pub fn temporary_roots() -> Vec<PathBuf> {
 fn is_under_any(path: &Path, roots: &[PathBuf]) -> bool {
     // A registered root is stored resolved and may no longer exist, so compare it with
     // each root in both its written and resolved forms.
-    let resolved = path.canonicalize().ok();
+    let resolved = hotsheet_sync::paths::canonicalize(path).ok();
     roots.iter().any(|root| {
-        let resolved_root = root.canonicalize().ok();
+        let resolved_root = hotsheet_sync::paths::canonicalize(root).ok();
         [Some(path), resolved.as_deref()]
             .into_iter()
             .flatten()

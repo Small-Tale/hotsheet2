@@ -173,7 +173,7 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<String, CompactionError> {
 
 fn ensure_dedicated_clean_store(root: &Path) -> Result<(String, String), CompactionError> {
     let top = PathBuf::from(git(root, &["rev-parse", "--show-toplevel"])?);
-    if top.canonicalize()? != root.canonicalize()? {
+    if hotsheet_sync::paths::canonicalize(&top)? != hotsheet_sync::paths::canonicalize(root)? {
         return Err(CompactionError::Invalid(
             "history rewrite requires a dedicated ticket-store Git repository; this store shares another repository".into(),
         ));
@@ -786,8 +786,8 @@ fn execute_store_locked(
             "disposable rewrite directory already exists".into(),
         ));
     }
-    let parent = backup_parent.canonicalize()?;
-    if parent.starts_with(root.canonicalize()?) {
+    let parent = hotsheet_sync::paths::canonicalize(backup_parent)?;
+    if parent.starts_with(hotsheet_sync::paths::canonicalize(root)?) {
         return Err(CompactionError::Invalid(
             "backup and rewrite directories must be outside the ticket store".into(),
         ));
@@ -825,8 +825,9 @@ fn execute_store_locked(
             "clone",
             "--mirror",
             "--no-hardlinks",
-            &root.to_string_lossy(),
-            &backup.to_string_lossy(),
+            // HS2-ECJ188: `git clone` reads a verbatim `\\?\C:` source as a host name.
+            &hotsheet_sync::paths::simplified(root).to_string_lossy(),
+            &hotsheet_sync::paths::simplified(backup).to_string_lossy(),
         ],
         backup_parent,
     )?;
@@ -836,8 +837,8 @@ fn execute_store_locked(
             "--no-hardlinks",
             "--branch",
             &current.branch,
-            &root.to_string_lossy(),
-            &work.to_string_lossy(),
+            &hotsheet_sync::paths::simplified(root).to_string_lossy(),
+            &hotsheet_sync::paths::simplified(&work).to_string_lossy(),
         ],
         backup_parent,
     )?;

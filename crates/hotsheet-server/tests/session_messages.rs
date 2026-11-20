@@ -272,9 +272,7 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     let listed = connection(&connections, "survives");
     assert_eq!(
         listed["project"],
-        project
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(project.path())
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -308,9 +306,7 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     let (_, connections) = send(&reattach_router, "GET", "/connections", None).await;
     assert_eq!(
         connection(&connections, "survives")["project"],
-        project
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(project.path())
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -383,7 +379,10 @@ async fn a_terminal_connection_belongs_to_its_launch_checkout_project() {
     let (_, connections) = send(&router, "GET", "/connections", None).await;
     assert_eq!(
         connection(&connections, "checkout-ai")["project"],
-        checkout.canonicalize().unwrap().to_string_lossy().as_ref()
+        hotsheet_sync::paths::canonicalize(&checkout)
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
     );
     let (status, _) = send(&router, "DELETE", "/terminals/checkout-ai", None).await;
     assert!(status.is_success());
@@ -407,9 +406,7 @@ async fn a_push_capable_terminal_is_launched_reachable_and_receives_prompts_and_
     let listed = connection(&list, "push-1");
     assert_eq!(
         listed["project"],
-        project
-            .path()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(project.path())
             .unwrap()
             .to_string_lossy()
             .as_ref()
@@ -1319,7 +1316,7 @@ password_env = "OPENCODE_SERVER_PASSWORD"
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_checkout_registry(registry.path().join("checkouts.json")));
     let project = tempfile::tempdir().unwrap();
-    let root = project.path().canonicalize().unwrap();
+    let root = hotsheet_sync::paths::canonicalize(project.path()).unwrap();
     let registration = serde_json::json!({
         "root": root, "alias": "routing", "stores": [store_dir.path()]
     })
@@ -1460,7 +1457,7 @@ password_env = "OPENCODE_SERVER_PASSWORD"
     let home = tempfile::tempdir().unwrap();
     let router = journaled_app(store_dir.path(), plugins.path(), home.path());
     let project = tempfile::tempdir().unwrap();
-    let root = project.path().canonicalize().unwrap();
+    let root = hotsheet_sync::paths::canonicalize(project.path()).unwrap();
     let registration = serde_json::json!({
         "root": root, "alias": "journal", "stores": [store_dir.path()]
     })

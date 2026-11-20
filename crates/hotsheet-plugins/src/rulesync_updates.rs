@@ -111,7 +111,7 @@ fn find_executable() -> Option<PathBuf> {
         let candidate = directory.join(name);
         candidate
             .is_file()
-            .then(|| candidate.canonicalize().ok())
+            .then(|| hotsheet_sync::paths::canonicalize(&candidate).ok())
             .flatten()
     })
 }

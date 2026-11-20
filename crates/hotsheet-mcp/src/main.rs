@@ -418,7 +418,7 @@ fn resolve_project_root(reference: &Path, cwd: &Path) -> Result<PathBuf> {
     } else {
         reference
     };
-    let canonical = path.canonicalize()?;
+    let canonical = hotsheet_sync::paths::canonicalize(path)?;
     if let Ok(checkout) = registry.resolve(canonical.to_string_lossy().as_ref()) {
         return Ok(PathBuf::from(checkout.root));
     }

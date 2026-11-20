@@ -74,7 +74,10 @@ fn hs2_trp2mj_a_worker_records_its_worktree_with_the_assignment() {
     ]);
     assert_eq!(f.run(&["status"]).state.assignments["work"].worktree, None);
     // Recorded by its resolved path; the same again changes nothing.
-    let resolved = std::fs::canonicalize(&tree).unwrap().display().to_string();
+    let resolved = hotsheet_sync::paths::canonicalize(&tree)
+        .unwrap()
+        .display()
+        .to_string();
     f.run(&strs(&accept("worker-session", tree.to_str().unwrap())));
     let first = f.run(&["status"]);
     assert_eq!(

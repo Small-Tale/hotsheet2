@@ -54,7 +54,7 @@ impl ProvisionalContext {
             return None;
         }
         let common = PathBuf::from(String::from_utf8(output.stdout).ok()?.trim());
-        let shipping = common.parent()?.canonicalize().ok()?;
+        let shipping = hotsheet_sync::paths::canonicalize(common.parent()?).ok()?;
         Some(Self {
             checkout_id: checkouts::checkout_id(&shipping).ok()?,
             project: shipping,
@@ -74,7 +74,7 @@ impl ProvisionalContext {
     /// The one registered checkout that links the ticket store at `store_root`. `None`
     /// when no checkout or more than one links it, since the code history is ambiguous.
     pub fn for_store(store_root: &Path, home: &Path) -> Option<Self> {
-        let store = store_root.canonicalize().ok()?;
+        let store = hotsheet_sync::paths::canonicalize(store_root).ok()?;
         let linked: Vec<Checkout> = CheckoutRegistry::new(home.join("checkouts.json"))
             .list()
             .ok()?
@@ -86,7 +86,9 @@ impl ProvisionalContext {
                     .filter(|source| source.provider == "git")
                     .map(|source| PathBuf::from(&source.locator))
                     .chain(checkout.stores.iter().map(PathBuf::from))
-                    .any(|path| path.canonicalize().is_ok_and(|path| path == store))
+                    .any(|path| {
+                        hotsheet_sync::paths::canonicalize(&path).is_ok_and(|path| path == store)
+                    })
             })
             .collect();
         match linked.as_slice() {

@@ -1271,7 +1271,9 @@ impl AppState {
     /// duplicates: the code checkouts whose group registries the sync loop publishes and
     /// refreshes (HS2-9EGWC4).
     pub fn group_registry_checkout_roots(&self) -> Vec<String> {
-        let canonical = |path: &FsPath| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canonical = |path: &FsPath| {
+            hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        };
         let hosted: Vec<std::path::PathBuf> = self
             .hosted_store_roots()
             .into_iter()
@@ -1299,13 +1301,13 @@ impl AppState {
     /// several checkouts; the longest configured retention wins so one project cannot
     /// permanently remove another project's recoverable tickets early.
     fn trash_cleanup_days_for_store(&self, root: &FsPath) -> u32 {
-        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        let canonical_root =
+            hotsheet_sync::paths::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
         let mut configured = None;
         for checkout in self.checkout_registry.list().unwrap_or_default() {
             let linked = checkout.sources.iter().any(|source| {
                 source.provider == "git"
-                    && FsPath::new(&source.locator)
-                        .canonicalize()
+                    && hotsheet_sync::paths::canonicalize(FsPath::new(&source.locator))
                         .unwrap_or_else(|_| source.locator.clone().into())
                         == canonical_root
             });
@@ -1338,7 +1340,9 @@ impl AppState {
             .into_iter()
             .flat_map(|checkout| checkout.sources)
             .filter(|source| source.provider == "git")
-            .filter_map(|source| FsPath::new(&source.locator).canonicalize().ok())
+            .filter_map(|source| {
+                hotsheet_sync::paths::canonicalize(FsPath::new(&source.locator)).ok()
+            })
             .filter(|root| root.is_dir())
             .collect();
         roots.sort();
@@ -1352,13 +1356,15 @@ impl AppState {
     /// the request with other kicks and with its regular pass, and while it is backed off
     /// for an offline remote the request waits for that pass rather than adding one.
     pub fn request_store_sync(&self, root: &FsPath) -> sync_loop::StoreSyncRequest {
-        let Ok(root) = root.canonicalize() else {
+        let Ok(root) = hotsheet_sync::paths::canonicalize(root) else {
             return sync_loop::StoreSyncRequest::NotRegistered;
         };
-        let hosted = self
-            .hosted_store_roots()
-            .into_iter()
-            .any(|(_, hosted)| FsPath::new(&hosted).canonicalize().ok().as_ref() == Some(&root));
+        let hosted = self.hosted_store_roots().into_iter().any(|(_, hosted)| {
+            hotsheet_sync::paths::canonicalize(FsPath::new(&hosted))
+                .ok()
+                .as_ref()
+                == Some(&root)
+        });
         if !hosted && !self.registered_git_store_roots().contains(&root) {
             return sync_loop::StoreSyncRequest::NotRegistered;
         }
@@ -2932,7 +2938,10 @@ mod terminal_permission_route_tests {
             .unwrap()
             .with_checkout_registry(registry_path);
         let req = request(Some(project.join("nested").display().to_string()));
-        let expected = project.canonicalize().unwrap().display().to_string();
+        let expected = hotsheet_sync::paths::canonicalize(&project)
+            .unwrap()
+            .display()
+            .to_string();
         assert_eq!(terminal_permission_project(&state, &req), expected);
         let env = terminal_permission_route_env(&state, &req, "term-1");
         assert!(env.contains(&("HOTSHEET_PROJECT".into(), expected)));

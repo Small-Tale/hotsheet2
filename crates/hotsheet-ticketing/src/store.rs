@@ -579,14 +579,10 @@ impl FsStore {
         other: &FsStore,
         operation: impl FnOnce() -> Result<T, E>,
     ) -> Result<T, E> {
-        let first = self
-            .root
-            .canonicalize()
-            .unwrap_or_else(|_| self.root.clone());
-        let second = other
-            .root
-            .canonicalize()
-            .unwrap_or_else(|_| other.root.clone());
+        let first =
+            hotsheet_sync::paths::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
+        let second =
+            hotsheet_sync::paths::canonicalize(&other.root).unwrap_or_else(|_| other.root.clone());
         match first.cmp(&second) {
             std::cmp::Ordering::Less => {
                 self.with_ticket_transaction(|| other.with_ticket_transaction(operation))
@@ -2382,11 +2378,12 @@ fn lock_git_coordination(root: &Path, filename: &str) -> Result<FileLock, StoreE
     let git_dir = crate::git::absolute_git_dir(root)?.ok_or_else(|| {
         StoreError::Git("`git rev-parse --absolute-git-dir` failed: not a Git work tree".into())
     })?;
-    let git_dir = fs::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
-        operation: "resolving Git directory",
-        path: git_dir,
-        source,
-    })?;
+    let git_dir =
+        hotsheet_sync::paths::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
+            operation: "resolving Git directory",
+            path: git_dir,
+            source,
+        })?;
     let path = git_dir.join(filename);
     let file = fs::OpenOptions::new()
         .read(true)

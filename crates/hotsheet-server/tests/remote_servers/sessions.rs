@@ -855,7 +855,7 @@ async fn hs2_gdjxgz_stdio_mcp_and_headless_cli_manage_sessions_on_a_live_local_s
     std::fs::write(
         &instance,
         json!({"pid":std::process::id(),"url":origin,"secret":SECRET,
-            "store_path":source.canonicalize().unwrap()})
+            "store_path":hotsheet_sync::paths::canonicalize(&source).unwrap()})
         .to_string(),
     )
     .unwrap();

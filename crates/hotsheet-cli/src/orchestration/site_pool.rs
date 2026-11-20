@@ -230,7 +230,7 @@ fn freshen(root: &Path, now_ms: u64) -> bool {
 
 /// The pool's source id of a store root, as `Coordinator` derives it.
 fn source_id(root: &Path) -> Option<String> {
-    let canonical = root.canonicalize().ok()?;
+    let canonical = hotsheet_sync::paths::canonicalize(root).ok()?;
     Some(format!(
         "{:x}",
         Sha256::digest(canonical.to_string_lossy().as_bytes())

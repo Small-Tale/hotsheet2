@@ -80,7 +80,7 @@ async fn hs2_hcw7md_propose_plan_starts_the_planner_in_the_orchestration_project
     let report = launch_report(&world.reports, &terminal);
     assert_eq!(
         Path::new(report["cwd"].as_str().unwrap()),
-        world.project.canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(&world.project).unwrap(),
         "{report}"
     );
     assert_eq!(report["files"]["AGENTS.md"], true, "{report}");

@@ -30,7 +30,7 @@ struct PendingReview {
 }
 
 pub fn state_dir(store_root: &Path) -> Result<PathBuf> {
-    let canonical = store_root.canonicalize()?;
+    let canonical = hotsheet_sync::paths::canonicalize(store_root)?;
     let hash = Sha256::digest(canonical.to_string_lossy().as_bytes());
     Ok(hotsheet_plugins::hotsheet_home()
         .join("feedback-synthesis")

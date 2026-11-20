@@ -861,9 +861,7 @@ fn git_email(path: &std::path::Path) -> Option<String> {
 /// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.v<schema>.sqlite`, keyed by a hash of the store's path
 /// (machine-local, gitignored, disposable — `docs/03` §3.2).
 fn default_index_path(store: &FsStore) -> Result<PathBuf> {
-    let root = store
-        .root()
-        .canonicalize()
+    let root = hotsheet_sync::paths::canonicalize(store.root())
         .unwrap_or_else(|_| store.root().to_path_buf());
     let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
     // HS2's own machine home (${HOTSHEET_HOME:-~/.hotsheet2}) — NOT ~/.hotsheet, which

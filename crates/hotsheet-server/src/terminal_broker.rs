@@ -381,10 +381,9 @@ pub(crate) fn runs_other_build(identity: &BrokerIdentity, own: &BrokerBuild) -> 
         return false;
     };
     let same_file = executable == own.executable
-        || executable
-            .canonicalize()
+        || hotsheet_sync::paths::canonicalize(executable)
             .ok()
-            .zip(own.executable.canonicalize().ok())
+            .zip(hotsheet_sync::paths::canonicalize(&own.executable).ok())
             .is_some_and(|(theirs, ours)| theirs == ours);
     !same_file
         || matches!(

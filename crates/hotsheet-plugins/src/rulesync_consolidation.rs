@@ -14,9 +14,8 @@ pub const TITLE: &str = "Consolidate Rulesync project guidance";
 pub const DETAILS: &str = "Review `AGENTS.md` and `.rulesync/rules/project-local.md` after the Rulesync switch or rule update. Compare generated guidance with the local rule, preserve unique project policy, remove redundant or stale text only after review, then regenerate and check the instruction files. Do not copy customer content into the ticket or delete guidance without checking its source.";
 
 pub fn tags(project: &Path) -> Vec<String> {
-    let canonical = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let canonical =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let hash = Sha256::digest(canonical.to_string_lossy().as_bytes());
     vec![
         "rulesync-consolidation".into(),

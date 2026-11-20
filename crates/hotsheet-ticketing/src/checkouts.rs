@@ -85,7 +85,7 @@ pub struct TicketSource {
 impl TicketSource {
     pub fn git(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let canonical = path.canonicalize().unwrap_or(path);
+        let canonical = hotsheet_sync::paths::canonicalize(&path).unwrap_or(path);
         let locator = canonical.to_string_lossy().into_owned();
         let hash = format!("{:x}", Sha256::digest(locator.as_bytes()));
         Self {
@@ -320,18 +320,21 @@ fn validate_linked_store_identities(checkout: &Checkout) -> Result<(), CheckoutE
 /// `.hotsheet2/store` link takes precedence over the sibling `<checkout>.hs2` convention.
 /// Discovery never creates a store or guesses that one checkout has only one provider.
 pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError> {
-    let canonical = root
-        .canonicalize()
+    let canonical = hotsheet_sync::paths::canonicalize(root)
         .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
     if let Some(linked) = legacy_link_source(&canonical) {
         let path = PathBuf::from(linked.locator);
         if path.join("hotsheet-store.json").is_file() {
-            return Ok(vec![path.canonicalize().unwrap_or(path)]);
+            return Ok(vec![
+                hotsheet_sync::paths::canonicalize(&path).unwrap_or(path),
+            ]);
         }
     }
     let sibling = PathBuf::from(format!("{}.hs2", canonical.display()));
     if sibling.join("hotsheet-store.json").is_file() {
-        Ok(vec![sibling.canonicalize().unwrap_or(sibling)])
+        Ok(vec![
+            hotsheet_sync::paths::canonicalize(&sibling).unwrap_or(sibling),
+        ])
     } else {
         Ok(Vec::new())
     }
@@ -340,8 +343,7 @@ pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError
 /// Stable, discoverable checkout id: basename plus twelve hex chars from the canonical
 /// absolute path. It deliberately is not a secret and changes when the checkout moves.
 pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
-    let canonical = root
-        .canonicalize()
+    let canonical = hotsheet_sync::paths::canonicalize(root)
         .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
     let name = canonical
         .file_name()
@@ -439,8 +441,7 @@ impl PreparedCheckoutLinks<'_> {
         mut default_source: Option<String>,
         explicit_clear: bool,
     ) -> Result<(Option<Checkout>, Checkout), CheckoutError> {
-        let root = root
-            .canonicalize()
+        let root = hotsheet_sync::paths::canonicalize(root)
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
         let before = self
             .file
@@ -1113,8 +1114,7 @@ impl CheckoutRegistry {
         repository: Option<String>,
         stores: Vec<PathBuf>,
     ) -> Result<Checkout, CheckoutError> {
-        let root = root
-            .canonicalize()
+        let root = hotsheet_sync::paths::canonicalize(root)
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
         let alias = alias.map(str::to_owned).unwrap_or_else(|| {
             root.file_name()
@@ -1240,8 +1240,7 @@ impl CheckoutRegistry {
         // HS2-6H8ZY6: the non-Explicit merge is last-wins by id. Reject
         // conflicting requested routes before it can erase their evidence.
         unique_source_ids(&sources)?;
-        let root = root
-            .canonicalize()
+        let root = hotsheet_sync::paths::canonicalize(root)
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
         let mut prepared = self.prepare_source_links()?;
         let existing = prepared
@@ -1364,8 +1363,7 @@ impl CheckoutRegistry {
         new_root: &Path,
         alias: Option<&str>,
     ) -> Result<Checkout, CheckoutError> {
-        let root = new_root
-            .canonicalize()
+        let root = hotsheet_sync::paths::canonicalize(new_root)
             .map_err(|_| CheckoutError::Missing(new_root.display().to_string()))?;
         let _lock = self.acquire_lock()?;
         let mut file = self.read_locked()?;
@@ -1902,8 +1900,7 @@ impl CheckoutRegistry {
         new_path: &Path,
         reviewed_unverified_recovery: bool,
     ) -> Result<Vec<Checkout>, CheckoutError> {
-        let canonical = new_path
-            .canonicalize()
+        let canonical = hotsheet_sync::paths::canonicalize(new_path)
             .map_err(|_| CheckoutError::Missing(new_path.display().to_string()))?;
         let replacement = TicketSource::git(&canonical);
         if !canonical.join(STORE_METADATA_FILE).is_file() {
@@ -2173,7 +2170,7 @@ impl CheckoutRegistry {
 }
 
 fn resolve_checkout(entries: Vec<Checkout>, reference: &str) -> Result<Checkout, CheckoutError> {
-    let canonical = Path::new(reference).canonicalize().ok();
+    let canonical = hotsheet_sync::paths::canonicalize(Path::new(reference)).ok();
     let matches: Vec<_> = entries
         .into_iter()
         .filter(|checkout| {
@@ -2244,10 +2241,10 @@ fn removal_path_candidates(reference: &Path) -> Vec<String> {
         }
     };
     let mut paths = vec![absolute.to_string_lossy().into_owned()];
-    if let Ok(canonical) = absolute.canonicalize() {
+    if let Ok(canonical) = hotsheet_sync::paths::canonicalize(&absolute) {
         paths.push(canonical.to_string_lossy().into_owned());
     } else if let (Some(parent), Some(name)) = (absolute.parent(), absolute.file_name())
-        && let Ok(parent) = parent.canonicalize()
+        && let Ok(parent) = hotsheet_sync::paths::canonicalize(parent)
     {
         paths.push(parent.join(name).to_string_lossy().into_owned());
     }
@@ -2469,8 +2466,7 @@ mod tests {
         std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
         std::fs::write(
             project.join(".hotsheet2/store"),
-            store_path
-                .canonicalize()
+            hotsheet_sync::paths::canonicalize(&store_path)
                 .unwrap()
                 .to_string_lossy()
                 .as_bytes(),
@@ -2842,7 +2838,9 @@ mod tests {
                 .source(migrated.default_source.as_deref().unwrap())
                 .unwrap()
                 .locator,
-            store_b.canonicalize().unwrap().to_string_lossy()
+            hotsheet_sync::paths::canonicalize(&store_b)
+                .unwrap()
+                .to_string_lossy()
         );
     }
 
@@ -4258,7 +4256,7 @@ mod tests {
         std::fs::write(sibling.join("hotsheet-store.json"), "{}").unwrap();
         assert_eq!(
             discover_ticket_stores(&checkout).unwrap(),
-            vec![sibling.canonicalize().unwrap()]
+            vec![hotsheet_sync::paths::canonicalize(&sibling).unwrap()]
         );
     }
 
@@ -4280,13 +4278,13 @@ mod tests {
         .unwrap();
         assert_eq!(
             discover_ticket_stores(&checkout).unwrap(),
-            vec![linked.canonicalize().unwrap()]
+            vec![hotsheet_sync::paths::canonicalize(&linked).unwrap()]
         );
 
         std::fs::write(checkout.join(".hotsheet2/store"), "missing").unwrap();
         assert_eq!(
             discover_ticket_stores(&checkout).unwrap(),
-            vec![sibling.canonicalize().unwrap()]
+            vec![hotsheet_sync::paths::canonicalize(&sibling).unwrap()]
         );
     }
 }

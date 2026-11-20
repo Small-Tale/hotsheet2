@@ -34,7 +34,7 @@ struct PoolSession {
 
 /// The coordination `source_id` of a store root, as `Coordinator` derives it.
 fn source_id(store_root: &Path) -> Option<String> {
-    let canonical = store_root.canonicalize().ok()?;
+    let canonical = hotsheet_sync::paths::canonicalize(store_root).ok()?;
     Some(format!(
         "{:x}",
         Sha256::digest(canonical.to_string_lossy().as_bytes())
@@ -73,7 +73,7 @@ pub(crate) fn planned_workers(
         };
         let path = common.join("hotsheet-coordination").join("state.json");
         // Worktrees of one checkout share a pool; read it once.
-        let key = path.canonicalize().unwrap_or_else(|_| path.clone());
+        let key = hotsheet_sync::paths::canonicalize(&path).unwrap_or_else(|_| path.clone());
         if !seen.insert(key) {
             continue;
         }

@@ -268,7 +268,7 @@ impl Targets {
         let unreadable = || "could not read the store's Git directories".to_string();
         let git_dir = git_stdout(store_path, &["rev-parse", "--absolute-git-dir"])
             .map(|out| PathBuf::from(out.trim_end_matches(['\n', '\r'])))
-            .and_then(|dir| dir.canonicalize().ok())
+            .and_then(|dir| hotsheet_sync::paths::canonicalize(&dir).ok())
             .ok_or_else(unreadable)?;
         let common_dir = git_stdout(store_path, &["rev-parse", "--git-common-dir"])
             .map(|out| {
@@ -279,16 +279,16 @@ impl Targets {
                     store_path.join(dir)
                 }
             })
-            .and_then(|dir| dir.canonicalize().ok())
+            .and_then(|dir| hotsheet_sync::paths::canonicalize(&dir).ok())
             .ok_or_else(unreadable)?;
         let mut work_dirs: Vec<PathBuf> =
             git_stdout(store_path, &["worktree", "list", "--porcelain"])
                 .unwrap_or_default()
                 .lines()
                 .filter_map(|line| line.strip_prefix("worktree "))
-                .filter_map(|dir| Path::new(dir).canonicalize().ok())
+                .filter_map(|dir| hotsheet_sync::paths::canonicalize(Path::new(dir)).ok())
                 .collect();
-        if let Ok(store) = store_path.canonicalize()
+        if let Ok(store) = hotsheet_sync::paths::canonicalize(store_path)
             && !work_dirs.contains(&store)
         {
             work_dirs.push(store);
@@ -526,7 +526,7 @@ fn move_aside(
 ) -> Result<Option<PathBuf>, String> {
     let canonical = lock
         .parent()
-        .and_then(|parent| parent.canonicalize().ok())
+        .and_then(|parent| hotsheet_sync::paths::canonicalize(parent).ok())
         .zip(lock.file_name())
         .map(|(parent, name)| parent.join(name));
     let relative = canonical

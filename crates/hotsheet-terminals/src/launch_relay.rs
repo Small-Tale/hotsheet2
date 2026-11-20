@@ -396,7 +396,10 @@ pub fn relay_launch(
 }
 
 fn same_executable(left: &Path, right: &Path) -> bool {
-    match (left.canonicalize(), right.canonicalize()) {
+    match (
+        hotsheet_sync::paths::canonicalize(left),
+        hotsheet_sync::paths::canonicalize(right),
+    ) {
         (Ok(left), Ok(right)) => left == right,
         _ => left == right,
     }

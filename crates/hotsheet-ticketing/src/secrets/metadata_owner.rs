@@ -75,7 +75,7 @@ impl Owner {
         Ok(owner)
     }
     fn check(&self) -> Result<(), SecretError> {
-        if self.requested.canonicalize()? != self.root {
+        if hotsheet_sync::paths::canonicalize(&self.requested)? != self.root {
             return Err(refusal());
         }
         self.proof.check(&self.root, &self.accounts)

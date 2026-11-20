@@ -11,6 +11,7 @@
 //! override counts as unset (HS2-15ZN8E).
 
 pub mod env_path;
+pub mod paths;
 
 use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 

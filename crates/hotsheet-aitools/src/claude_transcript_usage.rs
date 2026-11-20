@@ -491,7 +491,7 @@ fn watch_transcript_with(
     let recursive_from_start = cfg!(target_os = "macos");
     // The platform reports resolved paths (`/private/var/...` for `/var/...`), so both the
     // given and the resolved forms are matched.
-    let resolved = dir.canonicalize().unwrap_or_else(|_| dir.clone());
+    let resolved = hotsheet_sync::paths::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
     let forms: Vec<(std::path::PathBuf, std::path::PathBuf)> = [dir.clone(), resolved]
         .into_iter()
         .map(|form| {

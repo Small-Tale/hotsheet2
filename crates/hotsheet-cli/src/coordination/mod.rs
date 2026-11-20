@@ -118,7 +118,7 @@ impl Coordinator {
         source: &Path,
         registry_home: PathBuf,
     ) -> Result<Self> {
-        let project = project.canonicalize()?;
+        let project = hotsheet_sync::paths::canonicalize(project)?;
         let output = hotsheet_ticketing::git::launch("git")
             .arg("-C")
             .arg(&project)
@@ -138,12 +138,16 @@ impl Coordinator {
         let this = Self {
             directory,
             project: shipping.to_path_buf(),
-            source: source.canonicalize()?,
+            source: hotsheet_sync::paths::canonicalize(source)?,
             registry_home,
             project_id,
             source_id: format!(
                 "{:x}",
-                Sha256::digest(source.canonicalize()?.to_string_lossy().as_bytes())
+                Sha256::digest(
+                    hotsheet_sync::paths::canonicalize(source)?
+                        .to_string_lossy()
+                        .as_bytes()
+                )
             ),
             #[cfg(test)]
             before_dispatcher_register: std::sync::Mutex::new(None),

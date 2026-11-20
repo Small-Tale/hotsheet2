@@ -323,7 +323,9 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
         assert_eq!(record["pid"].as_u64(), Some(u64::from(std::process::id())));
         assert_eq!(
             record["store_path"].as_str(),
-            bootstrap.canonicalize().unwrap().to_str()
+            hotsheet_sync::paths::canonicalize(&bootstrap)
+                .unwrap()
+                .to_str()
         );
         let live = hotsheet_cli::external_launch::discover_running_server(&bootstrap, home)
             .expect("owned fixture process must be live");

@@ -125,7 +125,7 @@ fn git_common_dir(root: &Path) -> Option<PathBuf> {
         Ok(text) => git_dir.join(text.trim()),
         Err(_) => git_dir,
     };
-    let common = std::fs::canonicalize(common).ok()?;
+    let common = hotsheet_sync::paths::canonicalize(common).ok()?;
     common.join("refs").is_dir().then_some(common)
 }
 
@@ -366,7 +366,7 @@ mod tests {
                 "work",
             ],
         );
-        let common = std::fs::canonicalize(main.join(".git")).unwrap();
+        let common = hotsheet_sync::paths::canonicalize(main.join(".git")).unwrap();
         assert_eq!(git_common_dir(&main), Some(common.clone()));
         assert_eq!(git_common_dir(&linked), Some(common));
         assert_eq!(git_common_dir(dir.path()), None);

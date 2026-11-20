@@ -63,7 +63,8 @@ pub(super) fn parse_worktrees(listing: &str) -> Vec<Worktree> {
 
 /// The same directory, resolving links (a temporary directory behind `/private`).
 fn same_path(left: &Path, right: &Path) -> bool {
-    let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+    let resolve =
+        |path: &Path| hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_owned());
     left == right || resolve(left) == resolve(right)
 }
 

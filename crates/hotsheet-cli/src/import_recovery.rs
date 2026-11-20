@@ -104,8 +104,8 @@ fn source_path(base: &Path, attachment: &ExportAttachment) -> Result<PathBuf> {
     if Path::new(&attachment.stored_path).is_absolute() {
         bail!("recovery requires a portable export with relative attachment paths");
     }
-    let base = base.canonicalize()?;
-    let source = base.join(&attachment.stored_path).canonicalize()?;
+    let base = hotsheet_sync::paths::canonicalize(base)?;
+    let source = hotsheet_sync::paths::canonicalize(base.join(&attachment.stored_path))?;
     if !source.starts_with(&base) {
         bail!("export attachment escapes the portable bundle");
     }

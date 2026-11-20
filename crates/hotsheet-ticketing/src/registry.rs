@@ -31,9 +31,7 @@ impl StoreRegistry {
     /// The canonical identity of a store: its canonicalized root path. Matches the
     /// index's `store_id` derivation, and what `move_ticket` records in `moved_to_store`.
     pub fn store_id(store: &FsStore) -> String {
-        store
-            .root()
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(store.root())
             .unwrap_or_else(|_| store.root().to_path_buf())
             .display()
             .to_string()

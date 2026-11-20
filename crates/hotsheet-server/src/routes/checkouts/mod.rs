@@ -230,8 +230,7 @@ pub(crate) async fn open_project(
         .into_iter()
         .find(|checkout| {
             checkout.root
-                == FsPath::new(&body.root)
-                    .canonicalize()
+                == hotsheet_sync::paths::canonicalize(FsPath::new(&body.root))
                     .unwrap_or_default()
                     .to_string_lossy()
         });
@@ -733,7 +732,9 @@ pub(crate) async fn checkout_repository_compaction(
             )
         })?;
     let root = std::path::PathBuf::from(&source.locator);
-    if root.canonicalize().ok() == std::path::PathBuf::from(&checkout.root).canonicalize().ok() {
+    if hotsheet_sync::paths::canonicalize(&root).ok()
+        == hotsheet_sync::paths::canonicalize(std::path::PathBuf::from(&checkout.root)).ok()
+    {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "ticket store shares the code repository",
@@ -792,7 +793,9 @@ pub(crate) async fn execute_checkout_repository_compaction(
             )
         })?;
     let root = std::path::PathBuf::from(&source.locator);
-    if root.canonicalize().ok() == std::path::PathBuf::from(&checkout.root).canonicalize().ok() {
+    if hotsheet_sync::paths::canonicalize(&root).ok()
+        == hotsheet_sync::paths::canonicalize(std::path::PathBuf::from(&checkout.root)).ok()
+    {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "ticket store shares the code repository",
@@ -1234,15 +1237,14 @@ pub(crate) fn checkout_entries(
         .filter(|source| source.provider == "git")
     {
         let store_path = source.locator;
-        let canonical = FsPath::new(&store_path)
-            .canonicalize()
+        let canonical = hotsheet_sync::paths::canonicalize(FsPath::new(&store_path))
             .unwrap_or_else(|_| store_path.clone().into());
-        let find =
-            || {
-                state.host.locations().into_iter().find(|(_, root)| {
-                    root.canonicalize().unwrap_or_else(|_| root.clone()) == canonical
-                })
-            };
+        let find = || {
+            state.host.locations().into_iter().find(|(_, root)| {
+                hotsheet_sync::paths::canonicalize(root).unwrap_or_else(|_| root.clone())
+                    == canonical
+            })
+        };
         // A sweep may have unhosted it while the project stayed open (HS2-ARJ9J1).
         let found = find().or_else(|| {
             let store = FsStore::open(&store_path).ok()?;

@@ -539,9 +539,7 @@ pub(crate) fn terminal_permission_project(state: &AppState, req: &OpenTerminalRe
 
 fn terminal_permission_identity(state: &AppState, cwd: Option<&str>) -> String {
     let cwd = cwd.unwrap_or_else(|| state.store.root().to_str().unwrap_or_default());
-    let cwd = FsPath::new(cwd)
-        .canonicalize()
-        .unwrap_or_else(|_| cwd.into());
+    let cwd = hotsheet_sync::paths::canonicalize(FsPath::new(cwd)).unwrap_or_else(|_| cwd.into());
     let checkout = super::usage_store::checkout_containing(state, &cwd);
     checkout.map_or_else(
         || format!("unregistered:{}", cwd.display()),
@@ -557,9 +555,7 @@ fn terminal_project_for_cwd(state: &AppState, cwd: Option<&str>) -> String {
     let Some(cwd) = cwd else {
         return state.store.root().display().to_string();
     };
-    let cwd = FsPath::new(cwd)
-        .canonicalize()
-        .unwrap_or_else(|_| cwd.into());
+    let cwd = hotsheet_sync::paths::canonicalize(FsPath::new(cwd)).unwrap_or_else(|_| cwd.into());
     if let Some(checkout) = super::usage_store::checkout_containing(state, &cwd) {
         return checkout.root;
     }

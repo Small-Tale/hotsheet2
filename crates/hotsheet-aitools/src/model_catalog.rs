@@ -190,7 +190,10 @@ fn native_default_install(program: &str) -> Result<PathBuf, String> {
     if std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 == 0 {
         return Err("catalog executable is not executable".into());
     }
-    if first.canonicalize().ok() != expected.canonicalize().ok() || !expected.is_file() {
+    if hotsheet_sync::paths::canonicalize(&first).ok()
+        != hotsheet_sync::paths::canonicalize(&expected).ok()
+        || !expected.is_file()
+    {
         return Err("catalog executable is outside the documented CLI install path".into());
     }
     let mut magic = [0u8; 4];

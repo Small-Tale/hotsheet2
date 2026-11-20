@@ -30,7 +30,8 @@ pub struct ExternalLaunch {
 
 /// Locate the per-store instance record written by `hotsheet-server`.
 pub fn instance_path(home: &Path, store: &Path) -> PathBuf {
-    let canonical = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let canonical =
+        hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let id = &hotsheet_index::hash_bytes(canonical.to_string_lossy().as_bytes())[..16];
     home.join("instances").join(format!("{id}.json"))
 }
@@ -57,9 +58,9 @@ pub fn discover_running_server(store: &Path, home: &Path) -> Result<ServerInstan
             store.display()
         );
     }
-    let canonical = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
-    let recorded = PathBuf::from(&server.store_path)
-        .canonicalize()
+    let canonical =
+        hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
+    let recorded = hotsheet_sync::paths::canonicalize(PathBuf::from(&server.store_path))
         .unwrap_or_else(|_| PathBuf::from(&server.store_path));
     if canonical != recorded {
         bail!("server instance record belongs to a different ticket store");
@@ -95,9 +96,10 @@ impl ServerInstance {
     /// activity) answer for that store rather than for another one.
     #[must_use]
     pub fn anchors(&self, store: &Path) -> bool {
-        let canonical = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+        let canonical =
+            hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
         let recorded = PathBuf::from(&self.store_path);
-        recorded.canonicalize().unwrap_or(recorded) == canonical
+        hotsheet_sync::paths::canonicalize(&recorded).unwrap_or(recorded) == canonical
     }
 }
 
@@ -125,7 +127,9 @@ pub enum HostScope {
 /// Every CLI command that talks to the local server resolves its host here.
 pub fn discover_local_host(store: &Path, home: &Path, scope: HostScope) -> Result<ServerInstance> {
     let machine = machine_host_store(home);
-    let same = store.canonicalize().ok() == machine.canonicalize().ok() || store == machine;
+    let same = hotsheet_sync::paths::canonicalize(store).ok()
+        == hotsheet_sync::paths::canonicalize(&machine).ok()
+        || store == machine;
     let candidates: Vec<&Path> = match (same, scope) {
         (true, _) => vec![machine.as_path()],
         (false, HostScope::Machine) => vec![machine.as_path(), store],
@@ -299,7 +303,7 @@ mod tests {
                 "pid": std::process::id(),
                 "url": "http://127.0.0.1:8787",
                 "secret": "test-secret",
-                "store_path": store.canonicalize().unwrap(),
+                "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
             })
             .to_string(),
         )
@@ -389,7 +393,7 @@ mod tests {
                 "pid": std::process::id(),
                 "url": "http://127.0.0.1:9797",
                 "secret": "replacement-secret",
-                "store_path": store.canonicalize().unwrap(),
+                "store_path": hotsheet_sync::paths::canonicalize(&store).unwrap(),
             })
             .to_string(),
         )
@@ -422,7 +426,7 @@ mod tests {
                 "pid": pid,
                 "url": "http://127.0.0.1:8787",
                 "secret": secret,
-                "store_path": anchor.canonicalize().unwrap(),
+                "store_path": hotsheet_sync::paths::canonicalize(anchor).unwrap(),
             })
             .to_string(),
         )

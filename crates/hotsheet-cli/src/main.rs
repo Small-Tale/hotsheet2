@@ -1246,9 +1246,8 @@ fn urlencoding_component(value: &str) -> String {
 /// Refresh every registered checkout backed by `store_path`. If the current checkout is
 /// not registered yet, still maintain its local projection from the resolved store.
 fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
-    let store_path = store_path
-        .canonicalize()
-        .unwrap_or_else(|_| store_path.to_path_buf());
+    let store_path =
+        hotsheet_sync::paths::canonicalize(store_path).unwrap_or_else(|_| store_path.to_path_buf());
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
@@ -1256,15 +1255,16 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
     let mut had_matching_store_checkout = false;
     for checkout in registry.list()? {
         let matches = checkout.stores.iter().any(|candidate| {
-            Path::new(candidate)
-                .canonicalize()
+            hotsheet_sync::paths::canonicalize(Path::new(candidate))
                 .unwrap_or_else(|_| PathBuf::from(candidate))
                 == store_path
         });
         if matches {
             had_matching_store_checkout = true;
-            refreshed_current |= Path::new(&checkout.root).canonicalize().ok().as_ref()
-                == cwd.canonicalize().ok().as_ref();
+            refreshed_current |= hotsheet_sync::paths::canonicalize(Path::new(&checkout.root))
+                .ok()
+                .as_ref()
+                == hotsheet_sync::paths::canonicalize(cwd).ok().as_ref();
             let mut by_id: BTreeMap<Ulid, Ticket> = BTreeMap::new();
             for root in &checkout.stores {
                 for ticket in indexed_up_next_tickets(&FsStore::open(root)?)? {
@@ -1320,7 +1320,9 @@ fn indexed_up_next_tickets(store: &FsStore) -> Result<Vec<Ticket>> {
 
 fn local_checkout_root(store_path: &Path, cwd: &Path) -> PathBuf {
     let linked = hotsheet_cli::resolve_store_path(PathBuf::from("."), cwd);
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical = |path: &Path| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
     if cwd.join(hotsheet_cli::STORE_LINK).is_file() && canonical(&linked) == canonical(store_path) {
         cwd.to_path_buf()
     } else {
@@ -1629,7 +1631,9 @@ fn effective_ai_defaults(
 }
 
 fn settings_for_cli(store: &Path, cwd: &Path) -> hotsheet_ticketing::Settings {
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical = |path: &Path| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
     let canonical_store = canonical(store);
     let canonical_cwd = canonical(cwd);
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(

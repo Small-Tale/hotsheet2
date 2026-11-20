@@ -52,8 +52,9 @@ fn init_store(path: &Path, prefix: &str) -> FsStore {
         .unwrap();
     assert!(owner.status.success());
     assert_eq!(
-        std::fs::canonicalize(String::from_utf8(owner.stdout).unwrap().trim()).unwrap(),
-        std::fs::canonicalize(path).unwrap()
+        hotsheet_sync::paths::canonicalize(String::from_utf8(owner.stdout).unwrap().trim())
+            .unwrap(),
+        hotsheet_sync::paths::canonicalize(path).unwrap()
     );
     store
 }

@@ -49,9 +49,7 @@ impl TicketRef {
 
 /// Stable connection id for a git store, shared by CLI/MCP/server surfaces.
 pub fn git_connection_id(store: &FsStore) -> String {
-    let root = store
-        .root()
-        .canonicalize()
+    let root = hotsheet_sync::paths::canonicalize(store.root())
         .unwrap_or_else(|_| store.root().to_path_buf());
     let mut hash = Sha256::new();
     hash.update(root.to_string_lossy().as_bytes());

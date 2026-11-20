@@ -138,7 +138,7 @@ fn watch_tickets_with(
     start: StartStream,
 ) -> Option<(BackgroundWatcher, Arc<()>)> {
     // A store without a tickets directory has nothing to follow yet.
-    let tickets = std::fs::canonicalize(store.root.join("tickets")).ok()?;
+    let tickets = hotsheet_sync::paths::canonicalize(store.root.join("tickets")).ok()?;
     let (log, sender, connection) = (
         event_log.clone(),
         events.clone(),

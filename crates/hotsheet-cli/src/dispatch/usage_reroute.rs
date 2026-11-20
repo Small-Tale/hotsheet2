@@ -158,9 +158,7 @@ pub(crate) fn reroute_bootstrap_usage(home: &Path, projects: &Path, apply: bool)
             Some(store) => {
                 aliases
                     .entry(
-                        store
-                            .root()
-                            .canonicalize()
+                        hotsheet_sync::paths::canonicalize(store.root())
                             .unwrap_or_else(|_| store.root().to_path_buf()),
                     )
                     .or_insert_with(|| checkout.alias.clone());

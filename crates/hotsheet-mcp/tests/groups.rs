@@ -248,8 +248,8 @@ fn hs2_9kzsd4_serverless_checkout_names_groups_through_its_registry() {
             .stores
             .iter()
             .find(|linked| {
-                std::path::Path::new(linked.as_str()).canonicalize().ok()
-                    == store.canonicalize().ok()
+                hotsheet_sync::paths::canonicalize(std::path::Path::new(linked.as_str())).ok()
+                    == hotsheet_sync::paths::canonicalize(store).ok()
             })
             .unwrap();
         let mut args = json!({ "checkout": checkout.id, "store": linked, "title": title });

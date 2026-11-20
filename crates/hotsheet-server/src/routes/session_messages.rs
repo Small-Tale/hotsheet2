@@ -433,7 +433,7 @@ pub(crate) fn prepare_session_push(
             format!("allocating a session port: {error}"),
         )
     })?;
-    let directory = std::fs::canonicalize(directory)
+    let directory = hotsheet_sync::paths::canonicalize(directory)
         .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_else(|_| directory.to_string());
     let launch = PushLaunch {

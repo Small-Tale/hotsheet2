@@ -363,12 +363,10 @@ fn validated_status_path(root: &Path, relative: &str) -> Result<PathBuf, Reposit
     if !status.files.iter().any(|file| file.path == relative) {
         return Err(RepositoryBrowserError::UnknownFile);
     }
-    let canonical_root = root
-        .canonicalize()
+    let canonical_root = hotsheet_sync::paths::canonicalize(root)
         .map_err(repository_status::RepositoryStatusError::from)?;
     let candidate = canonical_root.join(relative_path);
-    let containment_target = nearest_existing_path(&candidate)
-        .canonicalize()
+    let containment_target = hotsheet_sync::paths::canonicalize(nearest_existing_path(&candidate))
         .map_err(repository_status::RepositoryStatusError::from)?;
     if !containment_target.starts_with(&canonical_root) {
         return Err(RepositoryBrowserError::UnsafePath);

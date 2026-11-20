@@ -77,9 +77,7 @@ pub use setup::{SetupReport, run_setup};
 /// CLI, MCP shim, and server share one index file
 /// (`${HOTSHEET_HOME}/index/<project-id>.v<schema>.sqlite`).
 pub fn default_index_path(store: &hotsheet_ticketing::FsStore) -> anyhow::Result<PathBuf> {
-    let root = store
-        .root()
-        .canonicalize()
+    let root = hotsheet_sync::paths::canonicalize(store.root())
         .unwrap_or_else(|_| store.root().to_path_buf());
     let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
     let dir = hotsheet_plugins::hotsheet_home().join("index");
@@ -143,7 +141,7 @@ pub fn exit_code_of(status: std::process::ExitStatus) -> i32 {
 /// subdirectory. Prefer the nearest checkout/store marker; a standalone directory remains
 /// its own root. This keeps `.codex/hooks.json` discoverable from nested working directories.
 pub fn launch_project_root(start: &Path) -> PathBuf {
-    let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+    let start = hotsheet_sync::paths::canonicalize(start).unwrap_or_else(|_| start.to_path_buf());
     start
         .ancestors()
         .find(|dir| {
@@ -161,8 +159,7 @@ pub fn discover_launch_sources(
     project: &Path,
     registry: &hotsheet_ticketing::checkouts::CheckoutRegistry,
 ) -> Result<LaunchSourceDiscovery> {
-    let project = project
-        .canonicalize()
+    let project = hotsheet_sync::paths::canonicalize(project)
         .with_context(|| format!("project path does not exist: {}", project.display()))?;
     let registered = match registry.resolve(project.to_string_lossy().as_ref()) {
         Ok(checkout) => Some(checkout),
@@ -191,7 +188,7 @@ pub fn discover_launch_sources(
     let linked = resolve_store_path(PathBuf::from("."), &project);
     if linked != Path::new(".") && FsStore::open(&linked).is_ok() {
         return Ok(LaunchSourceDiscovery {
-            selected: Some(linked.canonicalize().unwrap_or(linked)),
+            selected: Some(hotsheet_sync::paths::canonicalize(&linked).unwrap_or(linked)),
             candidates: Vec::new(),
         });
     }
@@ -208,7 +205,7 @@ pub fn discover_launch_sources(
             if path.extension().and_then(|value| value.to_str()) == Some("hs2")
                 && FsStore::open(&path).is_ok()
             {
-                candidates.push(path.canonicalize().unwrap_or(path));
+                candidates.push(hotsheet_sync::paths::canonicalize(&path).unwrap_or(path));
             }
         }
     }
@@ -256,8 +253,7 @@ pub fn resolve_store_path(requested: PathBuf, cwd: &Path) -> PathBuf {
 /// store, write its absolute path to `.hotsheet2/store`, and gitignore that link (it's
 /// machine-local). So later `hotsheet-cli` calls here resolve to the store with no `-C`.
 pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
-    let abs = store
-        .canonicalize()
+    let abs = hotsheet_sync::paths::canonicalize(store)
         .with_context(|| format!("store path does not exist: {}", store.display()))?;
     FsStore::open(&abs).with_context(|| format!("{} is not a Hot Sheet store", abs.display()))?;
     // HS2-726EXJ: only an owned or designated Git store becomes a project's ticket source.
@@ -404,11 +400,9 @@ pub fn run_migrate_with_progress(
     if let Ok(summary) = &result {
         observe(MigrationProgress::phase("verify_import"));
         import_completion::verify_export(store_path, &export_json)?;
-        let source = hotsheet_dir
-            .parent()
-            .unwrap_or(hotsheet_dir)
-            .canonicalize()
-            .unwrap_or_else(|_| hotsheet_dir.to_path_buf());
+        let source =
+            hotsheet_sync::paths::canonicalize(hotsheet_dir.parent().unwrap_or(hotsheet_dir))
+                .unwrap_or_else(|_| hotsheet_dir.to_path_buf());
         let receipt = serde_json::json!({
             "$hotsheetSchema": 1,
             "sourceProject": source,
@@ -650,7 +644,10 @@ mod store_link_tests {
         std::fs::create_dir_all(&nested).unwrap();
 
         let abs = link_store(store_dir.path(), code.path()).unwrap();
-        assert_eq!(abs, store_dir.path().canonicalize().unwrap());
+        assert_eq!(
+            abs,
+            hotsheet_sync::paths::canonicalize(store_dir.path()).unwrap()
+        );
         // The link file + a gitignore entry were written.
         let linked = std::fs::read_to_string(code.path().join(STORE_LINK)).unwrap();
         assert_eq!(linked.trim(), abs.display().to_string());
@@ -725,7 +722,10 @@ mod store_link_tests {
         let exact = root.path().join("app.hs2");
         FsStore::init_git(&exact, &StoreMetadata::new("HS")).unwrap();
         let one = discover_launch_sources(&project, &registry).unwrap();
-        assert_eq!(one.candidates, vec![exact.canonicalize().unwrap()]);
+        assert_eq!(
+            one.candidates,
+            vec![hotsheet_sync::paths::canonicalize(&exact).unwrap()]
+        );
 
         let other = root.path().join("shared.hs2");
         FsStore::init_git(&other, &StoreMetadata::new("SH")).unwrap();
@@ -734,7 +734,7 @@ mod store_link_tests {
         assert_eq!(select_launch_candidate(&multiple.candidates, 0), None);
         assert_eq!(
             select_launch_candidate(&multiple.candidates, 1),
-            Some(exact.canonicalize().unwrap())
+            Some(hotsheet_sync::paths::canonicalize(&exact).unwrap())
         );
 
         registry
@@ -744,7 +744,7 @@ mod store_link_tests {
             discover_launch_sources(&project, &registry)
                 .unwrap()
                 .selected,
-            Some(other.canonicalize().unwrap())
+            Some(hotsheet_sync::paths::canonicalize(&other).unwrap())
         );
     }
 

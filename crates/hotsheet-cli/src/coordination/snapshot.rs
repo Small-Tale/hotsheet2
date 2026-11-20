@@ -166,14 +166,20 @@ impl Coordinator {
                     continue;
                 }
                 if !(source.provider == "git"
-                    && Path::new(&source.locator).canonicalize().ok().as_ref()
+                    && hotsheet_sync::paths::canonicalize(Path::new(&source.locator))
+                        .ok()
+                        .as_ref()
                         == Some(&self.source))
                 {
                     uncovered_sources.push(source.connection_id.clone());
                 }
             }
             for store in &checkout.stores {
-                if Path::new(&store).canonicalize().ok().as_ref() != Some(&self.source) {
+                if hotsheet_sync::paths::canonicalize(Path::new(&store))
+                    .ok()
+                    .as_ref()
+                    != Some(&self.source)
+                {
                     let id = format!("{:x}", Sha256::digest(store.as_bytes()));
                     store_ids.insert(id.clone(), store.to_string());
                     uncovered_sources.push(id);

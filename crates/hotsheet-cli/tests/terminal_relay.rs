@@ -65,10 +65,10 @@ impl Fixture {
         let launchctl = dir.path().join("launchctl");
         fs::write(&launchctl, FAKE_LAUNCHCTL).unwrap();
         fs::set_permissions(&launchctl, fs::Permissions::from_mode(0o755)).unwrap();
-        let server = workspace_bin::path("hotsheet-cli")
-            .with_file_name("hotsheet-server")
-            .canonicalize()
-            .unwrap();
+        let server = hotsheet_sync::paths::canonicalize(
+            workspace_bin::path("hotsheet-cli").with_file_name("hotsheet-server"),
+        )
+        .unwrap();
         Self {
             dir,
             home,

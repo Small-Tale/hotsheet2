@@ -335,7 +335,8 @@ impl Capacity {
             .entry(root.to_path_buf())
             .or_insert_with(|| source.disk(root));
         // A session started below the checkout's root belongs to it.
-        let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        let canonical =
+            hotsheet_sync::paths::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
         HostObservation {
             capabilities: None,
             sampled_at_ms: Some(reading.sampled_at_ms),
@@ -376,7 +377,7 @@ impl Capacity {
                         busy: session.busy,
                         on_checkout: session.launch_cwd.as_ref().map(|cwd| {
                             let cwd = Path::new(cwd);
-                            cwd.canonicalize()
+                            hotsheet_sync::paths::canonicalize(cwd)
                                 .unwrap_or_else(|_| cwd.to_path_buf())
                                 .starts_with(&canonical)
                         }),

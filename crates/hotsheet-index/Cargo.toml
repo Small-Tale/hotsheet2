@@ -9,6 +9,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# One canonical path spelling, never Windows verbatim (HS2-ECJ188).
+hotsheet-sync.workspace = true
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 rusqlite.workspace = true

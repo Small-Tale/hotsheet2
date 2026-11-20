@@ -138,10 +138,10 @@ fn blocked_reason_at(store_path: &Path, step: &str, locks: &[PathBuf], now: Syst
 /// printed it (a linked worktree's Git directory lives elsewhere). A store-relative path
 /// uses `/` on every platform (HS2-T6YXN0).
 pub(crate) fn display_path(store_path: &Path, lock: &Path) -> String {
-    let canonical_store = store_path.canonicalize().ok();
+    let canonical_store = hotsheet_sync::paths::canonicalize(store_path).ok();
     let canonical_lock = lock
         .parent()
-        .and_then(|parent| parent.canonicalize().ok())
+        .and_then(|parent| hotsheet_sync::paths::canonicalize(parent).ok())
         .zip(lock.file_name())
         .map(|(parent, name)| parent.join(name));
     match (canonical_store, canonical_lock) {

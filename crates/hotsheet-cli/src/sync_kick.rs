@@ -33,7 +33,7 @@ pub fn request_host_sync(home: &Path, store: &Path) -> KickOutcome {
     let Ok(server) = discover_local_host(store, home, HostScope::Project) else {
         return KickOutcome::NoHost;
     };
-    let store = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let store = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let endpoint = format!("{}/sync/kick", server.url.trim_end_matches('/'));
     let body = serde_json::json!({ "store": store }).to_string();
     match ureq::post(&endpoint)

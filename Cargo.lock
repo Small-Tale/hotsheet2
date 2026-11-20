@@ -1116,6 +1116,7 @@ dependencies = [
  "hotsheet-plugins",
  "hotsheet-process-journal",
  "hotsheet-resource-claims",
+ "hotsheet-sync",
  "hotsheet-terminals",
  "hotsheet-ticketing",
  "hotsheet-tls",
@@ -1161,6 +1162,7 @@ name = "hotsheet-index"
 version = "0.0.0"
 dependencies = [
  "hotsheet-model",
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
  "rusqlite",
@@ -1176,6 +1178,7 @@ name = "hotsheet-jobs"
 version = "0.0.0"
 dependencies = [
  "hotsheet-process-journal",
+ "hotsheet-sync",
  "libc",
  "notify 6.1.1",
  "notify 8.2.1",
@@ -1256,6 +1259,7 @@ dependencies = [
  "base64 0.22.1",
  "hotsheet-model",
  "hotsheet-process-journal",
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "include_dir",
  "semver",
@@ -1272,6 +1276,7 @@ dependencies = [
 name = "hotsheet-process-journal"
 version = "0.0.0"
 dependencies = [
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
  "serde",
@@ -1285,6 +1290,7 @@ name = "hotsheet-resource-claims"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
  "ring",
@@ -1412,6 +1418,7 @@ name = "hotsheet-tls"
 version = "0.0.0"
 dependencies = [
  "hotsheet-plugins",
+ "hotsheet-sync",
  "rcgen",
  "serde",
  "serde_json",

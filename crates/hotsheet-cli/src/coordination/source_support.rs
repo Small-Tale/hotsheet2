@@ -151,7 +151,7 @@ pub(super) fn reports(
                         .push("checkout_source_metadata_mismatch".into());
                 }
             } else if source.provider == "git" {
-                let exists = Path::new(&source.locator).canonicalize().is_ok();
+                let exists = hotsheet_sync::paths::canonicalize(Path::new(&source.locator)).is_ok();
                 let mut report = local(source.connection_id.clone(), false);
                 if !exists {
                     report.configuration = SourceConfiguration::Missing;
@@ -177,12 +177,16 @@ pub(super) fn reports(
             }
         }
         for path in &checkout.stores {
-            if Path::new(path).canonicalize().ok().as_deref() != Some(source_path) {
+            if hotsheet_sync::paths::canonicalize(Path::new(path))
+                .ok()
+                .as_deref()
+                != Some(source_path)
+            {
                 use sha2::{Digest, Sha256};
                 let id = format!("{:x}", Sha256::digest(path.as_bytes()));
                 reports.entry(id.clone()).or_insert_with(|| {
                     let mut report = local(id, false);
-                    if Path::new(path).canonicalize().is_err() {
+                    if hotsheet_sync::paths::canonicalize(Path::new(path)).is_err() {
                         report.configuration = SourceConfiguration::Missing;
                         report.reasons.push("local_source_path_unavailable".into());
                     }

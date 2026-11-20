@@ -284,9 +284,7 @@ impl Index {
     /// (corrupt), it's deleted + rebuilt (corruption is a non-event, `docs/03` §3.8).
     /// `store_id` is derived from the store root.
     pub fn open_reconciled(db_path: &Path, store: &FsStore) -> Result<Self, IndexError> {
-        let store_id = store
-            .root()
-            .canonicalize()
+        let store_id = hotsheet_sync::paths::canonicalize(store.root())
             .unwrap_or_else(|_| store.root().to_path_buf())
             .display()
             .to_string();

@@ -67,7 +67,7 @@ fn server_binary(explicit: Option<PathBuf>) -> Result<PathBuf> {
         }
     };
     // launchd needs an absolute, stable program path.
-    path.canonicalize()
+    hotsheet_sync::paths::canonicalize(&path)
         .with_context(|| format!("hotsheet-server not found at {}", path.display()))
 }
 

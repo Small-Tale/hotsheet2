@@ -190,7 +190,7 @@ pub fn prepare_trigger_with_home(
         .unwrap_or("");
     let is_app_server = transport == "app-server";
     let codex_home = if is_app_server && !env.iter().any(|(k, _)| k == "CODEX_HOME") {
-        let store_abs = store_path.canonicalize().with_context(|| {
+        let store_abs = hotsheet_sync::paths::canonicalize(store_path).with_context(|| {
             format!(
                 "store path does not exist: {} (run `hotsheet-cli init` first)",
                 store_path.display()

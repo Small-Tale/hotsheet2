@@ -749,12 +749,13 @@ fn cmd_live_state(store: &Path, all: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&body)?);
         return Ok(());
     }
-    let wanted = store.canonicalize().unwrap_or_else(|_| store.to_path_buf());
+    let wanted = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let found = body["stores"].as_array().and_then(|stores| {
         stores.iter().find(|entry| {
             entry["root"].as_str().is_some_and(|root| {
                 let root = Path::new(root);
-                root.canonicalize().unwrap_or_else(|_| root.to_path_buf()) == wanted
+                hotsheet_sync::paths::canonicalize(root).unwrap_or_else(|_| root.to_path_buf())
+                    == wanted
             })
         })
     });
@@ -794,7 +795,7 @@ fn cmd_ci(store: &Path, cmd: CiCmd) -> Result<()> {
                     store.display()
                 )
             })?;
-            root.canonicalize()
+            hotsheet_sync::paths::canonicalize(&root)
                 .unwrap_or(root)
                 .to_string_lossy()
                 .into_owned()

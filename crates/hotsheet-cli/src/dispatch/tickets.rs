@@ -366,7 +366,7 @@ pub(crate) fn cmd_move(src_path: &Path, id: &str, to: &Path, yes: bool) -> Resul
     }
 
     // Until store ids exist (HS2-87), identify the destination by its canonical path.
-    let dest_id = std::fs::canonicalize(to)
+    let dest_id = hotsheet_sync::paths::canonicalize(to)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| to.display().to_string());
     let out = ops::move_ticket(&src, &dest, &ticket.id, &dest_id, now_ts())?;

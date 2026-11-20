@@ -231,7 +231,10 @@ async fn remote_terminal_contract(dir: tempfile::TempDir, state: AppState) {
     let router = app(state.clone());
     let workdir = dir.path().join("checkout");
     std::fs::create_dir_all(&workdir).unwrap();
-    let workdir = workdir.canonicalize().unwrap().display().to_string();
+    let workdir = hotsheet_sync::paths::canonicalize(&workdir)
+        .unwrap()
+        .display()
+        .to_string();
     let launch = json!({"id": "remote-cat", "command": "cat", "cwd": workdir});
 
     // A read-only desktop session lists terminals but cannot open one.
@@ -506,7 +509,10 @@ async fn size_claim_release(dir: tempfile::TempDir, state: AppState) {
     let router = app(state.clone());
     let workdir = dir.path().join("checkout");
     std::fs::create_dir_all(&workdir).unwrap();
-    let workdir = workdir.canonicalize().unwrap().display().to_string();
+    let workdir = hotsheet_sync::paths::canonicalize(&workdir)
+        .unwrap()
+        .display()
+        .to_string();
     let launched = router
         .clone()
         .oneshot(owner(
@@ -686,7 +692,10 @@ async fn reconnected_claim_survives_late_close(dir: tempfile::TempDir, state: Ap
     let router = app(state.clone());
     let workdir = dir.path().join("checkout");
     std::fs::create_dir_all(&workdir).unwrap();
-    let workdir = workdir.canonicalize().unwrap().display().to_string();
+    let workdir = hotsheet_sync::paths::canonicalize(&workdir)
+        .unwrap()
+        .display()
+        .to_string();
     let launched = router
         .clone()
         .oneshot(owner(

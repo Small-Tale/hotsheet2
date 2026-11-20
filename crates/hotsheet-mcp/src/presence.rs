@@ -107,7 +107,9 @@ pub fn identity_env(
 /// no server hosts simply yields `None`. A stale record from a crashed server is harmless:
 /// its upserts fail and are retried silently, exactly like a server that went away.
 pub fn discover_server(instances_dir: &Path, store: &Path) -> Option<(String, String)> {
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical = |path: &Path| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
     let wanted = canonical(store);
     let mut best: Option<(String, String, String)> = None;
     for entry in std::fs::read_dir(instances_dir).ok()?.flatten() {

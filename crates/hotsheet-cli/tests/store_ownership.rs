@@ -95,7 +95,7 @@ fn designated(born: bool) -> Designated {
     }
     std::fs::write(repo.join("staged.txt"), "user work\n").unwrap();
     git(&repo, &["add", "--", "staged.txt"]);
-    let store = store.canonicalize().unwrap();
+    let store = hotsheet_sync::paths::canonicalize(&store).unwrap();
     assert!(
         matches!(owner(&store), StoreGitOwner::Designated { .. }),
         "{:?}",
@@ -104,7 +104,7 @@ fn designated(born: bool) -> Designated {
     Designated {
         _dir: dir,
         home,
-        repo: repo.canonicalize().unwrap(),
+        repo: hotsheet_sync::paths::canonicalize(&repo).unwrap(),
         store,
     }
 }
@@ -374,7 +374,10 @@ fn hs2_v6jebr_bootstrap_prints_scoped_steps_when_it_cannot_commit_a_designated_r
         .success()
         .stdout(predicate::str::contains(format!(
             "git -C '{}' add -A -- {prefix}",
-            fixture.repo.display()
+            // HS2-ECJ188: the one canonical spelling, never `\\?\` or `RUNNER~1`.
+            hotsheet_sync::paths::canonicalize(&fixture.repo)
+                .unwrap()
+                .display()
         )))
         .stdout(predicate::str::contains(format!("--only -- {prefix}")));
     assert_eq!(head(&fixture.repo), None);

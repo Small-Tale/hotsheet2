@@ -154,8 +154,7 @@ fn user_id() -> u32 {
 pub fn socket_path(home: &Path, project: &str) -> io::Result<PathBuf> {
     let directory = PathBuf::from(format!("/tmp/hotsheet2-brokers-{}", user_id()));
     ensure_private_directory(&directory)?;
-    let home = home
-        .canonicalize()
+    let home = hotsheet_sync::paths::canonicalize(home)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(home));
     let mut digest = Sha256::new();
     digest.update(home.as_os_str().as_bytes());
@@ -179,8 +178,7 @@ pub fn relay_socket_path(home: &Path) -> io::Result<PathBuf> {
 
 /// A short stable key for `home`, distinct per `purpose`.
 pub fn home_key(home: &Path, purpose: &str) -> String {
-    let home = home
-        .canonicalize()
+    let home = hotsheet_sync::paths::canonicalize(home)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(home));
     let mut digest = Sha256::new();
     digest.update(home.as_os_str().as_bytes());

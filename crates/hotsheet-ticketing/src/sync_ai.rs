@@ -343,9 +343,10 @@ fn now() -> String {
 pub fn store_reference(project: &Path, store: &Path) -> String {
     // A path that does not exist yet still resolves through its parent.
     let canonical = |path: &Path| {
-        path.canonicalize().unwrap_or_else(|_| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| {
             match (
-                path.parent().and_then(|p| p.canonicalize().ok()),
+                path.parent()
+                    .and_then(|p| hotsheet_sync::paths::canonicalize(p).ok()),
                 path.file_name(),
             ) {
                 (Some(parent), Some(name)) => parent.join(name),

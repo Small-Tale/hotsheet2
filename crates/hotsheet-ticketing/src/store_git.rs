@@ -146,7 +146,10 @@ pub fn is_machine_anchor(root: &Path) -> bool {
 }
 
 fn is_anchor_of(root: &Path, anchor: &Path) -> bool {
-    match (root.canonicalize(), anchor.canonicalize()) {
+    match (
+        hotsheet_sync::paths::canonicalize(root),
+        hotsheet_sync::paths::canonicalize(anchor),
+    ) {
         (Ok(root), Ok(anchor)) => root == anchor,
         _ => root == anchor,
     }
@@ -362,12 +365,12 @@ impl FsStore {
             StoreGitOwner::Designated {
                 key,
                 head,
-                toplevel: PathBuf::from(toplevel),
+                toplevel: hotsheet_sync::paths::from_git(toplevel),
                 prefix: prefix.to_owned(),
             }
         } else {
             StoreGitOwner::Unowned {
-                toplevel: PathBuf::from(toplevel),
+                toplevel: hotsheet_sync::paths::from_git(toplevel),
             }
         }
     }

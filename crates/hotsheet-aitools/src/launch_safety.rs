@@ -241,7 +241,7 @@ impl IsolatedCodexHome {
     /// the machine under workspace-write. Git metadata needs its own root because
     /// Codex protects `.git` even when the surrounding store is writable.
     pub fn allow_linked_store_write(&self, store: &Path) -> Result<()> {
-        let store = std::fs::canonicalize(store)
+        let store = hotsheet_sync::paths::canonicalize(store)
             .with_context(|| format!("resolving linked store {}", store.display()))?;
         let output = hotsheet_ticketing::git::launch("git")
             .args(["rev-parse", "--absolute-git-dir", "--git-common-dir"])
@@ -269,7 +269,7 @@ impl IsolatedCodexHome {
             } else {
                 store.join(path)
             };
-            roots.push(std::fs::canonicalize(&path).with_context(|| {
+            roots.push(hotsheet_sync::paths::canonicalize(&path).with_context(|| {
                 format!("resolving linked store Git metadata {}", path.display())
             })?);
         }
@@ -455,8 +455,8 @@ fn persistent_runtime_path(storage: &Path, needs_short_socket_path: bool) -> Res
             std::fs::create_dir(&runtime)
                 .with_context(|| format!("creating CODEX_HOME {}", runtime.display()))?;
         }
-        let actual = runtime.canonicalize()?;
-        let expected = storage.canonicalize()?;
+        let actual = hotsheet_sync::paths::canonicalize(&runtime)?;
+        let expected = hotsheet_sync::paths::canonicalize(storage)?;
         if actual != expected {
             bail!(
                 "persistent CODEX_HOME alias {} points to {} instead of {}",
@@ -616,8 +616,8 @@ fn hs1_import_receipt_matches(project: &Path, store_path: &Path) -> bool {
         return false;
     }
     let (Ok(source_project), Ok(project)) = (
-        receipt.source_project.canonicalize(),
-        project.canonicalize(),
+        hotsheet_sync::paths::canonicalize(&receipt.source_project),
+        hotsheet_sync::paths::canonicalize(project),
     ) else {
         return false;
     };
@@ -766,7 +766,7 @@ mod tests {
             store.join(HS1_IMPORT_RECEIPT),
             serde_json::json!({
                 "$hotsheetSchema": 1,
-                "sourceProject": project.canonicalize().unwrap(),
+                "sourceProject": hotsheet_sync::paths::canonicalize(&project).unwrap(),
             })
             .to_string(),
         )
@@ -790,17 +790,17 @@ mod tests {
         for receipt in [
             serde_json::json!({
                 "$hotsheetSchema": 1,
-                "sourceProject": other.canonicalize().unwrap(),
+                "sourceProject": hotsheet_sync::paths::canonicalize(&other).unwrap(),
             })
             .to_string(),
             r#"{"$hotsheetSchema":1,"sourceProject":"relative/project"}"#.to_string(),
             serde_json::json!({
                 "$hotsheetSchema": 2,
-                "sourceProject": project.canonicalize().unwrap(),
+                "sourceProject": hotsheet_sync::paths::canonicalize(&project).unwrap(),
             })
             .to_string(),
             serde_json::json!({
-                "sourceProject": project.canonicalize().unwrap(),
+                "sourceProject": hotsheet_sync::paths::canonicalize(&project).unwrap(),
             })
             .to_string(),
             "not json".to_string(),
@@ -954,8 +954,8 @@ mod tests {
         assert_eq!(
             roots,
             [
-                repo.path().canonicalize().unwrap(),
-                repo.path().join(".git").canonicalize().unwrap()
+                hotsheet_sync::paths::canonicalize(repo.path()).unwrap(),
+                hotsheet_sync::paths::canonicalize(repo.path().join(".git")).unwrap()
             ]
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned())
@@ -1024,8 +1024,7 @@ mod tests {
         assert_eq!(roots.len(), 3);
         assert!(
             roots.contains(
-                &worktree
-                    .canonicalize()
+                &hotsheet_sync::paths::canonicalize(&worktree)
                     .unwrap()
                     .to_string_lossy()
                     .into_owned()
@@ -1033,15 +1032,15 @@ mod tests {
         );
         assert!(
             roots.contains(
-                &main
-                    .join(".git")
-                    .canonicalize()
+                &hotsheet_sync::paths::canonicalize(main.join(".git"))
                     .unwrap()
                     .to_string_lossy()
                     .into_owned()
             )
         );
-        let worktrees_dir = main.join(".git").canonicalize().unwrap().join("worktrees");
+        let worktrees_dir = hotsheet_sync::paths::canonicalize(main.join(".git"))
+            .unwrap()
+            .join("worktrees");
         assert!(
             roots
                 .iter()
@@ -1100,8 +1099,13 @@ mod tests {
                 .unwrap()
                 .contains(first.path().to_str().unwrap())
         }));
-        assert!(roots.iter().any(|root| root.as_str().unwrap()
-            == second.path().canonicalize().unwrap().to_str().unwrap()));
+        assert!(roots.iter().any(|root| {
+            root.as_str().unwrap()
+                == hotsheet_sync::paths::canonicalize(second.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+        }));
     }
 
     #[test]
@@ -1267,8 +1271,8 @@ mod tests {
         let runtime = persistent_runtime_path(&storage, true).unwrap();
         assert!(runtime.to_string_lossy().len() < storage.to_string_lossy().len());
         assert_eq!(
-            runtime.canonicalize().unwrap(),
-            storage.canonicalize().unwrap()
+            hotsheet_sync::paths::canonicalize(&runtime).unwrap(),
+            hotsheet_sync::paths::canonicalize(&storage).unwrap()
         );
         assert_eq!(
             std::fs::read_to_string(runtime.join("thread-state.json")).unwrap(),

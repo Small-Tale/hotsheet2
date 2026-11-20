@@ -36,10 +36,8 @@ fn invalid(message: &'static str) -> io::Error {
 }
 
 pub(super) fn account(path: &Path) -> io::Result<String> {
-    let parent = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .canonicalize()?;
+    let parent =
+        hotsheet_sync::paths::canonicalize(path.parent().unwrap_or_else(|| Path::new(".")))?;
     let file = path
         .file_name()
         .ok_or_else(|| invalid("invalid permission-rule path"))?;
@@ -59,10 +57,8 @@ fn legacy_key_with(path: &Path, secrets: &dyn SecretStore) -> io::Result<ActionK
 }
 
 pub(super) fn master_account(path: &Path) -> io::Result<String> {
-    let parent = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .canonicalize()?;
+    let parent =
+        hotsheet_sync::paths::canonicalize(path.parent().unwrap_or_else(|| Path::new(".")))?;
     Ok(format!(
         "{MASTER_PREFIX}{:x}",
         Sha256::digest(parent.to_string_lossy().as_bytes())

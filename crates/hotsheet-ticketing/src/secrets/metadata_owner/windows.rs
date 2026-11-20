@@ -306,7 +306,7 @@ impl Directories {
         let root = create_tree(&absolute, &principal)?;
         principal.check(&root, false, false)?;
         let root_id = identity(&root, true)?;
-        let path = absolute.canonicalize()?;
+        let path = hotsheet_sync::paths::canonicalize(&absolute)?;
         let accounts_path = path.join("key-metadata-locks");
         let accounts = create_tree(&accounts_path, &principal)?;
         principal.check(&accounts, false, false)?;

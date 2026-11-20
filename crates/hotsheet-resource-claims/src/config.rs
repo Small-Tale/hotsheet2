@@ -111,9 +111,8 @@ pub fn offline_policy(
 /// two projects, or in a project and the machine, never shares state.
 pub fn project_state_root(home: &Path, project: &Path) -> PathBuf {
     use ring::digest;
-    let canonical = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let canonical =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let hash = digest::digest(&digest::SHA256, canonical.to_string_lossy().as_bytes());
     let key: String = hash.as_ref()[..8]
         .iter()

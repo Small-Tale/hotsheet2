@@ -108,7 +108,7 @@ pub fn space(_path: &Path) -> Option<(u64, u64, u64)> {
 /// Resolve the volume that holds `path` (an added disk): the deepest detected or mounted volume
 /// containing it, or the path itself as a mount when nothing else matches.
 pub fn volume_for_path(path: &Path, detected: &[Volume]) -> Option<Volume> {
-    let path = std::fs::canonicalize(path).ok()?;
+    let path = hotsheet_sync::paths::canonicalize(path).ok()?;
     let (free_bytes, total_bytes, device) = space(&path)?;
     if let Some(volume) = detected.iter().find(|volume| volume.device == device) {
         return Some(volume.clone());
@@ -268,7 +268,7 @@ fn platform_volumes(ids: &mut VolumeIds) -> Vec<Volume> {
         .into_iter()
         .filter_map(|(device, mount)| {
             volume_at(mount, ids, || {
-                std::fs::canonicalize(&device)
+                hotsheet_sync::paths::canonicalize(&device)
                     .ok()
                     .and_then(|device| uuids.get(&device).cloned())
             })
@@ -318,7 +318,7 @@ fn linux_uuids(directory: &Path) -> BTreeMap<PathBuf, String> {
         .flatten()
         .flatten()
         .filter_map(|entry| {
-            let device = std::fs::canonicalize(entry.path()).ok()?;
+            let device = hotsheet_sync::paths::canonicalize(entry.path()).ok()?;
             Some((device, entry.file_name().to_string_lossy().into_owned()))
         })
         .collect()
@@ -532,8 +532,7 @@ tmpfs /run tmpfs rw 0 0
         assert!(volume.total_bytes > 0);
         assert!(volume.id.starts_with("mount:"));
         assert!(
-            dir.path()
-                .canonicalize()
+            hotsheet_sync::paths::canonicalize(dir.path())
                 .unwrap()
                 .starts_with(&volume.mount)
         );

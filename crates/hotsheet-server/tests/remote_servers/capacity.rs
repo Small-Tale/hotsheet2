@@ -559,7 +559,7 @@ async fn hs2_j8prtv_stdio_mcp_and_headless_cli_read_a_live_local_servers_capacit
     std::fs::write(
         &instance,
         json!({"pid":std::process::id(),"url":origin,"secret":SECRET,
-            "store_path":source.canonicalize().unwrap()})
+            "store_path":hotsheet_sync::paths::canonicalize(&source).unwrap()})
         .to_string(),
     )
     .unwrap();

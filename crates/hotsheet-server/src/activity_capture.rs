@@ -51,14 +51,11 @@ impl AppState {
                         return;
                     }
                 };
-                let canonical_store = store
-                    .root()
-                    .canonicalize()
+                let canonical_store = hotsheet_sync::paths::canonicalize(store.root())
                     .unwrap_or_else(|_| store.root().to_path_buf());
                 let linked = checkout.sources.iter().any(|source| {
                     source.provider == "git"
-                        && std::path::Path::new(&source.locator)
-                            .canonicalize()
+                        && hotsheet_sync::paths::canonicalize(std::path::Path::new(&source.locator))
                             .unwrap_or_else(|_| source.locator.clone().into())
                             == canonical_store
                 });

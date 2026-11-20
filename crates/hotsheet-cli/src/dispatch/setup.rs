@@ -24,12 +24,10 @@ fn queue_consolidation(store: &Path, project: &Path, announce: bool) -> Result<(
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
-    let project = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
+    let project =
+        hotsheet_sync::paths::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
     let checkout = registry.list()?.into_iter().find(|checkout| {
-        Path::new(&checkout.root)
-            .canonicalize()
+        hotsheet_sync::paths::canonicalize(Path::new(&checkout.root))
             .unwrap_or_else(|_| PathBuf::from(&checkout.root))
             == project
     });
@@ -961,9 +959,10 @@ pub(crate) fn cmd_launch(
     let requested = project.unwrap_or_else(|| cwd.to_path_buf());
     let launch_dir = match registry.resolve(requested.to_string_lossy().as_ref()) {
         Ok(checkout) => PathBuf::from(checkout.root),
-        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => requested
-            .canonicalize()
-            .with_context(|| format!("project path does not exist: {}", requested.display()))?,
+        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {
+            hotsheet_sync::paths::canonicalize(&requested)
+                .with_context(|| format!("project path does not exist: {}", requested.display()))?
+        }
         Err(error) => return Err(error.into()),
     };
     let project = hotsheet_cli::launch_project_root(&launch_dir);
@@ -971,10 +970,10 @@ pub(crate) fn cmd_launch(
     let selected = if let Some(path) = explicit {
         FsStore::open(&path)
             .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
-        Some(path.canonicalize().unwrap_or(path))
+        Some(hotsheet_sync::paths::canonicalize(&path).unwrap_or(path))
     } else if let Some(path) = create_ticket_store {
         hotsheet_cli::init_store(&path, &StoreMetadata::new("HS"))?;
-        Some(path.canonicalize().unwrap_or(path))
+        Some(hotsheet_sync::paths::canonicalize(&path).unwrap_or(path))
     } else {
         None
     };

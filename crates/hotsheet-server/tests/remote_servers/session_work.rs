@@ -492,7 +492,7 @@ async fn hs2_wefjv8_a_session_in_another_checkout_starts_with_that_checkouts_con
     let report = launch_report(&world.reports, terminal);
     assert_eq!(
         Path::new(report["cwd"].as_str().unwrap()),
-        world.project.canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(&world.project).unwrap(),
         "{report}"
     );
     assert_eq!(report["files"]["AGENTS.md"], true, "{report}");
@@ -504,14 +504,14 @@ async fn hs2_wefjv8_a_session_in_another_checkout_starts_with_that_checkouts_con
     assert_eq!(env["HOTSHEET_SECRET"], "<set>", "{report}");
     assert_eq!(
         Path::new(env["HOTSHEET_PROJECT"].as_str().unwrap()),
-        world.project.canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(&world.project).unwrap(),
         "{report}"
     );
 
     // The configuration is the checkout's: its MCP entry points at the project's own
     // linked store, never at the serving store.
     let mcp = std::fs::read_to_string(world.project.join(".mcp.json")).unwrap();
-    let project_store = world.project_store.canonicalize().unwrap();
+    let project_store = hotsheet_sync::paths::canonicalize(&world.project_store).unwrap();
     assert!(mcp.contains(project_store.to_str().unwrap()), "{mcp}");
     assert!(!mcp.contains(world.server_store.to_str().unwrap()), "{mcp}");
     let instructions = std::fs::read_to_string(world.project.join("AGENTS.md")).unwrap();
@@ -729,7 +729,7 @@ async fn hs2_yc2p7k_an_orchestrator_started_session_works_its_step_end_to_end() 
     let report = launch_report(&world.reports, &terminal);
     assert_eq!(
         Path::new(report["cwd"].as_str().unwrap()),
-        world.project.canonicalize().unwrap()
+        hotsheet_sync::paths::canonicalize(&world.project).unwrap()
     );
     assert_eq!(report["files"]["AGENTS.md"], true, "{report}");
     assert_eq!(report["files"][".mcp.json"], true, "{report}");
@@ -894,7 +894,7 @@ async fn hs2_mbdkwq_a_drawer_terminal_in_another_checkout_starts_with_its_config
     let report = launch_report(&world.reports, "drawer-mbdkwq");
     assert_eq!(
         Path::new(report["cwd"].as_str().unwrap()),
-        world.project.canonicalize().unwrap(),
+        hotsheet_sync::paths::canonicalize(&world.project).unwrap(),
         "{report}"
     );
     assert_eq!(report["files"]["AGENTS.md"], true, "{report}");
@@ -904,9 +904,7 @@ async fn hs2_mbdkwq_a_drawer_terminal_in_another_checkout_starts_with_its_config
     let mcp = std::fs::read_to_string(world.project.join(".mcp.json")).unwrap();
     assert!(
         mcp.contains(
-            world
-                .project_store
-                .canonicalize()
+            hotsheet_sync::paths::canonicalize(&world.project_store)
                 .unwrap()
                 .to_str()
                 .unwrap()

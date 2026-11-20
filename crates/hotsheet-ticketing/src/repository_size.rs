@@ -193,7 +193,7 @@ fn probe_git(path: &Path) -> GitProbe {
         Ok(output) if output.status.success() => {
             let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
             let path = PathBuf::from(text);
-            path.canonicalize().unwrap_or(path)
+            hotsheet_sync::paths::canonicalize(&path).unwrap_or(path)
         }
         Ok(_) => return GitProbe::NotRepository,
         Err(error) => return GitProbe::Unavailable(format!("Could not run Git: {error}")),

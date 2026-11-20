@@ -209,7 +209,7 @@ fn hs2_4bg2qn_serverless_mcp_writes_kick_the_host_or_report_local_only() {
     assert_eq!(kick.secret, SECRET);
     assert_eq!(
         Path::new(kick.body["store"].as_str().unwrap()),
-        store.canonicalize().unwrap()
+        hotsheet_sync::paths::canonicalize(&store).unwrap()
     );
     assert_no_kick(&received, "one kick per committed store");
 

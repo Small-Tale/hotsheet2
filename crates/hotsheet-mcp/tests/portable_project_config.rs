@@ -121,7 +121,10 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
         args,
         [
             "--project",
-            project.canonicalize().unwrap().to_str().unwrap()
+            hotsheet_sync::paths::canonicalize(&project)
+                .unwrap()
+                .to_str()
+                .unwrap()
         ]
     );
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -134,7 +137,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
             "pid":std::process::id(),
             "url":format!("http://{address}"),
             "secret":"synthetic-secret",
-            "store_path":bootstrap.canonicalize().unwrap(),
+            "store_path":hotsheet_sync::paths::canonicalize(&bootstrap).unwrap(),
         })
         .to_string(),
     )
@@ -260,7 +263,7 @@ fn project_entry_opens_source_free_checkout_and_reopens_after_relink_and_restart
             "pid":std::process::id(),
             "url":format!("http://{replacement_address}"),
             "secret":"replacement-secret",
-            "store_path":bootstrap.canonicalize().unwrap(),
+            "store_path":hotsheet_sync::paths::canonicalize(&bootstrap).unwrap(),
         })
         .to_string(),
     )
@@ -358,7 +361,7 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
     );
     let user: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&claude_config).unwrap()).unwrap();
-    let project_abs = project.canonicalize().unwrap();
+    let project_abs = hotsheet_sync::paths::canonicalize(&project).unwrap();
     let entry = &user["projects"][project_abs.to_str().unwrap()]["mcpServers"]["hotsheet"];
     let command = entry["command"].as_str().unwrap();
     assert_eq!(
@@ -406,7 +409,7 @@ fn hs2_pn848f_claude_local_override_launches_under_a_gui_path_from_another_direc
             "pid":std::process::id(),
             "url":format!("http://{address}"),
             "secret":"synthetic-secret",
-            "store_path":bootstrap.canonicalize().unwrap(),
+            "store_path":hotsheet_sync::paths::canonicalize(&bootstrap).unwrap(),
         })
         .to_string(),
     )

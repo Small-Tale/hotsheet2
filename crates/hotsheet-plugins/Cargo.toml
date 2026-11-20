@@ -9,6 +9,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# One canonical path spelling, never Windows verbatim (HS2-ECJ188).
+hotsheet-sync.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 thiserror.workspace = true

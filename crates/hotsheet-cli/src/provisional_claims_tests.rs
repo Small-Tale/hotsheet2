@@ -414,7 +414,10 @@ fn hs2_xyf4yt_contexts_resolve_a_checkout_or_nothing() {
     let nested = project.join("sub");
     fs::create_dir(&nested).unwrap();
     let context = ProvisionalContext::for_dir(&nested, root.path()).unwrap();
-    assert_eq!(context.project, project.canonicalize().unwrap());
+    assert_eq!(
+        context.project,
+        hotsheet_sync::paths::canonicalize(&project).unwrap()
+    );
     assert_eq!(
         context.checkout_id,
         checkouts::checkout_id(&project).unwrap()

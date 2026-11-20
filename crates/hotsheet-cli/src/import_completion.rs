@@ -32,7 +32,7 @@ fn proof_path(store: &Path, name: &str) -> Result<PathBuf> {
 /// Explicit headless counterpart of the bridge's post-push verification. The same
 /// versioned proof is consumed by reopened projects and authoritative DELETE checks.
 pub fn verify_backup(store: &Path) -> Result<String> {
-    let store = store.canonicalize()?;
+    let store = hotsheet_sync::paths::canonicalize(store)?;
     let completion_bytes = std::fs::read(proof_path(&store, COMPLETION)?)
         .context("retry HS1 migration before verifying its backup")?;
     let completion: serde_json::Value = serde_json::from_slice(&completion_bytes)?;
@@ -162,7 +162,7 @@ pub fn verify_export(store: &Path, export_path: &Path) -> Result<()> {
 /// Best-effort Git warnings are insufficient here: cleanup requires the exact
 /// committed revision and all referenced ticket/attachment files in its tree.
 pub fn record(store_path: &Path, source: &Path) -> Result<()> {
-    let store_path = store_path.canonicalize()?;
+    let store_path = hotsheet_sync::paths::canonicalize(store_path)?;
     let revision = git(&store_path, &["rev-parse", "--verify", "HEAD"])?;
     require_clean(&store_path)?;
     let tree = git(

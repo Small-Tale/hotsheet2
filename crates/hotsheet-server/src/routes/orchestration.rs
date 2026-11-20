@@ -82,7 +82,8 @@ fn follow_unhosted_stores(state: &AppState, checkout: &hotsheet_ticketing::check
     let is_hosted = |connection_id: &str, root: &std::path::Path| {
         hosted.iter().any(|(id, hosted_root)| {
             id == connection_id
-                || std::fs::canonicalize(hosted_root).is_ok_and(|hosted_root| hosted_root == root)
+                || hotsheet_sync::paths::canonicalize(hosted_root)
+                    .is_ok_and(|hosted_root| hosted_root == root)
         })
     };
     let mut unhosted = Vec::new();

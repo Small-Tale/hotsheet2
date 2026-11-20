@@ -44,8 +44,7 @@ fn claude_user_config_path_from(
 
 /// The key Claude Code files a checkout under: its resolved real path.
 pub fn project_key(project: &Path) -> String {
-    project
-        .canonicalize()
+    hotsheet_sync::paths::canonicalize(project)
         .unwrap_or_else(|_| project.to_path_buf())
         .to_string_lossy()
         .into_owned()

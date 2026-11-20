@@ -195,7 +195,8 @@ fn hs2_726exj_setup_keeps_a_project_source_free_rather_than_linking_an_unowned_s
         .unwrap()
         .iter()
         .find(|checkout| {
-            Path::new(checkout["root"].as_str().unwrap()) == fixture.project.canonicalize().unwrap()
+            Path::new(checkout["root"].as_str().unwrap())
+                == hotsheet_sync::paths::canonicalize(&fixture.project).unwrap()
         })
         .expect("setup registers the code project");
     assert_eq!(checkout["sources"], serde_json::json!([]));

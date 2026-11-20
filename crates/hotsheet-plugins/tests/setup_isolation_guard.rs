@@ -198,9 +198,7 @@ fn test_code<'a>(file: &Path, text: &'a str) -> Option<(usize, &'a str)> {
 
 /// The workspace root (this test's crate is `crates/hotsheet-plugins`).
 fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
+    hotsheet_sync::paths::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
         .expect("workspace root resolves")
 }
 

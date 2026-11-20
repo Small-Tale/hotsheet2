@@ -86,7 +86,7 @@ fn fixture() -> Fixture {
         checkouts,
         one,
         two,
-        store: store.canonicalize().unwrap(),
+        store: hotsheet_sync::paths::canonicalize(&store).unwrap(),
     }
 }
 

@@ -66,7 +66,9 @@ pub(crate) enum GroupCmd {
 /// of `cwd` that links to `store` (`.hotsheet2/store`) or is a registered checkout of
 /// it. `None` when the CLI runs outside such a project.
 pub(crate) fn checkout_root_for(store: &Path, cwd: &Path) -> Option<PathBuf> {
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical = |path: &Path| {
+        hotsheet_sync::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    };
     let store = canonical(store);
     let registered = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
