@@ -504,9 +504,7 @@ impl Coordinator {
         std::fs::create_dir_all(&self.registry_home)?;
         // HS2-7QPJ05: platform events name canonical paths (`/private/var` on macOS), and
         // the provider registry now lives directly in the home, so compare against it.
-        let registry_home = self
-            .registry_home
-            .canonicalize()
+        let registry_home = hotsheet_sync::paths::canonicalize(&self.registry_home)
             .unwrap_or_else(|_| self.registry_home.clone());
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
