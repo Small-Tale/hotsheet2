@@ -94,6 +94,19 @@ spelling would name another file (a path longer than `MAX_PATH`, a device name s
 arguments, and printed commands all use that spelling, and Git's `C:/...` output is read
 back as `C:\...`. Unix spellings are unchanged.
 
+A registry written on Windows before that fix may hold verbatim or 8.3 spellings, with
+checkout ids and Git connection ids hashed from them. Hot Sheet rewrites those paths and
+keeps the ids (HS2-CTV942, maintainer decision "Rewrite paths, keep ids"): every read
+shows a stored `\\?\` or `NAME~N` root, store, or Git locator whose directory still exists
+under its canonical spelling, and a read under the registry lock persists that rewrite
+alone. The checkout id, the Git connection id, and everything keyed by them (default
+source, source colors, store identities, the `checkout:<id>` permission vault) are
+unchanged, so re-registering or re-adding the same directory updates the old entry
+instead of adding one. A spelling whose path no longer exists stays as stored, and a
+rewrite that would duplicate another entry's root, or another Git locator in the same
+checkout, is skipped. The rewrite is idempotent; a registry without such spellings is
+never written by it.
+
 Registry mutations take an operating-system file lock across CLI and server processes,
 then replace the JSON through a uniquely named, flushed temporary file. This preserves
 every checkout when project opens overlap and prevents one writer from continuing through

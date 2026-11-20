@@ -2,6 +2,7 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+mod respelling;
 mod source_observation;
 pub use source_observation::CheckoutSourceProof;
 
@@ -83,6 +84,21 @@ pub struct TicketSource {
 }
 
 impl TicketSource {
+    /// HS2-CTV942: the Git source for `path`, keeping the connection id of a source in
+    /// `existing` that already names the same canonical store. A source registered
+    /// before HS2-ECJ188 has an id hashed from its old spelling; re-registering it must
+    /// not re-key it and orphan its default, color, and store identity.
+    pub fn git_keeping_id(path: impl Into<PathBuf>, existing: &[TicketSource]) -> Self {
+        let mut source = Self::git(path);
+        if let Some(old) = existing
+            .iter()
+            .find(|old| old.provider == "git" && old.locator == source.locator)
+        {
+            source.connection_id.clone_from(&old.connection_id);
+        }
+        source
+    }
+
     pub fn git(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
         let canonical = hotsheet_sync::paths::canonicalize(&path).unwrap_or(path);
@@ -452,7 +468,10 @@ impl PreparedCheckoutLinks<'_> {
         unique_source_ids(&sources)?;
         for source in &mut sources {
             if source.provider == "git" {
-                let normalized = TicketSource::git(&source.locator);
+                let normalized = TicketSource::git_keeping_id(
+                    &source.locator,
+                    before.as_ref().map_or(&[][..], |row| &row.sources),
+                );
                 if default_source.as_deref() == Some(&source.connection_id) {
                     default_source = Some(normalized.connection_id.clone());
                 }
@@ -1258,7 +1277,7 @@ impl CheckoutRegistry {
             if mode != OpenSourceMode::Explicit {
                 for source in &mut sources {
                     if source.provider == "git" {
-                        *source = TicketSource::git(&source.locator);
+                        *source = TicketSource::git_keeping_id(&source.locator, &existing.sources);
                     }
                 }
                 unique_source_ids(&sources)?;
@@ -1463,6 +1482,8 @@ impl CheckoutRegistry {
             }
             unique_source_ids(&checkout.sources)?;
         }
+        let mut file = file;
+        self.persist_respelling_locked(&mut file)?;
         normalize_registry(file)
     }
 
@@ -1475,7 +1496,10 @@ impl CheckoutRegistry {
             Err(error) => return Err(error.into()),
         };
         match serde_json::from_str(&text) {
-            Ok(file) => normalize_registry(file),
+            Ok(mut file) => {
+                self.persist_respelling_locked(&mut file)?;
+                normalize_registry(file)
+            }
             Err(error) => {
                 let Some(file) = recover_duplicated_suffix(&text) else {
                     return Err(CheckoutError::Invalid(error.to_string()));
@@ -1486,6 +1510,16 @@ impl CheckoutRegistry {
                 Ok(file)
             }
         }
+    }
+
+    /// HS2-CTV942: rewrite pre-fix Windows spellings in the registry as stored, before
+    /// any read-time migration, and persist only that rewrite. The caller holds the
+    /// registry lock. A registry without such spellings is never written.
+    fn persist_respelling_locked(&self, file: &mut RegistryFile) -> Result<(), CheckoutError> {
+        if respelling::respell_pre_fix_spellings(&mut file.checkouts) {
+            self.write_locked(file)?;
+        }
+        Ok(())
     }
 
     fn back_up_corrupt_registry(&self, contents: &[u8]) -> Result<PathBuf, CheckoutError> {
@@ -1775,6 +1809,8 @@ impl CheckoutRegistry {
                 "ticket source id is linked to another provider kind".into(),
             ));
         }
+        // HS2-CTV942: re-adding a store keeps the id it was first linked under.
+        let source = TicketSource::git_keeping_id(&source.locator, &checkout.sources);
         checkout
             .sources
             .retain(|item| item.connection_id != source.connection_id);
@@ -2259,6 +2295,8 @@ fn normalize_registry(mut file: RegistryFile) -> Result<RegistryFile, CheckoutEr
         });
     }
     file.schema_version = CHECKOUT_REGISTRY_SCHEMA_VERSION;
+    // HS2-CTV942: unlocked reads see the rewrite too; locked reads already persisted it.
+    respelling::respell_pre_fix_spellings(&mut file.checkouts);
     for checkout in &mut file.checkouts {
         if let Some(connection_id) = migrate_checkout(checkout) {
             file.link_derived_sources
@@ -2680,6 +2718,229 @@ mod tests {
             );
         }
         assert_eq!(registry.list().unwrap().len(), 1);
+    }
+
+    /// HS2-CTV942 fixture: a canonical temp base with a real `runneradmin` directory and
+    /// the pre-fix spelling of a path below it. On Windows that is the verbatim `\\?\`
+    /// form; elsewhere a `RUNNER~1` symbolic link stands in for the 8.3 short name.
+    struct PreFixHome {
+        _temp: tempfile::TempDir,
+        long: PathBuf,
+        short: PathBuf,
+    }
+
+    impl PreFixHome {
+        fn new() -> Self {
+            let temp = tempfile::tempdir().unwrap();
+            let base = hotsheet_sync::paths::canonicalize(temp.path()).unwrap();
+            let long = base.join("runneradmin");
+            std::fs::create_dir(&long).unwrap();
+            #[cfg(windows)]
+            let short = PathBuf::from(format!(r"\\?\{}", long.display()));
+            #[cfg(not(windows))]
+            let short = {
+                let short = base.join("RUNNER~1");
+                std::os::unix::fs::symlink(&long, &short).unwrap();
+                short
+            };
+            Self {
+                _temp: temp,
+                long,
+                short,
+            }
+        }
+
+        fn pre_fix(&self, name: &str) -> String {
+            let spelling = self.short.join(name).to_string_lossy().into_owned();
+            assert!(respelling::is_pre_fix_spelling(&spelling), "{spelling}");
+            spelling
+        }
+
+        fn canonical(&self, name: &str) -> String {
+            self.long.join(name).to_string_lossy().into_owned()
+        }
+
+        fn registry(&self) -> CheckoutRegistry {
+            CheckoutRegistry::new(self.long.join("checkouts.json"))
+        }
+
+        /// A registry as a pre-fix Windows build wrote it: pre-fix spellings, and ids
+        /// hashed from them rather than from the canonical spelling.
+        fn write_pre_fix_registry(&self, extra: Vec<serde_json::Value>) -> CheckoutRegistry {
+            let store = self.long.join("tickets");
+            if !store.exists() {
+                std::fs::create_dir(self.long.join("app")).unwrap();
+                FsStore::init_git(&store, &crate::store::StoreMetadata::new("A")).unwrap();
+            }
+            let instance = FsStore::open_without_maintenance(&store)
+                .unwrap()
+                .ensure_instance_id()
+                .unwrap();
+            let mut checkouts = vec![serde_json::json!({
+                "id": "app-0ld5pe11ing",
+                "root": self.pre_fix("app"),
+                "alias": "app",
+                "stores": [self.pre_fix("tickets")],
+                "sources": [{
+                    "connection_id": "0ld5pe11ingc0nn",
+                    "provider": "git",
+                    "locator": self.pre_fix("tickets"),
+                }],
+                "store_instance_ids": { "0ld5pe11ingc0nn": instance },
+                "source_colors": { "0ld5pe11ingc0nn": "#3b82f6" },
+                "default_source": "0ld5pe11ingc0nn",
+            })];
+            checkouts.extend(extra);
+            let registry = self.registry();
+            std::fs::write(
+                registry.path(),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "schemaVersion": 4,
+                    "checkouts": checkouts,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            registry
+        }
+    }
+
+    fn assert_kept_pre_fix_ids(home: &PreFixHome, checkout: &Checkout) {
+        assert_eq!(checkout.id, "app-0ld5pe11ing");
+        assert_eq!(checkout.root, home.canonical("app"));
+        assert_eq!(checkout.stores, vec![home.canonical("tickets")]);
+        assert_eq!(checkout.sources.len(), 1);
+        assert_eq!(checkout.sources[0].connection_id, "0ld5pe11ingc0nn");
+        assert_eq!(checkout.sources[0].locator, home.canonical("tickets"));
+        assert_eq!(checkout.default_source.as_deref(), Some("0ld5pe11ingc0nn"));
+        assert_eq!(
+            checkout
+                .source_colors
+                .get("0ld5pe11ingc0nn")
+                .map(String::as_str),
+            Some("#3b82f6")
+        );
+        assert!(checkout.store_instance_ids.contains_key("0ld5pe11ingc0nn"));
+    }
+
+    /// HS2-CTV942 ("Rewrite paths, keep ids"): an entry stored with a pre-fix spelling is
+    /// read under its canonical spelling with its ids, the locked read persists only that
+    /// rewrite, and re-registering the same directory updates it instead of adding one.
+    #[test]
+    fn hs2_ctv942_pre_fix_entry_is_respelled_and_reregistration_keeps_its_ids() {
+        let home = PreFixHome::new();
+        let registry = home.write_pre_fix_registry(Vec::new());
+        let stored = std::fs::read(registry.path()).unwrap();
+
+        // An unlocked read shows the rewrite without writing the file.
+        let listed = registry.list().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_kept_pre_fix_ids(&home, &listed[0]);
+        assert_eq!(std::fs::read(registry.path()).unwrap(), stored);
+        assert_eq!(
+            registry.resolve(&home.canonical("app")).unwrap().id,
+            "app-0ld5pe11ing"
+        );
+
+        // Re-registering the directory through its ordinary spelling keeps the entry.
+        let saved = registry
+            .register(
+                &home.long.join("app"),
+                Some("app"),
+                None,
+                vec![home.long.join("tickets")],
+            )
+            .unwrap();
+        assert_kept_pre_fix_ids(&home, &saved);
+        let listed = registry.list().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_kept_pre_fix_ids(&home, &listed[0]);
+        let text = std::fs::read_to_string(registry.path()).unwrap();
+        assert!(
+            !text.contains("RUNNER~1") && !text.contains(r"\\\\?\\"),
+            "{text}"
+        );
+
+        // Re-adding the same store keeps its connection id too.
+        let added = registry
+            .add_source(
+                "app-0ld5pe11ing",
+                TicketSource::git(home.long.join("tickets")),
+                false,
+            )
+            .unwrap();
+        assert_kept_pre_fix_ids(&home, &added);
+    }
+
+    /// HS2-CTV942: the rewrite runs under the registry lock, persists once, and a second
+    /// run finds nothing to change.
+    #[test]
+    fn hs2_ctv942_respelling_persists_under_the_lock_and_is_idempotent() {
+        let home = PreFixHome::new();
+        let registry = home.write_pre_fix_registry(Vec::new());
+        let locked = registry.lock_source_links().unwrap();
+        assert_kept_pre_fix_ids(&home, &locked.resolve("app").unwrap());
+        drop(locked);
+        let first = std::fs::read(registry.path()).unwrap();
+        let text = String::from_utf8(first.clone()).unwrap();
+        assert!(text.contains("0ld5pe11ingc0nn") && text.contains("app-0ld5pe11ing"));
+        assert!(
+            !text.contains("RUNNER~1") && !text.contains(r"\\\\?\\"),
+            "{text}"
+        );
+
+        for _ in 0..2 {
+            let locked = registry.lock_source_links().unwrap();
+            assert_kept_pre_fix_ids(&home, &locked.resolve("app").unwrap());
+            drop(locked);
+            assert_eq!(std::fs::read(registry.path()).unwrap(), first);
+        }
+        let mut checkouts = registry.list().unwrap();
+        assert!(!respelling::respell_pre_fix_spellings(&mut checkouts));
+    }
+
+    /// HS2-CTV942: a pre-fix spelling whose path no longer exists stays as stored, and a
+    /// rewrite that would duplicate another entry's root is skipped.
+    #[test]
+    fn hs2_ctv942_missing_or_colliding_pre_fix_entries_are_left_untouched() {
+        let home = PreFixHome::new();
+        std::fs::create_dir(home.long.join("other")).unwrap();
+        let registry = home.write_pre_fix_registry(vec![
+            serde_json::json!({
+                "id": "gone-0ld5pe11ing",
+                "root": home.pre_fix("gone"),
+                "alias": "gone",
+                "stores": [home.pre_fix("gone-tickets")],
+            }),
+            serde_json::json!({
+                "id": "other-0ld5pe11ing",
+                "root": home.pre_fix("other"),
+                "alias": "other",
+            }),
+            serde_json::json!({
+                "id": "other-c4n0n1ca1id",
+                "root": home.canonical("other"),
+                "alias": "other-canonical",
+            }),
+        ]);
+        let _ = registry
+            .lock_source_links()
+            .unwrap()
+            .resolve("app")
+            .unwrap();
+        let checkouts = registry.list().unwrap();
+        let by_id = |id: &str| checkouts.iter().find(|row| row.id == id).unwrap();
+        assert_eq!(checkouts.len(), 4);
+        assert_eq!(by_id("gone-0ld5pe11ing").root, home.pre_fix("gone"));
+        assert_eq!(
+            by_id("gone-0ld5pe11ing").stores,
+            vec![home.pre_fix("gone-tickets")]
+        );
+        assert_eq!(by_id("other-0ld5pe11ing").root, home.pre_fix("other"));
+        assert_eq!(by_id("other-c4n0n1ca1id").root, home.canonical("other"));
+        assert_kept_pre_fix_ids(&home, by_id("app-0ld5pe11ing"));
+        let roots: BTreeSet<_> = checkouts.iter().map(|row| row.root.clone()).collect();
+        assert_eq!(roots.len(), checkouts.len());
     }
 
     #[test]
