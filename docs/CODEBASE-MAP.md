@@ -987,6 +987,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   docs/                      # design docs 00–17 (+ this map)
   .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage (Linux x86_64 only per commit, HS2-WSE3FJ; ephemeral Linux Secret Service for encrypted permission tests) · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards (Chromium default; WebKit only in launching specs, HS2-HW6VED) + merged report (HS2-D95TXJ) · migrator lint/coverage
   .github/scripts/free-runner-disk.sh # Removes unused preinstalled toolchains and logs `df -h /` before the check/coverage jobs restore their bounded Swatinem/rust-cache (HS2-CTC6BA; tests: platform-matrix.test.mjs)
+  .github/scripts/free-rust-test-output.sh # Platforms Linux targets: after the Rust suite, removes target/clippy, incremental caches and extensionless test executables, keeping dependency artifacts and the nextest JUnit report; logs `df -h /` before and after (HS2-P9S2VT; tests: platform-matrix.test.mjs)
   .github/scripts/with-secret-service.sh # Disposable headless Linux Secret Service and smoke probe around CI Rust/browser test commands (HS2-1S4QEX)
   .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
   .github/msvc/has-include-next-fallback.h # Forced-include C fallback for MSVC 14.52's C7780 on the vendored libdav1d-sys dav1d in x64 Windows Platforms jobs (HS2-ZW0PVE; tests: platform-matrix.test.mjs)

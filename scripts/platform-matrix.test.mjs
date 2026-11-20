@@ -345,3 +345,32 @@ test('HS2-CTC6BA bounds the per-commit Rust caches and frees runner disk before 
     assert.ok(script.includes(`  ${path}\n`), `removes ${path}`);
   assert.match(script, /if \[ -e "\$path" \]; then/, 'each removal is guarded');
 });
+
+test('HS2-P9S2VT frees Linux runner disk before the build and reclaims Rust test output before the web suites', () => {
+  const core = workflow.slice(workflow.indexOf('\n  core:'), workflow.indexOf('\n  tauri:'));
+  const at = (needle) => {
+    const index = core.indexOf(needle);
+    assert.notEqual(index, -1, `core: missing ${needle}`);
+    return index;
+  };
+  const free = at(
+    "- name: Free runner disk (Linux)\n        if: matrix.os == 'linux'\n        run: bash .github/scripts/free-runner-disk.sh",
+  );
+  assert.ok(free < at('- name: Cache cargo + target'), 'free disk before the cache restore');
+  const reclaim = at(
+    "- name: Reclaim Rust test build output (Linux)\n        if: ${{ !cancelled() && matrix.os == 'linux' }}\n        run: bash .github/scripts/free-rust-test-output.sh",
+  );
+  // The profile reads the nextest JUnit report first; every web, fixture and browser step follows.
+  assert.ok(at('- name: Slowest Rust tests') < reclaim);
+  assert.ok(reclaim < at('- name: Web client lint, typecheck, unit tests, and production build'));
+  assert.ok(reclaim < at('- name: Build isolated browser fixtures'));
+  assert.ok(at('- name: Report free disk before the browser suite (Linux)') < at('- name: Full Playwright suite'));
+
+  const script = readFileSync(new URL('../.github/scripts/free-rust-test-output.sh', import.meta.url), 'utf8');
+  assert.equal(script.match(/^df -h \/$/gm)?.length, 2, 'free space is logged before and after');
+  assert.match(script, /for path in target\/clippy target\/debug\/incremental; do/);
+  // Only extensionless test executables go; dependency libraries stay for the binary rebuild.
+  assert.match(script, /find target\/debug\/deps -maxdepth 1 -type f ! -name '\*\.\*' -delete/);
+  assert.doesNotMatch(script, /rm -rf target(\/debug)?(\/deps)?\s*$/m, 'never removes the whole target or deps');
+  assert.doesNotMatch(script, /rm -rf[^\n]*target\/nextest/, 'the JUnit report stays for the upload step');
+});

@@ -10,7 +10,7 @@ set -uo pipefail
 echo "Free disk before cleanup:"
 df -h /
 
-# Toolchains and SDKs no job in ci.yml uses. The removals run in parallel; each is independent.
+# Toolchains and SDKs no job in ci.yml or the Platforms Linux targets uses (HS2-P9S2VT). The removals run in parallel; each is independent.
 paths=(
   /usr/share/dotnet
   /usr/local/lib/android

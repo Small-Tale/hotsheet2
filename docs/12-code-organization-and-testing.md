@@ -1113,7 +1113,7 @@ fast for an idle client. Two rules follow:
   the isolated fixture build. That suite runs in Chromium; WebKit runs only in the specs that
   launch it (see the browser engine matrix, HS2-HW6VED). Every suite runs even when an
   earlier one fails, the Rust suite runs every test after its first failure (HS2-D4HJZC), and each target uploads its JUnit and JSON reports and Playwright
-  failure output as `platform-reports-<target>`. Windows targets install dav1d from vcpkg
+  failure output as `platform-reports-<target>`. The Linux targets free unused preinstalled toolchains before the cache restore (`.github/scripts/free-runner-disk.sh`) and, after the Rust suite and its profile, reclaim clippy output, incremental caches and test executables with `.github/scripts/free-rust-test-output.sh`, logging `df -h /` before and after and again before the browser suite, because one runner disk holds every suite (HS2-P9S2VT). Windows targets install dav1d from vcpkg
   with the `x64-windows-static-md` or `arm64-windows-static-md` triplet. The Windows
   arm64 core and Tauri jobs install a commit-pinned, SHA-256-verified
   `gas-preprocessor.pl` for dav1d's MSVC ARM assembly (HS2-BCCF8J). Windows targets
