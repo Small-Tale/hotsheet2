@@ -193,7 +193,8 @@ fn hs2_n1qdzw_a_kept_waiter_is_replaced_when_its_directory_is() {
     assert_eq!(kept.waiters_started(), 2);
     step(OTHER);
     // Where a directory has no stable identity nothing is kept, as before this change.
-    let reused = usize::from(cfg!(not(unix)));
+    // HS2-H6E3RB: Windows has one (volume serial and file index), as Unix does.
+    let reused = usize::from(cfg!(not(any(unix, windows))));
     assert_eq!(kept.waiters_started(), 2 + reused);
 
     // The directory is removed and created again: a watch of the old one may be dead,

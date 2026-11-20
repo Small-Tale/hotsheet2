@@ -469,8 +469,10 @@ reported readiness. The measurements and the trace are in
   follower (`GithubActionsGates`) and the speculation gate probe do. The kept
   waiter is replaced when the directory was removed and created again or when
   another checkout is asked for, and a second thread that waits through the same
-  `KeptWaiter` at the same moment uses a waiter of its own. Windows has no
-  directory identity to compare, so nothing is kept there.
+  `KeptWaiter` at the same moment uses a waiter of its own. A directory's identity
+  is its device, inode and birth time on Unix, and its volume serial number, file
+  index and creation time on Windows (HS2-H6E3RB); before that Windows kept
+  nothing and started a watcher for every step.
 - **Never waiting on the platform (HS2-F6F42W).** On a loaded Mac the file-event
   service delivered events in 3 to 14 ms but took up to 7 s to start a stream, 4
   to 19 s to restart one (adding or moving a path) and up to 46 s to stop one; the

@@ -189,9 +189,42 @@ impl DirIdentity {
         )
     }
 
+    /// HS2-H6E3RB: the volume serial number and file index, which NTFS and ReFS give a
+    /// directory for its lifetime (the index carries a sequence number that changes when a
+    /// record is reused), plus the creation time. Without this every Windows follower step
+    /// started a new platform watcher.
+    #[cfg(windows)]
+    fn of(dir: &Path) -> Self {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, GetFileInformationByHandle,
+        };
+
+        let identity = fs::OpenOptions::new()
+            .read(true)
+            // A directory opens only with backup semantics.
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(dir)
+            .ok()
+            .and_then(|handle| {
+                // SAFETY: an all-zero BY_HANDLE_FILE_INFORMATION is a valid out-parameter.
+                let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+                // SAFETY: the handle is live for this call and `info` is initialized.
+                let ok = unsafe { GetFileInformationByHandle(handle.as_raw_handle(), &mut info) };
+                (ok != 0).then(|| {
+                    let index =
+                        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+                    let created = handle.metadata().ok().and_then(|meta| meta.created().ok());
+                    (u64::from(info.dwVolumeSerialNumber), index, created)
+                })
+            });
+        Self(identity)
+    }
+
     /// Without a stable identity to compare, no waiter is kept: every wait starts its
     /// own, as before.
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     fn of(_dir: &Path) -> Self {
         Self(None)
     }
