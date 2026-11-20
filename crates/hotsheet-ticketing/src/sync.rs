@@ -229,6 +229,11 @@ fn cycle_steps(
         // driver, whatever the merged trees' `.gitattributes` say.
         let driver = crate::merge_driver::ensure_registered(store_path, None);
         crate::sync_health::record_merge_driver(store_path, driver);
+        // HS2-WNPX98: and every checkout below carries the store's bytes unchanged,
+        // whatever the user's `core.autocrlf` says. The first pin also turns CRLF copies
+        // an older checkout left back into the committed LF bytes, before the pending
+        // commit below could record them.
+        crate::line_endings::ensure_pinned(store_path);
         // HS2-ADHFKZ: never commit into, or stack a replay on top of, an unfinished
         // rebase or merge. HS2-QR1K8R: one that needs no judgment is continued first.
         match integration_in_progress(store_path) {
@@ -1127,6 +1132,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+#[cfg(test)]
+mod line_endings_tests;
 #[cfg(test)]
 mod local_lock_tests;
 #[cfg(test)]

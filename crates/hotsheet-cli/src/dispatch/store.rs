@@ -880,6 +880,29 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
         }
     }
 
+    // HS2-WNPX98: Git must carry store files byte for byte, or a Windows checkout with
+    // `core.autocrlf` rewrites them as CRLF. A missing pin is added here, which also
+    // turns CRLF copies back into the committed LF bytes. Checked before the merge
+    // driver, whose registration pins line endings too, without reporting it.
+    if !hotsheet_ticketing::line_endings::status(path).applies() {
+        match hotsheet_ticketing::line_endings::ensure_pinned(path) {
+            hotsheet_ticketing::line_endings::LineEndingStatus::Repaired { repaired } => {
+                println!(
+                    "  - pinned the store's line endings in this checkout (they were \
+                     missing); restored LF in {repaired} file(s)"
+                );
+            }
+            hotsheet_ticketing::line_endings::LineEndingStatus::Pinned => {}
+            hotsheet_ticketing::line_endings::LineEndingStatus::Missing => {
+                println!(
+                    "  ! could not pin the store's line endings here — Git's own \
+                     `core.autocrlf` decides them"
+                );
+                issues += 1;
+            }
+        }
+    }
+
     // The semantic merge driver must be registered, or git would text-merge ticket files
     // and could dump conflict markers over structured data (HS2-18, docs/02 §2.7).
     // HS2-9TV6A2: a missing local registration is repaired rather than only reported.

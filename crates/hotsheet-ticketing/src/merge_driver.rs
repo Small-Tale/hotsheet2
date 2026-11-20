@@ -89,9 +89,10 @@ struct Layout {
     line: String,
 }
 
-/// The store's `info/attributes` path and the attribute line relative to the repository
-/// root (a designated root's tickets live under its prefix).
-fn layout(store: &Path) -> Option<Layout> {
+/// The store's `info/attributes` path and the store's prefix within its repository (empty
+/// for an owned store; `tickets/` lives under it for a designated root). Shared with
+/// [`crate::line_endings`], which pins the store's line endings in the same file.
+pub(crate) fn info_attributes(store: &Path) -> Option<(PathBuf, String)> {
     let out = crate::git::command()
         .arg("-C")
         .arg(store)
@@ -104,9 +105,20 @@ fn layout(store: &Path) -> Option<Layout> {
     let text = String::from_utf8_lossy(&out.stdout);
     let mut lines = text.lines();
     let git_dir = PathBuf::from(lines.next()?.trim_end_matches('\r'));
-    let prefix = lines.next().unwrap_or("").trim_end_matches('\r');
+    let prefix = lines
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('\r')
+        .to_string();
+    Some((git_dir.join("info").join("attributes"), prefix))
+}
+
+/// The store's `info/attributes` path and the attribute line relative to the repository
+/// root (a designated root's tickets live under its prefix).
+fn layout(store: &Path) -> Option<Layout> {
+    let (attributes, prefix) = info_attributes(store)?;
     Some(Layout {
-        attributes: git_dir.join("info").join("attributes"),
+        attributes,
         line: format!("{prefix}{ATTRIBUTE_LINE}"),
     })
 }

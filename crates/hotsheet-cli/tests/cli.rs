@@ -11046,6 +11046,121 @@ fn hs2_9tv6a2_doctor_repairs_a_missing_driver_registration() {
     assert!(hotsheet_cli::merge_driver_registered(p));
 }
 
+/// HS2-WNPX98: Git never rewrites store files as CRLF. `init` commits `* -text`, so a
+/// plain clone with `core.autocrlf=true` (the Git for Windows default) checks out LF. A
+/// clone of a store made before the fix starts with CRLF copies; its first `sync` pins
+/// the checkout, restores the committed LF bytes, commits nothing, and keeps pulling LF.
+/// `doctor` pins and repairs the same way.
+#[test]
+fn hs2_wnpx98_stores_keep_lf_in_an_autocrlf_clone_and_old_clones_are_repaired() {
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = hotsheet_ticketing::git::command()
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+    fn autocrlf_clone(parent: &Path, url: &str, name: &str) -> std::path::PathBuf {
+        let clone = parent.join(name);
+        git(
+            parent,
+            &[
+                "-c",
+                "core.autocrlf=true",
+                "clone",
+                "--quiet",
+                "--config",
+                "core.autocrlf=true",
+                url,
+                clone.to_str().unwrap(),
+            ],
+        );
+        git(&clone, &["config", "user.email", "w@example.com"]);
+        git(&clone, &["config", "user.name", "W"]);
+        clone
+    }
+    fn has_crlf(path: &Path) -> bool {
+        std::fs::read(path)
+            .unwrap()
+            .windows(2)
+            .any(|w| w == b"\r\n")
+    }
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "--bare", "--quiet"]);
+    let bare_url = bare.path().to_str().unwrap();
+    let a_dir = tempfile::tempdir().unwrap();
+    let a = a_dir.path();
+    hs(a).arg("init").assert().success();
+    git(a, &["config", "user.email", "a@example.com"]);
+    git(a, &["config", "user.name", "A"]);
+    let attributes = std::fs::read_to_string(a.join(".gitattributes")).unwrap();
+    assert!(attributes.lines().any(|l| l == "* -text"), "{attributes}");
+    git(a, &["remote", "add", "origin", bare_url]);
+    let slug = new_ticket(a, "line endings");
+    hs(a).arg("sync").assert().success();
+    let ticket = |root: &Path| {
+        let out = git(root, &["ls-files", "--", "tickets"]);
+        root.join(out.lines().find(|l| l.ends_with(".md")).unwrap())
+    };
+
+    // A plain clone of a store made after the fix is already right.
+    let clones = tempfile::tempdir().unwrap();
+    let fresh = autocrlf_clone(clones.path(), bare_url, "fresh");
+    assert!(!has_crlf(&ticket(&fresh)));
+
+    // A store made before the fix: no committed attribute, no local pin.
+    std::fs::write(
+        a.join(".gitattributes"),
+        "tickets/**/*.md merge=hotsheet-ticket\n",
+    )
+    .unwrap();
+    git(a, &["commit", "--quiet", "-am", "pre-fix attributes"]);
+    hs(a).arg("sync").assert().success();
+    let old = autocrlf_clone(clones.path(), bare_url, "old");
+    assert!(has_crlf(&ticket(&old)), "the precondition did not convert");
+    let before = git(&old, &["rev-parse", "HEAD"]);
+    hs(&old).arg("sync").assert().success();
+    assert_eq!(
+        git(&old, &["rev-parse", "HEAD"]),
+        before,
+        "the repair committed"
+    );
+    assert!(!has_crlf(&ticket(&old)));
+    assert!(git(&old, &["status", "--porcelain"]).is_empty());
+    // Incoming edits keep LF, and so does the next sync.
+    hs(a)
+        .args(["edit", &slug, "--details", "first line\nsecond line"])
+        .assert()
+        .success();
+    hs(a).arg("sync").assert().success();
+    hs(&old).arg("sync").assert().success();
+    hs(&old).arg("sync").assert().success();
+    assert!(!has_crlf(&ticket(&old)));
+    assert_eq!(
+        std::fs::read(ticket(&old)).unwrap(),
+        std::fs::read(ticket(a)).unwrap()
+    );
+
+    // `doctor` pins and repairs a pre-fix clone too.
+    let doctored = autocrlf_clone(clones.path(), bare_url, "doctored");
+    assert!(has_crlf(&ticket(&doctored)));
+    hs(&doctored)
+        .args(["doctor", "--project", doctored.to_str().unwrap()])
+        .assert()
+        .stdout(predicate::str::contains("pinned the store's line endings"));
+    assert!(!has_crlf(&ticket(&doctored)));
+    hs(&doctored)
+        .args(["doctor", "--project", doctored.to_str().unwrap()])
+        .assert()
+        .stdout(predicate::str::contains("pinned the store's line endings").not());
+}
+
 /// HS2-QR1K8R: when both sides added the same ticket file (Git passes an empty base), the
 /// driver takes the older version as the ancestor: the newer fields win, notes union, and
 /// no conflict markers are written, whichever side is "ours".

@@ -722,6 +722,29 @@ driver command naming a removed install) instead of only reporting it. When no
 runnable `hotsheet-cli` can be found, health reports `merge_driver: missing` and a
 conflict's next step names the registration.
 
+**Line endings are byte-exact (HS2-WNPX98).** Hot Sheet writes every store file with LF.
+Git must carry those bytes unchanged, whatever the user's `core.autocrlf` or `core.eol`
+say. Git for Windows sets `core.autocrlf=true` system-wide, and without a pin every
+replay, abort, or recovery checkout on Windows rewrote ticket files as CRLF, so a
+Windows site and a macOS or Linux site read different bytes for one ticket. Each
+checkout therefore carries `* -text` (or `<prefix>** -text` for a designated root, so
+the enclosing code repository keeps its own rules) in `<git-dir>/info/attributes`.
+That file outranks the committed `.gitattributes`, `core.attributesFile`,
+`core.autocrlf`, and `core.eol`, and `-text` turns off every end-of-line conversion while
+leaving merges and diffs alone. It is pinned wherever the merge driver is registered,
+including before each sync integration and by `doctor`. `init` and store
+registration also commit `* -text` in the store's `.gitattributes`, so a plain
+`git clone` is right before Hot Sheet first opens it. `-text` was chosen over
+`eol=lf` or `text=auto` because it never rewrites attachment bytes or binary files.
+
+A checkout made before the pin, or by plain Git on Windows, can hold CRLF copies of
+files committed with LF. The first pin repairs them. Every tracked file whose index blob
+has only LF endings and whose working copy has CRLF endings (all or some) gets its CRLF
+pairs turned back into LF, which is exactly the conversion the old `autocrlf` commit
+applied, so pending edits keep their content. Files committed with CRLF, binary files,
+and untracked files are left as they are. The sync that pins a clean pre-fix clone
+commits nothing.
+
 The driver is a **`hotsheet merge-driver` CLI subcommand** (so the merge logic is
 the same core code, tested once — [04-core-server-cli.md](04-core-server-cli.md)
 §4.4). Git invokes it with the base/ours/theirs versions; it performs a

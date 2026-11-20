@@ -120,6 +120,12 @@ impl AppState {
         if driver == hotsheet_ticketing::merge_driver::MergeDriverStatus::Repaired {
             tracing::info!(store = %store.root().display(), "registered the semantic ticket merge driver");
         }
+        // HS2-WNPX98: Git carries this checkout's store files byte for byte.
+        if let hotsheet_ticketing::line_endings::LineEndingStatus::Repaired { repaired } =
+            hotsheet_ticketing::line_endings::ensure_pinned(store.root())
+        {
+            tracing::info!(store = %store.root().display(), repaired, "pinned the store's line endings");
+        }
         let index = if self.persist_indexes {
             let path = multistore::index_path_for(&self.machine_home, &store)
                 .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

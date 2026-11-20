@@ -507,25 +507,45 @@ fn merge_driver_program() -> Option<PathBuf> {
 /// committed `.gitattributes` line, so every clone routes `tickets/**/*.md` through
 /// `merge=hotsheet-ticket`, plus this checkout's local `info/attributes` line and driver
 /// command, which apply even when a merged tree lacks `.gitattributes`.
+///
+/// HS2-WNPX98: it also pins the store's line endings the same two ways, so Git never
+/// converts ticket files to CRLF: the committed `* -text` line, for a plain `git clone`,
+/// and this checkout's `info/attributes` line, which repairs CRLF copies the first time.
 /// Best-effort + idempotent — safe to re-run (e.g. from `init` or a repair).
 pub fn register_merge_driver(
     store_path: &Path,
 ) -> hotsheet_ticketing::merge_driver::MergeDriverStatus {
-    // .gitattributes — append the line once, preserving any existing rules.
+    // .gitattributes — append each line once, preserving any existing rules.
     let ga = store_path.join(".gitattributes");
     let existing = std::fs::read_to_string(&ga).unwrap_or_default();
-    if !existing.lines().any(|l| l.trim() == MERGE_ATTR_LINE) {
-        let mut content = existing;
+    let mut content = existing.clone();
+    for (comment, line) in [
+        (
+            "# Hot Sheet semantic ticket merge (HS2-18)",
+            MERGE_ATTR_LINE,
+        ),
+        (
+            "# Hot Sheet store files are byte-exact, never converted to CRLF (HS2-WNPX98)",
+            hotsheet_ticketing::line_endings::COMMITTED_LINE,
+        ),
+    ] {
+        if content.lines().any(|l| l.trim() == line) {
+            continue;
+        }
         if !content.is_empty() && !content.ends_with('\n') {
             content.push('\n');
         }
-        content.push_str("# Hot Sheet semantic ticket merge (HS2-18)\n");
-        content.push_str(MERGE_ATTR_LINE);
+        content.push_str(comment);
         content.push('\n');
-        if let Err(e) = std::fs::write(&ga, content) {
-            eprintln!("warning: could not write {}: {e}", ga.display());
-        }
+        content.push_str(line);
+        content.push('\n');
     }
+    if content != existing
+        && let Err(e) = std::fs::write(&ga, content)
+    {
+        eprintln!("warning: could not write {}: {e}", ga.display());
+    }
+    hotsheet_ticketing::line_endings::ensure_pinned(store_path);
     hotsheet_ticketing::merge_driver::ensure_registered(
         store_path,
         merge_driver_program().as_deref(),

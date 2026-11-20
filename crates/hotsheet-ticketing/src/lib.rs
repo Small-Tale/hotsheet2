@@ -35,6 +35,7 @@ pub mod host_health;
 pub mod host_health_disks;
 pub mod identity;
 pub mod image_crop;
+pub mod line_endings;
 pub mod live_history;
 pub mod machine_home;
 pub mod merge;
