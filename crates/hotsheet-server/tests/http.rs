@@ -18348,7 +18348,7 @@ async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
 
     let destination_dir = tempfile::tempdir().unwrap();
     FsStore::init_git(destination_dir.path(), &StoreMetadata::new("DS")).unwrap();
-    let register_body = format!(r#"{{"path":"{}"}}"#, destination_dir.path().display());
+    let register_body = serde_json::json!({"path": destination_dir.path()}).to_string();
     let destination_connection = body_json(
         app.clone()
             .oneshot(authed("POST", "/stores", Some(&register_body)))
@@ -19496,7 +19496,7 @@ async fn hosts_multiple_stores_and_serves_a_scoped_list() {
     .unwrap();
 
     // Register it.
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -19573,7 +19573,7 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
     // Register a second store, empty to start.
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -19952,7 +19952,7 @@ async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
     // Register a second store.
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -20023,7 +20023,7 @@ async fn hs2_jfe7jj_hosting_a_store_never_takes_over_its_anchored_servers_record
         .register_instance(&hosted_record, hosted.path())
         .unwrap();
     for store in [anchored.path(), hosted.path()] {
-        let body = format!(r#"{{"path":"{}"}}"#, store.display());
+        let body = serde_json::json!({"path": store}).to_string();
         let resp = app
             .clone()
             .oneshot(authed("POST", "/stores", Some(&body)))
@@ -20066,7 +20066,7 @@ async fn a_registered_store_gets_its_own_watcher() {
     // Register an empty second store.
     let dir2 = tempfile::tempdir().unwrap();
     let store2 = FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -20128,7 +20128,7 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
     // A second store with its own ticket.
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -22796,7 +22796,7 @@ async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
         .with_test_permission_rules(&primary_rules);
     let bridge = state.permission_bridge();
     let app = app(state);
-    let body = format!(r#"{{"path":"{}"}}"#, secondary_dir.path().display());
+    let body = serde_json::json!({"path": secondary_dir.path()}).to_string();
     let registered = body_json(
         app.clone()
             .oneshot(authed("POST", "/stores", Some(&body)))
@@ -24156,7 +24156,7 @@ async fn cross_store_copy_and_move_between_hosted_stores() {
 
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("DS")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -24254,7 +24254,7 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .oneshot(authed(
             "POST",
             "/stores",
-            Some(&format!(r#"{{"path":"{}"}}"#, dir2.path().display())),
+            Some(&serde_json::json!({"path": dir2.path()}).to_string()),
         ))
         .await
         .unwrap();
@@ -25758,7 +25758,7 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
 
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -25965,7 +25965,7 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
     // Register a second store at runtime; it advertises the same machine server.
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     let resp = app
         .clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
@@ -26033,7 +26033,7 @@ async fn background_sync_covers_every_hosted_store() {
     // Register a second (local-only, no-remote) store.
     let dir2 = tempfile::tempdir().unwrap();
     FsStore::init_git(dir2.path(), &StoreMetadata::new("BB")).unwrap();
-    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let body = serde_json::json!({"path": dir2.path()}).to_string();
     app.clone()
         .oneshot(authed("POST", "/stores", Some(&body)))
         .await
