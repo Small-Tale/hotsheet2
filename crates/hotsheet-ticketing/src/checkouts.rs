@@ -2640,6 +2640,48 @@ mod tests {
         assert_ne!(checkout_id(&a).unwrap(), checkout_id(&b).unwrap());
     }
 
+    /// HS2-CTV942: one directory has one checkout id, root, and store locator however it
+    /// is spelled: through `..`, through its Windows verbatim `\\?\` form, or (on a
+    /// Windows runner) through the 8.3 short temp directory. None is stored verbatim.
+    #[test]
+    fn hs2_ctv942_one_directory_registers_under_one_spelling_and_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let store = temp.path().join("tickets");
+        std::fs::create_dir(&checkout).unwrap();
+        FsStore::init_git(&store, &crate::store::StoreMetadata::new("A")).unwrap();
+        let canonical = hotsheet_sync::paths::canonicalize(&checkout).unwrap();
+        let mut spellings = vec![
+            checkout.clone(),
+            temp.path().join("tickets").join("..").join("app"),
+            canonical.clone(),
+        ];
+        if cfg!(windows) {
+            spellings.push(PathBuf::from(format!(r"\\?\{}", canonical.display())));
+        }
+        let id = checkout_id(&checkout).unwrap();
+        for spelling in &spellings {
+            assert_eq!(checkout_id(spelling).unwrap(), id, "{spelling:?}");
+        }
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        for spelling in &spellings {
+            let saved = registry
+                .register(spelling, Some("app"), None, vec![store.clone()])
+                .unwrap();
+            assert_eq!(saved.id, id);
+            assert_eq!(saved.root, canonical.to_string_lossy());
+            assert!(!saved.root.starts_with(r"\\?\"), "{}", saved.root);
+            assert!(!saved.stores[0].starts_with(r"\\?\"), "{}", saved.stores[0]);
+            assert_eq!(
+                saved.sources[0].locator,
+                hotsheet_sync::paths::canonicalize(&store)
+                    .unwrap()
+                    .to_string_lossy()
+            );
+        }
+        assert_eq!(registry.list().unwrap().len(), 1);
+    }
+
     #[test]
     fn registry_supports_many_to_many_and_resolution() {
         let temp = tempfile::tempdir().unwrap();

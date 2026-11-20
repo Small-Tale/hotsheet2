@@ -5761,7 +5761,13 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .args(["checkout", "resolve", "web"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(checkout.path().to_str().unwrap()));
+        // HS2-CTV942: the registered root is the canonical spelling (long, never `\\?\`).
+        .stdout(predicate::str::contains(
+            hotsheet_sync::paths::canonicalize(checkout.path())
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ));
 
     let mut add_source = Command::new(workspace_bin::path("hotsheet-cli"));
     add_source

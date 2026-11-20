@@ -1504,6 +1504,9 @@ fn review_checkout_source(
     };
     let recorded = checkout.store_instance_ids.get(connection_id).cloned();
     let destination = store.unwrap_or_else(|| PathBuf::from(&source.locator));
+    // HS2-CTV942: the reviewed location in the registry's one spelling, so `RUNNER~1` or
+    // a relative argument is shown and recorded as the long canonical path.
+    let destination = hotsheet_sync::paths::canonicalize(&destination).unwrap_or(destination);
     let moved = hotsheet_sync::paths::canonicalize(&destination).ok()
         != hotsheet_sync::paths::canonicalize(Path::new(&source.locator)).ok();
     if recorded.is_some() && !moved {
