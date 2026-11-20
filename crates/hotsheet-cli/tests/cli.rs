@@ -6407,14 +6407,18 @@ command = "hotsheet-cli permission-hook"
         .args(["launch", "fake", "--ticket-store", &store_arg])
         .output()
         .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    // HS2-AWQW0F: a launch that fails before the tool runs exits 1; say why.
     assert_eq!(
         output.status.code(),
         Some(3),
-        "the tool's exit code passes through"
+        "the tool's exit code passes through; launch stderr:\n{stderr}"
     );
     let worker = String::from_utf8(output.stdout).unwrap().trim().to_string();
-    assert!(worker.starts_with("fake-"), "worker id {worker:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        worker.starts_with("fake-"),
+        "worker id {worker:?}; launch stderr:\n{stderr}"
+    );
     // HS2-RD4M29: the launched AI session acts as `ai` under its worker id.
     assert!(stderr.contains(&format!("ai:{worker}\n")), "{stderr}");
     assert!(
