@@ -214,7 +214,7 @@ impl BackgroundWatcher {
                 let mut watcher: Option<PathWatcher> = None;
                 let mut pending: Vec<Command> = Vec::new();
                 let mut retry = START_RETRY_FIRST;
-                loop {
+                'run: loop {
                     // Apply what was asked for: a first start, or the changes queued since.
                     let applied = match watcher.as_mut() {
                         None => {
@@ -284,9 +284,14 @@ impl BackgroundWatcher {
                         }
                         retry = (retry * 2).min(START_RETRY_MAX);
                     }
-                    // Every change queued meanwhile is applied in one go.
-                    while let Ok(command) = received.try_recv() {
-                        pending.push(command);
+                    // Every change queued meanwhile is applied in one go. A dropped owner ends
+                    // the thread here, before another start attempt (HS2-MGX6CW).
+                    loop {
+                        match received.try_recv() {
+                            Ok(command) => pending.push(command),
+                            Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => break 'run,
+                        }
                     }
                 }
                 // Stopping a stream can take tens of seconds; it happens here, never on the
