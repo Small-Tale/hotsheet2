@@ -15,7 +15,8 @@ pub(super) fn configured_owner(
 ) -> hotsheet_ticketing::checkouts::Checkout {
     std::fs::create_dir_all(source).unwrap();
     std::fs::create_dir_all(project).unwrap();
-    let providers = ProviderConfigRegistry::new(source.join("providers.json"));
+    // HS2-1M8E9D: this machine's configuration for the source (beside a non-store source).
+    let providers = ProviderConfigRegistry::for_store_in(home, source).unwrap();
     providers
         .save(&[ProviderConnection {
             id: "synthetic-provider".into(),
@@ -50,7 +51,7 @@ pub(super) fn shared_runtime(
     OrchestrationRuntime::new(
         home.into(),
         CheckoutRegistry::new(home.join("checkouts.json")),
-        ProviderConfigRegistry::new(source.join("providers.json")),
+        ProviderConfigRegistry::for_store_in(home, source).unwrap(),
         memory.clone(),
         Arc::new(MtlsRemoteTransport),
         identity(home).server_id,

@@ -1842,6 +1842,24 @@ mod core_backend {
                 .map_err(resource_claim_tools::backend_error)
         }
 
+        /// This machine's provider configuration for the store (HS2-1M8E9D), under the
+        /// home that holds the injected checkout registry.
+        fn provider_config(
+            &self,
+        ) -> Result<hotsheet_ticketing::ProviderConfigRegistry, hotsheet_ticketing::ProviderError>
+        {
+            let home = self
+                .checkout_registry
+                .path()
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .map_or_else(
+                    hotsheet_ticketing::machine_home::hotsheet_home,
+                    Path::to_path_buf,
+                );
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&home, self.store.root())
+        }
+
         fn orchestration_request(
             &self,
             method: &str,
@@ -1864,15 +1882,22 @@ mod core_backend {
                     .request_now(method, path, body)
                     .map_err(orchestration_tools::backend_error);
             }
-            hotsheet_cli::orchestration::OrchestrationRuntime::live(
-                home,
-                self.checkout_registry.clone(),
-                hotsheet_ticketing::ProviderConfigRegistry::new(
-                    self.store.root().join("providers.json"),
-                ),
-            )
-            .and_then(|runtime| runtime.request_now(method, path, body))
-            .map_err(orchestration_tools::backend_error)
+            // HS2-1M8E9D: this machine's provider configuration for the store.
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(home, self.store.root())
+                .map_err(|error| {
+                    hotsheet_ticketing::orchestration::OrchestrationError::Storage(
+                        std::io::Error::other(error.to_string()),
+                    )
+                })
+                .and_then(|providers| {
+                    hotsheet_cli::orchestration::OrchestrationRuntime::live(
+                        home,
+                        self.checkout_registry.clone(),
+                        providers,
+                    )
+                })
+                .and_then(|runtime| runtime.request_now(method, path, body))
+                .map_err(orchestration_tools::backend_error)
         }
 
         /// Override the clock + minter (deterministic tests).
@@ -2202,13 +2227,18 @@ mod core_backend {
             if source.is_some_and(|source| source != "git") {
                 return Err(bad_request("source must be git"));
             }
-            let registry = hotsheet_ticketing::ProviderConfigRegistry::new(
-                self.store.root().join("providers.json"),
-            );
+            // HS2-1M8E9D: this machine's provider configuration for the store.
+            let registry = self.provider_config().ok();
             hotsheet_ticketing::checkout_page::merged_external_sources(
                 checkout,
                 source.is_some(),
-                |id| Ok::<_, std::convert::Infallible>(registry.disabled(id).unwrap_or(false)),
+                |id| {
+                    Ok::<_, std::convert::Infallible>(
+                        registry
+                            .as_ref()
+                            .is_some_and(|registry| registry.disabled(id).unwrap_or(false)),
+                    )
+                },
             )
             .map_err(|never| match never {})
         }
@@ -5389,8 +5419,11 @@ mod tests {
         let git_cursor = git_only["next_cursor"].as_str().unwrap().to_owned();
 
         // Synthetic connections in the store's own registry: one enabled, one disabled.
-        let providers =
-            hotsheet_ticketing::ProviderConfigRegistry::new(store_root.join("providers.json"));
+        let providers = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+            &root.path().join("home"),
+            &store_root,
+        )
+        .unwrap();
         let connection =
             |id: &str, provider: &str, disabled: bool| hotsheet_ticketing::ProviderConnection {
                 id: id.into(),

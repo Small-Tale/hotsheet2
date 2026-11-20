@@ -8,7 +8,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection};
+use hotsheet_ticketing::ProviderConnection;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -297,7 +297,8 @@ pub(crate) fn account_listing_inputs(
     ),
     ApiError,
 > {
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connections = state
+        .provider_config()
         .load()
         .map_err(provider_transfer_error)?;
     let checkouts = state
@@ -423,7 +424,7 @@ pub(crate) async fn remove_unused_account_source(
     Path((account, connection_id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
     tokio::task::spawn_blocking(move || {
-        let providers = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+        let providers = state.provider_config();
         hotsheet_ticketing::accounts::remove_unused_source(
             &providers,
             &state.checkout_registry,

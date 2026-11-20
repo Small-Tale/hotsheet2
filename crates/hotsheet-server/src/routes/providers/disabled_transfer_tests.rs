@@ -1,6 +1,6 @@
 //! HS2-DJWTB0: real authenticated transfer parents in an explicitly isolated child.
 use super::*;
-use hotsheet_ticketing::{KeyRegistry, OsKeychain, StoreMetadata};
+use hotsheet_ticketing::{KeyRegistry, OsKeychain, ProviderConfigRegistry, StoreMetadata};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -188,7 +188,8 @@ fn hs2_djwtb0_owned_transfer_child() {
     hotsheet_aitools::enable_test_permission_vault();
     hotsheet_ticketing::secrets::enable_test_credentials().unwrap();
     let store = init_store(&home.join("store"), "HS");
-    let config = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    // HS2-1M8E9D: the machine copy the state reads, under the isolated home.
+    let config = ProviderConfigRegistry::for_store_in(&home, store.root()).unwrap();
     let keys = KeyRegistry::new(&home, OsKeychain);
     keys.set(ACCOUNT, "synthetic-transfer-token").unwrap();
     let state = AppState::new(store, "synthetic-secret".into())

@@ -1581,8 +1581,9 @@ same explanation (HS2-CGXGWY).
   `.hotsheet2/settings.json` or `.hotsheet2/settings.local.json`: those remain
   shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
-  non-secret records in the ticket store's `providers.json` (credentials remain keychain
-  references). The real Sources settings view lists active git and external connections
+  non-secret, machine-local records owned by the checkouts that link them, kept in this
+  machine's provider configuration for the ticket store and never synced through the store
+  (credentials remain keychain references; [02](02-ticket-storage.md) §2.11.1, HS2-1M8E9D). The real Sources settings view lists active git and external connections
   without embedding setup forms. Its brand "+ Data Source…" pill, in the workspace action zone where
   ticket views put New ticket… (HS2-G9J35B), opens the same dialog used by
   source-less project onboarding: the first screen selects GitHub, GitLab, or Jira (and,

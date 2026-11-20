@@ -1039,7 +1039,10 @@ Ticket sources are never global. A provider connection is **owned by the checkou
 link it** in `checkouts.json`; links stay many-to-many, and each checkout keeps its own
 default source (HS2-3SCH1K). `providers.json` remains the non-secret record store for those
 connections, but it is not a catalog a project browses: no project is offered another
-project's sources.
+project's sources. It is machine-local, like `checkouts.json`: each machine keeps its own
+copy for a store under `${HOTSHEET_HOME}/stores/<instanceId>/`, and the store never syncs it
+([02](02-ticket-storage.md) §2.11.1, HS2-1M8E9D). A teammate connects an external source
+once per machine, as each machine already signs in to its own account.
 
 - `GET /checkouts/{reference}/providers` lists only that checkout's linked sources, in link
   order, marked `default` by the checkout's own default source; the web client routes a

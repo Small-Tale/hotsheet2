@@ -1609,7 +1609,14 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             );
         }
         let registry = CheckoutRegistry::new(home.join("checkouts.json"));
-        let config = source.join("providers.json");
+        // HS2-1M8E9D: this machine's provider configuration for the -C source. A seeded
+        // machine copy always exists, so "configured" means it holds a connection; an
+        // unreadable one still counts, so its error is reported below.
+        let config = ProviderConfigRegistry::for_store_in(&home, &source)?;
+        let configured = config.path().is_file()
+            && config
+                .load()
+                .map_or(true, |connections| !connections.is_empty());
         // HS2-3D8D6V: a remote checkout is not registered here; its read uses no
         // provider configuration either.
         let remote = path.starts_with("/remotes/");
@@ -1619,59 +1626,57 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             Some(registry.describe(&owner_id).map_err(|_| anyhow::anyhow!("registered project is unavailable; use its checkout id or list --target-id/unbind for orphan cleanup"))?)
         };
         if owner.is_some_and(|owner| owner.sources.iter().any(|source| source.provider != "git"))
-            && !config.is_file()
+            && !configured
         {
             bail!(
-                "provider configuration is unavailable; pass -C <configured-host-source> containing the project's existing providers.json; no source was created"
+                "provider configuration is unavailable; pass -C <configured-host-source> whose provider connections this machine holds; no source was created"
             );
         }
-        OrchestrationRuntime::live(&home, registry, ProviderConfigRegistry::new(config)).and_then(
-            |runtime| {
-                let runtime = if monitor_off {
-                    runtime.with_gate_provider(std::sync::Arc::new(
-                        hotsheet_cli::orchestration::GithubActionsGates::new(&home),
-                    ))
-                } else {
-                    runtime
-                };
-                // HS2-TK9ADC: one target's role sessions, edited into the stored policy.
-                if let Some(edit) = body
-                    .as_object_mut()
-                    .and_then(|object| object.remove("role_sessions_edit"))
-                {
-                    let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
-                    // The actor this command attached stays with the request.
-                    body["policy"] = with_role_sessions(stored["policy"].take(), &edit);
-                    body["expected_revision"] = stored["revision"].take();
-                    let mut answer = runtime.request_now(method, &path, &body)?;
-                    // HS2-SYZB33: say when the entry names a site that is not its
-                    // project's home, where it starts nothing.
-                    let checked =
-                        runtime.request_now("POST", &format!("{path}/validate"), &json!({}))?;
-                    if let Some(warnings) = checked.get("warnings") {
-                        answer["warnings"] = warnings.clone();
-                    }
-                    return Ok(answer);
+        OrchestrationRuntime::live(&home, registry, config).and_then(|runtime| {
+            let runtime = if monitor_off {
+                runtime.with_gate_provider(std::sync::Arc::new(
+                    hotsheet_cli::orchestration::GithubActionsGates::new(&home),
+                ))
+            } else {
+                runtime
+            };
+            // HS2-TK9ADC: one target's role sessions, edited into the stored policy.
+            if let Some(edit) = body
+                .as_object_mut()
+                .and_then(|object| object.remove("role_sessions_edit"))
+            {
+                let mut stored = runtime.request_now("GET", &path, &Value::Null)?;
+                // The actor this command attached stays with the request.
+                body["policy"] = with_role_sessions(stored["policy"].take(), &edit);
+                body["expected_revision"] = stored["revision"].take();
+                let mut answer = runtime.request_now(method, &path, &body)?;
+                // HS2-SYZB33: say when the entry names a site that is not its
+                // project's home, where it starts nothing.
+                let checked =
+                    runtime.request_now("POST", &format!("{path}/validate"), &json!({}))?;
+                if let Some(warnings) = checked.get("warnings") {
+                    answer["warnings"] = warnings.clone();
                 }
-                // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
-                // repeated setup run is a no-op and a concurrent edit still conflicts.
-                if body.get("read_revision").is_some() {
-                    let read = body["read_revision"] == true;
-                    if let Some(object) = body.as_object_mut() {
-                        object.remove("read_revision");
-                    }
-                    if read {
-                        body["expected_revision"] =
-                            runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
-                    }
+                return Ok(answer);
+            }
+            // HS2-YCJDEB: `policy set` without a revision is read-then-set, so a
+            // repeated setup run is a no-op and a concurrent edit still conflicts.
+            if body.get("read_revision").is_some() {
+                let read = body["read_revision"] == true;
+                if let Some(object) = body.as_object_mut() {
+                    object.remove("read_revision");
                 }
-                // HS2-WN0MXZ: a validation run waits for its attempt unless told not to.
-                if let Some(result) = validation::until_finished(&runtime, &path, &mut body) {
-                    return result;
+                if read {
+                    body["expected_revision"] =
+                        runtime.request_now("GET", &path, &Value::Null)?["revision"].take();
                 }
-                runtime.request_now(method, &path, &body)
-            },
-        )
+            }
+            // HS2-WN0MXZ: a validation run waits for its attempt unless told not to.
+            if let Some(result) = validation::until_finished(&runtime, &path, &mut body) {
+                return result;
+            }
+            runtime.request_now(method, &path, &body)
+        })
     };
     let mut output = result.map_err(|error| anyhow::anyhow!("{}: {}", error.code(), error))?;
     if ensure_monitor && output["watching"] == false {

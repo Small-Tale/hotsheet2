@@ -137,7 +137,9 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
             .contains("no selected provider could supply AI feedback")
     );
     assert!(String::from_utf8_lossy(&unavailable.stderr).contains("unknown"));
-    ProviderConfigRegistry::new(root.join("providers.json"))
+    // HS2-1M8E9D: this machine's copy, which the CLI reads.
+    ProviderConfigRegistry::for_store_in(&home, &root)
+        .unwrap()
         .save(&[ProviderConnection {
             id: "github-test".into(),
             provider: "github".into(),

@@ -1107,7 +1107,9 @@ and hyphens; unique names; a non-empty query). Notification rules name views by 
 ([32](32-notifier-plugins.md) §32.5).
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
-commands they read the `-C` store's `providers.json`.
+commands they read this machine's provider configuration for the `-C` store
+([02](02-ticket-storage.md) §2.11.1, HS2-1M8E9D). `providers` prints that file's path on its
+last line (`# configuration: …`).
 
 `checkout remove` takes a checkout out of the machine registry (`HOTSHEET_HOME/checkouts.json`,
 HS2-X4RZ73), for example after a test or a deleted clone left a stale entry. It and the
@@ -1130,12 +1132,12 @@ server's `DELETE /checkouts/{reference}[?dry_run=true]` call one workflow,
   whether a window has the project open; in that case it answers 409 and nothing changes. A
   live server that cannot be reached also refuses the removal, because it cannot confirm
   that the project is closed. With no live server, the CLI runs the workflow directly against
-  the `-C` store's `providers.json`.
+  this machine's provider configuration for the `-C` store.
 
 `--json` prints the report: `registered`, `removed`, `dry_run`, `checkout_id`, `alias`, `root`,
 `kept_git_stores`, `removed_connections`, `shared_connections` (connection id to the
 checkout ids still using it), and `kept_credentials`.
-Provider configuration saves publish a complete synced sibling by atomic replacement,
+Provider configuration saves publish a complete sibling by atomic replacement,
 preserving existing file permissions. Event-driven coordination readers therefore see
 the previous or next complete configuration; malformed committed JSON still reports an
 error instead of being treated as an empty source list (HS2-GBSPP8).

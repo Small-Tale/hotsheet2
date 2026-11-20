@@ -243,8 +243,8 @@ provider-configuration writer takes), and `.*.tmp`, the staged sibling of an ato
 replace that exists only between its write and rename. A lasting lock an older client
 committed is removed from the index (never from disk) by the next sync pass or
 repository-wide commit, so a process that holds it keeps its inode on every clone that
-runs this version. `providers.json` itself is still committed; whether it should be is
-an open decision recorded on HS2-457FGS.
+runs this version. The list also names the legacy store-root `providers.json`, which is
+per machine now (§2.11.1, HS2-1M8E9D) and leaves the index the same way.
 
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
@@ -964,6 +964,49 @@ Its first consumer is **read tracking** (`local/reads.json`; `hotsheet read <slu
 marks read, `hotsheet ls` shows an unread `●`). Feedback-draft persistence, UI/view
 state, and machine-pref reconciliation slot into the same overlay next
 (**HS2-AWTHJE**).
+
+### 2.11.1 Provider configuration is per machine (HS2-1M8E9D)
+
+A store's external provider connections (GitHub, GitLab, Jira; see
+[16](16-external-sync-interface.md)) are machine-local. They hold keychain references, a
+signed-in account, and endpoint operations that name this machine's checkouts, and the
+orphan cleanup that removes a record no checkout links consults only this machine's
+`checkouts.json`. Sharing them through the store's history let one machine's cleanup
+delete another machine's sources.
+
+- **Where it lives.** `${HOTSHEET_HOME}/stores/<instanceId>/providers.json`, keyed by the
+  store's `instanceId` (§2.3), beside its lasting `providers.json.lock` and staged
+  `.providers-*.tmp` siblings. The key survives a move or re-clone; two clones of one store
+  on one machine share the copy. A legacy store without an `instanceId` is assigned one
+  through the existing idempotent identity path. Two machines sharing a store (the sites
+  model of [26](26-orchestration-projects.md)) each keep their own copy, and neither can
+  change or delete the other's.
+- **How readers find it.** Every server route, CLI command, MCP tool, and coordination
+  watcher resolves it through `ProviderConfigRegistry::for_store` (or the server's
+  `AppState::provider_config`), never by joining a path to the store root. A `-C`
+  host-configuration directory that is not a store keeps its `providers.json` beside it,
+  as before; Hot Sheet never syncs such a directory.
+- **One-time migration.** The first resolve on a machine with no copy seeds it once, under
+  the configuration lock: from the store-root `providers.json` working file when present;
+  otherwise, in a Git store, from the last committed version in history (a machine whose
+  older client lost its working file when it pulled the untrack); otherwise as an empty
+  list. The bytes are copied as they are. An existing copy is never replaced, so the
+  migration is idempotent and a later change to the legacy file has no effect.
+- **Untracking.** The managed `.gitignore` lists `providers.json`, and sync and
+  repository-wide commits remove it from the index only. Sync seeds the machine copy first.
+  When an older client's commit changed the file, the replay (or the `git rebase`
+  fallback) resolves a conflict confined to these machine-local root files by keeping the
+  file untracked, so a new client never stops in `Conflict`.
+- **Rollback.** The legacy working file stays on disk, untracked, as the snapshot taken at
+  migration time; an older build reads it again after a downgrade. Changes made after the
+  upgrade live only in the machine copy: copy it over the store-root file before
+  downgrading to keep them.
+- **Mixed versions.** An older client on another machine that pulls the untrack commit loses
+  its working file; upgrading it restores the configuration from history. If that older
+  client changed the file after the untrack reached it, its own sync reports a conflict
+  until it is upgraded, so upgrade every machine that shares a store.
+- **Headless.** The migration runs inside the shared resolver, so `hotsheet-cli providers`
+  (which prints the configuration path), the server, and MCP behave identically.
 
 ## 2.12 Automatic repo syncing — aggressive, hands-off
 

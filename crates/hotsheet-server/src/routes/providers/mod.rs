@@ -26,8 +26,7 @@ use hotsheet_sync::LockExt;
 use hotsheet_ticketing::checkout_order::MergeKey;
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
-    ApiTicket, FsStore, GitProvider, ProviderConfigRegistry, ProviderConnection, ProviderRegistry,
-    TicketQuery, TicketRef,
+    ApiTicket, FsStore, GitProvider, ProviderConnection, ProviderRegistry, TicketQuery, TicketRef,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -39,7 +38,8 @@ pub(crate) async fn list_providers(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<hotsheet_ticketing::ProviderDescriptor>>, ApiError> {
     let default_id = multistore::store_url_id(&state.store);
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connections = state
+        .provider_config()
         .load()
         .map_err(provider_transfer_error)?;
     let external_default = connections.iter().any(|connection| connection.default)
@@ -125,7 +125,8 @@ pub(crate) async fn list_checkout_providers(
             .collect()
     };
     let summaries = state.host.summaries();
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connections = state
+        .provider_config()
         .load()
         .map_err(provider_transfer_error)?;
     let injected = state.injected_providers.descriptors();
@@ -200,7 +201,8 @@ pub(crate) async fn list_checkout_providers(
 pub(crate) async fn list_provider_connections(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ProviderConnection>>, ApiError> {
-    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    state
+        .provider_config()
         .load()
         .map(Json)
         .map_err(provider_transfer_error)
@@ -212,7 +214,8 @@ fn save_provider_connections(
     replacing: Option<&str>,
 ) -> Result<ProviderConnection, ApiError> {
     let connection_id = connection.id.clone();
-    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    state
+        .provider_config()
         .update_connection(&connection_id, |connections| {
             if let Some(id) = replacing {
                 connection.disabled = connections
@@ -284,7 +287,8 @@ pub(crate) async fn create_provider_connection(
     Json(body): Json<CreateProviderConnectionBody>,
 ) -> Result<(StatusCode, Json<ProviderConnection>), ApiError> {
     let mut connection = body.connection;
-    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connections = state
+        .provider_config()
         .load()
         .map_err(provider_transfer_error)?;
     // Clients no longer ask users for an id; an empty one is generated (HS2-48GA17).
@@ -308,7 +312,7 @@ pub(crate) async fn create_provider_connection(
             body.infer_site,
         )?;
         hotsheet_extsync::connect_github_source(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             connection,
             None,
             hotsheet_extsync::ConnectMode::Create,
@@ -448,7 +452,7 @@ pub(crate) async fn recover_github_connection(
         GithubRecoveryAction::Compensate => hotsheet_extsync::RecoverGithubLink::Compensate,
     };
     let result = hotsheet_extsync::recover_github_link(
-        &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+        &state.provider_config(),
         &state.checkout_registry,
         &connection_id,
         action,
@@ -529,7 +533,8 @@ pub(crate) async fn get_provider_endpoint_review(
     Path(connection_id): Path<String>,
 ) -> Result<Json<EndpointReview>, ApiError> {
     use hotsheet_ticketing::github_endpoint::{Expected, State};
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connection = state
+        .provider_config()
         .load()
         .map_err(provider_transfer_error)?
         .into_iter()
@@ -633,7 +638,7 @@ pub(crate) async fn create_checkout_provider_connection(
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     let mut connection = body.connection;
     let explicit_endpoint = connection.settings.get("api_base").is_some();
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let registry = state.provider_config();
     if !body.explicit_public_api {
         fill_reused_sign_in_endpoint(&state, &mut connection)?;
     }
@@ -709,7 +714,8 @@ pub(crate) async fn set_checkout_provider_connection_disabled(
     Json(body): Json<ProviderConnectionDisabledBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     checkout_linking(&state, &reference, &connection_id)?;
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connection = state
+        .provider_config()
         .set_disabled(&connection_id, body.disabled)
         .map_err(provider_transfer_error)?
         .ok_or_else(|| ApiError::not_found(&connection_id))?;
@@ -725,7 +731,7 @@ fn update_connection_record(
     endpoint_expected: Option<hotsheet_ticketing::github_endpoint::Expected>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     connection.id = connection_id.clone();
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let registry = state.provider_config();
     let previous = registry
         .load()
         .map_err(provider_transfer_error)?
@@ -846,7 +852,8 @@ pub(crate) async fn set_provider_connection_disabled(
     Path(connection_id): Path<String>,
     Json(body): Json<ProviderConnectionDisabledBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
-    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connection = state
+        .provider_config()
         .set_disabled(&connection_id, body.disabled)
         .map_err(provider_transfer_error)?
         .ok_or_else(|| ApiError::not_found(&connection_id))?;
@@ -857,7 +864,8 @@ pub(crate) async fn set_provider_connection_disabled(
 
 /// Whether `connection_id` names a disabled external connection in `providers.json`.
 pub(crate) fn connection_disabled(state: &AppState, connection_id: &str) -> Result<bool, ApiError> {
-    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    state
+        .provider_config()
         .disabled(connection_id)
         .map_err(provider_transfer_error)
 }
@@ -871,7 +879,7 @@ pub(crate) async fn delete_provider_connection(
 ) -> Result<Json<hotsheet_ticketing::connection_removal::ConnectionRemoval>, ApiError> {
     tokio::task::spawn_blocking(move || {
         let removed = hotsheet_ticketing::connection_removal::remove_provider_connection(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             &state.checkout_registry,
             &connection_id,
         )
@@ -939,7 +947,7 @@ pub(crate) fn hosted_provider_registry(
     let selected = |id: &str| id == source || id == destination;
     let registry = ProviderRegistry::default();
     let default_id = multistore::store_url_id(&state.store);
-    let config = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let config = state.provider_config();
     let connections = config.load().map_err(provider_transfer_error)?;
     let injected = state.injected_providers.descriptors();
     admit_selected_transfers(&connections, &injected, source, destination)?;
@@ -1026,7 +1034,7 @@ pub(crate) fn provider_for(
             },
         ));
     }
-    let config = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let config = state.provider_config();
     let keys = state.key_registry();
     let connection = config
         .load()

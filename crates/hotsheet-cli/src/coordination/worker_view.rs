@@ -504,6 +504,16 @@ impl Coordinator {
         std::fs::create_dir_all(&self.registry_home)?;
         let settings_directory = self.project.join(".hotsheet2");
         let mut settings_directory_watched = settings_directory.is_dir();
+        // HS2-1M8E9D: provider configuration is this machine's copy in the home.
+        let providers = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+            &self.registry_home,
+            &self.source,
+        )?
+        .path()
+        .to_path_buf();
+        let providers_directory = providers
+            .parent()
+            .map_or_else(|| self.registry_home.clone(), std::path::Path::to_path_buf);
         // Every path is registered before the platform watcher starts once
         // (HS2-N1QDZW). HS2-F6F42W: it starts on its own thread, so the first read below
         // happens at once; going live, or a refused start while it is retried, is a
@@ -516,6 +526,7 @@ impl Coordinator {
                 (self.directory.as_path(), RecursiveMode::NonRecursive),
                 (self.source.as_path(), RecursiveMode::Recursive),
                 (self.registry_home.as_path(), RecursiveMode::NonRecursive),
+                (providers_directory.as_path(), RecursiveMode::NonRecursive),
                 if settings_directory_watched {
                     (settings_directory.as_path(), RecursiveMode::NonRecursive)
                 } else {
@@ -575,7 +586,6 @@ impl Coordinator {
                 Ok(Wake::Status) => Some(WatchStep::StreamStatus),
                 Ok(Wake::Event(Ok(event))) => {
                     let tickets = self.source.join("tickets");
-                    let providers = self.source.join("providers.json");
                     let checkouts = self.registry_home.join("checkouts.json");
                     let state = self.directory.join("state.json");
                     let settings = settings_directory.join("settings.json");

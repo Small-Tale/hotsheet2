@@ -995,7 +995,7 @@ fn hs2_76vmyg_provider_scope_change_wakes_without_ticket_polling() {
         "--after",
         &initial.cursor,
     ]);
-    hotsheet_ticketing::ProviderConfigRegistry::new(f.store.root().join("providers.json"))
+    machine_providers(&f)
         .save(&[hotsheet_ticketing::ProviderConnection {
             id: "synthetic-remote".into(),
             provider: "github".into(),
@@ -1034,7 +1034,7 @@ fn hs2_gbspp8_corrupt_provider_event_preserves_the_waiter_exit_cause() {
     ]);
     // An in-place writer exposes this state after creation/truncation and before bytes arrive.
     // Keep it empty until the event-backed reader exits: no scheduling delay or race is needed.
-    std::fs::write(f.store.root().join("providers.json"), b"").unwrap();
+    std::fs::write(machine_providers(&f).path(), b"").unwrap();
     let output = waiting.exit_output();
     let error = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{error}");
@@ -1055,8 +1055,7 @@ fn hs2_gbspp8_atomic_provider_publications_wake_create_replace_empty_and_refill(
         "--session",
         "root",
     ]);
-    let registry =
-        hotsheet_ticketing::ProviderConfigRegistry::new(f.store.root().join("providers.json"));
+    let registry = machine_providers(&f);
     let source = hotsheet_ticketing::ProviderConnection {
         id: "synthetic-remote".into(),
         provider: "github".into(),
@@ -1255,4 +1254,10 @@ fn hs2_cp6gwa_next_without_flags_re_registers_with_cli_defaults() {
     assert_eq!(route_of(&session), ("human_relay".to_string(), None));
     assert!(session["expires_at"].as_i64().unwrap() - now() <= 120);
     drop(waiting);
+}
+
+/// HS2-1M8E9D: this machine's provider configuration for the fixture store, under the
+/// inherited test home the CLI children use too.
+fn machine_providers(f: &Fixture) -> hotsheet_ticketing::ProviderConfigRegistry {
+    hotsheet_ticketing::ProviderConfigRegistry::for_store(f.store.root()).unwrap()
 }

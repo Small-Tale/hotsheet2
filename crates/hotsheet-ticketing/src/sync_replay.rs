@@ -108,24 +108,26 @@ pub(crate) fn replay_onto_upstream(store_path: &Path) -> Result<String, ReplayEr
             .stdin(Stdio::null())
             .output()
             .map_err(|error| ReplayError::Unsupported(error.to_string()))?;
-        match merged.status.code() {
-            Some(0) => {}
-            Some(1) => return Err(ReplayError::Conflict),
+        let output = String::from_utf8_lossy(&merged.stdout);
+        let tree = output.lines().next().unwrap_or_default().trim().to_string();
+        if tree.is_empty() && merged.status.code() == Some(0) {
+            return Err(unsupported("merge-tree printed no tree"));
+        }
+        let tree = match merged.status.code() {
+            Some(0) => tree,
+            // HS2-1M8E9D: an older client changed a machine-local root file this replay
+            // untracks. Keep it untracked; anything else is a real conflict.
+            Some(1) => match local_only_conflicts(&output) {
+                Some(paths) if !tree.is_empty() => without_root_entries(store_path, &tree, &paths)
+                    .ok_or_else(|| unsupported("could not drop a machine-local file"))?,
+                _ => return Err(ReplayError::Conflict),
+            },
             _ => {
                 return Err(ReplayError::Unsupported(
                     String::from_utf8_lossy(&merged.stderr).trim().to_string(),
                 ));
             }
-        }
-        let tree = String::from_utf8_lossy(&merged.stdout)
-            .lines()
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-        if tree.is_empty() {
-            return Err(unsupported("merge-tree printed no tree"));
-        }
+        };
         if tree == tip_tree {
             // The upstream already has this change; `git rebase` drops it too.
             continue;
@@ -134,6 +136,55 @@ pub(crate) fn replay_onto_upstream(store_path: &Path) -> Result<String, ReplayEr
         tip_tree = tree;
     }
     Ok(tip)
+}
+
+/// The conflicted paths `git merge-tree --write-tree` listed after its tree line, when
+/// every one is a machine-local root file ([`crate::store::LOCAL_ONLY_ROOT_FILES`]).
+/// `None` for any other conflict, or when none is listed.
+pub(crate) fn local_only_conflicts(merge_tree_output: &str) -> Option<Vec<String>> {
+    let mut paths: Vec<String> = merge_tree_output
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split_once('\t')
+                .map_or(line, |(_, path)| path)
+                .to_string()
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    let local_only = !paths.is_empty()
+        && paths
+            .iter()
+            .all(|path| crate::store::LOCAL_ONLY_ROOT_FILES.contains(&path.as_str()));
+    local_only.then_some(paths)
+}
+
+/// `tree` without the named top-level entries.
+fn without_root_entries(store_path: &Path, tree: &str, names: &[String]) -> Option<String> {
+    let listing = git_stdout(store_path, &["ls-tree", tree])?;
+    let kept: String = listing
+        .lines()
+        .filter(|line| {
+            line.split_once('\t')
+                .is_none_or(|(_, name)| !names.iter().any(|drop| drop == name))
+        })
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let mut child = crate::git::command()
+        .arg("-C")
+        .arg(store_path)
+        .arg("mktree")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    child.stdin.take()?.write_all(kept.as_bytes()).ok()?;
+    let out = child.wait_with_output().ok()?;
+    let id = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !id.is_empty()).then_some(id)
 }
 
 /// The fallback committer identity [`crate::FsStore::autocommit`] uses when the

@@ -241,7 +241,8 @@ fn accept_feedback_synthesis(
 
 pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     let store = FsStore::open(path)?;
-    let connections = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let config = ProviderConfigRegistry::for_store(store.root())?;
+    let connections = config.load()?;
     let external_default = connections.iter().any(|connection| connection.default);
     let disabled: Vec<String> = connections
         .iter()
@@ -275,6 +276,8 @@ pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
                 }
             );
         }
+        // HS2-1M8E9D: where this machine keeps the store's provider configuration.
+        println!("# configuration: {}", config.path().display());
     }
     Ok(())
 }
@@ -287,7 +290,7 @@ pub(crate) fn cmd_github_webhook_setup(
     secret_ref: &str,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
-    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let registry = ProviderConfigRegistry::for_store(store.root())?;
     let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
     let connection =
         hotsheet_extsync::configure_webhook(&registry, &keys, connection_id, secret_ref)?
@@ -416,7 +419,7 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
     if let Some(reference) = &checkout {
         checkout_registry.resolve(reference)?;
     }
-    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let registry = ProviderConfigRegistry::for_store(store.root())?;
     let connections = registry.load()?;
     let existing = match id.as_deref() {
         Some(id) => connections.iter().find(|item| item.id == id),
@@ -609,7 +612,7 @@ pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result
 pub(crate) fn cmd_github_recover(path: &Path, args: GithubRecoverArgs) -> Result<()> {
     let store = FsStore::open(path)?;
     let home = hotsheet_plugins::hotsheet_home();
-    let providers = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let providers = ProviderConfigRegistry::for_store(store.root())?;
     let checkouts =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
     let action = if args.compensate {
@@ -749,7 +752,7 @@ pub(crate) fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Resul
 pub(crate) fn cmd_feedback_synthesis_prepare(path: &Path, connections: &[String]) -> Result<()> {
     let store = FsStore::open(path)?;
     let git_id = git_connection_id(&store);
-    let configs = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let configs = ProviderConfigRegistry::for_store(store.root())?.load()?;
     let mut selected = connections.to_vec();
     selected.sort();
     selected.dedup();
@@ -810,7 +813,7 @@ pub(crate) fn cmd_provider_set_disabled(
     disabled: bool,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
-    ProviderConfigRegistry::new(store.root().join("providers.json"))
+    ProviderConfigRegistry::for_store(store.root())?
         .set_disabled(connection, disabled)?
         .ok_or_else(|| anyhow::anyhow!("provider connection '{connection}' was not found"))?;
     println!(
@@ -829,7 +832,7 @@ pub(crate) fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> 
     }
     let home = hotsheet_plugins::hotsheet_home();
     let report = hotsheet_ticketing::connection_removal::remove_provider_connection(
-        &ProviderConfigRegistry::new(store.root().join("providers.json")),
+        &ProviderConfigRegistry::for_store(store.root())?,
         &hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")),
         connection,
     )?;
@@ -1310,7 +1313,7 @@ pub(crate) fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
     let home = hotsheet_plugins::hotsheet_home();
     let keys = KeyRegistry::new(&home, OsKeychain);
     let connections =
-        ProviderConfigRegistry::new(FsStore::open(path)?.root().join("providers.json")).load()?;
+        ProviderConfigRegistry::for_store_in(&home, FsStore::open(path)?.root())?.load()?;
     let checkouts =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")).list()?;
     match cmd {
@@ -1634,7 +1637,7 @@ pub(crate) fn cmd_provider_connect(path: &Path, args: ProviderConnectArgs) -> Re
     let store = FsStore::open(path)?;
     let home = hotsheet_plugins::hotsheet_home();
     let keys = KeyRegistry::new(&home, OsKeychain);
-    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let registry = ProviderConfigRegistry::for_store(store.root())?;
     let checkout_registry =
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
     let reused = match &account {
@@ -1854,7 +1857,7 @@ pub(crate) fn configured_provider(
         )?;
         return Ok(Arc::new(GitProvider::new(git_id, store)));
     }
-    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let registry = ProviderConfigRegistry::for_store(store.root())?;
     let connection = registry
         .load()?
         .into_iter()

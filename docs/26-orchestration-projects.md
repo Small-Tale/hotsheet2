@@ -419,8 +419,9 @@ part of HS2-HSMH2Q.
 
 CLI, authenticated HTTP and MCP use one shared runtime over the core transaction.
 The CLI emits JSON for all target operations. `--project` is the registered owning
-checkout id; `-C` selects the existing host source that owns `providers.json`, not a
-target's default Git store. Missing host configuration produces an actionable
+checkout id; `-C` selects the existing host source whose machine-local provider
+configuration this machine holds ([02](02-ticket-storage.md) §2.11.1), not a target's
+default Git store. Missing host configuration produces an actionable
 error and never creates a hidden store or source. For a provider-only project:
 
 ```sh

@@ -197,7 +197,7 @@ fn hook_secret<S: hotsheet_ticketing::SecretStore>(
 }
 
 fn setup(state: &AppState, connection_id: &str) -> Result<WebhookSetup, ApiError> {
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let registry = state.provider_config();
     let snapshot = hotsheet_ticketing::github_endpoint::EndpointRegistry::new(&registry)
         .capture_ordinary(connection_id)
         .map_err(setup_provider_error)?;
@@ -283,7 +283,7 @@ fn linked_checkout(state: &AppState, connection: &ProviderConnection) -> Result<
 /// A capability becomes truthful only after a signed delivery from this exact
 /// configured source succeeded during the current server process.
 pub(crate) fn watch_ready(state: &AppState, connection: &ProviderConnection) -> bool {
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let registry = state.provider_config();
     let keys = state.key_registry();
     watch_ready_with(state, connection, &registry, &keys)
 }
@@ -336,7 +336,7 @@ pub(crate) async fn configure(
         ));
     }
     tokio::task::spawn_blocking(move || {
-        let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+        let registry = state.provider_config();
         let keys = state.key_registry();
         let configured =
             hotsheet_extsync::configure_webhook(&registry, &keys, &connection_id, &body.secret_ref)
@@ -418,7 +418,7 @@ fn receive_sync(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<WebhookReceipt>, ApiError> {
-    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let registry = state.provider_config();
     let keys = state.key_registry();
     let connection = registry
         .load()

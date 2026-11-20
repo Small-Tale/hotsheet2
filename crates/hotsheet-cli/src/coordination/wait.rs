@@ -36,12 +36,20 @@ impl Coordinator {
         let registry_home = self.registry_home.clone();
         std::fs::create_dir_all(&registry_home)?;
         let registry_file = registry_home.join("checkouts.json");
-        let providers_file = self.source.join("providers.json");
+        // HS2-1M8E9D: provider configuration is this machine's copy in the home.
+        let providers_file =
+            hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&registry_home, &self.source)?
+                .path()
+                .to_path_buf();
+        let providers_directory = providers_file
+            .parent()
+            .map_or_else(|| registry_home.clone(), std::path::Path::to_path_buf);
         let tickets = self.source.join("tickets");
         let mut watched = vec![
             (self.directory.as_path(), RecursiveMode::NonRecursive),
             (self.source.as_path(), RecursiveMode::NonRecursive),
             (registry_home.as_path(), RecursiveMode::NonRecursive),
+            (providers_directory.as_path(), RecursiveMode::NonRecursive),
         ];
         if tickets.is_dir() {
             watched.push((tickets.as_path(), RecursiveMode::Recursive));

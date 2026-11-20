@@ -351,6 +351,10 @@ fn integrate(store_path: &Path, limits: SyncLimits) -> Result<(), (SyncReport, C
     ))
 }
 
+/// Picks of one live rebase whose only conflict is a machine-local root file
+/// (HS2-1M8E9D) that are resolved before the conflict is reported instead.
+const MAX_LOCAL_ONLY_RESOLUTIONS: usize = 8;
+
 /// `git rebase` in the working tree, for a Git without the isolated replay. A write that
 /// lands during it can make Git refuse and reschedule a pick; that is continued here
 /// rather than aborted, because the abort would discard the write (HS2-QR1K8R).
@@ -358,7 +362,31 @@ fn live_rebase(
     store_path: &Path,
     heads: Option<(String, String)>,
 ) -> Result<(), (SyncReport, CycleDetail)> {
-    let rebase = git_run(store_path, &["rebase", "--quiet", "@{u}"]);
+    let mut rebase = git_run(store_path, &["rebase", "--quiet", "@{u}"]);
+    // HS2-1M8E9D: an older client's commit changed a machine-local root file a local
+    // commit untracks. Keep it untracked and continue; any other conflict stops below.
+    for _ in 0..MAX_LOCAL_ONLY_RESOLUTIONS {
+        if rebase.ok || lock_failure(store_path, "the rebase", &rebase.stderr).is_some() {
+            break;
+        }
+        let unmerged = unmerged_paths(store_path);
+        if unmerged.is_empty()
+            || !unmerged
+                .iter()
+                .all(|path| crate::store::LOCAL_ONLY_ROOT_FILES.contains(&path.as_str()))
+        {
+            break;
+        }
+        let mut untrack = vec!["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--"];
+        untrack.extend(unmerged.iter().map(String::as_str));
+        if !git_run(store_path, &untrack).ok {
+            break;
+        }
+        rebase = git_run(
+            store_path,
+            &["-c", "core.editor=true", "rebase", "--continue"],
+        );
+    }
     if rebase.ok {
         return Ok(());
     }
@@ -908,6 +936,9 @@ fn commit_pending_checked(store_path: &Path) -> Result<(), (SyncReport, CycleDet
     {
         eprintln!("warning: could not maintain store .gitignore: {error}");
     }
+    // HS2-1M8E9D: keep this machine's copy of a legacy store-root provider
+    // configuration before that file leaves the index.
+    crate::provider::seed_before_untrack(store_path);
     let mut untrack = vec!["rm", "-q", "-f", "--cached", "--ignore-unmatch", "--"];
     untrack.extend(crate::store::LOCAL_ONLY_ROOT_FILES);
     let untracked = git_run(store_path, &untrack);
@@ -1100,6 +1131,8 @@ pub(crate) fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
 mod local_lock_tests;
 #[cfg(test)]
 mod lock_tests;
+#[cfg(test)]
+mod machine_provider_tests;
 #[cfg(test)]
 mod merge_driver_tests;
 #[cfg(test)]

@@ -50,15 +50,18 @@ fn published_store(root: &Path) -> FsStore {
 fn hs2_457fgs_a_provider_configuration_write_then_sync_never_commits_its_lock() {
     let (_dir, store, _peer) = remote_with_two_clones();
     published_store(&store);
+    // A registry at the store root, as an older client keeps it. HS2-1M8E9D: the
+    // configuration itself is machine-local now too, so neither file is published.
     let registry = ProviderConfigRegistry::new(store.join("providers.json"));
     registry.save(&[connection()]).unwrap();
     assert!(store.join(PROVIDER_CONFIG_LOCK_FILE).is_file());
 
-    assert!(matches!(
-        sync_once(&store),
-        SyncReport::Synced { pushed: true, .. }
-    ));
+    assert_eq!(sync_once(&store), SyncReport::UpToDate);
     let published = remote_paths(&store);
+    assert!(
+        !published.iter().any(|path| path == "providers.json"),
+        "{published:?}"
+    );
     assert!(
         !published
             .iter()
@@ -110,7 +113,16 @@ fn hs2_457fgs_a_lock_an_older_client_committed_is_untracked_on_every_clone() {
         sync_once(&store),
         SyncReport::Synced { pushed: true, .. }
     ));
-    assert!(matches!(sync_once(&peer), SyncReport::Synced { .. }));
+    // Both clones make the same repair commit. Within one second, with one test identity,
+    // it is the same commit, so the peer may find itself already up to date.
+    let peer_report = sync_once(&peer);
+    assert!(
+        matches!(
+            peer_report,
+            SyncReport::Synced { .. } | SyncReport::UpToDate
+        ),
+        "{peer_report:?}"
+    );
     for clone in [&store, &peer] {
         let published = remote_paths(clone);
         for name in LOCAL_ONLY_ROOT_FILES {

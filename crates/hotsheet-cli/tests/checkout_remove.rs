@@ -128,7 +128,13 @@ fn hs2_x4rz73_remove_is_idempotent_and_keeps_shared_sources_and_files() {
         .map(|entry| entry["alias"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(aliases, vec!["docs".to_owned()]);
-    let providers = std::fs::read_to_string(f.store().join("providers.json")).unwrap();
+    // HS2-1M8E9D: the cleanup changed this machine's copy; the seeded store file stays.
+    let providers = std::fs::read_to_string(
+        hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&f.home(), &f.store())
+            .unwrap()
+            .path(),
+    )
+    .unwrap();
     assert!(!providers.contains("github-main"), "{providers}");
     assert!(providers.contains("github-docs"), "{providers}");
     assert!(

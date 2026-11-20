@@ -45,7 +45,8 @@ fn hs2_fg7zmf_actual_cli_snapshots_and_rejections_make_zero_provider_or_secret_r
     fs::write(home.join("keys.json"), "not a credential registry").unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
-    let config = ProviderConfigRegistry::new(f.store.root().join("providers.json"));
+    let config =
+        ProviderConfigRegistry::for_store_in(&f.root.path().join("home"), f.store.root()).unwrap();
     let connections = connections(&format!("http://{}", listener.local_addr().unwrap()));
     config.save(&connections).unwrap();
     let first = snapshot(&f, &["setup"]);
@@ -133,7 +134,8 @@ fn hs2_fg7zmf_actual_cli_snapshots_and_rejections_make_zero_provider_or_secret_r
 #[test]
 fn hs2_fg7zmf_preserved_foreign_records_cannot_replay_accept_handoff_recover_verify_or_finish() {
     let f = Fixture::new();
-    ProviderConfigRegistry::new(f.store.root().join("providers.json"))
+    ProviderConfigRegistry::for_store_in(&f.root.path().join("home"), f.store.root())
+        .unwrap()
         .save(&connections("http://127.0.0.1:9"))
         .unwrap();
     let mut state = snapshot(

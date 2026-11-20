@@ -3,7 +3,13 @@
 //! Provider-native ids stay strings at this boundary. The built-in git provider is
 //! the only adapter that translates them to ULIDs and delegates to [`crate::ops`].
 
+mod machine_config;
 mod source_observation;
+pub(crate) use machine_config::seed_before_untrack;
+pub use machine_config::{
+    MACHINE_STORE_CONFIG_DIR, PROVIDER_CONFIG_FILE, ProviderConfigSeed,
+    machine_provider_config_path, store_config_key,
+};
 pub use source_observation::ProviderConfigurationProof;
 
 use hotsheet_sync::LockExt;
@@ -144,6 +150,16 @@ impl ProviderConfigRegistry {
     // HS2-6H8ZY6: only the domain owner publishes, after its lock and validation.
     fn publish_unlocked(&self, connections: &[ProviderConnection]) -> Result<(), ProviderError> {
         validate_connections(connections)?;
+        let text = serde_json::to_string_pretty(&ProviderConnectionsFile {
+            connections: connections.to_vec(),
+        })
+        .expect("provider connection config is serializable");
+        self.publish_bytes_unlocked(format!("{text}\n").as_bytes())
+    }
+
+    /// Atomically replace the configuration file with `bytes`. The caller holds the
+    /// configuration lock.
+    fn publish_bytes_unlocked(&self, bytes: &[u8]) -> Result<(), ProviderError> {
         use std::io::Write;
 
         let parent = self
@@ -157,10 +173,6 @@ impl ProviderConfigRegistry {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(StoreError::Io(error).into()),
         };
-        let text = serde_json::to_string_pretty(&ProviderConnectionsFile {
-            connections: connections.to_vec(),
-        })
-        .expect("provider connection config is serializable");
         // HS2-GBSPP8: Create/Modify can wake readers before fs::write publishes any JSON.
         // Only expose a complete sibling on rename, preserving the existing config's mode.
         let mut builder = tempfile::Builder::new();
@@ -177,9 +189,7 @@ impl ProviderConfigRegistry {
                 .set_permissions(permissions)
                 .map_err(StoreError::Io)?;
         }
-        staged
-            .write_all(format!("{text}\n").as_bytes())
-            .map_err(StoreError::Io)?;
+        staged.write_all(bytes).map_err(StoreError::Io)?;
         staged.as_file().sync_all().map_err(StoreError::Io)?;
         staged
             .persist(&self.path)

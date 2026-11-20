@@ -30045,7 +30045,12 @@ async fn hs2_0he7e4_invalid_saved_site_rejects_both_creates_without_writes_and_c
             .status(),
         StatusCode::CREATED
     );
-    let providers = primary.path().join("providers.json");
+    // HS2-1M8E9D: the machine copy the server reads, seeded before the first request.
+    let providers =
+        hotsheet_ticketing::ProviderConfigRegistry::for_store_in(home.path(), primary.path())
+            .unwrap()
+            .path()
+            .to_path_buf();
     let call = |path: &'static str, body: serde_json::Value| {
         let app = app.clone();
         async move {
@@ -30184,8 +30189,8 @@ async fn hs2_6h8zy6_http_recovers_the_saved_pending_link_and_repeats() {
             vec![store_dir.path().into()],
         )
         .unwrap();
-    let providers =
-        hotsheet_ticketing::ProviderConfigRegistry::new(store_dir.path().join("providers.json"));
+    // HS2-1M8E9D: the machine copy the server reads.
+    let providers = state.provider_config();
     let connection = hotsheet_ticketing::ProviderConnection {
         id: "github-pending".into(),
         provider: "github".into(),
@@ -30246,9 +30251,13 @@ async fn hs2_6h8zy6_http_recovers_the_saved_pending_link_and_repeats() {
 #[tokio::test]
 async fn hs2_6h8zy6_http_endpoint_review_requires_exact_snapshot_and_explicit_choice() {
     let home = tempfile::tempdir().unwrap();
-    let (store_dir, state) = state();
-    let providers =
-        hotsheet_ticketing::ProviderConfigRegistry::new(store_dir.path().join("providers.json"));
+    let (_store_dir, state) = state();
+    let checkout_path = home.path().join("checkouts.json");
+    let state = state
+        .with_machine_home(home.path())
+        .with_checkout_registry(&checkout_path);
+    // HS2-1M8E9D: the machine copy the server reads, under its isolated home.
+    let providers = state.provider_config();
     providers
         .save(&[hotsheet_ticketing::ProviderConnection {
             id: "github-legacy".into(),
@@ -30263,10 +30272,7 @@ async fn hs2_6h8zy6_http_endpoint_review_requires_exact_snapshot_and_explicit_ch
             disabled: false,
         }])
         .unwrap();
-    let checkout_path = home.path().join("checkouts.json");
-    let app = app(state
-        .with_machine_home(home.path())
-        .with_checkout_registry(&checkout_path));
+    let app = app(state);
     let uri = "/provider-connections/github-legacy";
     let review = body_json(
         app.clone()

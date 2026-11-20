@@ -125,9 +125,11 @@ impl Coordinator {
         };
         live_claims.sort_by_key(|claim| claim.ticket.qualified());
         live_workers.retain(|worker| !live_claims.iter().any(|claim| &claim.worker == worker));
-        let connections =
-            hotsheet_ticketing::ProviderConfigRegistry::new(self.source.join("providers.json"))
-                .load()?;
+        let connections = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+            &self.registry_home,
+            &self.source,
+        )?
+        .load()?;
         let disabled: std::collections::HashSet<_> = connections
             .iter()
             .filter(|s| s.disabled)

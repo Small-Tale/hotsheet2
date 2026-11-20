@@ -11,7 +11,6 @@ use crate::routes::providers::provider_transfer_error;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use hotsheet_ticketing::ProviderConfigRegistry;
 use hotsheet_ticketing::checkout_removal::{CheckoutRemoval, remove_checkout};
 use hotsheet_ticketing::checkouts::CheckoutError;
 use hotsheet_ticketing::connection_removal::ConnectionRemovalError;
@@ -48,7 +47,7 @@ pub(crate) async fn remove_checkout_route(
             ));
         }
         let report = remove_checkout(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             &state.checkout_registry,
             &reference,
             params.dry_run,

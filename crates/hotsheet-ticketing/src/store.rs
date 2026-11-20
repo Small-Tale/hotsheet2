@@ -42,19 +42,30 @@ pub(crate) const PROVIDER_CONFIG_LOCK_FILE: &str = "providers.json.lock";
 /// configuration publication): a dot-file ending in `.tmp` that exists only between the
 /// write and the rename, or after a crash in that window (HS2-457FGS).
 const STAGED_WRITE_PATTERN: &str = ".*.tmp";
+/// The store-root provider configuration that older clients kept and synced. Provider
+/// configuration is per machine now (HS2-1M8E9D, [`crate::PROVIDER_CONFIG_FILE`]); the
+/// legacy working file stays on disk as a seed and a rollback snapshot, untracked.
+pub(crate) const LEGACY_PROVIDER_CONFIG_FILE: &str = crate::provider::PROVIDER_CONFIG_FILE;
 /// Every pattern the managed store `.gitignore` carries: host metadata, lasting
-/// machine-local locks, and staged atomic writes. None of them is ticket data.
-pub(crate) const MANAGED_IGNORES: [&str; 4] = [
+/// machine-local locks, staged atomic writes, and the legacy per-machine provider
+/// configuration. None of them is ticket data.
+pub(crate) const MANAGED_IGNORES: [&str; 5] = [
     FINDER_METADATA_FILE,
     NOTE_MUTATION_LOCK_FILE,
     PROVIDER_CONFIG_LOCK_FILE,
     STAGED_WRITE_PATTERN,
+    LEGACY_PROVIDER_CONFIG_FILE,
 ];
-/// Lasting machine-local lock files at the store root that an older client may already
-/// have committed. Sync and repository-wide commits remove them from the index while
-/// keeping the working file, so a lock holder's inode is never replaced (HS2-457FGS).
-pub(crate) const LOCAL_ONLY_ROOT_FILES: [&str; 2] =
-    [NOTE_MUTATION_LOCK_FILE, PROVIDER_CONFIG_LOCK_FILE];
+/// Machine-local files at the store root that an older client may already have
+/// committed: the lasting locks (HS2-457FGS) and the legacy provider configuration
+/// (HS2-1M8E9D). Sync and repository-wide commits remove them from the index while
+/// keeping the working file, so a lock holder's inode is never replaced and the legacy
+/// configuration stays available as a seed.
+pub(crate) const LOCAL_ONLY_ROOT_FILES: [&str; 3] = [
+    NOTE_MUTATION_LOCK_FILE,
+    PROVIDER_CONFIG_LOCK_FILE,
+    LEGACY_PROVIDER_CONFIG_FILE,
+];
 
 struct AttachmentWriteOptions {
     metadata: hotsheet_model::AttachmentMetadata,
@@ -3905,6 +3916,8 @@ mod tests {
         for path in [
             PROVIDER_CONFIG_LOCK_FILE,
             NOTE_MUTATION_LOCK_FILE,
+            // HS2-1M8E9D: provider configuration is per machine.
+            LEGACY_PROVIDER_CONFIG_FILE,
             ".providers-a1B2c3.tmp",
             ".hotsheet-store.json.41.0.tmp",
             "tickets/.01ARZ3NDEKTSV4RRFFQ69G5FAV.md.41.1.tmp",
@@ -3912,7 +3925,6 @@ mod tests {
             assert!(ignored(path), "{path} should be ignored");
         }
         for path in [
-            "providers.json",
             "hotsheet-store.json",
             "tickets/01ARZ3NDEKTSV4RRFFQ69G5FAV.md",
             "attachments/report.tmp",
@@ -3953,9 +3965,16 @@ mod tests {
                 .lines()
                 .any(|path| path == PROVIDER_CONFIG_LOCK_FILE)
         );
-        assert!(tracked.lines().any(|path| path == "providers.json"));
+        // HS2-1M8E9D: the legacy provider configuration leaves the index too, and its
+        // working file stays as this machine's seed.
+        assert!(
+            !tracked
+                .lines()
+                .any(|path| path == LEGACY_PROVIDER_CONFIG_FILE)
+        );
         assert!(tracked.lines().any(|path| path.ends_with(".md")));
         assert!(dir.path().join(PROVIDER_CONFIG_LOCK_FILE).is_file());
+        assert!(dir.path().join(LEGACY_PROVIDER_CONFIG_FILE).is_file());
         assert!(
             git_stdout(dir.path(), &["status", "--porcelain"])
                 .unwrap()

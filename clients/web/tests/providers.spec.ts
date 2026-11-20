@@ -41315,7 +41315,11 @@ test('HS2-WV6QCR saved-account form persists its API prefix and reads through th
     expect(created?.settings.api_base).toBe(endpoint);
     const connections = await actual.request<import('../src/api').ProviderConnection[]>('/provider-connections');
     expect(connections.find((item) => item.id === created?.id)?.settings.api_base).toBe(endpoint);
-    const persisted = JSON.parse(readFileSync(join(actual.store, 'providers.json'), 'utf8')) as {
+    // HS2-1M8E9D: provider configuration is this machine's copy, keyed by the store identity.
+    const { instanceId } = JSON.parse(readFileSync(join(actual.store, 'hotsheet-store.json'), 'utf8')) as {
+      instanceId: string;
+    };
+    const persisted = JSON.parse(readFileSync(join(actual.home, 'stores', instanceId, 'providers.json'), 'utf8')) as {
       connections: import('../src/api').ProviderConnection[];
     };
     expect(persisted.connections.find((item) => item.id === created?.id)?.settings.api_base).toBe(endpoint);

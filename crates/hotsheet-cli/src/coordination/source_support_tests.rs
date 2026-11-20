@@ -145,7 +145,7 @@ fn hs2_fg7zmf_additional_git_paths_are_described_without_reading_their_tickets()
 fn hs2_fg7zmf_snapshot_metadata_is_additive_and_never_changes_state_or_covers_sources() {
     let (_root, c) = super::tests::fixture();
     let connection = connection("source", "github");
-    let config = ProviderConfigRegistry::new(c.source.join("providers.json"));
+    let config = ProviderConfigRegistry::for_store_in(&c.registry_home, &c.source).unwrap();
     config.save(std::slice::from_ref(&connection)).unwrap();
     let bytes = fs::read(c.directory.join("state.json")).unwrap();
     let first = c.snapshot(1_800_000_000).unwrap();

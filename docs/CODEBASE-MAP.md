@@ -662,7 +662,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/phase_timing.rs    #   started-phase spans from activity notes, started_phase_since, per-store median testing-phase estimate (HS2-YDGM04)
       src/phase_report.rs    #   phase-duration report: per-ticket wall vs. live-claim time per phase (claim_history intervals), medians/percentiles over a completion range; CLI `phase-report`, completion nudge (HS2-JS7E61); shared bound parsing and reminder for `GET /phase-report`, `/checkouts/{ref}/phase-report`, MCP `hotsheet_phase_report`, and MCP completion `warnings` (HS2-8N7QZ2)
       src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/live-expiry renew/fenced-attempt renew/release/copy_ticket/move_ticket/assign/add_note_with_metadata/edit_note_with_metadata (set/keep/clear confidence, HS2-CY4CWC)/latest_confidence — the one op impl (CLI+server+MCP); Started phases and final-testing claim-next exclusion; TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
-      src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry (atomic complete config publication with preserved permissions, HS2-GBSPP8) + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
+      src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry (atomic complete config publication with preserved permissions, HS2-GBSPP8) + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH); `provider/machine_config.rs` resolves the per-machine `${HOTSHEET_HOME}/stores/<instanceId>/providers.json` and seeds it once from the legacy store file or history (HS2-1M8E9D)
       src/advisory_claim.rs #   provider-neutral best-effort claim event/projection, expiry skew, conflict and release tombstones (HS2-BPKM76)
       src/advisory_claim_v2.rs #   timestamped v2 operation IDs, 24-hour horizon and 60-second skew validation (HS2-0QEPRW)
       src/advisory_claim_ledger.rs #   bounded machine-local SQLite provisional Jira claim admission and replay states (HS2-BPKM76)
@@ -1094,6 +1094,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   bundle origins before connection/link writes; server `routes/providers/mod.rs` propagates
   strict metadata inference through both create routes, retaining explicit endpoint priority.
   Origin/account unit, CLI provider-read, and server source-create regressions cover this path.
+- **Provider configuration (HS2-1M8E9D):** external connections live per machine in
+  `${HOTSHEET_HOME}/stores/<instanceId>/providers.json`, resolved only through
+  `ProviderConfigRegistry::for_store[_in]` (server: `AppState::provider_config`); the legacy
+  store-root file is ignored, untracked by sync, and kept as a seed ([02](02-ticket-storage.md) §2.11.1).
 - **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` is version-guarded (legacy
   unversioned files remain readable) and maps readable path-derived
   checkout ids to optional repository identities and any number of ticket stores.

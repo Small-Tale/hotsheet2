@@ -3,7 +3,7 @@ use super::*;
 use hotsheet_ticketing::github_endpoint::{
     Endpoint, EndpointError, EndpointRegistry, Intent, Link, LinkObserver, Observation, Request,
 };
-use hotsheet_ticketing::{KeyRegistry, OsKeychain, StoreMetadata};
+use hotsheet_ticketing::{KeyRegistry, OsKeychain, ProviderConfigRegistry, StoreMetadata};
 use std::{
     path::Path,
     process::{Child, Command, Stdio},
@@ -233,7 +233,8 @@ fn hs2_6h8zy6_owned_read_admission_child() {
     hotsheet_aitools::enable_test_permission_vault();
     hotsheet_ticketing::secrets::enable_test_credentials().unwrap();
     let store = init_store(&home.join("store"), "HS");
-    let config = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    // HS2-1M8E9D: the machine copy the state reads, under the isolated home.
+    let config = ProviderConfigRegistry::for_store_in(&home, store.root()).unwrap();
     let keys = KeyRegistry::new(&home, OsKeychain);
     keys.set(ACCOUNT, "synthetic-read-token").unwrap();
     keys.record_site(ACCOUNT, "https://github.com").unwrap();

@@ -84,7 +84,8 @@ use hotsheet_model::{Status, Timestamp};
 use hotsheet_ticketing::advisory_claim_ledger::AdvisoryClaimLedger;
 use hotsheet_ticketing::provider_outbox::{OutboxAdmission, OutboxError, ProviderOutbox};
 use hotsheet_ticketing::{
-    FsStore, KeyRegistry, OsKeychain, ProviderPatch, ProviderRegistry, Settings,
+    FsStore, KeyRegistry, OsKeychain, ProviderConfigRegistry, ProviderPatch, ProviderRegistry,
+    Settings,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -957,6 +958,24 @@ impl AppState {
     /// The machine-local home this state reads and writes under.
     pub fn machine_home(&self) -> &std::path::Path {
         &self.machine_home
+    }
+
+    /// This machine's provider configuration for the primary store (HS2-1M8E9D):
+    /// `<machine home>/stores/<instance id>/providers.json`, seeded once from the store's
+    /// legacy root file. A failed seed is logged; the registry still names the machine
+    /// copy, never the store file that sync used to share.
+    pub fn provider_config(&self) -> ProviderConfigRegistry {
+        let key = self
+            .primary_instance_id
+            .clone()
+            .unwrap_or_else(|_| hotsheet_ticketing::git_connection_id(&self.store));
+        let registry = ProviderConfigRegistry::new(
+            hotsheet_ticketing::machine_provider_config_path(&self.machine_home, &key),
+        );
+        if let Err(error) = registry.seed_from_store(self.store.root()) {
+            tracing::warn!(%error, "providers: could not seed this machine's configuration");
+        }
+        registry
     }
 
     /// The instance-file / index-writer-lock registry under [`Self::machine_home`].

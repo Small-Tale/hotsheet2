@@ -893,8 +893,15 @@ fn prune_abandoned_checkouts(store_root: &std::path::Path) {
     let checkouts = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
-    let providers =
-        hotsheet_ticketing::ProviderConfigRegistry::new(store_root.join("providers.json"));
+    // HS2-1M8E9D: this machine's configuration only. The cleanup removes records no
+    // checkout of *this* machine links, which must never reach another machine.
+    let providers = match hotsheet_ticketing::ProviderConfigRegistry::for_store(store_root) {
+        Ok(providers) => providers,
+        Err(error) => {
+            tracing::warn!(%error, "checkouts: could not open this machine's provider configuration");
+            return;
+        }
+    };
     match hotsheet_ticketing::checkout_removal::prune_abandoned_temporary(
         &providers, &checkouts, false,
     ) {

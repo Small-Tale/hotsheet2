@@ -868,7 +868,9 @@ fn hs2_76vmyg_explicit_recovery_and_serial_integration_preserve_old_artifacts() 
 fn hs2_76vmyg_additional_enabled_sources_prevent_false_drained() {
     let (_root, c) = fixture();
     register(&c, Role::Integrator, "i", "generation-1", NOW);
-    let registry = hotsheet_ticketing::ProviderConfigRegistry::new(c.source.join("providers.json"));
+    let registry =
+        hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&c.registry_home, &c.source)
+            .unwrap();
     let mut source = hotsheet_ticketing::ProviderConnection {
         id: "other-source".into(),
         provider: "github".into(),

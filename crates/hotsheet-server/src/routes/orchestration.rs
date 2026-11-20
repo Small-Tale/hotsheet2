@@ -11,7 +11,7 @@ use hotsheet_cli::orchestration::{
     WatchState, error_status, request_cleanup_now,
 };
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::{ProviderConfigRegistry, orchestration::OrchestrationError};
+use hotsheet_ticketing::orchestration::OrchestrationError;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -56,7 +56,7 @@ pub(super) fn runtime(
     OrchestrationRuntime::live(
         state.machine_home(),
         state.checkout_registry.clone(),
-        ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+        state.provider_config(),
     )
     .map(|runtime| {
         runtime

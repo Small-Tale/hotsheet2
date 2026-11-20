@@ -1188,7 +1188,7 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 .map(|opened| opened.root().to_path_buf())
                 .unwrap_or_else(|_| store.to_path_buf());
             let checkout = registry.add_registered_source(
-                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &ProviderConfigRegistry::for_store(&store_root)?,
                 &reference,
                 source,
                 default,
@@ -1206,7 +1206,7 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 .map(|opened| opened.root().to_path_buf())
                 .unwrap_or_else(|_| store.to_path_buf());
             let report = hotsheet_ticketing::connection_removal::detach_source(
-                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &ProviderConfigRegistry::for_store(&store_root)?,
                 &registry,
                 &reference,
                 &connection_id,
@@ -1333,7 +1333,7 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 .map(|opened| opened.root().to_path_buf())
                 .unwrap_or_else(|_| store.to_path_buf());
             let checkout = registry.set_registered_default_source(
-                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &ProviderConfigRegistry::for_store(&store_root)?,
                 &reference,
                 selected,
             )?;

@@ -72,7 +72,7 @@ fn remove_one(
                 .map(|opened| opened.root().to_path_buf())
                 .unwrap_or_else(|_| store.to_path_buf());
             remove_checkout(
-                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &ProviderConfigRegistry::for_store(&store_root)?,
                 registry,
                 reference,
                 dry_run,

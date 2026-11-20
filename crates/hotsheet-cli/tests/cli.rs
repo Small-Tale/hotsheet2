@@ -12451,7 +12451,7 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
     };
     run(&["init"]).assert().success();
     std::fs::write(
-        dir.path().join("providers.json"),
+        machine_providers(home.path(), dir.path()),
         r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","default":true,"settings":{"credential":{"secret":"cli-user-pat"}}}]}"#,
     )
     .unwrap();
@@ -12482,7 +12482,7 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
     assert_eq!(report["unlinked_checkouts"].as_array().unwrap().len(), 1);
     // Accounts are machine-wide: removing a source never signs out (HS2-SM9PM8).
     assert_eq!(report["kept_credential"], "cli-user-pat");
-    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    let providers = std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap();
     assert!(!providers.contains("github-main"), "{providers}");
     let checkout = run(&["checkout", "resolve", "linked"])
         .assert()
@@ -12738,7 +12738,7 @@ fn project_owned_sources_and_accounts_have_headless_parity() {
     };
     run(&["init"]).assert().success();
     std::fs::write(
-        dir.path().join("providers.json"),
+        machine_providers(home.path(), dir.path()),
         r#"{"connections":[
             {"id":"github-acme-shared","provider":"github","locator":"acme/shared","name":"Shared","settings":{"credential":{"secret":"cli-team-pat"}}},
             {"id":"github-acme-old","provider":"github","locator":"acme/old","name":"Old","settings":{"credential":{"secret":"cli-team-pat"}}}
@@ -12815,7 +12815,7 @@ fn project_owned_sources_and_accounts_have_headless_parity() {
     .clone();
     let report: serde_json::Value = serde_json::from_slice(&report).unwrap();
     assert_eq!(report["removed_connection"], true, "{report}");
-    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    let providers = std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap();
     assert!(!providers.contains("github-acme-shared"), "{providers}");
     assert!(providers.contains("github-acme-old"), "{providers}");
     run(&[
@@ -12867,9 +12867,10 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
         .assert()
         .success()
         .stdout(predicate::str::contains("github-acme-repo"));
-    let file: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
-            .unwrap();
+    let file: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap(),
+    )
+    .unwrap();
     let connections = file["connections"].as_array().unwrap();
     assert_eq!(connections.len(), 1);
     assert_eq!(connections[0]["id"], "github-acme-repo");
@@ -12895,9 +12896,10 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
     ])
     .assert()
     .success();
-    let file: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
-            .unwrap();
+    let file: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap(),
+    )
+    .unwrap();
     assert_eq!(file["connections"].as_array().unwrap().len(), 1);
     assert_eq!(file["connections"][0]["name"], "Product issues");
     run(&["providers"])
@@ -12928,9 +12930,10 @@ fn github_connect_creates_and_links_one_connection_idempotently() {
     .assert()
     .failure()
     .stderr(predicate::str::contains("cannot be retargeted"));
-    let file: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.path().join("providers.json")).unwrap())
-            .unwrap();
+    let file: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap(),
+    )
+    .unwrap();
     assert_eq!(file["connections"][0]["name"], "Updated issues");
     assert_eq!(file["connections"][0]["disabled"], true);
     assert_eq!(file["connections"][0]["locator"], "acme/repo");
@@ -12970,7 +12973,7 @@ fn hs2_6h8zy6_github_recover_resumes_and_compensates_saved_pending_links() {
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.path().join("checkouts.json"));
     let checkout = checkouts.resolve("linked").unwrap();
     let providers =
-        hotsheet_ticketing::ProviderConfigRegistry::new(dir.path().join("providers.json"));
+        hotsheet_ticketing::ProviderConfigRegistry::new(machine_providers(home.path(), dir.path()));
     for id in ["github-resume", "github-compensate"] {
         EndpointRegistry::new(&providers)
             .apply(
@@ -13086,7 +13089,7 @@ fn hs2_0he7e4_github_connect_normalizes_saved_origins_and_preserves_precedence()
         ];
         run(&connect, &raw).assert().success();
         run(&connect, &raw).assert().success();
-        let providers = dir.path().join("providers.json");
+        let providers = machine_providers(home.path(), dir.path());
         let mut document: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&providers).unwrap()).unwrap();
         assert_eq!(document["connections"].as_array().unwrap().len(), 1);
@@ -13351,7 +13354,7 @@ fn provider_disable_blocks_provider_access_until_enabled() {
     };
     run(&["init"]).assert().success();
     std::fs::write(
-        dir.path().join("providers.json"),
+        machine_providers(home.path(), dir.path()),
         r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-github-fixture"}}}]}"#,
     )
     .unwrap();
@@ -13374,7 +13377,7 @@ fn provider_disable_blocks_provider_access_until_enabled() {
         .assert()
         .success()
         .stdout(predicate::str::contains("is enabled"));
-    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    let providers = std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap();
     assert!(!providers.contains("disabled"), "{providers}");
     run(&["providers"])
         .assert()
@@ -13902,7 +13905,7 @@ fn github_connect_configures_the_attachment_repository_headlessly() {
     };
     let connection = || -> serde_json::Value {
         let file: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(dir.path().join("providers.json")).unwrap(),
+            &std::fs::read_to_string(machine_providers(home.path(), dir.path())).unwrap(),
         )
         .unwrap();
         file["connections"][0].clone()
@@ -14411,9 +14414,9 @@ fn fake_provider_api(body: &'static str) -> (String, std::sync::mpsc::Receiver<S
     (origin, receiver)
 }
 
-fn connection_records(store: &std::path::Path) -> Vec<serde_json::Value> {
+fn connection_records(home: &std::path::Path, store: &std::path::Path) -> Vec<serde_json::Value> {
     let file: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(store.join("providers.json")).unwrap())
+        serde_json::from_str(&std::fs::read_to_string(machine_providers(home, store)).unwrap())
             .unwrap();
     file["connections"].as_array().unwrap().clone()
 }
@@ -14460,7 +14463,7 @@ fn provider_connect_creates_a_gitlab_source_idempotently_and_reuses_its_account(
             .success()
             .stdout(predicate::str::contains("as 'gitlab-acme-app'"));
     }
-    let records = connection_records(dir.path());
+    let records = connection_records(home.path(), dir.path());
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(records[0]["provider"], "gitlab");
     assert_eq!(records[0]["name"], "GitLab Issues");
@@ -14495,7 +14498,7 @@ fn provider_connect_creates_a_gitlab_source_idempotently_and_reuses_its_account(
     ])
     .assert()
     .success();
-    let records = connection_records(dir.path());
+    let records = connection_records(home.path(), dir.path());
     assert_eq!(records.len(), 2);
     let other = records
         .iter()
@@ -14570,7 +14573,7 @@ fn provider_connect_creates_a_gitlab_source_idempotently_and_reuses_its_account(
             .failure()
             .stderr(predicate::str::contains(message));
     }
-    assert_eq!(connection_records(dir.path()).len(), 2);
+    assert_eq!(connection_records(home.path(), dir.path()).len(), 2);
     run(&["provider-connect", "gitlab", "acme/x"])
         .assert()
         .failure()
@@ -14631,7 +14634,7 @@ fn provider_connect_creates_a_jira_source_and_fills_site_and_email_from_its_acco
             .success()
             .stdout(predicate::str::contains("as 'jira-app'"));
     }
-    let records = connection_records(dir.path());
+    let records = connection_records(home.path(), dir.path());
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(records[0]["name"], "App tracker");
     assert_eq!(records[0]["settings"]["base_url"], site.as_str());
@@ -14645,14 +14648,17 @@ fn provider_connect_creates_a_jira_source_and_fills_site_and_email_from_its_acco
     assert!(request.contains("project = APP"), "{request}");
     // A reconnect without --name keeps the name; another source reuses the account.
     run(&connect[..connect.len() - 2]).assert().success();
-    assert_eq!(connection_records(dir.path())[0]["name"], "App tracker");
+    assert_eq!(
+        connection_records(home.path(), dir.path())[0]["name"],
+        "App tracker"
+    );
     run(&["provider-connect", "jira", "OPS", "--account", "cli-jira"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
             "Connected Jira Cloud 'OPS' as 'jira-ops'",
         ));
-    let records = connection_records(dir.path());
+    let records = connection_records(home.path(), dir.path());
     let ops = records
         .iter()
         .find(|record| record["locator"] == "OPS")
@@ -15434,4 +15440,13 @@ fn hs2_shh7ww_actual_cli_declares_lists_and_separates_sites_of_one_project() {
     assert_eq!(version(), 1);
     let sites = hs2_4j6v46_value(&home, &source, &owner.id, &["sites"]);
     assert_eq!(sites["projects"].as_array().unwrap().len(), 2);
+}
+
+/// HS2-1M8E9D: this machine's provider configuration file for `store` under `home`, the
+/// file the CLI reads and writes, seeded once like the CLI's own first resolve.
+fn machine_providers(home: &std::path::Path, store: &std::path::Path) -> std::path::PathBuf {
+    hotsheet_ticketing::ProviderConfigRegistry::for_store_in(home, store)
+        .unwrap()
+        .path()
+        .to_path_buf()
 }

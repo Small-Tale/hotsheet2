@@ -144,8 +144,10 @@ async fn hs2_30xypy_an_external_provider_target_is_queued_up_next_and_never_clai
     // orchestration runtime opens that connection through the loopback.
     let c_store = fleet.root.path().join("c-issues");
     FsStore::init_git(&c_store, &StoreMetadata::new("EXT")).unwrap();
+    // HS2-1M8E9D: the peer machine's own copy, in the peer's home.
     let providers =
-        hotsheet_ticketing::ProviderConfigRegistry::new(fleet.b_store.join("providers.json"));
+        hotsheet_ticketing::ProviderConfigRegistry::for_store_in(&fleet.peer_home, &fleet.b_store)
+            .unwrap();
     providers
         .save(&[ProviderConnection {
             id: EXTERNAL.into(),

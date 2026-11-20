@@ -21,7 +21,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use hotsheet_model::Ulid;
 use hotsheet_sync::LockExt;
-use hotsheet_ticketing::{FsStore, ProviderConfigRegistry, TicketQuery};
+use hotsheet_ticketing::{FsStore, TicketQuery};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
 use std::sync::atomic::Ordering;
@@ -270,7 +270,7 @@ pub(crate) async fn open_project(
     let checkout = state
         .checkout_registry
         .open_registered_sources(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             root,
             body.alias.as_deref(),
             body.repository,
@@ -352,7 +352,7 @@ pub(crate) async fn register_checkout(
     let entry = state
         .checkout_registry
         .register_registered_sources(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             FsPath::new(&body.root),
             body.alias.as_deref(),
             body.repository,
@@ -431,7 +431,7 @@ pub(crate) async fn add_checkout_source(
     let checkout = state
         .checkout_registry
         .add_registered_source(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             &reference,
             source,
             body.make_default,
@@ -449,7 +449,7 @@ pub(crate) async fn remove_checkout_source(
 ) -> Result<Json<hotsheet_ticketing::connection_removal::SourceDetach>, ApiError> {
     tokio::task::spawn_blocking(move || {
         let detached = hotsheet_ticketing::connection_removal::detach_source(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             &state.checkout_registry,
             &reference,
             &connection_id,
@@ -621,7 +621,7 @@ pub(crate) async fn set_checkout_default_source(
     let checkout = state
         .checkout_registry
         .set_registered_default_source(
-            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.provider_config(),
             &reference,
             body.connection_id.as_deref(),
         )

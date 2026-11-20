@@ -10,9 +10,11 @@ use super::contract::{CoverageGap, CoverageGapReason, SourceConfiguration, Sourc
 impl super::Coordinator {
     /// Explain an existing foreign-source rejection without resolving its tickets or secrets.
     pub fn unsupported_source(&self, connection_id: &str) -> anyhow::Result<String> {
-        let connections =
-            hotsheet_ticketing::ProviderConfigRegistry::new(self.source.join("providers.json"))
-                .load()?;
+        let connections = hotsheet_ticketing::ProviderConfigRegistry::for_store_in(
+            &self.registry_home,
+            &self.source,
+        )?
+        .load()?;
         let checkouts: Vec<_> = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
             hotsheet_plugins::hotsheet_home().join("checkouts.json"),
         )
