@@ -219,12 +219,12 @@ mod tests {
             "features.ai-chat" => Some(json!("yes")),
             _ => None,
         });
-        assert_eq!(view.effective["drive"], true);
+        assert!(view.effective["drive"]);
         assert_eq!(view.configured["drive"], Some(true));
-        assert_eq!(view.effective["standby"], false);
-        assert_eq!(view.effective["ai-chat"], false);
+        assert!(!view.effective["standby"]);
+        assert!(!view.effective["ai-chat"]);
         assert_eq!(view.configured["ai-chat"], None);
-        assert_eq!(view.effective["announcer"], true);
+        assert!(view.effective["announcer"]);
         assert_eq!(view.defaults.len(), FEATURES.len());
         assert!(is_on(AUTO_GROUPING, Some(&json!(true))));
         assert!(!is_on(AUTO_GROUPING, None));
