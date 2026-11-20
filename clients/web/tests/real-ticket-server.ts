@@ -12,7 +12,6 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import { assertFixtureCli, assertFixtureServer } from '../scripts/test-fixture-capabilities.mjs';
-import { FEATURE_AREAS } from '../src/feature-areas';
 
 const execute = promisify(execFile);
 const fixtureCleanup = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
@@ -67,12 +66,24 @@ export interface RealTicketFixtureContext {
   cli: string;
 }
 
+/**
+ * Every registered feature id, read from the server registry (HS2-3GJZGG). The fixture runs under
+ * plain Node too (the owner harness), so it reads the source rather than importing client modules.
+ */
+async function registeredFeatureIds(): Promise<string[]> {
+  const rust = await readFile(new URL('../../../crates/hotsheet-ticketing/src/features.rs', import.meta.url), 'utf8');
+  const autoGrouping = /pub const AUTO_GROUPING: &str = "([^"]+)";/.exec(rust)?.[1] ?? 'auto-grouping';
+  return [
+    ...rust.replaceAll('feature(AUTO_GROUPING,', `feature("${autoGrouping}",`).matchAll(/feature\("([^"]+)",/g),
+  ].map((match) => match[1]);
+}
+
 /** Turn every feature area on in an isolated home's machine settings (HS2-3GJZGG). */
 async function enableAllFeatures(home: string): Promise<void> {
   const path = resolve(home, 'settings.json');
   await mkdir(home, { recursive: true });
   const current = existsSync(path) ? (JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>) : {};
-  for (const area of FEATURE_AREAS) current[`features.${area.id}`] = true;
+  for (const id of await registeredFeatureIds()) current[`features.${id}`] = true;
   await writeFile(path, `${JSON.stringify(current, null, 2)}\n`);
 }
 
