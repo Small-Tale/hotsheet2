@@ -1143,19 +1143,23 @@ mod tests {
         let ticket = store.list_tickets().unwrap().remove(0);
         let old = Timestamp::new("2026-01-01T00:00:00Z");
         let orphan_id = Ulid::new();
+        // HS2-CWAYQQ: Windows forbids line breaks and `>` in file names; the unusual-name
+        // rewrite stays covered on Unix by hs2_m0vtra_rewrites_paths_with_line_breaks_*.
+        let name = if cfg!(windows) {
+            "removed file.png"
+        } else {
+            "removed\n==>file.png"
+        };
         store
             .write_attachment(
                 &ticket.id,
                 orphan_id,
                 old.clone(),
-                "removed\n==>file.png",
+                name,
                 b"synthetic deleted attachment bytes",
             )
             .unwrap();
-        let path = format!(
-            "attachments/{}/{}/removed\n==>file.png",
-            ticket.id, orphan_id
-        );
+        let path = format!("attachments/{}/{}/{name}", ticket.id, orphan_id);
         let first_oid = git(store.root(), &["rev-parse", &format!("HEAD:{path}")]).unwrap();
         fs::write(store.root().join(&path), b"synthetic replacement bytes").unwrap();
         git_ok(store.root(), &["add", "--", &path]);
@@ -1325,6 +1329,9 @@ mod tests {
         .unwrap();
     }
 
+    // HS2-CWAYQQ: line breaks and `>` are not legal in Windows file names, so a Windows
+    // checkout can never hold these paths.
+    #[cfg(not(windows))]
     #[test]
     fn hs2_m0vtra_rewrites_paths_with_line_breaks_and_rename_markers() {
         let (dir, store, now) = fixture();

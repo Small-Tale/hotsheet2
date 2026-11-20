@@ -331,7 +331,9 @@ reference to the current directory. The read-only MCP tool `hotsheet_repository_
 server endpoint (HS2-R0131R).
 
 - **Git objects:** loose plus packed bytes from `git count-objects -v`. This is what a push
-  to GitHub carries.
+  to GitHub carries. Git for Windows reports apparent sizes in whole KiB, so a few small
+  objects can read as 0; when objects exist but their size is 0, the report sums the loose
+  object or pack file lengths instead (HS2-CWAYQQ).
 - **Attachments:** for each git ticket store, the on-disk `attachments/` payload. The walk
   stops after 200,000 directory entries and reports `truncated: true`, so `bytes` becomes a
   lower bound.

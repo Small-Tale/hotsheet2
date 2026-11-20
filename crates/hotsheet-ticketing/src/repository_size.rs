@@ -202,16 +202,89 @@ fn probe_git(path: &Path) -> GitProbe {
         .args(["count-objects", "-v"])
         .output()
     {
-        Ok(output) if output.status.success() => GitProbe::Measured {
-            toplevel,
-            size: parse_count_objects(&String::from_utf8_lossy(&output.stdout)),
-        },
+        Ok(output) if output.status.success() => {
+            let mut size = parse_count_objects(&String::from_utf8_lossy(&output.stdout));
+            if rounded_to_zero(&size)
+                && let Some(objects) = objects_dir(path)
+            {
+                measure_rounded_objects(&mut size, &objects, MAX_ATTACHMENT_ENTRIES);
+            }
+            GitProbe::Measured { toplevel, size }
+        }
         Ok(output) => GitProbe::Unavailable(format!(
             "Git could not count objects: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )),
         Err(error) => GitProbe::Unavailable(format!("Could not run Git: {error}")),
     }
+}
+
+/// Whether `count-objects` reported objects whose size rounded down to 0 KiB. Git for
+/// Windows has no `st_blocks`, so it sums apparent file lengths, and a few small loose
+/// objects (or a tiny pack) truncate to `size: 0` (HS2-CWAYQQ).
+fn rounded_to_zero(size: &GitObjectSize) -> bool {
+    (size.loose_objects > 0 && size.loose_bytes == 0) || (size.packs > 0 && size.packed_bytes == 0)
+}
+
+/// The repository's absolute object directory, or `None` when Git cannot name it.
+fn objects_dir(path: &Path) -> Option<PathBuf> {
+    let output = crate::git::command_in(path)
+        .args([
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "objects",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    (!text.is_empty()).then(|| PathBuf::from(text))
+}
+
+/// Replace a size that `count-objects` rounded to 0 with the summed byte lengths of the
+/// loose object files (`objects/xx/…`) or the pack files (`objects/pack/*.pack`), visiting
+/// at most `limit` entries each. Sizes Git reported as non-zero are kept as reported.
+fn measure_rounded_objects(size: &mut GitObjectSize, objects: &Path, limit: usize) {
+    if size.loose_objects > 0 && size.loose_bytes == 0 {
+        let mut visited = 0usize;
+        if let Ok(entries) = std::fs::read_dir(objects) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let is_fanout = name.len() == 2
+                    && name
+                        .to_str()
+                        .is_some_and(|name| name.bytes().all(|byte| byte.is_ascii_hexdigit()));
+                if !is_fanout {
+                    continue;
+                }
+                let remaining = limit.saturating_sub(visited);
+                let fanout = directory_size(&entry.path(), remaining);
+                visited =
+                    visited.saturating_add(usize::try_from(fanout.files).unwrap_or(usize::MAX));
+                size.loose_bytes = size.loose_bytes.saturating_add(fanout.bytes);
+                if fanout.truncated || visited >= limit {
+                    break;
+                }
+            }
+        }
+    }
+    if size.packs > 0
+        && size.packed_bytes == 0
+        && let Ok(entries) = std::fs::read_dir(objects.join("pack"))
+    {
+        for entry in entries.flatten().take(limit) {
+            if entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pack")
+                && let Ok(metadata) = entry.metadata()
+            {
+                size.packed_bytes = size.packed_bytes.saturating_add(metadata.len());
+            }
+        }
+    }
+    size.total_bytes = size.loose_bytes.saturating_add(size.packed_bytes);
 }
 
 /// Sum the regular files under `dir` without following symlinks, visiting at most
@@ -586,6 +659,67 @@ mod tests {
             parse_count_objects("junk\nsize: x\n"),
             GitObjectSize::default()
         );
+    }
+
+    #[test]
+    fn hs2_cwayqq_sizes_rounded_to_zero_kib_are_measured_from_object_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let objects = dir.path();
+        for (fanout, name, len) in [("ab", "cdef", 100usize), ("01", "2345", 50)] {
+            std::fs::create_dir_all(objects.join(fanout)).unwrap();
+            std::fs::write(objects.join(fanout).join(name), vec![b'x'; len]).unwrap();
+        }
+        std::fs::create_dir_all(objects.join("info")).unwrap();
+        std::fs::write(objects.join("info/packs"), vec![b'x'; 999]).unwrap();
+        std::fs::create_dir_all(objects.join("pack")).unwrap();
+        std::fs::write(objects.join("pack/pack-1.pack"), vec![b'x'; 300]).unwrap();
+        std::fs::write(objects.join("pack/pack-1.idx"), vec![b'x'; 77]).unwrap();
+
+        // Git for Windows truncates these small sizes to 0 KiB.
+        let mut size =
+            parse_count_objects("count: 2\nsize: 0\nin-pack: 1\npacks: 1\nsize-pack: 0\n");
+        assert!(rounded_to_zero(&size));
+        measure_rounded_objects(&mut size, objects, MAX_ATTACHMENT_ENTRIES);
+        assert_eq!(size.loose_bytes, 150);
+        assert_eq!(size.packed_bytes, 300);
+        assert_eq!(size.total_bytes, 450);
+        assert!(!rounded_to_zero(&size));
+
+        // A reported non-zero size is kept; only the rounded half is measured.
+        let mut size = parse_count_objects("count: 2\nsize: 8\npacks: 1\nsize-pack: 0\n");
+        measure_rounded_objects(&mut size, objects, MAX_ATTACHMENT_ENTRIES);
+        assert_eq!(size.loose_bytes, 8 * 1024);
+        assert_eq!(size.packed_bytes, 300);
+
+        // An empty repository is not rounded, and the walk honours its bound.
+        assert!(!rounded_to_zero(&parse_count_objects(
+            "count: 0\nsize: 0\npacks: 0\nsize-pack: 0\n"
+        )));
+        let mut size = parse_count_objects("count: 2\nsize: 0\n");
+        measure_rounded_objects(&mut size, objects, 1);
+        assert!(matches!(size.loose_bytes, 50 | 100), "{size:?}");
+    }
+
+    #[test]
+    fn hs2_cwayqq_a_small_repository_reports_nonzero_git_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            assert!(
+                crate::git::command_in(dir.path())
+                    .args(args)
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join("a.txt"), "synthetic").unwrap();
+        git(&["add", "a.txt"]);
+        let measured = git_object_size(dir.path()).unwrap();
+        assert_eq!(measured.loose_objects, 1);
+        assert!(measured.loose_bytes > 0 && measured.total_bytes > 0);
+        assert!(objects_dir(dir.path()).unwrap().is_absolute());
     }
 
     #[test]
