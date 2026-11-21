@@ -1,3 +1,4 @@
+import { Terminal } from '@xterm/xterm';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -41,6 +42,7 @@ import {
   terminalViewportClaimsSizing,
   terminalViewportScale,
   terminalViewportShouldAutoFocus,
+  terminalWindowsPty,
 } from './terminal-viewport';
 
 describe('terminal viewport protocol', () => {
@@ -89,6 +91,13 @@ describe('terminal viewport protocol', () => {
     expect(parseTerminalSizeMessage('{"pty_size":{"cols":80,"rows":24},"answered_by":7}')).toBeUndefined();
     expect(parseTerminalSizeMessage('terminal text')).toBeUndefined();
     expect(parseTerminalSizeMessage('{"pty_size":{"cols":0,"rows":40}}')).toBeUndefined();
+    // A Windows server names its ConPTY backend (HS2-X4RZA7).
+    const conpty = parseTerminalSizeMessage('{"pty_size":{"cols":45,"rows":60},"pty_backend":"conpty"}');
+    expect(conpty).toEqual({ pty_size: { cols: 45, rows: 60 }, pty_backend: 'conpty' });
+    expect(conpty && terminalWindowsPty(conpty)).toEqual({ backend: 'conpty' });
+    expect(terminalWindowsPty({ pty_size: { cols: 80, rows: 24 } })).toBeUndefined();
+    expect(terminalWindowsPty({ pty_size: { cols: 80, rows: 24 }, pty_backend: 'unix' })).toBeUndefined();
+    expect(parseTerminalSizeMessage('{"pty_size":{"cols":80,"rows":24},"pty_backend":1}')).toBeUndefined();
   });
   it('recognizes only the explicit replacement replay control', () => {
     expect(isTerminalReplacementReplay('{"terminal_replay":"replace"}')).toBe(true);
@@ -288,5 +297,44 @@ describe('terminal font family (HS2-4PBGKF)', () => {
     expect(faces.at(-1)).toBe('monospace');
     expect(faces.indexOf('"Cascadia Mono"')).toBe(faces.length - 2);
     expect(faces.slice(0, 3)).toEqual(['ui-monospace', 'SFMono-Regular', 'Menlo']);
+  });
+});
+
+describe('a ConPTY resize repaint (HS2-X4RZA7)', () => {
+  // Bytes captured from ConPTY on Windows 11 ARM64: 60 lines printed at 80x24, then the repaint that
+  // a resize to 45x60 produced. ConPTY repaints its old 24-row screen from the top row down.
+  const printed = `\u001b[2J\u001b[H${Array.from({ length: 60 }, (_, index) => `replay line ${String(index).padStart(5, '0')}\r\n`).join('')}REPLAY-READY\r\n`;
+  const repaint = [
+    '\u001b[?25l\u001b[8;60;45t\u001b[H',
+    ...Array.from({ length: 22 }, (_, index) => `replay line ${String(index + 38).padStart(5, '0')}\u001b[K\r\n`),
+    'REPLAY-READY\u001b[K\r\n',
+    '\u001b[K\r\n'.repeat(36),
+    '\u001b[K\u001b[24;1H\u001b[?25h',
+  ].join('');
+  const history = async (windowsPty?: { backend: 'conpty' }) => {
+    const terminal = new Terminal({ cols: 80, rows: 24, ...(windowsPty ? { windowsPty } : {}) });
+    const write = (data: string) =>
+      new Promise<void>((resolve) => {
+        terminal.write(data, resolve);
+      });
+    await write(printed);
+    terminal.resize(45, 60);
+    await write(repaint);
+    const buffer = terminal.buffer.active;
+    const lines = Array.from({ length: buffer.length }, (_, index) => buffer.getLine(index)?.translateToString(true));
+    terminal.dispose();
+    return lines.flatMap((line) => (line?.startsWith('replay line ') === true ? [Number(line.slice(12))] : []));
+  };
+
+  it('keeps every history line once when the viewer grows its rows the way ConPTY does', async () => {
+    expect(await history(terminalWindowsPty({ pty_size: { cols: 45, rows: 60 }, pty_backend: 'conpty' }))).toEqual(
+      Array.from({ length: 60 }, (_, index) => index),
+    );
+  });
+
+  it('loses the rows the repaint covers when the viewer pulls scrollback into its screen', async () => {
+    const lines = await history();
+    expect(lines).not.toContain(10);
+    expect(lines.length).toBeLessThan(60);
   });
 });

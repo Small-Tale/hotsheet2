@@ -200,6 +200,10 @@ struct SizeMsg<'a> {
     driven_by: Option<&'a str>,
     /// The one viewer whose emulator answers the program's terminal queries (HS2-0GZZHV).
     answered_by: Option<&'a str>,
+    /// `"conpty"` on Windows, so viewers grow rows the way ConPTY repaints (HS2-X4RZA7). Absent
+    /// for a Unix PTY.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pty_backend: Option<&'static str>,
 }
 #[derive(Serialize)]
 struct PtySizeMsg {
@@ -207,8 +211,8 @@ struct PtySizeMsg {
     rows: u16,
 }
 
-/// The `{pty_size, driven_by, answered_by}` text frame a viewer receives on attach and on every
-/// change of the size or of the query answerer.
+/// The `{pty_size, driven_by, answered_by, pty_backend?}` text frame a viewer receives on attach
+/// and on every change of the size or of the query answerer.
 fn terminal_size_message(decision: &hotsheet_terminals::Decision) -> Message {
     let msg = SizeMsg {
         pty_size: PtySizeMsg {
@@ -217,8 +221,9 @@ fn terminal_size_message(decision: &hotsheet_terminals::Decision) -> Message {
         },
         driven_by: decision.driven_by.as_deref(),
         answered_by: decision.answered_by.as_deref(),
+        pty_backend: hotsheet_terminals::PTY_BACKEND,
     };
-    // Serializing two integers and an optional string cannot fail.
+    // Serializing two integers and optional strings cannot fail.
     Message::Text(serde_json::to_string(&msg).unwrap_or_default().into())
 }
 
@@ -610,9 +615,33 @@ async fn broker_attach_loop(
 
 #[cfg(test)]
 mod terminal_text_tests {
-    use super::{TerminalText, classify_terminal_text, terminal_liveness_hello, terminal_pong};
+    use super::{
+        TerminalText, classify_terminal_text, terminal_liveness_hello, terminal_pong,
+        terminal_size_message,
+    };
     use crate::routes::terminals::replay::terminal_replay_control;
     use axum::extract::ws::Message;
+
+    /// HS2-X4RZA7: a Windows server names ConPTY in every size frame so viewers grow rows the way
+    /// its resize repaint does; a Unix server's frame is unchanged.
+    #[test]
+    fn size_frames_name_the_conpty_backend_only_on_windows() {
+        let decision = hotsheet_terminals::Decision {
+            cols: 120,
+            rows: 50,
+            driven_by: Some("viewer".into()),
+            answered_by: None,
+        };
+        let Message::Text(text) = terminal_size_message(&decision) else {
+            panic!("a text frame");
+        };
+        let expected = if cfg!(windows) {
+            r#"{"pty_size":{"cols":120,"rows":50},"driven_by":"viewer","answered_by":null,"pty_backend":"conpty"}"#
+        } else {
+            r#"{"pty_size":{"cols":120,"rows":50},"driven_by":"viewer","answered_by":null}"#
+        };
+        assert_eq!(text.as_str(), expected);
+    }
 
     #[test]
     fn malformed_resize_controls_are_dropped_instead_of_becoming_pty_input() {

@@ -109,6 +109,7 @@ import {
   terminalViewportClaimsSizing,
   type TerminalViewportPresentationDetail,
   terminalViewportScale,
+  terminalWindowsPty,
 } from './terminal-viewport';
 
 type OwnTerminalResource = (dispose: () => void) => void;
@@ -999,6 +1000,10 @@ function initializeTerminalViewport(
         const size = parseTerminalSizeMessage(frame.value);
         if (!size) return;
         serverSize = size.pty_size;
+        // Before the resize below, so a ConPTY terminal grows its rows the way ConPTY repaints.
+        const windowsPty = terminalWindowsPty(size);
+        if (windowsPty && terminal.options.windowsPty?.backend !== windowsPty.backend)
+          terminal.options.windowsPty = windowsPty;
         const drivenByViewer = size.driven_by === viewerId;
         const local = claimDimensions();
         resizeTerminalPreservingScroll(terminal, local.cols, local.rows);

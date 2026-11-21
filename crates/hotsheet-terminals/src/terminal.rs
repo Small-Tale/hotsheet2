@@ -564,6 +564,11 @@ fn pause_before_apply() {
     }
 }
 
+/// The pseudoterminal backend this build drives, as viewers name it (HS2-X4RZA7): Windows ConPTY
+/// repaints its own screen top-down after a resize, so a viewer must grow its rows the same way.
+/// `None` for a Unix PTY, which repaints nothing.
+pub const PTY_BACKEND: Option<&str> = if cfg!(windows) { Some("conpty") } else { None };
+
 /// The launcher-assigned session worker id variable (mirrors `hotsheet_aitools::WORKER_ID_ENV`).
 /// A terminal remembers it so a host that reattaches after a restart can still release the
 /// session's claims when the terminal ends (HS2-RXWXQ8).

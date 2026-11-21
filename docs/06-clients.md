@@ -4223,6 +4223,13 @@ temporary viewer over the same PTY.
 > out, plus the applied size right after each attach replay — HS2-7Y1BQ2, HS2-0GZZHV). The
 > client consumes those decisions through the credential-hiding local bridge described
 > below.
+>
+> A Windows server adds `pty_backend: "conpty"` to every decision (HS2-X4RZA7). ConPTY answers a
+> resize by repainting its screen from the top row down, so the viewer then sets xterm's
+> `windowsPty` option: when rows grow, xterm adds them at the bottom instead of pulling
+> scrollback into the screen, and the repaint rewrites the rows the viewer already shows. Without
+> it, the repaint overwrote the history lines a growing viewer had pulled down. A replay of
+> history printed before such a resize still loses those rows (HS2-8QY2ZX).
 
 Each rendered pane owns a stable random viewer id and one WebSocket attachment to the
 existing PTY; opening another pane or magnifying the terminal attaches another viewer and

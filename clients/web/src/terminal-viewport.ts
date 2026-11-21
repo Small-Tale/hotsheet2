@@ -12,6 +12,18 @@ export interface TerminalSizeMessage {
   driven_by?: string | null;
   /** The one viewer that answers the program's terminal queries (HS2-0GZZHV); absent from older servers. */
   answered_by?: string | null;
+  /** `conpty` from a Windows server (HS2-X4RZA7); absent for a Unix PTY and from older servers. */
+  pty_backend?: string;
+}
+
+/**
+ * The xterm `windowsPty` option a size frame asks for (HS2-X4RZA7). Windows ConPTY answers a resize
+ * by repainting its screen from the top row down. With the option, xterm also adds new rows at the
+ * bottom instead of pulling scrollback into the screen, so the repaint rewrites the rows it already
+ * shows and no history line is overwritten.
+ */
+export function terminalWindowsPty(size: TerminalSizeMessage): { backend: 'conpty' } | undefined {
+  return size.pty_backend === 'conpty' ? { backend: 'conpty' } : undefined;
 }
 
 export function terminalResizeClaim(
@@ -52,7 +64,8 @@ export function parseTerminalSizeMessage(value: string): TerminalSizeMessage | u
       cols > 0 &&
       rows > 0 &&
       (parsed.driven_by === undefined || parsed.driven_by === null || typeof parsed.driven_by === 'string') &&
-      (parsed.answered_by === undefined || parsed.answered_by === null || typeof parsed.answered_by === 'string')
+      (parsed.answered_by === undefined || parsed.answered_by === null || typeof parsed.answered_by === 'string') &&
+      (parsed.pty_backend === undefined || typeof parsed.pty_backend === 'string')
     )
       return parsed as unknown as TerminalSizeMessage;
   } catch {
