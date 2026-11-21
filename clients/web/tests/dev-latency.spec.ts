@@ -15,6 +15,8 @@ interface Report {
   message: string;
 }
 
+const DELAYED_TRACE = 'trace-delayed';
+
 const reports = (page: Page) =>
   page.evaluate(
     () =>
@@ -63,9 +65,14 @@ for (const viewport of [
       await page.route(`**${apiPath}/**`, async (route) => {
         const incoming = new URL(route.request().url()),
           path = incoming.pathname.slice(apiPath.length);
-        // Simulate a backed-up server for the ticket's detail reads once the test arms it.
-        if (slowTicket && route.request().method() === 'GET' && path.includes(slowTicket) && !path.includes('/ws/'))
-          await new Promise((resolve) => setTimeout(resolve, 400));
+        // Simulate a backed-up server for the ticket's detail reads once the test arms it. A delayed
+        // request carries its own trace id so the test reads its report, not another slow one (HS2-K05KZ5).
+        const delayed =
+          slowTicket !== undefined &&
+          route.request().method() === 'GET' &&
+          path.includes(slowTicket) &&
+          !path.includes('/ws/');
+        if (delayed) await new Promise((resolve) => setTimeout(resolve, 400));
         try {
           const response = await proxyFetch(route, {
             url: `${server.url}${path}${incoming.search}`,
@@ -77,7 +84,7 @@ for (const viewport of [
             headers: {
               ...response.headers(),
               'server-timing': `${response.headers()['server-timing'] ?? 'handler;dur=1'}, bridge;dur=5, upstream;dur=3`,
-              'x-hotsheet-trace-id': 'trace-fixture',
+              'x-hotsheet-trace-id': delayed ? DELAYED_TRACE : 'trace-fixture',
             },
           });
         } catch {
@@ -104,23 +111,29 @@ for (const viewport of [
       expect(interaction.label).toContain('click');
       expect(interaction.reasons).toContain('peak');
       expect(interaction.duration_ms).toBeGreaterThan(400);
-      const slowRequest = interaction.requests?.find((request) => request.duration_ms >= 400);
-      expect(slowRequest?.label).toMatch(/^GET \/.*\{id\}/);
+      // Another request may also be slow under load; read the delayed ticket read by its route (HS2-K05KZ5).
+      const slowRequest = interaction.requests?.find(
+        (request) => request.duration_ms >= 400 && /^GET \/.*\{id\}/.test(request.label),
+      );
+      expect(slowRequest).toBeDefined();
       // The server itself was fast: Server-Timing shows the delay was not in the handler.
       expect(slowRequest?.server_ms).toBeLessThan(400);
       expect(interaction.message).toContain('slowest request GET');
-      // The slow request is flagged on its own too, with ids templated out.
-      await expect
-        .poll(async () => (await reports(page)).slice(before).find((report) => report.kind === 'request'))
-        .toBeTruthy();
-      const request = (await reports(page)).slice(before).find((report) => report.kind === 'request')!;
+      // The slow request is flagged on its own too, with ids templated out. Under CI load another request
+      // can cross the slow threshold first, so select the delayed one by its trace id (HS2-K05KZ5).
+      const delayedReport = async () =>
+        (await reports(page))
+          .slice(before)
+          .find((report) => report.kind === 'request' && report.trace_id === DELAYED_TRACE);
+      await expect.poll(delayedReport).toBeTruthy();
+      const request = (await delayedReport())!;
+      expect(request.label).toMatch(/^GET \/.*\{id\}/);
       expect(request.label).not.toContain(ticket.id);
       expect(request.stages?.headers_ms).toBeGreaterThanOrEqual(400);
       expect(request.stages?.body_ms).toBeGreaterThanOrEqual(0);
       expect(request.stages?.paint_ms).toBeGreaterThanOrEqual(0);
       expect(request.stages?.bridge_ms).toBe(5);
       expect(request.stages?.upstream_ms).toBe(3);
-      expect(request.trace_id).toBe('trace-fixture');
 
       // Visible, non-blocking dev indicator.
       const toast = page.locator('[data-dev-latency-toast]');
