@@ -141,3 +141,36 @@ fn hs2_4r5mnj_a_held_prompt_waits_without_using_tries_and_settles_when_pasted() 
         (Some(RolePrompt::Pending), 1)
     );
 }
+
+/// HS2-9QQ0M9: a prompt being asked for the first time reads pending before any try,
+/// so a readiness event retries it. Asking uses no try: the bound still allows every
+/// try after it, and the window still applies.
+#[test]
+fn hs2_9qq0m9_asking_is_pending_without_using_a_try() {
+    let asking = RoleDelivery::asking();
+    assert_eq!(asking.prompt, Some(RolePrompt::Pending));
+    assert_eq!(asking.attempts, 0);
+    assert!(!asking.is_unasked());
+    assert!(asking.should_retry(LAUNCH, LAUNCH + 1));
+    assert!(!RoleDelivery::default().should_retry(LAUNCH, LAUNCH + 1));
+    // The start's refusal and a readiness retry, in either order, then delivery.
+    let mut d = asking;
+    for n in 1..MAX_ROLE_ATTEMPTS {
+        d = d.after(PushAttempt::NotReady, LAUNCH, LAUNCH + 1);
+        assert_eq!(d.prompt, Some(RolePrompt::Pending), "try {n}");
+        assert_eq!(d.attempts, n);
+    }
+    let delivered = d.after(PushAttempt::Delivered, LAUNCH, LAUNCH + 2);
+    assert_eq!(delivered.prompt, Some(RolePrompt::Delivered));
+    // A retry delivered it first; the start's late refusal changes nothing.
+    let raced = asking
+        .after(PushAttempt::Delivered, LAUNCH, LAUNCH + 1)
+        .after(PushAttempt::NotReady, LAUNCH, LAUNCH + 1);
+    assert_eq!(raced.prompt, Some(RolePrompt::Delivered));
+    assert_eq!(raced.attempts, 1);
+    // Out of the window it reads failed, as any pending prompt does.
+    assert_eq!(
+        asking.at(LAUNCH, LAUNCH + ROLE_PROMPT_WINDOW_MS),
+        Some(RolePrompt::Failed)
+    );
+}

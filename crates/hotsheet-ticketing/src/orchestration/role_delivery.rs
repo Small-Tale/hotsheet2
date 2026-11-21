@@ -146,6 +146,18 @@ impl RoleDelivery {
         }
     }
 
+    /// HS2-9QQ0M9: the host is about to push the prompt for the first time. Recorded
+    /// before that push, so a readiness event that arrives while it is under way finds
+    /// the prompt pending and tries again; recorded after it, the one event a tool may
+    /// give could find nothing asked and be dropped. Uses no try.
+    pub fn asking() -> Self {
+        Self {
+            prompt: Some(RolePrompt::Pending),
+            attempts: 0,
+            delivered_at_ms: None,
+        }
+    }
+
     /// The prompt went with the launch itself.
     pub fn at_launch(now_ms: u64) -> Self {
         Self {

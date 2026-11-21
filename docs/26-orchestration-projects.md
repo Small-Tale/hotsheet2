@@ -3086,6 +3086,15 @@ kept with the hosted session in `orchestration-hosted-sessions.json`
 (`role_delivery`), so a session a headless process started is retried by the server
 that runs it. The decision is a pure function (`RoleDelivery::after`, `at`).
 
+The prompt reads `pending` before the start's own first push, not after it
+(HS2-9QQ0M9; `RoleDelivery::asking`, which uses no try). A tool may signal readiness
+only once, for example by ending its first turn, and that signal can land while the
+start's refused push is still being recorded. Because the record already reads
+`pending`, that event retries the prompt instead of finding nothing asked and being
+dropped. An event before the record precedes the start's own push, which then finds
+the tool ready. The server passes a readiness event on when the role prompt or the
+request below reads `pending` (`HostedSession::awaits_push`).
+
 **Joining.** Only the target's coordination pool confirms that a session took up
 its role: its worker id registered, unexpired, in its role's slot (a worker entry,
 the dispatcher or the integrator). The hosted listing reports `joined` (`null` when

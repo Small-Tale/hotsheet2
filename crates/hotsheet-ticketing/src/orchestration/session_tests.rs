@@ -1357,6 +1357,94 @@ fn hs2_dg0ypa_one_live_session_per_run_across_repeats_losses_and_refills() {
 /// HS2-R7QH35: a hosted session's request naming one ticket: recorded once per ticket
 /// and kind, replaced by another, delivered within the role prompt's bounds counted
 /// from the request, and left alone once the session ended.
+/// HS2-9QQ0M9: the role prompt reads pending from the moment its first push begins,
+/// so a readiness event in that push finds something to retry. Asking again, or over
+/// an answer, changes nothing; a prompt given at launch is never asked. A pending
+/// request awaits a push as a pending role prompt does.
+#[test]
+fn hs2_9qq0m9_a_prompt_awaits_its_push_from_the_first_try_on() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (reserved, _) = registry
+        .reserve(HOSTED, &hosted("op-1", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-1").unwrap();
+    let found = || registry.by_session(&reserved.session_id).unwrap().unwrap();
+    assert!(!found().awaits_push());
+    let asked = registry.role_asking(HOSTED, "op-1").unwrap().unwrap();
+    assert_eq!(asked.role_delivery, RoleDelivery::asking());
+    assert!(found().awaits_push());
+    // The record keeps it across a read from disk.
+    assert_eq!(found().role_delivery, RoleDelivery::asking());
+    // Asking twice is once.
+    assert_eq!(
+        registry.role_asking(HOSTED, "op-1").unwrap().unwrap(),
+        asked
+    );
+    // A readiness retry delivers it; the start's late refusal is folded in and lost.
+    registry
+        .role_attempt(HOSTED, "op-1", Some(PushAttempt::Delivered), 20)
+        .unwrap();
+    let after = registry
+        .role_attempt(HOSTED, "op-1", Some(PushAttempt::NotReady), 21)
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.role_delivery.prompt, Some(RolePrompt::Delivered));
+    assert!(!found().awaits_push());
+    // Asking over an answer changes nothing.
+    assert_eq!(
+        registry
+            .role_asking(HOSTED, "op-1")
+            .unwrap()
+            .unwrap()
+            .role_delivery,
+        after.role_delivery
+    );
+    // A later request pending its push awaits it; delivered, it no longer does.
+    registry
+        .request(HOSTED, "op-1", &id(700), RequestKind::Assigned, None, 30)
+        .unwrap();
+    registry
+        .request_attempt(HOSTED, "op-1", PushAttempt::NotReady, 31)
+        .unwrap();
+    assert!(found().awaits_push());
+    registry
+        .request_attempt(HOSTED, "op-1", PushAttempt::Delivered, 32)
+        .unwrap();
+    assert!(!found().awaits_push());
+
+    // At launch: never asked, so never awaiting a push.
+    registry
+        .reserve(HOSTED, &hosted("op-2", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-2").unwrap();
+    registry.role_attempt(HOSTED, "op-2", None, 40).unwrap();
+    let launched = registry.role_asking(HOSTED, "op-2").unwrap().unwrap();
+    assert_eq!(launched.role_delivery, RoleDelivery::at_launch(40));
+    assert!(!launched.awaits_push());
+    // An ended session is not asked; an unknown operation is none.
+    registry
+        .reserve(HOSTED, &hosted("op-3", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-3").unwrap();
+    registry.end(HOSTED, "op-3", "wound_down", 50).unwrap();
+    assert!(
+        registry
+            .role_asking(HOSTED, "op-3")
+            .unwrap()
+            .unwrap()
+            .role_delivery
+            .is_unasked()
+    );
+    assert_eq!(registry.role_asking(HOSTED, "op-x").unwrap(), None);
+}
+
 #[test]
 fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bounds() {
     let home = tempfile::tempdir().unwrap();

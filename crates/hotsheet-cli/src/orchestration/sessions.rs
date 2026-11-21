@@ -1398,10 +1398,18 @@ impl OrchestrationRuntime {
         self.hosted_session_signal();
         // HS2-2DPGDY: the prompt went with the launch, or it is pushed now; a tool
         // that is not ready yet is tried again on its readiness events.
-        let attempt = (!launched.prompt_at_launch).then(|| {
-            self.sessions
-                .join_role(&checkout, &reserved.session_id, &role_text)
-        });
+        // HS2-9QQ0M9: it reads pending before the push, so a readiness event that
+        // lands while the push and its record are under way is not dropped. One that
+        // came earlier precedes this push, which then finds the tool ready.
+        let attempt = if launched.prompt_at_launch {
+            None
+        } else {
+            registry.role_asking(&checkout.id, &reserved.operation_id)?;
+            Some(
+                self.sessions
+                    .join_role(&checkout, &reserved.session_id, &role_text),
+            )
+        };
         let started = registry
             .role_attempt(
                 &checkout.id,

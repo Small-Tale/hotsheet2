@@ -42,6 +42,35 @@ pub(super) struct ScriptedHost {
     /// HS2-WHR4GS: runs once when the next setup is asked for, after the start
     /// reserved its terminal and before it launches: a stop that arrives meanwhile.
     pub(super) before_launch: OnceHook,
+    /// HS2-9QQ0M9: runs once, with the terminal id, after the next push was answered
+    /// and before the caller records that answer: a readiness event that lands while
+    /// the push is under way.
+    pub(super) during_push: PushHook,
+}
+
+/// HS2-9QQ0M9: what a [`PushHook`] runs, with the terminal id.
+type PushHookFn = Box<dyn FnOnce(&str) + Send>;
+
+/// HS2-9QQ0M9: a hook a test arms to run once inside a push.
+#[derive(Default)]
+pub(super) struct PushHook(Mutex<Option<PushHookFn>>);
+impl PushHook {
+    pub(super) fn arm(&self, hook: impl FnOnce(&str) + Send + 'static) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Box::new(hook));
+    }
+    fn fire(&self, session_id: &str) {
+        let hook = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(hook) = hook {
+            hook(session_id);
+        }
+    }
 }
 
 /// HS2-WHR4GS: a hook a test arms to run once.
@@ -178,11 +207,14 @@ impl SessionHost for ScriptedHost {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((session_id.into(), text.into()));
-        self.push_answers
+        let answer = self
+            .push_answers
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .pop_front()
-            .unwrap_or(PushAttempt::Delivered)
+            .unwrap_or(PushAttempt::Delivered);
+        self.during_push.fire(session_id);
+        answer
     }
     fn stopping(&self) -> bool {
         self.stopping.load(Ordering::SeqCst)
@@ -1823,6 +1855,75 @@ fn hs2_2dpgdy_a_role_prompt_is_retried_on_readiness_and_then_settles() {
         tries(),
         3 + hotsheet_ticketing::orchestration::MAX_ROLE_ATTEMPTS as usize
     );
+}
+
+/// HS2-9QQ0M9: the tool becomes ready, and says so once, while the start's first push
+/// (which it refused) is still being recorded. That one readiness event retries the
+/// prompt and delivers it; the start's late refusal does not undo the delivery. Before
+/// the fix the record read unasked during the push, so the event was dropped and the
+/// prompt stayed pending with nothing left to wake it.
+#[test]
+fn hs2_9qq0m9_a_readiness_event_during_the_first_push_is_not_lost() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady, PushAttempt::Delivered]);
+    let retried = Arc::new(Mutex::new(None));
+    let (runtime, seen) = (f.m.runtime.clone(), retried.clone());
+    f.host.during_push.arm(move |terminal| {
+        let mut rng = Rng(200);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        *seen.lock().unwrap() = Some(runtime.hosted_role_retry(terminal, &mut tx).unwrap());
+    });
+    let view = f.started("op-1", 1, "codex", &mut tx);
+    assert_eq!(
+        *retried.lock().unwrap(),
+        Some(Some(RolePrompt::Delivered)),
+        "the readiness event found the prompt pending and delivered it"
+    );
+    assert_eq!(view.role_prompt, Some(RolePrompt::Delivered));
+    let terminal = view.session.hosted.as_ref().unwrap().session_id.clone();
+    let pushes = f.host.pushes();
+    assert_eq!(pushes.len(), 2, "{pushes:?}");
+    assert!(
+        pushes
+            .iter()
+            .all(|(id, text)| *id == terminal && text.contains("`hotsheet-worker`"))
+    );
+    // Settled: a later readiness event pushes nothing more.
+    assert_eq!(
+        f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(f.host.pushes().len(), 2);
+
+    // A tool that takes its prompt at launch is never marked pending, so a readiness
+    // event during its start pushes nothing.
+    f.host.prompt_at_launch.store(true, Ordering::SeqCst);
+    let at_launch = f.started("op-2", 2, "claude", &mut tx);
+    assert_eq!(at_launch.role_prompt, Some(RolePrompt::AtLaunch));
+    let terminal = at_launch
+        .session
+        .hosted
+        .as_ref()
+        .unwrap()
+        .session_id
+        .clone();
+    assert_eq!(
+        f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap(),
+        Some(RolePrompt::AtLaunch)
+    );
+    assert_eq!(f.host.pushes().len(), 2);
 }
 
 #[test]

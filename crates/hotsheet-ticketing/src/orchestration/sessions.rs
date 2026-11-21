@@ -1108,6 +1108,18 @@ impl HostedRequest {
 }
 
 impl HostedSession {
+    /// HS2-9QQ0M9: whether a readiness event of its tool should be passed on: the role
+    /// prompt or the request (HS2-R7QH35) still reads pending in the record. Bounds
+    /// are judged by the retry itself, on its own clock.
+    pub fn awaits_push(&self) -> bool {
+        let pending = |delivery: &RoleDelivery| delivery.prompt == Some(RolePrompt::Pending);
+        pending(&self.role_delivery)
+            || self
+                .request
+                .as_ref()
+                .is_some_and(|request| pending(&request.delivery))
+    }
+
     /// The label this session carries in the hosting server's drawer.
     pub fn label(&self) -> String {
         session_label(
@@ -1520,6 +1532,21 @@ impl HostedSessionRegistry {
             .sessions
             .into_iter()
             .find(|session| session.session_id == session_id && session.started))
+    }
+
+    /// HS2-9QQ0M9: the host is about to push the role prompt for the first time. An
+    /// unasked delivery becomes pending with no try used, so readiness events from now
+    /// on retry it. Anything already asked, or an ended session, does not change.
+    pub fn role_asking(
+        &self,
+        checkout_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<HostedSession>, OrchestrationError> {
+        self.change(checkout_id, operation_id, |session| {
+            if session.ended_at_ms.is_none() && session.role_delivery.is_unasked() {
+                session.role_delivery = RoleDelivery::asking();
+            }
+        })
     }
 
     /// HS2-2DPGDY: fold one try at delivering the role into the record. A settled

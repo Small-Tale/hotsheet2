@@ -215,6 +215,8 @@ pub(crate) fn note_session_change(state: &AppState, terminal_id: &str) {
 /// HS2-2DPGDY: an AI terminal of this server may just have become ready for a message:
 /// its push address was registered, or it finished a turn. A role prompt an
 /// orchestrator's start left pending is tried again, bounded in number and time.
+/// HS2-9QQ0M9: so is a pending request (HS2-R7QH35), which the runtime retries on
+/// the same events after the role; checking only the role prompt here dropped them.
 /// Any other terminal changes nothing. Never called on a timer.
 pub(crate) fn retry_role(state: &AppState, terminal_id: &str) {
     let hosted =
@@ -222,12 +224,7 @@ pub(crate) fn retry_role(state: &AppState, terminal_id: &str) {
             .by_session(terminal_id)
             .ok()
             .flatten()
-            .is_some_and(|session| {
-                session
-                    .role_delivery
-                    .prompt
-                    .is_some_and(|prompt| !prompt.is_settled())
-            });
+            .is_some_and(|session| session.awaits_push());
     if !hosted {
         return;
     }
