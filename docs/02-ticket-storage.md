@@ -1207,6 +1207,14 @@ publisher or a ticket-store autocommit, then fails with `Unable to create
 still take Git's mandatory locks, and Hot Sheet's own commits in one repository serialize
 on the shared Git transaction lock.
 
+The constructor also gives Git an empty stdin (HS2-GN4X0B). A caller that feeds Git data
+sets its own pipe. On Windows, a child that inherits a pipe its parent has a read pending
+on blocks while it starts: Git for Windows and its MSYS `sh` query their standard handles,
+and I/O on a synchronous pipe is serialized. A server started with `--exit-on-stdin-eof`
+keeps such a read pending, so its `git diff --cached --quiet` (run with an inherited stdin)
+never returned, and the store's sync health stayed `pending` with no cycle finished.
+`hotsheet-mcp` reads JSON-RPC from stdin and had the same exposure.
+
 The repository's own Node scripts and test fixtures do the same (HS2-KKDZF4). A linked
 worktree's `pre-push` hook runs `scripts/check.sh` with an absolute `GIT_DIR`, and
 `pre-commit` adds `GIT_INDEX_FILE`. A fixture's `git -C <tmp> commit` started with them

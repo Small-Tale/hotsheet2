@@ -24,10 +24,18 @@
 //! `Unable to create '.../index.lock': File exists`. Hot Sheet's reads of a code checkout
 //! (repository status, the checkout watcher, code review) and of a store never need that
 //! refresh; every write still takes Git's mandatory locks.
+//!
+//! [`command`] gives Git an empty stdin (HS2-GN4X0B). Hot Sheet never feeds Git through an
+//! inherited stdin, and a caller that pipes data sets its own. On Windows a child that
+//! inherits a pipe this process has a read pending on blocks during startup: Git for
+//! Windows and its MSYS `sh` query their standard handles, and I/O on a synchronous pipe
+//! is serialized. A server started with `--exit-on-stdin-eof` (and `hotsheet-mcp`, which
+//! reads JSON-RPC from stdin) keeps such a read pending, so every `git diff --cached
+//! --quiet` it ran with `.status()` hung and the store's sync never finished a cycle.
 
 use std::ffi::OsStr;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// Environment variables removed from every git subprocess.
 ///
@@ -72,6 +80,8 @@ pub fn command() -> Command {
     remove_repository_env(&mut cmd);
     // HS2-NM6E27: reads never take `index.lock` behind a concurrent commit's back.
     cmd.env(OPTIONAL_LOCKS_VAR, "0");
+    // HS2-GN4X0B: never hand Git this process's stdin (see the module docs).
+    cmd.stdin(Stdio::null());
     cmd
 }
 
@@ -291,6 +301,51 @@ mod tests {
         // HS2-726EXJ: one initial branch on every git version, matching CI.
         assert_eq!(get("init.defaultBranch"), "master");
         assert_eq!(get("user.email"), "test@example.invalid");
+    }
+
+    /// The environment variable that makes [`hs2_gn4x0b_git_never_inherits_stdin`] run its
+    /// child half: spawn Git with this process's stdin left at its default.
+    const STDIN_CHILD: &str = "HOTSHEET_TEST_GIT_STDIN_CHILD";
+
+    /// HS2-GN4X0B: a Git child started with the default `spawn`/`status` stdio reads an empty
+    /// stdin, never the caller's. The test re-runs itself with a stdin pipe that holds data;
+    /// the child half runs an alias that copies its stdin, which must come back empty.
+    #[test]
+    fn hs2_gn4x0b_git_never_inherits_stdin() {
+        if std::env::var_os(STDIN_CHILD).is_some() {
+            let copied = command()
+                .args(["-c", "alias.copy-stdin=!cat", "copy-stdin"])
+                .stdout(Stdio::piped())
+                .spawn()
+                .and_then(std::process::Child::wait_with_output)
+                .unwrap();
+            assert!(copied.status.success(), "{copied:?}");
+            print!("copied=[{}]", String::from_utf8_lossy(&copied.stdout));
+            return;
+        }
+        use std::io::Write;
+        let mut runner = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "git::tests::hs2_gn4x0b_git_never_inherits_stdin",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(STDIN_CHILD, "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        runner
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"inherited-bytes")
+            .unwrap();
+        let output = runner.wait_with_output().unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{stdout}");
+        assert!(stdout.contains("copied=[]"), "{stdout}");
     }
 
     /// HS2-NKD80S: the Git directory is answered from the cache once known, a
