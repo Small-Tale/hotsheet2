@@ -48,11 +48,12 @@ export function HostDiskSettings({ disks, hostName, dialog, message = '' }: Host
     <div data-component="host-disk-settings">
       <List gap="xs">
         <Text variant="h2">Host health disks</Text>
-        <Text tone="quiet" flush>
+        {/* Block copy keeps the item inset so it lines up with the heading text (HS2-9DY7Q8). */}
+        <Text tone="quiet">
           {`Disks whose free space host health watches on ${hostName ?? 'the server host'}. A newly connected disk asks once on the Stats page.`}
         </Text>
         {disks === undefined ? (
-          <Text tone="quiet" size="compact" flush>
+          <Text tone="quiet" size="compact">
             Loading disks…
           </Text>
         ) : (

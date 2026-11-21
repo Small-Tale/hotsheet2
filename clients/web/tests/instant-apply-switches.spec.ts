@@ -13,7 +13,8 @@ import { proxyFetch, realTicketServer } from './real-ticket-server';
  * disks), Project Settings › General (Group new tickets automatically, Hide Verified column) and
  * Project Settings › Terminals (Use my global shell history) each expose `role="switch"` and save at
  * once. Synthetic tickets only. The captures are the ticket's after images, named by page, width and
- * color scheme, across wide, medium, narrow and back to wide.
+ * color scheme, across wide, medium, narrow and back to wide. At every width each switch track lines up
+ * with the text column within 2px (HS2-9DY7Q8).
  */
 type Server = Awaited<ReturnType<typeof realTicketServer>>;
 const captures = join('target', 'visual-captures', 'hs2-1mstxp');
@@ -66,8 +67,42 @@ async function settle(page: Page): Promise<void> {
     .toBe(0);
 }
 
+/** The left edge of an element's text, as a Range sees it. */
+const textLeft = (target: Locator) =>
+  target.evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return range.getBoundingClientRect().left;
+  });
+
+/** The left edge of a switch's track. */
+const trackLeft = (target: Locator) => target.evaluate((node) => node.getBoundingClientRect().left);
+
+/**
+ * HS2-9DY7Q8: each switch track (or tight copy) starts within 2px of the text it sits under, like
+ * the Features page (HS2-3GJZGG). Returns the reference text's x for pages with no text of their own.
+ */
+async function expectAligned(reference: Locator | number, items: Locator[]): Promise<number> {
+  const x = typeof reference === 'number' ? reference : await textLeft(reference);
+  for (const item of items) {
+    const left = (await item.getAttribute('role')) === 'switch' ? await trackLeft(item) : await textLeft(item);
+    expect(
+      Math.abs(left - x),
+      `${await item.evaluate((node) => node.outerHTML.slice(0, 80))} at ${left}`,
+    ).toBeLessThanOrEqual(2);
+  }
+  return x;
+}
+
 /** Wide, medium, narrow and back to wide; each width keeps the section unclipped and captured. */
-async function acrossWidths(page: Page, section: Locator, name: string, scheme: string, engine: string) {
+async function acrossWidths(
+  page: Page,
+  section: Locator,
+  name: string,
+  scheme: string,
+  engine: string,
+  aligned: (width: number) => Promise<unknown>,
+) {
   for (const [step, width] of [
     ['wide', 1440],
     ['medium', 1100],
@@ -79,6 +114,7 @@ async function acrossWidths(page: Page, section: Locator, name: string, scheme: 
     await expect(section).toBeVisible();
     expect(await section.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
     await settle(page);
+    await aligned(width);
     // The host name is the test machine's own; mask it so a capture names no developer machine.
     await page.screenshot({
       path: join(captures, `hs2-1mstxp-${name}-${step}-${width}-${scheme}-${engine}.png`),
@@ -137,7 +173,15 @@ for (const scheme of ['light', 'dark'] as const)
       await expect(loading).toBeChecked({ checked: !loadingBefore });
       await loading.setChecked(loadingBefore);
       await general.getByRole('heading', { name: 'Standby' }).scrollIntoViewIfNeeded();
-      await acrossWidths(page, general, 'app-general', scheme, browserName);
+      // The text column at each width, for pages whose switches have no text above them.
+      const textColumn = new Map<number, number>();
+      await acrossWidths(page, general, 'app-general', scheme, browserName, async (width) => {
+        const heading = general.getByRole('heading', { name: 'Standby' });
+        textColumn.set(width, await expectAligned(heading, [loading, standby]));
+        await expectAligned(general.getByRole('heading', { name: 'Host health disks' }), [
+          general.locator('[data-component="host-disk-settings"] p').first(),
+        ]);
+      });
 
       // Project Settings › General.
       const projectNav = page.getByRole('navigation', { name: 'Project Settings' });
@@ -161,7 +205,11 @@ for (const scheme of ['light', 'dark'] as const)
       const verified = project.getByRole('switch', { name: 'Hide Verified column' });
       await verified.check();
       await expect(verified).toBeChecked();
-      await acrossWidths(page, project, 'project-general', scheme, browserName);
+      await acrossWidths(page, project, 'project-general', scheme, browserName, (width) =>
+        expectAligned(project.getByText('Project Type', { exact: true }), [autoGroup, verified]).then((x) => {
+          expect(Math.abs(x - textColumn.get(width)!)).toBeLessThanOrEqual(2);
+        }),
+      );
       await verified.uncheck();
 
       // Project Settings › Terminals.
@@ -169,7 +217,9 @@ for (const scheme of ['light', 'dark'] as const)
       const terminals = page.locator('[data-settings-category="terminals"]');
       const history = terminals.getByRole('switch', { name: 'Use my global shell history' });
       await expect(history).toBeVisible();
-      await acrossWidths(page, terminals, 'terminals', scheme, browserName);
+      await acrossWidths(page, terminals, 'terminals', scheme, browserName, (width) =>
+        expectAligned(textColumn.get(width)!, [history]),
+      );
     } finally {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
       await server.stop();

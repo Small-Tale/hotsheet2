@@ -157,7 +157,8 @@ export function SettingsWorkspace({
             <TrashSettings days={lifecycle.days} message={lifecycle.message} draft={lifecycle.draft} />
           )}
           {category === 'terminals' && (
-            <List gap="xs">
+            // The 8px control inset lines the switch track up with the page's text (HS2-9DY7Q8).
+            <List gap="xs" controlInsets="l">
               <Switch
                 action={COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.value}
                 checked={terminals.inheritGlobalShellHistory}
@@ -222,37 +223,45 @@ export function SettingsWorkspace({
             <List gap="m">
               {/* Hidden while the Automatic ticket grouping feature is off; the setting keeps its value
                   (HS2-3GJZGG). */}
+              {/* Each switch takes the 8px control inset so its track lines up with the text (HS2-9DY7Q8). */}
               {featureOn('auto-grouping') && (
-                <Switch
-                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
-                  checked={columns.autoGroupNewTickets ?? true}
-                  hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
-                  label="Group new tickets automatically"
-                  rootAttributes={{ 'data-feature': 'auto-grouping' }}
-                />
+                <List controlInsets="l">
+                  <Switch
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleAutoGroupNewTickets.value}
+                    checked={columns.autoGroupNewTickets ?? true}
+                    hint="Each new ticket, however it is created, is offered to this project's default AI tool, which picks a group or names a new one. This uses one AI turn per batch of new tickets."
+                    label="Group new tickets automatically"
+                    rootAttributes={{ 'data-feature': 'auto-grouping' }}
+                  />
+                </List>
               )}
               {featureOn('auto-grouping') && columns.autoGroupMessage ? (
                 <Text tone="danger" role="alert">
                   {columns.autoGroupMessage}
                 </Text>
               ) : null}
-              <Switch
-                action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
-                checked={columns.hideVerified}
-                hint="Verified tickets appear in Completed."
-                label="Hide Verified column"
-              />
+              <List controlInsets="l">
+                <Switch
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.value}
+                  checked={columns.hideVerified}
+                  hint="Verified tickets appear in Completed."
+                  label="Hide Verified column"
+                />
+              </List>
             </List>
           )}
           {category === 'general' && (
             <>
               <ThemePicker value={general.theme} />
-              <Switch
-                action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
-                checked={general.showLoadingActivity}
-                hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
-                label="Show loading activity"
-              />
+              {/* The 8px control inset lines the switch track up with the theme hint and headings (HS2-9DY7Q8). */}
+              <List controlInsets="l">
+                <Switch
+                  action={COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.value}
+                  checked={general.showLoadingActivity}
+                  hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
+                  label="Show loading activity"
+                />
+              </List>
               {general.standby && featureOn('standby') && <StandbySettings {...general.standby} />}
               {general.hostDisks && <HostDiskSettings {...general.hostDisks} />}
             </>

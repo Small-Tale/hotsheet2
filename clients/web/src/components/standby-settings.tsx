@@ -45,13 +45,17 @@ export function StandbySettings({ settings, message = '' }: StandbySettingsProps
       <List gap="xs">
         <Text variant="h2">Standby</Text>
         <Grid minColumnWidth={rem(15)} gap="m">
-          <Switch
-            name={STANDBY_SETTING_FIELDS.enabled}
-            checked={effective?.enabled ?? false}
-            disabled={loading}
-            label="Enter standby when idle"
-            hint="Shows the night display after no direct interaction. The moon button enters it at any time. This applies to every client of this machine."
-          />
+          {/* The switch alone takes the 8px control inset, so its track lines up with the heading text
+              while the Select keeps its own label inset (HS2-9DY7Q8). */}
+          <List controlInsets="l">
+            <Switch
+              name={STANDBY_SETTING_FIELDS.enabled}
+              checked={effective?.enabled ?? false}
+              disabled={loading}
+              label="Enter standby when idle"
+              hint="Shows the night display after no direct interaction. The moon button enters it at any time. This applies to every client of this machine."
+            />
+          </List>
           <Select
             name={STANDBY_SETTING_FIELDS.idleMinutes}
             label="Standby After"
