@@ -2218,7 +2218,9 @@ The web client's other path-valued overrides read through the same `nonBlank` (H
 `HOTSHEET_CLIENT_READY_FILE`, `HOTSHEET_DEV_LATENCY_LOG`, and `HOTSHEET_VITE_CACHE_DIR`. A blank
 binary override selects the checkout's (or the production host's selected) binary, and a blank
 `HOTSHEET_REPO_ROOT` resolves to the checkout two levels above the working directory, as an unset
-one does, rather than to the working directory itself.
+one does, rather than to the working directory itself. On Windows a `HOTSHEET_CLI_BIN`,
+`HOTSHEET_MIGRATE_BIN`, or `HOTSHEET_SERVER_BIN` that names the binary without its `.exe` suffix
+passes the bridge's existence check when the `.exe` is present, as `spawn` resolves it (HS2-C4AK2J).
 
 The plain-Node launchers in `clients/web/scripts/` apply the same rule through
 `scripts/non-blank.mjs`, a twin of `nonBlank` that `machine-home.test.ts` pins to it (HS2-MVF6X3):

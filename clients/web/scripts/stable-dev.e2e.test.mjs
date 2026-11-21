@@ -13,9 +13,12 @@ import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabiliti
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = resolve(webRoot, '../..', process.env.CARGO_TARGET_DIR ?? 'target');
+// Name the built executables exactly, `.exe` included on Windows: the bridge checks an override
+// path before it spawns it (HS2-C4AK2J).
+const exe = process.platform === 'win32' ? '.exe' : '';
 const fixtureBinaries = {
-  HOTSHEET_SERVER_BIN: resolve(target, 'debug/hotsheet-server'),
-  HOTSHEET_CLI_BIN: resolve(target, 'debug/hotsheet-cli'),
+  HOTSHEET_SERVER_BIN: resolve(target, `debug/hotsheet-server${exe}`),
+  HOTSHEET_CLI_BIN: resolve(target, `debug/hotsheet-cli${exe}`),
 };
 let fixtureHome;
 beforeAll(async () => {

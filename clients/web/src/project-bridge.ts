@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from 'node:fs';
 import { access, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, extname, resolve } from 'node:path';
 
 import type { Checkout } from './api';
 import { CHANGE_MUX_PATH } from './change-mux-bridge';
@@ -258,6 +258,20 @@ async function exists(path: string) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether an executable is present at `path`. On Windows an override such as `HOTSHEET_CLI_BIN`
+ * may name the binary without its `.exe` suffix, as Unix-style instructions do; `spawn` resolves
+ * that name, so the existence check before it must too (HS2-C4AK2J).
+ */
+export async function executableExists(
+  path: string,
+  platform = process.platform,
+  present: (candidate: string) => Promise<boolean> = exists,
+): Promise<boolean> {
+  if (await present(path)) return true;
+  return platform === 'win32' && extname(path) === '' && present(`${path}.exe`);
 }
 
 export function developmentBinaryPath(root: string, name: string, platform = process.platform): string {
@@ -581,7 +595,7 @@ export async function migrateHs1Project(
   const ticketStore = locationInput?.trim() ? resolve(locationInput.trim()) : `${root}.hs2`,
     binary = migrateBinary(),
     exporter = migratorScript();
-  if (!(await exists(binary)))
+  if (!(await executableExists(binary)))
     throw new Error(
       `Hot Sheet migrator is not built at ${binary}. Run cargo build -p hotsheet-cli --bin hotsheet-migrate.`,
     );
@@ -892,7 +906,7 @@ export function projectServerPlan(
 
 async function initializeStore(path: string, standaloneRoot?: string): Promise<void> {
   const binary = toolBinary();
-  if (!(await exists(binary)))
+  if (!(await executableExists(binary)))
     throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
   await new Promise<void>((resolveInit, reject) => {
     const child = spawn(binary, localStoreInitArgs(path, Boolean(standaloneRoot)), {
@@ -921,7 +935,7 @@ export async function createLocalGitTicketStore(
   const root = await realpath(rootInput.trim()),
     path = locationInput?.trim() ? resolve(locationInput.trim()) : `${root}.hs2`,
     binary = toolBinary();
-  if (!(await exists(binary)))
+  if (!(await executableExists(binary)))
     throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
   const cli = await requireCurrentSetupCli((await exists(path)) ? path : undefined, runner),
     target = sessionForRoot(root);
@@ -1381,7 +1395,7 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
     launchedExit: () => exited,
     launch: async () => {
       exited = undefined;
-      if (!(await exists(binary)))
+      if (!(await executableExists(binary)))
         throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
       const log = openServerLog();
       try {

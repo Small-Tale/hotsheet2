@@ -20,6 +20,7 @@ import {
   developmentBinaryPath,
   developmentRepositoryRoot,
   developmentSetupAssetsFingerprint,
+  executableExists,
   folderChooserCommand,
   forgetVerifiedServer,
   hasHs1Registrations,
@@ -255,6 +256,24 @@ describe('bridge binary overrides (HS2-GVSJ5Y)', () => {
       );
     expect(migrationJobsDirectory({ HOTSHEET_MIGRATION_JOBS: 'relative/jobs' })).toBe('relative/jobs');
     expect(migrationJobsDirectory({ HOTSHEET_MIGRATION_JOBS: '/srv/jobs' })).toBe('/srv/jobs');
+  });
+});
+
+describe('executable overrides without a suffix (HS2-C4AK2J)', () => {
+  const present = (files: string[]) => (candidate: string) => Promise.resolve(files.includes(candidate));
+
+  it('accepts an extensionless Windows override whose .exe is present, as spawn does', async () => {
+    const cli = resolve('synthetic-target/debug/hotsheet-cli');
+    expect(await executableExists(cli, 'win32', present([`${cli}.exe`]))).toBe(true);
+    expect(await executableExists(`${cli}.exe`, 'win32', present([`${cli}.exe`]))).toBe(true);
+    expect(await executableExists(cli, 'win32', present([]))).toBe(false);
+  });
+
+  it('never adds a suffix on Unix or to a path that already has an extension', async () => {
+    const cli = resolve('synthetic-target/debug/hotsheet-cli');
+    expect(await executableExists(cli, 'linux', present([`${cli}.exe`]))).toBe(false);
+    expect(await executableExists(cli, 'darwin', present([cli]))).toBe(true);
+    expect(await executableExists(`${cli}.cmd`, 'win32', present([`${cli}.cmd.exe`]))).toBe(false);
   });
 });
 
