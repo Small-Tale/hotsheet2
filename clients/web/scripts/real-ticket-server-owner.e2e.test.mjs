@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readdir, rm } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -58,14 +58,28 @@ it('stops the real ticket server when its runner is SIGKILLed before teardown', 
     const deadline = Date.now() + 10_000;
     while (alive(started.pid) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
     expect(alive(started.pid), 'the orphaned server must stop on its own').toBe(false);
-    // The process exit and registry unlink are separate observations, especially on Windows.
-    // Keep the cleanup assertion, but wait for the bounded unlink instead of racing it.
+    const instances = resolve(started.home, 'instances');
+    const registrationFiles = async () =>
+      (await readdir(instances).catch(() => [])).filter((name) => name.endsWith('.json'));
+    if (process.platform === 'win32') {
+      // HS2-BQ5QK6: libuv starts a non-detached child in its parent's kill-on-close Job, so killing
+      // the runner terminates the server in the same instant, before it reads stdin EOF; no cleanup
+      // can run in a process ended by TerminateProcess. Its registration stays behind, as after any
+      // crash, and names only the dead server, so discovery reads it as stale ("none") and the next
+      // start on the store replaces it (lifecycle.rs `find_instance`).
+      for (const name of await registrationFiles()) {
+        const registration = JSON.parse(await readFile(resolve(instances, name), 'utf8'));
+        expect(registration.pid).toBe(started.pid);
+        expect(alive(registration.pid)).toBe(false);
+      }
+      return;
+    }
+    // The process exit and registry unlink are separate observations. Keep the cleanup assertion,
+    // but wait for the bounded unlink instead of racing it.
     const unlinkDeadline = Date.now() + 5_000;
     let registrations;
     do {
-      registrations = (await readdir(resolve(started.home, 'instances')).catch(() => [])).filter((name) =>
-        name.endsWith('.json'),
-      );
+      registrations = await registrationFiles();
       if (registrations.length > 0) await new Promise((r) => setTimeout(r, 50));
     } while (registrations.length > 0 && Date.now() < unlinkDeadline);
     expect(registrations).toEqual([]);
