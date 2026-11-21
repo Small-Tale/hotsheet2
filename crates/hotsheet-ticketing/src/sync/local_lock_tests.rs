@@ -89,8 +89,10 @@ fn hs2_457fgs_a_provider_configuration_write_then_sync_never_commits_its_lock() 
 fn hs2_457fgs_a_lock_an_older_client_committed_is_untracked_on_every_clone() {
     let (_dir, store, peer) = remote_with_two_clones();
     published_store(&store);
-    // An older client committed both lasting locks and published them.
+    // An older client committed the lasting locks and published them. HS2-JBF90Q: the
+    // resource-claims registry's lock sits in `.hotsheet2`.
     for name in LOCAL_ONLY_ROOT_FILES {
+        std::fs::create_dir_all(store.join(name).parent().unwrap()).unwrap();
         std::fs::write(store.join(name), "").unwrap();
         ok(&store, &["add", "-f", "--", name]);
     }

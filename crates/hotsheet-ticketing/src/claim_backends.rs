@@ -36,6 +36,11 @@ pub const REGISTRY_SCHEMA: u32 = 1;
 pub const MACHINE_REGISTRY_FILE: &str = "resource-claims/configurations.json";
 /// The project registry, relative to the project (checkout or ticket store) root.
 pub const PROJECT_REGISTRY_FILE: &str = ".hotsheet2/resource-claims.json";
+/// The lasting lock every registry writer takes beside the registry file. Machine-local:
+/// a ticket store's managed `.gitignore` names it (HS2-JBF90Q).
+pub(crate) const REGISTRY_LOCK_FILE: &str = ".resource-claims-config.lock";
+/// [`REGISTRY_LOCK_FILE`] beside the project registry, relative to the project root.
+pub(crate) const PROJECT_REGISTRY_LOCK_FILE: &str = ".hotsheet2/.resource-claims-config.lock";
 /// The source key prefix that names a Git ticket store by its durable identity, shared
 /// by every clone of that store.
 pub const STORE_SOURCE_PREFIX: &str = "store:";
@@ -483,7 +488,7 @@ impl Scope {
             .create(true)
             .truncate(false)
             .write(true)
-            .open(parent.join(".resource-claims-config.lock"))?;
+            .open(parent.join(REGISTRY_LOCK_FILE))?;
         let _lock = FileLock::acquire(lock_file)?;
         let mut registry = self.load()?;
         let before = registry.clone();

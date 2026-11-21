@@ -245,6 +245,10 @@ committed is removed from the index (never from disk) by the next sync pass or
 repository-wide commit, so a process that holds it keeps its inode on every clone that
 runs this version. The list also names the legacy store-root `providers.json`, which is
 per machine now (§2.11.1, HS2-1M8E9D, HS2-7QPJ05) and leaves the index the same way.
+It also names `.hotsheet2/.resource-claims-config.lock`, the lasting lock every writer
+of the store's shared resource-claims registry (`.hotsheet2/resource-claims.json`) takes
+beside it (HS2-JBF90Q): a sync once committed it into the shared history, and a copy
+already committed leaves the index the same way.
 
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every

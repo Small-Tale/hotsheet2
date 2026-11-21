@@ -50,22 +50,27 @@ pub(crate) const LEGACY_PROVIDER_CONFIG_FILE: &str = crate::provider::PROVIDER_C
 /// Every pattern the managed store `.gitignore` carries: host metadata, lasting
 /// machine-local locks, staged atomic writes, and the legacy per-machine provider
 /// configuration. None of them is ticket data.
-pub(crate) const MANAGED_IGNORES: [&str; 5] = [
+pub(crate) const MANAGED_IGNORES: [&str; 6] = [
     FINDER_METADATA_FILE,
     NOTE_MUTATION_LOCK_FILE,
     PROVIDER_CONFIG_LOCK_FILE,
     STAGED_WRITE_PATTERN,
     LEGACY_PROVIDER_CONFIG_FILE,
+    RESOURCE_CLAIMS_LOCK_FILE,
 ];
+/// HS2-JBF90Q: the lasting lock of the store's resource-claims registry
+/// (`.hotsheet2/resource-claims.json`, which is shared). A sync once committed it.
+const RESOURCE_CLAIMS_LOCK_FILE: &str = crate::claim_backends::PROJECT_REGISTRY_LOCK_FILE;
 /// Machine-local files at the store root that an older client may already have
 /// committed: the lasting locks (HS2-457FGS) and the legacy provider configuration
 /// (HS2-1M8E9D). Sync and repository-wide commits remove them from the index while
 /// keeping the working file, so a lock holder's inode is never replaced and the legacy
 /// configuration stays available as a seed.
-pub(crate) const LOCAL_ONLY_ROOT_FILES: [&str; 3] = [
+pub(crate) const LOCAL_ONLY_ROOT_FILES: [&str; 4] = [
     NOTE_MUTATION_LOCK_FILE,
     PROVIDER_CONFIG_LOCK_FILE,
     LEGACY_PROVIDER_CONFIG_FILE,
+    RESOURCE_CLAIMS_LOCK_FILE,
 ];
 
 struct AttachmentWriteOptions {
@@ -3981,6 +3986,79 @@ mod tests {
                 .is_empty()
         );
         // Repeating finds nothing left to repair.
+        assert!(!store.autocommit("again").unwrap());
+    }
+
+    /// HS2-JBF90Q: the lock a resource-claims registry writer takes beside the store's
+    /// shared `.hotsheet2/resource-claims.json` is ignored, and a store commit removes
+    /// one a sync already committed from the index, keeping the working file, once.
+    #[test]
+    fn hs2_jbf90q_the_resource_claims_lock_stays_out_of_store_history() {
+        let (dir, store) = temp_store();
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket(&ticket).unwrap();
+        // The registry writer creates the lock (a write that changes nothing still locks).
+        crate::claim_backends::Scope::Project {
+            root: dir.path().to_path_buf(),
+        }
+        .update(|_| Ok(()))
+        .unwrap();
+        assert!(dir.path().join(RESOURCE_CLAIMS_LOCK_FILE).is_file());
+        assert!(MANAGED_IGNORES.contains(&RESOURCE_CLAIMS_LOCK_FILE));
+        assert!(LOCAL_ONLY_ROOT_FILES.contains(&RESOURCE_CLAIMS_LOCK_FILE));
+        git(dir.path(), &["init", "-q"]).unwrap();
+        let ignored = |path: &str| git_ok(dir.path(), &["check-ignore", "-q", "--no-index", path]);
+        assert!(ignored(RESOURCE_CLAIMS_LOCK_FILE));
+        // The shared registry itself is not ignored.
+        assert!(!ignored(crate::claim_backends::PROJECT_REGISTRY_FILE));
+
+        // As the trial's sync did: the lock is in the history.
+        git(dir.path(), &["add", "-A"]).unwrap();
+        git(dir.path(), &["add", "-f", RESOURCE_CLAIMS_LOCK_FILE]).unwrap();
+        git(
+            dir.path(),
+            &[
+                "-c",
+                "user.name=Hot Sheet Test",
+                "-c",
+                "user.email=test@localhost",
+                "commit",
+                "-q",
+                "-m",
+                "older sync",
+            ],
+        )
+        .unwrap();
+        let tracked = || git_stdout(dir.path(), &["ls-files"]).unwrap();
+        assert!(
+            tracked()
+                .lines()
+                .any(|path| path == RESOURCE_CLAIMS_LOCK_FILE)
+        );
+
+        let mut edited = ticket.clone();
+        edited.title = "Edited".into();
+        store.write_ticket_committing(&edited).unwrap();
+        assert!(
+            !tracked()
+                .lines()
+                .any(|path| path == RESOURCE_CLAIMS_LOCK_FILE)
+        );
+        assert!(dir.path().join(RESOURCE_CLAIMS_LOCK_FILE).is_file());
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .trim()
+                .is_empty()
+        );
+        // Repeating finds nothing left to repair, and the writer locking again stages
+        // nothing.
+        assert!(!store.autocommit("again").unwrap());
+        crate::claim_backends::Scope::Project {
+            root: dir.path().to_path_buf(),
+        }
+        .update(|_| Ok(()))
+        .unwrap();
         assert!(!store.autocommit("again").unwrap());
     }
 
