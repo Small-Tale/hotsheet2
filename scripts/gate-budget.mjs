@@ -79,6 +79,8 @@ export function selectBudget({
       stage.group === 'always' ||
       stage.group === 'web_lint' ||
       /(?:^| )lint$|typecheck/.test(stage.command) ||
+      // HS2-V3R4JR: the Windows-target clippy pass is lint too, and the only local Windows type-check.
+      stage.command === 'node scripts/windows-cfg-check.mjs' ||
       directlyAffected(stage, changes);
     if (floor) selectedIds.add(stageId(stage));
     return {

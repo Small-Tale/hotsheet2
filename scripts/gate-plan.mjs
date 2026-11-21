@@ -21,6 +21,8 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export const STAGE_GROUPS = {
   '.::cargo fmt --all --check': 'always',
   '.::cargo lint': 'rust',
+  // HS2-V3R4JR: clippy for the Windows target, so Windows-only cfg errors fail before push.
+  '.::node scripts/windows-cfg-check.mjs': 'rust',
   '.::cargo nextest run --all-features --status-level leak': 'rust',
   '.::node --test scripts/verify-playwright-shards.test.mjs': 'tooling',
   '.::node scripts/check-test-coverage.mjs': 'always',
@@ -83,6 +85,7 @@ export const ROOT_TOOLING_TESTS = [
   'platform-matrix',
   'browser-engines',
   'root-test-reads',
+  'windows-cfg-check',
 ];
 /** HS2-WC74CR: the tooling stage records what its tests read and fails on an undeclared fixture. */
 export const ROOT_TEST_READS_PRELOAD = './scripts/root-test-reads-preload.mjs';

@@ -155,7 +155,7 @@ jobs:
 
       # Every ROOT_TOOLING_TESTS file in scripts/gate-plan.mjs runs here; gate-plan.test.mjs pins it (HS2-E6NFF6).
       - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
-        run: node --test --import ./scripts/root-test-reads-preload.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/gate-review.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-test-plan.test.mjs scripts/gate-case-rerun.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/integration-batch.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-edge-plan.test.mjs scripts/main-integration-window.test.mjs scripts/macos-dev-signing.test.mjs scripts/root-test-reads.test.mjs
+        run: node --test --import ./scripts/root-test-reads-preload.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/gate-review.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/gate-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-test-plan.test.mjs scripts/gate-case-rerun.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/integration-batch.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-edge-plan.test.mjs scripts/main-integration-window.test.mjs scripts/macos-dev-signing.test.mjs scripts/root-test-reads.test.mjs scripts/windows-cfg-check.test.mjs
 
       - name: Test browser shard completeness guard
         run: node --test scripts/verify-playwright-shards.test.mjs
@@ -268,6 +268,35 @@ jobs:
           name: migrator-coverage-lcov
           path: migrator/coverage/lcov.info
           if-no-files-found: ignore
+
+  # HS2-V3R4JR: clippy for x86_64-pc-windows-gnu from Linux, so a Windows-only `cfg` error (an
+  # import used only under #[cfg(unix)], HS2-QNZ60H and HS2-AZ6C66) fails per commit instead of in
+  # the daily Platforms run. Stub C tools let the build scripts pass; nothing is linked or run.
+  windows-cfg:
+    name: Windows cfg clippy (cross, no C build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain and the Windows GNU standard library
+        run: |
+          rustup show
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Cache cargo registry and dependency artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-cfg
+          workspaces: '. -> target/windows-cfg-check'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Clippy the Windows cfg branches
+        run: node scripts/windows-cfg-check.mjs
 
   # Per-language coverage (docs/12 §12.7.5): a separate Rust summary, NOT one merged lcov.
   # Now GATED on a conservative line floor (HS2-8WR8XF) — a real gate that catches a

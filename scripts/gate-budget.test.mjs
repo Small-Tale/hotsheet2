@@ -74,6 +74,19 @@ test('HS2-3ZJBRM web lint remains mandatory when its declared inputs change', ()
   assert.equal(result.selected[0]?.budgetReason, 'mandatory floor');
 });
 
+test('HS2-V3R4JR the Windows cfg clippy pass stays in the floor like cargo lint', () => {
+  const rust = [
+    stage('.', 'cargo lint', 'rust'),
+    stage('.', 'node scripts/windows-cfg-check.mjs', 'rust'),
+    stage('.', 'cargo doc --workspace', 'rust'),
+  ];
+  const result = selectBudget({ stages: rust, changes: ['crates/x/src/lib.rs'], history: { stages: {} }, budgetMs: 1 });
+  assert.deepEqual(
+    result.selected.filter((item) => item.budgetReason === 'mandatory floor').map((item) => item.command),
+    ['cargo lint', 'node scripts/windows-cfg-check.mjs'],
+  );
+});
+
 test('HS2-GN06JT public assets and contracts keep their direct suites in the floor', () => {
   for (const path of ['clients/web/public/favicon-32.png', 'docs/contracts/api.json']) {
     const result = choose({ changes: [path], budgetMs: 1 });

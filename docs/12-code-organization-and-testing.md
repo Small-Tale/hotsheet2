@@ -1100,7 +1100,10 @@ fast for an idle client. Two rules follow:
   the `CI` workflow's Linux x86_64 jobs, per the maintainer policy of 2026-11-03. The former
   per-commit `windows-credential-store` job moved to the Windows targets below, so a
   Windows-only regression surfaces in the next daily run, up to a day later; HS2-C6P32J files
-  its ticket.
+  its ticket. The `windows-cfg` job is the exception that still runs on Linux: it
+  type-checks and lints the Windows `cfg` branches with `scripts/windows-cfg-check.mjs`
+  (HS2-V3R4JR), so a Windows compile error fails per commit; Windows behavior still waits for
+  Platforms.
 - **Full-platform workflow (HS2-31RGRK) — built:** `.github/workflows/platforms.yml`
   (workflow name `Platforms`) runs the full suite daily, on manual dispatch and through
   `workflow_call` for the release flow (HS2-5PEWKJ). It never runs per commit, and
@@ -1362,6 +1365,42 @@ workflow for Windows and macOS) is the evidence. The scan reads text only; it er
 reporting. Measured on 2026-11-06 against `466793655` (the escaped change), `43afaf86f` and
 `3f1384fc5`, it took 55-65 ms per gate preparation, with one batched `git cat-file` and one
 `git diff`. It flagged both platform changes and nothing in the third commit.
+
+**Windows `cfg` clippy without a Windows C toolchain (HS2-V3R4JR).** Test code gated
+`#[cfg(unix)]` twice left imports unused on Windows, where the build denies warnings
+(HS2-QNZ60H, HS2-AZ6C66). Both reached `main` and failed only the Platforms Clippy step. The
+Rust code itself cross-checks fine; only the C dependencies' build scripts fail, and `cargo
+clippy` never links, so their outputs are not needed. `scripts/windows-cfg-check.mjs` runs the
+`cargo lint` clippy pass with `--target x86_64-pc-windows-gnu` in `target/windows-cfg-check`:
+
+- `CC_`, `CXX_` and `AR_x86_64_pc_windows_gnu` name stub tools that write empty objects and
+  archives, which covers `ring`, `aws-lc-sys`, `libsqlite3-sys` and `libwebp-sys2`;
+- a stub `nasm` on `PATH` (rav1e) and a stub `CMAKE` (libavif) do the same;
+- `--config target.x86_64-pc-windows-gnu.dav1d.include=…` overrides libdav1d-sys's meson build
+  through its `links = "dav1d"` key, and `SYSTEM_DEPS_DAV1D_NO_PKG_CONFIG` answers image's dav1d
+  probe;
+- `RUSTC_WRAPPER` is dropped, because cc-rs would hand the stub to sccache.
+
+Host builds keep the real compiler, and nothing built there can link or run. A Windows host
+skips the script, since its own `cargo lint` compiles these branches. The local gate runs it in
+the `rust` group right after `cargo lint`, and the per-commit `windows-cfg` CI job runs it on
+Linux. A dependency whose build script needs real C output would fail the check, and the
+failure message points at the stubs.
+
+Measured on 2026-11-22 on an M1 Pro, from `origin/main` 5e49ae3db:
+
+| Run                                                      | Result                                                                           | Time    |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- | ------- |
+| Cold, empty target directory                             | fails: unused `commit_file`, `ok`, `health` in `ref_lock_race_tests.rs` (AZ6C66) | 69-92 s |
+| With the AZ6C66 fix                                      | passes                                                                           | 61 s    |
+| QNZ60H fix reverted                                      | fails: unused `SyncState` in `push_race_tests.rs`                                | —       |
+| One test file or `hotsheet-ticketing/src/lib.rs` touched | passes                                                                           | 34-36 s |
+
+The target directory takes about 4 GB. Running clippy on a `windows-latest` runner instead
+would cost about 11 minutes per push at the 2x Windows minute rate: in Platforms runs
+44932784177 and 44880687249, MSVC setup and the vcpkg dav1d build took 4-4.5 minutes and Clippy
+5.5-6.5 minutes. It would also break the Linux-only per-commit policy (HS2-WSE3FJ). The
+cross check does not cover `target_env = "msvc"` branches; the workspace has none.
 
 ### 12.7.7 AI-tool integration testing (the HS1 Codex pain, designed out)
 

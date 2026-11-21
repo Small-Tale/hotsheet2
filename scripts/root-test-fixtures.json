@@ -5,7 +5,7 @@
     "clients/web/tests/": ["browser-engines", "local-gate"]
   },
   "fixtures": {
-    ".cargo/config.toml": ["platform-matrix"],
+    ".cargo/config.toml": ["platform-matrix", "windows-cfg-check"],
     ".githooks/pre-commit": ["git-hooks", "main-integration-window"],
     ".githooks/pre-push": ["git-hooks", "main-integration-window"],
     ".github/msvc/has-include-next-fallback.h": ["platform-matrix"],
@@ -14,11 +14,11 @@
     ".github/vcpkg-ports/dav1d/msvc-has-include-next.patch": ["platform-matrix"],
     ".github/vcpkg-ports/dav1d/portfile.cmake": ["platform-matrix"],
     ".github/vcpkg-ports/dav1d/vcpkg.json": ["platform-matrix"],
-    ".github/workflows/ci.yml": ["browser-engines", "gate-plan", "integration-batch", "platform-matrix", "throughput-baseline", "windows-crt-directives", "windows-crt-link-correlation"],
+    ".github/workflows/ci.yml": ["browser-engines", "gate-plan", "integration-batch", "platform-matrix", "throughput-baseline", "windows-cfg-check", "windows-crt-directives", "windows-crt-link-correlation"],
     ".github/workflows/platforms.yml": ["browser-engines", "platform-matrix", "windows-crt-directives", "windows-crt-link-correlation"],
     "clients/web/package.json": ["browser-engines", "installed-dependencies"],
     "clients/web/playwright.config.ts": ["browser-engines"],
-    "clients/web/scripts/repository-env.mjs": ["browser-engines", "ci-completion-proposal", "ci-failure-attribution", "ci-failure-parse", "ci-gate", "gate-budget", "gate-case-rerun", "gate-edge-plan", "gate-plan", "gate-review", "gate-test-plan", "gate-ticket-profile", "gate-timings", "git-hooks", "installed-dependencies", "integration-batch", "integration-record", "local-gate", "macos-dev-signing", "main-integration-authority", "main-integration-options", "main-integration-window", "platform-matrix", "playwright-retries", "root-test-reads", "test-profile", "test-quiet", "throughput-baseline", "verified-worktree-cleanup", "windows-crt-directives", "windows-crt-link-correlation"],
+    "clients/web/scripts/repository-env.mjs": ["browser-engines", "ci-completion-proposal", "ci-failure-attribution", "ci-failure-parse", "ci-gate", "gate-budget", "gate-case-rerun", "gate-edge-plan", "gate-plan", "gate-review", "gate-test-plan", "gate-ticket-profile", "gate-timings", "git-hooks", "installed-dependencies", "integration-batch", "integration-record", "local-gate", "macos-dev-signing", "main-integration-authority", "main-integration-options", "main-integration-window", "platform-matrix", "playwright-retries", "root-test-reads", "test-profile", "test-quiet", "throughput-baseline", "verified-worktree-cleanup", "windows-cfg-check", "windows-crt-directives", "windows-crt-link-correlation"],
     "crates/hotsheet-cli/src/broken_pipe.rs": ["gate-edge-plan"],
     "crates/hotsheet-cli/src/coordination/strategy.rs": ["integration-batch"],
     "docs/12-code-organization-and-testing.md": ["browser-engines"]

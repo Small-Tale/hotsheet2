@@ -180,8 +180,9 @@ export function platformCfgEvidence(files, host = process.platform) {
   const where = files.map((file) => (file.lines.length ? `${file.path}:${file.lines[0]}` : file.path)).join(', ');
   const summary = files.length
     ? `${files.length} Rust file${files.length === 1 ? '' : 's'} change platform cfg code (${where}); only the ` +
-      `${hostName} branches were compiled locally. CI clippy type-checks Linux; the Platforms workflow covers ` +
-      'Windows and macOS.'
+      `${hostName} branches were compiled natively. scripts/windows-cfg-check.mjs type-checks Windows in the ` +
+      "gate's rust stages and per-commit CI (HS2-V3R4JR); CI clippy type-checks Linux; the Platforms workflow " +
+      'builds and tests Windows and macOS.'
     : 'none';
   return { host: hostName, files, summary };
 }

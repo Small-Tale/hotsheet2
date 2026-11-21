@@ -70,6 +70,17 @@ covering `main` CI run (Linux) or the Platforms workflow (Windows, macOS) is the
 those branches. The scan and its measured 55-65 ms cost are described in
 [12-code-organization-and-testing.md](12-code-organization-and-testing.md).
 
+The Windows branches are no longer only deferred (HS2-V3R4JR). Whenever a change reaches the
+`rust` group, the gate runs `node scripts/windows-cfg-check.mjs` after `cargo lint`: the same
+clippy pass for `x86_64-pc-windows-gnu`, with stub C tools so the build scripts pass without a
+Windows sysroot. It runs for every Rust change, not only for changed `cfg` lines, because code
+that only a `cfg(unix)` branch uses can lose its last Windows caller in an ordinary edit. It
+adds 34-36 s to a warm Rust gate and 70-90 s to a cold one, and it is part of the T0/T1
+mandatory floor like `cargo lint`. The per-commit `windows-cfg` CI job
+runs the same script, which covers smoke and standalone pushes. Linux branches on a macOS host
+and macOS branches stay deferred to CI and Platforms. The stubs and measurements are in
+[12-code-organization-and-testing.md](12-code-organization-and-testing.md).
+
 ## Workspace chrome selection (HS2-P9A21R, HS2-4S22C4)
 
 A change to a workspace chrome owner selects the phone navigation and resize cases
