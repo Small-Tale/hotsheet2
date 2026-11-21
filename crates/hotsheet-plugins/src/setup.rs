@@ -4111,7 +4111,8 @@ mod tests {
     fn production_snapshot_finds_the_durable_hook_cli_when_the_override_is_missing() {
         let home = tempfile::tempdir().unwrap();
         // HS2-QKH55A: an extensionless file is not the durable CLI on Windows.
-        let extensionless = home.path().join("bin/hotsheet-cli");
+        // HS2-QKH55A: join each component so Windows expectations use `\`.
+        let extensionless = home.path().join("bin").join("hotsheet-cli");
         std::fs::create_dir_all(extensionless.parent().unwrap()).unwrap();
         if cfg!(windows) {
             std::fs::write(&extensionless, b"not an executable").unwrap();
@@ -4119,7 +4120,8 @@ mod tests {
         }
         let durable = home
             .path()
-            .join(format!("bin/hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+            .join("bin")
+            .join(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&durable, b"durable").unwrap();
         assert_eq!(
             stable_hook_cli(None, true, Some(home.path())),
@@ -4133,7 +4135,11 @@ mod tests {
             ),
             format!("{} permission-hook --agent codex", durable.display())
         );
-        let snapshot = home.path().join("hotsheet-local-host-abc/bin/hotsheet-cli");
+        let snapshot = home
+            .path()
+            .join("hotsheet-local-host-abc")
+            .join("bin")
+            .join("hotsheet-cli");
         std::fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
         std::fs::write(&snapshot, b"snapshot").unwrap();
         assert!(is_local_host_snapshot_binary(&snapshot));
