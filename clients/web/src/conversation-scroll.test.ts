@@ -182,6 +182,52 @@ describe('conversation scroll', () => {
     expect(view.scrollTop).toBe(217);
   });
 
+  it('returns a scrolled-back reader to the position a dropped clearance clamped (HS2-FAP9B8)', () => {
+    const view = transcript(555, 857),
+      root = rootOf(view);
+    // Like the browser, a script write clamps to the scroll range; its event arrives later.
+    let top = 0;
+    Object.defineProperty(view, 'scrollTop', {
+      get: () => top,
+      set: (value: number) => {
+        top = Math.max(0, Math.min(value, view.scrollHeight - view.clientHeight));
+      },
+    });
+    syncConversationScroll(root);
+    view.scroll(160);
+    // Selecting re-renders: the clearance drops by 110 px and the 67 px selection row appears, so the
+    // compensated position (227) is past the shorter end and clamps to 192.
+    view.resize(747);
+    view.move(67);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(192);
+    view.scroll(192);
+    // The restored clearance makes room, and the reader returns to the compensated position.
+    view.resize(857);
+    followConversationEnd(root);
+    expect(view.scrollTop).toBe(227);
+    view.scroll(227);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(227);
+    // A later re-render drops the clearance again. Layout clamps at once, but the browser reports
+    // that scroll only at its next frame, after the render's sync, which keeps the same goal.
+    view.scrollHeight = 747;
+    top = 192;
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(192);
+    view.scroll(192);
+    syncConversationScroll(root);
+    view.resize(857);
+    followConversationEnd(root);
+    expect(view.scrollTop).toBe(227);
+    // The reader's own scroll replaces the goal: a clearance change no longer moves them.
+    view.scroll(100);
+    view.resize(900);
+    followConversationEnd(root);
+    syncConversationScroll(root);
+    expect(view.scrollTop).toBe(100);
+  });
+
   it('keeps a following transcript at the end the clearance moves, and skips an unsynced one (HS2-4J9QFX)', () => {
     const view = transcript(300, 1_000),
       unsynced = transcript(300, 1_000);

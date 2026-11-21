@@ -127,8 +127,12 @@ const rows = [
   },
 ];
 
-test('evaluates is: filters and boolean expressions in the workspace search', async ({ page }) => {
-  test.setTimeout(60_000);
+/**
+ * Open the mocked search demo project with the workspace search expanded. Each search test starts
+ * here, so no single test carries the whole search tour: one 40-second test ran past its budget on
+ * the slower Windows ARM64 runner (HS2-FAP9B8).
+ */
+async function openSearchDemo(page: Page) {
   const ticketQueries: URL[] = [];
   await page.route(appRequests, async (route) => {
     const request = route.request(),
@@ -213,7 +217,11 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await openMockedProject(page);
   await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
-  const search = page.getByRole('searchbox', { name: 'Search tickets' }),
+  return { search: page.getByRole('searchbox', { name: 'Search tickets' }), ticketQueries };
+}
+
+test('turns typed search terms into editable chips without moving the toolbar', async ({ page }) => {
+  const { search } = await openSearchDemo(page),
     toolbar = page
       .locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]')
       .filter({ has: page.locator('.ticket-search-field') }),
@@ -376,8 +384,10 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-0094cq-inline-search-narrow.png', fullPage: true });
-  await page.setViewportSize({ width: 1800, height: 800 });
-  await page.getByRole('button', { name: 'Clear search' }).click();
+});
+
+test('evaluates is: filters and boolean expressions in the workspace search', async ({ page }) => {
+  const { search, ticketQueries } = await openSearchDemo(page);
   await search.fill('is:up-next ');
   await expect(page.locator('[data-component="search-field-token"][data-token-value="is:up-next"]')).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
@@ -466,7 +476,10 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   for (const slug of ['HS2-ACTIVE', 'HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
-  await page.getByRole('button', { name: 'Clear search' }).click();
+});
+
+test('evaluates has: and date filters and lists them in the search syntax help', async ({ page }) => {
+  const { search, ticketQueries } = await openSearchDemo(page);
   await search.fill('NOT has:attachment');
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);

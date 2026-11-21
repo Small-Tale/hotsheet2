@@ -7,6 +7,12 @@ interface TranscriptScrollState {
   offset: number;
   /** The scroller's width. A change reflows every message, so `top` no longer names the reading position. */
   width: number;
+  /**
+   * The position a sync wanted for a scrolled-back reader when the browser clamped it short. A re-render
+   * drops the composer clearance for a moment, so the end is briefly shorter than the reading position;
+   * the restored clearance makes room again, and this is where the reader returns (HS2-FAP9B8).
+   */
+  wanted?: number;
 }
 
 /**
@@ -48,6 +54,7 @@ function observeReaderScroll(transcript: HTMLElement, state: TranscriptScrollSta
   // a selection-bar offset placed near an end that a re-render had briefly shortened by
   // dropping the composer clearance (HS2-4J9QFX).
   if (top === state.top) return;
+  state.wanted = undefined;
   if (atLatestEdge(transcript)) state.pinned = true;
   else if (top < state.top) state.pinned = false;
   state.top = top;
@@ -96,14 +103,17 @@ export function syncConversationScroll(root: ParentNode = document, force = fals
     if (!force && !state.pinned) {
       // The selection bar is a row above the scroller. Offset its movement so the
       // message under the reader's eye stays at the same screen position.
-      transcript.scrollTop = state.top + (chromeMoved ? offset - state.offset : 0);
+      const target = (state.wanted ?? state.top) + (chromeMoved ? offset - state.offset : 0);
+      transcript.scrollTop = target;
       state.offset = offset;
       state.width = width;
       state.top = transcript.scrollTop;
+      state.wanted = state.top < target - 0.5 ? target : undefined;
       continue;
     }
     transcript.scrollTop = transcript.scrollHeight;
     state.pinned = true;
+    state.wanted = undefined;
     state.top = transcript.scrollTop;
     state.offset = offset;
     state.width = width;
@@ -111,15 +121,24 @@ export function syncConversationScroll(root: ParentNode = document, force = fals
 }
 
 /**
- * Keep only transcripts that follow their latest message at the end, after chrome over the end
- * (the drawer composer's published clearance) changed size. A scrolled-back reader, or a transcript
- * no render has synced yet, is never moved (HS2-4J9QFX).
+ * Keep transcripts that follow their latest message at the end, after chrome over the end (the drawer
+ * composer's published clearance) changed size. A scrolled-back reader is never pulled to the end or
+ * pinned (HS2-4J9QFX); it only returns to the position a sync wanted and the shorter end clamped
+ * (HS2-FAP9B8). A transcript no render has synced yet is never moved.
  */
 export function followConversationEnd(root: ParentNode = document): void {
   for (const transcript of root.querySelectorAll<HTMLElement>('.ai-conversation__transcript')) {
     const state = transcriptStates.get(transcript);
-    if (!state?.pinned) continue;
-    transcript.scrollTop = transcript.scrollHeight;
+    if (!state) continue;
+    if (state.pinned) {
+      transcript.scrollTop = transcript.scrollHeight;
+      state.top = transcript.scrollTop;
+      continue;
+    }
+    if (state.wanted === undefined) continue;
+    const wanted = state.wanted;
+    transcript.scrollTop = wanted;
     state.top = transcript.scrollTop;
+    state.wanted = state.top < wanted - 0.5 ? wanted : undefined;
   }
 }
