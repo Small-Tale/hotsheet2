@@ -16883,20 +16883,37 @@ test('naturally makes room before fading in a ticket created from the composer',
   expect(before).not.toBeNull();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Naturally animated incoming ticket');
-  // Sample the incoming ghost's opacity on every frame from before creation until it is removed, so the
-  // fade-in assertion never depends on a wall-clock sleep landing mid-flight (HS2-FGHVY4: a fixed 200ms
-  // wait raced the animation on a loaded machine and then waited on an already-removed ghost).
+  // Record the incoming ghost's own fade animation when the ghost is inserted, and whether it ran to
+  // its end. Reading the animation, not sampled frames, holds at any host speed: a fixed 200ms wait
+  // raced it (HS2-FGHVY4), and per-frame samples on the Windows ARM64 runner never landed inside the
+  // 160 ms fade (HS2-8CDFYM).
   await page.evaluate(() => {
-    const samples: number[] = [];
-    (window as unknown as { __ghostOpacities: number[] }).__ghostOpacities = samples;
-    const sample = () => {
-      const node = document.querySelector(
+    const record: { opacity: string[]; duration: number; playState: string; finished: boolean }[] = [];
+    (window as unknown as { __ghostFades: typeof record }).__ghostFades = record;
+    const observer = new MutationObserver(() => {
+      const node = document.querySelector<HTMLElement>(
         '[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]',
       );
-      if (node) samples.push(Number.parseFloat(getComputedStyle(node).opacity));
-      if (node || samples.length === 0) requestAnimationFrame(sample);
-    };
-    requestAnimationFrame(sample);
+      if (!node) return;
+      observer.disconnect();
+      for (const animation of node.getAnimations()) {
+        const effect = animation.effect as KeyframeEffect,
+          entry = {
+            opacity: effect.getKeyframes().map((frame) => String(frame.opacity)),
+            duration: Number(effect.getTiming().duration),
+            playState: animation.playState,
+            finished: false,
+          };
+        record.push(entry);
+        void animation.finished.then(
+          () => {
+            entry.finished = true;
+          },
+          () => undefined,
+        );
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   });
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const incoming = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEW001"]').locator('..'),
@@ -16908,9 +16925,15 @@ test('naturally makes room before fading in a ticket created from the composer',
   await expect.poll(async () => (await existing.boundingBox())?.y ?? 0).toBeGreaterThan(before!.y);
   await expect(ghost).toHaveCount(0);
   await expect(incoming).toHaveCSS('visibility', 'visible');
-  const opacities = await page.evaluate(() => (window as unknown as { __ghostOpacities: number[] }).__ghostOpacities);
-  expect(opacities.length).toBeGreaterThan(0);
-  expect(opacities.some((opacity) => opacity > 0 && opacity < 1)).toBe(true);
+  // The ghost faded from transparent to opaque over a real duration and ran to its end: the product
+  // played the fade rather than skipping to the settled state.
+  const fades = await page.evaluate(
+    () =>
+      (window as unknown as { __ghostFades: { opacity: string[]; duration: number; finished: boolean }[] })
+        .__ghostFades,
+  );
+  expect(fades).toEqual([expect.objectContaining({ opacity: ['0', '1'], finished: true })]);
+  expect(fades[0].duration).toBeGreaterThan(0);
 });
 
 test('finishes local ticket creation motion without redundantly reconciling its acknowledged long-poll event', async ({
