@@ -708,9 +708,8 @@ fn spawn_signal_listener(state: AppState) -> tokio::sync::mpsc::Receiver<()> {
 /// Begin the bounded shutdown once stdin closes: the owning process exited (HS2-VQ8ZWT).
 /// Input is discarded; only EOF (or a read error) matters. A blocking thread, not a timer.
 fn stop_on_stdin_eof(state: AppState) {
+    let mut stdin = watched_stdin();
     std::thread::spawn(move || {
-        use std::io::Read;
-        let mut stdin = std::io::stdin().lock();
         let mut buf = [0_u8; 1024];
         loop {
             match stdin.read(&mut buf) {
@@ -724,6 +723,52 @@ fn stop_on_stdin_eof(state: AppState) {
         state.begin_stopping();
         shutdown_log("shutdown: stdin closed (owner exited); stopping");
     });
+}
+
+/// The stdin the EOF watcher reads. On Unix that is the process stdin itself.
+#[cfg(not(windows))]
+fn watched_stdin() -> Box<dyn std::io::Read + Send> {
+    Box::new(std::io::stdin())
+}
+
+/// The stdin the EOF watcher reads, taken out of the process's standard handles (HS2-ME31D0).
+///
+/// The owner's stdin is a synchronous pipe, and the watcher keeps a read pending on it. Windows
+/// serializes every operation on a synchronous file object, so a child that inherited that
+/// stdin (every `git` the server runs, AI-tool probes) blocked in its C runtime start-up
+/// querying the handle until the owner exited: Code Review stayed at "Finding ticket commits…"
+/// and repository status never answered. The watcher now owns the original handle, made
+/// non-inheritable, and the process stdin becomes `NUL`, which children inherit instead. If the
+/// swap fails, the watcher reads stdin as before.
+#[cfg(windows)]
+fn watched_stdin() -> Box<dyn std::io::Read + Send> {
+    use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, IntoRawHandle as _};
+    use windows_sys::Win32::Foundation::{
+        HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
+    };
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE, SetStdHandle};
+
+    // SAFETY: querying a standard handle has no preconditions.
+    let original = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    if original.is_null() || original == INVALID_HANDLE_VALUE {
+        return Box::new(std::io::stdin());
+    }
+    let Ok(nul) = std::fs::File::open("NUL") else {
+        return Box::new(std::io::stdin());
+    };
+    // SAFETY: `nul` is a valid open handle; on success the process standard input refers to it,
+    // so it is deliberately never closed below.
+    if unsafe { SetStdHandle(STD_INPUT_HANDLE, nul.as_raw_handle()) } == 0 {
+        return Box::new(std::io::stdin());
+    }
+    let _ = nul.into_raw_handle();
+    // SAFETY: `original` is the valid stdin handle this process received. It is no longer a
+    // standard handle, so the watcher's file is its only owner. Clearing inheritance keeps it
+    // out of every child's handle table.
+    unsafe {
+        SetHandleInformation(original, HANDLE_FLAG_INHERIT, 0);
+        Box::new(std::fs::File::from_raw_handle(original))
+    }
 }
 
 /// Detached test bootstrap servers cannot use stdin ownership: the short-lived CLI

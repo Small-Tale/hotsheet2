@@ -827,6 +827,13 @@ The flag is safe even when the dead owner also held the server's stdout and stde
 shutdown diagnostics never panic on a broken pipe, and the reader begins stopping
 before it logs anything.
 
+The watched pipe is never handed to the server's children (HS2-ME31D0). On Windows the
+reader keeps a synchronous read pending on it, and a child that inherited it (every `git`
+the server runs) blocked in its runtime start-up until the owner exited. The reader therefore
+owns the original handle, made non-inheritable, and the process's standard input becomes
+`NUL` before any child is spawned. `crates/hotsheet-server/tests/stdin_eof_git_children.rs`
+asks for repository status while the owner holds stdin.
+
 Detached bootstrap servers launched by tests cannot use stdin ownership because the
 short-lived CLI launcher closes stdin first. Those fixtures set
 `HOTSHEET_TEST_SERVER_OWNER_PID` to their runner PID (HS2-BNGHKM). The server checks
