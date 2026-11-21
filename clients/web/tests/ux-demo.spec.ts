@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { readClipboardText } from './clipboard-text';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test('resizes the AI conversation bottom sheet and restores its opening size (HS2-3P2DE9)', async ({
@@ -1007,7 +1008,7 @@ test('offers remembered-answer row and selected actions in preview and dialog (H
   await previewMenu.getByRole('button', { name: 'Selected Answer Actions' }).click();
   await expect(page.getByRole('menuitem', { name: 'Edit Match' })).toBeDisabled();
   await page.getByRole('menuitem', { name: 'Copy Selected Actions' }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${firstAction}\n${secondAction}`);
+  expect(await readClipboardText(page)).toBe(`${firstAction}\n${secondAction}`);
   await page.setViewportSize({ width: 390, height: 844 });
   await rows.nth(0).evaluate((element) => {
     element.scrollIntoView({ block: 'start' });

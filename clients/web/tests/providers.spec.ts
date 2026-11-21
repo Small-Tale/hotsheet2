@@ -18,6 +18,7 @@ import { projectScopedServerPath } from '../src/project-bridge';
 import { hostHealthFixture } from '../src/ux-demo/host-health-fixtures';
 import { glanceScenario } from '../src/ux-demo/live-state-fixtures';
 import { appRequests } from './app-requests';
+import { readClipboardText } from './clipboard-text';
 import { routeAllFeaturesOn } from './feature-areas-route';
 import { openMockedProject, projectTab, ticketListLoaded } from './open-mocked-project';
 import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
@@ -33026,7 +33027,7 @@ test('copies one or every selected ticket ID from row and More actions menus (HS
   await expect(menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true })).toBeVisible();
   await captureMenu('hs2-f0xzax-multiple-wide');
   await menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01\nHS2-START02');
+  await expect.poll(() => readClipboardText(page)).toBe('HS2-DEMO01\nHS2-START02');
   await page.setViewportSize({ width: 390, height: 844 });
   await second.click({ button: 'right' });
   await expect(menu.getByRole('menuitem', { name: 'Copy ticket IDs', exact: true })).toBeVisible();

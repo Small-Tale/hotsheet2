@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
+import { readClipboardText } from './clipboard-text';
 import { openMockedProject } from './open-mocked-project';
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
@@ -89,7 +90,7 @@ test('copies all terminal text or a selection from the phone copy sheet', async 
   // Nothing selected: Copy takes everything.
   await sheet.getByRole('button', { name: 'Copy', exact: true }).tap();
   await expect(sheet).toHaveJSProperty('open', false);
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(value);
+  expect(await readClipboardText(page)).toBe(value);
   const lines = value.split('\n').length;
   await expect(toast(page)).toContainText(`Copied terminal text (${lines} lines)`);
 
