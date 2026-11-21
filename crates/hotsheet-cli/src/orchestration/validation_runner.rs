@@ -341,6 +341,11 @@ pub(super) fn launch(home: &Path, spec: &StepSpec) -> std::io::Result<Launched> 
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     detach(&mut command);
+    // HS2-8CGT4R: Windows would hand the runner this process's inheritable standard
+    // handles, so a caller reading this process's output would wait for the runner too.
+    // Unix keeps the posix_spawn path (HS2-H1EK8R); its stdio is already null.
+    #[cfg(windows)]
+    hotsheet_process_journal::close_inherited_descriptors(&mut command);
     let mut child = hotsheet_process_journal::LaunchContext {
         journal: hotsheet_process_journal::ProcessJournal::at(home),
         supervisor: "hotsheet-cli",
