@@ -1926,6 +1926,303 @@ fn hs2_9qq0m9_a_readiness_event_during_the_first_push_is_not_lost() {
     assert_eq!(f.host.pushes().len(), 2);
 }
 
+/// HS2-NSGH2H: a hosted session started on `target` with the tool its policy allows
+/// and given its role prompt, for request tests: its hosting checkout id and terminal id.
+fn hosted_for_requests(
+    f: &Fixture,
+    operation: &str,
+    target: u128,
+    tx: &mut Transaction<'_>,
+) -> (String, String) {
+    let tool = if target == 1 { "codex" } else { "claude" };
+    let view = f.started(operation, target, tool, tx);
+    assert_eq!(view.role_prompt, Some(RolePrompt::Delivered));
+    let terminal = view.session.hosted.as_ref().unwrap().session_id.clone();
+    let checkout = HostedSessionRegistry::new(&f.m.home)
+        .by_session(&terminal)
+        .unwrap()
+        .unwrap()
+        .checkout_id;
+    (checkout, terminal)
+}
+
+/// HS2-NSGH2H: ask the hosted session `operation` to work `ticket`.
+fn hosted_request(
+    runtime: &OrchestrationRuntime,
+    checkout: &str,
+    operation: &str,
+    ticket: &str,
+    tx: &mut Transaction<'_>,
+) -> Option<RolePrompt> {
+    let reply = runtime
+        .hosted_session_request(
+            checkout,
+            crate::orchestration::sessions::HostedSessionRequest {
+                operation_id: operation.into(),
+                ticket: ticket.into(),
+                kind: crate::orchestration::sessions::RequestKind::Assigned,
+                commit: None,
+                actor: Some(worker()),
+            },
+            tx,
+        )
+        .unwrap();
+    assert_eq!(reply.reason, None);
+    reply.request_prompt
+}
+
+/// HS2-NSGH2H: how the request recorded for `operation` stands now.
+fn recorded_request(f: &Fixture, checkout: &str, operation: &str) -> Option<RolePrompt> {
+    HostedSessionRegistry::new(&f.m.home)
+        .get(checkout, operation)
+        .unwrap()
+        .unwrap()
+        .request
+        .unwrap()
+        .at(hotsheet_ticketing::Clock::now_ms(&Clock))
+}
+
+/// HS2-NSGH2H: the request pushes sent to `terminal` so far.
+fn request_pushes(f: &Fixture, terminal: &str) -> usize {
+    f.host
+        .pushes()
+        .iter()
+        .filter(|(id, text)| id == terminal && text.contains("gave this session new work"))
+        .count()
+}
+
+/// HS2-NSGH2H: the tool becomes ready, and says so once, while a request's first push
+/// (which it refused) is still being recorded. That one readiness event retries the
+/// request and delivers it; the late refusal does not undo the delivery. Before the
+/// fix the request read unasked during the push, so the event was dropped and the
+/// request stayed pending with nothing left to wake it.
+#[test]
+fn hs2_nsgh2h_a_readiness_event_during_a_requests_first_push_is_not_lost() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let (checkout, terminal) = hosted_for_requests(&f, "op-1", 1, &mut tx);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady, PushAttempt::Delivered]);
+    let retried = Arc::new(Mutex::new(None));
+    let (runtime, seen, home, at) = (
+        f.m.runtime.clone(),
+        retried.clone(),
+        f.m.home.clone(),
+        checkout.clone(),
+    );
+    f.host.during_push.arm(move |terminal| {
+        let mut rng = Rng(200);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        runtime.hosted_role_retry(terminal, &mut tx).unwrap();
+        *seen.lock().unwrap() = HostedSessionRegistry::new(&home)
+            .get(&at, "op-1")
+            .unwrap()
+            .unwrap()
+            .request
+            .unwrap()
+            .at(hotsheet_ticketing::Clock::now_ms(&Clock));
+    });
+    let reply = hosted_request(&f.m.runtime, &checkout, "op-1", &id(700), &mut tx);
+    assert_eq!(
+        *retried.lock().unwrap(),
+        Some(RolePrompt::Delivered),
+        "the readiness event found the request pending and delivered it"
+    );
+    assert_eq!(
+        reply,
+        Some(RolePrompt::Delivered),
+        "the late refusal is lost"
+    );
+    assert_eq!(
+        recorded_request(&f, &checkout, "op-1"),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 2);
+    // Settled: a later readiness event pushes nothing more.
+    let pushes = f.host.pushes().len();
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(f.host.pushes().len(), pushes);
+}
+
+/// HS2-NSGH2H: the same request again is never pushed twice, whether it comes while
+/// the first push is under way, while that push's refusal leaves it pending, or after
+/// it was delivered. Another ticket is a new request and is pushed once.
+#[test]
+fn hs2_nsgh2h_a_repeated_request_is_not_pushed_twice() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let (checkout, terminal) = hosted_for_requests(&f, "op-1", 1, &mut tx);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .extend([PushAttempt::NotReady]);
+    // A repeat arrives inside the first push: it finds the request recorded and
+    // pending, and leaves the push to the call that recorded it.
+    let repeated = Arc::new(Mutex::new(None));
+    let (runtime, seen, at) = (f.m.runtime.clone(), repeated.clone(), checkout.clone());
+    f.host.during_push.arm(move |_| {
+        let mut rng = Rng(200);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        *seen.lock().unwrap() = Some(hosted_request(&runtime, &at, "op-1", &id(700), &mut tx));
+    });
+    let first = hosted_request(&f.m.runtime, &checkout, "op-1", &id(700), &mut tx);
+    assert_eq!(*repeated.lock().unwrap(), Some(Some(RolePrompt::Pending)));
+    assert_eq!(first, Some(RolePrompt::Pending));
+    assert_eq!(request_pushes(&f, &terminal), 1);
+    // Refused and pending: a repeat pushes nothing; readiness delivers it.
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-1", &id(700), &mut tx),
+        Some(RolePrompt::Pending)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 1);
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(request_pushes(&f, &terminal), 2);
+    // Delivered: a repeat pushes nothing.
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-1", &id(700), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 2);
+    // Another ticket is a new request: pushed once, and not again on a repeat.
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-1", &id(701), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-1", &id(701), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 3);
+}
+
+/// HS2-NSGH2H: a request's delivery across readiness events before, during and after
+/// its first push, a refusal and then a retry, and a delivery and then a late
+/// refusal. Each case is a fresh session; each counts the request pushes it causes.
+#[test]
+fn hs2_nsgh2h_request_delivery_transitions_around_the_first_push() {
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &Clock,
+        rng: &mut rng,
+    };
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let answers = |answers: &[PushAttempt]| {
+        f.host
+            .push_answers
+            .lock()
+            .unwrap()
+            .extend(answers.iter().copied());
+    };
+
+    // Readiness before the request: nothing is pending, nothing is pushed. The
+    // request then finds the tool ready and is delivered by its own push.
+    let (checkout, terminal) = hosted_for_requests(&f, "op-1", 1, &mut tx);
+    let before = f.host.pushes().len();
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(f.host.pushes().len(), before);
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-1", &id(700), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 1);
+
+    // Readiness during the push, which the tool takes: the retry inside it pushes once
+    // more (both copies of one request, as for a role prompt) and both deliver.
+    let (checkout, terminal) = hosted_for_requests(&f, "op-2", 2, &mut tx);
+    let runtime = f.m.runtime.clone();
+    f.host.during_push.arm(move |terminal| {
+        let mut rng = Rng(200);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        runtime.hosted_role_retry(terminal, &mut tx).unwrap();
+    });
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-2", &id(700), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 2);
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(request_pushes(&f, &terminal), 2, "settled");
+
+    // A refusal, then readiness after the push: retried and delivered, then settled.
+    let (checkout, terminal) = hosted_for_requests(&f, "op-3", 1, &mut tx);
+    answers(&[PushAttempt::NotReady]);
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-3", &id(700), &mut tx),
+        Some(RolePrompt::Pending)
+    );
+    answers(&[PushAttempt::NotReady]);
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(
+        recorded_request(&f, &checkout, "op-3"),
+        Some(RolePrompt::Pending),
+        "refused again: still pending"
+    );
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(
+        recorded_request(&f, &checkout, "op-3"),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 3);
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(request_pushes(&f, &terminal), 3);
+
+    // A delivery, then a late refusal: the retry inside the push delivers it and the
+    // first push's rejection, folded in afterwards, changes nothing.
+    let (checkout, terminal) = hosted_for_requests(&f, "op-4", 2, &mut tx);
+    answers(&[PushAttempt::Rejected, PushAttempt::Delivered]);
+    let runtime = f.m.runtime.clone();
+    f.host.during_push.arm(move |terminal| {
+        let mut rng = Rng(200);
+        let mut tx = Transaction {
+            clock: &Clock,
+            rng: &mut rng,
+        };
+        runtime.hosted_role_retry(terminal, &mut tx).unwrap();
+    });
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-4", &id(700), &mut tx),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(request_pushes(&f, &terminal), 2);
+
+    // A rejection with no retry settles it as failed: readiness pushes nothing more.
+    // (A fresh machine: each target is at its session limit.)
+    let f = Fixture::new(&[1, 2], &mut tx);
+    let (checkout, terminal) = hosted_for_requests(&f, "op-5", 1, &mut tx);
+    f.host
+        .push_answers
+        .lock()
+        .unwrap()
+        .push_back(PushAttempt::Rejected);
+    assert_eq!(
+        hosted_request(&f.m.runtime, &checkout, "op-5", &id(700), &mut tx),
+        Some(RolePrompt::Failed)
+    );
+    f.m.runtime.hosted_role_retry(&terminal, &mut tx).unwrap();
+    assert_eq!(request_pushes(&f, &terminal), 1);
+}
+
 #[test]
 fn hs2_2dpgdy_a_prompt_at_launch_or_an_unsupported_tool_asks_nothing_more() {
     let mut rng = Rng(100);

@@ -11,10 +11,10 @@ use hotsheet_ticketing::ops;
 use hotsheet_ticketing::orchestration::{
     AdmissionOutcome, AdmissionRequest, AuditOutcome, AuditRecord, DenialReason, ExternalWork,
     HostedRef, HostedSession, HostedSessionRegistry, MachineLimits, NewHostedSession, NewSession,
-    Observed, OrchestratedSession, RunEvent, RunEventKind, RunEventSource, SafePoint,
-    SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin, SessionOwner,
-    SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate, StopRequest,
-    TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_hand_back,
+    Observed, OrchestratedSession, RecordedRequest, RunEvent, RunEventKind, RunEventSource,
+    SafePoint, SafePointFacts, SessionControl, SessionError, SessionLoad, SessionOrigin,
+    SessionOwner, SessionRegistry, SessionRequest, SessionRole, SessionState, SessionUpdate,
+    StopRequest, TargetAction, TargetDestination, TargetOpError, Withdrawal, decide_hand_back,
     decide_safe_point, decide_stop,
 };
 pub use hotsheet_ticketing::orchestration::{PushAttempt, RequestKind, RolePrompt};
@@ -1579,7 +1579,14 @@ impl OrchestrationRuntime {
             return Ok(refused(SessionError::NotActive));
         }
         let now_ms = tx.clock.now_ms();
-        let Some(recorded) = registry.request(
+        // HS2-NSGH2H: a new request reads pending before its first push, so a readiness
+        // event that lands while that push and its record are under way retries it
+        // rather than being dropped. Only the call that recorded it pushes it first;
+        // the same request again is not pushed twice.
+        let Some(RecordedRequest {
+            session: recorded,
+            first_push,
+        }) = registry.request(
             &checkout.id,
             &request.operation_id,
             &request.ticket,
@@ -1590,11 +1597,7 @@ impl OrchestrationRuntime {
         else {
             return Ok(refused(SessionError::NotFound));
         };
-        let unasked = recorded
-            .request
-            .as_ref()
-            .is_some_and(|request| request.delivery.is_unasked());
-        let request_prompt = if unasked {
+        let request_prompt = if first_push {
             self.hosted_request_push(&checkout, &recorded, tx)?
         } else {
             recorded

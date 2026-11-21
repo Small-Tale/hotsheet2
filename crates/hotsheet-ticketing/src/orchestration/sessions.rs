@@ -1100,6 +1100,16 @@ pub struct HostedRequest {
     pub delivery: RoleDelivery,
 }
 
+/// HS2-NSGH2H: what [`HostedSessionRegistry::request`] recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedRequest {
+    pub session: HostedSession,
+    /// This call recorded a new request, already reading pending, and owes its first
+    /// push. A repeat of the request it holds, or a session that ended, owes none:
+    /// only one caller pushes a request first, however the calls interleave.
+    pub first_push: bool,
+}
+
 impl HostedRequest {
     /// How the request stands at `now_ms`; a pending one past its bounds is failed.
     pub fn at(&self, now_ms: u64) -> Option<RolePrompt> {
@@ -1605,6 +1615,12 @@ impl HostedSessionRegistry {
     /// keep the request as it is, so a repeat is never pushed twice; another ticket or
     /// kind replaces it. `Ok(None)` when no session has the operation id; an ended
     /// session keeps what it had.
+    ///
+    /// HS2-NSGH2H: a new request is recorded pending (`RoleDelivery::asking`, no try
+    /// used) before its first push, so a readiness event that lands while that push
+    /// is under way finds it pending and retries it. Whether the caller owes the first
+    /// push is [`RecordedRequest::first_push`], decided under the registry lock: the
+    /// delivery state can no longer tell a new request from a repeat.
     pub fn request(
         &self,
         checkout_id: &str,
@@ -1613,12 +1629,13 @@ impl HostedSessionRegistry {
         kind: RequestKind,
         commit: Option<&str>,
         now_ms: u64,
-    ) -> Result<Option<HostedSession>, OrchestrationError> {
+    ) -> Result<Option<RecordedRequest>, OrchestrationError> {
         valid_identifier(ticket)?;
         if let Some(commit) = commit {
             valid_identifier(commit)?;
         }
-        self.change(checkout_id, operation_id, |session| {
+        let mut first_push = false;
+        let session = self.change(checkout_id, operation_id, |session| {
             if session.ended_at_ms.is_some() {
                 return;
             }
@@ -1633,10 +1650,15 @@ impl HostedSessionRegistry {
                     kind,
                     commit: commit.map(Into::into),
                     requested_at_ms: now_ms,
-                    delivery: RoleDelivery::default(),
+                    delivery: RoleDelivery::asking(),
                 });
+                first_push = true;
             }
-        })
+        })?;
+        Ok(session.map(|session| RecordedRequest {
+            session,
+            first_push,
+        }))
     }
 
     /// HS2-R7QH35: fold one try at delivering the request into the record. A settled

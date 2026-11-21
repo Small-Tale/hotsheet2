@@ -1445,6 +1445,101 @@ fn hs2_9qq0m9_a_prompt_awaits_its_push_from_the_first_try_on() {
     assert_eq!(registry.role_asking(HOSTED, "op-x").unwrap(), None);
 }
 
+/// HS2-NSGH2H: a new request reads pending, and awaits its push, from the moment it is
+/// recorded; only the call that recorded it owes the first push. A repeat owes none
+/// in any state, another ticket owes one again, and an ended session owes none. Tries
+/// fold in as for a role prompt: a refusal then a retry delivers it, and a refusal
+/// after a delivery changes nothing.
+#[test]
+fn hs2_nsgh2h_a_request_reads_pending_before_its_first_push_and_is_pushed_first_once() {
+    let home = tempfile::tempdir().unwrap();
+    let registry = HostedSessionRegistry::new(home.path());
+    let clock = Clock(std::cell::Cell::new(10));
+    let mut rng = Rng(100);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (reserved, _) = registry
+        .reserve(HOSTED, &hosted("op-1", "codex"), &mut tx)
+        .unwrap();
+    registry.mark_started(HOSTED, "op-1").unwrap();
+    let found = || registry.by_session(&reserved.session_id).unwrap().unwrap();
+    let request = |ticket: &str, now| {
+        let recorded = registry
+            .request(HOSTED, "op-1", ticket, RequestKind::Assigned, None, now)
+            .unwrap()
+            .unwrap();
+        (recorded.first_push, recorded.session.request.unwrap())
+    };
+    let attempt = |answer, now| {
+        registry
+            .request_attempt(HOSTED, "op-1", answer, now)
+            .unwrap()
+            .unwrap()
+            .request
+            .unwrap()
+            .at(now)
+    };
+    assert!(!found().awaits_push());
+    // Recorded: pending with no try used, and the readiness filter passes events on.
+    let (first_push, first) = request(&id(700), 20);
+    assert!(first_push);
+    assert_eq!(first.delivery, RoleDelivery::asking());
+    assert!(found().awaits_push());
+    assert!(first.delivery.should_retry(first.requested_at_ms, 20));
+    // The record keeps it across a read from disk.
+    assert_eq!(found().request.unwrap().delivery, RoleDelivery::asking());
+    // A repeat before any try owes no push and changes nothing.
+    assert_eq!(request(&id(700), 21), (false, first.clone()));
+    // A refusal, a repeat, then a retry that delivers it.
+    assert_eq!(
+        attempt(PushAttempt::NotReady, 30),
+        Some(RolePrompt::Pending)
+    );
+    assert!(found().awaits_push());
+    let (again, pending) = request(&id(700), 31);
+    assert!(!again);
+    assert_eq!(
+        (pending.requested_at_ms, pending.delivery.attempts),
+        (20, 1)
+    );
+    assert_eq!(
+        attempt(PushAttempt::Delivered, 32),
+        Some(RolePrompt::Delivered)
+    );
+    assert!(!found().awaits_push());
+    // A late refusal after the delivery changes nothing; nor does a repeat.
+    assert_eq!(
+        attempt(PushAttempt::NotReady, 33),
+        Some(RolePrompt::Delivered)
+    );
+    assert_eq!(
+        attempt(PushAttempt::Rejected, 34),
+        Some(RolePrompt::Delivered)
+    );
+    assert!(!request(&id(700), 35).0);
+    // Another ticket is a new request: pending, owing its first push.
+    let (next_push, next) = request(&id(701), 40);
+    assert!(next_push);
+    assert_eq!(
+        (next.requested_at_ms, next.delivery),
+        (40, RoleDelivery::asking())
+    );
+    assert!(found().awaits_push());
+    // A rejection settles it as failed: no longer awaiting a push.
+    assert_eq!(attempt(PushAttempt::Rejected, 41), Some(RolePrompt::Failed));
+    assert!(!found().awaits_push());
+    // An ended session records nothing new and owes no push.
+    registry.end(HOSTED, "op-1", "wound_down", 50).unwrap();
+    let ended = registry
+        .request(HOSTED, "op-1", &id(702), RequestKind::Assigned, None, 60)
+        .unwrap()
+        .unwrap();
+    assert!(!ended.first_push);
+    assert_eq!(ended.session.request.unwrap().ticket, id(701));
+}
+
 #[test]
 fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bounds() {
     let home = tempfile::tempdir().unwrap();
@@ -1464,6 +1559,7 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
             .request(HOSTED, "op-1", ticket, kind, None, now)
             .unwrap()
             .unwrap()
+            .session
             .request
             .unwrap()
     };
@@ -1484,8 +1580,12 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
             .request,
         None
     );
+    // HS2-NSGH2H: a new request reads pending before its first push, with no try used.
     let first = request(&id(700), RequestKind::Assigned, 20);
-    assert_eq!((first.requested_at_ms, first.at(20)), (20, None));
+    assert_eq!(
+        (first.requested_at_ms, first.at(20), first.delivery),
+        (20, Some(RolePrompt::Pending), RoleDelivery::asking())
+    );
     // Not ready, then the same request again: kept, not reset.
     assert_eq!(
         attempt(PushAttempt::NotReady, 30).at(30),
@@ -1504,7 +1604,7 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
     let claimed = request(&id(700), RequestKind::Claimed, 70);
     assert_eq!(
         (claimed.kind, claimed.requested_at_ms, claimed.at(70)),
-        (RequestKind::Claimed, 70, None)
+        (RequestKind::Claimed, 70, Some(RolePrompt::Pending))
     );
     let next = request(&id(701), RequestKind::Assigned, 80);
     assert_eq!((next.ticket.clone(), next.requested_at_ms), (id(701), 80));
@@ -1522,6 +1622,7 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
             )
             .unwrap()
             .unwrap()
+            .session
             .request
             .unwrap()
     };
@@ -1551,7 +1652,8 @@ fn hs2_r7qh35_a_request_is_recorded_once_replaced_by_another_and_delivered_in_bo
         .request(HOSTED, "op-1", &id(702), RequestKind::Assigned, None, 120)
         .unwrap()
         .unwrap();
-    assert_eq!(ended.request.unwrap().ticket, id(701));
+    assert!(!ended.first_push);
+    assert_eq!(ended.session.request.unwrap().ticket, id(701));
     assert!(
         registry
             .request(

@@ -4958,6 +4958,14 @@ it is, so nothing is pushed twice; another ticket or kind replaces it. A person'
 session is refused `session_human_owned`, an ended one `session_not_active`. The
 hosted listing reports `request_prompt`.
 
+A new request reads `pending` before its first push, not after it (HS2-NSGH2H, as
+HS2-9QQ0M9 does for the role prompt; `RoleDelivery::asking`, which uses no try). A
+readiness event that lands while that push and its record are under way therefore
+retries the request instead of finding nothing asked and being dropped. Because the
+delivery can no longer tell a new request from a repeat, the record decides that
+under its lock (`RecordedRequest::first_push`): only the call that recorded a new
+request pushes it first, and a repeat, whenever it arrives, pushes nothing.
+
 **Orchestrating half.** `session_tell_ticket(owner, session_id, actor, tx)` sends the
 request for the session's current, unfinished run, through the gate as
 `sessions_manage` continuing, and publishes `session_request_<code>` on the run's

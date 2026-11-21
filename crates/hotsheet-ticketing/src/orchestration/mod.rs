@@ -174,10 +174,10 @@ pub use session_idle::{SessionIdleStore, observe_idle};
 pub use sessions::{
     HostedRef, HostedRequest, HostedSession, HostedSessionRegistry, MAX_HOSTED_SESSIONS,
     MAX_SESSION_HISTORY, MAX_SESSION_PROJECT_CHARS, MAX_SESSIONS, NewHostedSession, NewSession,
-    OrchestratedSession, RequestKind, SafePoint, SafePointBlocker, SafePointFacts, SessionControl,
-    SessionError, SessionOrigin, SessionOwner, SessionRegistry, SessionRole, SessionState,
-    SessionTransition, SessionUpdate, StopRequest, decide_hand_back, decide_safe_point,
-    decide_stop, run_holder, session_label,
+    OrchestratedSession, RecordedRequest, RequestKind, SafePoint, SafePointBlocker, SafePointFacts,
+    SessionControl, SessionError, SessionOrigin, SessionOwner, SessionRegistry, SessionRole,
+    SessionState, SessionTransition, SessionUpdate, StopRequest, decide_hand_back,
+    decide_safe_point, decide_stop, run_holder, session_label,
 };
 pub use shared_plan::{SHARED_PLAN_PATH, SharedPlan, SharedPlanStore, SharedStep, merge_steps};
 pub use summary::{
