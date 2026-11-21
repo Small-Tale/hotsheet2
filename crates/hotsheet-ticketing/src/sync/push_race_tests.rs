@@ -9,7 +9,10 @@ use std::time::Duration;
 
 use super::tests::{commit_file, ok, remote_with_two_clones};
 use super::*;
-use crate::sync_health::{SyncState, health};
+use crate::sync_health::health;
+// Only the Unix `RacingPeer` tests compare states (HS2-6EW369, HS2-R2BC3N).
+#[cfg(unix)]
+use crate::sync_health::SyncState;
 
 /// Fast raced retries for tests: `retries` more attempts, a 1 ms pause unit.
 /// Unix-only like the `RacingPeer` tests that use it (HS2-6EW369).
