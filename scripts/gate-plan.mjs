@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
+import { fixtureReaders, readManifest } from './root-test-reads.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -37,8 +38,9 @@ export const STAGE_GROUPS = {
   'spikes/kerf-webawesome::npm run build': 'spike',
 };
 // HS2-3ZJBRM: exact lists keep a new or moved root test unclassified until its
-// read inputs are reviewed. Policy tests read other packages or generated guidance;
-// tooling tests read scripts/ and full-fallback configuration inputs only.
+// read inputs are reviewed. Policy tests read other packages or generated guidance and always run.
+// Tooling tests read scripts/ and full-fallback inputs, plus the repository files that
+// scripts/root-test-fixtures.json records for them (HS2-WC74CR).
 export const ROOT_POLICY_TESTS = [
   'instruction-policy',
   'sync-ai-playbook',
@@ -80,8 +82,14 @@ export const ROOT_TOOLING_TESTS = [
   'macos-dev-signing',
   'platform-matrix',
   'browser-engines',
+  'root-test-reads',
 ];
-const rootTestCommand = (names) => `node --test ${names.map((name) => `scripts/${name}.test.mjs`).join(' ')}`;
+/** HS2-WC74CR: the tooling stage records what its tests read and fails on an undeclared fixture. */
+export const ROOT_TEST_READS_PRELOAD = './scripts/root-test-reads-preload.mjs';
+const rootTestCommand = (names, preload) =>
+  `node --test ${preload ? `--import ${preload} ` : ''}${names.map((name) => `scripts/${name}.test.mjs`).join(' ')}`;
+/** Repository files and directories outside scripts/ that root tooling tests read (HS2-WC74CR). */
+export const ROOT_TEST_FIXTURES = readManifest(root);
 
 /** Why each group can never be omitted: these checks read the whole repository. */
 const ALWAYS_REASON =
@@ -116,9 +124,23 @@ export const PATH_RULES = [
   [/^docs\//, ['web'], 'documentation; web tests read docs/contracts and other docs'],
 ];
 
-export function classifyPath(path) {
-  for (const [pattern, groups, reason] of PATH_RULES) if (pattern.test(path)) return { groups, reason };
-  return { groups: 'full', reason: 'unclassified path' };
+export function classifyPath(path, fixtures = ROOT_TEST_FIXTURES) {
+  const rule = PATH_RULES.find(([pattern]) => pattern.test(path));
+  const match = rule ? { groups: rule[1], reason: rule[2] } : { groups: 'full', reason: 'unclassified path' };
+  // HS2-WC74CR: a root tooling test reads this file as a fixture, so a change to it reaches that test.
+  const readers = fixtureReaders(fixtures, path);
+  if (!readers.length || match.groups === 'full' || match.groups.includes('tooling')) return match;
+  return {
+    groups: [...match.groups, 'tooling'],
+    reason: `${match.reason}; ${readers.map((name) => `scripts/${name}.test.mjs`).join(', ')} read it (scripts/root-test-fixtures.json)`,
+    readers,
+  };
+}
+
+/** The tooling stage narrowed to the test files that read a changed fixture, in gate order (HS2-WC74CR). */
+export function narrowedToolingCommand(readers) {
+  const names = ROOT_TOOLING_TESTS.filter((name) => readers.has(name));
+  return names.length ? rootTestCommand(names, ROOT_TEST_READS_PRELOAD) : null;
 }
 
 /** The gate stages, read from scripts/check.sh so the plan can never drift from the real gate. */
@@ -147,20 +169,27 @@ export function parseCheckScript(text) {
 
 export function stageGroup(stage) {
   if (stage.cwd === '.' && stage.command === rootTestCommand(ROOT_POLICY_TESTS)) return 'always';
-  if (stage.cwd === '.' && stage.command === rootTestCommand(ROOT_TOOLING_TESTS)) return 'tooling';
+  if (stage.cwd === '.' && stage.command === rootTestCommand(ROOT_TOOLING_TESTS, ROOT_TEST_READS_PRELOAD))
+    return 'tooling';
   return STAGE_GROUPS[`${stage.cwd}::${stage.command}`];
 }
 
 /** Build the plan from the gate's stages and the changed paths. Pure: no Git or process access. */
-export function plan({ stages, changes, fallback = [] }) {
+export function plan({ stages, changes, fallback = [], fixtures = ROOT_TEST_FIXTURES }) {
   const reasons = new Map();
   const add = (group, reason) => reasons.set(group, [...(reasons.get(group) ?? []), reason]);
   const full = [...fallback];
+  // Root tooling tests that read a changed fixture; null once a change reaches the whole tooling group.
+  let readers = new Set();
   if (changes.length === 0) full.push('no changes since the base; nothing narrower can be justified');
   for (const path of changes) {
-    const { groups, reason } = classifyPath(path);
+    const classified = classifyPath(path, fixtures);
+    const { groups, reason } = classified;
     if (groups === 'full') full.push(`${path}: ${reason}`);
     else for (const group of groups) add(group, `${path}: ${reason}`);
+    if (groups !== 'full' && groups.includes('tooling'))
+      if (classified.readers && readers) for (const name of classified.readers) readers.add(name);
+      else readers = null;
   }
   const unknown = stages.filter((stage) => stageGroup(stage) === undefined);
   for (const stage of unknown) full.push(`unclassified gate stage: ${stage.cwd} ${stage.command}`);
@@ -173,9 +202,15 @@ export function plan({ stages, changes, fallback = [] }) {
       if (mode === 'full') return { ...stage, group, selected: true, reasons: ['full gate'] };
       if (group === 'always') return { ...stage, group, selected: true, reasons: [ALWAYS_REASON] };
       const why = reasons.get(group);
-      return why
-        ? { ...stage, group, selected: true, reasons: why }
-        : { ...stage, group, selected: false, reasons: [`no changed path reaches the ${group} group`] };
+      if (!why) return { ...stage, group, selected: false, reasons: [`no changed path reaches the ${group} group`] };
+      // A fixture change runs only the root tests that read it, not every tooling test (HS2-WC74CR).
+      const narrowed =
+        group === 'tooling' && readers && stage.command === rootTestCommand(ROOT_TOOLING_TESTS, ROOT_TEST_READS_PRELOAD)
+          ? narrowedToolingCommand(readers)
+          : null;
+      return narrowed
+        ? { ...stage, command: narrowed, group, selected: true, reasons: why }
+        : { ...stage, group, selected: true, reasons: why };
     }),
   };
 }

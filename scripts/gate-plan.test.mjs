@@ -12,9 +12,11 @@ import {
   collect,
   execute,
   main,
+  narrowedToolingCommand,
   parseCheckScript,
   plan,
   ROOT_POLICY_TESTS,
+  ROOT_TEST_FIXTURES,
   ROOT_TOOLING_TESTS,
   stageGroup,
 } from './gate-plan.mjs';
@@ -22,8 +24,10 @@ import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.m
 
 const realCheck = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'check-full.sh'), 'utf8');
 const stages = parseCheckScript(realCheck);
-const selectedGroups = (changes) => {
-  const result = plan({ stages, changes });
+// Package edges alone; HS2-WC74CR covers the recorded root-test fixtures separately.
+const noFixtures = { directories: {}, fixtures: {} };
+const selectedGroups = (changes, fixtures = noFixtures) => {
+  const result = plan({ stages, changes, fixtures });
   return {
     mode: result.mode,
     groups: [...new Set(result.stages.filter((s) => s.selected).map((s) => s.group))].sort(),
@@ -125,14 +129,14 @@ test('HS2-FCCRCK falls back to the full gate for gate, config, lock, toolchain, 
 });
 
 test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-wide checks', () => {
-  const result = plan({ stages, changes: ['clients/web/src/app.ts'] });
+  const result = plan({ stages, changes: ['clients/web/src/app.ts'], fixtures: noFixtures });
   const omitted = result.stages.filter((stage) => !stage.selected);
   assert.deepEqual(
     omitted.map((stage) => stage.command),
     [
       'cargo lint',
       'cargo nextest run --all-features --status-level leak',
-      'node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/gate-review.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-test-plan.test.mjs scripts/gate-case-rerun.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs',
+      'node --test --import ./scripts/root-test-reads-preload.mjs scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/gate-timings.test.mjs scripts/gate-review.test.mjs scripts/playwright-retries.test.mjs scripts/ci-gate.test.mjs scripts/ci-completion-proposal.test.mjs scripts/verified-worktree-cleanup.test.mjs scripts/ci-failure-parse.test.mjs scripts/ci-failure-attribution.test.mjs scripts/integration-record.test.mjs scripts/gate-plan.test.mjs scripts/gate-edge-plan.test.mjs scripts/gate-budget.test.mjs scripts/gate-test-plan.test.mjs scripts/gate-case-rerun.test.mjs scripts/gate-ticket-profile.test.mjs scripts/local-gate.test.mjs scripts/installed-dependencies.test.mjs scripts/git-hooks.test.mjs scripts/windows-crt-directives.test.mjs scripts/windows-crt-link-correlation.test.mjs scripts/throughput-baseline.test.mjs scripts/main-integration-options.test.mjs scripts/main-integration-authority.test.mjs scripts/main-integration-window.test.mjs scripts/integration-batch.test.mjs scripts/macos-dev-signing.test.mjs scripts/platform-matrix.test.mjs scripts/browser-engines.test.mjs scripts/root-test-reads.test.mjs',
       'node --test scripts/verify-playwright-shards.test.mjs',
       'npm run lint',
       'npm run test:coverage',
@@ -153,7 +157,7 @@ test('HS2-FCCRCK lists every omitted stage with its reason and keeps repository-
 
 test('HS2-3ZJBRM scopes web lint and script-local tests by declared inputs', () => {
   const selected = (paths, command) => {
-    const result = plan({ stages, changes: paths });
+    const result = plan({ stages, changes: paths, fixtures: noFixtures });
     return { mode: result.mode, stage: result.stages.find((stage) => stage.command === command) };
   };
   const webLint = 'npm run lint:web';
@@ -187,6 +191,74 @@ test('HS2-3ZJBRM scopes web lint and script-local tests by declared inputs', () 
   const changedTest = realCheck.replace('scripts/test-quiet.test.mjs', 'scripts/new-root-test.test.mjs');
   const drift = plan({ stages: parseCheckScript(changedTest), changes: ['docs/06-clients.md'] });
   assert.equal(drift.mode, 'full', 'an unreviewed root-test input must fail closed');
+});
+
+// HS2-WC74CR: gate-edge-plan.test.mjs reads crates/hotsheet-cli/src/broken_pipe.rs as a live fixture, and a
+// change to that file selected the Rust, web and migrator groups but not the root tooling tests (HS2-3RTF0G).
+test('HS2-WC74CR selects the root tooling tests for a repository file they read as a fixture', () => {
+  const tooling = stages.find((stage) => stageGroup(stage) === 'tooling');
+  assert.ok(tooling);
+  assert.match(tooling.command, /^node --test --import \.\/scripts\/root-test-reads-preload\.mjs /);
+  assert.ok(
+    (ROOT_TEST_FIXTURES.fixtures['crates/hotsheet-cli/src/broken_pipe.rs'] ?? []).includes('gate-edge-plan'),
+    'the recorded manifest names the fixture gate-edge-plan.test.mjs reads',
+  );
+  const real = plan({ stages, changes: ['crates/hotsheet-cli/src/broken_pipe.rs'] });
+  assert.equal(real.mode, 'selected');
+  const stage = real.stages.find((entry) => entry.group === 'tooling' && entry.command.includes('--import'));
+  assert.equal(stage.selected, true);
+  // Only the test files that read the changed fixture run.
+  const readers = ROOT_TEST_FIXTURES.fixtures['crates/hotsheet-cli/src/broken_pipe.rs'];
+  assert.equal(
+    stage.command,
+    `node --test --import ./scripts/root-test-reads-preload.mjs ${ROOT_TOOLING_TESTS.filter((name) =>
+      readers.includes(name),
+    )
+      .map((name) => `scripts/${name}.test.mjs`)
+      .join(' ')}`,
+  );
+  assert.match(
+    stage.reasons.join('\n'),
+    /gate-edge-plan\.test\.mjs[^\n]* read it \(scripts\/root-test-fixtures\.json\)/,
+  );
+  assert.deepEqual(selectedGroups(['crates/hotsheet-cli/src/broken_pipe.rs'], ROOT_TEST_FIXTURES).groups, [
+    'always',
+    'migrator',
+    'rust',
+    'tooling',
+    'web',
+  ]);
+
+  // A change with other tooling readers adds their files; one that reaches the whole group keeps the stage.
+  const two = plan({
+    stages,
+    changes: ['crates/hotsheet-cli/src/broken_pipe.rs', 'clients/web/playwright.config.ts'],
+  }).stages.find((entry) => entry.group === 'tooling' && entry.selected);
+  assert.match(two.command, /scripts\/gate-edge-plan\.test\.mjs/);
+  assert.match(two.command, /scripts\/browser-engines\.test\.mjs/);
+  assert.doesNotMatch(two.command, /scripts\/test-quiet\.test\.mjs/);
+  const whole = plan({ stages, changes: ['crates/hotsheet-cli/src/broken_pipe.rs', 'scripts/gate-plan.mjs'] });
+  assert.equal(whole.mode, 'full');
+  assert.ok(whole.stages.some((entry) => entry.command === tooling.command && entry.selected));
+  assert.equal(narrowedToolingCommand(new Set(['not-a-root-test'])), null);
+
+  const fixtures = {
+    directories: { 'docs/indexed/': ['browser-engines'] },
+    fixtures: { 'docs/synthetic.md': ['local-gate'], 'scripts/x.mjs': ['local-gate'] },
+  };
+  assert.deepEqual(classifyPath('docs/synthetic.md', fixtures).groups, ['web', 'tooling']);
+  assert.deepEqual(classifyPath('docs/other.md', fixtures).groups, ['web'], 'an unread file keeps its package edges');
+  assert.equal(classifyPath('scripts/x.mjs', fixtures).groups, 'full', 'a full-fallback path stays full');
+  assert.equal(classifyPath('unknown/input.txt', { fixtures: { 'unknown/input.txt': ['local-gate'] } }).groups, 'full');
+  // A declared directory covers a file added after the manifest was recorded.
+  assert.deepEqual(classifyPath('docs/indexed/new.md', fixtures).readers, ['browser-engines']);
+  const added = plan({ stages, changes: ['clients/web/src/new-module-hs2-wc74cr.ts'] }).stages.find(
+    (entry) => entry.group === 'tooling' && entry.selected,
+  );
+  assert.equal(
+    added?.command,
+    'node --test --import ./scripts/root-test-reads-preload.mjs scripts/local-gate.test.mjs',
+  );
 });
 
 function repository(t) {

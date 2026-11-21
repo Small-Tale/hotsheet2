@@ -210,8 +210,26 @@ pay for web source lint, while web source and generated-artifact edits do.
 Root Node tests are two declared stage lists. The cross-package policy list
 (instruction, pinned guidance, feature coverage, quarantine, gitgist and Rulesync)
 stays mandatory. The script-local tooling list is selected when the full fallback
-applies. Its tests read `scripts/` and configuration inputs already classified as
-full-fallback paths; a new or changed test list is unclassified until reviewed.
+applies, and when a repository file it reads as a fixture changes. Its tests read
+`scripts/`, configuration inputs already classified as full-fallback paths, and the
+files `scripts/root-test-fixtures.json` records (HS2-WC74CR); a new or changed test
+list is unclassified until reviewed.
+The fixture list is derived, not guessed. The tooling stage preloads
+`scripts/root-test-reads-preload.mjs`, which records every tracked file outside
+`scripts/` that a test file, or a Node process it starts, opens for reading or
+imports. At exit a test file fails, naming the files, when it read one the manifest
+does not declare for it. `node scripts/root-test-fixtures.mjs --write` reruns the tooling tests in
+record mode and rewrites the file entries. `local-gate` and `browser-engines` index the
+real web client, so the manifest also has reviewed `directories` entries
+(`clients/web/src/` and `clients/web/tests/`): a file added there is covered without
+regeneration, and the generator omits the files they cover. When only fixture reads
+select the tooling group, the stage runs just the test files that read a changed
+file, so a web source or spec change now runs those two files (66 s on the shared
+Mac, 2026-11-21) instead of none. HS2-3RTF0G is the miss this closes:
+`gate-edge-plan.test.mjs` reads `crates/hotsheet-cli/src/broken_pipe.rs`, and a change
+to it selected the Rust, web and migrator groups but not the tooling tests. The
+recorder sees reads through Node's `fs` module and module loader only; a file read by
+Git or another non-Node child is not recorded.
 CI's root test steps hand-list the same files, and `scripts/gate-plan.test.mjs`
 fails when a file in either list is missing from `.github/workflows/ci.yml` or CI
 runs a root test that neither list classifies (HS2-E6NFF6).
