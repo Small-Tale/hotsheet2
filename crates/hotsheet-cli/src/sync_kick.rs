@@ -5,13 +5,14 @@
 //! so the host's sync loop fetches, integrates, and pushes it promptly. When no host
 //! accepts, the CLI says the commits may be local only and names `hotsheet-cli sync`.
 //!
-//! The host comes from [`discover_local_host`] under `HOTSHEET_HOME`, so a test or an
-//! isolated home never reaches the user's real host.
+//! The host comes from [`discover_local_host`] under `HOTSHEET_HOME`, then from any other
+//! live host recorded there (HS2-MHX1BH), so a test or an isolated home never reaches the
+//! user's real host.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::external_launch::{HostScope, discover_local_host};
+use crate::external_launch::{HostScope, ServerInstance, discover_local_host, running_servers};
 
 /// How long the CLI waits for the host to answer a kick. The host answers at once; the
 /// sync runs on its background loop.
@@ -29,10 +30,35 @@ pub enum KickOutcome {
 }
 
 /// Ask the running host to sync the store at `store` once.
+///
+/// HS2-MHX1BH: the host anchored on the store, then the machine host, then every other
+/// live host under this home, until one accepts. A host started with `hotsheet-cli serve
+/// -C <another store>` syncs the stores of its registered checkouts too, and only its
+/// instance record names its own anchor, so asking only the first two missed it and
+/// said no host was running. A host that refuses (it does not sync this store) leaves
+/// the next one to be asked; with none accepting, the last refusal is reported.
 pub fn request_host_sync(home: &Path, store: &Path) -> KickOutcome {
-    let Ok(server) = discover_local_host(store, home, HostScope::Project) else {
-        return KickOutcome::NoHost;
-    };
+    let mut hosts = Vec::new();
+    if let Ok(server) = discover_local_host(store, home, HostScope::Project) {
+        hosts.push(server);
+    }
+    for server in running_servers(home) {
+        if !hosts.iter().any(|known| known.url == server.url) {
+            hosts.push(server);
+        }
+    }
+    let mut outcome = KickOutcome::NoHost;
+    for server in &hosts {
+        outcome = kick(server, store);
+        if outcome == KickOutcome::Accepted {
+            break;
+        }
+    }
+    outcome
+}
+
+/// Ask one host to sync the store.
+fn kick(server: &ServerInstance, store: &Path) -> KickOutcome {
     let store = hotsheet_sync::paths::canonicalize(store).unwrap_or_else(|_| store.to_path_buf());
     let endpoint = format!("{}/sync/kick", server.url.trim_end_matches('/'));
     let body = serde_json::json!({ "store": store }).to_string();

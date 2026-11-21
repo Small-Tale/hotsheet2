@@ -452,3 +452,75 @@ async fn hs2_pq7k4t_an_accepted_kick_announces_the_store_health_at_once() {
     assert_eq!(event.id, checkout.id);
     assert_eq!(event.slug, expected.as_str());
 }
+
+/// HS2-MHX1BH: a host started with `hotsheet-cli serve -C <another store>` (in the trial,
+/// the orchestration store) syncs the registered project store, but its instance record
+/// names only its own anchor, neither the project store nor the machine anchor. The CLI's
+/// kick still finds it among the live hosts of the home and is accepted, so no "no host
+/// is running" notice appears. A live record whose host does not answer comes first and
+/// does not stop the search.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_mhx1bh_a_kick_reaches_a_host_anchored_on_another_store() {
+    let fixture = Fixture::new();
+    let _sync = spawn_sync_loop(fixture.state.clone(), Duration::from_secs(3600));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let router = app(fixture.state.clone());
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+    let record = |anchor: &Path, url: &str| {
+        std::fs::create_dir_all(anchor).unwrap();
+        let path = hotsheet_cli::external_launch::instance_path(&fixture.home, anchor);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "pid": std::process::id(),
+                "url": url,
+                "secret": SECRET,
+                "store_path": anchor,
+            })
+            .to_string(),
+        )
+        .unwrap();
+    };
+    let project = fixture.project.clone();
+    let home = fixture.home.clone();
+    let ask = move || {
+        let (home, project) = (home.clone(), project.clone());
+        tokio::task::spawn_blocking(move || {
+            hotsheet_cli::sync_kick::request_host_sync(&home, &project)
+        })
+    };
+    // No host recorded: nothing to ask.
+    assert_eq!(
+        ask().await.unwrap(),
+        hotsheet_cli::sync_kick::KickOutcome::NoHost
+    );
+    // A host that does not answer: refused, not "no host".
+    record(&fixture.dir.path().join("silent.hs2"), "http://127.0.0.1:9");
+    assert!(matches!(
+        ask().await.unwrap(),
+        hotsheet_cli::sync_kick::KickOutcome::Refused(_)
+    ));
+    // The host anchored on the orchestration store accepts the project store's kick.
+    record(&fixture.dir.path().join("orchestration.hs2"), &url);
+    assert_eq!(
+        ask().await.unwrap(),
+        hotsheet_cli::sync_kick::KickOutcome::Accepted
+    );
+    let home = fixture.home.clone();
+    let project = fixture.project.clone();
+    let messages = tokio::task::spawn_blocking(move || {
+        hotsheet_cli::sync_kick::kick_after_writes(&home, vec![project])
+    })
+    .await
+    .unwrap();
+    assert!(messages.is_empty(), "{messages:?}");
+}

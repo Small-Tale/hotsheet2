@@ -1147,7 +1147,10 @@ engine** so the user effectively never runs git by hand:
   which cannot fetch or rebase. After each command, the CLI therefore sends an
   authenticated `POST /sync/kick` with the store's absolute path for every store it
   committed to. It finds the host through the same discovery as other CLI commands,
-  under `HOTSHEET_HOME`. The host accepts only a hosted or registered store (`202`);
+  under `HOTSHEET_HOME`, and then asks every other live host recorded there until one
+  accepts (HS2-MHX1BH): a host started with `hotsheet-cli serve -C <another store>`
+  syncs the stores of its registered checkouts too, though its instance record names
+  only its own store. The host accepts only a hosted or registered store (`202`);
   otherwise it returns `404 store_not_registered`, or `503 sync_not_running` when it
   runs no sync loop. An accepted kick runs one prompt pass over just the kicked
   stores. Kicks in one burst coalesce into one pass. A kicked pass leaves the regular
