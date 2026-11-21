@@ -91,7 +91,7 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   await ready(first, shared, 'run-a');
   if (process.platform === 'win32') {
     expect((await fetch(`http://127.0.0.1:${shared}/src/main.tsx`)).status).toBe(200);
-    expect(windowsDescendants(first.child.pid).some((child) => child.Name === 'esbuild.exe')).toBe(true);
+    expect((await windowsDescendants(first.child.pid)).some((child) => child.Name === 'esbuild.exe')).toBe(true);
   }
   expect(await identity(shared, 'run-b')).toBe(404);
   expect(await identity(shared, '')).toBe(404);
@@ -102,7 +102,7 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   expect(collision.output()).toMatch(/already in use/i);
   if (process.platform === 'win32') {
     await stopServerProcess(collision);
-    expect(windowsDescendants(collision.child.pid)).toEqual([]);
+    expect(await windowsDescendants(collision.child.pid)).toEqual([]);
   }
   expect(await identity(shared, 'run-b')).toBe(404);
   expect(await identity(shared, 'run-a')).toBe(200);
@@ -113,7 +113,7 @@ it('answers only its own identity, refuses a taken port, and survives the other 
   await ready(second, separate, 'run-b');
   expect(await identity(separate, 'run-a')).toBe(404);
   await stopServerProcess(first);
-  if (process.platform === 'win32') expect(windowsDescendants(first.child.pid)).toEqual([]);
+  if (process.platform === 'win32') expect(await windowsDescendants(first.child.pid)).toEqual([]);
   expect(await identity(shared, 'run-a')).toBe('refused');
   expect(await identity(separate, 'run-b'), second.output()).toBe(200);
 }, 60_000);

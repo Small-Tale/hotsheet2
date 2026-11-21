@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 
+import { descendantsIn, windowsProcessTable } from './windows-process-table.mjs';
+
 // HS2-F6F8MA: real processes launched the way Playwright launches `webServer` (a `shell: true`,
 // `detached: true` child whose stdin is a pipe from the runner). Every process here is started by this
 // file, recorded by pid and start time, and signalled only while that identity still matches.
@@ -60,13 +62,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (windows) windowsProcessTable().close();
   if (fixtures) await rm(fixtures, { recursive: true, force: true });
 });
 
-afterEach(() => {
+afterEach(async () => {
   // Stop only fixtures this file started whose pid still names the same process.
   for (const entry of recorded.splice(0))
-    if (alive(entry))
+    if (await alive(entry))
       try {
         if (windows) spawnSync('taskkill', ['/PID', String(entry.pid), '/T', '/F'], { windowsHide: true });
         else process.kill(entry.pid, 'SIGKILL');
@@ -76,16 +79,12 @@ afterEach(() => {
   for (const handle of handles.splice(0)) handle.kill('SIGKILL');
 });
 
-function processInfo(pid) {
+async function processInfo(pid) {
   if (windows) {
-    const script = `Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' | Select-Object ParentProcessId,CreationDate,Name | ConvertTo-Json -Compress`;
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      encoding: 'utf8',
-      windowsHide: true,
-    });
-    if (result.status !== 0 || !result.stdout.trim()) return null;
-    const info = JSON.parse(result.stdout);
-    return { pgid: null, ppid: info.ParentProcessId, started: info.CreationDate, name: info.Name };
+    // One warm helper answers every query; a PowerShell cold start per call timed this file out on
+    // the arm64 runner (HS2-S5BQRD).
+    const info = (await windowsProcessTable().snapshot()).get(pid);
+    return info ? { pgid: null, ppid: info.ppid, started: info.started, name: info.name } : null;
   }
   const result = spawnSync('ps', ['-o', 'pgid=,stat=,lstart=', '-p', String(pid)], { encoding: 'utf8' });
   const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(result.stdout);
@@ -93,8 +92,8 @@ function processInfo(pid) {
   return match && !match[2].startsWith('Z') ? { pgid: Number(match[1]), started: match[3] } : null;
 }
 
-function record(pid) {
-  const info = processInfo(pid);
+async function record(pid) {
+  const info = await processInfo(pid);
   if (!info) throw new Error(`Fixture ${pid} exited before it was recorded.`);
   const entry = { pid, ...info };
   recorded.push(entry);
@@ -102,28 +101,17 @@ function record(pid) {
 }
 
 /** Same pid and same start time: a reused pid never counts as the recorded process. */
-function alive(entry) {
-  return processInfo(entry.pid)?.started === entry.started;
+async function alive(entry) {
+  return (await processInfo(entry.pid))?.started === entry.started;
 }
 
-function descendantsOf(rootPid) {
-  if (windows) {
-    const result = spawnSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress',
-      ],
-      { encoding: 'utf8', windowsHide: true },
-    );
-    const rows = JSON.parse(result.stdout).map((row) => [row.ProcessId, row.ParentProcessId]);
-    const found = [rootPid];
-    for (let index = 0; index < found.length; index += 1)
-      for (const [pid, ppid] of rows) if (ppid === found[index] && !found.includes(pid)) found.push(pid);
-    return found.slice(1);
-  }
+/** Whether every entry has exited; one process-table read covers them all on Windows. */
+async function allExited(entries) {
+  return (await Promise.all(entries.map(alive))).every((live) => !live);
+}
+
+async function descendantsOf(rootPid) {
+  if (windows) return descendantsIn(await windowsProcessTable().snapshot(), rootPid);
   const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' })
     .stdout.trim()
     .split('\n')
@@ -213,11 +201,11 @@ function launch(serverArgs, launcherArgs = ['--exit-on-stdin-eof']) {
 async function startOwned(mode, launcherArgs) {
   const run = startRunner(launch(mode, launcherArgs));
   const [, launcherPid] = await run.line(/launcher (\d+)/);
-  const owned = { launcher: record(Number(launcherPid)) };
+  const owned = { launcher: await record(Number(launcherPid)) };
   const ready = await run.line(/ready ([\d ]+)\n/);
   const [serverPid, port, ...descendantPids] = ready[1].trim().split(' ').map(Number);
-  owned.server = record(serverPid);
-  owned.descendants = descendantPids.map(record);
+  owned.server = await record(serverPid);
+  owned.descendants = await Promise.all(descendantPids.map(record));
   return { ...run, owned, port };
 }
 
@@ -237,12 +225,12 @@ async function startForeign() {
     });
   });
   const [pid, port, ...descendantPids] = ready;
-  return { entries: [record(pid), ...descendantPids.map(record)], port };
+  return { entries: await Promise.all([pid, ...descendantPids].map(record)), port };
 }
 
 async function expectReleased({ owned, port }) {
   const all = [owned.launcher, owned.server, ...owned.descendants];
-  await eventually(() => all.every((entry) => !alive(entry)), 'every owned process to exit');
+  await eventually(() => allExited(all), 'every owned process to exit');
   expect(await listening(port)).toBe(false);
 }
 
@@ -283,11 +271,11 @@ if (windows)
       detached: false,
     });
     const ready = await run.line(/ready (\d+) (\d+)\n/);
-    const server = record(Number(ready[1]));
+    const server = await record(Number(ready[1]));
     const port = Number(ready[2]);
     expect(await listening(port)).toBe(true);
     stopRunner(run, 'SIGKILL');
-    await eventually(() => !alive(server), 'cmd.exe fixture server to exit');
+    await eventually(async () => !(await alive(server)), 'cmd.exe fixture server to exit');
     expect(await listening(port)).toBe(false);
   });
 
@@ -303,7 +291,7 @@ for (const signal of ['SIGKILL', 'SIGTERM'])
     stopRunner(run, signal);
     await expectReleased(run);
     // A same-command process and listener the launcher never started is untouched.
-    expect(foreign.entries.every(alive)).toBe(true);
+    expect((await Promise.all(foreign.entries.map(alive))).every(Boolean)).toBe(true);
     expect(await listening(foreign.port)).toBe(true);
   });
 
@@ -332,14 +320,14 @@ it('ignores stdin without --exit-on-stdin-eof (HS2-F6F8MA)', async () => {
   // Close only the runner's pipe handle to the launcher, not the runner: the server keeps serving.
   stopRunner(run, 'SIGKILL');
   await run.closed;
-  expect(alive(run.owned.server)).toBe(true);
+  expect(await alive(run.owned.server)).toBe(true);
   expect(await listening(run.port)).toBe(true);
   // This file started it; end its group by the recorded launcher identity.
-  if (alive(run.owned.launcher)) {
+  if (await alive(run.owned.launcher)) {
     if (windows) spawnSync('taskkill', ['/PID', String(run.owned.launcher.pid), '/T', '/F'], { windowsHide: true });
     else process.kill(-run.owned.launcher.pid, 'SIGKILL');
   }
-  await eventually(() => !alive(run.owned.server), 'manual fixture stop');
+  await eventually(async () => !(await alive(run.owned.server)), 'manual fixture stop');
 });
 
 it('stops the real Vite fixture server and its esbuild service when the runner is killed (HS2-F6F8MA)', async () => {
@@ -375,11 +363,11 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
     const [, launcherPid] = await run.line(/launcher (\d+)/);
     await run.line(/ready in/i);
     expect(await listening(port)).toBe(true);
-    const tree = [Number(launcherPid), ...descendantsOf(Number(launcherPid))].map(record);
+    const tree = await Promise.all([Number(launcherPid), ...(await descendantsOf(Number(launcherPid)))].map(record));
     // Launcher, Vite, and at least esbuild's service.
     expect(tree.length).toBeGreaterThanOrEqual(3);
     stopRunner(run, 'SIGKILL');
-    await eventually(() => tree.every((entry) => !alive(entry)), 'every Vite fixture process to exit');
+    await eventually(() => allExited(tree), 'every Vite fixture process to exit');
     expect(await listening(port)).toBe(false);
   } finally {
     await rm(cacheDir, { recursive: true, force: true });

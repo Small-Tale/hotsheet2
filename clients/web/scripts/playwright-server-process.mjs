@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
+import { windowsProcessTable } from './windows-process-table.mjs';
+
 /** Observe the owned server before it can exit (HS2-0BQ8J9/HS2-XP3Y4D). */
 export function trackServerProcess(child, { drained } = {}) {
   const exited = new Promise((resolveExit) => child.once('exit', (code) => resolveExit(code)));
@@ -7,29 +9,26 @@ export function trackServerProcess(child, { drained } = {}) {
   return { child, exited, closed, drained };
 }
 
-/** Query only children of the server PID this fixture launched, never by process name or port. */
-export function windowsDescendants(pid) {
+/**
+ * Query only children of the server PID this fixture launched, never by process name or port. The
+ * shared process-table helper answers without a PowerShell cold start per call (HS2-S5BQRD).
+ */
+export async function windowsDescendants(pid, table = windowsProcessTable()) {
   if (process.platform !== 'win32') return [];
   if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Missing owned Windows server PID.');
-  const script = `Get-CimInstance Win32_Process | Where-Object ParentProcessId -EQ ${pid} | Select-Object ProcessId,Name | ConvertTo-Json -Compress`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 5000,
-  });
-  if (result.error || result.status !== 0) {
-    throw new Error(`Could not inspect owned Windows descendants (${result.error?.code ?? result.status}).`);
+  let rows;
+  try {
+    rows = await table.snapshot();
+  } catch (error) {
+    throw new Error(`Could not inspect owned Windows descendants (${error.message}).`, { cause: error });
   }
-  const output = result.stdout.trim();
-  if (!output) return [];
-  const value = JSON.parse(output);
-  return Array.isArray(value) ? value : [value];
+  return [...rows.values()].filter((row) => row.ppid === pid).map((row) => ({ ProcessId: row.pid, Name: row.name }));
 }
 
 async function waitForWindowsDescendants(pid) {
   const deadline = Date.now() + 10_000;
   for (;;) {
-    const remaining = windowsDescendants(pid);
+    const remaining = await windowsDescendants(pid);
     if (remaining.length === 0) return;
     if (Date.now() >= deadline) {
       throw new Error(`Owned Windows server ${pid} retained ${remaining.length} descendants after shutdown.`);
