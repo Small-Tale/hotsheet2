@@ -49,26 +49,30 @@ test('naturally phases an exact-height arrival without changing internal contain
     column.prepend(incoming);
     const finalTop = retained.getBoundingClientRect().top;
     motion.animateTicketMotion(snapshot, document, false);
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        resolve(undefined);
-      });
-    });
+    // HS2-Y3XGXD: read each phase at an exact animation time, not after a wall-clock wait. On a
+    // loaded macOS runner a timer fired before the first animation frame (opacity still 1) or long
+    // after the phase it meant to sample.
+    const animations = document.getAnimations(),
+      seek = (ms: number) => {
+        for (const animation of animations) {
+          animation.pause();
+          animation.currentTime = ms;
+        }
+      };
+    seek(0);
     const earlyTop = retained.getBoundingClientRect().top,
       ghost = document.querySelector<HTMLElement>('[data-ticket-motion-ghost="incoming"]')!,
       realBody = incoming.querySelector<HTMLElement>('.ticket-list-row__body')!,
       ghostBody = ghost.querySelector<HTMLElement>('.ticket-list-row__body')!,
       padding = [getComputedStyle(realBody).paddingLeft, getComputedStyle(ghostBody).paddingLeft],
       widths = [incoming.getBoundingClientRect().width, ghost.getBoundingClientRect().width];
-    await new Promise((resolve) => {
-      setTimeout(resolve, 110);
-    });
+    // The layout makes room first (0-240 ms) while the ghost waits hidden, then the ghost fades in.
+    seek(110);
     const midTop = retained.getBoundingClientRect().top,
       midOpacity = Number.parseFloat(getComputedStyle(ghost).opacity);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 190);
-    });
+    seek(300);
     const fadeOpacity = Number.parseFloat(getComputedStyle(ghost).opacity);
+    for (const animation of animations) animation.play();
     await motion.waitForTicketMotionSettled();
     const settledTop = retained.getBoundingClientRect().top;
     return {
@@ -120,22 +124,24 @@ test('naturally fades a departure before collapsing its exact outer-wrapper spac
     outgoing.remove();
     const finalTop = retained.getBoundingClientRect().top;
     motion.animateTicketMotion(snapshot, document, false);
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        resolve(undefined);
-      });
-    });
+    // HS2-Y3XGXD: sample each phase at an exact animation time (see the arrival spec above).
+    const animations = document.getAnimations(),
+      seek = (ms: number) => {
+        for (const animation of animations) {
+          animation.pause();
+          animation.currentTime = ms;
+        }
+      };
+    seek(0);
     const earlyTop = retained.getBoundingClientRect().top,
       ghost = document.querySelector<HTMLElement>('[data-ticket-motion-ghost="outgoing"]')!;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 85);
-    });
+    // The departure fades in place first (0-160 ms), then its space collapses (160-400 ms).
+    seek(85);
     const fadeTop = retained.getBoundingClientRect().top,
       fadeOpacity = Number.parseFloat(getComputedStyle(ghost).opacity);
-    await new Promise((resolve) => {
-      setTimeout(resolve, 150);
-    });
+    seek(235);
     const collapseTop = retained.getBoundingClientRect().top;
+    for (const animation of animations) animation.play();
     await motion.waitForTicketMotionSettled();
     return {
       beforeTop,
