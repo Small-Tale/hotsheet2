@@ -629,6 +629,7 @@ export type TicketStoreSyncState =
   | 'up_to_date'
   | 'synced'
   | 'offline'
+  | 'push_raced'
   | 'rejected'
   | 'conflict'
   | 'blocked'

@@ -783,6 +783,11 @@ pub(crate) fn cmd_sync(
                     .unwrap_or_default()
             );
         }
+        // HS2-R2BC3N: the remote answered; another machine kept publishing first.
+        SyncReport::PushRaced => println!(
+            "Another machine published during every push attempt — local commits are saved \
+             and the next sync integrates and pushes them."
+        ),
         SyncReport::Conflict => bail!(
             "a ticket had a body change on both sides that couldn't auto-merge — resolve it \
              manually, then commit (the working tree was left clean; nothing was lost)"

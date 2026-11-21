@@ -1168,6 +1168,7 @@ const TICKET_STORE_SYNC_STATES = new Set([
   'up_to_date',
   'synced',
   'offline',
+  'push_raced',
   'rejected',
   'conflict',
   'blocked',

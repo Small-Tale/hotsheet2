@@ -75,19 +75,17 @@ fn home_pool(fleet: &Fleet) -> Coordinator {
 /// How many passes one machine's sync loop may take when each push loses a race.
 const RACED_PASSES: usize = 5;
 
-/// One pass of a machine's sync loop, repeated at once (as the product's next pass
-/// would) while its push loses the documented race to another pusher in the fleet: a
-/// peer server's own sync or claim push may land between this clone's fetch and push
-/// (HS2-457FGS). Any other outcome ends the repetition.
+/// One pass of a machine's sync loop, repeated at once (as the product's loop repasses
+/// promptly) while its push loses every in-cycle retry of the documented race to another
+/// pusher in the fleet: a peer server's own sync or claim push may land between this
+/// clone's fetch and push (HS2-457FGS). Since HS2-R2BC3N a pass retries a raced push
+/// itself and reports `PushRaced` only when every attempt lost, so a repetition here is
+/// rare. Any other outcome ends the repetition.
 fn sync_pass(store: &Path) -> hotsheet_ticketing::sync::SyncReport {
-    use hotsheet_ticketing::sync::{PUSH_RACE_REASON, SyncReport, sync_once};
+    use hotsheet_ticketing::sync::{SyncReport, sync_once};
     let mut report = sync_once(store);
     for _ in 1..RACED_PASSES {
-        let raced = report == SyncReport::Offline
-            && hotsheet_ticketing::sync_health::read_record(store)
-                .and_then(|record| record.reason)
-                .as_deref()
-                == Some(PUSH_RACE_REASON);
+        let raced = report == SyncReport::PushRaced;
         if !raced {
             break;
         }

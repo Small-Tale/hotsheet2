@@ -56,9 +56,13 @@ pub enum SyncState {
     UpToDate,
     /// The last cycle integrated and/or published commits.
     Synced,
-    /// The remote was unreachable, refused authentication, or moved during the push.
-    /// Transient: the loop retries with backoff.
+    /// The remote was unreachable or refused authentication. Transient: the loop retries
+    /// with backoff.
     Offline,
+    /// Another pusher moved the remote during every push attempt of the last cycle
+    /// (HS2-R2BC3N). The remote was reached; the next pass integrates and retries
+    /// promptly, with no backoff. Not a failure.
+    PushRaced,
     /// The remote refused the push (for example a file over GitHub's size limit).
     /// Retrying the same push cannot succeed; local history needs a repair.
     Rejected,
@@ -100,6 +104,7 @@ impl SyncState {
             Self::UpToDate => "up_to_date",
             Self::Synced => "synced",
             Self::Offline => "offline",
+            Self::PushRaced => "push_raced",
             Self::Rejected => "rejected",
             Self::Conflict => "conflict",
             Self::Blocked => "blocked",
@@ -116,6 +121,7 @@ impl From<SyncReport> for SyncState {
             SyncReport::UpToDate => Self::UpToDate,
             SyncReport::Synced { .. } => Self::Synced,
             SyncReport::Offline => Self::Offline,
+            SyncReport::PushRaced => Self::PushRaced,
             SyncReport::Rejected => Self::Rejected,
             SyncReport::Conflict => Self::Conflict,
             SyncReport::Blocked => Self::Blocked,
@@ -727,6 +733,49 @@ mod tests {
         );
         assert_eq!(record.consecutive_failures, 0);
         assert_eq!(record.last_success_at.as_deref(), Some("t4"));
+    }
+
+    /// HS2-R2BC3N: a lost push race reached the remote, so it is neither a failure (no
+    /// count toward the offline banner) nor a publication (no last-success time), and the
+    /// outage before it no longer counts; an outage after it counts from one again.
+    #[test]
+    fn hs2_r2bc3n_a_push_race_is_neither_a_failure_nor_a_success() {
+        assert!(!SyncState::PushRaced.is_failure());
+        assert_eq!(SyncState::PushRaced.as_str(), "push_raced");
+        assert_eq!(
+            serde_json::to_string(&SyncState::PushRaced).unwrap(),
+            "\"push_raced\""
+        );
+        let mut record = SyncRecord::default();
+        apply_outcome(
+            &mut record,
+            SyncReport::UpToDate,
+            CycleDetail::default(),
+            "t1",
+        );
+        apply_outcome(&mut record, SyncReport::Offline, detail("down"), "t2");
+        apply_outcome(&mut record, SyncReport::Offline, detail("down"), "t3");
+        assert_eq!(record.consecutive_failures, 2);
+        for at in ["t4", "t5"] {
+            apply_outcome(&mut record, SyncReport::PushRaced, detail("raced"), at);
+            assert_eq!(record.consecutive_failures, 0);
+            assert_eq!(record.outcome, Some(SyncState::PushRaced));
+            assert_eq!(record.last_success_at.as_deref(), Some("t1"));
+            assert_eq!(record.reason.as_deref(), Some("raced"));
+        }
+        apply_outcome(&mut record, SyncReport::Offline, detail("down"), "t6");
+        assert_eq!(record.consecutive_failures, 1);
+        apply_outcome(
+            &mut record,
+            SyncReport::Synced {
+                pulled: true,
+                pushed: true,
+            },
+            CycleDetail::default(),
+            "t7",
+        );
+        assert_eq!(record.consecutive_failures, 0);
+        assert_eq!(record.last_success_at.as_deref(), Some("t7"));
     }
 
     #[test]

@@ -30,6 +30,11 @@
 //! each step's output, naming the lock files in the health reason ([`crate::sync_locks`]).
 //! A lock the pre-check finds is moved aside first when it is provably stale: old, and no
 //! process has the store's Git directory open (HS2-T0V269, [`crate::sync_stale_locks`]).
+//!
+//! A push that loses a race to another pusher is a normal conflict in a store several
+//! machines share, not an outage (HS2-R2BC3N): the cycle fetches, integrates, and pushes
+//! again at once, a bounded number of times with a short jittered pause, and reports
+//! [`SyncReport::PushRaced`] only when every attempt lost.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -55,9 +60,13 @@ pub enum SyncReport {
     UpToDate,
     /// Integrated remote changes and/or pushed local commits.
     Synced { pulled: bool, pushed: bool },
-    /// The remote was unreachable, refused authentication, or moved during the push —
-    /// kept working locally; the next cycle retries.
+    /// The remote was unreachable or refused authentication — kept working locally; the
+    /// next cycle retries after a backoff.
     Offline,
+    /// Another pusher moved the remote during every push attempt of the cycle
+    /// (HS2-R2BC3N). The remote was reachable and nothing is wrong; the local commits stay
+    /// unpublished until the next pass, which runs promptly instead of backing off.
+    PushRaced,
     /// The remote refused the push (HS2-ADHFKZ): a hook, branch protection, or a file over
     /// the host's size limit. Retrying the same history cannot succeed.
     Rejected,
@@ -82,15 +91,50 @@ pub enum SyncReport {
 pub(crate) struct SyncLimits {
     pub oversized_bytes: u64,
     pub replay: ReplayMode,
+    /// Further fetch-integrate-push attempts after a push loses a race (HS2-R2BC3N).
+    pub push_race_retries: u32,
+    /// The pause unit before a raced retry; see [`push_race_pause`].
+    pub push_race_pause: std::time::Duration,
 }
+
+/// Further attempts after a push loses a race to another pusher (HS2-R2BC3N). An attempt
+/// usually loses to a push that landed, so a handful of machines pushing at once
+/// normally all publish within one cycle.
+pub const PUSH_RACE_RETRIES: u32 = 4;
+
+/// The pause unit before a raced retry (HS2-R2BC3N); see [`push_race_pause`].
+pub const PUSH_RACE_PAUSE: std::time::Duration = std::time::Duration::from_millis(100);
 
 impl Default for SyncLimits {
     fn default() -> Self {
         Self {
             oversized_bytes: OVERSIZED_OBJECT_BYTES,
             replay: ReplayMode::Auto,
+            push_race_retries: PUSH_RACE_RETRIES,
+            push_race_pause: PUSH_RACE_PAUSE,
         }
     }
+}
+
+/// The pause before raced retry `attempt` (1-based): equal jitter over a doubling window,
+/// between `unit * 2^(attempt-1)` and twice that (the floor stops at 8 units), so racers that lost
+/// together spread out instead of colliding again. `random` picks the point in the window.
+#[must_use]
+pub fn push_race_pause(
+    unit: std::time::Duration,
+    attempt: u32,
+    random: u64,
+) -> std::time::Duration {
+    let floor = unit.saturating_mul(1 << attempt.saturating_sub(1).min(3));
+    let span = u64::try_from(floor.as_nanos()).unwrap_or(u64::MAX);
+    floor + std::time::Duration::from_nanos(random % span.saturating_add(1))
+}
+
+fn random_u64() -> u64 {
+    let mut bytes = [0u8; 8];
+    // Without OS randomness every racer pauses the window's floor, which still retries.
+    let _ = getrandom::fill(&mut bytes);
+    u64::from_le_bytes(bytes)
 }
 
 /// How a cycle replays local commits onto the upstream (HS2-QR1K8R).
@@ -249,22 +293,75 @@ fn cycle_steps(
         }
     }
 
+    // HS2-R2BC3N: a push that loses a race to another pusher fetches, integrates and
+    // pushes again at once, a bounded number of times, instead of ending the cycle.
+    let mut pulled = false;
+    let mut attempt = 0;
+    loop {
+        match exchange(store_path, limits) {
+            Exchange::Finished(report, detail) => {
+                let report = match report {
+                    SyncReport::Synced {
+                        pulled: now,
+                        pushed,
+                    } => SyncReport::Synced {
+                        pulled: pulled || now,
+                        pushed,
+                    },
+                    // An earlier attempt integrated incoming commits.
+                    SyncReport::UpToDate if pulled => SyncReport::Synced {
+                        pulled: true,
+                        pushed: false,
+                    },
+                    other => other,
+                };
+                return (report, detail);
+            }
+            Exchange::Raced { pulled: now } => {
+                pulled |= now;
+                if attempt >= limits.push_race_retries {
+                    return failed(SyncReport::PushRaced, PUSH_RACE_REASON);
+                }
+                attempt += 1;
+                std::thread::sleep(push_race_pause(
+                    limits.push_race_pause,
+                    attempt,
+                    random_u64(),
+                ));
+            }
+        }
+    }
+}
+
+/// How one fetch-integrate-push attempt ended.
+enum Exchange {
+    /// The cycle's outcome, whatever it is, except a lost push race.
+    Finished(SyncReport, CycleDetail),
+    /// Another pusher moved the remote between this attempt's fetch and its push.
+    Raced { pulled: bool },
+}
+
+/// Fetch, integrate incoming commits, and push local ones once.
+fn exchange(store_path: &Path, limits: SyncLimits) -> Exchange {
+    let finished = |(report, detail)| Exchange::Finished(report, detail);
     // Fetch; an unreachable remote is not an error — stay offline-tolerant.
     let fetch = git_run(store_path, &["fetch", "--quiet"]);
     if !fetch.ok {
         if let Some(blocked) = lock_failure(store_path, "fetch", &fetch.stderr) {
-            return blocked;
+            return finished(blocked);
         }
-        return failed(
+        return finished(failed(
             SyncReport::Offline,
             transport_reason("fetch", &fetch.stderr),
-        );
+        ));
     }
 
     // Without an upstream tracking branch we can't compare/rebase; try to publish instead.
+    // A raced first publish is reported as such: without an upstream, a retry cannot
+    // integrate what the other pusher published.
     if !git_ok(store_path, &["rev-parse", "--verify", "--quiet", "@{u}"]) {
         let push = git_run(store_path, &["push", "--quiet", "-u", "origin", "HEAD"]);
-        return if push.ok {
+        return finished(if push.ok {
             (
                 SyncReport::Synced {
                     pulled: false,
@@ -274,7 +371,7 @@ fn cycle_steps(
             )
         } else {
             classify_push_failure(store_path, &push.stderr, limits)
-        };
+        });
     }
 
     let (ahead, behind) = ahead_behind(store_path);
@@ -284,10 +381,13 @@ fn cycle_steps(
     let mut pulled = false;
     if behind > 0 {
         let Ok(_lock) = lock_git_transaction(store_path) else {
-            return failed(SyncReport::Offline, "could not lock the store for sync");
+            return finished(failed(
+                SyncReport::Offline,
+                "could not lock the store for sync",
+            ));
         };
         if let Err(stopped) = integrate(store_path, limits) {
-            return stopped;
+            return finished(stopped);
         }
         pulled = true;
     }
@@ -301,18 +401,24 @@ fn cycle_steps(
             if push.ok {
                 pushed = true;
             } else {
-                // The next cycle re-fetches; a refusal is reported as such.
-                return classify_push_failure(store_path, &push.stderr, limits);
+                let (report, detail) = classify_push_failure(store_path, &push.stderr, limits);
+                if report == SyncReport::PushRaced {
+                    return Exchange::Raced { pulled };
+                }
+                // A refusal or an outage is reported as such; the next cycle re-fetches.
+                return finished((report, detail));
             }
         }
     }
 
-    let report = if pulled || pushed {
-        SyncReport::Synced { pulled, pushed }
-    } else {
-        SyncReport::UpToDate
-    };
-    (report, CycleDetail::default())
+    finished((
+        if pulled || pushed {
+            SyncReport::Synced { pulled, pushed }
+        } else {
+            SyncReport::UpToDate
+        },
+        CycleDetail::default(),
+    ))
 }
 
 /// Replay local commits onto the fetched upstream and move the branch there. The caller
@@ -460,10 +566,9 @@ pub fn push_was_refused(stderr: &str) -> bool {
     refused && !push_raced(&lower)
 }
 
-/// The recorded reason of a pass whose push lost a race to another pusher (HS2-457FGS
-/// names it so callers that drive passes themselves can tell it from an outage).
-pub const PUSH_RACE_REASON: &str =
-    "the remote moved during the push; the next sync integrates it and retries";
+/// The recorded reason of a [`SyncReport::PushRaced`] cycle (HS2-457FGS, HS2-R2BC3N).
+pub const PUSH_RACE_REASON: &str = "another pusher moved the remote during every push \
+     attempt of this sync; the next sync integrates it and retries promptly";
 
 /// Another pusher moved the remote branch first; a re-fetch and retry fixes it.
 fn push_raced(lower: &str) -> bool {
@@ -480,6 +585,10 @@ fn classify_push_failure(
 ) -> (SyncReport, CycleDetail) {
     if let Some(blocked) = lock_failure(store_path, "push", stderr) {
         return blocked;
+    }
+    // HS2-R2BC3N: a lost race is not an outage; a re-fetch and retry fixes it.
+    if push_raced(&stderr.to_ascii_lowercase()) {
+        return failed(SyncReport::PushRaced, PUSH_RACE_REASON);
     }
     if !push_was_refused(stderr) {
         return failed(SyncReport::Offline, transport_reason("push", stderr));
@@ -522,8 +631,6 @@ fn transport_reason(step: &str, stderr: &str) -> String {
         || lower.contains("403")
     {
         format!("the remote refused authentication during {step}")
-    } else if push_raced(&lower) {
-        PUSH_RACE_REASON.to_string()
     } else {
         let detail = stderr
             .lines()
@@ -1143,6 +1250,8 @@ mod machine_provider_tests;
 #[cfg(test)]
 mod merge_driver_tests;
 #[cfg(test)]
+mod push_race_tests;
+#[cfg(test)]
 mod saved_writes_tests;
 // The process scan these cycles rely on exists on Unix only (HS2-T0V269); Windows
 // refusal is covered in `sync_stale_locks`.
@@ -1481,10 +1590,25 @@ pub(crate) mod tests {
             transport_reason("push", "fatal: Authentication failed for 'x'"),
             "the remote refused authentication during push"
         );
-        assert!(
-            transport_reason("push", " ! [rejected] main -> main (fetch first)")
-                .contains("moved during the push")
+        // HS2-R2BC3N: a lost race is its own outcome, never an outage or a refusal.
+        let (_dir, store, _peer) = remote_with_two_clones();
+        for raced in [
+            " ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs",
+            " ! [rejected]        main -> main (non-fast-forward)",
+            " ! [rejected]        main -> main (stale info)",
+            "remote: error: cannot lock ref 'refs/heads/main': is at a but expected b\n \
+             ! [remote rejected] main -> main (failed to update ref)",
+        ] {
+            let (report, detail) = classify_push_failure(&store, raced, SyncLimits::default());
+            assert_eq!(report, SyncReport::PushRaced, "{raced}");
+            assert_eq!(detail.reason.as_deref(), Some(PUSH_RACE_REASON));
+        }
+        let (report, _) = classify_push_failure(
+            &store,
+            "fatal: unable to access 'x': Could not resolve host",
+            SyncLimits::default(),
         );
+        assert_eq!(report, SyncReport::Offline);
         let lines = rejection_lines(github);
         assert!(lines.contains("GH001"), "{lines}");
         assert!(!lines.contains("To "), "{lines}");

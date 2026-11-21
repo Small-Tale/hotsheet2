@@ -672,6 +672,12 @@ describe('HS2-ADHFKZ ticket-store sync health parser matches the Rust SyncHealth
     expect(parseTicketStoreSyncReport({ checkout_id: 'x', stores: [] }).stores).toEqual([]);
   });
 
+  it('accepts the HS2-R2BC3N push race state and rejects an unknown state', () => {
+    const raced = { ...minimal, state: 'push_raced', reason: 'another pusher moved the remote' };
+    expect(parseTicketStoreSyncReport(wire(raced)).stores[0]?.health.state).toBe('push_raced');
+    expect(() => parseTicketStoreSyncReport(wire({ ...minimal, state: 'raced' }))).toThrow();
+  });
+
   it('reads the HS2-QR1K8R AI repair ask and rejects an unknown outcome', () => {
     const ask = {
       outcome: 'started',

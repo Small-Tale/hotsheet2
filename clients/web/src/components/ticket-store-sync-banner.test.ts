@@ -64,6 +64,7 @@ describe('failingTicketStores (HS2-ADHFKZ)', () => {
       ['up_to_date', false],
       ['synced', false],
       ['offline', false],
+      ['push_raced', false],
       ['rejected', true],
       ['conflict', true],
       ['blocked', false],
@@ -73,6 +74,13 @@ describe('failingTicketStores (HS2-ADHFKZ)', () => {
     for (const [state, failing] of states)
       expect(failingTicketStores(report(['s', health(state)])).length, state).toBe(failing ? 1 : 0);
     expect(failingTicketStores(undefined)).toEqual([]);
+  });
+
+  it('never treats a lost push race as failing, however often it repeats (HS2-R2BC3N)', () => {
+    const raced = health('push_raced', { consecutive_failures: 0 });
+    expect(failingTicketStores(report(['s', raced]))).toEqual([]);
+    const after = health('push_raced', { consecutive_failures: PERSISTENT_OFFLINE_FAILURES + 2 });
+    expect(failingTicketStores(report(['s', after]))).toEqual([]);
   });
 
   it('treats offline as failing only once it has persisted', () => {

@@ -55,6 +55,8 @@ function isPublicationFailure(health: TicketStoreSyncHealth): boolean {
     case 'offline':
     case 'blocked':
       return health.consecutive_failures >= PERSISTENT_OFFLINE_FAILURES;
+    // HS2-R2BC3N: another machine published first; the server retries promptly.
+    case 'push_raced':
     case 'not_repository':
     case 'no_remote':
     case 'pending':
@@ -82,6 +84,7 @@ export function syncFailureSummary(health: TicketStoreSyncHealth): string {
       // HS2-6ACT5Y: the server's reason names the lock files and their age.
       return health.reason ? sentence(health.reason) : 'A Git lock file in the store is blocking sync.';
     case 'offline':
+    case 'push_raced':
     case 'not_repository':
     case 'no_remote':
     case 'pending':

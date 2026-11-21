@@ -32,6 +32,13 @@ use crate::AppState;
 pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_BACKOFF: Duration = Duration::from_secs(300);
 
+/// How soon the loop runs again after a pass whose push lost every in-cycle race
+/// (HS2-R2BC3N), so a peer's published claim release is not held back for the base
+/// interval. A busy remote that keeps winning falls back to the base cadence after
+/// [`MAX_RACED_REPASSES`] such passes in a row; a race never backs off.
+const RACED_REPASS: Duration = Duration::from_secs(2);
+const MAX_RACED_REPASSES: u32 = 3;
+
 /// A request to the sync loop: every store (a server write), or one store a CLI write
 /// committed to (HS2-D9ZGAE). The path is canonical.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,7 +300,9 @@ impl SizeLevels {
 /// `Blocked` (HS2-ADHFKZ: a refused push re-sends the same history, so it must not hammer
 /// the remote at the base cadence; HS2-6ACT5Y: a stale Git lock stays until someone removes
 /// it). A `Conflict` or stalled rebase is a user-action-needed state
-/// whose next pass is a cheap local check, so it does **not** back off.
+/// whose next pass is a cheap local check, so it does **not** back off. Neither does a lost
+/// push race (HS2-R2BC3N): the remote answered, so [`raced_wait`] brings the next pass
+/// forward instead.
 pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncReport)]) -> Duration {
     let any_offline = reports.iter().any(|(_, r)| {
         matches!(
@@ -306,6 +315,25 @@ pub fn next_delay(base: Duration, current: Duration, reports: &[(String, SyncRep
     } else {
         base
     }
+}
+
+/// The wait before the next regular pass, given the delay [`next_delay`] chose and how many
+/// passes in a row (this one included) had a store whose push lost every race
+/// (HS2-R2BC3N): [`RACED_REPASS`] for the first [`MAX_RACED_REPASSES`] of them while the
+/// cadence is healthy. A backed-off loop keeps its backoff, so a race on one store cannot
+/// make another store's unreachable remote spin.
+fn raced_wait(base: Duration, delay: Duration, raced_streak: u32) -> Duration {
+    if raced_streak == 0 || raced_streak > MAX_RACED_REPASSES || delay > base {
+        delay
+    } else {
+        delay.min(RACED_REPASS)
+    }
+}
+
+fn any_raced(reports: &[(String, SyncReport)]) -> bool {
+    reports
+        .iter()
+        .any(|(_, report)| *report == SyncReport::PushRaced)
 }
 
 /// Push each pending lost-claim conflict of `store_root` to its losing session. A pass runs on
@@ -460,15 +488,27 @@ fn drive<W: Waker>(
     let mut delay = base;
     let mut scope = PassScope::All;
     let mut deadline = Duration::ZERO;
+    let mut raced_streak = 0;
     loop {
         let reports = pass(&scope);
+        raced_streak = if any_raced(&reports) {
+            raced_streak + 1
+        } else if scope == PassScope::All {
+            0
+        } else {
+            raced_streak
+        };
         if scope == PassScope::All {
             delay = next_delay(base, delay, &reports);
-            deadline = waker.now() + delay;
+            deadline = waker.now() + raced_wait(base, delay, raced_streak);
         } else {
             // A kicked pass keeps the regular deadline; only an unreachable remote moves
-            // the loop into backoff, which ignores kicks until that deadline.
+            // the loop into backoff, which ignores kicks until that deadline. A kicked
+            // pass that lost every push race brings the regular pass forward (HS2-R2BC3N).
             delay = next_delay(base, delay, &reports).max(delay);
+            if any_raced(&reports) {
+                deadline = deadline.min(waker.now() + raced_wait(base, delay, raced_streak));
+            }
         }
         let mut next = PassScope::empty();
         loop {
@@ -758,6 +798,103 @@ mod tests {
             },
         )];
         assert_eq!(next_delay(base, MAX_BACKOFF, &recovered), base);
+    }
+
+    /// HS2-R2BC3N: a lost push race never backs off, from any delay, alone or beside a
+    /// healthy store; beside an unreachable store the backoff wins, and the quick repass
+    /// is skipped so that store does not spin.
+    #[test]
+    fn hs2_r2bc3n_next_delay_never_backs_off_for_a_push_race() {
+        let base = Duration::from_secs(30);
+        let raced = vec![("s".into(), SyncReport::PushRaced)];
+        assert_eq!(next_delay(base, base, &raced), base);
+        assert_eq!(
+            next_delay(base, MAX_BACKOFF, &raced),
+            base,
+            "a race ends a backoff"
+        );
+        let beside_healthy = vec![
+            ("a".into(), SyncReport::UpToDate),
+            ("b".into(), SyncReport::PushRaced),
+        ];
+        assert_eq!(next_delay(base, base, &beside_healthy), base);
+        let beside_offline = vec![
+            ("a".into(), SyncReport::Offline),
+            ("b".into(), SyncReport::PushRaced),
+        ];
+        let delay = next_delay(base, base, &beside_offline);
+        assert_eq!(delay, base * 2);
+        assert_eq!(raced_wait(base, delay, 1), delay, "the backoff is kept");
+        for streak in 1..=MAX_RACED_REPASSES {
+            assert_eq!(raced_wait(base, base, streak), RACED_REPASS);
+        }
+        assert_eq!(raced_wait(base, base, 0), base);
+        assert_eq!(raced_wait(base, base, MAX_RACED_REPASSES + 1), base);
+        // A base interval shorter than the repass is never lengthened.
+        let short = Duration::from_secs(1);
+        assert_eq!(raced_wait(short, short, 1), short);
+    }
+
+    /// HS2-R2BC3N: passes whose push loses every race run again within seconds, a bounded
+    /// number of times in a row, then keep the base cadence (never doubling) while the
+    /// remote stays busy; a pass that publishes ends the streak, and a later race starts a
+    /// new one.
+    #[test]
+    fn hs2_r2bc3n_raced_passes_repass_promptly_then_keep_the_base_cadence() {
+        let report = |n: usize| match n {
+            0..=4 | 7 => SyncReport::PushRaced,
+            _ => SyncReport::UpToDate,
+        };
+        let times = pass_times(&[(140, Gone)], report);
+        // The first three raced passes repass 2 s later; the fourth and fifth keep 30 s.
+        assert_eq!(times, [0, 2, 4, 6, 36, 66, 96, 126, 128]);
+    }
+
+    /// HS2-R2BC3N: a race followed by real outages backs off from the base interval as
+    /// before, and a race after an outage ends the backoff and repasses promptly.
+    #[test]
+    fn hs2_r2bc3n_a_race_then_an_outage_backs_off_and_an_outage_then_a_race_recovers() {
+        let race_then_outage = |n: usize| match n {
+            0 => SyncReport::PushRaced,
+            1 | 2 => SyncReport::Offline,
+            _ => SyncReport::UpToDate,
+        };
+        assert_eq!(
+            pass_times(&[(215, Gone)], race_then_outage),
+            [0, 2, 62, 182, 212]
+        );
+        let outage_then_race = |n: usize| match n {
+            0 | 1 => SyncReport::Offline,
+            2 => SyncReport::PushRaced,
+            _ => SyncReport::UpToDate,
+        };
+        assert_eq!(
+            pass_times(&[(215, Gone)], outage_then_race),
+            [0, 60, 180, 182, 212]
+        );
+        // Kicks during the outage's backoff still wait for its deadline.
+        let times = pass_times(&[(5, KICK), (70, KICK), (215, Gone)], outage_then_race);
+        assert_eq!(times, [0, 60, 180, 182, 212]);
+    }
+
+    /// HS2-R2BC3N: a CLI write's kicked pass that loses every race brings the regular pass
+    /// forward instead of leaving the write unpublished until the base interval.
+    #[test]
+    fn hs2_r2bc3n_a_raced_kicked_pass_brings_the_regular_pass_forward() {
+        let report = |n: usize| match n {
+            1 => SyncReport::PushRaced,
+            _ => SyncReport::UpToDate,
+        };
+        let passes = scoped_passes(&[(10, store_kick("/a")), (50, Gone)], report);
+        assert_eq!(
+            passes,
+            [
+                (0, PassScope::All),
+                (10, stores(&["/a"])),
+                (12, PassScope::All),
+                (42, PassScope::All)
+            ]
+        );
     }
 
     /// HS2-KKFEY5: the loop announces each rise across a limit exactly once, re-announces
