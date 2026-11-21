@@ -1128,6 +1128,16 @@ engine** so the user effectively never runs git by hand:
   not an outage: the cycle retries the fetch within the same bounded loop as a lost push
   race and, if every attempt loses, ends `push_raced` with a fetch-race reason and no
   failure counted. A lock file that is still present stays `blocked` (§2.12.2).
+- **A lock another local Git process releases at once is a race too (HS2-8BSDBA).** A
+  headless write's background `git push` also holds the remote-tracking ref's lock
+  file while it updates that ref. A fetch or push that meets it fails with
+  `Unable to create '<...>.lock': File exists` once Git's own short lock retry
+  (`core.filesRefLockTimeout`) ends. When every lock file the step's output names is
+  gone within one second, the cycle treats it as a local race: it retries within the
+  same bounded loop and, if every attempt meets such a lock, ends `push_raced` with a
+  lock-race reason and no failure counted. A lock that is still present after that
+  window stays `blocked`; the next pass's pre-check recovers it when it is provably
+  stale (HS2-T0V269).
 - **Registered stores and headless writes (HS2-D9ZGAE).** The machine host's loop
   syncs every hosted store and also every Git store linked to a registered checkout,
   whether or not a client has opened that project since the host started. It reads
@@ -1240,18 +1250,18 @@ It never holds credentials or ticket or attachment content.
 
 Each cycle ends in one state:
 
-| State                       | Meaning                                                                                     | Retry                                |
-| --------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `no_remote`                 | Local-only store, or a designated root whose code repository publishes (HS2-V6JEBR)         | none                                 |
-| `pending`                   | A remote exists and no outcome applies yet                                                  | next pass                            |
-| `up_to_date` / `synced`     | The remote has every local commit                                                           | base cadence                         |
-| `offline`                   | Fetch or push could not reach the remote, or authentication failed                          | exponential backoff                  |
-| `push_raced`                | Every push (HS2-R2BC3N) or fetch (HS2-ZJQYZH) of the cycle lost a race; the remote answered | 2 s, three times, then base cadence  |
-| `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit) | exponential backoff; needs a repair  |
-| `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it               | not replayed for the same divergence |
-| `blocked`                   | A Git lock file in the store stopped a local step (HS2-6ACT5Y); nothing was merged          | exponential backoff                  |
-| `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                       | none until finished or aborted       |
-| `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                        | none until recovered                 |
+| State                       | Meaning                                                                                                                 | Retry                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `no_remote`                 | Local-only store, or a designated root whose code repository publishes (HS2-V6JEBR)                                     | none                                 |
+| `pending`                   | A remote exists and no outcome applies yet                                                                              | next pass                            |
+| `up_to_date` / `synced`     | The remote has every local commit                                                                                       | base cadence                         |
+| `offline`                   | Fetch or push could not reach the remote, or authentication failed                                                      | exponential backoff                  |
+| `push_raced`                | Every push (HS2-R2BC3N) or fetch (HS2-ZJQYZH, HS2-8BSDBA) of the cycle lost a local or remote race; the remote answered | 2 s, three times, then base cadence  |
+| `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit)                             | exponential backoff; needs a repair  |
+| `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it                                           | not replayed for the same divergence |
+| `blocked`                   | A Git lock file in the store stopped a local step (HS2-6ACT5Y); nothing was merged                                      | exponential backoff                  |
+| `rebase_in_progress`        | An unfinished rebase or merge in the store needs a decision (§2.12.3)                                                   | none until finished or aborted       |
+| `history_recovery_required` | A compaction rewrite replaced the remote; recover first (HS2-RFJ1GN)                                                    | none until recovered                 |
 
 The rules:
 

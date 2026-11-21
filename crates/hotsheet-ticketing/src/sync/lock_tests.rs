@@ -187,6 +187,8 @@ fn hs2_6act5y_a_local_lock_in_push_output_is_blocked_but_a_remote_lock_is_not() 
          'refs/remotes/origin/main': Unable to create '{}': File exists.\n",
         tracking_lock(&store).display()
     );
+    // HS2-8BSDBA: only a lock still present after the settle window blocks the push.
+    plant(&tracking_lock(&store));
     let (report, detail) = classify_push_failure(&store, &local, SyncLimits::default());
     assert_eq!(report, SyncReport::Blocked);
     assert!(

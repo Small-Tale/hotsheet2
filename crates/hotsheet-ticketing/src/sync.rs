@@ -40,6 +40,12 @@
 //! process in the same clone (a headless autocommit's background push updates that ref
 //! too) is the same kind of local race, never an outage (HS2-ZJQYZH): the remote answered,
 //! so the cycle retries it within the same bounded loop.
+//!
+//! A fetch or push whose output names a local lock file that is gone moments later lost
+//! the same kind of race: another Git process in the clone (that background push updating
+//! the remote-tracking ref) held the lock briefly (HS2-8BSDBA). The cycle re-checks the
+//! named locks for a short bounded window and retries within the loop when they are gone;
+//! a lock that stays is still [`SyncReport::Blocked`].
 
 use std::io::Write as _;
 use std::path::Path;
@@ -102,6 +108,9 @@ pub(crate) struct SyncLimits {
     pub push_race_retries: u32,
     /// The pause unit before a raced retry; see [`push_race_pause`].
     pub push_race_pause: std::time::Duration,
+    /// How long a lock named by a failed fetch or push may take to disappear before the
+    /// step is reported [`SyncReport::Blocked`] rather than retried (HS2-8BSDBA).
+    pub lock_race_settle: std::time::Duration,
 }
 
 /// Further attempts after a push loses a race to another pusher (HS2-R2BC3N). An attempt
@@ -112,6 +121,16 @@ pub const PUSH_RACE_RETRIES: u32 = 4;
 /// The pause unit before a raced retry (HS2-R2BC3N); see [`push_race_pause`].
 pub const PUSH_RACE_PAUSE: std::time::Duration = std::time::Duration::from_millis(100);
 
+/// How long a lock named by a failed network step may take to disappear before the cycle
+/// reports it [`SyncReport::Blocked`] (HS2-8BSDBA). Git itself retries a ref lock for
+/// `core.filesRefLockTimeout` (100 ms by default) before failing, so a lock named in its
+/// output was held longer than that; another Git process's ref update on a loaded machine
+/// still releases it well within this window, while a stale or long-held lock outlasts it.
+pub const LOCK_RACE_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The interval between re-checks of a lock named by a failed network step.
+const LOCK_RACE_RECHECK: std::time::Duration = std::time::Duration::from_millis(25);
+
 impl Default for SyncLimits {
     fn default() -> Self {
         Self {
@@ -119,6 +138,7 @@ impl Default for SyncLimits {
             replay: ReplayMode::Auto,
             push_race_retries: PUSH_RACE_RETRIES,
             push_race_pause: PUSH_RACE_PAUSE,
+            lock_race_settle: LOCK_RACE_SETTLE,
         }
     }
 }
@@ -349,7 +369,8 @@ enum Exchange {
     Finished(SyncReport, CycleDetail),
     /// Another pusher moved the remote between this attempt's fetch and its push, or
     /// another local Git process moved the remote-tracking ref during the fetch
-    /// (HS2-ZJQYZH). `reason` is recorded if every attempt races.
+    /// (HS2-ZJQYZH) or briefly held a lock the fetch or push needed (HS2-8BSDBA).
+    /// `reason` is recorded if every attempt races.
     Raced { pulled: bool, reason: &'static str },
 }
 
@@ -364,6 +385,13 @@ fn exchange(store_path: &Path, limits: SyncLimits) -> Exchange {
             return Exchange::Raced {
                 pulled: false,
                 reason: FETCH_RACE_REASON,
+            };
+        }
+        // HS2-8BSDBA: a lock another local Git process held for a moment is a race too.
+        if transient_lock_raced(store_path, &fetch.stderr, limits) {
+            return Exchange::Raced {
+                pulled: false,
+                reason: LOCK_RACE_REASON,
             };
         }
         if let Some(blocked) = lock_failure(store_path, "fetch", &fetch.stderr) {
@@ -422,10 +450,12 @@ fn exchange(store_path: &Path, limits: SyncLimits) -> Exchange {
             } else {
                 let (report, detail) = classify_push_failure(store_path, &push.stderr, limits);
                 if report == SyncReport::PushRaced {
-                    return Exchange::Raced {
-                        pulled,
-                        reason: PUSH_RACE_REASON,
+                    let reason = if detail.reason.as_deref() == Some(LOCK_RACE_REASON) {
+                        LOCK_RACE_REASON
+                    } else {
+                        PUSH_RACE_REASON
                     };
+                    return Exchange::Raced { pulled, reason };
                 }
                 // A refusal or an outage is reported as such; the next cycle re-fetches.
                 return finished((report, detail));
@@ -597,6 +627,52 @@ pub const PUSH_RACE_REASON: &str = "another pusher moved the remote during every
 pub const FETCH_RACE_REASON: &str = "another Git process in this checkout moved the \
      remote-tracking branch during every fetch of this sync; the next sync retries promptly";
 
+/// The recorded reason of a [`SyncReport::PushRaced`] cycle whose every fetch or push found
+/// a local lock file another Git process released moments later (HS2-8BSDBA).
+pub const LOCK_RACE_REASON: &str = "another Git process in this checkout briefly held a \
+     lock this sync's fetch or push needed, during every attempt; the next sync retries \
+     promptly";
+
+/// Whether a failed fetch or push stopped only on local lock files that another Git process
+/// in the clone held for a moment (HS2-8BSDBA): its output names at least one local lock,
+/// and every named lock is gone within [`SyncLimits::lock_race_settle`]. A headless
+/// write's background `git push` holds the remote-tracking ref's lock this way. A lock
+/// that stays is not a race: [`lock_failure`] reports it as [`SyncReport::Blocked`], and
+/// the next cycle's pre-check recovers it when it is provably stale (HS2-T0V269).
+fn transient_lock_raced(store_path: &Path, stderr: &str, limits: SyncLimits) -> bool {
+    let locks: Vec<std::path::PathBuf> = crate::sync_locks::locks_in_output(stderr)
+        .into_iter()
+        .map(|lock| {
+            if lock.is_relative() {
+                store_path.join(lock)
+            } else {
+                lock
+            }
+        })
+        .collect();
+    !locks.is_empty() && locks_released_within(&locks, limits.lock_race_settle)
+}
+
+/// Whether every lock in `locks` is absent now or disappears within `settle`, re-checked
+/// every [`LOCK_RACE_RECHECK`].
+fn locks_released_within(locks: &[std::path::PathBuf], settle: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + settle;
+    loop {
+        // `symlink_metadata`: a lock is a plain file; never follow anything else.
+        if locks
+            .iter()
+            .all(|lock| std::fs::symlink_metadata(lock).is_err())
+        {
+            return true;
+        }
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return false;
+        }
+        std::thread::sleep(LOCK_RACE_RECHECK.min(deadline - now));
+    }
+}
+
 /// Whether a failed fetch lost the compare-and-swap on a local ref it was updating: Git
 /// read the ref, another process in the clone moved it, and the update's expected old
 /// value no longer matched (`cannot lock ref '<ref>': is at <a> but expected <b>`). The
@@ -624,6 +700,10 @@ fn classify_push_failure(
     stderr: &str,
     limits: SyncLimits,
 ) -> (SyncReport, CycleDetail) {
+    // HS2-8BSDBA: a lock another local Git process held for a moment is a race.
+    if transient_lock_raced(store_path, stderr, limits) {
+        return failed(SyncReport::PushRaced, LOCK_RACE_REASON);
+    }
     if let Some(blocked) = lock_failure(store_path, "push", stderr) {
         return blocked;
     }
@@ -1292,6 +1372,8 @@ mod machine_provider_tests;
 mod merge_driver_tests;
 #[cfg(test)]
 mod push_race_tests;
+#[cfg(test)]
+mod ref_lock_race_tests;
 #[cfg(test)]
 mod saved_writes_tests;
 // The process scan these cycles rely on exists on Unix only (HS2-T0V269); Windows
