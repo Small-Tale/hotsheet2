@@ -828,6 +828,55 @@ impl AppState {
     }
 }
 
+impl AppState {
+    /// HS2-PNCA93: start an owner's scheduling loop when a process other than this
+    /// server enables automatic placement, such as `hotsheet-cli orchestration policy
+    /// set`. Every policy or project-type change writes this machine's scheduler wake
+    /// marker; on each new marker this follower starts the loop of every owner whose
+    /// policy now enables automatic placement and that has none running. A running loop
+    /// sees the same marker itself and ends when its policy no longer enables it. Idle,
+    /// it reads one small file at each safety re-check and makes no request. Call
+    /// inside the runtime, once per serving process.
+    pub fn spawn_scheduler_wake_follower(&self) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let state = self.clone();
+        let directory = self
+            .machine_home()
+            .join(hotsheet_cli::orchestration::SCHEDULER_WAKE_DIRECTORY);
+        let _ = std::fs::create_dir_all(&directory);
+        let token = directory.join("token");
+        // Read before the thread starts, so a change made meanwhile is not taken as seen.
+        let mut seen = std::fs::read_to_string(&token).ok();
+        let _ = std::thread::Builder::new()
+            .name("orchestration-scheduler-wake".into())
+            .spawn(move || {
+                let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).ok();
+                while !state.is_stopping() {
+                    match &waiter {
+                        Some(waiter) => {
+                            let _ = waiter.wait(std::time::Duration::from_secs(1));
+                        }
+                        None => std::thread::sleep(std::time::Duration::from_secs(1)),
+                    }
+                    let current = std::fs::read_to_string(&token).ok();
+                    if current == seen {
+                        continue;
+                    }
+                    seen = current;
+                    let Ok(shared) = runtime(&state, handle.clone()) else {
+                        continue;
+                    };
+                    let _guard = handle.enter();
+                    for owner in shared.scheduler_owners() {
+                        ensure_scheduler(&state, &owner);
+                    }
+                }
+            });
+    }
+}
+
 /// HS2-6MNMVB: a person took over, paused or stopped an orchestrator session hosted
 /// here; every client refetches its terminals so the drawer shows the new owner.
 fn announce_terminal_orchestrator(state: &AppState, terminal_id: &str) {

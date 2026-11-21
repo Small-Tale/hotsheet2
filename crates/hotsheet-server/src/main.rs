@@ -600,6 +600,9 @@ async fn main() -> Result<()> {
     // Show this machine's orchestration lines to viewers of its remote targets
     // (HS2-KB2Y51). Idle when no remote target is bound.
     state.spawn_target_line_push();
+    // Start an owner's scheduling loop when a CLI process enables automatic placement
+    // (HS2-PNCA93). Idle until the scheduler wake marker changes.
+    state.spawn_scheduler_wake_follower();
 
     // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
     // a quiescent restart) stops accepting and tells long waits to finish; open connections

@@ -3710,7 +3710,12 @@ overwritten.
 ### Reevaluation
 
 The server runs one loop per owner whose policy enables automatic placement, started
-at server start and when a policy or scheduler request arrives, and ended when the
+at server start, when a policy or scheduler request arrives, and when another process
+on the machine changes a policy or project type (HS2-PNCA93): every such change writes
+the machine's scheduler wake marker, and the server's wake follower then starts the loop
+of each owner whose policy now enables automatic placement and has none running, so
+`hotsheet-cli orchestration policy set` with `placement.automatic: true` starts placement
+on a running server just as Start Orchestration does. The loop is ended when the
 policy no longer enables it or the server begins stopping. A stopping server's
 followers end the same way, it launches no session (the start stays requested), and
 it reports nothing about its terminals as they go down, so a server started after it

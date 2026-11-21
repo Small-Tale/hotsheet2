@@ -3430,6 +3430,10 @@ HS2-Y3N3PH` opens an added project's detail in the real shell against the real
   policy), then a real server behind its bearer: the routes, the loop starting when
   the policy enables it, a readiness event causing the next pass, and the stdio MCP
   tool reading the same schedule and log.
+  `remote_servers/scheduler.rs # hs2_pnca93` turns automatic placement on with the
+  owned CLI while a server runs, reads the log only through the CLI (a scheduler
+  request would start the loop itself), and sees the server's loop start with no
+  restart and no server request (HS2-PNCA93; it failed without the wake follower).
 - `contracts.spec.ts # HS2-ECWG50` validates the real server's schedule,
   explanation, tick, decision log and policy `placement` responses against the
   contract.

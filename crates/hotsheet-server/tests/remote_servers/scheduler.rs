@@ -595,6 +595,173 @@ async fn hs2_ecwg50_server_routes_event_loop_and_stdio_mcp_share_the_scheduler()
         .unwrap();
 }
 
+/// HS2-PNCA93: `hotsheet-cli orchestration policy set` turns automatic placement on
+/// while a server runs for the owner. The CLI writes the policy itself, with no server
+/// request, and the server's wake follower starts the owner's loop without a restart
+/// or a client request. The log is read through the CLI, because a scheduler request
+/// to the server would itself start the loop.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_pnca93_cli_policy_set_starts_the_running_servers_loop() {
+    assert!(hotsheet_aitools::test_permission_vault_available());
+    hotsheet_aitools::enable_test_permission_vault();
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let source = root.path().join("store");
+    let host = state(&source, &home);
+    let project = root.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let checkout = CheckoutRegistry::new(home.join("checkouts.json"))
+        .register(&project, None, None, vec![source.clone()])
+        .unwrap();
+    let connection = checkout.sources[0].connection_id.clone();
+    let store = FsStore::open(&source).unwrap();
+    let orchestration = ticket(&store, "Coordinate from the command line");
+    let work = ticket(&store, "Synthetic ready work");
+    let router = app(host.clone());
+    let base = format!("/checkouts/{}/orchestration", checkout.id);
+    let added = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/targets"),
+        json!({"target_id":TARGET,"label":"Self","expected_revision":null}),
+        true,
+    )
+    .await
+    .1;
+    let candidate = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/inspect"),
+        json!({"destination":{"kind":"local","checkout_id":checkout.id}}),
+        true,
+    )
+    .await
+    .1;
+    api(
+        router.clone(),
+        "PUT",
+        &format!("{base}/targets/{TARGET}/binding"),
+        json!({"target":{"owner_checkout_id":checkout.id,"target_id":TARGET},
+            "expected_manifest_revision":added["revision"],"expected_binding_revision":0,
+            "previous_destination":null,"destination":candidate["destination"]}),
+        true,
+    )
+    .await;
+    let expires = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+        + 3_600_000;
+    super::orchestration::remember_rules(
+        router.clone(),
+        &format!("{base}/targets/{TARGET}"),
+        json!({"actor_id":"scheduler-1","actions":["tickets_read","gates_observe"],
+            "expires_at_ms":expires,"actor":{"role":"human","id":"maintainer"}}),
+    )
+    .await;
+    let (status, step) = api(
+        router.clone(),
+        "POST",
+        &format!("{base}/readiness/define"),
+        json!({"actor":{"role":"ai","id":"scheduler-1"},
+            "ticket":{"native_id": orchestration.slug},"target_id":TARGET,
+            "connection_id":connection,"native_id":work.slug}),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{step}");
+    let step_id = step["step"]["step_id"].as_str().unwrap().to_owned();
+    host.spawn_scheduler_wake_follower();
+
+    let store_arg = source.to_str().unwrap();
+    let human = [
+        "--actor-role",
+        "human",
+        "--actor-id",
+        "maintainer",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let worker = [
+        "--actor-role",
+        "ai",
+        "--actor-id",
+        "scheduler-1",
+        "-C",
+        store_arg,
+        "orchestration",
+    ];
+    let set_policy = |body: Value| {
+        let file = root.path().join("policy.json");
+        std::fs::write(&file, serde_json::to_vec(&body).unwrap()).unwrap();
+        cli_named(
+            &home,
+            &human,
+            &[
+                "policy",
+                "set",
+                "--project",
+                &checkout.id,
+                "--file",
+                file.to_str().unwrap(),
+            ],
+        )
+    };
+    let decisions = || {
+        cli_named(
+            &home,
+            &worker,
+            &[
+                "scheduler",
+                "decisions",
+                "--project",
+                &checkout.id,
+                "--limit",
+                "200",
+            ],
+        )
+    };
+    // A policy without automatic placement starts nothing.
+    set_policy(policy(false, true));
+    assert_eq!(decisions()["entries"], json!([]));
+
+    // The command line turns automatic placement on: the running server's loop starts
+    // and its first pass acts as the policy's actor.
+    set_policy(policy(true, true));
+    let directory = home.join("orchestration-scheduler-decisions");
+    std::fs::create_dir_all(&directory).unwrap();
+    let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let started = loop {
+        let page = decisions();
+        let pass = page["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["trigger"] == "start" && entry["kind"] == "tick")
+            .cloned();
+        if let Some(pass) = pass {
+            break (pass, page);
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        assert!(!remaining.is_zero(), "the loop never started: {page}");
+        tokio::task::block_in_place(|| waiter.wait(remaining));
+    };
+    let (pass, page) = started;
+    assert_eq!(pass["mode"], "applied", "{page}");
+    assert_eq!(pass["actor_id"], "scheduler-1");
+    assert_eq!(pass["tick"]["automatic"], true);
+    assert!(
+        page["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "unplaced" && entry["step_id"] == step_id),
+        "{page}"
+    );
+}
+
 /// HS2-2FG91X: scheduling around claimable resources, on the same fixtures.
 #[path = "resources.rs"]
 mod resources;
