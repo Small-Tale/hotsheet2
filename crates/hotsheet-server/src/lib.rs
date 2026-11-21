@@ -475,6 +475,8 @@ pub struct AppState {
     /// instance registration so a maintainer can see which host owns the machine server
     /// (HS2-GWFEAA). Set once by the binary before publishing instances.
     launcher: Arc<Mutex<String>>,
+    /// HS2-QPJQ7A: the remote listener's URL when it is paired with a local listener.
+    remote_listener_url: Arc<Mutex<Option<String>>>,
     /// Candidate windows for the built-in deterministic local adapter. Project-attributed
     /// events are keyed by checkout and re-read that checkout's machine-local settings on
     /// every event; unattributed legacy events retain store-only compatibility behavior.
@@ -528,6 +530,7 @@ struct InstanceMeta {
     build_revision: Option<String>,
     executable: Option<String>,
     launcher: String,
+    remote_url: Option<String>,
 }
 
 /// The launcher label a server reports when nobody named one (HS2-GWFEAA).
@@ -713,6 +716,7 @@ impl AppState {
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
             launcher: Arc::new(Mutex::new(UNSPECIFIED_LAUNCHER.to_owned())),
+            remote_listener_url: Arc::new(Mutex::new(None)),
             activity_distillation: Arc::new(Mutex::new(std::collections::HashMap::new())),
             activity_volume: Arc::new(Mutex::new(
                 hotsheet_ticketing::ActivityVolumeGuard::default(),
@@ -1062,6 +1066,16 @@ impl AppState {
     pub fn set_launcher(&self, launcher: impl Into<String>) {
         let mut current = self.launcher.lock_or_recover();
         *current = launcher.into();
+    }
+
+    /// HS2-QPJQ7A: record the remote listener's URL beside the local URL clients use.
+    pub fn set_remote_listener_url(&self, url: String) {
+        *self.remote_listener_url.lock_or_recover() = Some(url);
+    }
+
+    /// The remote listener's URL when this server also serves a local listener.
+    pub fn remote_listener_url(&self) -> Option<String> {
+        self.remote_listener_url.lock_or_recover().clone()
     }
 
     /// The launcher label this server reports (HS2-GWFEAA).

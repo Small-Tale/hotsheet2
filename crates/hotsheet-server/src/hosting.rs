@@ -330,6 +330,7 @@ impl AppState {
                 build_revision: self.source_revision.build_revision().map(str::to_owned),
                 executable: self.executable(),
                 launcher: self.launcher(),
+                remote_url: self.remote_listener_url(),
             });
         }
         for (_, root) in self.host.locations() {
@@ -363,6 +364,7 @@ impl AppState {
             executable: meta.executable,
             launcher: Some(meta.launcher),
             anchor: Some(self.store.root().display().to_string()),
+            remote_url: meta.remote_url,
         };
         // Hold this store's index-writer lock too, so a second machine server can't
         // double-write its index (HS2-AYCA1W). The primary store's lock is already held by

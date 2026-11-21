@@ -976,6 +976,10 @@ Use only disposable homes and synthetic issued device credentials. Read `remote 
 
 The synthetic automated CLI/service/MCP and TLS lifecycle cases passed on 2026-10-30. The operator enrollment checklist above was not performed with real devices or credentials. There is no rendered UI in this foundation.
 
+### Headless pairing bundle and local listener on a real second machine (HS2-FZXXTG, HS2-QPJQ7A)
+
+On the serving machine, run `cert init --host <name>`, serve with `--bind 0.0.0.0:8787`, and confirm `serve --list` reports it `healthy` with a `remote listener:` line and that a CLI write prints no "may be local only" note. Write a bundle with `cert issue <device> --bundle <file> --origin https://<name>:8787 --role read-write`, copy it privately to the other machine, run `remote register --label <label> --bundle <file>` there (expect one keychain prompt), then delete the file on both machines. Start a Claude session on the serving machine from the orchestrator and confirm a permission prompt reaches Hot Sheet rather than Claude's own terminal. Automated coverage uses two isolated homes on one machine (`crates/hotsheet-server/tests/mtls_site.rs`); the real network, the real keychain and a real Claude hook remain manual.
+
 ### Pairing through Tailscale Serve (HS2-H4REBS)
 
 Use two machines on one tailnet with disposable homes and synthetic projects. On the

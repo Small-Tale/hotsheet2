@@ -7,11 +7,12 @@ mod registry;
 mod workflow;
 
 pub use contract::{
-    MAX_REMOTE_CHECKOUTS, MAX_REMOTE_HOST_NAME, MAX_REMOTE_RESPONSE_BYTES, REMOTE_PROTOCOL_VERSION,
-    RegisterRemote, RemoteCheckout, RemoteCheckoutState, RemoteCredentials, RemoteDiscovery,
-    RemoteFailure, RemoteIdentity, RemoteReview, RemoteSelectedProject, RemoteSnapshot,
-    RemoteSource, RemoteTransport, RemoteView, ReviewRemote, ReviewedRemoteIdentity, RevokeRemote,
-    normalize_remote_origin, remote_registry_origin_is_loopback, validate_remote_checkouts,
+    MAX_REMOTE_CHECKOUTS, MAX_REMOTE_HOST_NAME, MAX_REMOTE_RESPONSE_BYTES, PAIRING_BUNDLE_FORMAT,
+    PairingBundle, REMOTE_PROTOCOL_VERSION, RegisterRemote, RemoteCheckout, RemoteCheckoutState,
+    RemoteCredentials, RemoteDiscovery, RemoteFailure, RemoteIdentity, RemoteReview,
+    RemoteSelectedProject, RemoteSnapshot, RemoteSource, RemoteTransport, RemoteView, ReviewRemote,
+    ReviewedRemoteIdentity, RevokeRemote, normalize_remote_origin,
+    remote_registry_origin_is_loopback, validate_remote_checkouts,
 };
 pub use registry::{RemoteRegistry, server_identity};
 

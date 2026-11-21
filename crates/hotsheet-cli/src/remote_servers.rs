@@ -7,9 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hotsheet_ticketing::remote_servers::{
-    MAX_REMOTE_RESPONSE_BYTES, RegisterRemote, RemoteCredentials, RemoteDiscovery, RemoteError,
-    RemoteFailure, RemoteIdentity, RemoteRegistry, RemoteSnapshot, RemoteTransport, RemoteView,
-    ReviewRemote, RevokeRemote, normalize_remote_origin, validate_remote_checkouts,
+    MAX_REMOTE_RESPONSE_BYTES, PAIRING_BUNDLE_FORMAT, PairingBundle, RegisterRemote,
+    RemoteCredentials, RemoteDiscovery, RemoteError, RemoteFailure, RemoteIdentity, RemoteRegistry,
+    RemoteSnapshot, RemoteTransport, RemoteView, ReviewRemote, RevokeRemote,
+    normalize_remote_origin, validate_remote_checkouts,
 };
 use hotsheet_ticketing::{OsKeychain, SecretStore};
 use serde::de::DeserializeOwned;
@@ -150,13 +151,105 @@ impl RemoteRuntime {
 }
 
 pub fn read_remote_credentials(input: impl Read) -> Result<RemoteCredentials, RemoteError> {
+    Ok(read_remote_credential_input(input)?.credentials)
+}
+
+/// HS2-FZXXTG: credential input for `remote register`/`review`, the desktop's private CLI
+/// call and the MCP tool alike: a plain credential object, or a pairing bundle written by
+/// `cert issue --bundle`, which also names the serving machine's identity and origin.
+pub struct RemoteCredentialInput {
+    pub credentials: RemoteCredentials,
+    /// The server id a pairing bundle names; `None` for a plain credential object.
+    pub server_id: Option<String>,
+    /// The origin a pairing bundle suggests.
+    pub origin: Option<String>,
+}
+
+impl RemoteCredentialInput {
+    /// The server id to verify: an explicit one must equal the bundle's, so a bundle for
+    /// another machine is never registered under a typed id.
+    pub fn expected_server_id(&self, explicit: Option<String>) -> Result<String, RemoteError> {
+        match (explicit, &self.server_id) {
+            (Some(explicit), Some(bundled)) if &explicit != bundled => Err(RemoteError::Invalid(
+                "the pairing bundle names another server id than --expected-server-id",
+            )),
+            (Some(explicit), _) => Ok(explicit),
+            (None, Some(bundled)) => Ok(bundled.clone()),
+            (None, None) => Err(RemoteError::Invalid(
+                "an expected server id is required unless a pairing bundle names one",
+            )),
+        }
+    }
+
+    /// The origin to register: an explicit one wins, since the importing machine may reach
+    /// the server by another name; the bundle's suggestion is the default.
+    pub fn origin(&self, explicit: Option<&str>) -> Result<String, RemoteError> {
+        match (explicit, &self.origin) {
+            (Some(explicit), _) => normalize_remote_origin(explicit),
+            (None, Some(bundled)) => normalize_remote_origin(bundled),
+            (None, None) => Err(RemoteError::Invalid(
+                "an origin is required unless the pairing bundle suggests one",
+            )),
+        }
+    }
+}
+
+pub fn read_remote_credential_input(
+    input: impl Read,
+) -> Result<RemoteCredentialInput, RemoteError> {
     let mut bytes = Vec::new();
     input.take(400 * 1024 + 1).read_to_end(&mut bytes)?;
     if bytes.len() > 400 * 1024 {
         return Err(RemoteError::Invalid("remote credential input is too large"));
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|_| RemoteError::Invalid("invalid remote credential input"))
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| RemoteError::Invalid("invalid remote credential input"))?;
+    if value.get("format").is_none() {
+        return Ok(RemoteCredentialInput {
+            credentials: serde_json::from_value(value)
+                .map_err(|_| RemoteError::Invalid("invalid remote credential input"))?,
+            server_id: None,
+            origin: None,
+        });
+    }
+    let bundle: PairingBundle = serde_json::from_value(value)
+        .map_err(|_| RemoteError::Invalid("invalid pairing bundle"))?;
+    if bundle.format != PAIRING_BUNDLE_FORMAT {
+        return Err(RemoteError::Invalid("unsupported pairing bundle format"));
+    }
+    if bundle.server_id.parse::<ulid::Ulid>().is_err() {
+        return Err(RemoteError::Invalid(
+            "pairing bundle server id is not a ULID",
+        ));
+    }
+    Ok(RemoteCredentialInput {
+        credentials: bundle.credentials,
+        server_id: Some(bundle.server_id),
+        origin: bundle.origin,
+    })
+}
+
+/// HS2-FZXXTG: the bundle `cert issue --bundle` writes for one newly issued device. The
+/// device certificate is the identity, so the bundle carries no bearer.
+pub fn pairing_bundle(
+    device: &hotsheet_tls::DeviceCert,
+    server_id: String,
+    origin: Option<&str>,
+) -> Result<PairingBundle, RemoteError> {
+    Ok(PairingBundle {
+        format: PAIRING_BUNDLE_FORMAT.into(),
+        server_id,
+        device: device.name.clone(),
+        origin: origin.map(normalize_remote_origin).transpose()?,
+        credentials: RemoteCredentials {
+            bearer_secret: String::new(),
+            session_origin: None,
+            session_csrf: None,
+            ca_pem: Some(device.ca_pem.clone()),
+            client_certificate_pem: Some(device.cert_pem.clone()),
+            client_key_pem: Some(device.key_pem.clone()),
+        },
+    })
 }
 
 fn now_ms() -> u64 {

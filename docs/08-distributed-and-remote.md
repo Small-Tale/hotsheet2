@@ -123,7 +123,29 @@ hotsheet-cli remote review <registration-ulid> --expected-revision <revision> --
 hotsheet-cli remote revoke <registration-ulid> --expected-revision <revision>
 ```
 
-The input bundle keeps `bearer_secret` for stored-format compatibility. A
+**Headless pairing (HS2-FZXXTG).** The serving machine writes a private pairing
+bundle instead of printing PEMs, and the other machine imports it:
+
+```sh
+# On the serving machine (after `cert init --host <name>`; serve with mTLS):
+hotsheet-cli cert issue home-orchestrator -C <store> --bundle <file> --origin https://<name>:8787 --role read-write
+# On the other machine:
+hotsheet-cli remote register --label "Second Mac" --bundle <file>
+```
+
+The bundle (`format: "hotsheet-pairing-bundle/v1"`) carries the serving machine's
+`server_id`, the device name, an optional suggested `origin` and the CA, device
+certificate and key; it is created with mode 0600 and never overwrites a file.
+`remote register` and `remote review` read it through the same reader as a plain
+credential file (`--bundle` is an alias of `--credentials-file`), as do the desktop's
+private CLI call and the `hotsheet_remotes` MCP tool. The bundle's server id is
+verified, and an explicit `--expected-server-id` must equal it; an explicit
+`--origin` overrides the suggestion, since the importer may reach the server by
+another name. Re-importing with the same origin keeps the same registration.
+
+The input bundle keeps `bearer_secret` for stored-format compatibility. It may be
+empty or absent only for an HTTPS device identity (certificate and key, no paired
+session), which never sends it (HS2-FZXXTG). A
 paired session uses `session:<opaque-session-token>` in that field; transport
 sends it only as a cookie. A paired session keeps its approved
 `session_origin` and `session_csrf` in the private secret record for writes and

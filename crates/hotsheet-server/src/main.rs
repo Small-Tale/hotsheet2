@@ -46,6 +46,11 @@ struct Cli {
     /// HTTP is permitted only when selected deliberately.
     #[arg(long, value_enum, conflicts_with = "stop")]
     remote_transport: Option<RemoteTransportMode>,
+    /// Loopback address of the plain-HTTP listener this machine's own CLI, hooks and sessions
+    /// use beside a remote listener (HS2-QPJQ7A). Port 0 picks a free port; it must be a
+    /// loopback address. Ignored without a remote listener, where `--bind` is already local.
+    #[arg(long, default_value = "127.0.0.1:0", conflicts_with = "stop")]
+    local_bind: String,
     /// Shared secret required on `X-Hotsheet-Secret` (generated + printed if omitted).
     #[arg(long)]
     secret: Option<String>,
@@ -343,6 +348,7 @@ async fn main() -> Result<()> {
     } else {
         "http"
     };
+    let local_addr = local_listener_addr(mode, &cli.local_bind)?;
 
     let secret = cli.secret.unwrap_or_else(|| Ulid::new().to_string());
 
@@ -442,14 +448,32 @@ async fn main() -> Result<()> {
         hotsheet_server::provider_write_behind::spawn_jira_dispatch_loop(state.clone());
 
     let listener = TcpListener::bind(addr).await?;
-    let local = listener.local_addr()?;
-    let url = format!("{scheme}://{local}");
+    let bound = listener.local_addr()?;
+    let remote_url = format!("{scheme}://{bound}");
+    // HS2-QPJQ7A: a remote listener (mTLS needs a client certificate on every handshake,
+    // loopback included) is paired with a loopback plain-HTTP listener guarded by the
+    // machine bearer: the Tier-0 local model. This machine's CLI, hooks, sync kicks and
+    // the sessions it launches use that one; remote peers keep the remote listener.
+    let local_listener =
+        match local_addr {
+            Some(local_addr) => Some(TcpListener::bind(local_addr).await.map_err(|e| {
+                anyhow::anyhow!("could not bind the local listener {local_addr}: {e}")
+            })?),
+            None => None,
+        };
+    let url = match &local_listener {
+        Some(local) => format!("http://{}", local.local_addr()?),
+        None => remote_url.clone(),
+    };
+    if local_listener.is_some() {
+        state.set_remote_listener_url(remote_url.clone());
+    }
     state.set_terminal_server_url(url.clone());
     // Keychain can block for an OS approval. The bridge remains fail-closed until
     // this loader finishes, while unrelated HTTP routes can start (HS2-Q7R2RM).
     let _permission_rules_load = state.spawn_permission_rules_load();
     println!(
-        "hotsheet-server listening on {url} (store: {}){}",
+        "hotsheet-server listening on {remote_url} (store: {}){}",
         cli.path.display(),
         match mode {
             None => " [local HTTP]",
@@ -460,6 +484,8 @@ async fn main() -> Result<()> {
     );
     if mode.is_none() {
         println!("secret: {secret}");
+    } else {
+        println!("local clients: {url} (machine bearer; this machine's CLI, hooks and sessions)");
     }
 
     // Opt-in distributed driving loop (HS2-1TY7GC): spawn a real AI tool per self-claimed
@@ -582,7 +608,15 @@ async fn main() -> Result<()> {
     // exit, because connection tasks and parked blocking work can outlive the listener.
     let stopping = state.clone();
     let stop_accepting = async move { stopping.stopping().await };
-    let serve: std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> =
+    let local_serve = local_listener.map(|listener| {
+        let stopping = state.clone();
+        axum::serve(
+            listener,
+            app(state.clone()).into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move { stopping.stopping().await })
+    });
+    let remote_serve: std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> =
         match tls_config {
             // Tier 1: mutual TLS (manual acceptor that drains its tracked connections).
             Some((config, acl_file)) => Box::pin(hotsheet_server::tls::serve_tls_with_acl(
@@ -602,6 +636,15 @@ async fn main() -> Result<()> {
                 Box::pin(async move { Ok(serve.await?) })
             }
         };
+    let serve = async move {
+        match local_serve {
+            Some(local) => {
+                let local = async move { Ok::<(), anyhow::Error>(local.await?) };
+                tokio::try_join!(remote_serve, local).map(|_| ())
+            }
+            None => remote_serve.await,
+        }
+    };
     let drain = std::time::Duration::from_millis(cli.shutdown_drain_ms);
     let outcome = drain_on_shutdown(serve, &state, drain, force).await;
     // A probe started during the drain must not outlive the process either (HS2-BH3M53).
@@ -628,6 +671,26 @@ async fn main() -> Result<()> {
             std::process::exit(0);
         }
     }
+}
+
+/// HS2-QPJQ7A: the loopback address of the local listener that accompanies a remote
+/// listener, or `None` when the only listener is already the local Tier-0 one.
+fn local_listener_addr(
+    mode: Option<RemoteTransportMode>,
+    local_bind: &str,
+) -> Result<Option<SocketAddr>> {
+    if mode.is_none() {
+        return Ok(None);
+    }
+    let addr: SocketAddr = local_bind
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid --local-bind '{local_bind}' (want IP:port)"))?;
+    anyhow::ensure!(
+        addr.ip().is_loopback(),
+        "--local-bind must be a loopback address: it accepts the machine bearer without a \
+         client certificate"
+    );
+    Ok(Some(addr))
 }
 
 /// HS2-B14HYW: a fixture-owned default artifact must fail before native credentials
@@ -989,6 +1052,10 @@ mod tests {
         }
         assert!(Cli::try_parse_from(["hotsheet-server", "--remote-transport", "invalid"]).is_err());
         assert!(
+            Cli::try_parse_from(["hotsheet-server", "--local-bind", "127.0.0.1:0", "--stop"])
+                .is_err()
+        );
+        assert!(
             Cli::try_parse_from(["hotsheet-server", "--remote-transport", "http", "--stop"])
                 .is_err()
         );
@@ -1053,5 +1120,34 @@ mod tests {
         let stop =
             Cli::try_parse_from(["hotsheet-server", "--stop", "--kill-all-terminals"]).unwrap();
         assert!(stop.stop && stop.kill_all_terminals);
+    }
+
+    #[test]
+    fn hs2_qpjq7a_a_remote_listener_gets_a_loopback_local_listener() {
+        assert_eq!(local_listener_addr(None, "127.0.0.1:0").unwrap(), None);
+        for mode in [
+            RemoteTransportMode::Http,
+            RemoteTransportMode::Https,
+            RemoteTransportMode::Mtls,
+        ] {
+            assert_eq!(
+                local_listener_addr(Some(mode), "127.0.0.1:0").unwrap(),
+                Some("127.0.0.1:0".parse().unwrap())
+            );
+            assert_eq!(
+                local_listener_addr(Some(mode), "[::1]:18790").unwrap(),
+                Some("[::1]:18790".parse().unwrap())
+            );
+            // The local listener takes the machine bearer without a client certificate,
+            // so it never opens off loopback.
+            for refused in ["0.0.0.0:0", "192.0.2.10:8787", "not-an-address"] {
+                assert!(
+                    local_listener_addr(Some(mode), refused).is_err(),
+                    "{refused}"
+                );
+            }
+        }
+        let cli = Cli::try_parse_from(["hotsheet-server"]).unwrap();
+        assert_eq!(cli.local_bind, "127.0.0.1:0");
     }
 }

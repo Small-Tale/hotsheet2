@@ -15,6 +15,10 @@ pub(crate) const MAX_REGISTRY_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteCredentials {
+    /// The machine bearer, sent only to a loopback HTTP origin, or a `session:` token. Empty
+    /// for an mTLS device identity, where the certificate authorizes and the bearer would
+    /// authorize nothing (HS2-FZXXTG).
+    #[serde(default)]
     pub bearer_secret: String,
     /// The origin approved during pairing. Kept beside the token in the private secret store.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,9 +47,23 @@ impl RemoteCredentials {
         self.bearer_secret.strip_prefix("session:")
     }
 
+    /// HS2-FZXXTG: an HTTPS device identity (certificate and key, no paired session) needs
+    /// no bearer; nothing on that transport would send it.
+    fn bearer_optional(&self, origin: &str) -> bool {
+        !origin.starts_with("http://")
+            && self.client_certificate_pem.is_some()
+            && self.client_key_pem.is_some()
+            && self.session_origin.is_none()
+            && self.session_csrf.is_none()
+    }
+
     pub fn trust_fingerprint(&self, origin: &str) -> Result<Option<String>, RemoteError> {
-        if self.bearer_secret.is_empty()
-            || self.bearer_secret.len() > 8_192
+        if self.bearer_secret.is_empty() && !self.bearer_optional(origin) {
+            return Err(RemoteError::Invalid(
+                "bearer must be nonempty printable ASCII",
+            ));
+        }
+        if self.bearer_secret.len() > 8_192
             || !self
                 .bearer_secret
                 .bytes()
@@ -132,6 +150,39 @@ impl RemoteCredentials {
             ));
         };
         Ok(Some(format!("{:x}", Sha256::digest(certificate.as_ref()))))
+    }
+}
+
+/// HS2-FZXXTG: the format tag of a pairing bundle written by `cert issue --bundle`.
+pub const PAIRING_BUNDLE_FORMAT: &str = "hotsheet-pairing-bundle/v1";
+
+/// HS2-FZXXTG: everything one machine needs to register another's mTLS listener, written on
+/// the serving machine by `hotsheet-cli cert issue <device> --bundle <file>` and read by
+/// `remote register --credentials-file <file>`. It names the serving machine's durable server
+/// id, so the importer verifies the identity it pairs with without typing it.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PairingBundle {
+    pub format: String,
+    /// The serving machine's durable server id (`remote identity`).
+    pub server_id: String,
+    /// The device certificate's name on the serving machine.
+    pub device: String,
+    /// The origin the serving machine suggests; the importer may name another.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    pub credentials: RemoteCredentials,
+}
+
+impl std::fmt::Debug for PairingBundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingBundle")
+            .field("format", &self.format)
+            .field("server_id", &self.server_id)
+            .field("device", &self.device)
+            .field("origin", &self.origin)
+            .field("credentials", &self.credentials)
+            .finish()
     }
 }
 

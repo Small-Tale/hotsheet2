@@ -50,6 +50,10 @@ pub struct InstanceInfo {
     /// it. Absent in legacy records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<String>,
+    /// HS2-QPJQ7A: the remote (mTLS, HTTPS or off-loopback HTTP) listener's URL when `url`
+    /// is the loopback listener beside it. Absent for a local-only server and legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_url: Option<String>,
 }
 
 impl InstanceInfo {
@@ -567,6 +571,7 @@ mod tests {
             executable: None,
             launcher: None,
             anchor: None,
+            remote_url: None,
         }
     }
 

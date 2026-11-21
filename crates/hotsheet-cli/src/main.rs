@@ -878,6 +878,11 @@ enum Cmd {
         /// retains the existing mTLS default (HS2-W4JJJE).
         #[arg(long, value_parser = ["http", "https", "mtls"], conflicts_with_all = ["stop", "list"])]
         remote_transport: Option<String>,
+        /// Loopback address of the plain-HTTP listener a remote listener keeps for this
+        /// machine's own CLI, hooks and sessions (default `127.0.0.1:0`, a free port;
+        /// HS2-QPJQ7A). Pin it to keep one URL across restarts.
+        #[arg(long, conflicts_with_all = ["stop", "list"])]
+        local_bind: Option<String>,
         /// Shared secret for `X-Hotsheet-Secret` (generated + printed by the server if omitted).
         #[arg(long, conflicts_with = "list")]
         secret: Option<String>,

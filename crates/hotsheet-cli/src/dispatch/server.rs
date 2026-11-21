@@ -40,6 +40,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Serve {
             bind,
             remote_transport,
+            local_bind,
             secret,
             stop,
             kill_all_terminals,
@@ -49,6 +50,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             path,
             &bind,
             remote_transport.as_deref(),
+            local_bind.as_deref(),
             secret,
             ServeStop {
                 stop,
@@ -77,6 +79,7 @@ pub(crate) fn cmd_serve(
     path: &Path,
     bind: &str,
     remote_transport: Option<&str>,
+    local_bind: Option<&str>,
     secret: Option<String>,
     stop: ServeStop,
     list: bool,
@@ -93,6 +96,7 @@ pub(crate) fn cmd_serve(
         path,
         bind,
         remote_transport,
+        local_bind,
         secret.as_deref(),
         stop,
         (!stop.stop).then_some("cli"),
@@ -130,8 +134,23 @@ pub(crate) fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             println!("Next: `hotsheet-cli cert issue <device-name>` to enroll a client, then");
             println!("bind the server off-loopback (e.g. `serve --bind 0.0.0.0:8787`).");
         }
-        CertCmd::Issue { name } => {
+        CertCmd::Issue {
+            name,
+            bundle: Some(bundle),
+            origin,
+            role,
+        } => issue_pairing_bundle(&paths, name, bundle, origin.as_deref(), role.as_deref())?,
+        CertCmd::Issue {
+            name,
+            bundle: None,
+            role,
+            ..
+        } => {
+            let role = role.as_deref().map(device_role).transpose()?;
             let dev = hotsheet_tls::issue_device(&paths, name)?;
+            if let Some(role) = role {
+                hotsheet_tls::set_device_role(&paths, name, role)?;
+            }
             eprintln!(
                 "Issued client cert for '{}' (fingerprint {}). Copy all three PEMs to the device:",
                 dev.name, dev.fingerprint
@@ -157,12 +176,7 @@ pub(crate) fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             print!("{}", dev.ca_pem);
         }
         CertCmd::Role { name, role } => {
-            let role = match role.as_str() {
-                "read-only" | "read_only" => hotsheet_tls::DeviceRole::ReadOnly,
-                "read-write" | "read_write" => hotsheet_tls::DeviceRole::ReadWrite,
-                "deny" => hotsheet_tls::DeviceRole::Deny,
-                _ => bail!("role must be read-only, read-write, or deny"),
-            };
+            let role = device_role(role)?;
             let fpr = hotsheet_tls::set_device_role(&paths, name, role)?;
             println!("Set '{name}' ({fpr}) to {role:?}. This applies on the next request.");
         }
@@ -171,6 +185,86 @@ pub(crate) fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             println!("Revoked '{name}' ({fpr}). This applies on the next TLS connection.");
         }
     }
+    Ok(())
+}
+
+fn device_role(role: &str) -> Result<hotsheet_tls::DeviceRole> {
+    Ok(match role {
+        "read-only" | "read_only" => hotsheet_tls::DeviceRole::ReadOnly,
+        "read-write" | "read_write" => hotsheet_tls::DeviceRole::ReadWrite,
+        "deny" => hotsheet_tls::DeviceRole::Deny,
+        _ => bail!("role must be read-only, read-write, or deny"),
+    })
+}
+
+/// HS2-FZXXTG: issue a device certificate and write the pairing bundle the other machine
+/// imports with `remote register --credentials-file`. Every input is checked before the
+/// certificate is issued, so a refused call leaves no orphaned device behind.
+fn issue_pairing_bundle(
+    paths: &hotsheet_tls::Paths,
+    name: &str,
+    bundle: &Path,
+    origin: Option<&str>,
+    role: Option<&str>,
+) -> Result<()> {
+    let role = role.map(device_role).transpose()?;
+    if let Some(origin) = origin {
+        hotsheet_ticketing::remote_servers::normalize_remote_origin(origin)?;
+    }
+    let to_stdout = bundle == Path::new("-");
+    if !to_stdout && bundle.exists() {
+        bail!(
+            "{} already exists; choose a new bundle file (it would hold a private key)",
+            bundle.display()
+        );
+    }
+    let identity = hotsheet_ticketing::remote_servers::server_identity(
+        &hotsheet_plugins::hotsheet_home(),
+        || ulid::Ulid::new().to_string(),
+    )?;
+    let device = hotsheet_tls::issue_device(paths, name)?;
+    if let Some(role) = role {
+        hotsheet_tls::set_device_role(paths, name, role)?;
+    }
+    let contents = serde_json::to_string_pretty(&hotsheet_cli::remote_servers::pairing_bundle(
+        &device,
+        identity.server_id.clone(),
+        origin,
+    )?)?;
+    if to_stdout {
+        println!("{contents}");
+        return Ok(());
+    }
+    write_private_new(bundle, contents.as_bytes())?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "device": device.name,
+            "fingerprint": device.fingerprint,
+            "server_id": identity.server_id,
+            "bundle": bundle,
+            "role": role,
+            "next": "copy the bundle privately to the other machine, then run `hotsheet-cli remote register --label <label> --credentials-file <bundle>` there and delete the file",
+        }))?
+    );
+    Ok(())
+}
+
+/// Create `path` (never replacing a file) readable by its owner only.
+fn write_private_new(path: &Path, contents: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .with_context(|| format!("could not create {}", path.display()))?;
+    file.write_all(contents)?;
+    file.sync_all()?;
     Ok(())
 }
 
@@ -303,8 +397,23 @@ pub(crate) enum CertCmd {
         hosts: Vec<String>,
     },
     /// Issue a client (device) cert signed by the project CA, printing the cert + key + CA
-    /// PEMs to copy to the device. `name` identifies it for later revocation.
-    Issue { name: String },
+    /// PEMs to copy to the device. `name` identifies it for later revocation. With
+    /// `--bundle`, write instead the pairing bundle that `remote register
+    /// --credentials-file` imports on the other machine (HS2-FZXXTG).
+    Issue {
+        name: String,
+        /// Write a private pairing bundle (JSON: this machine's server id, the CA, the
+        /// device certificate and key) to this new file, or `-` for stdout.
+        #[arg(long, value_name = "FILE")]
+        bundle: Option<PathBuf>,
+        /// The origin the other machine should use, e.g. `https://site.local:8787`; recorded
+        /// in the bundle as a default the importer may override.
+        #[arg(long, requires = "bundle")]
+        origin: Option<String>,
+        /// Also set the device's ACL role (read-only, read-write or deny), like `cert role`.
+        #[arg(long)]
+        role: Option<String>,
+    },
     /// Rotate a device certificate, revoking the old leaf and printing a fresh 90-day leaf.
     Renew { name: String },
     /// Set an issued device's explicit ACL role: read-only, read-write, or deny.
@@ -419,6 +528,9 @@ pub(crate) struct RegisteredServer {
     build_revision: Option<String>,
     #[serde(default)]
     executable: Option<String>,
+    /// HS2-QPJQ7A: the remote listener beside the loopback `url`, when there is one.
+    #[serde(default)]
+    remote_url: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -443,6 +555,8 @@ pub(crate) struct ServerInventoryEntry {
     launcher: Option<String>,
     build_revision: Option<String>,
     executable: Option<String>,
+    /// HS2-QPJQ7A: the remote listener beside the loopback URL, when there is one.
+    remote_url: Option<String>,
 }
 
 pub(crate) fn cmd_list_servers() -> Result<()> {
@@ -521,6 +635,7 @@ struct GroupedRegistration {
     launcher: Option<String>,
     build_revision: Option<String>,
     executable: Option<String>,
+    remote_url: Option<String>,
 }
 
 pub(crate) fn server_inventory(
@@ -546,6 +661,7 @@ pub(crate) fn server_inventory(
         group.launcher = group.launcher.take().or(server.launcher);
         group.build_revision = group.build_revision.take().or(server.build_revision);
         group.executable = group.executable.take().or(server.executable);
+        group.remote_url = group.remote_url.take().or(server.remote_url);
     }
     let mut stale_records = Vec::new();
     let mut servers = grouped
@@ -566,6 +682,7 @@ pub(crate) fn server_inventory(
                 launcher: group.launcher,
                 build_revision: group.build_revision,
                 executable: group.executable,
+                remote_url: group.remote_url,
             }
         })
         .collect::<Vec<_>>();
@@ -605,6 +722,9 @@ pub(crate) fn render_server_inventory(inventory: &ServerInventory, pruned: usize
             server.launcher.as_deref().unwrap_or("unknown"),
             server.build_revision.as_deref().unwrap_or("unknown"),
         ));
+        if let Some(remote_url) = &server.remote_url {
+            output.push_str(&format!("  remote listener: {remote_url}\n"));
+        }
         if let Some(executable) = &server.executable {
             output.push_str(&format!("  executable: {executable}\n"));
         }
@@ -697,6 +817,7 @@ pub(crate) fn server_args(
     path: &Path,
     bind: &str,
     remote_transport: Option<&str>,
+    local_bind: Option<&str>,
     secret: Option<&str>,
     stop: ServeStop,
     launcher: Option<&str>,
@@ -709,6 +830,9 @@ pub(crate) fn server_args(
     ];
     if let Some(mode) = remote_transport {
         args.extend(["--remote-transport".into(), mode.into()]);
+    }
+    if let Some(local_bind) = local_bind {
+        args.extend(["--local-bind".into(), local_bind.into()]);
     }
     if let Some(secret) = secret {
         args.extend(["--secret".into(), secret.into()]);
@@ -1007,6 +1131,7 @@ mod tests {
                 Path::new("store path"),
                 "127.0.0.1:0",
                 None,
+                None,
                 Some("secret"),
                 ServeStop {
                     stop: true,
@@ -1034,6 +1159,7 @@ mod tests {
                 "127.0.0.1:0",
                 None,
                 None,
+                None,
                 ServeStop {
                     stop: true,
                     kill_all_terminals: false,
@@ -1050,6 +1176,7 @@ mod tests {
                 "127.0.0.1:0",
                 None,
                 None,
+                None,
                 ServeStop::default(),
                 Some("cli")
             ),
@@ -1060,6 +1187,7 @@ mod tests {
                 Path::new("s"),
                 "0.0.0.0:8787",
                 Some("http"),
+                None,
                 None,
                 ServeStop::default(),
                 Some("cli")
@@ -1076,6 +1204,29 @@ mod tests {
             ]
             .map(std::ffi::OsString::from)
         );
+        // HS2-QPJQ7A: an explicit local listener address reaches the server.
+        assert_eq!(
+            server_args(
+                Path::new("s"),
+                "0.0.0.0:8787",
+                Some("mtls"),
+                Some("127.0.0.1:18790"),
+                None,
+                ServeStop::default(),
+                None
+            ),
+            [
+                "-C",
+                "s",
+                "--bind",
+                "0.0.0.0:8787",
+                "--remote-transport",
+                "mtls",
+                "--local-bind",
+                "127.0.0.1:18790"
+            ]
+            .map(std::ffi::OsString::from)
+        );
     }
 
     #[test]
@@ -1088,7 +1239,7 @@ mod tests {
             ),
             (
                 "two.json",
-                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/two","started_at":"2026-09-10T01:00:00Z"}"#,
+                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/two","started_at":"2026-09-10T01:00:00Z","remote_url":"https://0.0.0.0:18787"}"#,
             ),
             (
                 "stale.json",
@@ -1127,6 +1278,8 @@ mod tests {
         assert!(rendered.contains("healthy   pid=42"));
         assert!(rendered.contains("launcher=local-host-snapshot build=source-sha256:abc"));
         assert!(rendered.contains("  executable: /tmp/snapshot/bin/hotsheet-server"));
+        // HS2-QPJQ7A: the health check uses the loopback URL; the remote listener is shown.
+        assert!(rendered.contains("  remote listener: https://0.0.0.0:18787"));
         assert!(rendered.contains("stale     pid=99"));
         assert!(rendered.contains("launcher=unknown build=unknown"));
         assert!(rendered.contains("invalid registry record"));

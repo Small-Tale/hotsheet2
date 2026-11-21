@@ -727,3 +727,51 @@ fn hs2_hgg426_stored_server_identity_never_carries_a_host_name() {
             .is_none()
     );
 }
+
+#[test]
+fn hs2_fzxxtg_a_device_certificate_needs_no_bearer_but_every_other_shape_does() {
+    // The device certificate is opaque here: only the CA is parsed.
+    let device = RemoteCredentials {
+        bearer_secret: String::new(),
+        session_origin: None,
+        session_csrf: None,
+        ca_pem: None,
+        client_certificate_pem: Some("synthetic-device-certificate".into()),
+        client_key_pem: Some("synthetic-device-key".into()),
+    };
+    assert_eq!(
+        device
+            .trust_fingerprint("https://peer.example.test:8787")
+            .unwrap(),
+        None
+    );
+    // A credential file without the field reads as the same empty bearer.
+    let parsed: RemoteCredentials = serde_json::from_value(serde_json::json!({
+        "client_certificate_pem": "synthetic-device-certificate",
+        "client_key_pem": "synthetic-device-key",
+    }))
+    .unwrap();
+    assert!(parsed == device);
+    // Plain HTTP (the local bearer or a paired session), a certificate without its key,
+    // and HTTPS without a device identity still need the bearer slot filled.
+    let mut half = device.clone();
+    half.client_key_pem = None;
+    assert!(
+        half.trust_fingerprint("https://peer.example.test:8787")
+            .is_err()
+    );
+    let mut plain = device.clone();
+    plain.client_certificate_pem = None;
+    plain.client_key_pem = None;
+    for origin in ["http://127.0.0.1:8787", "https://peer.example.test:8787"] {
+        assert!(plain.trust_fingerprint(origin).is_err(), "{origin}");
+    }
+    assert!(device.trust_fingerprint("http://127.0.0.1:8787").is_err());
+    let mut session_proof = device.clone();
+    session_proof.session_csrf = Some("B".repeat(43));
+    assert!(
+        session_proof
+            .trust_fingerprint("https://peer.example.test:8787")
+            .is_err()
+    );
+}

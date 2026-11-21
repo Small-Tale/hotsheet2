@@ -20083,6 +20083,7 @@ async fn hs2_jfe7jj_hosting_a_store_never_takes_over_its_anchored_servers_record
             executable: None,
             launcher: Some("cli".into()),
             anchor: anchor.map(|anchor| anchor.display().to_string()),
+            remote_url: None,
         }
     };
     let anchored_record = record(anchored.path(), Some(anchored.path()));

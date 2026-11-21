@@ -13,7 +13,7 @@ pub(crate) fn definition() -> Value {
             "id": { "type": "string", "description": "immutable registration ULID, required for mutation/discovery" },
             "label": { "type": "string" }, "origin": { "type": "string" },
             "expected_server_id": { "type": "string", "description": "server ULID explicitly supplied by pairing" },
-            "credentials_file": { "type": "string", "description": "local file containing bearer_secret and HTTPS ca_pem/client_certificate_pem/client_key_pem; never put credential values in tool arguments" },
+            "credentials_file": { "type": "string", "description": "local file containing bearer_secret and HTTPS ca_pem/client_certificate_pem/client_key_pem, or a pairing bundle from `hotsheet-cli cert issue --bundle` that also supplies expected_server_id and a default origin; never put credential values in tool arguments" },
             "expected_revision": { "type": "integer", "minimum": 1 },
             "previous_identity": { "type": "object", "required": ["server_id", "ca_fingerprint"], "properties": {
                 "server_id": { "type": "string" }, "ca_fingerprint": { "type": ["string", "null"] }
@@ -92,11 +92,33 @@ pub(crate) fn dispatch(args: &Value, backend: &dyn Backend) -> Result<Value, Str
         }
         let input = std::fs::File::open(file)
             .map_err(|_| "could not read local credential file".to_string())?;
-        let credentials = hotsheet_cli::remote_servers::read_remote_credentials(input)
+        let input = hotsheet_cli::remote_servers::read_remote_credential_input(input)
             .map_err(|error| error.to_string())?;
+        // HS2-FZXXTG: a pairing bundle fills the server id and, for a registration, the
+        // origin the arguments leave out; a different explicit server id is refused.
+        let explicit_server_id = object
+            .get("expected_server_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if explicit_server_id.is_some() || input.server_id.is_some() {
+            object.insert(
+                "expected_server_id".into(),
+                Value::String(
+                    input
+                        .expected_server_id(explicit_server_id)
+                        .map_err(|error| error.to_string())?,
+                ),
+            );
+        }
+        if action == "register" && !object.contains_key("origin") && input.origin.is_some() {
+            object.insert(
+                "origin".into(),
+                Value::String(input.origin(None).map_err(|error| error.to_string())?),
+            );
+        }
         object.insert(
             "credentials".into(),
-            serde_json::to_value(credentials)
+            serde_json::to_value(input.credentials)
                 .map_err(|_| "invalid credential input".to_string())?,
         );
     }

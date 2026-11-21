@@ -418,3 +418,78 @@ fn hs2_4j6v46_metadata_transport_refuses_redirect_and_route_relocation_before_re
         );
     }
 }
+
+#[test]
+fn hs2_fzxxtg_a_pairing_bundle_supplies_identity_and_origin_for_the_same_reader() {
+    const SERVER: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    let dir = tempfile::tempdir().unwrap();
+    let paths = hotsheet_tls::Paths::at(dir.path().join("tls"));
+    hotsheet_tls::init_ca(&paths, &[]).unwrap();
+    let device = hotsheet_tls::issue_device(&paths, "synthetic-orchestrator").unwrap();
+    let bundle = pairing_bundle(
+        &device,
+        SERVER.into(),
+        Some("https://site.example.test:8787"),
+    )
+    .unwrap();
+    assert!(bundle.credentials.bearer_secret.is_empty());
+    let text = serde_json::to_string(&bundle).unwrap();
+    let input = read_remote_credential_input(text.as_bytes()).unwrap();
+    assert_eq!(input.server_id.as_deref(), Some(SERVER));
+    assert_eq!(input.expected_server_id(None).unwrap(), SERVER);
+    assert_eq!(
+        input.expected_server_id(Some(SERVER.into())).unwrap(),
+        SERVER
+    );
+    assert!(
+        input
+            .expected_server_id(Some("01BX5ZZKBKACTAV9WEVGEMMVRZ".into()))
+            .is_err(),
+        "a typed id must match the bundle's"
+    );
+    assert_eq!(
+        input.origin(None).unwrap(),
+        "https://site.example.test:8787"
+    );
+    assert_eq!(
+        input
+            .origin(Some("https://site.tailnet.test:8787"))
+            .unwrap(),
+        "https://site.tailnet.test:8787",
+        "the importer may reach the server by another name"
+    );
+    // The bundle's credentials pass the registry's own validation without a bearer and
+    // pin the project CA.
+    assert!(
+        input
+            .credentials
+            .trust_fingerprint("https://site.example.test:8787")
+            .unwrap()
+            .is_some()
+    );
+    // The legacy plain object still reads and names nothing.
+    let plain =
+        read_remote_credential_input(serde_json::to_string(&credentials()).unwrap().as_bytes())
+            .unwrap();
+    assert!(plain.credentials == credentials());
+    assert!(plain.expected_server_id(None).is_err());
+    assert!(plain.origin(None).is_err());
+    assert_eq!(
+        read_remote_credentials(text.as_bytes()).unwrap(),
+        bundle.credentials
+    );
+    // A foreign format, a malformed server id and unknown fields are refused.
+    for (key, value) in [
+        ("format", json!("hotsheet-pairing-bundle/v99")),
+        ("server_id", json!("not-a-ulid")),
+        ("unexpected", json!(true)),
+    ] {
+        let mut changed: Value = serde_json::from_str(&text).unwrap();
+        changed[key] = value;
+        assert!(
+            read_remote_credential_input(changed.to_string().as_bytes()).is_err(),
+            "{key}"
+        );
+    }
+    assert!(pairing_bundle(&device, SERVER.into(), Some("ftp://site.example.test")).is_err());
+}

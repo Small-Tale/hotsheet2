@@ -2047,6 +2047,17 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
   > to network observers; choose HTTPS or a trusted TLS-terminating frontend when
   > that exposure is unacceptable. A TLS client never falls back to HTTP.
 
+  > **Local listener beside a remote one (HS2-QPJQ7A):** a server with any remote
+  > listener also binds a loopback-only plain-HTTP listener (`--local-bind`, default
+  > `127.0.0.1:0`; a non-loopback address is refused). It is the Tier-0 model: the
+  > machine bearer from a loopback peer, no client certificate. The discovery record's
+  > `url` names this listener and `remote_url` names the remote one, so the machine's
+  > own CLI (`serve --list` health, server reads), the sync kick after CLI writes, the
+  > sessions it launches (`HOTSHEET_SERVER`) and their permission hooks keep working
+  > while remote peers still need the mTLS handshake. `serve --list` prints
+  > `remote listener: <url>`. Pass `--local-bind 127.0.0.1:<port>` to keep one local
+  > URL across restarts.
+
 ### 4.6.1 Host-approved remote browser sessions (HS2-7DBJMS)
 
 The browser host must explicitly set `HOTSHEET_BROWSER_AUTH_MODE=remote` before

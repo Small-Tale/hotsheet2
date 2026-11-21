@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use hotsheet_cli::remote_servers::RemoteRuntime;
-use hotsheet_ticketing::remote_servers::{
-    RegisterRemote, ReviewRemote, ReviewedRemoteIdentity, normalize_remote_origin,
+use hotsheet_cli::remote_servers::{
+    RemoteCredentialInput, RemoteRuntime, read_remote_credential_input,
 };
+use hotsheet_ticketing::remote_servers::{RegisterRemote, ReviewRemote, ReviewedRemoteIdentity};
 
 use super::Ctx;
 use crate::Cmd;
@@ -37,17 +37,22 @@ enum RemoteCmd {
     /// Stop restoring one remote checkout on this machine.
     UnselectProject { id: String, checkout: String },
     /// Verify and register a server using explicit pairing identity and credential input.
+    /// A pairing bundle from `cert issue --bundle` supplies the server id and a default
+    /// origin; re-running with the same origin updates the same registration (HS2-FZXXTG).
     Register {
         #[arg(long)]
         id: Option<String>,
         #[arg(long)]
         label: String,
+        /// Required unless the pairing bundle suggests one; an explicit origin wins.
         #[arg(long)]
-        origin: String,
+        origin: Option<String>,
+        /// Required unless the pairing bundle names it; when both are given they must match.
         #[arg(long)]
-        expected_server_id: String,
-        /// JSON bearer/CA/device certificate/key bundle; '-' reads bounded stdin.
-        #[arg(long)]
+        expected_server_id: Option<String>,
+        /// JSON credentials (bearer/CA/device certificate/key) or a pairing bundle from
+        /// `cert issue --bundle`; '-' reads bounded stdin.
+        #[arg(long, visible_alias = "bundle")]
         credentials_file: PathBuf,
     },
     /// Explicitly review a changed identity, origin, label or credential at one revision.
@@ -65,7 +70,8 @@ enum RemoteCmd {
         origin: String,
         #[arg(long)]
         expected_server_id: String,
-        #[arg(long)]
+        /// JSON credentials or a pairing bundle naming the same server id.
+        #[arg(long, visible_alias = "bundle")]
         credentials_file: PathBuf,
     },
     /// Disable local access before retryable credential cleanup; does not revoke a remote certificate.
@@ -191,7 +197,9 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             expected_server_id,
             credentials_file,
         } => {
-            let origin = normalize_remote_origin(&origin)?;
+            let input = credential_input(&credentials_file)?;
+            let origin = input.origin(origin.as_deref())?;
+            let expected_server_id = input.expected_server_id(expected_server_id)?;
             let id = match id {
                 Some(id) => id,
                 None => runtime
@@ -206,7 +214,7 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
                 label,
                 origin,
                 expected_server_id,
-                credentials: credentials(&credentials_file)?,
+                credentials: input.credentials,
             })?)?
         }
         RemoteCmd::Review {
@@ -218,20 +226,24 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
             origin,
             expected_server_id,
             credentials_file,
-        } => serde_json::to_value(runtime.review(
-            &id,
-            ReviewRemote {
-                expected_revision,
-                previous_identity: ReviewedRemoteIdentity {
-                    server_id: previous_server_id,
-                    ca_fingerprint: previous_ca_fingerprint,
+        } => {
+            let input = credential_input(&credentials_file)?;
+            let expected_server_id = input.expected_server_id(Some(expected_server_id))?;
+            serde_json::to_value(runtime.review(
+                &id,
+                ReviewRemote {
+                    expected_revision,
+                    previous_identity: ReviewedRemoteIdentity {
+                        server_id: previous_server_id,
+                        ca_fingerprint: previous_ca_fingerprint,
+                    },
+                    label,
+                    origin,
+                    expected_server_id,
+                    credentials: input.credentials,
                 },
-                label,
-                origin,
-                expected_server_id,
-                credentials: credentials(&credentials_file)?,
-            },
-        )?)?,
+            )?)?
+        }
         RemoteCmd::Revoke {
             id,
             expected_revision,
@@ -265,17 +277,11 @@ fn device_change(
     Ok(serde_json::Value::Object(change))
 }
 
-fn credentials(
-    path: &std::path::Path,
-) -> Result<hotsheet_ticketing::remote_servers::RemoteCredentials> {
+fn credential_input(path: &std::path::Path) -> Result<RemoteCredentialInput> {
     if path == std::path::Path::new("-") {
-        Ok(hotsheet_cli::remote_servers::read_remote_credentials(
-            std::io::stdin(),
-        )?)
+        Ok(read_remote_credential_input(std::io::stdin())?)
     } else {
-        Ok(hotsheet_cli::remote_servers::read_remote_credentials(
-            std::fs::File::open(path)?,
-        )?)
+        Ok(read_remote_credential_input(std::fs::File::open(path)?)?)
     }
 }
 
