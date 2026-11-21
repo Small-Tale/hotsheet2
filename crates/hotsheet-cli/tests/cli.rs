@@ -15648,7 +15648,34 @@ fn hs2_shh7ww_actual_cli_declares_lists_and_separates_sites_of_one_project() {
     assert_eq!(sites["projects"][0]["sites"][1]["project"], false);
     // HS2-D4G81Q: --capabilities reads each bound site's machine; neither is bound here,
     // so the view is the same and names no machine.
-    let read = hs2_4j6v46_value(&home, &source, &owner.id, &["sites", "--capabilities"]);
+    // HS2-BVGWK6: the read passes the target gate, so an unidentified reader is refused
+    // up front with the flags to pass, not with `invalid_request` for every site.
+    hs2_4j6v46_command(&home, &source, false)
+        .args(["sites", "--capabilities", "--project", &owner.id])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs an identified actor"))
+        .stderr(predicate::str::contains("--actor-id"));
+    // A role without an id identifies nobody either.
+    hs2_4j6v46_command(&home, &source, false)
+        .args(["sites", "--capabilities", "--project", &owner.id])
+        .args(["--actor-role", "human"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs an identified actor"));
+    let read = hs2_4j6v46_value(
+        &home,
+        &source,
+        &owner.id,
+        &[
+            "sites",
+            "--capabilities",
+            "--actor-role",
+            "human",
+            "--actor-id",
+            "maintainer",
+        ],
+    );
     assert_eq!(read, sites);
     // Removing the project while its site is active fails with the site's code.
     hs2_4j6v46_command(&home, &source, false)

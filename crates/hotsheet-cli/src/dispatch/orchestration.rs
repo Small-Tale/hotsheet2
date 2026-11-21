@@ -1302,6 +1302,19 @@ fn identity(value: Option<String>) -> Result<Value> {
         }),
     }
 }
+/// HS2-BVGWK6: reading each site's machine passes the target gate, which refuses an
+/// unidentified reader. Without an actor every site answered `invalid_request`, which
+/// did not say what was missing, so the command refuses up front and names the flags.
+fn sites_actor_check(command: &TargetCmd, has_actor: bool) -> Result<()> {
+    if matches!(command, TargetCmd::Sites { capabilities: true }) && !has_actor {
+        bail!(
+            "target sites --capabilities reads each site's machine through the target gate, \
+             which needs an identified actor: pass --actor-role <human|ai> --actor-id <id> \
+             (or set HOTSHEET_ACTOR_ROLE and HOTSHEET_ACTOR_ID)"
+        );
+    }
+    Ok(())
+}
 fn route(project: &str, command: TargetCmd) -> Result<(&'static str, String, Value)> {
     let prefix = format!("/checkouts/{}/orchestration/targets", project);
     let target = |id: &str| json!({"owner_checkout_id":project,"target_id":id});
@@ -1424,6 +1437,13 @@ pub(crate) fn run(command: Cmd, context: &Ctx) -> Result<()> {
         OrchestrationCmd::Project(arguments) => projects::project_route(arguments)?,
         OrchestrationCmd::Target(arguments) => {
             let owner_id = required(arguments.project.clone())?;
+            sites_actor_check(
+                &arguments.command,
+                context
+                    .actor
+                    .as_ref()
+                    .is_some_and(|actor| actor.id.is_some()),
+            )?;
             let request = route(&owner_id, arguments.command)?;
             (owner_id, request)
         }

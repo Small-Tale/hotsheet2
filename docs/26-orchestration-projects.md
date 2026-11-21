@@ -277,7 +277,9 @@ Orchestration lists a project's other sites right after it, each labelled `Site 
 
 **What each site's machine is (HS2-D4G81Q).** Asked with `capabilities=true`
 (`GET …/sites?capabilities=true` with the actor in the query, or `POST …/sites` with
-`{"capabilities":true}` and the actor in the body; `target sites --capabilities`; MCP
+`{"capabilities":true}` and the actor in the body; `target sites --capabilities`, which
+refuses up front without `--actor-role`/`--actor-id` or `HOTSHEET_ACTOR_*` because the
+gate needs an identified reader (HS2-BVGWK6); MCP
 `sites` with `capabilities: true`), the view also reads each site this machine binds
 through the same gated capacity read as a project detail (`gates_observe`, which never
 asks; §26.10). Each such site carries `capabilities`, the machine's OS, architecture,
