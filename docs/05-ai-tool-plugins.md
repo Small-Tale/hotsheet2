@@ -956,7 +956,14 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   When those bytes move the cursor to an absolute position (`CSI row;col H`), they are the tail
   of a repaint rather than the cursor's line: Windows ConPTY repaints the whole screen after every
   resize and ends with blank rows and a move back to the prompt. The clear then keeps from the
-  last line that shows text, so the prompt survives (HS2-4PBGKF). It
+  last line that shows text, so the prompt survives (HS2-4PBGKF). ConPTY's own screen buffer
+  still holds the cleared rows and would repaint them after the next resize, so on Windows
+  `Terminal::clear_replay` then starts a short PowerShell on the terminal's pseudoconsole (through
+  the kept slave handle) that scrolls the buffer up by the cursor's row and moves the cursor with
+  it, as Windows Terminal's Clear Buffer does through `ClearPseudoConsole`. ConPTY answers with a
+  repaint of only the prompt line, which the viewers already show (HS2-G1YTWQ). A program that
+  reads its own screen buffer sees the same change; an elevated PowerShell also prefixes the
+  console title, which Hot Sheet does not display. It
   gives the replay a new output-stream id so no viewer can `resume_from` across the clear, and
   publishes an in-band rewrite marker (an empty chunk) on the live fan-out. Each viewer pump
   resyncs on the marker and sends its existing replacement frame, so attached viewers in every

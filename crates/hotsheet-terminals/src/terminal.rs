@@ -465,6 +465,32 @@ pub struct Terminal {
     /// A trailing re-decide is scheduled for a size change the min-interval deferred.
     trailing_resize: Arc<std::sync::atomic::AtomicBool>,
     exit_hint: Option<Arc<std::sync::atomic::AtomicBool>>,
+    /// The pseudoconsole's slave, kept to start the buffer-clearing helper on it (HS2-G1YTWQ).
+    /// It shares the master's pseudoconsole, so holding it does not delay end of output.
+    #[cfg(windows)]
+    slave: Mutex<Box<dyn portable_pty::SlavePty + Send>>,
+}
+
+/// HS2-G1YTWQ: the PowerShell that a Windows clear starts on the terminal's own pseudoconsole. It
+/// scrolls ConPTY's screen buffer up by the cursor's row and moves the cursor with it, so the
+/// cursor's line becomes the top row and nothing above it is left for a later resize repaint.
+/// Windows Terminal's Clear Buffer clears ConPTY the same way (`ClearPseudoConsole`), which
+/// `portable-pty` does not expose.
+#[cfg(windows)]
+const CONPTY_CLEAR_SCRIPT: &str = "$y=[Console]::CursorTop-[Console]::WindowTop;if($y -gt 0){[Console]::Out.Write([string][char]27+'['+$y+'S'+[char]27+'['+$y+'A');[Console]::Out.Flush()}";
+
+/// The helper command for [`CONPTY_CLEAR_SCRIPT`].
+#[cfg(windows)]
+fn conpty_clear_command() -> CommandBuilder {
+    let mut command = CommandBuilder::new("powershell.exe");
+    command.args([
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        CONPTY_CLEAR_SCRIPT,
+    ]);
+    command
 }
 
 /// Wall-clock milliseconds, the same clock the terminal's callers pass as `now_ms`.
@@ -757,8 +783,12 @@ impl Terminal {
         // master has nothing left to read; only then release it so the drain sees EOF.
         #[cfg(unix)]
         release_slave_when_drained(pair.slave, Arc::downgrade(&child), Arc::downgrade(&master));
-        #[cfg(not(unix))]
-        drop(pair.slave); // release the slave in the parent so EOF is seen on child exit
+        // Windows keeps the slave for the clear helper (HS2-G1YTWQ). It is a second handle on the
+        // master's pseudoconsole, so output still ends when the master is dropped.
+        #[cfg(windows)]
+        let slave = Mutex::new(pair.slave);
+        #[cfg(not(any(unix, windows)))]
+        drop(pair.slave);
 
         let output = Arc::new(OutputReplay::new(
             clamp_replay_bytes(spec.replay_bytes),
@@ -813,6 +843,8 @@ impl Terminal {
             worker_id,
             trailing_resize: Arc::default(),
             exit_hint,
+            #[cfg(windows)]
+            slave,
         })
     }
 
@@ -1031,8 +1063,43 @@ impl Terminal {
     /// line, the output stream gets a new id so no viewer resumes from before the clear, and
     /// every attached viewer receives a replacement snapshot. The shell is not told. Returns the
     /// new stream position.
+    ///
+    /// On Windows, ConPTY keeps its own screen buffer and repaints it after every resize, which
+    /// would bring the cleared output back to every viewer. The clear therefore also moves the
+    /// cursor's line to the top of that buffer (HS2-G1YTWQ). Its repaint arrives after the clear and
+    /// shows only that line, as the viewers already do. A program reading its own screen buffer
+    /// sees the same change, as it does after Windows Terminal's Clear Buffer.
     pub fn clear_replay(&self) -> StreamPosition {
-        self.output.clear()
+        let position = self.output.clear();
+        #[cfg(windows)]
+        self.clear_conpty_buffer();
+        position
+    }
+
+    /// Start [`CONPTY_CLEAR_SCRIPT`] on this terminal's pseudoconsole and reap it on a thread. A
+    /// helper that cannot start leaves the replay cleared and is only logged.
+    #[cfg(windows)]
+    fn clear_conpty_buffer(&self) {
+        if self
+            .child
+            .with_lock(|child| child.try_wait().ok())
+            .is_none_or(|status| status.is_some())
+        {
+            return;
+        }
+        match self
+            .slave
+            .with_lock(|slave| slave.spawn_command(conpty_clear_command()))
+        {
+            Ok(mut helper) => {
+                std::thread::spawn(move || {
+                    let _ = helper.wait();
+                });
+            }
+            Err(error) => {
+                eprintln!("Hot Sheet terminal could not clear the ConPTY buffer: {error}")
+            }
+        }
     }
 
     /// How many bytes of recent output the scrollback ring retains (HS2-Y5DYC0).
@@ -1135,6 +1202,49 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(!term.is_alive());
+    }
+
+    /// HS2-G1YTWQ: a clear on Windows also clears ConPTY's own screen buffer, so the repaint a
+    /// later resize produces shows the prompt line and none of the cleared output. Before, the
+    /// repaint brought rows 177 to 199 back to every viewer and into the replay.
+    #[cfg(windows)]
+    #[test]
+    fn hs2_g1ytwq_a_resize_after_a_clear_does_not_repaint_the_cleared_output() {
+        let mut spec = TermSpec::new("powershell.exe");
+        spec.args = [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "1..199|%{'OLD-OUTPUT {0:D3}' -f $_}; [Console]::Out.Write('PROMPT$ '); Start-Sleep 60",
+        ]
+        .map(String::from)
+        .to_vec();
+        let term = Terminal::spawn(spec).expect("spawn");
+        let text = |term: &Terminal| String::from_utf8_lossy(&term.scrollback()).into_owned();
+        assert!(
+            wait_until(|| text(&term).contains("PROMPT$"), 30),
+            "{}",
+            text(&term)
+        );
+        term.clear_replay();
+        // The helper's repaint moves the prompt line to the top row of ConPTY's screen.
+        assert!(
+            wait_until(|| text(&term).contains("\x1b[1;9H"), 30),
+            "{:?}",
+            text(&term)
+        );
+        term.resize(50, 120).expect("resize");
+        assert!(
+            wait_until(|| text(&term).contains("\x1b[8;50;120t"), 30),
+            "{:?}",
+            text(&term)
+        );
+        std::thread::sleep(Duration::from_millis(500));
+        let replay = text(&term);
+        assert!(!replay.contains("OLD-OUTPUT"), "{replay:?}");
+        assert!(replay.contains("PROMPT$"), "{replay:?}");
+        let _ = term.kill();
     }
 
     fn wait_until(mut cond: impl FnMut() -> bool, secs: u64) -> bool {
