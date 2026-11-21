@@ -5,6 +5,7 @@ import {
   chmod,
   copyFile,
   cp,
+  link,
   mkdir,
   mkdtemp,
   readdir,
@@ -205,7 +206,29 @@ async function machineServer(home) {
   }
 }
 
-async function copyBinaries(directory) {
+/**
+ * Give `source` a new path at `destination` (HS2-2FHHX7). The fixtures need distinct, deletable
+ * binary paths, not new bytes: the host's own launch snapshot is what keeps it independent of them.
+ * Copying the three debug binaries (about 460 MB) per path, three paths at once across this file's
+ * concurrent tests, saturated a loaded CI disk for 31 to 44 s before the host even started, so
+ * hard-link instead. Deleting or renaming over a link removes only that name, never the target
+ * build. `fresh` (or a failed link, for example across devices) writes a real copy: a new file,
+ * as a rebuild produces.
+ */
+async function placeBinary(source, destination, { fresh = false } = {}) {
+  if (!fresh) {
+    try {
+      await link(source, destination);
+      return;
+    } catch {
+      // Fall back to a copy: another device, or a file system without hard links.
+    }
+  }
+  await copyFile(source, destination);
+  await chmod(destination, (await stat(source)).mode & 0o777);
+}
+
+async function copyBinaries(directory, { fresh = false } = {}) {
   await mkdir(directory, { recursive: true });
   return Object.fromEntries(
     await Promise.all(
@@ -214,8 +237,7 @@ async function copyBinaries(directory) {
         // A server started from an earlier copy may still be executing `destination`; Linux
         // refuses to overwrite a running executable (ETXTBSY) but allows replacing it by rename.
         const staged = `${destination}.${process.pid}.${Date.now()}.tmp`;
-        await copyFile(source, staged);
-        await chmod(staged, (await stat(source)).mode & 0o777);
+        await placeBinary(source, staged, { fresh });
         await rename(staged, destination);
         // A fresh copy is a new executable to macOS; its first launch must not be timed (HS2-04D6DW).
         launchOnce(destination);
@@ -290,24 +312,32 @@ it.concurrent(
     // Everything that can fail runs inside the try, so the host and its machine server are always
     // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
     try {
-      phase('copy binaries');
+      phase('copy plugins');
       // HS2-6VQ5RV: a private checkout whose setup templates the test edits after the host starts.
       const checkout = resolve(home, 'checkout');
       await cp(resolve(repoRoot, 'plugins'), resolve(checkout, 'plugins'), { recursive: true });
+      phase('link binaries');
       const candidateBin = resolve(home, 'candidate-bin');
       await mkdir(candidateBin);
       const candidates = Object.fromEntries(
         await Promise.all(
           Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
             const destination = resolve(candidateBin, `${variable.toLowerCase()}${exe}`);
-            await copyFile(source, destination);
-            await chmod(destination, (await stat(source)).mode & 0o777);
+            await placeBinary(source, destination);
             // Launch each copy once before the host probes it, so its startup window is not spent (HS2-04D6DW, HS2-B74N07).
             launchOnce(destination);
             return [variable, destination];
           }),
         ),
       );
+      // HS2-2FHHX7: the fixture writes no binary bytes before the host starts. On one device the
+      // candidate shares the build's file; across devices placeBinary falls back to a copy.
+      const [built, candidate] = await Promise.all([
+        stat(workingTreeBinaries.HOTSHEET_SERVER_BIN),
+        stat(candidates.HOTSHEET_SERVER_BIN),
+      ]);
+      if (process.platform !== 'win32' && built.dev === candidate.dev) expect(candidate.ino).toBe(built.ino);
+      phase('revision probe');
       const revision = JSON.parse(
         (await run(workingTreeBinaries.HOTSHEET_SERVER_BIN, ['--revision-status'])).stdout,
       ).build_revision;
@@ -330,6 +360,7 @@ it.concurrent(
       // HS2-D2JQ9A: the host says which server build it launches (release when one is built), and it
       // says so before its ready line, which waitForHost has already seen (HS2-SNH42P).
       expect(log).toMatch(/Using (release|debug) Hot Sheet binaries/);
+      phase('copy client build');
       // A second pinned host later in this test needs the same build after the working outputs are gone.
       otherBuildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-other-'));
       await cp(buildRoot, otherBuildRoot, { recursive: true });
@@ -767,7 +798,7 @@ it.concurrent(
 
       // (c) Rebuilding the dev host's binaries (here: replacing them in place) does not touch the
       // running pinned server; both hosts keep opening through it.
-      await copyBinaries(resolve(home, 'dev-bin'));
+      await copyBinaries(resolve(home, 'dev-bin'), { fresh: true });
       expect((await openThrough(devOrigin, project, ticketStore)).status).toBe(201);
       const pinnedAgain = await openThrough(pinnedOrigin, project, ticketStore);
       expect(pinnedAgain.status).toBe(201);
