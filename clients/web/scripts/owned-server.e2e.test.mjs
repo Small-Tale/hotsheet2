@@ -107,6 +107,13 @@ async function alive(entry) {
   return (await processInfo(entry.pid))?.started === entry.started;
 }
 
+/** The recorded entries still alive, by pid and name, for a timeout message. */
+async function survivors(entries) {
+  const live = [];
+  for (const entry of entries) if (await alive(entry)) live.push(`${entry.pid} ${entry.name ?? ''}`.trim());
+  return live.length ? `; still running: ${live.join(', ')}` : '';
+}
+
 /** Whether every entry has exited; one process-table read covers them all on Windows. */
 async function allExited(entries) {
   return (await Promise.all(entries.map(alive))).every((live) => !live);
@@ -144,11 +151,14 @@ async function availablePort() {
   return address.port;
 }
 
-/** Poll process state (not the network) until `check` holds or the bound expires. */
-async function eventually(check, label, timeoutMs = 15_000) {
+/**
+ * Poll process state (not the network) until `check` holds or the bound expires. `explain` names
+ * what was still there, so a Windows-only leak says which process survived (HS2-F6F8MA).
+ */
+async function eventually(check, label, timeoutMs = 15_000, explain = async () => '') {
   const deadline = Date.now() + timeoutMs;
   while (!(await check())) {
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}${await explain()}`);
     await new Promise((resolveTick) => setTimeout(resolveTick, 50));
   }
 }
@@ -369,7 +379,12 @@ it('stops the real Vite fixture server and its esbuild service when the runner i
     // Launcher, Vite, and at least esbuild's service.
     expect(tree.length).toBeGreaterThanOrEqual(3);
     stopRunner(run, 'SIGKILL');
-    await eventually(() => allExited(tree), 'every Vite fixture process to exit');
+    await eventually(
+      () => allExited(tree),
+      'every Vite fixture process to exit',
+      15_000,
+      () => survivors(tree),
+    );
     expect(await listening(port)).toBe(false);
   } finally {
     await rm(cacheDir, { recursive: true, force: true });
