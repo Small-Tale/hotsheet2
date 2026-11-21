@@ -470,8 +470,14 @@ test.describe('touch tablet at a desktop width', () => {
     await expect(footer.getByRole('button', { name: 'Copy Terminal Text' })).toBeVisible();
     await expect(footer.getByRole('button', { name: 'Open nano in Project Terminal Drawer' })).toBeVisible();
     expect(await footer.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    // The focused cursor's blink never finishes; wait only for finite animations (HS2-6657ED).
     await magnified.evaluate(async (node) => {
-      await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => 0)));
+      await Promise.all(
+        node
+          .getAnimations({ subtree: true })
+          .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => 0)),
+      );
     });
     await page.screenshot({ path: test.info().outputPath('hs2-5dhhpv-magnified-1180.png') });
     await page.evaluate(() => navigator.clipboard.writeText('q'));

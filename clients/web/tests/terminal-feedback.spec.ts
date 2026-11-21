@@ -671,8 +671,12 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   });
   await expect.poll(async () => (await visibleRows()).join('\n'), { timeout: 15_000 }).toContain('history line 079');
   await terminal.hover();
-  await page.mouse.wheel(0, -600);
-  await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 079');
+  // The first wheel after the pointer arrives can scroll nothing, so wheel until the newest line
+  // leaves the screen. A heartbeat redraw used to wipe it and hide this (HS2-6657ED).
+  await expect(async () => {
+    await page.mouse.wheel(0, -600);
+    expect((await visibleRows()).join('\n')).not.toContain('history line 079');
+  }).toPass();
   const anchoredRows = await visibleRows(),
     grid = (await terminal.getAttribute('data-grid-size'))!.split('x').map(Number);
   await terminal.evaluate((_element, [cols, rows]) => {
@@ -1315,7 +1319,7 @@ test('scrolls phone dedicated and magnified terminals with a finger drag (HS2-KF
     }),
     page = await context.newPage(),
     cdp = await context.newCDPSession(page);
-  await installTerminalFixture(page, false, false, { redrawOnlyOnResize: true });
+  await installTerminalFixture(page);
   await page.goto('/');
   await openMockedProject(page);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -1591,10 +1595,14 @@ async function assertMagnifiedKeyBar(
   const before = (await sent()).length;
   await keyBar.getByRole('button', { name: 'Tab', exact: true }).click();
   await expect.poll(async () => (await sent()).slice(before)).toEqual(['\t']);
-  // Settle the magnified overlay's entrance before capturing it.
+  // Settle the magnified overlay's entrance before capturing it. The focused cursor's blink never
+  // finishes; a redraw used to move it away on every heartbeat claim (HS2-6657ED).
   await magnified.evaluate(async (node) => {
     await Promise.all(
-      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+      node
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
     );
   });
   await page.waitForTimeout(400);

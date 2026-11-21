@@ -218,10 +218,10 @@ test('HS2-M5QPED terminal search highlights every match and counts them through 
   await expect(highlights(nano)).toHaveCount(2);
   await expect(highlights(viewport)).toHaveCount(0);
   await drawer.locator('[data-tab-id="terminal-new"] [data-action="select-drawer-item"]').click();
-  // Back on the first terminal (its fake PTY redrew the nano screen on resume, so one match again), the
-  // search follows and the second terminal's highlights go.
-  await expect(highlights()).toHaveCount(2);
-  await expect(count).toHaveText('1 of 1');
+  // Back on the first terminal, which keeps its screen like a real PTY at an unchanged size (HS2-6657ED),
+  // the search follows with all three matches and the second terminal's highlights go.
+  await expect(highlights()).toHaveCount(4);
+  await expect(count).toHaveText(/^\d of 3$/);
   await expect(highlights(nano)).toHaveCount(0);
 
   // Closing (empty the field, then Escape) removes the highlights and the count.
