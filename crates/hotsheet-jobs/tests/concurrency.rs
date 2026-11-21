@@ -125,6 +125,43 @@ fn racing_producers_get_exactly_one_lease_and_one_outcome() {
     assert_eq!(done.lease.unwrap().generation, 1);
 }
 
+/// HS2-JSF985 on Windows: a monitor judged a watch Job while the server held the Job's
+/// snapshot and the checkout revision open, and `acquire` failed with `Access is denied`
+/// because the old publication renamed with `MoveFileExW`. Every transition must succeed
+/// while readers keep both files open, and those readers keep the bytes they opened.
+#[test]
+fn hs2_jsf985_transitions_publish_while_readers_hold_the_snapshot_and_revision_open() {
+    use std::io::Read;
+    let fx = fixture();
+    let job = fx.create(ProducerFamily::Watch);
+    let checkout = fx.home.path().join("jobs").join(CHECKOUT);
+    let snapshot = checkout.join(&job.id).join("job.json");
+    let mut held_snapshot = std::fs::File::open(&snapshot).unwrap();
+    let mut held_revision = std::fs::File::open(checkout.join("revision")).unwrap();
+    let token = fx.start(&job.id, "monitor:test");
+    let update = JobUpdate {
+        feed: vec![FeedLine::out("watching".to_string())],
+        ..JobUpdate::default()
+    };
+    fx.store.update(CHECKOUT, &job.id, &token, update).unwrap();
+    fx.store
+        .finish(
+            CHECKOUT,
+            &job.id,
+            &token,
+            FinalStatus::Failed,
+            Outcome::default(),
+        )
+        .unwrap();
+    assert_eq!(fx.get(&job.id).status, Status::Failed);
+    let mut old = String::new();
+    held_snapshot.read_to_string(&mut old).unwrap();
+    assert!(old.contains("\"queued\""), "{old}");
+    let mut revision = String::new();
+    held_revision.read_to_string(&mut revision).unwrap();
+    assert!(!revision.is_empty());
+}
+
 #[test]
 fn concurrent_creates_get_distinct_jobs_within_the_cap() {
     let fx = fixture();
