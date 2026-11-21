@@ -20,6 +20,14 @@ const PRINTER = [
   '    sys.stdout.flush()',
 ].join('\n');
 
+/**
+ * The same printer, held until one input line arrives, so its history is printed at the size the
+ * test settled (HS2-4PBGKF). Windows ConPTY answers a resize by repainting its old screen from the
+ * top of the new one; a history printed at 80x24 and replayed at the phone's size keeps its last
+ * line mid-screen and loses the rows that repaint covers (HS2-X4RZA7).
+ */
+const GATED_PRINTER = ['import sys', 'sys.stdin.readline()', ...PRINTER.split('\n').slice(1)].join('\n');
+
 interface Frame {
   at: number;
   text?: string;
@@ -262,10 +270,11 @@ test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({
 });
 
 /**
- * Let this page's viewport settle the PTY at its size before a measured attach (HS2-4PBGKF). Windows
- * ConPTY repaints its whole screen after every resize, addressing rows absolutely. A repaint that
- * arrived while the test held the replay rewrote the rows the reader was looking at. Once the size is
- * settled, the repaint is part of every replay and nothing arrives later. A Unix PTY prints nothing.
+ * Let this page's viewport settle the PTY at its size before a measured attach, then release the
+ * gated printer so its whole history is printed at that size (HS2-4PBGKF). Windows ConPTY repaints
+ * its whole screen after every resize, addressing rows absolutely. A repaint that arrived while the
+ * test held the replay rewrote the rows the reader was looking at, and a repaint of a history printed
+ * at another size put its last line mid-screen (HS2-X4RZA7). A Unix PTY prints nothing on a resize.
  */
 async function settlePtySize(page: Page, server: Awaited<ReturnType<typeof realTicketServer>>, terminalId: string) {
   await page.goto('/');
@@ -290,6 +299,13 @@ async function settlePtySize(page: Page, server: Awaited<ReturnType<typeof realT
     .toContain(`\u001b[8;${rows};${cols}t`);
 }
 
+/** Release a gated printer: Enter sends `\r`, which ends the line on a Unix PTY and on ConPTY. */
+async function releasePrinter(page: Page) {
+  await page.locator('.terminal-viewport--dedicated').last().locator('.xterm-helper-textarea').focus();
+  await page.keyboard.type('print');
+  await page.keyboard.press('Enter');
+}
+
 /**
  * Paint the tail, read back into it, release the whole replay, and reach far older history.
  * `cpuThrottle` slows the page's CPU the way a slow CI host does (HS2-J6B4MT).
@@ -299,15 +315,16 @@ async function paintTailThenWholeReplay(page: Page, cpuThrottle?: number) {
   try {
     const terminal = await server.request<{ id: string }>('/terminals', 'POST', {
       command: 'python3',
-      args: ['-u', '-c', PRINTER],
+      args: ['-u', '-c', GATED_PRINTER],
       cwd: server.root,
     });
-    await expect
-      .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
-      .toContain('REPLAY-READY');
     await page.setViewportSize({ width: 390, height: 844 });
     await recordSockets(page);
     await settlePtySize(page, server, terminal.id);
+    await releasePrinter(page);
+    await expect
+      .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
+      .toContain('REPLAY-READY');
     await page.addInitScript(() => {
       // Hold everything after the tail (header + payload) until the test releases it.
       window.__holdFromMessage = 2;
