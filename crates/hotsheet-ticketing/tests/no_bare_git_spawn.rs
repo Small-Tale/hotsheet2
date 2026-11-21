@@ -334,9 +334,10 @@ const FORK_TRIGGER_INVENTORY: &[(&str, &str, Verdict)] = &[
     ),
     (
         "hotsheet-terminals/src/terminal.rs",
-        "env_clear=1 env_dynamic=1 pty=1",
+        "env_clear=1 env_dynamic=1 pty=2",
         Verdict::Forks(
-            "a PTY child needs setsid and a controlling terminal, which only fork gives",
+            "a PTY child needs setsid and a controlling terminal, which only fork gives; \
+             the second PTY spawn is the Windows-only ConPTY clear helper (HS2-G1YTWQ)",
         ),
     ),
     (
