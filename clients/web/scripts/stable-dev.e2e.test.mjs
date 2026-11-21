@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { pruneStaleSnapshots } from './stable-dev.mjs';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -384,6 +385,10 @@ it.concurrent(
       expect(processAlive(stablePid)).toBe(false);
       // Vite went with it: the port no longer serves.
       await expect(fetch(`http://127.0.0.1:${port}/src/main.js`)).rejects.toThrow();
+      // On Windows, libuv starts a non-detached child in its parent's kill-on-close Job, so the
+      // runner's death terminates stable-dev and Vite at once, before any cleanup can run. The
+      // snapshot then names a dead owner, and the next launch's prune reclaims it (HS2-BQ5QK6).
+      if (process.platform === 'win32') expect(await pruneStaleSnapshots(runtimeTemp)).toHaveLength(1);
       expect(await readdir(runtimeTemp)).toEqual([]);
     } finally {
       if (runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');

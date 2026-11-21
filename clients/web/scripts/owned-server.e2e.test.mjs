@@ -25,7 +25,7 @@ const RUNNER = `
 const { spawn } = require('node:child_process');
 const config = JSON.parse(process.argv[1]);
 const child = spawn(config.command, config.args, {
-  shell: config.shell, detached: true, stdio: ['pipe', 'pipe', 'pipe'],
+  shell: config.shell, detached: config.detached ?? true, stdio: ['pipe', 'pipe', 'pipe'],
   env: { ...process.env, ...config.env },
 });
 console.log('launcher ' + child.pid);
@@ -277,6 +277,10 @@ if (windows)
       command: `node scripts/owned-server.mjs --exit-on-stdin-eof -- node "${join(fixtures, 'server.cjs')}" plain`,
       args: [],
       shell: true,
+      // Exactly as Playwright's launchProcess: `detached` only off Windows. A detached cmd.exe has no
+      // console, so the node it starts gets a new console instead of the runner's pipes, and its
+      // output never arrives (HS2-BQ5QK6).
+      detached: false,
     });
     const ready = await run.line(/ready (\d+) (\d+)\n/);
     const server = record(Number(ready[1]));
