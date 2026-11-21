@@ -12,6 +12,8 @@ use super::*;
 use crate::sync_health::{SyncState, health};
 
 /// Fast raced retries for tests: `retries` more attempts, a 1 ms pause unit.
+/// Unix-only like the `RacingPeer` tests that use it (HS2-6EW369).
+#[cfg(unix)]
 fn quick(retries: u32) -> SyncLimits {
     SyncLimits {
         push_race_retries: retries,
@@ -27,10 +29,15 @@ fn quick(retries: u32) -> SyncLimits {
 /// `race-<n>.md` and push it, so the remote refuses the store's update as a stale old
 /// value, the way two machines pushing at once collide. After race `break_after`, it
 /// also moves the remote away, so the store's next fetch fails like a real outage.
+///
+/// Unix-only (HS2-6EW369): the hook is a POSIX shell script with an executable bit;
+/// the simultaneous-racers test below covers the retry on every platform.
+#[cfg(unix)]
 struct RacingPeer {
     counter: PathBuf,
 }
 
+#[cfg(unix)]
 impl RacingPeer {
     fn install(store: &Path, peer: &Path, limit: u32, break_after: Option<u32>) -> Self {
         let counter = store.parent().unwrap().join("races");
@@ -63,11 +70,8 @@ impl RacingPeer {
         );
         let hook = store.join(".git/hooks/pre-push");
         std::fs::write(&hook, script).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
         Self { counter }
     }
 
