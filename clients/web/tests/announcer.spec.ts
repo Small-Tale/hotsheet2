@@ -199,6 +199,14 @@ test('HS2-EYW4H8 HS2-YF8P38 shows toggle states and keeps two spaced control gro
   await expect(audio).toHaveAttribute('aria-pressed', 'true');
   // Playback hugs the start and the toggles hug the end; widening only grows the gap between them.
   const measure = async () => {
+    // boundingBox() does not retry; right after Expand the toolbar briefly has no box (HS2-T184N6).
+    for (const region of [
+      controls,
+      controls.getByRole('group', { name: 'Playback' }),
+      controls.getByRole('group', { name: 'Narration' }),
+      controls.getByRole('group', { name: 'Announcer Settings' }),
+    ])
+      await expect(region).toBeVisible();
     const bar = await controls.boundingBox();
     const playback = await controls.getByRole('group', { name: 'Playback' }).boundingBox();
     const narration = await controls.getByRole('group', { name: 'Narration' }).boundingBox();
