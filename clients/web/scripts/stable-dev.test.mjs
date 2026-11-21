@@ -177,6 +177,7 @@ describe('stable dev snapshot', () => {
       return true;
     };
     let started;
+    const spawnOptions = [];
     const childStarted = new Promise((resolveStarted) => {
       started = resolveStarted;
     });
@@ -191,7 +192,8 @@ describe('stable dev snapshot', () => {
       createSnapshot: async () => '/tmp/runtime/hotsheet-web-stable-test',
       removeSnapshot: async () => undefined,
       pruneSnapshots: async () => [],
-      spawnChild: () => {
+      spawnChild: (_command, _arguments, options) => {
+        spawnOptions.push(options);
         started();
         return child;
       },
@@ -200,6 +202,7 @@ describe('stable dev snapshot', () => {
     return {
       running,
       childStarted,
+      spawnOptions,
       child,
       processHost,
       stdin,
@@ -243,6 +246,8 @@ describe('stable dev snapshot', () => {
     const harness = shutdownHarness({ ownedStdin: true });
     await harness.childStarted;
     expect(harness.stdin.resumed).toBe(true);
+    // HS2-C4AK2J: Vite never shares the owned lifeline pipe; on Windows it blocked before listening.
+    expect(harness.spawnOptions.map((options) => options.stdio)).toEqual([['ignore', 'inherit', 'inherit']]);
     harness.stdin.emit('end');
     expect(harness.child.signals).toEqual(['SIGTERM']);
     harness.child.emit('close', null, 'SIGTERM');
@@ -266,6 +271,8 @@ describe('stable dev snapshot', () => {
     const harness = shutdownHarness({ ppid: 1 });
     await harness.childStarted;
     expect(harness.intervals.size).toBe(0);
+    // Without an owned lifeline, a terminal's stdin still reaches Vite's shortcuts (HS2-C4AK2J).
+    expect(harness.spawnOptions.map((options) => options.stdio)).toEqual(['inherit']);
     harness.child.emit('close', 0, null);
     expect(await harness.running).toBe(0);
   });

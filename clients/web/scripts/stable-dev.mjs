@@ -163,7 +163,8 @@ export async function runStableDev({
       : undefined;
   parentWatch?.unref?.();
   const onStdinEnd = () => stop('SIGTERM');
-  if (environment.HOTSHEET_STABLE_DEV_OWNED_STDIN === '1') {
+  const ownedStdin = environment.HOTSHEET_STABLE_DEV_OWNED_STDIN === '1';
+  if (ownedStdin) {
     stdin.on('end', onStdinEnd);
     stdin.on('close', onStdinEnd);
     stdin.resume();
@@ -178,7 +179,10 @@ export async function runStableDev({
     child = spawnChild(processHost.execPath, [viteEntry, '--host', '127.0.0.1', ...viteArguments], {
       cwd: snapshotRoot,
       env: stableDevEnvironment(sourceRoot, snapshotRoot, environment),
-      stdio: 'inherit',
+      // An owned stdin is this launcher's lifeline, not Vite's input. On Windows, a child given the
+      // same pipe while this process has a read pending on it blocks before Vite ever listens
+      // (HS2-C4AK2J), so Vite gets no stdin then. A terminal's stdin still reaches Vite's shortcuts.
+      stdio: ownedStdin ? ['ignore', 'inherit', 'inherit'] : 'inherit',
     });
 
     log(`Stable dev snapshot: ${snapshotRoot}`);
@@ -192,7 +196,7 @@ export async function runStableDev({
     return result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
   } finally {
     if (parentWatch !== undefined) timers.clearInterval(parentWatch);
-    if (environment.HOTSHEET_STABLE_DEV_OWNED_STDIN === '1') {
+    if (ownedStdin) {
       stdin.off('end', onStdinEnd);
       stdin.off('close', onStdinEnd);
       stdin.pause();
