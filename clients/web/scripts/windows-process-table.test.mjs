@@ -14,6 +14,8 @@ import {
 const FAKE = `
 const mode = process.argv[1];
 let queries = 0;
+if (mode === 'mute') process.stderr.write('synthetic startup failure\\n');
+else process.stdout.write('#ready\\r\\n');
 process.stdin.setEncoding('utf8');
 let buffer = '';
 process.stdin.on('data', (chunk) => {
@@ -22,8 +24,10 @@ process.stdin.on('data', (chunk) => {
   while ((end = buffer.indexOf('\\n')) >= 0) {
     buffer = buffer.slice(end + 1);
     queries += 1;
-    if (mode === 'silent') continue;
-    process.stdout.write('4\\t0\\t0\\tSystem\\t\\r\\n' + (100 + queries) + '\\t4\\t132000000000000000\\tsynthetic tool.exe\\t"C:\\\\synthetic tool.exe" --home C:\\\\home\\r\\nnot a row\\r\\n.\\r\\n');
+    if (mode === 'silent' || mode === 'mute') continue;
+    const reply = () => process.stdout.write('4\\t0\\t0\\tSystem\\t\\r\\n' + (100 + queries) + '\\t4\\t132000000000000000\\tsynthetic tool.exe\\t"C:\\\\synthetic tool.exe" --home C:\\\\home\\r\\nnot a row\\r\\n.\\r\\n');
+    if (mode === 'slow' && queries > 1) setTimeout(reply, 1000);
+    else reply();
     if (mode === 'exit-after-answer') process.exit(0);
   }
 });
@@ -64,22 +68,77 @@ describe('Windows process table (HS2-S5BQRD)', () => {
     }
   });
 
-  it('rejects a query the helper never answers and recovers with a new helper', async () => {
+  it('keeps a slow helper working and gives its late answer to the next caller', async () => {
+    let started = 0;
+    const table = createProcessTable({
+      command: fake('slow'),
+      timeoutMs: 700,
+      spawnImpl: (command, args, options) => {
+        started += 1;
+        return spawn(command, args, options);
+      },
+    });
+    try {
+      // The first answer comes at once; every later one takes 1 s, longer than a caller waits.
+      expect((await table.snapshot()).has(101)).toBe(true);
+      // The caller's bound expires first, and the error names the stage: started, query running.
+      await expect(table.snapshot()).rejects.toThrow(
+        /did not answer within 700 ms: PowerShell started after \d+ ms; the query has run \d+ ms with 0 rows so far\./,
+      );
+      // The same helper is still answering that query; the next caller shares it instead of asking again.
+      expect((await table.snapshot()).has(102)).toBe(true);
+      expect(started).toBe(1);
+    } finally {
+      table.close();
+    }
+  });
+
+  it('replaces a helper whose query stays unanswered past the restart bound', async () => {
     let started = 0;
     const table = createProcessTable({
       command: fake('silent'),
-      timeoutMs: 300,
+      timeoutMs: 1_000,
+      restartAfterMs: 1_500,
       spawnImpl: (...args) => {
         started += 1;
         return (started === 1 ? spawnSilent : spawnAnswering)(...args);
       },
     });
     try {
-      await expect(table.snapshot()).rejects.toThrow(/did not answer within 300 ms/);
+      await expect(table.snapshot()).rejects.toThrow(/did not answer within 1000 ms/);
+      // Within the restart bound the stuck query is shared, not repeated or replaced.
+      await expect(table.snapshot()).rejects.toThrow(/did not answer within 1000 ms/);
+      expect(started).toBe(1);
+      // Past it, the stuck helper is replaced and a new one answers.
       expect((await table.snapshot()).has(101)).toBe(true);
       expect(started).toBe(2);
     } finally {
       table.close();
+    }
+  }, 15_000);
+
+  it('names a helper that never started and reports its stderr', async () => {
+    const table = createProcessTable({ command: fake('mute'), timeoutMs: 3_000 });
+    try {
+      await expect(table.snapshot()).rejects.toThrow(
+        /PowerShell has not started after \d+ ms\. Helper stderr: synthetic startup failure/,
+      );
+    } finally {
+      table.close();
+    }
+  });
+
+  it('warms the helper before the first poll and bounds the warm-up', async () => {
+    const warm = createProcessTable({ command: fake() });
+    const silent = createProcessTable({ command: fake('silent'), timeoutMs: 2_000 });
+    try {
+      await warm.warm(5_000);
+      expect((await warm.snapshot()).has(102)).toBe(true);
+      await silent.snapshot().catch(() => undefined);
+      await expect(silent.warm(200)).rejects.toThrow(/did not warm within 200 ms: PowerShell started after \d+ ms/);
+    } finally {
+      warm.close();
+      silent.close();
     }
   });
 
@@ -110,6 +169,7 @@ describe('Windows process table (HS2-S5BQRD)', () => {
     expect(script).toContain('Get-CimInstance Win32_Process');
     expect(script).toContain("[Console]::Out.WriteLine('.')");
     expect(script).toContain('-join [char]9');
+    expect(script.indexOf("WriteLine('#ready')")).toBeLessThan(script.indexOf('ReadLine()'));
   });
 });
 

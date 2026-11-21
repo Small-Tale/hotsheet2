@@ -59,7 +59,9 @@ beforeAll(async () => {
   fixtures = await mkdtemp(join(tmpdir(), 'hotsheet-owned-server-'));
   await writeFile(join(fixtures, 'runner.cjs'), RUNNER);
   await writeFile(join(fixtures, 'server.cjs'), SERVER);
-});
+  // Take the process-table helper's PowerShell cold start before any test's bounds start (HS2-S5BQRD).
+  if (windows) await windowsProcessTable().warm();
+}, 150_000);
 
 afterAll(async () => {
   if (windows) windowsProcessTable().close();

@@ -249,6 +249,10 @@ let buildRoot, ownershipBuildRoot;
 beforeAll(async () => {
   assertFixtureServer(workingTreeBinaries.HOTSHEET_SERVER_BIN);
   assertFixtureCli(workingTreeBinaries.HOTSHEET_CLI_BIN);
+  // Warm the process-table helper while the client builds; cleanup polls must not pay its cold start (HS2-S5BQRD).
+  const warming = process.platform === 'win32' ? windowsProcessTable().warm() : undefined;
+  // Awaited below; until then a failed warm-up is not an unhandled rejection.
+  warming?.catch(() => {});
   await mkdir(resolve(webRoot, 'target'), { recursive: true });
   buildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-'));
   await run(process.execPath, [viteCli, 'build', '--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir'], {
@@ -266,6 +270,7 @@ beforeAll(async () => {
   // The first test deletes its build outputs to prove the snapshot; the ownership test needs its own.
   ownershipBuildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-ownership-'));
   await cp(buildRoot, ownershipBuildRoot, { recursive: true });
+  await warming;
 }, 180_000);
 afterAll(async () => {
   if (process.platform === 'win32') windowsProcessTable().close();

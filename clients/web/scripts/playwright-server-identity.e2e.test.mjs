@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 
 import { stopServerProcess, trackServerProcess, windowsDescendants } from './playwright-server-process.mjs';
+import { windowsProcessTable } from './windows-process-table.mjs';
 
 // Two real Vite servers launched the way Playwright's webServer launches them: each answers only its
 // own test-server identity, a second server on a taken port refuses instead of sharing it, and
@@ -18,6 +19,15 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vite = resolve(webRoot, 'node_modules/vite/bin/vite.js');
 const owned = [];
 const directories = [];
+
+// The process-table helper's first answer includes a PowerShell cold start; take it before any
+// test's own bounds start (HS2-S5BQRD).
+beforeAll(async () => {
+  if (process.platform === 'win32') await windowsProcessTable().warm();
+}, 150_000);
+afterAll(() => {
+  if (process.platform === 'win32') windowsProcessTable().close();
+});
 
 afterEach(async () => {
   // Only the servers this test started are stopped; nothing else on the machine is touched.
