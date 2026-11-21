@@ -23,7 +23,7 @@ process.stdin.on('data', (chunk) => {
     buffer = buffer.slice(end + 1);
     queries += 1;
     if (mode === 'silent') continue;
-    process.stdout.write('4 0 0 System\\r\\n' + (100 + queries) + ' 4 132000000000000000 synthetic tool.exe\\r\\nnot a row\\r\\n.\\r\\n');
+    process.stdout.write('4\\t0\\t0\\tSystem\\t\\r\\n' + (100 + queries) + '\\t4\\t132000000000000000\\tsynthetic tool.exe\\t"C:\\\\synthetic tool.exe" --home C:\\\\home\\r\\nnot a row\\r\\n.\\r\\n');
     if (mode === 'exit-after-answer') process.exit(0);
   }
 });
@@ -36,8 +36,14 @@ describe('Windows process table (HS2-S5BQRD)', () => {
     try {
       const [first, shared] = await Promise.all([table.snapshot(), table.snapshot()]);
       expect(shared).toBe(first);
-      expect(first.get(4)).toEqual({ pid: 4, ppid: 0, started: '0', name: 'System' });
-      expect(first.get(101)).toEqual({ pid: 101, ppid: 4, started: '132000000000000000', name: 'synthetic tool.exe' });
+      expect(first.get(4)).toEqual({ pid: 4, ppid: 0, started: '0', name: 'System', command: '' });
+      expect(first.get(101)).toEqual({
+        pid: 101,
+        ppid: 4,
+        started: '132000000000000000',
+        name: 'synthetic tool.exe',
+        command: '"C:\\synthetic tool.exe" --home C:\\home',
+      });
       expect(first.size).toBe(2);
       // A later query reaches the same helper, which counts it as its second.
       expect((await table.snapshot()).has(102)).toBe(true);
@@ -77,14 +83,21 @@ describe('Windows process table (HS2-S5BQRD)', () => {
     }
   });
 
-  it('reads names with spaces and CRLF endings and skips lines that are not rows', () => {
-    const table = parseProcessRows(['12 4 99 a b c.exe\r', '', 'garbage', '13 12 100 x']);
+  it('reads names and command lines with spaces and CRLF endings and skips lines that are not rows', () => {
+    const table = parseProcessRows(['12\t4\t99\ta b c.exe\tc.exe --flag  two\r', '', 'garbage', '13\t12\t100\tx']);
     expect([...table.keys()]).toEqual([12, 13]);
     expect(table.get(12)?.name).toBe('a b c.exe');
+    expect(table.get(12)?.command).toBe('c.exe --flag  two');
+    expect(table.get(13)?.command).toBe('');
   });
 
   it('walks every descendant generation of a root, nearest first', () => {
-    const table = parseProcessRows(['10 1 1 root', '11 10 1 child', '12 11 1 grandchild', '13 1 1 unrelated']);
+    const table = parseProcessRows([
+      '10\t1\t1\troot\t',
+      '11\t10\t1\tchild\t',
+      '12\t11\t1\tgrandchild\t',
+      '13\t1\t1\tunrelated\t',
+    ]);
     expect(descendantsIn(table, 10)).toEqual([11, 12]);
     expect(descendantsIn(table, 13)).toEqual([]);
   });
@@ -96,6 +109,7 @@ describe('Windows process table (HS2-S5BQRD)', () => {
     const script = Buffer.from(args[3] ?? '', 'base64').toString('utf16le');
     expect(script).toContain('Get-CimInstance Win32_Process');
     expect(script).toContain("[Console]::Out.WriteLine('.')");
+    expect(script).toContain('-join [char]9');
   });
 });
 

@@ -27,6 +27,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { launchOnce } from './first-launch.mjs';
 import { assertFixtureCli, assertFixtureServer } from './test-fixture-capabilities.mjs';
+import { windowsProcessTable } from './windows-process-table.mjs';
 
 // HS2-587N4D: `npm run prod` serves the built client through the same local bridge without Vite.
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
@@ -106,23 +107,11 @@ async function processesUsing(home) {
     .slice(0, 16);
   // HS2-XP3Y4D: Windows has no `ps`. Read process command lines through the same
   // native process inventory used by the owned-server fixture, without inserting
-  // the synthetic home path into a PowerShell expression.
+  // the synthetic home path into a PowerShell expression. One warm helper answers every
+  // poll; a PowerShell cold start per poll cost 0.7-1.0 s each (HS2-S5BQRD, HS2-GDARTB).
   const lines =
     process.platform === 'win32'
-      ? []
-          .concat(
-            JSON.parse(
-              (
-                await run('powershell.exe', [
-                  '-NoProfile',
-                  '-NonInteractive',
-                  '-Command',
-                  'Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress',
-                ])
-              ).stdout || '[]',
-            ),
-          )
-          .map((row) => `${row.ProcessId} ${row.CommandLine ?? ''}`)
+      ? [...(await windowsProcessTable().snapshot()).values()].map((row) => `${row.pid} ${row.command}`)
       : (await run('ps', ['-Ao', 'pid=,command='])).stdout.split('\n');
   return lines
     .filter(
@@ -279,6 +268,7 @@ beforeAll(async () => {
   await cp(buildRoot, ownershipBuildRoot, { recursive: true });
 }, 180_000);
 afterAll(async () => {
+  if (process.platform === 'win32') windowsProcessTable().close();
   if (buildRoot) await rm(buildRoot, { recursive: true, force: true });
   if (ownershipBuildRoot) await rm(ownershipBuildRoot, { recursive: true, force: true });
 });

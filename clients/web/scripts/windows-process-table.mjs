@@ -6,15 +6,16 @@ import { spawn } from 'node:child_process';
  * ARM64 VM (a warm `Get-CimInstance Win32_Process` takes 25-60 ms), and several cold starts per
  * poll pushed the owned-server and server-identity fixtures past their timeouts on the hosted
  * arm64 runner. Each request writes one line to the helper's stdin; the helper answers with one
- * `pid ppid started name` line per process and a lone `.` line. Concurrent callers share the
- * query in flight.
+ * tab-separated `pid ppid started name command-line` line per process and a lone `.` line.
+ * Concurrent callers share the query in flight.
  */
 const SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
   'while ($null -ne [Console]::In.ReadLine()) {',
   '  foreach ($row in Get-CimInstance Win32_Process) {',
   '    $started = if ($row.CreationDate) { $row.CreationDate.ToFileTimeUtc() } else { 0 }',
-  "    [Console]::Out.WriteLine(('{0} {1} {2} {3}' -f $row.ProcessId, $row.ParentProcessId, $started, $row.Name))",
+  "    $command = if ($row.CommandLine) { $row.CommandLine -replace '[\\t\\r\\n]', ' ' } else { '' }",
+  '    [Console]::Out.WriteLine((@($row.ProcessId, $row.ParentProcessId, $started, $row.Name, $command) -join [char]9))',
   '  }',
   "  [Console]::Out.WriteLine('.')",
   '  [Console]::Out.Flush()',
@@ -33,10 +34,10 @@ export function powershellHelperCommand() {
 export function parseProcessRows(lines) {
   const table = new Map();
   for (const line of lines) {
-    const match = /^(\d+) (\d+) (\d+) (.*)$/u.exec(line.trim());
+    const match = /^(\d+)\t(\d+)\t(\d+)\t([^\t]*)\t?(.*)$/u.exec(line.replace(/\r$/u, ''));
     if (!match) continue;
-    const [, pid, ppid, started, name] = match;
-    table.set(Number(pid), { pid: Number(pid), ppid: Number(ppid), started, name });
+    const [, pid, ppid, started, name, command] = match;
+    table.set(Number(pid), { pid: Number(pid), ppid: Number(ppid), started, name, command });
   }
   return table;
 }
