@@ -278,6 +278,15 @@ afterAll(async () => {
   if (ownershipBuildRoot) await rm(ownershipBuildRoot, { recursive: true, force: true });
 });
 
+/**
+ * Windows budget multiplier, measured (HS2-GDARTB). One run of this file's two tests starts 737 `git`
+ * processes from the machine server (352 `rev-parse`; one repository discovery repeats 96 times). A
+ * `git --version` spawn costs 14 ms on macOS and 90-135 ms on the Windows 11 ARM64 VM, whether or not
+ * the parent has a console, so the same flow runs 4-5x longer on the Windows runners: about 100-130 s
+ * against 120 s. Repeated discovery is HS2-CBZV9W; until it lands, Windows gets 2x.
+ */
+const windowsBudget = process.platform === 'win32' ? 2 : 1;
+
 // Keep the large process fixture readable while changing only its scheduling (HS2-XSP0GJ).
 it.concurrent(
   'serves the production client and the local bridge without Vite',
@@ -641,7 +650,7 @@ it.concurrent(
       expect(survivors).toEqual([]);
     }
   },
-  120_000,
+  120_000 * windowsBudget,
 );
 
 // HS2-9AWEX5: the pinned production host and a dev host (`npm run dev`) share one machine server per
@@ -826,5 +835,5 @@ it.concurrent(
       expect(survivors).toEqual([]);
     }
   },
-  240_000,
+  240_000 * windowsBudget,
 );
