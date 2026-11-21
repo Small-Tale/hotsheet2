@@ -18,6 +18,10 @@ tempfile.workspace = true
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
+# HS2-8CGT4R: a detached launch marks the launcher's standard handles not inheritable.
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
 # HS2-Y4VDBK: detached launches resolve their program as execvp would (git::program_path).
 [target.'cfg(target_os = "macos")'.dependencies]
 hotsheet-ticketing.workspace = true

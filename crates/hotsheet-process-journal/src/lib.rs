@@ -602,7 +602,15 @@ mod spawn_attributes {
 /// a descriptor for its whole life, and whoever reads the other end never sees its end.
 /// This closes, in the child before exec, every descriptor above stdio that is not
 /// close-on-exec. Close-on-exec descriptors (the standard library's own exec status pipe
-/// among them) close by themselves. A no-op off Unix.
+/// among them) close by themselves.
+///
+/// HS2-8CGT4R: Windows starts every child with handle inheritance on, so it receives every
+/// inheritable handle of its launcher. The launcher's standard handles are inheritable
+/// whenever its own launcher gave them, such as the pipe a caller reads the launcher's
+/// output from, and a detached child would hold that pipe open for its whole life. So
+/// on Windows this marks the launcher's standard handles not inheritable. A later child
+/// given `Stdio::inherit` still gets them: the standard library passes it inheritable
+/// duplicates. Other handles Hot Sheet opens are not inheritable to begin with.
 pub fn close_inherited_descriptors(command: &mut Command) {
     #[cfg(unix)]
     {
@@ -624,7 +632,24 @@ pub fn close_inherited_descriptors(command: &mut Command) {
             });
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+        let _ = command;
+        for handle in [
+            std::io::stdin().as_raw_handle(),
+            std::io::stdout().as_raw_handle(),
+            std::io::stderr().as_raw_handle(),
+        ] {
+            if !handle.is_null() {
+                // SAFETY: the handle is this process's live standard handle; only its
+                // inheritance flag changes. A failure (a console pseudo-handle) is harmless.
+                unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) };
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     let _ = command;
 }
 
@@ -1109,6 +1134,72 @@ mod tests {
         // SAFETY: the pid is the detached sleep this test just launched and has not reaped.
         unsafe { libc::kill(i32::try_from(pid).unwrap(), libc::SIGKILL) };
         assert_eq!(held, 0, "detached passed the descriptor on");
+    }
+
+    /// HS2-8CGT4R: a launcher whose own output is a pipe (a test's `Command::output()`, a
+    /// shell capturing `$(...)`) hands its detached child none of that pipe, so the reader
+    /// sees end of file when the launcher exits, not when the detached child does. On
+    /// Windows every inheritable handle goes to every child, and the launcher's standard
+    /// handles are inheritable pipe ends, so `job watch ci` hung until its monitor exited.
+    #[test]
+    fn hs2_8cgt4r_a_detached_child_keeps_no_end_of_its_launchers_output_pipe() {
+        const ROLE: &str = "HS2_8CGT4R_ROLE";
+        const NAME: &str =
+            "tests::hs2_8cgt4r_a_detached_child_keeps_no_end_of_its_launchers_output_pipe";
+        let me = std::env::current_exe().unwrap();
+        let role_command = |role: &str| {
+            let mut command = Command::new(&me);
+            command
+                .args(["--exact", NAME, "--nocapture", "--test-threads=1"])
+                .env(ROLE, role);
+            command
+        };
+        match std::env::var(ROLE).as_deref() {
+            // The detached child outlives the launcher by far more than the bound below.
+            Ok("sleeper") => {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                return;
+            }
+            Ok("launcher") => {
+                let home = tempfile::tempdir().unwrap();
+                let context = LaunchContext {
+                    journal: ProcessJournal::at(home.path()),
+                    supervisor: "hotsheet-test",
+                    purpose: Purpose::JobMonitor,
+                    project_id: None,
+                    session_id: None,
+                    binary_revision: None,
+                };
+                context
+                    .detached_as(
+                        &mut role_command("sleeper"),
+                        Detach {
+                            process_group: true,
+                            session: false,
+                        },
+                    )
+                    .unwrap();
+                println!("launched");
+                return;
+            }
+            _ => {}
+        }
+        let started = std::time::Instant::now();
+        let output = role_command("launcher")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        let waited = started.elapsed();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("launched"));
+        assert!(
+            waited < std::time::Duration::from_secs(10),
+            "the launcher's output stayed open for {waited:?}: the detached child holds it"
+        );
     }
 
     /// HS2-Y4VDBK: on macOS a detached launch is a `posix_spawn` with attributes, never a
