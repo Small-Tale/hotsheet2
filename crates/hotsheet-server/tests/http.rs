@@ -14949,6 +14949,10 @@ async fn hs2_f10y9p_interleaved_ticket_files_summarize_and_launch_per_run() {
     run(&["init", "-q"]);
     run(&["config", "user.name", "Test"]);
     run(&["config", "user.email", "test@example.com"]);
+    // HS2-6EW369: Git for Windows sets `core.autocrlf=true` system-wide, so difftool's
+    // temporary copies would hold CRLF and `tr` below would leave a `\r` per line. The
+    // assertions compare the committed LF text, so the fixture opts out.
+    run(&["config", "core.autocrlf", "false"]);
     run(&["config", "diff.tool", "hs2-test"]);
     let record = format!(
         "echo \"$GIT_DIFF_PATH_COUNTER $(tr '\\n' ' ' < \"$LOCAL\")-> $(tr '\\n' ' ' < \"$REMOTE\")\" >> '{}'; echo --- >> '{}'",
