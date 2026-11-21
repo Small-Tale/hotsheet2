@@ -99,12 +99,18 @@ also watches other disks the user chooses (HS2-NHK8V8):
     read-only images, and local Time Machine snapshots are skipped.
   - Linux: read-write block-device file systems, without boot, snap, or loop mounts, and each
     device once.
+  - Windows (HS2-FWF7AX): every drive letter (`GetLogicalDriveStringsW`) on a fixed or removable
+    drive with a mounted, writable volume. Network, optical, and RAM drives and empty card
+    readers are skipped; a network share is added by path.
   - Other platforms detect nothing yet; only the store's volume and added disks count.
 
-  The store's own volume is recognised by its device number and never listed twice.
+  The store's own volume is recognised by its device number (on Windows, the volume serial
+  number from `GetVolumeInformationW`, so an 8.3 short name or a verbatim path resolves to the
+  same volume) and never listed twice.
 
 - **Identity.** A volume is keyed by its OS volume UUID (macOS `diskutil info`, looked up once per
-  mount; Linux `/dev/disk/by-uuid`), as `uuid:<UUID>`, else by its mount point, as
+  mount; Linux `/dev/disk/by-uuid`; Windows the volume GUID from
+  `GetVolumeNameForVolumeMountPointW`), as `uuid:<UUID>`, else by its mount point, as
   `mount:<path>`. The key survives a removable drive's unplug and reconnect.
 - **Choices.** A choice is a machine-wide setting, `host_health.disks` in
   `${HOTSHEET_HOME}/settings.json`. It maps each volume id to

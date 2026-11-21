@@ -100,9 +100,70 @@ pub fn space(path: &Path) -> Option<(u64, u64, u64)> {
     ))
 }
 
-#[cfg(not(unix))]
+/// Free and total bytes plus the volume serial number, which stands in for the device number,
+/// of the volume holding `path` (HS2-FWF7AX). 8.3 short names and verbatim prefixes resolve
+/// to the same volume, so a path is matched by its volume rather than by its spelling.
+#[cfg(windows)]
+pub fn space(path: &Path) -> Option<(u64, u64, u64)> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetVolumePathNameW};
+    // Like statvfs, a missing path holds no volume.
+    std::fs::metadata(path).ok()?;
+    let wide = windows_wide(path);
+    let mut root = vec![0u16; WINDOWS_PATH_CAPACITY];
+    // SAFETY: `wide` is NUL-terminated and `root` is writable for the length passed.
+    if unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) } == 0 {
+        return None;
+    }
+    let (serial, _) = windows_volume_information(&root)?;
+    let (mut available, mut total) = (0u64, 0u64);
+    // SAFETY: `wide` is NUL-terminated and both output pointers are writable.
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut available,
+            &mut total,
+            std::ptr::null_mut(),
+        )
+    };
+    (ok != 0).then_some((available, total, u64::from(serial)))
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn space(_path: &Path) -> Option<(u64, u64, u64)> {
     None
+}
+
+/// Room for any Windows path the volume calls return, including the `\\?\` form.
+#[cfg(windows)]
+const WINDOWS_PATH_CAPACITY: usize = 32_768;
+
+#[cfg(windows)]
+fn windows_wide(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    path.as_os_str().encode_wide().chain(Some(0)).collect()
+}
+
+/// The serial number and file-system flags of the volume whose root is the NUL-terminated
+/// `root`, or `None` when no volume is mounted there (an empty card reader).
+#[cfg(windows)]
+fn windows_volume_information(root: &[u16]) -> Option<(u32, u32)> {
+    use windows_sys::Win32::Storage::FileSystem::GetVolumeInformationW;
+    let (mut serial, mut flags) = (0u32, 0u32);
+    // SAFETY: `root` is NUL-terminated; the name buffers are omitted with zero lengths and the
+    // two numeric outputs are writable.
+    let ok = unsafe {
+        GetVolumeInformationW(
+            root.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            &mut serial,
+            std::ptr::null_mut(),
+            &mut flags,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (ok != 0).then_some((serial, flags))
 }
 
 /// Resolve the volume that holds `path` (an added disk): the deepest detected or mounted volume
@@ -174,10 +235,13 @@ pub fn detected_volumes(ids: &mut VolumeIds) -> Vec<Volume> {
 
 /// Whether this platform can detect volumes; elsewhere only the store volume and added disks count.
 pub const fn detection_supported() -> bool {
-    cfg!(any(target_os = "macos", target_os = "linux"))
+    cfg!(any(target_os = "macos", target_os = "linux", windows))
 }
 
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))] // HS2-NHK8V8
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", windows)),
+    allow(dead_code)
+)] // HS2-NHK8V8
 fn volume_at(
     mount: PathBuf,
     ids: &mut VolumeIds,
@@ -324,7 +388,76 @@ fn linux_uuids(directory: &Path) -> BTreeMap<PathBuf, String> {
         .collect()
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+/// Windows (HS2-FWF7AX): every drive letter on a fixed or removable drive with a mounted,
+/// writable volume. Network, optical, and RAM drives are skipped, as are empty card readers.
+#[cfg(windows)]
+fn platform_volumes(ids: &mut VolumeIds) -> Vec<Volume> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDriveStringsW};
+    // `GetDriveTypeW` results and the read-only volume flag (`winbase.h`, `winnt.h`).
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_FIXED: u32 = 3;
+    const FILE_READ_ONLY_VOLUME: u32 = 0x0008_0000;
+    let mut buffer = vec![0u16; 1024];
+    // SAFETY: `buffer` is writable for the length passed.
+    let length = unsafe { GetLogicalDriveStringsW(buffer.len() as u32, buffer.as_mut_ptr()) };
+    let Some(listed) = buffer.get(..length as usize) else {
+        return Vec::new();
+    };
+    windows_drive_roots(listed)
+        .into_iter()
+        .filter_map(|root| {
+            let wide = windows_wide(Path::new(&root));
+            // SAFETY: `wide` is a NUL-terminated root path.
+            let kind = unsafe { GetDriveTypeW(wide.as_ptr()) };
+            let (_, flags) = windows_volume_information(&wide)?;
+            let listed =
+                matches!(kind, DRIVE_FIXED | DRIVE_REMOVABLE) && flags & FILE_READ_ONLY_VOLUME == 0;
+            listed.then(|| volume_at(PathBuf::from(&root), ids, || windows_volume_guid(&wide)))?
+        })
+        .collect()
+}
+
+/// The roots in `GetLogicalDriveStringsW`'s NUL-separated list (`C:\`, `D:\`, ...).
+#[cfg_attr(not(windows), allow(dead_code))] // HS2-FWF7AX: the pure parser is tested on every host.
+pub(crate) fn windows_drive_roots(listed: &[u16]) -> Vec<String> {
+    listed
+        .split(|unit| *unit == 0)
+        .filter(|root| !root.is_empty())
+        .map(String::from_utf16_lossy)
+        .collect()
+}
+
+/// The volume GUID behind a drive root, stable across a removable drive's reconnect and a
+/// changed drive letter.
+#[cfg(windows)]
+fn windows_volume_guid(root: &[u16]) -> Option<String> {
+    use windows_sys::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
+    let mut name = vec![0u16; 64];
+    // SAFETY: `root` is a NUL-terminated root path ending in a separator and `name` is writable
+    // for the length passed (a volume name is 49 characters with its terminator).
+    if unsafe {
+        GetVolumeNameForVolumeMountPointW(root.as_ptr(), name.as_mut_ptr(), name.len() as u32)
+    } == 0
+    {
+        return None;
+    }
+    let end = name
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(name.len());
+    parse_volume_guid(&String::from_utf16_lossy(&name[..end]))
+}
+
+/// The GUID of a `\\?\Volume{GUID}\` volume name.
+#[cfg_attr(not(windows), allow(dead_code))] // HS2-FWF7AX: the pure parser is tested on every host.
+pub(crate) fn parse_volume_guid(name: &str) -> Option<String> {
+    let rest = name.strip_prefix(r"\\?\Volume{")?;
+    let rest = rest.strip_suffix('\\').unwrap_or(rest);
+    let guid = rest.strip_suffix('}')?.to_ascii_uppercase();
+    (guid.len() == 36 && guid.chars().all(|c| c.is_ascii_hexdigit() || c == '-')).then_some(guid)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn platform_volumes(_ids: &mut VolumeIds) -> Vec<Volume> {
     Vec::new()
 }
@@ -467,6 +600,53 @@ mod tests {
             LOCAL | 0x0010_0000,
             "/Volumes/com.apple.TimeMachine.localsnapshots"
         ));
+    }
+
+    #[test]
+    fn fwf7ax_windows_drive_roots_and_volume_guids_are_parsed() {
+        let listed: Vec<u16> = "C:\\\0D:\\\0\0".encode_utf16().collect();
+        assert_eq!(windows_drive_roots(&listed), ["C:\\", "D:\\"]);
+        assert!(windows_drive_roots(&[]).is_empty());
+        assert_eq!(
+            parse_volume_guid(r"\\?\Volume{0a1b2c3d-4e5f-6789-abcd-0123456789ab}\").as_deref(),
+            Some("0A1B2C3D-4E5F-6789-ABCD-0123456789AB")
+        );
+        assert_eq!(
+            parse_volume_guid(r"\\?\Volume{0A1B2C3D-4E5F-6789-ABCD-0123456789AB}").as_deref(),
+            Some("0A1B2C3D-4E5F-6789-ABCD-0123456789AB")
+        );
+        assert_eq!(parse_volume_guid(r"\\?\Volume{not-a-guid}\"), None);
+        assert_eq!(parse_volume_guid(r"C:\"), None);
+    }
+
+    /// HS2-FWF7AX: Windows reads space and a volume number for any path on a volume, so a path
+    /// on the store's volume is recognised however it is spelled, and the system drive is
+    /// detected with its volume GUID.
+    #[cfg(windows)]
+    #[test]
+    fn fwf7ax_windows_reads_space_and_detects_the_system_volume() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let (free, total, device) = space(dir.path()).expect("the temp volume has space");
+        assert!(total > 0 && free <= total);
+        assert_eq!(space(&nested).map(|(_, _, d)| d), Some(device));
+        let canonical = hotsheet_sync::paths::canonicalize(dir.path()).unwrap();
+        assert_eq!(space(&canonical).map(|(_, _, d)| d), Some(device));
+        assert_eq!(space(&dir.path().join("missing")), None);
+        let volume = volume_for_path(&nested, &[]).unwrap();
+        assert_eq!(volume.device, device);
+        assert!(
+            volume.mount.parent().is_none(),
+            "the drive root: {volume:?}"
+        );
+        let detected = detected_volumes(&mut VolumeIds::default());
+        let system = detected
+            .iter()
+            .find(|volume| volume.device == device)
+            .unwrap_or_else(|| panic!("the temp volume is detected: {detected:?}"));
+        assert!(system.id.starts_with("uuid:"), "{system:?}");
+        assert!(detection_supported());
     }
 
     #[test]
