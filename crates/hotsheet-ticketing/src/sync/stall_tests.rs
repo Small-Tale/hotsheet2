@@ -64,6 +64,10 @@ fn merging_store() -> (
     FsStore,
 ) {
     let (dir, root, peer) = remote_with_two_clones();
+    // The peer stands for another Hot Sheet site, so it pins store line endings as every
+    // site does (HS2-WNPX98). A plain Git clone on Windows would otherwise check out the
+    // published LF bytes as CRLF under Git for Windows' `core.autocrlf=true`.
+    assert!(crate::line_endings::ensure_pinned(&peer).applies());
     let store = FsStore::init(&root, &StoreMetadata::new("HS"))
         .unwrap()
         .with_deferred_push();
