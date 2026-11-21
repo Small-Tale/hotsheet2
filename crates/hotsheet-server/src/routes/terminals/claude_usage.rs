@@ -300,7 +300,7 @@ fn persist(state: &AppState, inner: &FollowInner) {
         std::fs::create_dir_all(dir)?;
         let temp = path.with_extension("json.tmp");
         std::fs::write(&temp, serde_json::to_vec(&record)?)?;
-        std::fs::rename(temp, &path)
+        hotsheet_sync::files::replace(&temp, &path)
     };
     if let Err(error) = write() {
         tracing::warn!(%error, "persisting a Claude usage follow failed");

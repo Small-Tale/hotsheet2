@@ -92,7 +92,7 @@ fn private_write(path: &Path, bytes: &[u8]) -> Result<()> {
     }
     file.write_all(bytes)?;
     file.sync_all()?;
-    fs::rename(temp, path)?;
+    hotsheet_sync::files::replace(&temp, path)?;
     Ok(())
 }
 

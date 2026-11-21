@@ -166,7 +166,7 @@ impl OrchestrationRuntime {
                 let bytes = serde_json::to_vec(&failures).map_err(std::io::Error::other)?;
                 let temporary = path.with_extension("json.partial");
                 std::fs::write(&temporary, bytes)?;
-                std::fs::rename(&temporary, &path)
+                hotsheet_sync::files::replace(&temporary, &path)
             });
         if written.is_err() {
             tracing::warn!(

@@ -296,7 +296,7 @@ fn save_runs(path: &Path, runs: &BTreeMap<String, CiRun>) {
             &temp,
             serde_json::to_vec_pretty(&file).map_err(std::io::Error::other)?,
         )?;
-        std::fs::rename(&temp, path)
+        hotsheet_sync::files::replace(&temp, path)
     };
     if let Err(error) = write() {
         tracing::warn!(path = %path.display(), %error, "could not save the CI status file");

@@ -1546,7 +1546,7 @@ impl CheckoutRegistry {
             let mut output = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
             output.write_all(&serde_json::to_vec_pretty(file).expect("serializable registry"))?;
             output.sync_all()?;
-            std::fs::rename(&tmp, &self.path)
+            hotsheet_sync::files::replace(&tmp, &self.path)
         })();
         if result.is_err() {
             let _ = std::fs::remove_file(&tmp);

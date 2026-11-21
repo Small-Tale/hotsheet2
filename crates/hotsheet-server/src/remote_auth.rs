@@ -600,7 +600,7 @@ fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         let mut file = options.open(&temp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
-        fs::rename(&temp, path)?;
+        hotsheet_sync::files::replace(&temp, path)?;
         Ok(())
     })();
     if result.is_err() {

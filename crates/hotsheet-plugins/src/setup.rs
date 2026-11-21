@@ -3706,7 +3706,7 @@ fn write_file(project: &Path, path: &Path, contents: &str) -> Result<(), SetupEr
             }
             std::fs::set_permissions(&staged, metadata.permissions())?;
         }
-        std::fs::rename(&staged, path)
+        hotsheet_sync::files::replace(&staged, path)
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&staged);

@@ -364,7 +364,7 @@ fn run_step(
 fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
     let temporary = path.with_extension("plist.tmp");
     fs::write(&temporary, contents)?;
-    fs::rename(&temporary, path)
+    hotsheet_sync::files::replace(&temporary, path)
 }
 
 fn wait_ready(agent: &RelayAgent, timeout: Duration) -> Result<RelayHello, RelayUnavailable> {

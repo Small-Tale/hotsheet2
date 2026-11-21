@@ -364,7 +364,7 @@ fn read_lock_holder(path: &Path) -> LockHolder {
 fn publish_lock(path: &Path, pid: u32) -> std::io::Result<()> {
     let tmp = path.with_extension(format!("lock.{pid}.{}.tmp", ulid::Ulid::new()));
     std::fs::write(&tmp, pid.to_string())?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
+    hotsheet_sync::files::replace(&tmp, path).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })
 }

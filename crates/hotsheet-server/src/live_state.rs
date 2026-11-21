@@ -1024,7 +1024,7 @@ impl PeakBook {
                 &temp,
                 serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?,
             )?;
-            std::fs::rename(&temp, &path)
+            hotsheet_sync::files::replace(&temp, &path)
         };
         if let Err(error) = write() {
             tracing::warn!(path = %path.display(), %error, "could not save live-state peaks");

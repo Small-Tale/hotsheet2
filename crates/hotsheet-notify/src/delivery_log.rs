@@ -350,7 +350,7 @@ impl<'a> Journal<'a> {
             }
             file.sync_all()?;
             drop(file);
-            std::fs::rename(&temporary, self.path)?;
+            hotsheet_sync::files::replace(&temporary, self.path)?;
             sync_parent(self.path)
         };
         if let Err(error) = write() {

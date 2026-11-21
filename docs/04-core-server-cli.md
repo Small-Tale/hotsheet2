@@ -113,7 +113,10 @@ complete previous file or the complete new one. On Windows that rename uses POSI
 semantics and succeeds while other handles hold the target open; readers keep the
 previous contents. A sharing failure from a handle that does not allow deletion is retried
 briefly before it is reported. `hotsheet_sync::files::persist` is the one publication path
-for temporary files (HS2-J5DCJH).
+for temporary files (HS2-J5DCJH), and `hotsheet_sync::files::replace` the one for any other
+staged file renamed over a target, including ticket files (HS2-13KK94). A direct rename
+remains only where it moves a directory, sets a stale lock aside, or claims a file, and a
+source-scan test names each such site with its reason.
 
 Registry mutations take an operating-system file lock across CLI and server processes,
 then replace the JSON through a uniquely named, flushed temporary file. This preserves

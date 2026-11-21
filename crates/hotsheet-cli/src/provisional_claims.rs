@@ -213,7 +213,7 @@ pub fn warn_once(home: &Path, keys: &[String]) -> Vec<String> {
         record.warned.drain(..excess);
         let staged = home.join(format!("{WARNINGS_FILE}.tmp"));
         fs::write(&staged, serde_json::to_vec_pretty(&record)?)?;
-        fs::rename(&staged, &path)?;
+        hotsheet_sync::files::replace(&staged, &path)?;
         Ok(fresh)
     };
     attempt().unwrap_or_else(|_| keys.to_vec())

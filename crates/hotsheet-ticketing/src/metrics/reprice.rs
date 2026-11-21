@@ -195,7 +195,7 @@ pub(super) fn atomic_write(path: &std::path::Path, bytes: &[u8]) -> io::Result<(
             .open(&staged)?;
         file.write_all(bytes)?;
         file.sync_all()?;
-        fs::rename(&staged, path)
+        hotsheet_sync::files::replace(&staged, path)
     })();
     if result.is_err() {
         let _ = fs::remove_file(staged);

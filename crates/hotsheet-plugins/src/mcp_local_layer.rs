@@ -228,7 +228,7 @@ fn write_atomically(path: &Path, contents: &[u8]) -> std::io::Result<()> {
         if let Ok(metadata) = std::fs::metadata(path) {
             std::fs::set_permissions(&staged, metadata.permissions())?;
         }
-        std::fs::rename(&staged, path)
+        hotsheet_sync::files::replace(&staged, path)
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&staged);

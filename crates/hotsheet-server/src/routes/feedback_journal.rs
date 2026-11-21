@@ -100,7 +100,7 @@ impl Journal {
             file.write_all(&body)?;
             file.sync_all()?;
         }
-        std::fs::rename(&temporary, &path)?;
+        hotsheet_sync::files::replace(&temporary, &path)?;
         if let Ok(dir) = std::fs::File::open(&self.dir) {
             let _ = dir.sync_all();
         }

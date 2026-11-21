@@ -428,7 +428,7 @@ fn write_checkpoint(path: &Path, seen: HashSet<String>) -> io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))?;
     }
-    fs::rename(temporary, path)
+    hotsheet_sync::files::replace(&temporary, path)
 }
 
 #[cfg(test)]

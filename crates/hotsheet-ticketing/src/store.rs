@@ -1482,7 +1482,7 @@ impl FsStore {
                 fs::rename(stage_root.join(item.id.to_string()), &final_dir)?;
                 published.push(final_dir);
             }
-            fs::rename(&staged_ticket, &ticket_path)?;
+            hotsheet_sync::files::replace(&staged_ticket, &ticket_path)?;
             Ok::<(), std::io::Error>(())
         })();
         let _ = fs::remove_dir_all(&stage_root);
@@ -2114,7 +2114,8 @@ pub(crate) fn write_file_atomically(path: &Path, bytes: &[u8]) -> std::io::Resul
         std::process::id(),
         SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    let result = fs::write(&staged, bytes).and_then(|()| fs::rename(&staged, path));
+    let result =
+        fs::write(&staged, bytes).and_then(|()| hotsheet_sync::files::replace(&staged, path));
     if result.is_err() {
         let _ = fs::remove_file(&staged);
     }

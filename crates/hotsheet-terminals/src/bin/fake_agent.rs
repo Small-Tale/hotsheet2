@@ -137,7 +137,7 @@ fn main() {
                 // Written whole and then renamed, so a reader never sees half of it.
                 let partial = path.with_extension("partial");
                 if let Err(e) = std::fs::write(&partial, report(&probes))
-                    .and_then(|()| std::fs::rename(&partial, &path))
+                    .and_then(|()| hotsheet_sync::files::replace(&partial, &path))
                 {
                     eprintln!("hs-fake-agent: report failed: {e}");
                     exit_code = 2;

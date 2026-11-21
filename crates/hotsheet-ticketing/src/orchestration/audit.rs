@@ -298,7 +298,7 @@ impl<R: JournalRecord> Journal<R> {
         let size = regular_len(&current)?;
         if size > 0 && size + line.len() as u64 > self.segment_limit {
             reject_nonregular(&self.previous())?;
-            fs::rename(&current, self.previous())?;
+            hotsheet_sync::files::replace(&current, &self.previous())?;
         }
         let mut file = open(&current, true, true)?;
         // A crash can leave a torn final line; start the new entry on its own line.

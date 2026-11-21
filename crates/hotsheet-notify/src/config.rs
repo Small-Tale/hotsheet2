@@ -374,7 +374,7 @@ impl NotificationConfig {
         let tmp = home.join(format!(".{CONFIG_FILE}.{}.tmp", ulid::Ulid::new()));
         let text = serde_json::to_string_pretty(self).expect("serializable") + "\n";
         std::fs::write(&tmp, text).map_err(io)?;
-        std::fs::rename(&tmp, &path).map_err(|e| {
+        hotsheet_sync::files::replace(&tmp, &path).map_err(|e| {
             let _ = std::fs::remove_file(&tmp);
             io(e)
         })

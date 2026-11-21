@@ -100,7 +100,7 @@ impl LiveRecord {
                 &temp,
                 serde_json::to_vec_pretty(&record).map_err(std::io::Error::other)?,
             )?;
-            std::fs::rename(&temp, &path)
+            hotsheet_sync::files::replace(&temp, &path)
         };
         match write() {
             Ok(()) => true,

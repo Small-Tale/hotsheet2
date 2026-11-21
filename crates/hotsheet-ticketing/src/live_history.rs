@@ -149,7 +149,7 @@ fn rewrite(path: &Path, records: &[HistoryRecord]) -> std::io::Result<()> {
     }
     let temp = path.with_extension("jsonl.tmp");
     std::fs::write(&temp, text)?;
-    std::fs::rename(&temp, path)
+    hotsheet_sync::files::replace(&temp, path)
 }
 
 /// One completed ticket on the timeline.
