@@ -169,8 +169,10 @@ clock is the machine's clock (injectable in tests).
   that shortens a lease, publishes the new state and then sends one datagram to each
   registered waiter. Either the waiter's inspection sees the freed state or the
   releaser sees the waiter, so no wake-up is lost. Between signals a waiter sleeps once,
-  until the earlier of the holder's known expiry and its own deadline. A datagram
-  carries no information: a woken waiter re-reads the state, so a stray datagram costs
+  until the earlier of the holder's known expiry and its own deadline. An OS timer
+  that returns before that instant (Windows ARM64's socket timeout did) waits out the
+  remainder instead of re-reading state, so only a datagram or the planned instant
+  costs a read (HS2-H9DNG6). A datagram carries no information: a woken waiter re-reads the state, so a stray datagram costs
   one read. A namespace accepts at most 256 waiters at a time, and a registration left
   by a crashed waiter is removed a minute after that waiter's own deadline.
 - **Crash with a held lease.** The lease stays until its expiry and then lapses. If the
