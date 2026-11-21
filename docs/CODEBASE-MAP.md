@@ -799,6 +799,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/api_error.rs       #   ApiError ({ "error": ..., "code"? }) and its From conversions; `ticket_changed` code on stale expected tokens (HS2-9S8CV1); `write_behind_unavailable` code on the queued-batch refusal without a durable outbox (HS2-DEVEYE)
       src/dto.rs             #   request/response DTOs
       src/watcher.rs         #   filesystem + repository watcher (WatchHandle, handle_path_change)
+      src/store_watch_scope.rs # HS2-VN96J5: the directory a store's tickets watcher holds (store root on Windows so the store can move, `tickets/` elsewhere) and its event filter
       src/target_store_watch.rs # HS2-G5FYP6 (on the shared BackgroundWatcher since HS2-F6F42W, recording tickets modified before its stream went live): target-feed watches on the tickets of a followed checkout's unhosted linked Git stores (`target_store_changed` events, dropped after ten idle minutes)
       src/code_ref_watch.rs # HS2-XA9DZA: target-feed watch on a followed checkout's git common dir (`refs/` and `packed-refs`, remote-tracking changes only, local re-read until live), recording `code_refs_changed` events so the feed answers `remote_refs_changed` and a site's late handoff push wakes the orchestrator
       src/worklist_refresh.rs #  WorklistRefresher: one debounced, coalescing background worker for every checkout worklist regeneration (writes, watcher, project open), off the request path (HS2-Z99TJN)

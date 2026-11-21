@@ -5,6 +5,7 @@ use crate::events::{
     next_index_repair_delay,
 };
 use crate::multistore::{StoreEntry, StoreHost};
+use crate::store_watch_scope::TicketsWatchScope;
 use crate::{AppState, LocalWriteHashes, multistore};
 use hotsheet_index::hash_bytes;
 use hotsheet_model::{Ulid, parse_file};
@@ -160,6 +161,17 @@ pub(crate) fn spawn_watcher_for(
     target: WatchTarget,
     backend: WatcherBackend,
 ) -> anyhow::Result<WatchHandle> {
+    let scope = Arc::new(TicketsWatchScope::for_store(target.entry.store.root()));
+    spawn_watcher_in_scope(target, backend, scope)
+}
+
+/// [`spawn_watcher_for`] with the native stream's directory and event filter chosen by
+/// `scope` (HS2-VN96J5), so tests can run the Windows store-root scope on every platform.
+pub(crate) fn spawn_watcher_in_scope(
+    target: WatchTarget,
+    backend: WatcherBackend,
+    scope: Arc<TicketsWatchScope>,
+) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
 
     let tickets_dir = target.entry.store.root().join("tickets");
@@ -207,8 +219,12 @@ pub(crate) fn spawn_watcher_for(
                     slot.bridge = bridge.ok();
                 }
                 request_resync(&tickets_dir, STARTUP_RESYNC);
+                let watch_dir = scope.watch_dir().to_path_buf();
                 let mut watcher = match notify::recommended_watcher(move |res| {
-                    if !is_access_event(&res) {
+                    if is_access_event(&res) {
+                        return;
+                    }
+                    if let Some(res) = scope.admit(res) {
                         tx.send(res);
                     }
                 }) {
@@ -222,9 +238,9 @@ pub(crate) fn spawn_watcher_for(
                         return;
                     }
                 };
-                if let Err(error) = watcher.watch(&tickets_dir, RecursiveMode::Recursive) {
+                if let Err(error) = watcher.watch(&watch_dir, RecursiveMode::Recursive) {
                     tracing::warn!(
-                        dir = %tickets_dir.display(),
+                        dir = %watch_dir.display(),
                         %error,
                         "store watcher failed to start"
                     );
@@ -1758,5 +1774,190 @@ mod access_event_tests {
         assert!(!super::is_access_event(&Err(notify::Error::generic(
             "lost"
         ))));
+    }
+}
+
+/// HS2-VN96J5: the store-root scope Windows uses, run with the platform's native watcher.
+/// On Windows these prove the store can move while watched; on macOS and Linux they pin
+/// the scope's filtering and the move, restore and re-arm sequence on the native backends.
+#[cfg(test)]
+mod store_root_scope_tests {
+    use super::{TicketsWatchScope, WatcherBackend, spawn_watcher_in_scope};
+    use crate::events::ChangeEvent;
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+    use tokio::sync::broadcast;
+
+    fn create(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
+        ops::create(
+            store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-11-21T00:00:00Z"),
+            NewTicket {
+                title: title.into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
+    /// A native stream can take seconds to start on a loaded machine.
+    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Every change event received so far.
+    fn drain(rx: &mut broadcast::Receiver<ChangeEvent>) -> Vec<(String, String)> {
+        let mut seen = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            seen.push((event.kind, event.id));
+        }
+        seen
+    }
+
+    fn wait_for_change(rx: &mut broadcast::Receiver<ChangeEvent>, id: Ulid) {
+        let id = id.to_string();
+        wait_for("the ticket's change event", || {
+            drain(rx)
+                .iter()
+                .any(|(kind, seen)| kind == "changed" && *seen == id)
+        });
+    }
+
+    struct Watched {
+        state: crate::AppState,
+        scope: Arc<TicketsWatchScope>,
+        handle: super::WatchHandle,
+        events: broadcast::Receiver<ChangeEvent>,
+    }
+
+    fn watch_root(root: &Path) -> Watched {
+        let store = FsStore::open(root).unwrap();
+        let state = crate::AppState::new(store, "secret".into()).unwrap();
+        let events = state.events.subscribe();
+        let scope = Arc::new(TicketsWatchScope::new(root, true));
+        let handle = spawn_watcher_in_scope(
+            super::default_watch_target(&state),
+            WatcherBackend::Recommended,
+            scope.clone(),
+        )
+        .unwrap();
+        let entry = state.default_entry();
+        wait_for("the watcher to go live", || entry.freshness.in_sync());
+        Watched {
+            state,
+            scope,
+            handle,
+            events,
+        }
+    }
+
+    /// An idle store and Git churn beside `tickets/` deliver nothing to the watch loop;
+    /// a ticket write is still seen.
+    #[test]
+    fn hs2_vn96j5_root_scope_is_quiet_when_idle_and_ignores_git_churn() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let store = FsStore::init_git(&root, &StoreMetadata::new("HS")).unwrap();
+        let mut watched = watch_root(&root);
+        // The native stream may still report the store's own creation; let it settle.
+        std::thread::sleep(Duration::from_millis(500));
+        drain(&mut watched.events);
+        let before = watched.scope.delivered();
+
+        std::thread::sleep(Duration::from_secs(2));
+        assert_eq!(watched.scope.delivered(), before, "an idle store is silent");
+
+        // Synthetic churn inside the Git directory, which Git itself never reads.
+        let objects = root.join(".git").join("hs2-vn96j5-churn");
+        std::fs::create_dir_all(&objects).unwrap();
+        for index in 0..200 {
+            std::fs::write(objects.join(format!("object-{index}")), b"synthetic").unwrap();
+        }
+        std::fs::write(root.join("notes.txt"), b"synthetic").unwrap();
+        std::thread::sleep(Duration::from_secs(1));
+        assert_eq!(
+            watched.scope.delivered(),
+            before,
+            "Git churn and store metadata never reach the watch loop"
+        );
+        assert!(drain(&mut watched.events).is_empty());
+
+        let ticket = create(&store, "written by another process");
+        wait_for_change(&mut watched.events, ticket.id);
+        assert!(watched.scope.delivered() > before);
+        drop(watched.handle);
+        drop(watched.state);
+    }
+
+    /// The watched store moves away and back twice. The move succeeds while watched (the
+    /// Windows failure this fixes), no ticket is reported deleted while it is away, and
+    /// writes after it returns are indexed. Where the backend follows the moved directory
+    /// (Windows, Linux), a write made while it was away is picked up by the rescan.
+    #[test]
+    fn hs2_vn96j5_a_watched_store_moves_away_and_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let away = dir.path().join("away");
+        let store = FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let mut watched = watch_root(&root);
+        let entry = watched.state.default_entry();
+        for round in 0..2 {
+            std::fs::rename(&root, &away).expect("a watched store can be moved");
+            let moved = FsStore::open(&away).unwrap();
+            let while_away = create(&moved, &format!("written while away {round}"));
+            std::thread::sleep(Duration::from_millis(800));
+            let seen = drain(&mut watched.events);
+            assert!(
+                seen.iter().all(|(kind, _)| kind != "deleted"),
+                "no ticket is reported deleted while the store is away: {seen:?}"
+            );
+            std::fs::rename(&away, &root).expect("the store moves back");
+            let after = create(&store, &format!("written after return {round}"));
+            wait_for_change(&mut watched.events, after.id);
+            if !cfg!(target_os = "macos") {
+                wait_for("the rescan to index the write made while away", || {
+                    entry
+                        .index
+                        .lock()
+                        .unwrap()
+                        .slug_candidates(&while_away.slug)
+                        .unwrap()
+                        == vec![while_away.id]
+                });
+            }
+        }
+        drop(watched.handle);
+    }
+
+    /// Re-arming after a relink: the old watcher is dropped and the moved store is watched
+    /// again at its new path, which then sees writes; the old one reports nothing.
+    #[test]
+    fn hs2_vn96j5_a_moved_store_is_watched_again_at_its_new_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("store");
+        let moved_root = dir.path().join("moved");
+        FsStore::init(&root, &StoreMetadata::new("HS")).unwrap();
+        let mut old = watch_root(&root);
+        std::fs::rename(&root, &moved_root).expect("a watched store can be moved");
+        drop(old.handle);
+        let mut new = watch_root(&moved_root);
+        let ticket = create(&FsStore::open(&moved_root).unwrap(), "after the relink");
+        wait_for_change(&mut new.events, ticket.id);
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(
+            drain(&mut old.events).is_empty(),
+            "the dropped watcher reports nothing"
+        );
+        drop(new.handle);
     }
 }

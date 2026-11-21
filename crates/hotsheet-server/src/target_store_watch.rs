@@ -26,6 +26,7 @@ use hotsheet_model::Ulid;
 use tokio::sync::broadcast;
 
 use crate::events::{ChangeEvent, EventLog, emit_change};
+use crate::store_watch_scope::TicketsWatchScope;
 use hotsheet_sync::LockExt;
 
 /// The change kind the target feed reads for a store this server does not host.
@@ -139,6 +140,22 @@ fn watch_tickets_with(
 ) -> Option<(BackgroundWatcher, Arc<()>)> {
     // A store without a tickets directory has nothing to follow yet.
     let tickets = hotsheet_sync::paths::canonicalize(store.root.join("tickets")).ok()?;
+    // HS2-VN96J5: on Windows a handle on `tickets` would keep the store from being moved.
+    let scope = TicketsWatchScope::for_store(tickets.parent()?);
+    watch_scoped_tickets(store, &tickets, scope, event_log, events, start)
+}
+
+/// [`watch_tickets_with`] watching `scope`'s directory, which tests set to the store root.
+fn watch_scoped_tickets(
+    store: &UnhostedStore,
+    tickets: &Path,
+    scope: TicketsWatchScope,
+    event_log: &Arc<Mutex<EventLog>>,
+    events: &broadcast::Sender<ChangeEvent>,
+    start: StartStream,
+) -> Option<(BackgroundWatcher, Arc<()>)> {
+    let tickets = tickets.to_path_buf();
+    let watch_dir = scope.watch_dir().to_path_buf();
     let (log, sender, connection) = (
         event_log.clone(),
         events.clone(),
@@ -166,8 +183,10 @@ fn watch_tickets_with(
     });
     let on_event = emit.clone();
     let handler = move |delivery: Delivery| {
-        let Ok(event) = delivery else { return };
-        if matches!(event.kind, EventKind::Access(_)) {
+        let Ok(mut event) = delivery else { return };
+        if matches!(event.kind, EventKind::Access(_))
+            || scope.admit_paths(&mut event.paths).is_none()
+        {
             return;
         }
         on_event(changed_tickets(event.paths));
@@ -187,7 +206,7 @@ fn watch_tickets_with(
         on_status();
     };
     let watcher = BackgroundWatcher::start_with(
-        &[(&tickets, RecursiveMode::Recursive)],
+        &[(&watch_dir, RecursiveMode::Recursive)],
         handler,
         status,
         start,
@@ -412,6 +431,70 @@ mod tests {
         assert_eq!(recorded(&other), 0);
         // Only now may the stand-in start end (as refused, which reads once more).
         drop(hold);
+    }
+
+    /// HS2-VN96J5: in the store-root scope Windows uses, the watch holds the store root,
+    /// records ticket writes and nothing beside `tickets/`, and the store can be moved.
+    #[test]
+    fn hs2_vn96j5_a_root_scoped_watch_records_only_ticket_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("linked");
+        let shard = root.join("tickets").join("AB");
+        let git = root.join(".git").join("churn");
+        std::fs::create_dir_all(&shard).unwrap();
+        std::fs::create_dir_all(&git).unwrap();
+        let log = Arc::new(Mutex::new(EventLog::default()));
+        let (events, _keep) = broadcast::channel(16);
+        let store = UnhostedStore {
+            connection_id: "linked-connection".into(),
+            root: root.clone(),
+        };
+        let canonical = hotsheet_sync::paths::canonicalize(&root).unwrap();
+        let watched = Arc::new(Mutex::new(Vec::new()));
+        let start: StartStream = {
+            let watched = watched.clone();
+            Box::new(move |paths, handler| {
+                watched
+                    .lock_or_recover()
+                    .extend(paths.iter().map(|(path, _)| path.to_path_buf()));
+                PathWatcher::start(paths, handler)
+            })
+        };
+        let (watcher, pending) = watch_scoped_tickets(
+            &store,
+            &canonical.join("tickets"),
+            TicketsWatchScope::new(&canonical, true),
+            &log,
+            &events,
+            start,
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !watcher.is_live() {
+            assert!(Instant::now() < deadline, "the watch never went live");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*watched.lock_or_recover(), std::slice::from_ref(&canonical));
+        let recorded = |id: &str| {
+            log.lock_or_recover()
+                .since(0)
+                .0
+                .iter()
+                .any(|event| event.kind == TARGET_STORE_CHANGE_KIND && event.id == id)
+        };
+        // A ULID-named file outside `tickets/` is not a ticket.
+        let outside = Ulid::new().to_string();
+        std::fs::write(git.join(format!("{outside}.md")), "synthetic").unwrap();
+        let id = Ulid::new().to_string();
+        std::fs::write(shard.join(format!("{id}.md")), "---\n---\n").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !recorded(&id) {
+            assert!(Instant::now() < deadline, "the write was never recorded");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!recorded(&outside));
+        std::fs::rename(&root, dir.path().join("moved")).expect("a watched store can move");
+        drop((watcher, pending));
     }
 
     #[test]
