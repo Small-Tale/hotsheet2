@@ -406,7 +406,8 @@ it.concurrent(
         .toBe(false);
       // The host has already removed its working CLI build. A Codex process that keeps this
       // hook command through the next host restart still needs an executable outside the snapshot.
-      const stableHookCli = resolve(home, 'bin/hotsheet-cli'),
+      // HS2-QKH55A: the durable CLI keeps Cargo's `.exe` suffix on Windows, as local-host.ts writes it.
+      const stableHookCli = resolve(home, `bin/hotsheet-cli${exe}`),
         codexHooks = JSON.parse(await readFile(resolve(project, '.codex/hooks.json'), 'utf8'));
       const hookCommand = codexHooks.hooks.PermissionRequest[0].hooks[0].command,
         expectedHookCommand = `${stableHookCli} permission-hook --agent codex`;
@@ -430,7 +431,10 @@ it.concurrent(
         );
       }
       expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
-      expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
+      // The legacy alias (codex-hook-compat.ts) serves pre-fix POSIX snapshot paths only: no pre-fix
+      // host ran on Windows, and an extensionless `bin\hotsheet-cli` cannot be launched there (HS2-QKH55A).
+      if (process.platform !== 'win32')
+        expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
       phase('host and unhost project');
       const hostsProject = async () =>
         (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');

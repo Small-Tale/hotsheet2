@@ -3422,7 +3422,7 @@ fn stable_hook_cli(
     home: Option<&Path>,
 ) -> Option<std::path::PathBuf> {
     snapshot
-        .then(|| home.map(|home| home.join("bin/hotsheet-cli")))
+        .then(|| home.map(durable_hook_cli))
         .flatten()
         .filter(|path| path.is_file())
         .or_else(|| {
@@ -3434,6 +3434,14 @@ fn stable_hook_cli(
                 })
                 .map(Path::to_path_buf)
         })
+}
+
+/// The durable hook CLI the local host keeps under the machine home. It carries the platform's
+/// executable suffix, as `clients/web/src/local-host.ts` writes it (`hotsheet-cli.exe` on
+/// Windows, HS2-QKH55A).
+fn durable_hook_cli(home: &Path) -> std::path::PathBuf {
+    home.join("bin")
+        .join(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn is_local_host_snapshot_binary(path: &Path) -> bool {
@@ -4102,8 +4110,16 @@ mod tests {
     #[test]
     fn production_snapshot_finds_the_durable_hook_cli_when_the_override_is_missing() {
         let home = tempfile::tempdir().unwrap();
-        let durable = home.path().join("bin/hotsheet-cli");
-        std::fs::create_dir_all(durable.parent().unwrap()).unwrap();
+        // HS2-QKH55A: an extensionless file is not the durable CLI on Windows.
+        let extensionless = home.path().join("bin/hotsheet-cli");
+        std::fs::create_dir_all(extensionless.parent().unwrap()).unwrap();
+        if cfg!(windows) {
+            std::fs::write(&extensionless, b"not an executable").unwrap();
+            assert_eq!(stable_hook_cli(None, true, Some(home.path())), None);
+        }
+        let durable = home
+            .path()
+            .join(format!("bin/hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
         std::fs::write(&durable, b"durable").unwrap();
         assert_eq!(
             stable_hook_cli(None, true, Some(home.path())),
