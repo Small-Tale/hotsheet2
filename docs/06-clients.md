@@ -3743,7 +3743,10 @@ stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to t
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
-changing rows, columns, or glyph proportions. At phone
+changing rows, columns, or glyph proportions. The terminal font stack is `ui-monospace,
+SFMono-Regular, Menlo, "Cascadia Mono", monospace`. Windows' generic `monospace` is Consolas,
+whose narrower cells made the 80×24 grid 1.47:1 and left part of every 5:3 frame empty; Cascadia
+Mono, the Windows Terminal default, has the proportions the 5:3 geometry assumes (HS2-4PBGKF). At phone
 viewport widths of 600px or less, the Workspace Grid defaults to one card across so the scaled
 80×24 preview fills the available width. Its one-to-three-card zoom preference persists
 separately from the desktop across and short-layout high preferences. A live drawer

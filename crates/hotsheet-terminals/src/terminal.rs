@@ -168,6 +168,28 @@ impl AnsiState {
     }
 }
 
+/// Whether `bytes` (starting outside an escape sequence) position the cursor absolutely with
+/// `CSI … H` or `CSI … f` (HS2-4PBGKF).
+fn moves_cursor_absolutely(bytes: &[u8]) -> bool {
+    let mut ansi = AnsiState::Ground;
+    bytes.iter().any(|&byte| {
+        let in_csi = matches!(ansi, AnsiState::Csi);
+        ansi = ansi.advance(byte);
+        in_csi && matches!(ansi, AnsiState::Ground) && matches!(byte, b'H' | b'f')
+    })
+}
+
+/// Whether `bytes` (starting outside an escape sequence) print anything other than blanks and
+/// control characters (HS2-4PBGKF).
+fn shows_text(bytes: &[u8]) -> bool {
+    let mut ansi = AnsiState::Ground;
+    bytes.iter().any(|&byte| {
+        let ground = matches!(ansi, AnsiState::Ground);
+        ansi = ansi.advance(byte);
+        ground && byte > b' ' && byte != 0x7f
+    })
+}
+
 /// A bounded byte ring that trims only at terminal-parser-safe boundaries. Raw byte eviction
 /// can expose the parameter tail of an ANSI command (for example `61m`) as visible text when a
 /// viewer replays into a fresh emulator. UTF-8 continuation bytes are likewise never retained as
@@ -230,11 +252,28 @@ impl Ring {
     /// is the cursor's line and stays (a prompt alone, a repeated clear, or a full-screen program
     /// that addresses the cursor instead of writing newlines). The stream offset is unchanged: it
     /// counts produced bytes, not retained ones.
+    ///
+    /// A cursor line that moves the cursor to an absolute position (`CSI row;col H`) does not
+    /// describe the cursor's line: the bytes since the last newline are the tail of a repaint.
+    /// Windows ConPTY repaints the whole screen after every resize, ending with blank rows and a
+    /// cursor move back to the prompt, so keeping only that tail cleared the prompt too
+    /// (HS2-4PBGKF). Such a clear keeps from the start of the last line that shows text instead.
     fn clear_before_cursor_line(&mut self) {
-        let line_start = (0..self.buf.len())
-            .rev()
-            .find(|&index| self.buf[index].value == b'\n' && self.safe_start_at(index + 1))
-            .map_or(0, |index| index + 1);
+        let mut starts = vec![0];
+        starts.extend(
+            (0..self.buf.len())
+                .filter(|&index| self.buf[index].value == b'\n' && self.safe_start_at(index + 1))
+                .map(|index| index + 1),
+        );
+        let bytes = self.snapshot();
+        let mut line_start = starts[starts.len() - 1];
+        if moves_cursor_absolutely(&bytes[line_start..]) {
+            line_start = starts
+                .windows(2)
+                .rev()
+                .find(|line| shows_text(&bytes[line[0]..line[1]]))
+                .map_or(line_start, |line| line[0]);
+        }
         self.buf.drain(..line_start);
     }
     fn replay(&self, stream: u64) -> Replay {
@@ -1216,6 +1255,51 @@ mod tests {
             b"\x1b[Hscreen\x1b[38;5"
         );
         assert_eq!(cleared(&["é".as_bytes()]), "é".as_bytes());
+    }
+
+    /// HS2-4PBGKF: Windows ConPTY repaints the screen after a resize and ends the repaint with
+    /// blank rows and an absolute cursor move back to the prompt. The clear keeps the prompt's
+    /// line from that repaint, not only the trailing cursor move, and clearing again keeps it.
+    #[test]
+    fn hs2_4pbgkf_clear_after_a_conpty_repaint_keeps_the_prompt_line() {
+        let mut ring = Ring::new(4096);
+        ring.push(b"OLD-OUTPUT 198\r\nOLD-OUTPUT 199\r\nPROMPT$\x1b[1C");
+        // The repaint a resize produces (captured from ConPTY on Windows 11 ARM64).
+        ring.push(b"\x1b[?25l\x1b[8;50;120t\x1b[HOLD-OUTPUT 198\x1b[K\r\nOLD-OUTPUT 199\x1b[K\r\n");
+        ring.push(b"PROMPT$\x1b[K\r\n\x1b[K\r\n\x1b[K\r\n\x1b[K\x1b[3;9H\x1b[?25h");
+        ring.clear_before_cursor_line();
+        let kept = b"PROMPT$\x1b[K\r\n\x1b[K\r\n\x1b[K\r\n\x1b[K\x1b[3;9H\x1b[?25h";
+        assert_eq!(ring.snapshot(), kept);
+        ring.clear_before_cursor_line();
+        assert_eq!(
+            ring.snapshot(),
+            kept,
+            "clearing twice keeps the same prompt line"
+        );
+        // Later output after the prompt line, then another clear, keeps the new cursor line.
+        ring.push(b"echo:after\r\nPROMPT$\x1b[1C");
+        ring.clear_before_cursor_line();
+        assert_eq!(ring.snapshot(), b"PROMPT$\x1b[1C");
+        // A repaint with no text at all keeps its own tail, as before.
+        let mut blank = Ring::new(4096);
+        blank.push(b"\x1b[H\x1b[K\r\n\x1b[K\x1b[2;1H");
+        blank.clear_before_cursor_line();
+        assert_eq!(blank.snapshot(), b"\x1b[K\x1b[2;1H");
+        // A relative cursor move on the prompt line is still just the prompt line.
+        let mut relative = Ring::new(4096);
+        relative.push(b"old\r\n$ \x1b[2C\x1b[1A");
+        relative.clear_before_cursor_line();
+        assert_eq!(relative.snapshot(), b"$ \x1b[2C\x1b[1A");
+    }
+
+    #[test]
+    fn hs2_4pbgkf_absolute_moves_and_visible_text_ignore_escape_contents() {
+        assert!(moves_cursor_absolutely(b"\x1b[H"));
+        assert!(moves_cursor_absolutely(b"x\x1b[12;4f"));
+        assert!(!moves_cursor_absolutely(b"H\x1b[2A\x1b]0;H\x07"));
+        assert!(shows_text(b"\x1b[K$"));
+        assert!(shows_text("é".as_bytes()));
+        assert!(!shows_text(b"\x1b[K \t\r\n\x1b]0;title\x07\x1b[32m"));
     }
 
     /// HS2-HA0Z3A: clear then output, clear twice, and the stream offset across a clear.

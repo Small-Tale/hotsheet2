@@ -952,7 +952,11 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
 - **Shared clear (HS2-HA0Z3A).** `POST /terminals/{id}/clear` (broker op `clear_replay`) marks
   a replay boundary instead of writing to the PTY or appending clear-screen bytes to the ring.
   Under the ring lock it drops every retained byte before the cursor's line (the bytes after
-  the last newline at a parser-safe position; with no such newline the whole ring is that line),
+  the last newline at a parser-safe position; with no such newline the whole ring is that line).
+  When those bytes move the cursor to an absolute position (`CSI row;col H`), they are the tail
+  of a repaint rather than the cursor's line: Windows ConPTY repaints the whole screen after every
+  resize and ends with blank rows and a move back to the prompt. The clear then keeps from the
+  last line that shows text, so the prompt survives (HS2-4PBGKF). It
   gives the replay a new output-stream id so no viewer can `resume_from` across the clear, and
   publishes an in-band rewrite marker (an empty chunk) on the live fan-out. Each viewer pump
   resyncs on the marker and sends its existing replacement frame, so attached viewers in every

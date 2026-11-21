@@ -226,7 +226,7 @@ test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({
     const input = await fetch(`${server.url}/terminals/${terminal.id}/input`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'X-Hotsheet-Secret': server.secret },
-      body: JSON.stringify({ data: 'while-away\n' }),
+      body: JSON.stringify({ data: 'while-away\r' }),
     });
     expect(input.ok).toBe(true);
     await expect
@@ -262,6 +262,35 @@ test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({
 });
 
 /**
+ * Let this page's viewport settle the PTY at its size before a measured attach (HS2-4PBGKF). Windows
+ * ConPTY repaints its whole screen after every resize, addressing rows absolutely. A repaint that
+ * arrived while the test held the replay rewrote the rows the reader was looking at. Once the size is
+ * settled, the repaint is part of every replay and nothing arrives later. A Unix PTY prints nothing.
+ */
+async function settlePtySize(page: Page, server: Awaited<ReturnType<typeof realTicketServer>>, terminalId: string) {
+  await page.goto('/');
+  const surface = await mountViewport(
+    page,
+    `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminalId)}/attach?secret=${encodeURIComponent(server.secret)}`,
+  );
+  await expect(surface).toHaveAttribute('data-connection', 'connected');
+  const applied = async () => {
+    const grid = await surface.getAttribute('data-grid-size');
+    const sizes = (await page.evaluate(() => window.__replayFrames ?? []))
+      .filter((frame) => frame.text?.includes('"pty_size"'))
+      .map((frame) => JSON.parse(frame.text!) as { pty_size: { cols: number; rows: number } })
+      .map(({ pty_size: size }) => `${String(size.cols)}x${String(size.rows)}`);
+    return grid !== null && sizes.at(-1) === grid ? grid : undefined;
+  };
+  await expect.poll(applied).toBeDefined();
+  if (process.platform !== 'win32') return;
+  const [cols, rows] = (await applied())!.split('x');
+  await expect
+    .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminalId}`)).scrollback ?? '')
+    .toContain(`\u001b[8;${rows};${cols}t`);
+}
+
+/**
  * Paint the tail, read back into it, release the whole replay, and reach far older history.
  * `cpuThrottle` slows the page's CPU the way a slow CI host does (HS2-J6B4MT).
  */
@@ -278,6 +307,7 @@ async function paintTailThenWholeReplay(page: Page, cpuThrottle?: number) {
       .toContain('REPLAY-READY');
     await page.setViewportSize({ width: 390, height: 844 });
     await recordSockets(page);
+    await settlePtySize(page, server, terminal.id);
     await page.addInitScript(() => {
       // Hold everything after the tail (header + payload) until the test releases it.
       window.__holdFromMessage = 2;

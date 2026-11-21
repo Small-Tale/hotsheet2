@@ -10,15 +10,35 @@ import { installTerminalFixture, project } from './terminal-feedback-fixture';
 // attached xterm answers it. Each answer counted as a keystroke, so the idle viewer took the size
 // back, the resize made the program ask again, and so on. It prints each size it receives so a
 // failure shows the churn, and echoes each line after the replies the terminals sent before it.
-const SIZE_REPORTER = String.raw`import os,signal,sys,termios
-attrs = termios.tcgetattr(0)
-attrs[3] &= ~termios.ECHO
-termios.tcsetattr(0, termios.TCSANOW, attrs)
+const SIZE_REPORTER = String.raw`import os,sys
 def report(*_):
-    c,r = os.get_terminal_size(0)
+    c,r = os.get_terminal_size(1)
     sys.stdout.write(f'\r\nSIZE {c}x{r}\r\n\x1b[6n')
     sys.stdout.flush()
-signal.signal(signal.SIGWINCH, report)
+if os.name == 'nt':
+    # HS2-4PBGKF: Windows has no termios or SIGWINCH. Turn off the console's input echo and watch the
+    # console size from a local thread instead (no requests).
+    import ctypes,threading,time
+    kernel = ctypes.windll.kernel32
+    handle = kernel.GetStdHandle(-10)
+    mode = ctypes.c_uint()
+    kernel.GetConsoleMode(handle, ctypes.byref(mode))
+    kernel.SetConsoleMode(handle, mode.value & ~0x4)
+    def watch():
+        last = os.get_terminal_size(1)
+        while True:
+            time.sleep(0.05)
+            now = os.get_terminal_size(1)
+            if now != last:
+                last = now
+                report()
+    threading.Thread(target=watch, daemon=True).start()
+else:
+    import signal,termios
+    attrs = termios.tcgetattr(0)
+    attrs[3] &= ~termios.ECHO
+    termios.tcsetattr(0, termios.TCSANOW, attrs)
+    signal.signal(signal.SIGWINCH, report)
 report()
 while True:
     line = sys.stdin.readline()
@@ -147,10 +167,21 @@ async function openPhoneTerminal(page: Page): Promise<Locator> {
   return viewport;
 }
 
+/**
+ * Windows ConPTY answers a program's cursor-position query itself and never forwards it, so no
+ * viewer sees one there and none may answer (HS2-4PBGKF). A Unix PTY forwards it to every viewer.
+ */
+const QUERIES_REACH_VIEWERS = process.platform !== 'win32';
+
 /** How many cursor-position replies each viewer sent toward the PTY from `from` on. */
 function repliesSince(devices: { desktop: Viewer; phone: Viewer }, from: number) {
   const count = (viewer: Viewer) => viewer.replies.filter((at) => at >= from).length;
   return { desktop: count(devices.desktop), phone: count(devices.phone) };
+}
+
+/** The replies a forwarded query earns: none at all where the PTY host answers it (HS2-4PBGKF). */
+function answered(desktop: number, phone: number) {
+  return QUERIES_REACH_VIEWERS ? { desktop, phone } : { desktop: 0, phone: 0 };
 }
 
 /** The sizes this viewer received from `from` on, after `quietMs` more of waiting. */
@@ -182,7 +213,8 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     await expect(drawer).toHaveAttribute('data-driving', 'true');
     const desktopGrid = (await drawer.getAttribute('data-grid-size'))!;
     await expect(drawer).toHaveAttribute('data-pty-size', desktopGrid);
-    await expect.poll(() => desktop.replies.length).toBeGreaterThan(0);
+    if (QUERIES_REACH_VIEWERS) await expect.poll(() => desktop.replies.length).toBeGreaterThan(0);
+    else await expect(drawer.locator('.xterm-rows')).toContainText(`SIZE ${desktopGrid}`);
     await desktop.page.keyboard.type('desk\n');
     await expect(drawer.locator('.xterm-rows')).toContainText(/ECHO:\S*desk/);
 
@@ -208,11 +240,11 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     // even though the desktop drawer, the desktop grid tile, and the phone grid tile all saw the query.
     // Typing waits for that answer, as on the desktop: under load a reply that lands inside the typed
     // word split its echo (HS2-93R05G).
-    await expect.poll(() => repliesSince(devices, from)).toEqual({ desktop: 0, phone: 1 });
+    await expect.poll(() => repliesSince(devices, from)).toEqual(answered(0, 1));
     await phone.page.keyboard.type('phone\n');
     await expect(phoneTerminal.locator('.xterm-rows')).toContainText(/ECHO:\S*phone/);
     await expect(phoneTerminal).toHaveAttribute('data-driving', 'true');
-    expect(repliesSince(devices, from)).toEqual({ desktop: 0, phone: 1 });
+    expect(repliesSince(devices, from)).toEqual(answered(0, 1));
 
     // Both viewers sit idle across two heartbeats. Before the fix the size flipped about every 0.5 s.
     from = Date.now();
@@ -229,7 +261,7 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     await expect(drawer).toHaveAttribute('data-pty-size', desktopGrid);
     expect(await sizesAfter(desktop, from, 8_000)).toEqual([desktopGrid]);
     // The new driver answers the resize's query; the old one stopped.
-    expect(repliesSince(devices, from)).toEqual({ desktop: 1, phone: 0 });
+    expect(repliesSince(devices, from)).toEqual(answered(1, 0));
 
     // Typing on the phone takes it again, once.
     from = Date.now();
@@ -237,7 +269,7 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     await phone.page.keyboard.type('again\n');
     await expect(drawer).toHaveAttribute('data-pty-size', phoneGrid);
     expect(await sizesAfter(desktop, from, 8_000)).toEqual([phoneGrid]);
-    expect(repliesSince(devices, from)).toEqual({ desktop: 0, phone: 1 });
+    expect(repliesSince(devices, from)).toEqual(answered(0, 1));
 
     // The passive desktop reconnecting does not take the size from the phone.
     from = Date.now();
@@ -258,7 +290,7 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     expect(await sizesAfter(desktop, from, 3_000)).toEqual([desktopGrid]);
     // The lone desktop answers the query its takeover caused.
     await expect(drawer).toHaveAttribute('data-answers-queries', 'true');
-    expect(repliesSince(devices, from).desktop).toBe(1);
+    expect(repliesSince(devices, from).desktop).toBe(answered(1, 0).desktop);
     await desktop.page.screenshot({ path: testInfo.outputPath('hs2-1yx5vs-desktop-after-phone-left.png') });
   } finally {
     for (const viewer of viewers) await viewer.close();

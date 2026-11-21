@@ -12,6 +12,7 @@ import {
   TERMINAL_DASHBOARD_ROWS,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
+  TERMINAL_FONT_FAMILY,
   TERMINAL_GESTURE_CLAIM_WINDOW_MS,
   TERMINAL_INPUT_PROBE_TIMEOUT_MS,
   TERMINAL_PENDING_INPUT_LIMIT,
@@ -278,5 +279,14 @@ describe('gesture-opened sizing claims (HS2-1YX5VS)', () => {
     expect(terminalGestureClaimDue(1_000, 1_001 + TERMINAL_GESTURE_CLAIM_WINDOW_MS, true)).toBe(false);
     expect(terminalGestureClaimDue(1_000, 1_000, false)).toBe(false);
     expect(terminalGestureClaimDue(undefined, 1_000, true)).toBe(false);
+  });
+});
+
+describe('terminal font family (HS2-4PBGKF)', () => {
+  it('reaches Cascadia Mono before the generic monospace that is Consolas on Windows', () => {
+    const faces = TERMINAL_FONT_FAMILY.split(',').map((face) => face.trim());
+    expect(faces.at(-1)).toBe('monospace');
+    expect(faces.indexOf('"Cascadia Mono"')).toBe(faces.length - 2);
+    expect(faces.slice(0, 3)).toEqual(['ui-monospace', 'SFMono-Regular', 'Menlo']);
   });
 });

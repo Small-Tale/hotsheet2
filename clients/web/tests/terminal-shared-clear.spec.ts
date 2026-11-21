@@ -143,7 +143,12 @@ test('a shared clear reaches a second client, a reload, and an offline warm view
       await expect(surface.locator('.xterm-rows')).not.toContainText('OLD-OUTPUT');
       await expect(surface.locator('.xterm-rows')).toContainText('PROMPT$');
     }
-    expect(await scrollback(server, terminal.id)).toBe('PROMPT$ ');
+    // The replay starts at the prompt line and holds nothing before it. A Unix PTY keeps exactly
+    // `PROMPT$ `; Windows ConPTY's prompt line is the end of its resize repaint, with erases and a
+    // cursor move after it (HS2-4PBGKF).
+    const cleared = await scrollback(server, terminal.id);
+    expect(cleared).toMatch(process.platform === 'win32' ? /^PROMPT\$/ : /^PROMPT\$ $/);
+    expect(cleared).not.toContain('OLD-OUTPUT');
 
     // Clear then new output: both attached clients receive it.
     await clearing.locator('.xterm-helper-textarea').focus();

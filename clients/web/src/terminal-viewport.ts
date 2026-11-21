@@ -220,6 +220,13 @@ export const TERMINAL_DASHBOARD_COLS = 80;
 export const TERMINAL_DASHBOARD_ROWS = 24;
 export const TERMINAL_DASHBOARD_FONT_SIZE = 24;
 export const TERMINAL_DASHBOARD_LINE_HEIGHT = 1.085;
+/**
+ * The terminal font stack. The 80×24 grid's 5:3 natural geometry assumes a monospace face about
+ * 0.5 as wide as it is tall (SF Mono, Menlo, DejaVu Sans Mono). Windows' generic `monospace` is
+ * Consolas, about 0.47, so its 80×24 grid was 1.47:1 and left a band of every 5:3 tile empty.
+ * Cascadia Mono, the Windows Terminal default, has the expected proportions (HS2-4PBGKF).
+ */
+export const TERMINAL_FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, "Cascadia Mono", monospace';
 export const TERMINAL_PREVIEW_NATURAL_WIDTH = 1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT = 768;
 export const TERMINAL_PREVIEW_SCROLLBACK = 0;
