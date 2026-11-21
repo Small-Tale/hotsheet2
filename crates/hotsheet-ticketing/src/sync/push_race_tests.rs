@@ -300,3 +300,156 @@ fn hs2_r2bc3n_several_simultaneous_racers_all_publish_within_one_cycle() {
         }
     }
 }
+
+/// Another Git process in the store's own clone that moves the remote-tracking branch
+/// while the store's fetch is updating it, the way a headless autocommit's background
+/// `git push` updates the remote-tracking ref (HS2-ZJQYZH).
+///
+/// A `reference-transaction` hook runs in its `preparing` state after the fetch read the
+/// ref and before Git locks it, so moving the ref there makes the fetch's update fail
+/// `cannot lock ref '...': is at <a> but expected <b>`, as on the macOS runner in
+/// Platforms run 44880687249. `target` is a shell expression for where the ref goes;
+/// `$new` is the value the fetch wanted and `$cur` the ref's value now.
+///
+/// Unix-only like [`RacingPeer`]: the hook is a POSIX shell script with an executable bit.
+#[cfg(unix)]
+struct RacingRefWriter {
+    counter: PathBuf,
+}
+
+#[cfg(unix)]
+impl RacingRefWriter {
+    fn install(store: &Path, limit: u32, target: &str) -> Self {
+        let counter = store.parent().unwrap().join("ref-races");
+        let script = format!(
+            "#!/bin/sh\n\
+             [ \"$1\" = preparing ] || {{ cat >/dev/null; exit 0; }}\n\
+             [ -z \"$HS2_ZJQYZH_INNER\" ] || {{ cat >/dev/null; exit 0; }}\n\
+             line=$(grep ' refs/remotes/origin/' | grep -v ' refs/remotes/origin/HEAD$') || exit 0\n\
+             n=$(cat '{counter}' 2>/dev/null || echo 0)\n\
+             [ \"$n\" -lt {limit} ] || exit 0\n\
+             echo $((n + 1)) > '{counter}'\n\
+             rest=${{line#* }}\n\
+             new=${{rest%% *}}\n\
+             ref=${{rest#* }}\n\
+             cur=$(git rev-parse \"$ref\")\n\
+             HS2_ZJQYZH_INNER=1 git update-ref \"$ref\" \"{target}\"\n\
+             exit 0\n",
+            counter = counter.display(),
+        );
+        let hook = store.join(".git/hooks/reference-transaction");
+        std::fs::write(&hook, script).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        Self { counter }
+    }
+
+    fn races(&self) -> u32 {
+        std::fs::read_to_string(&self.counter)
+            .ok()
+            .and_then(|count| count.trim().parse().ok())
+            .unwrap_or(0)
+    }
+
+    fn remove(store: &Path) {
+        std::fs::remove_file(store.join(".git/hooks/reference-transaction")).unwrap();
+    }
+}
+
+/// A peer published, and while the store fetched it a local Git process moved the
+/// remote-tracking ref to the same commit first. The remote answered, so the cycle is
+/// not `Offline`: it retries the fetch at once and publishes, with no failure counted.
+#[cfg(unix)]
+#[test]
+fn hs2_zjqyzh_a_fetch_that_loses_its_tracking_ref_update_is_retried_not_offline() {
+    let (_dir, store, peer) = remote_with_two_clones();
+    commit_file(&peer, "peer.md", "peer\n");
+    ok(&peer, &["push", "--quiet"]);
+    commit_file(&store, "local.md", "local\n");
+    let writer = RacingRefWriter::install(&store, 1, "$new");
+
+    let report = sync_once_with(&store, quick(PUSH_RACE_RETRIES));
+
+    assert_eq!(writer.races(), 1, "the fetch raced the ref writer once");
+    assert_eq!(
+        report,
+        SyncReport::Synced {
+            pulled: true,
+            pushed: true
+        },
+        "{:?}",
+        health(&store).reason
+    );
+    let files = remote_files(&remote_of(&store));
+    for file in ["local.md", "peer.md"] {
+        assert!(files.iter().any(|name| name == file), "{file}: {files:?}");
+    }
+    let health = health(&store);
+    assert_eq!(health.state, SyncState::Synced);
+    assert_eq!(health.consecutive_failures, 0);
+    assert_eq!(health.unpublished_commits, 0);
+}
+
+/// Every fetch of the cycle loses its tracking-ref update: the cycle stops after its
+/// bounded retries and reports a race with the fetch reason, never `Offline`, and counts
+/// no failure. Once the writer stops, the next cycle publishes.
+#[cfg(unix)]
+#[test]
+fn hs2_zjqyzh_repeated_fetch_ref_races_report_raced_then_recover() {
+    let (_dir, store, peer) = remote_with_two_clones();
+    commit_file(&peer, "peer.md", "peer\n");
+    ok(&peer, &["push", "--quiet"]);
+    commit_file(&store, "local.md", "local\n");
+    let local = git_stdout(&store, &["rev-parse", "HEAD"]).unwrap();
+    let seed = git_stdout(&store, &["rev-parse", "@{u}"]).unwrap();
+    let seed = seed.trim();
+    // Alternate the ref between two commits the fetch never wants, so every fetch races.
+    let target = format!(
+        "$(if [ \"$cur\" = {seed} ]; then echo {local}; else echo {seed}; fi)",
+        local = local.trim()
+    );
+    let writer = RacingRefWriter::install(&store, 1_000, &target);
+
+    assert_eq!(sync_once_with(&store, quick(2)), SyncReport::PushRaced);
+    assert_eq!(writer.races(), 3, "the first fetch and two retries");
+    let raced = health(&store);
+    assert_eq!(raced.state, SyncState::PushRaced);
+    assert_eq!(raced.reason.as_deref(), Some(FETCH_RACE_REASON));
+    assert_eq!(raced.consecutive_failures, 0);
+    assert_eq!(raced.next_action, None, "nothing for a person to do");
+
+    RacingRefWriter::remove(&store);
+    assert_eq!(
+        sync_once_with(&store, quick(1)),
+        SyncReport::Synced {
+            pulled: true,
+            pushed: true
+        }
+    );
+    let files = remote_files(&remote_of(&store));
+    for file in ["local.md", "peer.md"] {
+        assert!(files.iter().any(|name| name == file), "{file}: {files:?}");
+    }
+    assert_eq!(health(&store).consecutive_failures, 0);
+}
+
+/// Only a lost compare-and-swap on a local ref is a fetch race: an existing lock file is
+/// `Blocked`'s, and transport errors and the remote's own messages stay outages.
+#[test]
+fn hs2_zjqyzh_only_a_local_ref_compare_and_swap_failure_is_a_fetch_race() {
+    assert!(fetch_ref_raced(
+        "error: cannot lock ref 'refs/remotes/origin/main': is at 18d6b88 but expected d2f80f7\n\
+         From /tmp/remote\n ! d2f80f7..18d6b88  main -> origin/main  (unable to update local ref)\n"
+    ));
+    assert!(!fetch_ref_raced(
+        "error: cannot lock ref 'refs/remotes/origin/main': Unable to create \
+         '/tmp/s/.git/refs/remotes/origin/main.lock': File exists.\n"
+    ));
+    assert!(!fetch_ref_raced(
+        "remote: error: cannot lock ref 'refs/heads/main': is at a but expected b\n"
+    ));
+    assert!(!fetch_ref_raced(
+        "fatal: '/tmp/remote.git' does not appear to be a git repository\n"
+    ));
+    assert!(!fetch_ref_raced(""));
+}

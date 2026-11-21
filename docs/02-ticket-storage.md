@@ -1120,6 +1120,14 @@ engine** so the user effectively never runs git by hand:
   the remote) ends the cycle `offline` with the usual backoff. This keeps a peer's claim
   release from reaching the shared remote a backoff late, which held paired machines'
   handoffs back.
+- **A fetch that loses a local ref race is retried too (HS2-ZJQYZH).** Another Git
+  process in the same clone can move the remote-tracking branch between a fetch reading
+  it and updating it; a headless write's background `git push` does this when it
+  publishes. Git then fails the fetch with
+  `cannot lock ref '<ref>': is at <a> but expected <b>`. The remote answered, so this is
+  not an outage: the cycle retries the fetch within the same bounded loop as a lost push
+  race and, if every attempt loses, ends `push_raced` with a fetch-race reason and no
+  failure counted. A lock file that is still present stays `blocked` (§2.12.2).
 - **Registered stores and headless writes (HS2-D9ZGAE).** The machine host's loop
   syncs every hosted store and also every Git store linked to a registered checkout,
   whether or not a client has opened that project since the host started. It reads
@@ -1238,7 +1246,7 @@ Each cycle ends in one state:
 | `pending`                   | A remote exists and no outcome applies yet                                                  | next pass                            |
 | `up_to_date` / `synced`     | The remote has every local commit                                                           | base cadence                         |
 | `offline`                   | Fetch or push could not reach the remote, or authentication failed                          | exponential backoff                  |
-| `push_raced`                | Another pusher moved the remote during every push attempt of the cycle (HS2-R2BC3N)         | 2 s, three times, then base cadence  |
+| `push_raced`                | Every push (HS2-R2BC3N) or fetch (HS2-ZJQYZH) of the cycle lost a race; the remote answered | 2 s, three times, then base cadence  |
 | `rejected`                  | The remote refused the push (hook, branch protection, or a file over the host's size limit) | exponential backoff; needs a repair  |
 | `conflict`                  | A ticket body changed on both sides and the merge driver could not resolve it               | not replayed for the same divergence |
 | `blocked`                   | A Git lock file in the store stopped a local step (HS2-6ACT5Y); nothing was merged          | exponential backoff                  |

@@ -35,6 +35,11 @@
 //! machines share, not an outage (HS2-R2BC3N): the cycle fetches, integrates, and pushes
 //! again at once, a bounded number of times with a short jittered pause, and reports
 //! [`SyncReport::PushRaced`] only when every attempt lost.
+//!
+//! A fetch that loses the compare-and-swap on its own remote-tracking ref to another Git
+//! process in the same clone (a headless autocommit's background push updates that ref
+//! too) is the same kind of local race, never an outage (HS2-ZJQYZH): the remote answered,
+//! so the cycle retries it within the same bounded loop.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -64,8 +69,10 @@ pub enum SyncReport {
     /// next cycle retries after a backoff.
     Offline,
     /// Another pusher moved the remote during every push attempt of the cycle
-    /// (HS2-R2BC3N). The remote was reachable and nothing is wrong; the local commits stay
-    /// unpublished until the next pass, which runs promptly instead of backing off.
+    /// (HS2-R2BC3N), or another Git process in the clone moved the remote-tracking ref
+    /// during every fetch (HS2-ZJQYZH). The remote was reachable and nothing is wrong; the
+    /// local commits stay unpublished until the next pass, which runs promptly instead of
+    /// backing off.
     PushRaced,
     /// The remote refused the push (HS2-ADHFKZ): a hook, branch protection, or a file over
     /// the host's size limit. Retrying the same history cannot succeed.
@@ -317,10 +324,13 @@ fn cycle_steps(
                 };
                 return (report, detail);
             }
-            Exchange::Raced { pulled: now } => {
+            Exchange::Raced {
+                pulled: now,
+                reason,
+            } => {
                 pulled |= now;
                 if attempt >= limits.push_race_retries {
-                    return failed(SyncReport::PushRaced, PUSH_RACE_REASON);
+                    return failed(SyncReport::PushRaced, reason);
                 }
                 attempt += 1;
                 std::thread::sleep(push_race_pause(
@@ -337,8 +347,10 @@ fn cycle_steps(
 enum Exchange {
     /// The cycle's outcome, whatever it is, except a lost push race.
     Finished(SyncReport, CycleDetail),
-    /// Another pusher moved the remote between this attempt's fetch and its push.
-    Raced { pulled: bool },
+    /// Another pusher moved the remote between this attempt's fetch and its push, or
+    /// another local Git process moved the remote-tracking ref during the fetch
+    /// (HS2-ZJQYZH). `reason` is recorded if every attempt races.
+    Raced { pulled: bool, reason: &'static str },
 }
 
 /// Fetch, integrate incoming commits, and push local ones once.
@@ -347,6 +359,13 @@ fn exchange(store_path: &Path, limits: SyncLimits) -> Exchange {
     // Fetch; an unreachable remote is not an error — stay offline-tolerant.
     let fetch = git_run(store_path, &["fetch", "--quiet"]);
     if !fetch.ok {
+        // HS2-ZJQYZH: the remote answered; a local Git process won the ref update.
+        if fetch_ref_raced(&fetch.stderr) {
+            return Exchange::Raced {
+                pulled: false,
+                reason: FETCH_RACE_REASON,
+            };
+        }
         if let Some(blocked) = lock_failure(store_path, "fetch", &fetch.stderr) {
             return finished(blocked);
         }
@@ -403,7 +422,10 @@ fn exchange(store_path: &Path, limits: SyncLimits) -> Exchange {
             } else {
                 let (report, detail) = classify_push_failure(store_path, &push.stderr, limits);
                 if report == SyncReport::PushRaced {
-                    return Exchange::Raced { pulled };
+                    return Exchange::Raced {
+                        pulled,
+                        reason: PUSH_RACE_REASON,
+                    };
                 }
                 // A refusal or an outage is reported as such; the next cycle re-fetches.
                 return finished((report, detail));
@@ -569,6 +591,25 @@ pub fn push_was_refused(stderr: &str) -> bool {
 /// The recorded reason of a [`SyncReport::PushRaced`] cycle (HS2-457FGS, HS2-R2BC3N).
 pub const PUSH_RACE_REASON: &str = "another pusher moved the remote during every push \
      attempt of this sync; the next sync integrates it and retries promptly";
+
+/// The recorded reason of a [`SyncReport::PushRaced`] cycle whose every fetch lost its
+/// remote-tracking ref update to another local Git process (HS2-ZJQYZH).
+pub const FETCH_RACE_REASON: &str = "another Git process in this checkout moved the \
+     remote-tracking branch during every fetch of this sync; the next sync retries promptly";
+
+/// Whether a failed fetch lost the compare-and-swap on a local ref it was updating: Git
+/// read the ref, another process in the clone moved it, and the update's expected old
+/// value no longer matched (`cannot lock ref '<ref>': is at <a> but expected <b>`). The
+/// remote answered, so this is a local race, never an outage (HS2-ZJQYZH). A lock file
+/// that exists is not this: [`lock_failure`] reports it as [`SyncReport::Blocked`].
+fn fetch_ref_raced(stderr: &str) -> bool {
+    stderr.lines().any(|line| {
+        let lower = line.trim().to_ascii_lowercase();
+        !lower.starts_with("remote:")
+            && lower.contains("cannot lock ref")
+            && lower.contains("but expected")
+    }) && crate::sync_locks::locks_in_output(stderr).is_empty()
+}
 
 /// Another pusher moved the remote branch first; a re-fetch and retry fixes it.
 fn push_raced(lower: &str) -> bool {
