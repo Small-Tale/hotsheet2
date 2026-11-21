@@ -49,6 +49,7 @@ function card(
     status: 'not_started',
     priority: 'default',
     category: 'feature',
+    site_id: project.target_id,
     project_label: project.label,
     location: project.location,
     machine_label: project.machine_label,

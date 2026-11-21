@@ -2,7 +2,7 @@
 //! running and proposed plans, estimates, and repeated, out-of-order, interleaved and
 //! empty-then-refill inputs. Synthetic ids only.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::json;
 
@@ -164,6 +164,7 @@ struct Fixture {
     targets: Vec<TimelineTarget>,
     steps: Vec<TimelineStep>,
     runs: Vec<Run>,
+    step_runs: BTreeMap<String, BTreeSet<String>>,
     sessions: Vec<OrchestratedSession>,
     hints: BTreeMap<String, PlacementHint>,
     permissions: BTreeMap<String, PermissionWait>,
@@ -211,6 +212,7 @@ impl Fixture {
             targets: &self.targets,
             steps: &self.steps,
             runs: &self.runs,
+            step_runs: &self.step_runs,
             sessions: &self.sessions,
             hints: &self.hints,
             permissions: &self.permissions,
@@ -844,4 +846,117 @@ fn hs2_h5h9qp_a_provisional_item_carries_its_ledger_record_with_gate_slugs() {
             .get("provisional")
             .is_none()
     );
+}
+
+/// HS2-6GE7WM: a step names the project's home site, and the scheduler placed its run on
+/// another site. The item reports the run's site (its id, label, location and machine),
+/// not the one the step names, and sorts with that site; before a run it keeps the named
+/// site.
+#[test]
+fn hs2_6ge7wm_an_item_reports_the_site_its_run_was_placed_on() {
+    // Steps 1 and 3 both name "web" (local); step 3's run went to the "api" site on the
+    // build host. "api" is declared first.
+    let mut fixture = Fixture::new(vec![
+        step(1, L::InProgress, &[]),
+        step(3, L::InProgress, &[]),
+    ]);
+    let mut placed = run(3, 3, RunState::Requested, 10, None);
+    placed.target.target_id = "api".into();
+    placed.target.connection_id = "api-source".into();
+    fixture.runs = vec![placed.clone()];
+    let item = |view: &Timeline, step: &str| -> TimelineItem {
+        view.waves
+            .iter()
+            .flat_map(|wave| wave.items.iter())
+            .find(|item| item.step_id == step)
+            .cloned()
+            .unwrap()
+    };
+    let working_now = |view: &Timeline| -> Vec<(String, String)> {
+        view.waves
+            .iter()
+            .find(|wave| wave.kind == WaveKind::WorkingNow)
+            .unwrap()
+            .items
+            .iter()
+            .map(|item| (item.step_id.clone(), item.site_id.clone()))
+            .collect()
+    };
+    // Without knowing the run was placed for the step, the step's own site is shown and
+    // no run is attached: the defect the trial saw.
+    let unknown = fixture.view();
+    let before = item(&unknown, "step-3");
+    assert!(before.run.is_none());
+    assert_eq!(before.location, TargetLocation::Local);
+    assert_eq!(before.project_label, "Web");
+
+    fixture
+        .step_runs
+        .insert("step-3".into(), BTreeSet::from([placed.run_id.clone()]));
+    let view = fixture.view();
+    let working = item(&view, "step-3");
+    assert_eq!(working.run.as_ref().unwrap().run_id, placed.run_id);
+    assert_eq!(working.site_id, "api");
+    assert_eq!(working.location, TargetLocation::Remote);
+    assert_eq!(working.project_label, "API");
+    assert_eq!(working.machine_label.as_deref(), Some("Build host"));
+    // The step itself still names its home site.
+    assert_eq!(working.target.target_id, "web");
+    // A step without a run keeps the site it names.
+    let waiting = item(&view, "step-1");
+    assert!(waiting.run.is_none());
+    assert_eq!(
+        (
+            waiting.location,
+            waiting.site_id.as_str(),
+            waiting.project_label.as_str()
+        ),
+        (TargetLocation::Local, "web", "Web")
+    );
+    // Cards gather by the site the work runs on, in declaration order.
+    assert_eq!(
+        working_now(&view),
+        [
+            ("step-3".into(), "api".into()),
+            ("step-1".into(), "web".into())
+        ]
+    );
+    assert_eq!(
+        working_now(&unknown),
+        [
+            ("step-1".into(), "web".into()),
+            ("step-3".into(), "web".into())
+        ]
+    );
+
+    // The same again changes nothing; a later placement back on the home wins once it is
+    // the unfinished one, and the cancelled remote run no longer decides the site.
+    assert_eq!(fixture.view(), view);
+    fixture.runs[0].state = RunState::Cancelled;
+    let mut home = run(4, 3, RunState::Requested, 30, None);
+    home.operation_id = "op-home".into();
+    fixture
+        .step_runs
+        .get_mut("step-3")
+        .unwrap()
+        .insert(home.run_id.clone());
+    fixture.runs.push(home.clone());
+    let moved = item(&fixture.view(), "step-3");
+    assert_eq!(moved.run.as_ref().unwrap().run_id, home.run_id);
+    assert_eq!(moved.location, TargetLocation::Local);
+    assert_eq!(moved.machine_label, None);
+
+    // A placed run on a site no longer declared shows its id and no location.
+    let mut gone = Fixture::new(vec![step(1, L::InProgress, &[])]);
+    let mut orphan = run(5, 1, RunState::Requested, 10, None);
+    orphan.target.target_id = "retired".into();
+    gone.step_runs
+        .insert("step-1".into(), BTreeSet::from([orphan.run_id.clone()]));
+    gone.runs = vec![orphan];
+    let lost = item(&gone.view(), "step-1");
+    assert_eq!(
+        (lost.site_id.as_str(), lost.project_label.as_str()),
+        ("retired", "retired")
+    );
+    assert_eq!(lost.location, TargetLocation::Unbound);
 }

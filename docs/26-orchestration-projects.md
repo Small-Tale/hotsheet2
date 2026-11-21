@@ -5335,10 +5335,19 @@ work should end (its start plus one wave length) or now, and each later wave one
 length after the one before. A proposed plan's First starts on kick-off.
 
 **Items.** Each item names its step, its goal (orchestration) ticket with slug and title,
-its target project and ticket, the target's location (`local`, `remote` with the paired
-server's label, or `unbound`), its tool (the live session's, else the scheduler's last
+its target project and ticket, where the work runs (`site_id`, `project_label`, and the
+location: `local`, `remote` with the paired server's label, or `unbound`), its tool (the live session's, else the scheduler's last
 decision's, else the plan step's preferred tool of §26.25), its run summary, what it waits
 on (`waits_on`, each prerequisite ticket with the step that works it), and its **state**:
+
+**Where the work runs (HS2-6GE7WM).** A step names one site of its project, but the
+scheduler may place its run on any active site of that project (§26.17). An item with a
+run reports the run's site: `site_id` is the run's target, and `project_label`,
+`location` and `machine_label` describe that site. The step's runs are its run on the
+ticket it names and every run the scheduler dispatched for it (`sched-run-<step>` and its
+later generations), the unfinished one first. Before a run exists the item reports the
+site the step names. Items sort, and the view's cards gather, by that site in declaration
+order, so during a two-machine run each machine's work is grouped under its own site.
 
 | State                    | When                                                                                    |
 | ------------------------ | --------------------------------------------------------------------------------------- |
@@ -5406,8 +5415,8 @@ A read on the server also starts the target followers of §26.9.
 - **Board.** The production ticket board (`TicketBoard`, Kerf `ColumnTrack`) with the
   waves reversed: Later, Then, Next, Working Now, Done; before kick-off Fourth … First.
   It opens scrolled to its right end with Working Now in view; on a phone (paged) it
-  opens on Working Now. In each column the cards are grouped by project, and a project
-  group collapses in the view's own scope. Kerf has no start-at-end option, so the app
+  opens on Working Now. In each column the cards are grouped by the site the work runs
+  on (HS2-6GE7WM), and a group collapses in the view's own scope. Kerf has no start-at-end option, so the app
   wiring sets the scroll position once per board layout and when the board's width
   changes (KF-QHJKA4).
 - **Cards** are the shared `TicketRow` with its new **orchestration line**: the state in

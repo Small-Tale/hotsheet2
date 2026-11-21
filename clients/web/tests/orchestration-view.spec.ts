@@ -699,6 +699,82 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
   }
 });
 
+test('HS2-6GE7WM a card shows the site its run was placed on and gathers under that site', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await declareSelf(server);
+    await asOrchestrationProject(server);
+    const plan = await planAndDispatch(server);
+    await plan.dispatch();
+    // The real timeline names the site each item runs on: here the one site, for both steps.
+    const real = (await send(server, 'GET', `/checkouts/${server.checkoutId}/orchestration/timeline`)) as {
+      waves: Array<{ items: Array<{ site_id?: string }> }>;
+    };
+    const sites = real.waves.flatMap((wave) => wave.items.map((item) => item.site_id));
+    expect(sites).toEqual([TARGET, TARGET]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openProject(page, server, 'Launch');
+    // The scheduler placed the first step's run on another site of the project, on a paired Mac, as the
+    // two-site server test (`e2e_sites.rs`) shows the real timeline reporting it.
+    const otherSite = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
+    await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
+      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
+        incoming = new URL(route.request().url());
+      try {
+        const response = await proxyFetch(route, {
+          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+          timeout: 60_000,
+        });
+        const body = (await response.json()) as {
+          waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
+        };
+        for (const wave of body.waves)
+          for (const item of wave.items)
+            if (item.target.native_id === plan.first.id)
+              Object.assign(item, {
+                site_id: otherSite,
+                project_label: 'Self on the second Mac',
+                location: 'remote',
+                machine_label: 'Second Mac',
+              });
+        await route.fulfill({ response, json: body });
+      } catch {
+        await route.abort().catch(() => undefined);
+      }
+    });
+    await page.locator('[data-segment-value="orchestration"]').first().click();
+    const view = page.locator('[data-orchestration-view="true"]');
+    const placed = view.locator(`[data-component="ticket-group"][data-ticket-group="${otherSite}"]`);
+    await expect(placed).toHaveAttribute('aria-label', 'Self on the second Mac group', { timeout: 30_000 });
+    const first = placed.locator(`[data-ticket-slug="${plan.first.slug}"]`);
+    await expect(first.locator('[data-orchestration-part="placement"]')).toHaveText('Second Mac');
+    const home = view.locator(`[data-component="ticket-group"][data-ticket-group="${TARGET}"]`);
+    await expect(home).toHaveAttribute('aria-label', 'Self group');
+    const second = home.locator(`[data-ticket-slug="${plan.second.slug}"]`);
+    await expect(second).toBeVisible();
+    await expect(home.locator(`[data-ticket-slug="${plan.first.slug}"]`)).toHaveCount(0);
+    await capture(page, 'sites-1440', 'hs2-6ge7wm');
+    // The inspector names the run's site too.
+    await first.click();
+    await expect(page.locator('[data-orchestration-inspector]')).toContainText('Self on the second Mac (remote)');
+    await capture(page, 'sites-inspector-1440', 'hs2-6ge7wm');
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expect(view).toHaveAttribute('data-layout', width === 390 ? 'paged' : 'grid');
+      await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.85);
+      await capture(page, `sites-${width}`, 'hs2-6ge7wm');
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect.poll(() => visibleShare(page, 'Working Now Column')).toBeGreaterThan(0.95);
+    await expect(first.locator('[data-orchestration-part="placement"]')).toHaveText('Second Mac');
+    await capture(page, 'sites-1440-after-narrow', 'hs2-6ge7wm');
+  } finally {
+    await server.stop(page);
+  }
+});
+
 test('HS2-AMCSKS an orchestration project shows its Orchestration entries on the first paint', async ({
   browser,
   baseURL,

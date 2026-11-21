@@ -513,6 +513,47 @@ async fn hs2_rcr4a6_one_project_on_two_servers_end_to_end() {
     let w = placed_step(&fleet, step_w, TARGET_B, "os:windows").await;
     let l = placed_step(&fleet, step_l, TARGET_A, "os:linux").await;
     let x = placed_step(&fleet, step_x, TARGET_A, "tool:fake-codex").await;
+    // HS2-6GE7WM: the timeline, which the Orchestration view's cards read, shows each
+    // step where its run was placed: the Windows step on the peer, the others at home,
+    // although all three steps name the home site.
+    let timeline = fleet.ok("GET", "/timeline", Value::Null).await;
+    let item = |step: &str| {
+        timeline["waves"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|wave| wave["items"].as_array().unwrap())
+            .find(|item| item["step_id"] == step)
+            .cloned()
+            .unwrap_or_else(|| panic!("no item for {step}: {timeline}"))
+    };
+    let on_peer = item(step_w);
+    assert_eq!(on_peer["target"]["target_id"], TARGET_A, "{on_peer}");
+    assert_eq!(
+        on_peer["run"]["run_id"],
+        w.run_id.as_deref().unwrap(),
+        "{on_peer}"
+    );
+    assert_eq!(on_peer["site_id"], TARGET_B, "{on_peer}");
+    assert_eq!(on_peer["location"], "remote", "{on_peer}");
+    assert_eq!(on_peer["machine_label"], "Synthetic peer", "{on_peer}");
+    assert_eq!(
+        on_peer["project_label"],
+        format!("Target {TARGET_B}").as_str(),
+        "{on_peer}"
+    );
+    for (step, placed) in [(step_l, &l), (step_x, &x)] {
+        let at_home = item(step);
+        assert_eq!(at_home["run"]["run_id"], placed.run_id.as_deref().unwrap());
+        assert_eq!(at_home["site_id"], TARGET_A, "{at_home}");
+        assert_eq!(at_home["location"], "local", "{at_home}");
+        assert!(at_home.get("machine_label").is_none(), "{at_home}");
+        assert_eq!(
+            at_home["project_label"],
+            format!("Target {TARGET_A}").as_str(),
+            "{at_home}"
+        );
+    }
     pool.register(
         Role::Dispatcher,
         &dispatcher.worker,

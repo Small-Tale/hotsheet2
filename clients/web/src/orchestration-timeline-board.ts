@@ -243,7 +243,8 @@ export function timelineCard(
     updatedLabel: cardTime(item, timeline, clock),
     selected: item.step_id === selectedStep,
     draggable: false,
-    group: item.target.target_id,
+    // HS2-6GE7WM: cards gather by the site the work runs on, which the group name describes.
+    group: item.site_id ?? item.target.target_id,
     groupName: item.project_label,
     orchestration,
   };

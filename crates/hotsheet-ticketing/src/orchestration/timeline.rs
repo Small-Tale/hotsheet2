@@ -245,6 +245,9 @@ pub struct TimelineInput<'a> {
     pub targets: &'a [TimelineTarget],
     pub steps: &'a [TimelineStep],
     pub runs: &'a [Run],
+    /// HS2-6GE7WM: the runs the scheduler dispatched for each step, by step id. Such a
+    /// run may be on another site of the step's project than the one the step names.
+    pub step_runs: &'a BTreeMap<String, BTreeSet<String>>,
     pub sessions: &'a [OrchestratedSession],
     pub hints: &'a BTreeMap<String, PlacementHint>,
     pub permissions: &'a BTreeMap<String, PermissionWait>,
@@ -302,6 +305,11 @@ pub struct TimelineItem {
     pub target: RunTarget,
     #[serde(flatten)]
     pub ticket: TicketLabel,
+    /// HS2-6GE7WM: the declared target (site) the work runs on: its run's site, which
+    /// the scheduler may have chosen among the project's sites, or before a run the one
+    /// the step names. `project_label`, `location` and `machine_label` describe it.
+    #[serde(default)]
+    pub site_id: String,
     pub project_label: String,
     pub location: TargetLocation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -404,10 +412,16 @@ fn measured_minutes(runs: &[Run]) -> Option<u64> {
     Some((leads[leads.len() / 2] / 60_000).max(1))
 }
 
-/// The most recent run on a target ticket: an unfinished one first.
-fn run_of<'a>(runs: &'a [Run], target: &RunTarget) -> Option<&'a Run> {
-    runs.iter()
-        .filter(|run| run.target == *target)
+/// The most recent run of a step: one on its target ticket, or one the scheduler
+/// dispatched for it on any site (HS2-6GE7WM). An unfinished one first.
+fn run_of<'a>(input: &TimelineInput<'a>, step_id: &str, target: &RunTarget) -> Option<&'a Run> {
+    let placed = input.step_runs.get(step_id);
+    input
+        .runs
+        .iter()
+        .filter(|run| {
+            run.target == *target || placed.is_some_and(|placed| placed.contains(&run.run_id))
+        })
         .max_by_key(|run| {
             (
                 !run.state.is_terminal(),
@@ -524,11 +538,14 @@ fn phase(input: &TimelineInput<'_>) -> TimelinePhase {
         TimelinePhase::NoPlan
     } else if input.policy.automatic {
         TimelinePhase::Running
-    } else if input
-        .steps
-        .iter()
-        .any(|step| run_of(input.runs, &step.readiness.step.target).is_some())
-    {
+    } else if input.steps.iter().any(|step| {
+        run_of(
+            input,
+            &step.readiness.step.step_id,
+            &step.readiness.step.target,
+        )
+        .is_some()
+    }) {
         TimelinePhase::Paused
     } else {
         TimelinePhase::Proposed
@@ -570,11 +587,14 @@ fn item(
     });
     let decision = input.decisions.get(&goal_key);
     let state = state_of(step, permission, decision);
+    let run = run_of(input, &plan.step_id, &plan.target);
+    // HS2-6GE7WM: where the work runs is the site of its run, which the scheduler may
+    // have placed on another site of the project; before a run, the site the step names.
+    let site = run.map_or(&plan.target.target_id, |run| &run.target.target_id);
     let target = input
         .targets
         .iter()
-        .find(|target| target.target_id == plan.target.target_id);
-    let run = run_of(input.runs, &plan.target);
+        .find(|target| target.target_id == *site);
     let session = run.and_then(|run| {
         input
             .sessions
@@ -625,10 +645,8 @@ fn item(
             .get(&ticket_key(&plan.target))
             .cloned()
             .unwrap_or_default(),
-        project_label: target.map_or_else(
-            || plan.target.target_id.clone(),
-            |target| target.label.clone(),
-        ),
+        site_id: site.clone(),
+        project_label: target.map_or_else(|| site.clone(), |target| target.label.clone()),
         location: target.map_or(TargetLocation::Unbound, |target| target.location),
         machine_label: target.and_then(|target| target.machine_label.clone()),
         tool: session
@@ -760,7 +778,8 @@ pub fn timeline(input: &TimelineInput<'_>) -> Timeline {
     }
     let sort = |items: &mut Vec<TimelineItem>| {
         items.sort_by(|a, b| {
-            (order(&a.target.target_id), &a.step_id).cmp(&(order(&b.target.target_id), &b.step_id))
+            // HS2-6GE7WM: by the site the work runs on, so each site's cards gather.
+            (order(&a.site_id), &a.step_id).cmp(&(order(&b.site_id), &b.step_id))
         });
     };
     let measured = measured_minutes(input.runs);

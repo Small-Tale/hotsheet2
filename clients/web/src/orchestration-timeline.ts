@@ -80,6 +80,12 @@ export interface TimelineItem {
   status?: string;
   priority?: string;
   category?: string;
+  /**
+   * HS2-6GE7WM: the declared target (site) the work runs on: its run's site, which the scheduler may
+   * choose among the project's sites, or before a run the site the step names. `project_label`,
+   * `location` and `machine_label` describe it. Absent from a server older than this field.
+   */
+  site_id?: string;
   project_label: string;
   location: TargetLocation;
   machine_label?: string;

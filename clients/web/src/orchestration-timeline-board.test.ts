@@ -80,6 +80,24 @@ describe('orchestration timeline on the ticket board (HS2-J89JC7)', () => {
     expect(stepOfCard(undefined)).toBeUndefined();
   });
 
+  it('gathers a card under the site its run was placed on, not the site its step names (HS2-6GE7WM)', () => {
+    const timeline = demoTimeline('running');
+    // The step names the local Web project; the scheduler placed its run on the remote API site.
+    const placed: TimelineItem = {
+      ...item('step-4'),
+      site_id: 'api',
+      project_label: 'API',
+      location: 'remote',
+      machine_label: 'Build host',
+    };
+    const card = timelineCard(placed, timeline, undefined, demoClock);
+    expect([card.group, card.groupName, card.remoteClaim]).toEqual(['api', 'API', true]);
+    expect(machineLabel(placed)).toBe('Build host');
+    // A server older than the field groups by the step's own target.
+    const older = timelineCard({ ...item('step-4'), site_id: undefined }, timeline, undefined, demoClock);
+    expect([older.group, older.groupName]).toEqual(['web', 'Web']);
+  });
+
   it('states every item state in words with its tone, and lets the status badge speak for running and done', () => {
     expect(stateWords(item('step-3'), false)).toBeUndefined();
     expect(stateWords(item('step-1'), false)).toBeUndefined();

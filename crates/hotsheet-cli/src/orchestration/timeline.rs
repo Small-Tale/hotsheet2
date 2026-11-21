@@ -8,7 +8,7 @@
 //! it waits on the run event journal, the decision log and the scheduler's wake
 //! marker, never on a timer, and answers as soon as what it shows changed.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use hotsheet_model::{NoteKind, Ticket};
@@ -321,13 +321,29 @@ impl OrchestrationRuntime {
         let policy = self.policy(owner_id)?;
         let body = policy.policy.as_ref();
         let orchestrating = self.orchestrating(owner_id)?;
+        let runs = self.run_list(owner_id, false)?;
+        // HS2-6GE7WM: the runs the scheduler dispatched for each step, whichever site of
+        // the step's project it placed them on.
+        let step_runs: BTreeMap<String, BTreeSet<String>> = steps
+            .iter()
+            .map(|step| {
+                let step_id = &step.readiness.step.step_id;
+                let placed = runs
+                    .iter()
+                    .filter(|run| super::session_executor::scheduled_run_of(run, step_id))
+                    .map(|run| run.run_id.clone())
+                    .collect();
+                (step_id.clone(), placed)
+            })
+            .collect();
         let input = TimelineInput {
             owner_checkout_id: owner_id,
             now_ms,
             declared,
             targets: &targets,
             steps: &steps,
-            runs: &self.run_list(owner_id, false)?,
+            runs: &runs,
+            step_runs: &step_runs,
             sessions: &SessionRegistry::new(&self.home).list(owner_id, false)?,
             hints: &hints(&records),
             permissions: &self.permission_waits(owner_id, &records, now_ms)?,
