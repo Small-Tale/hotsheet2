@@ -8,11 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use super::tests::{commit_file, ok, remote_with_two_clones};
+use super::tests::remote_with_two_clones;
 use super::*;
+// Only the Unix hook-driven tests commit files, run Git and read sync health
+// (HS2-8BSDBA, HS2-QNZ60H): a Windows test build denies unused imports.
 #[cfg(unix)]
-use crate::sync_health::SyncState;
-use crate::sync_health::health;
+use super::tests::{commit_file, ok};
+#[cfg(unix)]
+use crate::sync_health::{SyncState, health};
 
 /// Fast raced retries and a settle window far above the hook's release delay, so the
 /// transient-lock tests do not depend on scheduling under load.
