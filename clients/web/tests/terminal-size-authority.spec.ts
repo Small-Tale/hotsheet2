@@ -67,6 +67,8 @@ type Viewer = {
   replies: number[];
   /** The page-side ends of this page's attach sockets, newest last. */
   attaches: WebSocketRoute[];
+  /** Everything this page sent toward the PTY as input, in order (HS2-PSV7BG). */
+  input: string[];
   close: () => Promise<void>;
 };
 
@@ -89,6 +91,7 @@ async function openViewer(
     sizes: [],
     replies: [],
     attaches: [],
+    input: [],
     close: async () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
       await context.close();
@@ -117,6 +120,7 @@ async function openViewer(
     route.onMessage((message) => {
       const text = typeof message === 'string' ? message : message.toString('latin1');
       for (let reply = cursorPositionReplies(text); reply > 0; reply -= 1) viewer.replies.push(Date.now());
+      if (!text.startsWith('{')) viewer.input.push(text);
       upstream.send(message);
     });
     upstream.onMessage((message) => {
@@ -241,7 +245,19 @@ test('the last device a human used keeps the terminal size; idle viewers never f
     // Typing waits for that answer, as on the desktop: under load a reply that lands inside the typed
     // word split its echo (HS2-93R05G).
     await expect.poll(() => repliesSince(devices, from)).toEqual(answered(0, 1));
+    // HS2-PSV7BG: on loaded macOS runners the phone's word never echoed. Each step below names the
+    // layer that lost it: the phone's focused, writable input; its socket; the program's echo in
+    // the server's scrollback; the phone's render.
+    const phoneInput = phoneTerminal.locator('.xterm-helper-textarea');
+    await expect(phoneInput).toBeFocused();
+    await expect(phoneInput).not.toHaveAttribute('readonly');
     await phone.page.keyboard.type('phone\n');
+    await expect.poll(() => phone.input.join(''), { message: 'the phone sent its typed word' }).toContain('phone');
+    await expect
+      .poll(async () => (await server.request<{ scrollback?: string }>('/terminals/live')).scrollback ?? '', {
+        message: 'the program echoed the phone word',
+      })
+      .toMatch(/ECHO:\S*phone/);
     await expect(phoneTerminal.locator('.xterm-rows')).toContainText(/ECHO:\S*phone/);
     await expect(phoneTerminal).toHaveAttribute('data-driving', 'true');
     expect(repliesSince(devices, from)).toEqual(answered(0, 1));
