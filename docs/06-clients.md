@@ -3884,7 +3884,7 @@ starts a new output stream, so a reload, another client, or a remounted or recon
 viewport no longer replays the cleared output, and every attached viewport in any client receives
 a replacement with that line. On Windows the clear also moves the cursor's line to the top of
 ConPTY's own screen buffer, so a later resize repaint does not bring the cleared output back
-(HS2-G1YTWQ). When the server cannot share it (an older server, or a detached
+(HS2-G1YTWQ); input typed meanwhile waits until that has happened, so its answer is kept. When the server cannot share it (an older server, or a detached
 broker that predates the op and answers `501`), the local clear still stands. Beside them, a
 borderless Kerf search icon (collapsible `SearchField` in its own toolbar group) expands into a
 field when activated and searches the selected terminal with xterm's search addon (HS2-TWZSZF):

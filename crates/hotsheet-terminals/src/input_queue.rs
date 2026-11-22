@@ -57,6 +57,8 @@ struct State {
     /// Bytes queued or being written right now.
     queued_bytes: usize,
     closed: bool,
+    /// Live [`InputHold`]s: while any is held, the writer thread writes nothing (HS2-G1YTWQ).
+    held: usize,
 }
 
 impl State {
@@ -150,6 +152,17 @@ impl InputQueue {
         rx.recv().unwrap_or_else(|_| Err(InputClosed.into()))
     }
 
+    /// HS2-G1YTWQ: hold every write, queued or later, until the returned guard drops. Callers
+    /// keep queueing in order; a write already in progress finishes. A Windows clear holds input
+    /// while its helper scrolls ConPTY's buffer, so a keystroke sent right after the clear is not
+    /// echoed in time to be scrolled away with the cleared output.
+    pub fn hold(&self) -> InputHold {
+        self.shared.state.lock_or_recover().held += 1;
+        InputHold {
+            shared: self.shared.clone(),
+        }
+    }
+
     /// Unwritten bytes, including a write in progress.
     pub fn queued_bytes(&self) -> usize {
         self.shared.state.lock_or_recover().queued_bytes
@@ -181,6 +194,21 @@ impl InputQueue {
     }
 }
 
+/// Holds a terminal's input while it lives; see [`InputQueue::hold`].
+pub struct InputHold {
+    shared: Arc<Shared>,
+}
+
+impl Drop for InputHold {
+    fn drop(&mut self) {
+        {
+            let mut state = self.shared.state.lock_or_recover();
+            state.held = state.held.saturating_sub(1);
+        }
+        self.shared.cvar.notify_all();
+    }
+}
+
 fn enqueue(state: &mut State, bytes: Vec<u8>, ack: Ack) {
     state.queued_bytes += bytes.len();
     state.chunks.push_back(Chunk { bytes, ack });
@@ -208,7 +236,9 @@ fn run_writer(shared: &Shared, mut writer: Box<dyn Write + Send>) {
         let chunk = {
             let mut state = shared.state.lock_or_recover();
             loop {
-                if let Some(chunk) = state.chunks.pop_front() {
+                if state.held == 0
+                    && let Some(chunk) = state.chunks.pop_front()
+                {
                     break chunk;
                 }
                 if state.closed {
@@ -312,6 +342,33 @@ mod tests {
             .unwrap();
         assert_eq!(&*writer.written.lock_or_recover(), b"first second third!");
         assert_eq!(queue.queued_bytes(), 0);
+    }
+
+    #[test]
+    fn hs2_g1ytwq_held_input_waits_in_order_until_every_hold_drops() {
+        let (writer, entered) = gated(true, false);
+        let queue = InputQueue::spawn(Box::new(writer.clone()));
+        queue.write(b"before ".to_vec()).unwrap();
+        let first = queue.hold();
+        let second = queue.hold();
+        let (done_tx, done) = mpsc::channel();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for word in ["held ", "in order"] {
+                    queue.write(word.as_bytes().to_vec()).unwrap();
+                }
+                done_tx.send(()).unwrap();
+            });
+            // Nothing is written while a hold lives, and the writer does not spin.
+            assert!(done.recv_timeout(Duration::from_millis(200)).is_err());
+            assert_eq!(&*writer.written.lock_or_recover(), b"before ");
+            drop(first);
+            assert!(done.recv_timeout(Duration::from_millis(200)).is_err());
+            drop(second);
+            done.recv_timeout(Duration::from_secs(5)).unwrap();
+        });
+        assert_eq!(&*writer.written.lock_or_recover(), b"before held in order");
+        drop(entered);
     }
 
     #[tokio::test(flavor = "current_thread")]

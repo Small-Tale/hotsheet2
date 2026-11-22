@@ -479,6 +479,10 @@ pub struct Terminal {
 #[cfg(windows)]
 const CONPTY_CLEAR_SCRIPT: &str = "$y=[Console]::CursorTop-[Console]::WindowTop;if($y -gt 0){[Console]::Out.Write([string][char]27+'['+$y+'S'+[char]27+'['+$y+'A');[Console]::Out.Flush()}";
 
+/// The longest a clear holds the program's input for its helper (HS2-G1YTWQ).
+#[cfg(windows)]
+const CONPTY_CLEAR_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// The helper command for [`CONPTY_CLEAR_SCRIPT`].
 #[cfg(windows)]
 fn conpty_clear_command() -> CommandBuilder {
@@ -1083,6 +1087,13 @@ impl Terminal {
 
     /// Start [`CONPTY_CLEAR_SCRIPT`] on this terminal's pseudoconsole and reap it on a thread. A
     /// helper that cannot start leaves the replay cleared and is only logged.
+    ///
+    /// The program's input is held until the helper exits. The helper scrolls by the cursor's
+    /// row when it runs, a few hundred milliseconds after the clear; a line typed in that time
+    /// was echoed and answered first, so the scroll took the new output away with the cleared
+    /// output (HS2-G1YTWQ, `terminal-shared-clear.spec.ts` on the Windows ARM64 VM). Input sent
+    /// meanwhile stays queued in order. A helper that has not exited after
+    /// [`CONPTY_CLEAR_LIMIT`] is killed so input cannot stay held.
     #[cfg(windows)]
     fn clear_conpty_buffer(&self) {
         if self
@@ -1092,13 +1103,24 @@ impl Terminal {
         {
             return;
         }
+        let hold = self.input.hold();
         match self
             .slave
             .with_lock(|slave| slave.spawn_command(conpty_clear_command()))
         {
             Ok(mut helper) => {
                 std::thread::spawn(move || {
+                    let deadline = std::time::Instant::now() + CONPTY_CLEAR_LIMIT;
+                    // Reaping a local child process: no request is sent while it runs.
+                    while matches!(helper.try_wait(), Ok(None)) {
+                        if std::time::Instant::now() >= deadline {
+                            let _ = helper.kill();
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
                     let _ = helper.wait();
+                    drop(hold);
                 });
             }
             Err(error) => {
@@ -1249,6 +1271,53 @@ mod tests {
         let replay = text(&term);
         assert!(!replay.contains("OLD-OUTPUT"), "{replay:?}");
         assert!(replay.contains("PROMPT$"), "{replay:?}");
+        let _ = term.kill();
+    }
+
+    /// HS2-G1YTWQ: a line typed right after a clear is answered after the clear's helper has
+    /// scrolled ConPTY's buffer, so a later resize repaints the answer. Before, the helper ran
+    /// after the answer and scrolled it away with the cleared output: every viewer and the
+    /// replay then showed only the prompt (`terminal-shared-clear.spec.ts` on the ARM64 VM).
+    #[cfg(windows)]
+    #[test]
+    fn hs2_g1ytwq_input_typed_right_after_a_clear_survives_the_clear() {
+        let mut spec = TermSpec::new("powershell.exe");
+        spec.args = [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "1..199|%{'OLD-OUTPUT {0:D3}' -f $_}; while($true){ [Console]::Out.Write('PROMPT$ '); $l=[Console]::In.ReadLine(); if($null -eq $l){break}; [Console]::Out.Write(\"echo:$l`r`n\") }",
+        ]
+        .map(String::from)
+        .to_vec();
+        let term = Terminal::spawn(spec).expect("spawn");
+        let text = |term: &Terminal| String::from_utf8_lossy(&term.scrollback()).into_owned();
+        assert!(
+            wait_until(|| text(&term).contains("PROMPT$"), 30),
+            "{}",
+            text(&term)
+        );
+        term.clear_replay();
+        term.write(b"after-clear\r").expect("type");
+        assert!(
+            wait_until(|| text(&term).contains("echo:after-clear"), 30),
+            "{:?}",
+            text(&term)
+        );
+        std::thread::sleep(Duration::from_millis(500));
+        let before = term.scrollback().len();
+        term.resize(50, 120).expect("resize");
+        assert!(
+            wait_until(|| term.scrollback().len() > before, 30),
+            "{:?}",
+            text(&term)
+        );
+        std::thread::sleep(Duration::from_millis(500));
+        let replay = text(&term);
+        let repaint = &replay[replay.rfind("\x1b[H").expect("a repaint")..];
+        assert!(repaint.contains("echo:after-clear"), "{replay:?}");
+        assert!(!replay.contains("OLD-OUTPUT"), "{replay:?}");
         let _ = term.kill();
     }
 

@@ -961,7 +961,10 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   `Terminal::clear_replay` then starts a short PowerShell on the terminal's pseudoconsole (through
   the kept slave handle) that scrolls the buffer up by the cursor's row and moves the cursor with
   it, as Windows Terminal's Clear Buffer does through `ClearPseudoConsole`. ConPTY answers with a
-  repaint of only the prompt line, which the viewers already show (HS2-G1YTWQ). A program that
+  repaint of only the prompt line, which the viewers already show (HS2-G1YTWQ). The program's
+  input is held, in order, until the helper exits (at most 10 s): the helper scrolls by the
+  cursor's row when it runs, so a line answered before then would be scrolled away with the
+  cleared output. A program that
   reads its own screen buffer sees the same change; an elevated PowerShell also prefixes the
   console title, which Hot Sheet does not display. It
   gives the replay a new output-stream id so no viewer can `resume_from` across the clear, and
