@@ -15364,13 +15364,22 @@ const renderMetrics = (page: import('@playwright/test').Page) =>
 
 test('shows no spurious permission popup or repeated work while an open project is idle', async ({ page }) => {
   const permissionRequests: string[] = [];
+  let permissionLoads = 0;
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
     if (path.endsWith('/permissions') || path.endsWith('/connections')) permissionRequests.push(path);
   });
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname.endsWith('/permissions')) permissionLoads += 1;
+  });
   await mockProject(page);
   await page.goto('/');
   await openMockedProject(page);
+  // Opening the project reads permissions once, and the change stream's initial resync reads them
+  // again (each read also lists connections). On the Windows arm64 runner the resync's read landed
+  // after the fixed settling second, inside the idle window (Platforms run 44968652865), so wait for
+  // both reads first. The second still lets their rendering settle (HS2-E86RR6).
+  await expect.poll(() => permissionLoads).toBeGreaterThanOrEqual(2);
   await page.waitForTimeout(1_000);
   permissionRequests.length = 0;
   await resetRenderMetrics(page);
