@@ -21,12 +21,25 @@ const PRINTER = [
 ].join('\n');
 
 /**
- * The same printer, held until one input line arrives, so its history is printed at the size the
- * test settled (HS2-4PBGKF). Windows ConPTY answers a resize by repainting its old screen from the
- * top of the new one; a history printed at 80x24 and replayed at the phone's size keeps its last
- * line mid-screen and loses the rows that repaint covers (HS2-X4RZA7).
+ * The same printer, held until one input line names the grid the test settled, and then until its
+ * own console reports that grid, so its history is printed at the size it is replayed at
+ * (HS2-4PBGKF). Windows ConPTY answers a resize by repainting its old screen from the top of the new
+ * one; a history printed at 80x24 and replayed at the phone's size keeps its last line mid-screen
+ * and loses the rows that repaint covers (HS2-X4RZA7). The printer asks its own console rather than
+ * the test waiting for ConPTY output: a resize of a blank ConPTY screen wrote nothing on the Windows
+ * runners (Platforms run 44968652865). The wait is local to the fixture process and sends nothing.
  */
-const GATED_PRINTER = ['import sys', 'sys.stdin.readline()', ...PRINTER.split('\n').slice(1)].join('\n');
+const GATED_PRINTER = [
+  'import os, sys, time',
+  'cols, rows = (int(value) for value in sys.stdin.readline().split()[-2:])',
+  'deadline = time.monotonic() + 20',
+  'while tuple(os.get_terminal_size(sys.stdout.fileno())) != (cols, rows):',
+  '    if time.monotonic() > deadline:',
+  "        sys.stdout.write('SIZE-MISMATCH %s\\r\\n' % (os.get_terminal_size(sys.stdout.fileno()),))",
+  '        sys.exit(1)',
+  '    time.sleep(0.02)',
+  ...PRINTER.split('\n').slice(1),
+].join('\n');
 
 interface Frame {
   at: number;
@@ -270,11 +283,9 @@ test('a reconnect resumes with only the output it missed (HS2-K93QHA)', async ({
 });
 
 /**
- * Let this page's viewport settle the PTY at its size before a measured attach, then release the
- * gated printer so its whole history is printed at that size (HS2-4PBGKF). Windows ConPTY repaints
- * its whole screen after every resize, addressing rows absolutely. A repaint that arrived while the
- * test held the replay rewrote the rows the reader was looking at, and a repaint of a history printed
- * at another size put its last line mid-screen (HS2-X4RZA7). A Unix PTY prints nothing on a resize.
+ * Let this page's viewport settle the PTY at its size before a measured attach, and return that
+ * grid as `colsxrows` for {@link releasePrinter} (HS2-4PBGKF). The server reports the size it gave
+ * the PTY; the gated printer then waits until its own console has it.
  */
 async function settlePtySize(page: Page, server: Awaited<ReturnType<typeof realTicketServer>>, terminalId: string) {
   await page.goto('/');
@@ -292,17 +303,17 @@ async function settlePtySize(page: Page, server: Awaited<ReturnType<typeof realT
     return grid !== null && sizes.at(-1) === grid ? grid : undefined;
   };
   await expect.poll(applied).toBeDefined();
-  if (process.platform !== 'win32') return;
-  const [cols, rows] = (await applied())!.split('x');
-  await expect
-    .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminalId}`)).scrollback ?? '')
-    .toContain(`\u001b[8;${rows};${cols}t`);
+  return (await applied())!;
 }
 
-/** Release a gated printer: Enter sends `\r`, which ends the line on a Unix PTY and on ConPTY. */
-async function releasePrinter(page: Page) {
+/**
+ * Release a gated printer with the grid it must see first. Enter sends `\r`, which ends the line on
+ * a Unix PTY and on ConPTY.
+ */
+async function releasePrinter(page: Page, grid: string) {
+  const [cols, rows] = grid.split('x');
   await page.locator('.terminal-viewport--dedicated').last().locator('.xterm-helper-textarea').focus();
-  await page.keyboard.type('print');
+  await page.keyboard.type(`print ${cols} ${rows}`);
   await page.keyboard.press('Enter');
 }
 
@@ -320,8 +331,7 @@ async function paintTailThenWholeReplay(page: Page, cpuThrottle?: number) {
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await recordSockets(page);
-    await settlePtySize(page, server, terminal.id);
-    await releasePrinter(page);
+    await releasePrinter(page, await settlePtySize(page, server, terminal.id));
     await expect
       .poll(async () => (await server.request<{ scrollback?: string }>(`/terminals/${terminal.id}`)).scrollback ?? '')
       .toContain('REPLAY-READY');
