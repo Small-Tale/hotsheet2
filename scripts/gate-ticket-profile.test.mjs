@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { withoutGitRepositoryEnv } from '../clients/web/scripts/repository-env.mjs';
 import {
   chooseTicket,
   developmentStrategyFromSettings,
   profileFromTags,
+  readTicketProfile,
   resolveConfiguredDevelopmentStrategy,
   withDevelopmentStrategy,
 } from './gate-ticket-profile.mjs';
@@ -291,4 +294,65 @@ test('HS2-VQ5ND5 combines known tags and validates tiers and budget overrides', 
   assert.throws(() => profileFromTags(ticket('HS2-A', ['testing:future'])), /Unknown testing tag/);
   assert.throws(() => profileFromTags(ticket('HS2-A', ['test-budget:bad'])), /positive duration/);
   assert.throws(() => profileFromTags(ticket('HS2-A', ['tier:T2', 'test-budget:15m'])), /no time budget/);
+});
+
+test('HS2-E5EX0M a machine-wide provider the gate cannot list does not hide the ticket', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hs2-e5ex0m-'));
+  const savedPath = process.env.PATH;
+  const savedWorker = process.env.HOTSHEET_WORKER_ID;
+  try {
+    const repo = join(dir, 'repo');
+    mkdirSync(join(repo, '.hotsheet2/store'), { recursive: true });
+    const git = (...args) =>
+      execFileSync('git', args, {
+        cwd: repo,
+        env: withoutGitRepositoryEnv(process.env),
+        stdio: 'pipe',
+      });
+    git('init', '-q');
+    git(
+      '-c',
+      'user.name=Synthetic',
+      '-c',
+      'user.email=synthetic@example.invalid',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'HS2-AAAAAA Synthetic change',
+    );
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    const fake = join(bin, 'hotsheet-cli');
+    const listed = JSON.stringify([
+      { slug: 'HS2-AAAAAA', connection_id: 'git', native_id: 'A', qualified_id: 'git:A', claimed_by: null, tags: [] },
+    ]);
+    const detail = JSON.stringify({ slug: 'HS2-AAAAAA', tags: ['tier:T0'] });
+    writeFileSync(
+      fake,
+      [
+        '#!/bin/sh',
+        'case "$1" in',
+        '  providers) printf "other-credentialed\\ngit\\n" ;;',
+        '  provider-ls) if [ "$2" = git ]; then printf %s \'' +
+          listed +
+          '\'; else echo "credential store unavailable" >&2; exit 1; fi ;;',
+        "  provider-get) printf %s '" + detail + "' ;;",
+        '  *) exit 2 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(fake, 0o755);
+    process.env.PATH = `${bin}:${savedPath}`;
+    delete process.env.HOTSHEET_WORKER_ID;
+    const profile = readTicketProfile(repo);
+    assert.match(profile.reason, /HEAD commit subject/);
+    assert.deepEqual(profile.tags, ['tier:T0']);
+  } finally {
+    process.env.PATH = savedPath;
+    if (savedWorker === undefined) delete process.env.HOTSHEET_WORKER_ID;
+    else process.env.HOTSHEET_WORKER_ID = savedWorker;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

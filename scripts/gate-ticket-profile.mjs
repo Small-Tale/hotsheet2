@@ -328,7 +328,16 @@ export function readTicketProfile(
     .split('\n')
     .filter(Boolean)
     .map((line) => line.trim().split(/\s+/)[0]);
-  const tickets = providers.flatMap((connection) => JSON.parse(run('provider-ls', connection)));
+  // Provider configuration is machine-wide (HS2-7QPJ05), so this list can name other projects'
+  // connections, some of which need credentials a gate never unlocks (HS2-XTQHPK). A connection
+  // that cannot be listed cannot hold this checkout's ticket; skip it (HS2-E5EX0M).
+  const tickets = providers.flatMap((connection) => {
+    try {
+      return JSON.parse(run('provider-ls', connection));
+    } catch {
+      return [];
+    }
+  });
   const subject = execFileSync('git', ['log', '-1', '--format=%s'], {
     cwd: repo,
     env: withoutGitRepositoryEnv(process.env),
