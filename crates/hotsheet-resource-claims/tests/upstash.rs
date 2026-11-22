@@ -261,6 +261,75 @@ fn hs2_k9j1rk_a_parked_wait_sends_no_requests_while_it_is_idle() {
     assert_eq!(fake.count("subscribe"), 1);
 }
 
+/// HS2-QX9QQE: a stream whose read timeout ends early, as a Windows ARM64 socket timer does.
+struct EarlyTimeout(UreqTransport);
+
+struct EarlyStream(Box<dyn upstash::transport::Subscription>, bool);
+
+impl upstash::transport::Subscription for EarlyStream {
+    fn next(&mut self) -> Result<upstash::transport::Event, upstash::transport::RestError> {
+        // The confirmation is read; the next read "times out" at once, long before the
+        // lifetime the backend asked for.
+        if self.1 {
+            return Ok(upstash::transport::Event::Timeout);
+        }
+        self.1 = true;
+        self.0.next()
+    }
+}
+
+impl upstash::transport::RestTransport for EarlyTimeout {
+    fn command(
+        &self,
+        args: &[serde_json::Value],
+    ) -> Result<serde_json::Value, upstash::transport::RestError> {
+        self.0.command(args)
+    }
+    fn pipeline(
+        &self,
+        commands: &[Vec<serde_json::Value>],
+    ) -> Result<Vec<serde_json::Value>, upstash::transport::RestError> {
+        self.0.pipeline(commands)
+    }
+    fn subscribe(
+        &self,
+        channel: &str,
+        lifetime: Duration,
+    ) -> Result<Box<dyn upstash::transport::Subscription>, upstash::transport::RestError> {
+        Ok(Box::new(EarlyStream(
+            self.0.subscribe(channel, lifetime)?,
+            false,
+        )))
+    }
+}
+
+#[test]
+fn hs2_qx9qqe_an_early_stream_timeout_waits_out_its_lifetime_without_resubscribing() {
+    let fake = Fake::start();
+    let backend = UpstashBackend::new(
+        "up",
+        "hs2rc",
+        Arc::new(EarlyTimeout(UreqTransport::new(&fake.url, TOKEN))),
+        None,
+    );
+    let held = backend.acquire(&target("vms/one"), &lease(60)).unwrap();
+    let started = Instant::now();
+    match backend
+        .wait_free(&target("vms/one"), Duration::from_millis(600))
+        .unwrap()
+    {
+        WaitOutcome::TimedOut { holder } => assert_eq!(holder.claim_id, held.claim.claim_id),
+        other => panic!("{other:?}"),
+    }
+    assert!(started.elapsed() >= Duration::from_millis(600));
+    assert_eq!(
+        fake.count("subscribe"),
+        1,
+        "an early timeout is not a reason to subscribe again: {:?}",
+        fake.log.lock().unwrap()
+    );
+}
+
 #[test]
 fn hs2_k9j1rk_expiry_wakes_a_wait_with_one_timeout_and_no_message() {
     let fake = Fake::start();

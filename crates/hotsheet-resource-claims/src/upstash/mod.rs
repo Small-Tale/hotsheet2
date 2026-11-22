@@ -463,8 +463,9 @@ impl ClaimBackend for UpstashBackend {
             // The stream lives until the holder's lease runs out (or the wait does), so
             // expiry is one timeout rather than a series of looks.
             let lifetime = remaining.min(left + EXPIRY_SLACK);
+            let ends = Instant::now() + lifetime;
             let outcome = match self.transport.subscribe(&channel, lifetime) {
-                Ok(mut stream) => self.watch(&mut *stream, target),
+                Ok(mut stream) => self.watch(&mut *stream, target, ends),
                 Err(error) => Err(error),
             };
             match outcome {
@@ -505,10 +506,18 @@ impl UpstashBackend {
     /// Read one open stream. Once the service confirms the subscription the state is read
     /// again, closing the gap between the first read and the subscribe: a release that
     /// landed in it is found here instead of waited for.
+    ///
+    /// HS2-QX9QQE: a read timeout can end before the stream's lifetime (`ends`). On Windows
+    /// ARM64 the socket timer returns early and the timeout is truncated to whole
+    /// milliseconds, so the wait loop saw a few milliseconds left and read and subscribed
+    /// again. The rest of the lifetime is slept here instead, so the stream's end costs one
+    /// read, as on every other platform. A release in those milliseconds is found by the
+    /// read that follows.
     fn watch(
         &self,
         stream: &mut dyn transport::Subscription,
         target: &ResourceRef,
+        ends: Instant,
     ) -> Result<Option<WaitOutcome>, RestError> {
         loop {
             match stream.next()? {
@@ -522,7 +531,13 @@ impl UpstashBackend {
                 }
                 // A release or a shortened lease: read again at the top of the wait loop.
                 Event::Message(_) => return Ok(None),
-                Event::Timeout => return Ok(None),
+                Event::Timeout => {
+                    let rest = ends.saturating_duration_since(Instant::now());
+                    if !rest.is_zero() {
+                        std::thread::sleep(rest);
+                    }
+                    return Ok(None);
+                }
                 Event::Closed => {
                     return Err(RestError::Unreachable("the subscription closed".into()));
                 }

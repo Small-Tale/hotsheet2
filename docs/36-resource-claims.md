@@ -740,7 +740,9 @@ pruned with HS2-FYXHA6.
   holds one `POST /subscribe/<channel>` server-sent-event stream open. The wait reads the holder and
   its time left, opens a stream that lives that long (or the wait's timeout, if sooner), re-reads the
   state once the service confirms the subscription (so a release in the gap is found, not waited
-  for), and then reads until a message, the end of the stream (expiry) or the deadline. A release
+  for), and then reads until a message, the end of the stream (expiry) or the deadline. A read
+  timeout that ends before the stream's lifetime (a Windows ARM64 socket timer returns early) sleeps
+  the rest instead of reading and subscribing again (HS2-QX9QQE). A release
   publishes `released`; a renewal that shortens a lease publishes `shortened`. Nothing polls on a
   timer: a parked wait sends no request, and a stream that fails backs off 250 ms, 500 ms … up to
   5 s, at most six times, then fails with `backend_unreachable`.
