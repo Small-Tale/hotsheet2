@@ -10682,6 +10682,8 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
         driven_by: expect.any(String) as unknown,
         // The drawer drives, so it also answers the program's queries (HS2-0GZZHV).
         answered_by: expect.any(String) as unknown,
+        // A Windows server names its ConPTY backend in every size frame (HS2-X4RZA7).
+        ...(process.platform === 'win32' ? { pty_backend: 'conpty' } : {}),
       },
     ]);
     expect(preview.claims.every((claim) => !claim.focus && !claim.interacting)).toBe(true);
