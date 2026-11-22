@@ -10,6 +10,8 @@ export interface DesktopRemoteServer {
   revision: number;
   revoked: boolean;
   last_failure: string | null;
+  /** The checkouts the host last confirmed; names an unreachable host's remembered tabs (HS2-WNK73S). */
+  last_confirmed_checkouts?: Array<{ id: string; name: string }>;
   stale: boolean;
 }
 

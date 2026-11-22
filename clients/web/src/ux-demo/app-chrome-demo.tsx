@@ -18,6 +18,8 @@ import { AppError } from '../components/app-error';
 import { ClientUpdateNoticeBanner } from '../components/client-update-notice-banner';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
+import { RemoteProjectPlaceholder } from '../components/remote-project-placeholder';
+import { RemoteReconnectingBanner } from '../components/remote-reconnecting-banner';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { ShellBanner } from '../components/shell-banner';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
@@ -96,6 +98,36 @@ export function ProjectSetupWarningBannerDemo() {
   return (
     <CatalogExample label="Default">
       <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
+    </CatalogExample>
+  );
+}
+
+/** The remembered remote tab's workspace while it opens and while its server does not answer (HS2-EJ5K09, HS2-WNK73S). */
+export function RemoteProjectPlaceholderDemo() {
+  return (
+    <>
+      <CatalogExample label="Loading">
+        <RemoteProjectPlaceholder projectId="remote:demo-loading" name="Studio · alpha" phase="loading" />
+      </CatalogExample>
+      <CatalogExample label="Reconnecting">
+        <RemoteProjectPlaceholder projectId="remote:demo-waiting" name="Studio · alpha" phase="reconnecting" />
+      </CatalogExample>
+      <CatalogExample label="Retrying">
+        <RemoteProjectPlaceholder
+          projectId="remote:demo-retrying"
+          name="Studio · alpha"
+          phase="reconnecting"
+          connecting
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
+export function RemoteReconnectingBannerDemo() {
+  return (
+    <CatalogExample label="Default">
+      <RemoteReconnectingBanner host="studio" />
     </CatalogExample>
   );
 }
@@ -227,6 +259,8 @@ export const demoModule: DemoModule = {
     'codex-hooks-notice-banner': { catalogExamples: true, Demo: CodexHooksNoticeBannerDemo },
     'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
+    'remote-project-placeholder': { catalogExamples: true, Demo: RemoteProjectPlaceholderDemo },
+    'remote-reconnecting-banner': { catalogExamples: true, Demo: RemoteReconnectingBannerDemo },
     'server-build-notice-banner': { catalogExamples: true, Demo: ServerBuildNoticeBannerDemo },
     'source-stale-notice-banner': { catalogExamples: true, Demo: SourceStaleNoticeBannerDemo },
     'client-update-notice-banner': { catalogExamples: true, Demo: ClientUpdateNoticeBannerDemo },

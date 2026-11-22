@@ -14,6 +14,8 @@ export const NAVIGATION_AND_TABS_ACTIONS = {
   openProjectStats: action('open-project-stats'),
   selectProjectTab: action('select-project-tab'),
   retryProjectRestore: action('retry-project-restore'),
+  /** Retry a remembered remote project's placeholder tab now (HS2-WNK73S). */
+  retryRemoteProject: action('retry-remote-project'),
 } as const;
 
 /**

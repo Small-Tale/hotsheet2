@@ -40,7 +40,9 @@ The model carried from HS1's shipped remote-client work (§112) already fits:
   embedded-core tab kind (§9.1e). The tab machinery is generic over the origin.
 - The client shows local and remote projects **side by side**, with per-project
   connectivity state (connected / reconnecting / unreachable) off the WebSocket
-  reconnect.
+  reconnect. A selected remote project whose host is unreachable keeps its tab as a
+  reconnecting placeholder and opens when the host answers (HS2-EJ5K09, HS2-WNK73S;
+  `docs/06-clients.md`).
 
 **Orchestration is live-mount only** (maintainer decision, 2026-08-19). A client
 reaches another machine's project by **attaching to that machine's running server**

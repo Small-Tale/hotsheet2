@@ -1,7 +1,7 @@
 import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import type { Signal } from 'kerfjs';
+import { type Signal, signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import {
@@ -39,6 +39,8 @@ import { ProjectSetupWarningBanner } from '../components/project-setup-warning-b
 import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
+import { RemoteProjectPlaceholder } from '../components/remote-project-placeholder';
+import { RemoteReconnectingBanner } from '../components/remote-reconnecting-banner';
 import { RepositorySizeBanner } from '../components/repository-size-banner';
 import { SearchScopeToolbar } from '../components/search-scope-toolbar';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
@@ -95,6 +97,7 @@ import type { WorkersLive } from '../project-live-summary';
 import { projectTabDropKind } from '../project-tab-file-drop';
 import type { DesktopRemoteServer } from '../remote-projects/client';
 import { parseRemoteProjectId } from '../remote-projects/identity';
+import { remotePlaceholderTabId, type RemoteTabPlaceholder } from '../remote-projects/reconnect';
 import { showsStaleSourceNotice } from '../source-stale-notice';
 import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
@@ -161,6 +164,10 @@ export interface HotSheetShellDependencies {
   projectRestoreRank: (id: string) => number | undefined;
   projects: Signal<Project[]>;
   desktopRemoteServers: Signal<DesktopRemoteServer[]>;
+  /** Remembered remote tabs that are not open yet: loading or reconnecting (HS2-EJ5K09, HS2-WNK73S). */
+  remotePlaceholders?: Signal<readonly RemoteTabPlaceholder[]>;
+  /** Open remote projects whose server stopped answering (HS2-WNK73S). */
+  remoteStreamsDown?: Signal<ReadonlySet<string>>;
   projectTabClaimClock: Signal<number>;
   projectTerminalDrawerProps: () => TerminalDrawerProps | undefined;
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
@@ -271,6 +278,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projectRestoreRank,
     projects,
     desktopRemoteServers,
+    remotePlaceholders = signal<readonly RemoteTabPlaceholder[]>([]),
+    remoteStreamsDown = signal<ReadonlySet<string>>(new Set()),
     projectTabClaimClock,
     projectTerminalDrawerProps,
     projectTicketCounts,
@@ -328,18 +337,24 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     if (initialProjectRestorePending.value) return <ProjectRestoreState />;
     const current = project(),
       restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value),
-      // A selected still-opening project tab shows its opening panel until it registers (HS2-XGSSK1).
-      openingRoot = restoreFailure
+      // A selected remote tab that is not open yet shows its loading or reconnecting panel (HS2-WNK73S).
+      remotePlaceholder = restoreFailure
         ? undefined
-        : pendingRestoreEntries((root) => root)
-            .map((entry) => entry.item)
-            .find((root) => root === selectedProjectRestoreRoot.value);
-    if (!current && !restoreFailure && !openingRoot) return <AppEmptyState />;
+        : remotePlaceholders.value.find((item) => remotePlaceholderTabId(item.id) === selectedProjectRestoreRoot.value),
+      // A selected still-opening project tab shows its opening panel until it registers (HS2-XGSSK1).
+      openingRoot =
+        restoreFailure || remotePlaceholder
+          ? undefined
+          : pendingRestoreEntries((root) => root)
+              .map((entry) => entry.item)
+              .find((root) => root === selectedProjectRestoreRoot.value);
+    if (!current && !restoreFailure && !openingRoot && !remotePlaceholder) return <AppEmptyState />;
     // A chat hosts the permission sidecar within its own modal top layer, and Settings → Permissions
     // lays it out above its automation controls (HS2-84XE8Q). Otherwise the shell popup uses the global
     // top layer above the terminal drawer (HS2-VBG6W5, HS2-ZESCM2). It always renders in the viewport
     // overlay slot, so crossing between phone and desktop keeps the presented node (HS2-7VRFX0).
-    const settingsHostsPermission = !restoreFailure && !openingRoot && permissionPopupInSettings(),
+    const settingsHostsPermission =
+        !restoreFailure && !openingRoot && !remotePlaceholder && permissionPopupInSettings(),
       haltPopup = haltedSessionsController.popup(),
       popup =
         (conversationOpen.value || settingsHostsPermission ? undefined : permissionPopupSurface('top')) ?? haltPopup,
@@ -363,10 +378,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           location: parseRemoteProjectId(item.id) ? ('remote' as const) : ('local' as const),
           disconnected: Boolean(
             parseRemoteProjectId(item.id) &&
-            desktopRemoteServers.value.find((server) => server.id === parseRemoteProjectId(item.id)?.bindingId)
-              ?.last_failure,
+            (remoteStreamsDown.value.has(item.id) ||
+              desktopRemoteServers.value.find((server) => server.id === parseRemoteProjectId(item.id)?.bindingId)
+                ?.last_failure),
           ),
-          selected: !restoreFailure && !openingRoot && item.id === selectedProjectId.value,
+          selected: !restoreFailure && !openingRoot && !remotePlaceholder && item.id === selectedProjectId.value,
           notificationCount: permissionCount(item.id),
           // A halted session or unanswered AI question in this project's terminals needs the user.
           ...(terminalGroups.value.some(
@@ -395,15 +411,37 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       rankedProjectTabs = interleaveByRank<{ tab: ProjectTabProps; rank?: number }>(
         projectTabs.map((tab) => ({ tab, rank: projectRestoreRank(tab.id) })),
         (entry) => entry.rank,
-        pendingRestoreEntries((root) => ({
-          tab: {
-            id: `${PENDING_PROJECT_TAB_PREFIX}${root}`,
-            name: pendingProjectName(root),
-            location: 'local' as const,
-            selected: root === openingRoot,
-            pending: true,
-          },
-        })),
+        [
+          ...pendingRestoreEntries<{ tab: ProjectTabProps }>((root) => ({
+            tab: {
+              id: `${PENDING_PROJECT_TAB_PREFIX}${root}`,
+              name: pendingProjectName(root),
+              location: 'local',
+              selected: root === openingRoot,
+              pending: true,
+            },
+          })),
+          // Remembered remote tabs hold their saved positions while loading or reconnecting; the
+          // opened tab takes the same rank (HS2-EJ5K09, HS2-WNK73S).
+          // A placeholder whose project already registered is finishing its activation: show the real tab only.
+          ...remotePlaceholders.value
+            .filter((item) => !projectTabs.some((tab) => tab.id === item.id))
+            .map((item) => ({
+              rank: item.rank,
+              item: {
+                tab: {
+                  id: remotePlaceholderTabId(item.id),
+                  name: item.name,
+                  location: 'remote' as const,
+                  selected: item.id === remotePlaceholder?.id,
+                  pending: item.phase === 'loading',
+                  busy: item.phase === 'reconnecting' && item.connecting,
+                  disconnected: item.phase === 'reconnecting',
+                  draggable: false,
+                },
+              },
+            })),
+        ],
       ).map((entry) => entry.tab);
     const tabs = [
       ...rankedProjectTabs,
@@ -475,6 +513,27 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
           mobile={viewportMobile.value}
           workspace={<ProjectRestoreError {...restoreFailure} />}
+          inspectorVisible={false}
+          viewportOverlay={popup}
+        />
+      );
+    if (remotePlaceholder)
+      return (
+        <MainShell
+          tabs={tabs}
+          announcerTrigger={announcerTrigger()}
+          announcer={announcerPanel()}
+          mode="project"
+          header={<WorkspaceIdentity projectName={remotePlaceholder.name} id="workspace-page-title" headingLevel={1} />}
+          mobile={viewportMobile.value}
+          workspace={
+            <RemoteProjectPlaceholder
+              projectId={remotePlaceholder.id}
+              name={remotePlaceholder.name}
+              phase={remotePlaceholder.phase}
+              connecting={remotePlaceholder.connecting}
+            />
+          }
           inspectorVisible={false}
           viewportOverlay={popup}
         />
@@ -706,6 +765,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && (
                 <Hs1RegistrationRepairBanner />
               )}
+            {remoteStreamsDown.value.has(current.id) && (
+              <RemoteReconnectingBanner host={current.remoteHost ?? current.name} />
+            )}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {showsStaleSourceNotice(current.compatibility) && <SourceStaleNoticeBanner />}

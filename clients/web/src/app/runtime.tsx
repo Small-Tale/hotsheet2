@@ -254,12 +254,21 @@ import { createRefreshBarrier } from '../refresh-barrier';
 import { createRemoteHostHealth, projectHostHealth } from '../remote-host-health';
 import { createRemoteLiveStates, projectLiveStates } from '../remote-live-states';
 import {
+  desktopRemoteDiscover,
   desktopRemoteForget,
   desktopRemoteOpen,
   desktopRemoteSelected,
   desktopRemoteServers as listDesktopRemoteServers,
 } from '../remote-projects/client';
-import { parseRemoteProjectId } from '../remote-projects/identity';
+import { isRemoteProjectId, parseRemoteProjectId } from '../remote-projects/identity';
+import {
+  createRemoteReconnect,
+  REMOTE_STREAM_DOWN_GRACE_MS,
+  remotePlaceholderProjectId,
+  remotePlaceholderTabId,
+  remoteTabPlaceholders,
+  wireRemoteReconnectWakeups,
+} from '../remote-projects/reconnect';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { parseGuidanceSourceUpdates } from '../server-response-parsers';
@@ -1569,6 +1578,85 @@ export async function startHotSheetWebClient() {
     openRemoteProjectDialog,
     openRemoteCheckout,
   } = projectLifecycleController;
+  // Remembered remote project tabs show at once and stay while their host is unreachable
+  // (HS2-EJ5K09, HS2-WNK73S). Remote-browser clients have no machine registry and never seed it.
+  /** Startup's local restore settled; until then a remote tab never takes the selection. */
+  let localProjectRestoreSettled = false;
+  const remoteReconnect = createRemoteReconnect({
+    open: (bindingId, checkoutId) => desktopRemoteOpen(bindingId, checkoutId),
+    probe: async (bindingId) => (await desktopRemoteDiscover(bindingId)).checkouts !== null,
+    isOpen: (id) => projects.value.some((item) => item.id === id),
+    opened: async (placeholder, remote) => {
+      await wireOpenedProject(
+        remote.root,
+        { ok: true, project: remote, providers: await new Api(remote.apiPath).providers().catch(() => []) },
+        placeholder.rank,
+      );
+      startPermissionUpdates();
+      syncProjectChangeStreams();
+      // The tab takes the selection only when the user is on its placeholder, or nothing is selected.
+      const onPlaceholder = selectedProjectRestoreRoot.value === remotePlaceholderTabId(placeholder.id);
+      if (
+        onPlaceholder ||
+        (localProjectRestoreSettled && !selectedProjectId.value && !selectedProjectRestoreRoot.value)
+      ) {
+        if (onPlaceholder) selectedProjectRestoreRoot.value = '';
+        await activateOpenedProject(remote);
+      }
+    },
+    discard: (placeholder) => {
+      void desktopRemoteForget(placeholder.bindingId, placeholder.checkoutId).catch(() => undefined);
+    },
+  });
+  /** With no local project to show, reveal the first remote tab instead of the empty application. */
+  function revealRemoteTabWhenIdle() {
+    if (!localProjectRestoreSettled || selectedProjectId.value || selectedProjectRestoreRoot.value) return;
+    const opened = projects.value.at(0),
+      placeholder = remoteReconnect.placeholders.value.at(0);
+    if (opened) void activateOpenedProject(opened);
+    else if (placeholder) selectProjectTab(remotePlaceholderTabId(placeholder.id));
+  }
+  async function restoreRemoteProjectTabs() {
+    if (isRemoteClient()) return;
+    const [servers, selected] = await Promise.all([
+      listDesktopRemoteServers().catch(() => []),
+      desktopRemoteSelected().catch(() => []),
+    ]);
+    desktopRemoteServers.value = servers;
+    const restoring = remoteReconnect.restore(remoteTabPlaceholders(selected, servers));
+    revealRemoteTabWhenIdle();
+    await restoring;
+  }
+  /**
+   * Remote projects whose change stream has been down past a short grace (HS2-WNK73S). The grace
+   * timer only changes what is displayed; it never makes a request.
+   */
+  const remoteStreamsDown = signal<ReadonlySet<string>>(new Set());
+  const remoteStreamDownTimers = new Map<string, number>();
+  function remoteStreamHealth(projectId: string, live: boolean | undefined) {
+    if (!isRemoteProjectId(projectId)) return;
+    const setDown = (down: boolean) => {
+      if (remoteStreamsDown.peek().has(projectId) === down) return;
+      const next = new Set(remoteStreamsDown.peek());
+      if (down) next.add(projectId);
+      else next.delete(projectId);
+      remoteStreamsDown.value = next;
+    };
+    if (live === false) {
+      if (remoteStreamDownTimers.has(projectId) || remoteStreamsDown.peek().has(projectId)) return;
+      remoteStreamDownTimers.set(
+        projectId,
+        window.setTimeout(() => {
+          remoteStreamDownTimers.delete(projectId);
+          setDown(true);
+        }, REMOTE_STREAM_DOWN_GRACE_MS),
+      );
+      return;
+    }
+    window.clearTimeout(remoteStreamDownTimers.get(projectId));
+    remoteStreamDownTimers.delete(projectId);
+    setDown(false);
+  }
   let projectSelectionGeneration = 0;
   const composerRestoreIntent = createComposerRestoreIntent();
   let projectActivationGeneration = 0,
@@ -2851,6 +2939,10 @@ export async function startHotSheetWebClient() {
     conversationStates,
     aiToolLabel,
     closeProjectIds,
+    remotePlaceholderName: (tabId) => {
+      const id = remotePlaceholderProjectId(tabId);
+      return id === undefined ? undefined : remoteReconnect.placeholders.value.find((item) => item.id === id)?.name;
+    },
   });
   function setShellMode(mode: ProjectTabBarMode) {
     // A dashboard whose feature area is off is ignored, however it was asked for (HS2-3GJZGG).
@@ -2923,6 +3015,15 @@ export async function startHotSheetWebClient() {
     if (failure) {
       selectedProjectRestoreRoot.value = failure.root;
       saveActiveProjectRoot(localStorage, failure.root);
+      return;
+    }
+    // A remembered remote tab that is not open yet shows its loading or reconnecting panel, and
+    // selecting it retries its host at once (HS2-WNK73S).
+    const placeholderId = remotePlaceholderProjectId(next);
+    if (placeholderId !== undefined) {
+      if (!remoteReconnect.placeholders.value.some((item) => item.id === placeholderId)) return;
+      selectedProjectRestoreRoot.value = next;
+      void remoteReconnect.retryNow(placeholderId);
       return;
     }
     // A still-opening project tab is selectable and shows its opening panel until it registers (HS2-XGSSK1).
@@ -3006,7 +3107,10 @@ export async function startHotSheetWebClient() {
   function persistProjectSessionNow() {
     if (initialProjectRestorePending.value) return;
     if (selectedProjectRestoreRoot.value) {
-      saveActiveProjectRoot(localStorage, selectedProjectRestoreRoot.value);
+      saveActiveProjectRoot(
+        localStorage,
+        remotePlaceholderProjectId(selectedProjectRestoreRoot.value) ?? selectedProjectRestoreRoot.value,
+      );
       return;
     }
     const current = project();
@@ -4767,7 +4871,10 @@ export async function startHotSheetWebClient() {
     featureSettings: { applyEvents: featureAreas.applyEvents, resync: featureAreas.resync },
     browserGrants,
     pairingRequests,
-    onStreamHealth: standby.streamHealth,
+    onStreamHealth: (projectId, live) => {
+      standby.streamHealth(projectId, live);
+      remoteStreamHealth(projectId, live);
+    },
     liveHistory: { resync: () => statsOvernight.resync?.() ?? Promise.resolve() },
   });
   const {
@@ -5191,11 +5298,23 @@ export async function startHotSheetWebClient() {
   });
   // A hoisted entry point: the project-close owner built earlier receives it as its teardown callback.
   function closeProjectIds(ids: readonly string[]) {
-    for (const id of ids) {
+    const placeholderTabs = ids.filter((id) => remotePlaceholderProjectId(id) !== undefined);
+    for (const tabId of placeholderTabs) {
+      // Closing a remote tab that is not open yet is the explicit forget (HS2-WNK73S).
+      const placeholder = remoteReconnect.forget(remotePlaceholderProjectId(tabId)!);
+      if (placeholder) void desktopRemoteForget(placeholder.bindingId, placeholder.checkoutId).catch(() => undefined);
+      if (selectedProjectRestoreRoot.value === tabId) {
+        selectedProjectRestoreRoot.value = '';
+        const next = remoteReconnect.placeholders.value.at(0);
+        if (!selectedProjectId.value && next) selectedProjectRestoreRoot.value = remotePlaceholderTabId(next.id);
+      }
+    }
+    const projectIds = ids.filter((id) => !placeholderTabs.includes(id));
+    for (const id of projectIds) {
       const remote = parseRemoteProjectId(id);
       if (remote) void desktopRemoteForget(remote.bindingId, remote.checkoutId);
     }
-    projectTeardown.closeProjectIds(ids);
+    if (projectIds.length) projectTeardown.closeProjectIds(projectIds);
   }
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
@@ -6330,6 +6449,8 @@ export async function startHotSheetWebClient() {
     projectRestoreFailures,
     projectRestoreRank,
     projects,
+    remotePlaceholders: remoteReconnect.placeholders,
+    remoteStreamsDown,
     projectTabClaimClock,
     projectTerminalDrawerProps,
     projectTicketCounts,
@@ -6912,6 +7033,9 @@ export async function startHotSheetWebClient() {
     terminalRailScreen,
     selectProjectTab,
     retryProjectRestore,
+    retryRemoteProject: (projectId: string) => {
+      void remoteReconnect.retryNow(projectId);
+    },
     onTabBarFit: projectTabFit.onFit,
     terminalDrawerBounds,
     terminalDashboardSize,
@@ -7653,6 +7777,11 @@ export async function startHotSheetWebClient() {
   }
   const startupTicketDeepLink = parseTicketDeepLink(window.location.search);
   const rememberedActiveRoot = activeProjectRoot(localStorage);
+  // The reviewed bindings and selected checkouts live in this machine's registry, not browser storage.
+  // Their tabs appear before any remote open and alongside the local restore; each host opens on its
+  // own, so a slow or unreachable host never holds back another tab (HS2-EJ5K09, HS2-WNK73S).
+  void restoreRemoteProjectTabs().catch(() => undefined);
+  const disposeRemoteReconnectWakeups = wireRemoteReconnectWakeups(remoteReconnect);
   void (async () => {
     try {
       await restoreRememberedProjects({
@@ -7681,25 +7810,8 @@ export async function startHotSheetWebClient() {
           syncProjectChangeStreams();
         },
       });
-      if (!isRemoteClient()) {
-        desktopRemoteServers.value = await listDesktopRemoteServers().catch(() => []);
-        // The reviewed bindings and selected checkouts live in this machine's registry, not
-        // browser storage. Restore each independently so one unavailable host cannot hide another.
-        const rememberedRemote = await desktopRemoteSelected().catch(() => []);
-        for (const selected of rememberedRemote) {
-          try {
-            const remote = await desktopRemoteOpen(selected.binding_id, selected.checkout_id);
-            await wireOpenedProject(remote.root, {
-              ok: true,
-              project: remote,
-              providers: await new Api(remote.apiPath).providers().catch(() => []),
-            });
-            if (!selectedProjectId.value) await activateOpenedProject(remote);
-          } catch {
-            showToast('An approved remote project could not reconnect. Open Remote project to retry.');
-          }
-        }
-      }
+      localProjectRestoreSettled = true;
+      revealRemoteTabWhenIdle();
       if (startupTicketDeepLink) await openStartupTicketDeepLink(startupTicketDeepLink);
       startPermissionUpdates();
       syncProjectChangeStreams();
@@ -7712,6 +7824,10 @@ export async function startHotSheetWebClient() {
   return {
     appRoot,
     disposeInteractions: () => {
+      disposeRemoteReconnectWakeups();
+      remoteReconnect.dispose();
+      for (const timer of remoteStreamDownTimers.values()) window.clearTimeout(timer);
+      remoteStreamDownTimers.clear();
       disposeToolbarVisibility();
       disposeTicketGroupSettings();
       disposeProjectTabFitReset();

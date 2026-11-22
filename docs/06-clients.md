@@ -1463,6 +1463,27 @@ same explanation (HS2-CGXGWY).
   Startup never persists a partial session over a saved draft. Onboarding for an inactive
   restored project waits until activation, and setup/migration dialogs take precedence over
   reopening the saved composer while retaining its draft.
+  Remembered **remote** projects (the checkouts this machine's registry lists under
+  `hotsheet-cli remote selected-projects`) get their tabs at once, before any remote open and
+  alongside the local restore, named `<binding label> · <last confirmed checkout name>` from the
+  registry alone and ranked after the local tabs in the registry's saved order. Every host opens
+  in parallel; each tab becomes the real project in the same position as soon as its own open
+  succeeds, so a slow or unreachable host only keeps its own tab loading (HS2-EJ5K09). A tab whose
+  first open is still running is Kerf's named `pending` tab and shows "Opening <name>…". A tab
+  whose host did not answer stays as a reconnecting placeholder (WifiOff indicator; the panel
+  says the server is not answering and offers **Retry now**). Retries are per host binding with
+  exponential backoff from 2 s doubling to a 5-minute cap; each retry first makes one reachability
+  probe of the host (`GET /__hotsheet/remotes/:id/checkouts`) and only then reopens that host's
+  checkouts, so an idle unreachable host costs one probe per backoff interval however many of its
+  projects were selected. Network `online` and window `focus` wake a retry (at most once per
+  10 s per host), and selecting the tab retries at once; there is no fixed-interval polling. The
+  opened tab takes the selection only when the user is on its placeholder (or nothing is
+  selected). No failure ever forgets a selection: only closing the tab forgets it
+  (`DELETE /__hotsheet/remotes/:id/projects/:checkout`), and an open that finishes after the
+  close is forgotten again. When an open remote project's server stops answering mid-session,
+  its tab and loaded tickets stay; once its change stream has been down for 3 s the tab shows
+  the disconnected indicator and the workspace a "Reconnecting to <host>" banner, both cleared
+  when the stream (which retries on its own bounded backoff) is live again (HS2-WNK73S).
   A project that remains unavailable stays in the tab bar with a red title and error icon;
   selecting it presents the exact failure, known stale-server context, its remembered root,
   likely recovery steps, and an in-place retry action. Failed tabs are not draggable or

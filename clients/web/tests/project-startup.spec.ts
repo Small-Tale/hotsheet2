@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 import type { Capabilities } from '../src/api';
 import type { Project } from '../src/interactions/types';
@@ -914,4 +914,244 @@ test('lists remote servers and projects as rows with an overflow menu (HS2-A5CKQ
   await menu.getByRole('menuitem', { name: 'Remove' }).click();
   await expect.poll(() => deletes).toEqual([`/__hotsheet/remotes/${id}?revision=3`]);
   await expect(row).toHaveCount(0);
+});
+
+/**
+ * A faithful stand-in for the host's remote routes (dev-server.ts): the registry list with
+ * `last_confirmed_checkouts`, `selected-projects`, a reachability probe that answers 503 while the
+ * peer is down, an open that answers 409 while down, and the forget DELETE. Opens can be gated.
+ */
+async function remoteRegistryFixture(page: Page, hosts: Array<{ id: string; label: string; checkouts: string[] }>) {
+  const up = new Map(hosts.map((host) => [host.id, true])),
+    openGates = new Map<string, ReturnType<typeof gate>>(),
+    calls: string[] = [];
+  const servers = hosts.map((host) => ({
+    id: host.id,
+    label: host.label,
+    origin: `http://${host.label.toLowerCase()}.test:8787`,
+    identity: { server_id: host.id, ca_fingerprint: null },
+    revision: 1,
+    revoked: false,
+    last_failure: null as string | null,
+    last_confirmed_checkouts: host.checkouts.map((id) => ({ id, name: `${id}-name`, state: 'available', sources: [] })),
+    stale: false,
+  }));
+  const selected = hosts.flatMap((host) => host.checkouts.map((checkout_id) => ({ binding_id: host.id, checkout_id })));
+  await page.route('**/__hotsheet/remotes**', async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    calls.push(`${request.method()} ${path}`);
+    if (path === '/__hotsheet/remotes') return route.fulfill({ json: servers });
+    if (path === '/__hotsheet/remotes/selected-projects') return route.fulfill({ json: selected });
+    const match = /^\/__hotsheet\/remotes\/([^/]+)\/(?:checkouts|projects\/([^/]+)(\/open)?)$/.exec(path);
+    const server = match && servers.find((item) => item.id === match[1]);
+    if (!match || !server) return route.fulfill({ status: 404, json: { error: 'Unknown synthetic remote route' } });
+    if (!match[2])
+      return up.get(server.id)
+        ? route.fulfill({ json: { remote: server, checkouts: server.last_confirmed_checkouts } })
+        : route.fulfill({
+            status: 503,
+            json: { error: 'Could not reach or authenticate the approved remote server.' },
+          });
+    const checkout = decodeURIComponent(match[2]);
+    if (request.method() === 'DELETE') return route.fulfill({ json: { selected: false } });
+    await openGates.get(`${server.id}/${checkout}`)?.promise;
+    if (!up.get(server.id))
+      return route.fulfill({ status: 409, json: { error: 'This remote project is unavailable. Retry discovery.' } });
+    const id = remoteProjectId(server.id, checkout);
+    return route.fulfill({
+      status: 201,
+      json: {
+        id,
+        root: id,
+        name: `${server.label} · ${checkout}-name`,
+        remoteHost: server.label,
+        stores: [],
+        apiPath: `/__hotsheet/project-api/${encodeURIComponent(id)}`,
+        compatibility: { kind: 'compatible', revisionMismatch: false, sourceStale: false, canRestartServer: false },
+        needsTicketSetup: false,
+        needsHs1Migration: false,
+        hs1ImportCompleted: false,
+        hs1CleanupEligible: false,
+        hs1RegistrationRepairAvailable: false,
+      },
+    });
+  });
+  return { up, openGates, calls };
+}
+
+const STUDIO = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+const LAPTOP = '01ARZ3NDEKTSV4RRFFQ69G5FAW';
+const projectTabIds = (page: Page) =>
+  page
+    .locator('[data-tab-kind="project"]')
+    .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.projectId ?? ''));
+
+test('shows remembered remote tabs before any open resolves and opens each host on its own (HS2-EJ5K09)', async ({
+  page,
+}) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [
+    { id: STUDIO, label: 'Studio', checkouts: ['one'] },
+    { id: LAPTOP, label: 'Laptop', checkouts: ['two'] },
+  ]);
+  const slow = gate(),
+    fast = gate();
+  remote.openGates.set(`${STUDIO}/one`, slow);
+  remote.openGates.set(`${LAPTOP}/two`, fast);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  // Both tabs render from the registry alone while both opens are still held.
+  const studio = page.locator(
+      `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`,
+    ),
+    laptop = page.locator(
+      `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(LAPTOP, 'two')}"]`,
+    );
+  await expect(studio).toHaveAttribute('data-project-pending', 'true');
+  await expect(laptop).toHaveAttribute('data-project-pending', 'true');
+  await expect(page.getByRole('tab', { name: /Studio · one-name/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Laptop · two-name/ })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 900, height: 700 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ej5k09-loading-tabs-medium.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Both opens started in parallel.
+  await expect
+    .poll(() => remote.calls.filter((call) => call.startsWith('POST') && call.endsWith('/open')).length)
+    .toBe(2);
+  // The fast host opens while the slow one is still loading.
+  fast.release();
+  await expect(
+    page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(LAPTOP, 'two')}"]`),
+  ).toBeVisible();
+  await expect(studio).toHaveAttribute('data-project-pending', 'true');
+  expect(await projectTabIds(page)).toEqual([
+    'alpha',
+    `remote-placeholder:${remoteProjectId(STUDIO, 'one')}`,
+    remoteProjectId(LAPTOP, 'two'),
+  ]);
+  slow.release();
+  await expect(
+    page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(STUDIO, 'one')}"]`),
+  ).toBeVisible();
+  // The saved order holds, and the local project kept the selection.
+  expect(await projectTabIds(page)).toEqual(['alpha', remoteProjectId(STUDIO, 'one'), remoteProjectId(LAPTOP, 'two')]);
+  await expect(page.locator('[data-tab-kind="project"][data-project-id="alpha"]')).toHaveAttribute(
+    'data-selected',
+    'true',
+  );
+});
+
+test('keeps an unreachable remote tab reconnecting and opens it in place once the host answers (HS2-WNK73S)', async ({
+  page,
+}) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [
+    { id: STUDIO, label: 'Studio', checkouts: ['one'] },
+    { id: LAPTOP, label: 'Laptop', checkouts: ['two'] },
+  ]);
+  remote.up.set(STUDIO, false);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const placeholderId = `remote-placeholder:${remoteProjectId(STUDIO, 'one')}`,
+    studio = page.locator(`[data-tab-kind="project"][data-project-id="${placeholderId}"]`);
+  await expect(
+    page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(LAPTOP, 'two')}"]`),
+  ).toBeVisible();
+  // The down host keeps its tab, in its saved place, with the disconnected indicator.
+  await expect(studio).toHaveAttribute('data-disconnected', 'true');
+  await expect(studio.locator('[data-lucide="wifi-off"]')).toBeVisible();
+  expect(await projectTabIds(page)).toEqual(['alpha', placeholderId, remoteProjectId(LAPTOP, 'two')]);
+  await studio.click();
+  const panel = page.locator('[data-remote-project-placeholder="reconnecting"]');
+  await expect(panel).toContainText('Reconnecting to Studio · one-name');
+  for (const [scheme, width, height] of [
+    ['light', 1440, 900],
+    ['light', 900, 700],
+    ['light', 390, 844],
+    ['dark', 1440, 900],
+    ['dark', 900, 700],
+    ['dark', 390, 844],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width, height });
+    await expect(panel.getByRole('button', { name: 'Retry now' })).toBeInViewport();
+    await page.screenshot({
+      path: `target/visual-captures/hs2-wnk73s-reconnecting-${scheme}-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // The host comes back; an explicit retry probes it once and opens the project in the same tab position.
+  remote.up.set(STUDIO, true);
+  const probesBefore = remote.calls.filter((call) => call === `GET /__hotsheet/remotes/${STUDIO}/checkouts`).length;
+  await panel.getByRole('button', { name: 'Retry now' }).click();
+  const opened = page.locator(`[data-tab-kind="project"][data-project-id="${remoteProjectId(STUDIO, 'one')}"]`);
+  await expect(opened).toHaveAttribute('data-selected', 'true');
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  expect(await projectTabIds(page)).toEqual(['alpha', remoteProjectId(STUDIO, 'one'), remoteProjectId(LAPTOP, 'two')]);
+  expect(remote.calls.filter((call) => call === `GET /__hotsheet/remotes/${STUDIO}/checkouts`).length).toBeGreaterThan(
+    probesBefore,
+  );
+  // Nothing forgot the selection along the way.
+  expect(remote.calls.some((call) => call.startsWith('DELETE'))).toBe(false);
+});
+
+test('closing a reconnecting remote tab is the only thing that forgets it (HS2-WNK73S)', async ({ page }) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  const remote = await remoteRegistryFixture(page, [{ id: STUDIO, label: 'Studio', checkouts: ['one'] }]);
+  remote.up.set(STUDIO, false);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const studio = page.locator(
+    `[data-tab-kind="project"][data-project-id="remote-placeholder:${remoteProjectId(STUDIO, 'one')}"]`,
+  );
+  await expect(studio).toHaveAttribute('data-disconnected', 'true');
+  expect(remote.calls.some((call) => call.startsWith('DELETE'))).toBe(false);
+  await studio.hover();
+  await studio.locator('[data-action="close-project-tab"]').click();
+  await page.getByRole('button', { name: 'Close Project', exact: true }).click();
+  await expect(studio).toHaveCount(0);
+  await expect
+    .poll(() => remote.calls.filter((call) => call.startsWith('DELETE')))
+    .toEqual([`DELETE /__hotsheet/remotes/${STUDIO}/projects/one`]);
+});
+
+test('keeps an open remote tab with a reconnecting state while its host drops mid-session (HS2-WNK73S)', async ({
+  page,
+}) => {
+  await startupFixture(page, ['alpha'], 'alpha', false);
+  await remoteRegistryFixture(page, [{ id: LAPTOP, label: 'Laptop', checkouts: ['two'] }]);
+  const id = remoteProjectId(LAPTOP, 'two'),
+    host = { down: false, sockets: [] as WebSocketRoute[] };
+  await page.routeWebSocket(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/sync(?:\?.*)?$/, (socket) => {
+    if (host.down) void socket.close();
+    else host.sockets.push(socket);
+  });
+  await page.route(/\/__hotsheet\/project-api\/remote[^/]+\/ws\/poll/, (route) =>
+    host.down ? route.fulfill({ status: 502, json: { error: 'Remote server unreachable.' } }) : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const tab = page.locator(`[data-tab-kind="project"][data-project-id="${id}"]`);
+  await tab.click();
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  const banner = page.locator('[data-component="remote-reconnecting-banner"]');
+  await expect(banner).toHaveCount(0);
+  host.down = true;
+  for (const socket of host.sockets.splice(0)) await socket.close();
+  // The tab and its loaded tickets stay; past the grace the tab and the workspace say it is reconnecting.
+  await expect(banner).toContainText('Reconnecting to Laptop', { timeout: 15_000 });
+  await expect(tab).toHaveAttribute('data-disconnected', 'true');
+  await expect(page.getByText('Workspace restored work', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-wnk73s-mid-session-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(banner).toBeInViewport();
+  await page.screenshot({ path: 'target/visual-captures/hs2-wnk73s-mid-session-narrow.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  host.down = false;
+  await expect(banner).toHaveCount(0, { timeout: 40_000 });
+  await expect(tab).toHaveAttribute('data-disconnected', 'false');
 });

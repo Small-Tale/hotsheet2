@@ -2181,6 +2181,48 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "remote-project-placeholder",
+      "name": "RemoteProjectPlaceholder",
+      "kind": "component",
+      "purpose": "Loading or reconnecting workspace of a remembered remote project tab that is not open yet, with an immediate retry (HS2-EJ5K09, HS2-WNK73S).",
+      "useWhen": [
+        "A selected remembered remote project tab is still opening or its server is not answering."
+      ],
+      "avoidWhen": [
+        "The project is local or already open; use ProjectOpeningState or the project workspace."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/remote-project-placeholder.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "remote-reconnecting-banner",
+      "name": "RemoteReconnectingBanner",
+      "kind": "component",
+      "purpose": "Warning strip while an open remote project's server stops answering mid-session (HS2-WNK73S).",
+      "useWhen": [
+        "An open remote project's change stream has been down past its grace period."
+      ],
+      "avoidWhen": [
+        "The project is local, or the remote tab never opened; use RemoteProjectPlaceholder."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/remote-reconnecting-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "repository-size",
       "name": "RepositorySize",
       "kind": "component",

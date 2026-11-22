@@ -6618,6 +6618,134 @@
       }
     },
     {
+      "key": "hotsheet-web:remote-project-placeholder",
+      "package": "hotsheet-web",
+      "id": "remote-project-placeholder",
+      "name": "RemoteProjectPlaceholder",
+      "kind": "component",
+      "purpose": "Loading or reconnecting workspace of a remembered remote project tab that is not open yet, with an immediate retry (HS2-EJ5K09, HS2-WNK73S).",
+      "publicExports": [
+        {
+          "name": "RemoteProjectPlaceholder"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-project-placeholder.tsx"
+      ],
+      "source": "src/components/remote-project-placeholder.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-project-placeholder.tsx",
+        "composition": "src/components/remote-project-placeholder.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:remote-reconnecting-banner",
+      "package": "hotsheet-web",
+      "id": "remote-reconnecting-banner",
+      "name": "RemoteReconnectingBanner",
+      "kind": "component",
+      "purpose": "Warning strip while an open remote project's server stops answering mid-session (HS2-WNK73S).",
+      "publicExports": [
+        {
+          "name": "RemoteReconnectingBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/remote-reconnecting-banner.tsx"
+      ],
+      "source": "src/components/remote-reconnecting-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/remote-reconnecting-banner.tsx",
+        "composition": "src/components/remote-reconnecting-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:repository-size",
       "package": "hotsheet-web",
       "id": "repository-size",

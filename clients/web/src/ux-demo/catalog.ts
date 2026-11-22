@@ -317,6 +317,7 @@ export const demoCatalog: DemoCategory[] = [
     name: 'Shared interactions',
     demos: [
       cataloged('app-empty-state'),
+      cataloged('remote-project-placeholder'),
       cataloged('app-error', ['state-banner']),
       cataloged('content-transition'),
       demo('tab-bar-item', 'TabBarItem', 'Shared project and terminal tab geometry, state, and close action.'),
@@ -358,6 +359,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('codex-hooks-notice-banner', ['shell-banner']),
       cataloged('shell-banner', ['list', 'state-banner']),
       cataloged('project-setup-warning-banner', ['shell-banner']),
+      cataloged('remote-reconnecting-banner', ['shell-banner']),
       cataloged('server-build-notice-banner', ['shell-banner']),
       cataloged('source-stale-notice-banner', ['shell-banner']),
       cataloged('client-update-notice-banner', ['shell-banner']),

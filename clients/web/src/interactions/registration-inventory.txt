@@ -83,6 +83,7 @@ navigation-and-tabs	delegate	document.body	'click'	'[data-action="open-project-s
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="select-project-tab"]'
 navigation-and-tabs	delegate	document.body	'change'	'kui-select[name="mobile-project"]'
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="retry-project-restore"]'
+navigation-and-tabs	delegate	document.body	'click'	'[data-action="retry-remote-project"]'
 terminals	delegate	document.body	'focusin'	'.terminal-session:not([hidden]) .xterm-helper-textarea'
 terminals	delegate	document.body	'click'	'[data-action="exit-terminal-focus-mode"]'
 terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-grid-fullscreen"]'

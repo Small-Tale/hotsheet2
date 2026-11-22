@@ -27,6 +27,8 @@ export interface ProjectCloseDependencies {
   aiToolLabel: (tool: string) => string;
   /** Tear down the closed projects' runtime state (owned by the application runtime). */
   closeProjectIds: (ids: readonly string[]) => void;
+  /** The name of a remote tab that is not open yet (HS2-WNK73S); `undefined` for any other id. */
+  remotePlaceholderName?: (tabId: string) => string | undefined;
 }
 
 /**
@@ -46,6 +48,7 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
     conversationStates,
     aiToolLabel,
     closeProjectIds,
+    remotePlaceholderName,
   } = dependencies;
   let pendingProjectCloseIds: string[] = [];
   function projectCloseResources(projectId: string): ProjectCloseResource[] {
@@ -88,15 +91,16 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
     while (pendingProjectCloseIds.length) {
       const projectId = pendingProjectCloseIds[0],
         target = projects.value.find((item) => item.id === projectId),
-        failed = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === projectId);
-      if (!target && !failed) {
+        failed = projectRestoreFailures.value.find((item) => projectRestoreTabId(item.root) === projectId),
+        placeholderName = remotePlaceholderName?.(projectId);
+      if (!target && !failed && placeholderName === undefined) {
         pendingProjectCloseIds.shift();
         continue;
       }
       const resources = target ? projectCloseResources(projectId) : [];
       projectCloseDialog.value = {
         projectId,
-        projectName: target?.name ?? failed!.name,
+        projectName: target?.name ?? failed?.name ?? placeholderName!,
         resources,
         selectedKey: resources[0] ? projectCloseResourceKey(resources[0]) : undefined,
       };
@@ -109,7 +113,8 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
     pendingProjectCloseIds = [...new Set(ids)].filter(
       (id) =>
         projects.value.some((item) => item.id === id) ||
-        projectRestoreFailures.value.some((item) => projectRestoreTabId(item.root) === id),
+        projectRestoreFailures.value.some((item) => projectRestoreTabId(item.root) === id) ||
+        remotePlaceholderName?.(id) !== undefined,
     );
     projectCloseDialog.value = undefined;
     presentNextProjectClose();

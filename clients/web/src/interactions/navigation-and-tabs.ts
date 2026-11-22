@@ -36,6 +36,8 @@ export interface NavigationAndTabInteractionsDependencies {
   readonly selectTicketView: (next: TicketView, { refresh }?: { refresh?: boolean }) => void;
   readonly selectProjectTab: (next: string) => void;
   readonly retryProjectRestore: (root: string) => Promise<void>;
+  /** Retry a remote placeholder tab's host now (HS2-WNK73S). */
+  readonly retryRemoteProject: (projectId: string) => void;
   /** Kerf's public TabBar fit reports, which size the project strip's launcher (HS2-A2CSNB). */
   readonly onTabBarFit: (fit: TabBarFit) => void;
 }
@@ -64,6 +66,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     selectTicketView,
     selectProjectTab,
     retryProjectRestore,
+    retryRemoteProject,
     onTabBarFit,
   } = dependencies;
   lifetime.add(
@@ -199,6 +202,12 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.selector, (_event, target) => {
       const root = data(target).projectRoot;
       if (root) void retryProjectRestore(root);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.retryRemoteProject.selector, (_event, target) => {
+      const id = data(target).projectId;
+      if (id) retryRemoteProject(id);
     }),
   );
   return () => {
