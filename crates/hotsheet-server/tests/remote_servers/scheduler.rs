@@ -733,15 +733,20 @@ async fn hs2_pnca93_cli_policy_set_starts_the_running_servers_loop() {
     std::fs::create_dir_all(&directory).unwrap();
     let waiter = hotsheet_jobs::ChangeWaiter::starting(&[directory.as_path()]).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    // A pass appends its tick record first and each decision after it, one append at a time,
+    // so a read can land between them. Wait for the step's own record too: a Windows runner
+    // read the tick alone (`unplaced: 1`) before the unplaced record was written.
     let started = loop {
         let page = decisions();
-        let pass = page["entries"]
-            .as_array()
-            .unwrap()
+        let entries = page["entries"].as_array().unwrap();
+        let pass = entries
             .iter()
             .find(|entry| entry["trigger"] == "start" && entry["kind"] == "tick")
             .cloned();
-        if let Some(pass) = pass {
+        let decided = entries
+            .iter()
+            .any(|entry| entry["kind"] == "unplaced" && entry["step_id"] == step_id);
+        if let (Some(pass), true) = (pass, decided) {
             break (pass, page);
         }
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
@@ -752,14 +757,7 @@ async fn hs2_pnca93_cli_policy_set_starts_the_running_servers_loop() {
     assert_eq!(pass["mode"], "applied", "{page}");
     assert_eq!(pass["actor_id"], "scheduler-1");
     assert_eq!(pass["tick"]["automatic"], true);
-    assert!(
-        page["entries"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|entry| entry["kind"] == "unplaced" && entry["step_id"] == step_id),
-        "{page}"
-    );
+    assert_eq!(pass["tick"]["unplaced"], 1, "{page}");
 }
 
 /// HS2-2FG91X: scheduling around claimable resources, on the same fixtures.
