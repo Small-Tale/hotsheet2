@@ -125,3 +125,39 @@ describe('OrchestrationProjectDetail Sites (HS2-D4G81Q)', () => {
     expect(siteText(markup, 'W2')).toContain('Linux, x86_64');
   });
 });
+
+/** The markup of one section, by its aria-label. */
+const sectionOf = (markup: string, label: string) =>
+  new RegExp(`aria-label="${label}"[\\s\\S]*?</section>`).exec(markup)?.[0] ?? '';
+const textOf = (markup: string) => markup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+describe('OrchestrationProjectDetail Binding names every site (HS2-NGP2AK)', () => {
+  it('lists each site on its own row, the home site marked, when the project has several', () => {
+    const binding = textOf(
+      sectionOf(
+        render({
+          where: '2 sites · Local on This Computer, Remote on Build host',
+          sites: [
+            { targetId: 'W1', label: 'Widgets', where: 'Local on This Computer', home: true },
+            { targetId: 'W2', label: 'Widgets build host', where: 'Remote on Build host', home: false },
+            { targetId: 'W3', label: 'Widgets spare', where: '', home: false },
+          ],
+        }),
+        'Binding',
+      ),
+    );
+    for (const text of [
+      'Where 3 sites',
+      'Widgets (Home) Local on This Computer',
+      'Widgets build host Remote on Build host',
+      'Widgets spare Not bound on this computer',
+    ])
+      expect(binding).toContain(text);
+  });
+
+  it('keeps one Where row for a one-site project', () => {
+    const binding = textOf(sectionOf(render(), 'Binding'));
+    expect(binding).toContain('Where Local on This Computer');
+    expect(binding).not.toContain('sites');
+  });
+});

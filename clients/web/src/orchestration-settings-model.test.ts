@@ -125,7 +125,8 @@ describe('orchestration settings model (HS2-W27N1D)', () => {
     expect(rows.map((row) => [row.label, row.siteOf, row.where])).toEqual([
       ['Accounts', undefined, ''],
       ['Orphan site', undefined, ''],
-      ['Widgets', undefined, '3 sites · Local on This Computer'],
+      // HS2-NGP2AK: every site's place, the project's own first, each place once.
+      ['Widgets', undefined, '3 sites · Local on This Computer, Remote on Build host'],
       ['Widgets laptop', 'W1', 'Site of Widgets'],
       ['Widgets on the build host', 'W1', 'Site of Widgets · Remote on Build host'],
     ]);

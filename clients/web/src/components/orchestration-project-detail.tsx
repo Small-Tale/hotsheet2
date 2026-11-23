@@ -215,7 +215,20 @@ export function OrchestrationProjectDetail({
         <section aria-label="Binding">
           <ListHeader label="Binding" />
           <ValueTable label={`${label} binding`} density="compact" stackBelow="compact">
-            <ValueTableRow label="Where" value={where || 'Not bound on this computer'} />
+            {several ? (
+              // HS2-NGP2AK: a project with several sites names where each one is, one row per site.
+              <>
+                <ValueTableRow label="Where" value={`${String(sites.length)} sites`} />
+                {sites.map((site) => (
+                  <ValueTableRow
+                    label={site.home ? `${site.label} (Home)` : site.label}
+                    value={site.where || 'Not bound on this computer'}
+                  />
+                ))}
+              </>
+            ) : (
+              <ValueTableRow label="Where" value={where || 'Not bound on this computer'} />
+            )}
             <ValueTableRow label="Connection" value={badge(connection)} placeholder={loading && !detail?.resolution} />
             {checked ? <ValueTableRow label="Last Checked" value={formatTime(checked)} /> : null}
           </ValueTable>

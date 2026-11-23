@@ -159,10 +159,15 @@ export function projectRows(
     .filter((target) => !projectOf(target))
     .sort(byLabel)
     .flatMap((project) => {
-      const sites = active.filter((target) => projectOf(target) === project.target_id).sort(byLabel);
+      const sites = active.filter((target) => projectOf(target) === project.target_id).sort(byLabel),
+        siteRows = sites.map((site) => row(site, `Site of ${project.label}`));
+      if (!sites.length) return [row(project, '')];
+      // HS2-NGP2AK: a project with several sites names where every one of them is, its own first.
+      const own = row(project, ''),
+        places = [...new Set([own.place, ...siteRows.map((site) => site.place)].filter(Boolean))];
       return [
-        row(project, sites.length ? `${sites.length + 1} sites` : ''),
-        ...sites.map((site) => row(site, `Site of ${project.label}`)),
+        { ...own, where: [`${String(sites.length + 1)} sites`, places.join(', ')].filter(Boolean).join(' · ') },
+        ...siteRows,
       ];
     });
 }

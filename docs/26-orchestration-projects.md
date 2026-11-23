@@ -5783,6 +5783,10 @@ the type changes to Software while it shows.
   never shows the policy's retired `targets[].actions` or `approval.required_for`
   (HS2-XHQ1EH: the server ignores and drops them); every member it does not show is
   written back unchanged.
+- **Where (HS2-NGP2AK).** A project with several sites names where every site is: its
+  row reads _N sites · Local on This Computer, Remote on Build host_ (each place once,
+  the project's own first), and the detail's Binding lists one row per site, the home
+  site marked _(Home)_, under _Where: N sites_.
 - **A project's limits (HS2-7WF6JD).** The detail's **Limits** section, between Binding
   and Capacity and Admission, edits that project's entry in the policy (`targets[]`):
   Orchestrate in This Project (`enabled`), AI Tools Here (the tools the policy does not
