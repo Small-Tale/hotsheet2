@@ -445,6 +445,29 @@ mod tests {
         Ok(())
     }
 
+    /// A catalog file replaced by an older copy never moves a live device's idle clock back.
+    #[test]
+    fn a_reload_never_rolls_back_a_newer_idle_clock() -> Result<()> {
+        let home = tempfile::tempdir()?;
+        let now = wall_clock();
+        let auth = RemoteAuth::open_machine_at(home.path(), SERVER, now)?;
+        let tablet = pair(&auth, "Synthetic tablet", now)?;
+        let older = std::fs::read(machine_catalog_path(home.path()))?;
+        let later = now + 10 * super::super::ACTIVITY_PERSIST_INTERVAL;
+        assert!(works(&auth, &tablet, later)?);
+        std::fs::write(machine_catalog_path(home.path()), &older)?;
+        assert_eq!(auth.list(later)[0].last_used_at, later);
+        // A write applied on top of the older file keeps the newer use too.
+        let change = super::super::DeviceChange {
+            role: Some(Role::ReadOnly),
+            ..Default::default()
+        };
+        auth.change(&tablet.device.id, change)?.unwrap();
+        let reopened = RemoteAuth::open_machine_at(home.path(), SERVER, later)?;
+        assert_eq!(reopened.list(later)[0].last_used_at, later);
+        Ok(())
+    }
+
     /// Two servers on different primary stores share the machine catalog: neither loses the
     /// other's pairing, and a revocation in one holds in the other at its next request.
     #[test]

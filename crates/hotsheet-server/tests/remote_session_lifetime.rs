@@ -198,17 +198,38 @@ async fn closed(socket: &mut SyncSocket) {
 }
 
 /// Advance the clock and wait for the open stream's once-a-second recheck to persist the use.
-async fn advance_while_streaming(state: &AppState, clock: &ManualClock, seconds: i64) {
-    let mut writes = state.remote_auth().unwrap().writes();
-    let before = *writes.borrow_and_update();
+/// Every listed server shares the machine catalog (HS2-YDDPN4), so the use counts once whichever
+/// of them persists it; `state` must then report the device as used now.
+async fn advance_while_streaming(
+    state: &AppState,
+    also: &[&AppState],
+    clock: &ManualClock,
+    seconds: i64,
+) {
+    let mut watched: Vec<_> = std::iter::once(state)
+        .chain(also.iter().copied())
+        .map(|server| {
+            let mut writes = server.remote_auth().unwrap().writes();
+            let before = *writes.borrow_and_update();
+            (writes, before)
+        })
+        .collect();
     clock.advance(seconds);
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        writes.wait_for(|count| *count > before),
-    )
-    .await
-    .expect("the open stream records the device's use")
-    .unwrap();
+    let any_write = futures_util::future::select_all(watched.iter_mut().map(|(writes, before)| {
+        let before = *before;
+        Box::pin(async move { writes.wait_for(|count| *count > before).await.map(|_| ()) })
+    }));
+    tokio::time::timeout(Duration::from_secs(10), any_write)
+        .await
+        .expect("the open stream records the device's use")
+        .0
+        .unwrap();
+    let now = clock.now();
+    let devices = state.remote_auth().unwrap().list(now);
+    assert!(
+        devices.iter().all(|device| device.last_used_at == now),
+        "the use is visible to every server sharing the catalog"
+    );
 }
 
 #[tokio::test]
@@ -225,13 +246,15 @@ async fn hs2_4b0ksd_an_open_stream_keeps_a_device_past_thirty_days_through_a_res
     let mut writes = state.remote_auth().unwrap().writes();
     let before = *writes.borrow_and_update();
     for _ in 0..12 {
-        advance_while_streaming(&state, &clock, 3 * DAY).await;
+        advance_while_streaming(&state, &[], &clock, 3 * DAY).await;
     }
     assert!(clock.now() - START > IDLE_TTL);
     // Bounded persistence: one write per step, however many rechecks ran.
     assert_eq!(*writes.borrow(), before + 12);
 
     // The server restarts (a rebuild or a reboot): the device reconnects without approval.
+    // The first in-process server keeps serving its stream task after the client drops, and
+    // both share the machine catalog, so either may persist the use from here on.
     drop(socket);
     let restarted = server(dir.path(), &clock);
     let router = app(restarted.clone());
@@ -243,10 +266,10 @@ async fn hs2_4b0ksd_an_open_stream_keeps_a_device_past_thirty_days_through_a_res
     socket = sync_socket(addr, &device).await;
 
     // Still in use on day 60 and day 89: the reminder days pass, the session holds.
-    advance_while_streaming(&restarted, &clock, 24 * DAY).await;
+    advance_while_streaming(&restarted, &[&state], &clock, 24 * DAY).await;
     let (_, current) = me(&router, &device).await;
     assert_eq!(current["reminder_day"], json!(60));
-    advance_while_streaming(&restarted, &clock, 29 * DAY).await;
+    advance_while_streaming(&restarted, &[&state], &clock, 29 * DAY).await;
     let (_, current) = me(&router, &device).await;
     assert_eq!(current["reminder_day"], json!(89));
 

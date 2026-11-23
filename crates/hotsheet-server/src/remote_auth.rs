@@ -362,6 +362,20 @@ fn read_catalog(path: &Path, server_id: &str) -> Result<Option<Data>> {
     Ok(Some(data))
 }
 
+/// Replace the in-memory catalog with `fresh`, read from disk, without moving any live
+/// session's idle clock backward: a file replaced by an older copy never makes a device that
+/// this process saw in use look idle (HS2-YDDPN4).
+fn adopt(current: &mut Data, mut fresh: Data) {
+    for entry in &mut fresh.sessions {
+        if let Some(known) = current.sessions.iter().find(|known| {
+            known.device.id == entry.device.id && equal_digest(&known.token_hash, &entry.token_hash)
+        }) {
+            entry.device.last_used_at = entry.device.last_used_at.max(known.device.last_used_at);
+        }
+    }
+    *current = fresh;
+}
+
 /// Hold the catalog's cross-process lock (`<catalog>.lock`) until the result is dropped.
 fn lock_catalog(path: &Path) -> Result<hotsheet_ticketing::FileLock> {
     let mut lock = path.as_os_str().to_owned();
@@ -518,7 +532,7 @@ impl RemoteAuth {
             guard.stamp = on_disk;
             match read_catalog(&self.path, &guard.data.server_id) {
                 Ok(Some(data)) => {
-                    guard.data = data;
+                    adopt(&mut guard.data, data);
                     self.revision
                         .send_modify(|revision| *revision = revision.wrapping_add(1));
                 }
@@ -592,7 +606,7 @@ impl RemoteAuth {
         // Always re-read under the lock: a stamp can repeat on a coarse-clock filesystem
         // that reuses inodes, and a stale base would lose another server's change.
         if let Some(data) = read_catalog(&self.path, &guard.data.server_id)? {
-            guard.data = data;
+            adopt(&mut guard.data, data);
         }
         let mut next = guard.data.clone();
         let result = change(&mut next)?;
