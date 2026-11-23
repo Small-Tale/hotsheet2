@@ -447,6 +447,9 @@ pub struct AppState {
     /// The `CODEX_HOME` a Codex session that reported none runs under; `None` is the user's
     /// default home (hermetic tests point it at an empty directory).
     default_codex_home: Option<Arc<std::path::PathBuf>>,
+    /// The home the macOS screen saver's snapshot locations derive from; `None` reads
+    /// `HOTSHEET_SCREENSAVER_HOME` or `$HOME` (a test gives each server its own; HS2-MC2PSC).
+    screensaver_home: Option<Arc<std::path::PathBuf>>,
     /// Machine-local checkout discovery. Checkout ids identify working directories and
     /// are intentionally separate from store ids and server authentication tokens.
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -702,6 +705,7 @@ impl AppState {
             target_store_watches: Arc::default(),
             code_ref_watches: Arc::default(),
             default_codex_home: None,
+            screensaver_home: None,
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),
             ),
@@ -1473,6 +1477,25 @@ impl AppState {
     pub fn with_default_codex_home(mut self, home: std::path::PathBuf) -> Self {
         self.default_codex_home = Some(Arc::new(home));
         self
+    }
+
+    /// Derive the screen saver's snapshot locations from `home` instead of the process
+    /// environment, so concurrent test servers never overwrite one another's snapshot
+    /// in the one folder `.cargo/config.toml` forces for every process (HS2-MC2PSC).
+    pub fn with_screensaver_home(mut self, home: std::path::PathBuf) -> Self {
+        self.screensaver_home = Some(Arc::new(home));
+        self
+    }
+
+    pub(crate) fn screensaver_locations(
+        &self,
+    ) -> Option<hotsheet_ticketing::screensaver::Locations> {
+        match &self.screensaver_home {
+            Some(home) => Some(hotsheet_ticketing::screensaver::Locations::for_home(
+                home.as_ref().clone(),
+            )),
+            None => hotsheet_ticketing::screensaver::locations_from_env(),
+        }
     }
 
     pub(crate) fn default_codex_home(&self) -> std::path::PathBuf {

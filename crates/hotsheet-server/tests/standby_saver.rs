@@ -10,7 +10,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use hotsheet_server::standby_saver::write_to;
 use hotsheet_server::{AppState, app};
-use hotsheet_ticketing::screensaver::{self, Locations, SNAPSHOT_FILE, SNAPSHOT_VALID_MS};
+use hotsheet_ticketing::screensaver::{Locations, SNAPSHOT_FILE, SNAPSHOT_VALID_MS};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -151,49 +151,65 @@ async fn hs2_mzm988_an_empty_server_still_leaves_a_valid_snapshot() {
     assert_eq!(snapshot["live"]["stores"], json!([]));
 }
 
-/// Removes the snapshot directory the router test opts into, even when it fails.
-struct OptIn(std::path::PathBuf);
-impl Drop for OptIn {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+/// Read the snapshot in `dir` once it reports `state` for its first store, waking on file
+/// events in `dir` rather than on a timer.
+fn wait_for_snapshot_state(dir: &Path, state: &str) -> Value {
+    use notify::Watcher as _;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = notify::recommended_watcher(move |event| {
+        let _ = tx.send(event);
+    })
+    .unwrap();
+    watcher
+        .watch(dir, notify::RecursiveMode::NonRecursive)
+        .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let mut last = None;
+    loop {
+        // Checked after the watch starts, so a write that landed before it is still seen.
+        if let Ok(bytes) = std::fs::read(dir.join(SNAPSHOT_FILE))
+            && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
+        {
+            if value["live"]["stores"][0]["state"] == state {
+                return value;
+            }
+            last = Some(value);
+        }
+        if let Err(error) =
+            rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+        {
+            panic!(
+                "the router never wrote state {state:?} to the snapshot ({error}); last snapshot: {last:?}"
+            );
+        }
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hs2_mzm988_the_running_router_keeps_the_snapshot_current_from_live_state_events() {
-    // This test writes where the server writes in production, so it runs only against the isolated
-    // home `.cargo/config.toml` forces, never the developer's real screen saver container.
-    let locations = screensaver::locations_from_env().expect("a saver home");
-    let dir = locations.snapshot_dirs()[0].clone();
-    assert!(
-        dir.to_string_lossy().contains("test-screensaver-home"),
-        "refusing to write outside the isolated saver home: {}",
-        dir.display()
-    );
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let _cleanup = OptIn(dir.clone());
-
+    // HS2-MC2PSC: this server's saver locations are its own. `.cargo/config.toml` forces one saver
+    // home for every test process, so under suite load another test's server overwrote this
+    // snapshot after the live_state write, and the next write was a minute away.
     let h = harness();
-    let router = app(h.state.clone());
+    let locations = Locations::for_home(h.dir.path().join("saver-home"));
+    let dir = locations.snapshot_dirs()[0].clone();
+    std::fs::create_dir_all(&dir).unwrap();
+    let state = h
+        .state
+        .clone()
+        .with_screensaver_home(h.dir.path().join("saver-home"));
+    let router = app(state.clone());
     let _router_task =
-        hotsheet_server::notification_router::spawn_notification_router(h.state.clone()).await;
-    start_work(&router).await;
+        hotsheet_server::notification_router::spawn_notification_router(state.clone()).await;
 
-    // A pushed live_state reaches the file without anyone asking for it.
-    let snapshot = tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            if let Ok(bytes) = std::fs::read(dir.join(SNAPSHOT_FILE))
-                && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
-                && value["live"]["stores"][0]["state"] == "active"
-            {
-                return value;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .expect("the router wrote the active state to the snapshot");
+    // A pushed live_state reaches the file without anyone asking for it. Without the server's own
+    // saver home this directory does not exist for it, so nothing would arrive.
+    let waiter = {
+        let dir = dir.clone();
+        tokio::task::spawn_blocking(move || wait_for_snapshot_state(&dir, "active"))
+    };
+    start_work(&router).await;
+    let snapshot = waiter.await.unwrap();
     assert_eq!(snapshot["version"], 1);
     assert_eq!(snapshot["live"]["stores"][0]["store"], h.store_id.as_str());
     assert!(

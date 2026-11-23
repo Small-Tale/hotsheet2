@@ -472,6 +472,9 @@ without a device-management profile, so Hot Sheet reports the setting's state an
   `--bundle` the CLI looks in the desktop app's resources, then in a development build.
 - **Test isolation.** `HOTSHEET_SCREENSAVER_HOME` replaces `$HOME` for these locations; `.cargo/config.toml`
   forces it to a repository-local folder so no test touches the real container or `~/Library/Screen Savers`.
+  That folder is shared by every test process, so a test that asserts the server's own snapshot gives its
+  server a private saver home (`AppState::with_screensaver_home`); otherwise concurrent test servers overwrite
+  each other's snapshot (HS2-MC2PSC).
 - **Content.** The same as standby: project names and states are visible while the screen is locked. A
   counts-only mode is HS2-R7CXD5.
 - **Verification.** `clients/macos-screensaver/check.sh` builds the bundle, loads its principal class, hosts

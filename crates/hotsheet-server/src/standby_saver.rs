@@ -17,7 +17,7 @@ use crate::live_state;
 /// Write the snapshot for this process's saver locations. Never fails the caller: a saver that
 /// cannot be fed must not disturb the server.
 pub(crate) fn write(state: &AppState) {
-    let Some(locations) = screensaver::locations_from_env() else {
+    let Some(locations) = state.screensaver_locations() else {
         return;
     };
     write_to(state, &locations, unix_ms());
