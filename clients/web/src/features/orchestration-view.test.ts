@@ -145,6 +145,25 @@ describe('Propose Plan through the planning session (HS2-HCW7MD seam, HS2-J89JC7
     await expect(planner.cancelUpdate(project)).rejects.toThrow(/No plan update/);
   });
 
+  it('says to install a tool, not to choose one, when this machine has none (HS2-N3HWP9)', async () => {
+    let installed = false;
+    const planner = createServerPlanner({
+      choice: () => undefined,
+      installed: () => installed,
+      client: () => ({}) as never,
+      personId: () => 'person-1',
+    });
+    expect(planner.availability(project)).toEqual({
+      available: false,
+      reason: 'Install and sign in to an AI tool on this machine first',
+    });
+    await expect(planner.propose(project)).rejects.toThrow(/Install and sign in/);
+    await expect(planner.update(project)).rejects.toThrow(/Install and sign in/);
+    // A tool is installed but the one chosen here is not: choosing another in Settings helps.
+    installed = true;
+    expect(planner.availability(project).reason).toMatch(/Choose an AI tool/);
+  });
+
   it('names this browser’s person with one stable, bounded id', () => {
     const values = new Map<string, string>();
     const storage = {

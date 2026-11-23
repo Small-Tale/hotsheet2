@@ -3730,7 +3730,8 @@ export async function startHotSheetWebClient() {
     },
     persistWorkspacePreferences,
     personId: () => orchestrationPersonId(localStorage),
-    // HS2-HCW7MD: Propose Plan runs the planner in the tool the person chose to drive with here.
+    // HS2-HCW7MD: Propose Plan runs the planner in the tool the person chose to drive with here; with none
+    // chosen, Auto (HS2-N3HWP9): the project's default tool, else the first installed one.
     planner: createServerPlanner({
       choice: (current) => {
         const selection = effectiveDriveSelection(current.id);
@@ -3738,6 +3739,7 @@ export async function startHotSheetWebClient() {
           ? { tool: selection.tool, model: selection.model, effort: selection.effort }
           : undefined;
       },
+      installed: () => aiTools.value.length > 0,
       client: (current) => new Api(current.apiPath),
       personId: () => orchestrationPersonId(localStorage),
     }),

@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 
 import { openMockedProject, projectTab } from './open-mocked-project';
+import { syntheticTool } from './orchestration-real-fixtures';
 import { proxyFetch, realTicketServer } from './real-ticket-server';
 
 /**
@@ -988,7 +989,9 @@ test('HS2-5RYXNN a planner waiting on its tool’s first-run question says so in
 
 test('HS2-190RDX Update Plan re-plans while the plan runs, shows the update and cancels it', async ({ page }) => {
   test.setTimeout(120_000);
-  const server = await realTicketServer();
+  // Update Plan runs the planner in an installed tool (Auto, HS2-N3HWP9). The synthetic tool keeps it
+  // independent of which AI tools the test host has; the planning requests are routed below.
+  const server = await realTicketServer({ seed: ({ env }) => syntheticTool(env.HOTSHEET_HOME!) });
   try {
     await declareSelf(server);
     await asOrchestrationProject(server);

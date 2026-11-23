@@ -140,20 +140,29 @@ function planningRefusal(reason: unknown): never {
   throw reason;
 }
 
-/** Propose Plan through the server's planning session, in the tool the person chose (no server default). */
+const CHOOSE_TOOL = 'Choose an AI tool for this project in Settings first';
+// HS2-N3HWP9: with no tool chosen the planner runs Auto, in an installed tool; this is the case where
+// none is installed, so choosing one in Settings would not help.
+const NO_TOOL = 'Install and sign in to an AI tool on this machine first';
+
+/**
+ * Propose Plan through the server's planning session, in the tool the person chose, else Auto: the
+ * project's default tool or the first installed one (no server default). `installed` says whether this
+ * machine has any AI tool, so a refusal names what to do.
+ */
 export function createServerPlanner(options: {
   choice: (project: Project) => AiToolChoice | undefined;
+  installed?: (project: Project) => boolean;
   client: (project: Project) => Api;
   personId: () => string;
 }): OrchestrationPlanner {
+  const missing = (project: Project) => (options.installed?.(project) === false ? NO_TOOL : CHOOSE_TOOL);
   return {
     availability: (project) =>
-      options.choice(project)
-        ? { available: true }
-        : { available: false, reason: 'Choose an AI tool for this project in Settings first' },
+      options.choice(project) ? { available: true } : { available: false, reason: missing(project) },
     async propose(project) {
       const choice = options.choice(project);
-      if (!choice) throw new Error('Choose an AI tool for this project in Settings first.');
+      if (!choice) throw new Error(`${missing(project)}.`);
       try {
         const proposal = await options
           .client(project)
@@ -172,7 +181,7 @@ export function createServerPlanner(options: {
     },
     async update(project) {
       const choice = options.choice(project);
-      if (!choice) throw new Error('Choose an AI tool for this project in Settings first.');
+      if (!choice) throw new Error(`${missing(project)}.`);
       try {
         const update = await options
           .client(project)
