@@ -2820,9 +2820,9 @@
       "id": "terminal-edit-menu",
       "name": "TerminalEditMenu",
       "kind": "component",
-      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
+      "purpose": "Terminal edit menu opened from a touch long-press or a right-click with selected text. Copy writes the selection to the viewing device, Copy Text opens the Copy sheet, and Paste sends the clipboard to the terminal.",
       "useWhen": [
-        "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
+        "A terminal long-press or a right-click on a terminal selection needs clipboard actions."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."

@@ -2,11 +2,94 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { readClipboardText } from './clipboard-text';
 import { openMockedProject } from './open-mocked-project';
-import { installTerminalFixture } from './terminal-feedback-fixture';
+import { installTerminalFixture, project } from './terminal-feedback-fixture';
 
 // HS2-FRB545: phone terminals copy their text through a selectable sheet and paste from the clipboard,
 // falling back to a paste sheet when the clipboard cannot be read.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+
+test.describe('desktop remote terminal clipboard', () => {
+  test.use({ viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 });
+
+  for (const method of ['shortcut', 'context menu'] as const) {
+    test(`copies remote terminal text to the viewing device via ${method} (HS2-RJRRSF)`, async ({ page, context }) => {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await installTerminalFixture(page);
+      await page.route(/\/__hotsheet\/(?:remote\/)?projects\/open$/, (route) =>
+        route.fulfill({
+          status: 201,
+          json: {
+            ...project,
+            id: 'remote:01ARZ3NDEKTSV4RRFFQ69G5FAV:terminal-feedback',
+            apiPath: '/__hotsheet/project-api/remote-terminal-feedback',
+          },
+        }),
+      );
+      await openProject(page);
+      await expect(page.locator('[data-tab-kind="project"][data-location="remote"]')).toHaveCount(1);
+      await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+      await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
+      const drawer = page.locator('[data-component="terminal-drawer"]');
+      await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+      await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+      const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+      await expect(viewport.locator('.xterm-rows')).toContainText('GNU nano 8.4');
+      const text = 'GNU nano 8.4';
+      const { x, y, width, height } = await terminalTextBox(viewport, text);
+      await page.mouse.move(x + 1, y + height / 2);
+      await page.mouse.down();
+      await page.mouse.move(x + width - 1, y + height / 2, { steps: 6 });
+      await page.mouse.up();
+      await expect(viewport.locator('.xterm-selection div').first()).toBeVisible();
+      const clipboard = await page.evaluateHandle(() => navigator.clipboard);
+      await clipboard.evaluate((api) => api.writeText('Synthetic previous clipboard text'));
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }),
+      );
+
+      if (method === 'shortcut') {
+        // Some browser hosts do not deliver the native Copy event for xterm's virtual selection.
+        await page.evaluate(() => {
+          document.addEventListener(
+            'copy',
+            (event) => {
+              if (!(event.target instanceof Element) || !event.target.closest('.xterm')) return;
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            },
+            { capture: true },
+          );
+        });
+        await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+        await page.keyboard.press('ControlOrMeta+c');
+      } else {
+        await page.mouse.click(x + width / 2, y + height / 2, { button: 'right' });
+        const menu = page.locator('[data-context-menu="terminal-edit"]');
+        const copy = menu.getByRole('menuitem', { name: 'Copy', exact: true });
+        await expect(copy).toBeVisible();
+        await page.screenshot({
+          path: test.info().outputPath('hs2-rjrrsf-remote-copy-menu-1280.png'),
+          animations: 'disabled',
+        });
+        await page.setViewportSize({ width: 1024, height: 800 });
+        await expect(menu).toBeInViewport();
+        await page.screenshot({
+          path: test.info().outputPath('hs2-rjrrsf-remote-copy-menu-1024.png'),
+          animations: 'disabled',
+        });
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await copy.click();
+      }
+      await expect(toast(page)).toContainText('Copied selection (1 line)');
+      await expect.poll(() => clipboard.evaluate((api) => api.readText())).toBe(text);
+      expect(await sentInput(page)).toEqual([]);
+      await page.mouse.click(x + width / 2, y + height / 2);
+      await expect(viewport.locator('.xterm-selection div')).toHaveCount(0);
+      await page.keyboard.press('Control+c');
+      await expect.poll(() => sentInput(page)).toEqual(['\u0003']);
+    });
+  }
+});
 
 type FeedbackWindow = typeof window & {
   __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }>;

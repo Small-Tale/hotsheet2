@@ -1,5 +1,5 @@
 /**
- * Phone terminal clipboard (HS2-FRB545).
+ * Terminal clipboard (HS2-FRB545, HS2-RJRRSF).
  *
  * xterm's surface is not natively selectable on touch devices and its hidden helper textarea offers
  * no Paste callout, so phone chrome exposes explicit Copy and Paste actions. Copy snapshots the
@@ -18,6 +18,19 @@ export const TERMINAL_PASTE_EVENT = 'hotsheet-terminal-paste';
  * edit menu at `detail` (viewport coordinates) (HS2-KKP8YJ).
  */
 export const TERMINAL_EDIT_MENU_EVENT = 'hotsheet-terminal-edit-menu';
+
+/** The viewing device's standard Copy chord, before xterm interprets it as terminal input. */
+export function terminalSelectionCopyKey(event: KeyboardEvent, apple: boolean): boolean {
+  return (
+    !event.defaultPrevented &&
+    !event.isComposing &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === 'c' &&
+    event.metaKey === apple &&
+    event.ctrlKey !== apple
+  );
+}
 
 /**
  * Whether a keydown inside a terminal should dismiss its open edit menu instead of reaching xterm,

@@ -1,5 +1,9 @@
 # Feature Coverage Matrix
 
+HS2-RJRRSF: `clients/web/tests/terminal-clipboard.spec.ts` selects text with a mouse in a
+remote project tab, copies via the keyboard and the right-click menu, checks the viewing
+browser's clipboard with the async API unavailable, and verifies shell Ctrl-C with no selection.
+
 HS2-N1QDZW: `hotsheet-jobs/src/watch.rs` unit tests run the shared file watcher
 against the real platform backend: four paths registered with one start, repeated
 and interleaved writes reported for each path, a path added later, a shallow and

@@ -101,6 +101,7 @@ terminals	delegate	document.body	'click'	'[data-action="close-magnified-terminal
 terminals	delegate	document.body	'mousedown'	'[data-component="terminal-key-bar"]'
 terminals	wireTerminalKeyBar	document.body
 terminals	delegate	document.body	TERMINAL_EDIT_MENU_EVENT	'[data-component="terminal-viewport"]'
+terminals	delegateCapture	document.body	'contextmenu'	'[data-component="terminal-viewport"]'
 terminals	document.addEventListener	'toggle'
 terminals	delegateCapture	document.body	'keydown'	'[data-component="terminal-viewport"]'
 terminals	delegate	document.body	'mousedown'	'[data-action="clear-terminal"]'

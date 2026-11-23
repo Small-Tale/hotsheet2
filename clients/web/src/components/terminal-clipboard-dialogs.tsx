@@ -41,10 +41,9 @@ export interface TerminalEditMenuState {
 const SHEET_WIDTH = remify(672);
 
 /**
- * Terminal edit menu (HS2-KKP8YJ): a context-mode Kerf PopupMenu at the long-press point that reuses
- * the HS2-FRB545 Copy and Paste actions. After a long-press selected text it leads with Copy, which
- * copies that selection (HS2-EYR96N). The interaction layer remembers which terminal it was opened
- * on, so the chosen action lands there.
+ * A context-mode Kerf PopupMenu at the long-press or right-click point (HS2-KKP8YJ, HS2-RJRRSF).
+ * When the terminal has selected text, Copy writes that selection to the viewing device. The
+ * interaction layer remembers the selection and the terminal that opened the menu.
  */
 export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
   if (!state) return null;

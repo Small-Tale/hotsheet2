@@ -4751,7 +4751,7 @@ Paste actions:
   the open-in-drawer button.
 
 The long-press edit menu below works at every width. A mouse or trackpad desktop, including a
-tablet with a trackpad attached (fine primary pointer), is unchanged.
+tablet with a trackpad attached (fine primary pointer), keeps its existing clipboard toolbar layout.
 
 **Long-press terminal edit menu (HS2-KKP8YJ).** Holding one finger still on any interactive
 terminal for 500 ms selects the word under the finger, and lifting opens a small edit menu where the
@@ -4766,6 +4766,12 @@ terminal. The menu is a context-mode Kerf `PopupMenu`:
 The menu acts on the terminal it was opened over. An outside touch, Escape, or choosing an item dismisses it.
 Escape works even while a focused terminal holds the keyboard, and that Escape never reaches the shell
 (HS2-B06X7Y); with the menu closed, Escape is the terminal's again.
+
+**Desktop terminal copy (HS2-RJRRSF).** Select terminal text and use Command-C or Ctrl-C on the
+viewing device, or right-click a selected terminal and choose **Copy** from the same edit menu.
+Both gestures write the selected text to the viewing device's clipboard for local and remote
+projects. Right-click with no selection keeps the browser context menu. Ctrl-C without a terminal
+selection still reaches the shell.
 
 **Touch text selection (HS2-EYR96N).** The long-press is also how a phone selects a range of
 terminal text directly, using xterm's own selection (the same highlight and text a desktop mouse

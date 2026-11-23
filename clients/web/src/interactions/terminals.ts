@@ -27,6 +27,7 @@ import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../cont
 import { copyWithSelection } from '../copy-text';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
+import { isAppleShortcutPlatform } from '../keyboard-shortcuts';
 import { type MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
@@ -41,6 +42,7 @@ import {
   terminalCopySelection,
   type TerminalEditMenuDetail,
   terminalEditMenuDismissKey,
+  terminalSelectionCopyKey,
   writeClipboardText,
 } from '../terminal-clipboard';
 import {
@@ -430,7 +432,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // Phone terminal clipboard (HS2-FRB545). The sheet keeps the viewport it was opened from, so a paste
   // lands in that terminal even if the drawer selection changed underneath the dialog.
   let clipboardViewport: HTMLElement | undefined,
-    editMenuViewport: HTMLElement | undefined,
+    editMenuTarget: { viewport: HTMLElement; selection?: string } | undefined,
     editMenuFocus: HTMLElement | undefined,
     refocusAfterPaste: HTMLElement | undefined,
     clipboardGeneration = 0;
@@ -451,37 +453,54 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     const current = terminalPaste.peek();
     if (current?.open) terminalPaste.value = { ...current, open: false };
   };
-  // The long-press edit menu (HS2-KKP8YJ) acts on the terminal it was opened over; toolbar, pill, and key-bar
+  // The terminal edit menu acts on the terminal it was opened over; toolbar, pill, and key-bar
   // buttons act on the terminal of the drawer or tile that holds them.
   const clipboardTarget = (target: Element) => {
     if (!target.closest(TERMINALS_TARGETS.terminalEditMenu.selector)) return keyBarViewport(target);
-    const viewport = editMenuViewport;
-    editMenuViewport = undefined;
+    const viewport = editMenuTarget?.viewport;
+    editMenuTarget = undefined;
     terminalEditMenu.value = undefined;
     return viewport?.isConnected ? viewport : undefined;
   };
+  const openEditMenu = (viewport: HTMLElement, x: number, y: number, selection?: string) => {
+    // The pointer and focus move into the popup. Keep the selection from the terminal at open time.
+    editMenuTarget = { viewport, selection };
+    // Kerf's menu takes focus while open (beta.106); a terminal that held the keyboard gets it back.
+    const active = document.activeElement;
+    editMenuFocus = active instanceof HTMLElement && viewport.contains(active) ? active : undefined;
+    terminalEditMenu.value = {
+      ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
+        width: 192,
+        height: selection ? 144 : 96,
+      }),
+      selection: Boolean(selection),
+    };
+  };
   lifetime.add(
     delegate(document.body, TERMINAL_EDIT_MENU_EVENT, TERMINALS_TARGETS.terminalViewport.selector, (event, target) => {
-      const viewport = target as HTMLElement,
-        { x, y } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
-      const { selection } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
-      editMenuViewport = viewport;
-      // Kerf's menu takes focus while open (beta.106); a terminal that held the keyboard gets it back.
-      const active = document.activeElement;
-      editMenuFocus = active instanceof HTMLElement && viewport.contains(active) ? active : undefined;
-      terminalEditMenu.value = {
-        ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
-          width: 192,
-          height: selection === true ? 144 : 96,
-        }),
-        selection: selection === true,
-      };
+      const { x, y, selection } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
+      const viewport = target as HTMLElement;
+      openEditMenu(viewport, x, y, selection ? readTerminalViewportSelection(viewport) : undefined);
+    }),
+  );
+  // Desktop right-click on a selection uses the same local clipboard as the touch menu (HS2-RJRRSF).
+  // An unselected terminal still gets the browser's normal context menu.
+  lifetime.add(
+    delegateCapture(document.body, 'contextmenu', TERMINALS_TARGETS.terminalViewport.selector, (event, target) => {
+      const viewport = target as HTMLElement;
+      if (!(event instanceof MouseEvent) || event.button !== 2) return;
+      const selection = readTerminalViewportSelection(viewport);
+      if (!selection) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openEditMenu(viewport, event.clientX, event.clientY, selection);
     }),
   );
   // Once the edit menu closes (an item, Escape, or an outside press), return the keyboard to the
   // terminal that held it, unless the user has since moved focus elsewhere (HS2-BH7NZ4).
   const restoreEditMenuFocus = (event: Event) => {
     if (closedPopupMenuRoot(event)?.dataset.contextMenu !== 'terminal-edit') return;
+    if (!terminalEditMenu.peek()) editMenuTarget = undefined;
     const focus = editMenuFocus;
     editMenuFocus = undefined;
     if (!focus) return;
@@ -493,16 +512,32 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     });
   };
   document.addEventListener('toggle', restoreEditMenuFocus, { capture: true, signal: lifetime.signal });
+  const appleClipboardPlatform = isAppleShortcutPlatform();
+  const copyTerminalSelection = (text: string) => {
+    void writeClipboardText(text, navigator.clipboard as Clipboard | undefined, () => copyWithSelection(text)).then(
+      (copied) => {
+        showToast(copied ? terminalCopyMessage(text, true) : 'Could not copy the selection.');
+      },
+    );
+  };
   // Escape dismisses the open edit menu even while a focused terminal holds the keyboard: xterm's
   // helper textarea handles Escape and stops it, so the document-level dismiss never sees it. Capture
   // it first, and do not also send ESC to the shell (HS2-B06X7Y).
   lifetime.add(
-    delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalViewport.selector, (event) => {
+    delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalViewport.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
+      if (terminalSelectionCopyKey(keyboard, appleClipboardPlatform)) {
+        const text = readTerminalViewportSelection(target as HTMLElement);
+        if (!text) return;
+        keyboard.preventDefault();
+        keyboard.stopPropagation();
+        copyTerminalSelection(text);
+        return;
+      }
       if (!terminalEditMenuDismissKey(keyboard, Boolean(terminalEditMenu.peek()))) return;
       keyboard.preventDefault();
       keyboard.stopPropagation();
-      editMenuViewport = undefined;
+      editMenuTarget = undefined;
       terminalEditMenu.value = undefined;
     }),
   );
@@ -642,19 +677,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       });
     }),
   );
-  // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard
-  // (HS2-EYR96N). The page is not inert here, so the shared off-screen selection fallback works.
+  // Copy from the edit menu sends the viewport's selection straight to this device's clipboard.
   lifetime.add(
     wireTerminalClipboardActions(document.body, {
       copySelection: (target) => {
-        const viewport = clipboardTarget(target),
-          text = viewport ? readTerminalViewportSelection(viewport) : undefined;
-        if (!text) return;
-        void writeClipboardText(text, navigator.clipboard as Clipboard | undefined, () => copyWithSelection(text)).then(
-          (copied) => {
-            showToast(copied ? terminalCopyMessage(text, true) : 'Could not copy the selection.');
-          },
-        );
+        const text = editMenuTarget?.selection;
+        if (clipboardTarget(target) && text) copyTerminalSelection(text);
       },
       copyText: (target) => {
         const viewport = clipboardTarget(target);
