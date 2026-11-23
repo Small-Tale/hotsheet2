@@ -802,6 +802,30 @@ impl RemoteAuth {
         write: bool,
         now: i64,
     ) -> Result<Result<Device, AuthFailure>> {
+        self.authorize_with(token, Proof::Browser { csrf, origin }, write, now)
+    }
+
+    /// HS2-AW2AKF: authorize a paired device that presented its credential in an
+    /// `Authorization: Bearer` header. A browser never attaches that header on its own,
+    /// so a cross-site page cannot replay it; the Origin and CSRF proofs that defend the
+    /// cookie from cross-site requests are not required. Revocation, expiry and the
+    /// read-only role still apply.
+    pub fn authorize_bearer(
+        &self,
+        token: &str,
+        write: bool,
+        now: i64,
+    ) -> Result<Result<Device, AuthFailure>> {
+        self.authorize_with(token, Proof::Bearer, write, now)
+    }
+
+    fn authorize_with(
+        &self,
+        token: &str,
+        proof: Proof<'_>,
+        write: bool,
+        now: i64,
+    ) -> Result<Result<Device, AuthFailure>> {
         // Avoid a disk write for every API read and every per-second stream recheck: persist
         // activity at most once per interval. The inner recheck still makes concurrent
         // revocation authoritative.
@@ -812,7 +836,7 @@ impl RemoteAuth {
                 return Ok(Err(AuthFailure::Invalid));
             };
             let entry = &guard.data.sessions[position];
-            let result = validate(entry, csrf, origin, write, now);
+            let result = validate(entry, proof, write, now);
             if result.is_err() || entry.device.last_used_at > now - ACTIVITY_PERSIST_INTERVAL {
                 return Ok(result.map(|device| device.at(now)));
             }
@@ -822,7 +846,7 @@ impl RemoteAuth {
                 return Ok(Err(AuthFailure::Invalid));
             };
             let entry = &mut data.sessions[position];
-            if let Err(error) = validate(entry, csrf, origin, write, now) {
+            if let Err(error) = validate(entry, proof, write, now) {
                 return Ok(Err(error));
             }
             touch(&mut entry.device, now);
@@ -950,7 +974,15 @@ impl RemoteAuth {
                 return Ok(Err(AuthFailure::Invalid));
             };
             let entry = &mut data.sessions[position];
-            if let Err(error) = validate(entry, Some(csrf), Some(origin), false, now) {
+            if let Err(error) = validate(
+                entry,
+                Proof::Browser {
+                    csrf: Some(csrf),
+                    origin: Some(origin),
+                },
+                false,
+                now,
+            ) {
                 return Ok(Err(error));
             }
             let new_token = random_token()?;
@@ -983,10 +1015,23 @@ fn digest(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
 
+/// How a request proved it holds a paired session (HS2-AW2AKF).
+#[derive(Clone, Copy)]
+enum Proof<'a> {
+    /// The session cookie, which a browser attaches to cross-site requests too: writes
+    /// need the paired Origin and the CSRF token.
+    Browser {
+        csrf: Option<&'a str>,
+        origin: Option<&'a str>,
+    },
+    /// An `Authorization: Bearer` header, which only a client that holds the credential
+    /// sends (a paired machine's server-to-server calls).
+    Bearer,
+}
+
 fn validate(
     entry: &SessionRecord,
-    csrf: Option<&str>,
-    origin: Option<&str>,
+    proof: Proof<'_>,
     write: bool,
     now: i64,
 ) -> Result<Device, AuthFailure> {
@@ -999,6 +1044,9 @@ fn validate(
     if write && entry.device.role == Role::ReadOnly {
         return Err(AuthFailure::ReadOnly);
     }
+    let Proof::Browser { csrf, origin } = proof else {
+        return Ok(Device::from(&entry.device));
+    };
     if origin.is_some_and(|value| value != entry.device.origin) || (write && origin.is_none()) {
         return Err(AuthFailure::Invalid);
     }
@@ -1359,6 +1407,76 @@ mod tests {
     }
 
     const ORIGIN: &str = "http://localhost:4175";
+
+    /// HS2-AW2AKF: a bearer-presented credential writes without browser Origin and CSRF
+    /// proof, while the cookie form keeps both. Revocation, expiry and the read-only role
+    /// refuse either form.
+    #[test]
+    fn hs2_aw2akf_bearer_writes_without_browser_proof_and_keeps_every_other_check() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let auth = RemoteAuth::open(dir.path().join("remote-auth.json"), "synthetic-server")?;
+        let issued = issue(&auth, ORIGIN, 100)?;
+        // The browser form still needs both proofs for a write.
+        assert_eq!(
+            auth.authorize(&issued.token, None, None, true, 101)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        assert_eq!(
+            auth.authorize(&issued.token, None, Some(ORIGIN), true, 101)?
+                .unwrap_err(),
+            AuthFailure::Csrf
+        );
+        assert_eq!(
+            auth.authorize(&issued.token, Some("wrong"), Some(ORIGIN), true, 101)?
+                .unwrap_err(),
+            AuthFailure::Csrf
+        );
+        assert!(
+            auth.authorize(&issued.token, Some(&issued.csrf), Some(ORIGIN), true, 101)?
+                .is_ok()
+        );
+        // The bearer form reads and writes with neither.
+        assert!(auth.authorize_bearer(&issued.token, false, 102)?.is_ok());
+        assert!(auth.authorize_bearer(&issued.token, true, 102)?.is_ok());
+        // An unknown bearer, or the CSRF token presented as one, is not a session.
+        assert_eq!(
+            auth.authorize_bearer("not-a-session", true, 102)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        assert_eq!(
+            auth.authorize_bearer(&issued.csrf, false, 102)?
+                .unwrap_err(),
+            AuthFailure::Invalid
+        );
+        // A read-only device writes through neither form.
+        let pair = auth.request("Synthetic reader", ORIGIN, 103)?.unwrap();
+        auth.approve(&pair.id, Role::ReadOnly, Grants::default(), 103)?
+            .unwrap();
+        let reader = auth
+            .redeem(&pair.id, &pair.challenge, ORIGIN, 103)?
+            .unwrap();
+        assert!(auth.authorize_bearer(&reader.token, false, 104)?.is_ok());
+        assert_eq!(
+            auth.authorize_bearer(&reader.token, true, 104)?
+                .unwrap_err(),
+            AuthFailure::ReadOnly
+        );
+        // Expiry and revocation hold for the bearer form.
+        assert_eq!(
+            auth.authorize_bearer(&issued.token, false, 102 + SESSION_TTL + 1)?
+                .unwrap_err(),
+            AuthFailure::SessionExpired
+        );
+        assert!(auth.revoke(&issued.device.id)?);
+        assert_eq!(
+            auth.authorize_bearer(&issued.token, true, 105)?
+                .unwrap_err(),
+            AuthFailure::Revoked
+        );
+        Ok(())
+    }
 
     #[test]
     fn hs2_4b0ksd_use_keeps_a_device_past_thirty_days_until_the_ninety_day_cap() -> Result<()> {

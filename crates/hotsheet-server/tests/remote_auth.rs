@@ -1420,3 +1420,165 @@ async fn hs2_yddpn4_restart_on_another_primary_store_keeps_paired_devices() {
     assert_eq!(json_body(refused).await["code"], "session_revoked");
     assert_eq!(status(&on_a, me(&phone)).await, StatusCode::OK);
 }
+
+/// One write to the primary store with exactly the given credential headers.
+fn write_with(headers: &[(&str, &str)]) -> Request<Body> {
+    let mut req = Request::builder()
+        .method("POST")
+        .uri("/tickets")
+        .header(header::CONTENT_TYPE, "application/json");
+    for (name, value) in headers {
+        req = req.header(*name, *value);
+    }
+    req.body(Body::from(
+        json!({"title": "Synthetic bearer write"}).to_string(),
+    ))
+    .unwrap()
+}
+
+/// HS2-AW2AKF: a paired machine presents its session as an `Authorization: Bearer` header
+/// and writes without browser Origin and CSRF proof; the cookie form still needs both, so a
+/// cross-site browser request carrying the cookie stays refused.
+#[tokio::test]
+async fn hs2_aw2akf_bearer_writes_without_browser_proof_while_cookie_writes_need_it() {
+    let (_dir, state) = fixture();
+    let router = app(state);
+    let (cookie, csrf, _) =
+        paired(&router, "Synthetic machine", json!({"role": "read_write"})).await;
+    let token = cookie.split_once('=').unwrap().1.to_owned();
+    let bearer = format!("Bearer {token}");
+    let refusal = |response: axum::response::Response| async move {
+        let status = response.status();
+        (status, json_body(response).await["code"].clone())
+    };
+    let send = |request| router.clone().oneshot(request);
+    // The browser form: the cookie alone, or with Origin but no CSRF, writes nothing.
+    assert_eq!(
+        refusal(send(write_with(&[("cookie", &cookie)])).await.unwrap()).await,
+        (StatusCode::UNAUTHORIZED, json!("session_invalid"))
+    );
+    assert_eq!(
+        refusal(
+            send(write_with(&[("cookie", &cookie), ("origin", ORIGIN)]))
+                .await
+                .unwrap()
+        )
+        .await,
+        (StatusCode::FORBIDDEN, json!("csrf_required"))
+    );
+    assert_eq!(
+        refusal(
+            send(write_with(&[
+                ("cookie", &cookie),
+                ("origin", "http://elsewhere.example"),
+                ("x-hotsheet-csrf", &csrf),
+            ]))
+            .await
+            .unwrap()
+        )
+        .await,
+        (StatusCode::UNAUTHORIZED, json!("session_invalid"))
+    );
+    // The CSRF token presented as a bearer is no session: the cookie form decides, and
+    // without its proof it refuses.
+    let csrf_as_bearer = format!("Bearer {csrf}");
+    assert_eq!(
+        refusal(
+            send(write_with(&[
+                ("cookie", &cookie),
+                ("origin", ORIGIN),
+                ("authorization", &csrf_as_bearer),
+            ]))
+            .await
+            .unwrap()
+        )
+        .await,
+        (StatusCode::FORBIDDEN, json!("csrf_required"))
+    );
+    assert_eq!(
+        refusal(
+            send(write_with(&[("authorization", "Bearer not-a-session")]))
+                .await
+                .unwrap()
+        )
+        .await,
+        (StatusCode::UNAUTHORIZED, json!("session_invalid"))
+    );
+    // The full browser proof and the bearer each write.
+    let browser = send(write_with(&[
+        ("cookie", &cookie),
+        ("origin", ORIGIN),
+        ("x-hotsheet-csrf", &csrf),
+    ]))
+    .await
+    .unwrap();
+    assert!(browser.status().is_success(), "{}", browser.status());
+    let machine = send(write_with(&[("authorization", &bearer)]))
+        .await
+        .unwrap();
+    assert!(machine.status().is_success(), "{}", machine.status());
+    // The peer narrows the device to read-only: the bearer still reads and is refused
+    // writes with the read-only code.
+    let device = json_body(
+        send(request("GET", "/remote-auth/owner", None, None, None, true))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = device["devices"][0]["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "PATCH",
+                &format!("/remote-auth/owner/devices/{id}"),
+                Some(json!({"role": "read_only"})),
+                None,
+                None,
+                true,
+            ),
+        )
+        .await,
+        StatusCode::OK
+    );
+    let read = Request::builder()
+        .uri("/tickets")
+        .header("authorization", &bearer)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(read).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        refusal(
+            send(write_with(&[("authorization", &bearer)]))
+                .await
+                .unwrap()
+        )
+        .await,
+        (StatusCode::FORBIDDEN, json!("read_only"))
+    );
+    // Revocation ends the bearer as it ends the cookie.
+    assert_eq!(
+        status(
+            &router,
+            request(
+                "DELETE",
+                &format!("/remote-auth/owner/devices/{id}"),
+                None,
+                None,
+                None,
+                true,
+            ),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        refusal(
+            send(write_with(&[("authorization", &bearer)]))
+                .await
+                .unwrap()
+        )
+        .await,
+        (StatusCode::UNAUTHORIZED, json!("session_revoked"))
+    );
+}

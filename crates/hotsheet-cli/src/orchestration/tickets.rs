@@ -576,20 +576,10 @@ impl OrchestrationRuntime {
                 {
                     return Err(OrchestrationError::Gate(refused));
                 }
-                Err(OrchestrationError::TargetOperation(
-                    code.and_then(TargetOpError::from_code)
-                        .unwrap_or(match reply.status {
-                            401 | 403 => TargetOpError::Unauthorized,
-                            // An older peer has no such route.
-                            404 | 405 if code.is_none() => TargetOpError::PeerUnsupported,
-                            404 => TargetOpError::NotFound,
-                            409 => TargetOpError::Conflict,
-                            422 => TargetOpError::Unsupported,
-                            429 => TargetOpError::RateLimited,
-                            400 => TargetOpError::Invalid,
-                            _ => TargetOpError::Failed,
-                        }),
-                ))
+                Err(OrchestrationError::TargetOperation(peer_refusal(
+                    reply.status,
+                    code,
+                )))
             }
         }
     }
@@ -1120,4 +1110,30 @@ pub(super) fn decode_query(value: &str) -> Result<String, OrchestrationError> {
         }
     }
     String::from_utf8(out).map_err(|_| OrchestrationError::Invalid("malformed query value"))
+}
+
+/// HS2-AZ15GA, HS2-AW2AKF: a peer's refusal of a target call. The peer's target routes
+/// name their own refusal by code; a refusal of this machine's pairing (expired, revoked,
+/// read-only, missing browser proof, unknown credential) keeps its own code. Only an
+/// uncoded 401 or 403 is classified by status, and it is the peer's authentication, not a
+/// provider credential. The peer's message text is never forwarded.
+pub(super) fn peer_refusal(status: u16, code: Option<&str>) -> TargetOpError {
+    if let Some(known) = code.and_then(TargetOpError::from_code) {
+        return known;
+    }
+    if matches!(status, 401 | 403) {
+        return code
+            .and_then(TargetOpError::from_peer_auth_code)
+            .unwrap_or(TargetOpError::PeerAuthRefused);
+    }
+    match status {
+        // An older peer has no such route.
+        404 | 405 if code.is_none() => TargetOpError::PeerUnsupported,
+        404 => TargetOpError::NotFound,
+        409 => TargetOpError::Conflict,
+        422 => TargetOpError::Unsupported,
+        429 => TargetOpError::RateLimited,
+        400 => TargetOpError::Invalid,
+        _ => TargetOpError::Failed,
+    }
 }

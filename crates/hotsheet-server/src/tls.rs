@@ -226,17 +226,21 @@ async fn enforce_client_access(
             // reports a transport failure instead of this refusal. Bounded, so a
             // read-only device cannot make the server read more than this.
             let _ = axum::body::to_bytes(request.into_body(), READ_ONLY_REFUSAL_DRAIN).await;
-            (
+            // HS2-AW2AKF: a stable code, so a peer's orchestrator reports a read-only pairing
+            // as such instead of a provider credential failure.
+            crate::api_error::ApiError::new(
                 axum::http::StatusCode::FORBIDDEN,
                 "client certificate is read-only",
             )
-                .into_response()
+            .with_code("read_only")
+            .into_response()
         }
-        hotsheet_tls::DeviceRole::Deny => (
+        hotsheet_tls::DeviceRole::Deny => crate::api_error::ApiError::new(
             axum::http::StatusCode::FORBIDDEN,
             "client certificate is not authorized",
         )
-            .into_response(),
+        .with_code("certificate_denied")
+        .into_response(),
     }
 }
 

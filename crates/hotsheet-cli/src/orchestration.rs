@@ -667,7 +667,14 @@ pub fn error_status(error: &OrchestrationError) -> u16 {
                 E::Invalid => 400,
                 E::Unsupported | E::LinksUnsupported => 422,
                 E::RateLimited => 429,
-                E::Unauthorized | E::PeerUnsupported | E::Failed => 502,
+                E::Unauthorized
+                | E::PeerUnsupported
+                | E::Failed
+                | E::PeerSessionExpired
+                | E::PeerSessionRevoked
+                | E::PeerReadOnly
+                | E::PeerCsrfRequired
+                | E::PeerAuthRefused => 502,
             }
         }
     }

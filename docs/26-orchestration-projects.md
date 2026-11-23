@@ -385,6 +385,15 @@ refuses writes whatever a remembered rule says. Target refusals are content-free
 `target_provider_unauthorized`, `target_rate_limited`, `target_source_disabled`,
 `target_request_invalid`, `target_peer_unsupported` (an older peer without the
 route), `target_operation_failed`. Provider message text is never forwarded.
+`target_provider_unauthorized` means only the target's ticket provider refused its
+credentials. When the peer refuses this machine's pairing itself, the refusal
+names why (HS2-AW2AKF): `target_peer_session_expired` (renew the approval on the
+peer), `target_peer_session_revoked` (pair again), `target_peer_read_only` (the
+pairing is read-only), `target_peer_csrf_required` (an older peer that asks a
+paired machine for browser write proof) or `target_peer_auth_refused` (an unknown
+credential, a denied certificate, or an uncoded 401/403). Each carries a
+person-readable message with the next step. A paired-session binding writes with
+its bearer credential, so its writes need no browser Origin or CSRF proof.
 
 ```sh
 hotsheet-cli --actor-role ai --actor-id <worker-id> -C <configured-host-source> orchestration ticket create \
@@ -1728,7 +1737,7 @@ Each state other than `passed` and `running` carries a reason code:
   (HS2-H1EK8R).
 - `skipped`: `prerequisite_not_passed`.
 - `unavailable`: `profile_not_defined`, `program_not_found`, `launch_failed`, or the
-  target's own refusal code, such as `target_provider_unauthorized` for a read-only
+  target's own refusal code, such as `target_peer_read_only` for a read-only
   pairing, `target_peer_unsupported` for a peer without the route, or
   `capacity_reached`.
 - `unverified`: `execution_lost` (the host accepted the attempt and no longer knows

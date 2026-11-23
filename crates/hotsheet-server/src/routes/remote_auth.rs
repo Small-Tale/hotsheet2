@@ -236,6 +236,16 @@ fn value<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name)?.to_str().ok()
 }
 
+/// The paired-session credential of an `Authorization: Bearer` header (HS2-AW2AKF).
+fn bearer(headers: &HeaderMap) -> Option<&str> {
+    let value = value(headers, "authorization")?;
+    let (scheme, token) = value.split_once(' ')?;
+    scheme
+        .eq_ignore_ascii_case("bearer")
+        .then(|| token.trim())
+        .filter(|token| !token.is_empty())
+}
+
 fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     value(headers, "cookie")?.split(';').find_map(|piece| {
         piece
@@ -328,6 +338,19 @@ pub(crate) fn session(
     write: bool,
     websocket: bool,
 ) -> Result<Device, ApiError> {
+    // HS2-AW2AKF: a paired machine's server-to-server call presents its credential as a
+    // bearer header. A browser never sends that header on its own, so it needs no Origin
+    // or CSRF proof; the cookie path below keeps both for browsers. A bearer that names no
+    // paired session (another credential on the same header) falls through to the cookie.
+    if let Some(token) = bearer(headers) {
+        match catalog(state)?
+            .authorize_bearer(token, write, now(state))
+            .map_err(|_| internal())?
+        {
+            Err(AuthFailure::Invalid) if cookie(headers, SESSION_COOKIE).is_some() => {}
+            result => return result.map_err(failed),
+        }
+    }
     let token = cookie(headers, SESSION_COOKIE).ok_or_else(|| failed(AuthFailure::Invalid))?;
     let origin = value(headers, "origin");
     if (write || websocket) && origin.is_none() {

@@ -388,3 +388,211 @@ fn mcp_reply(home: &Path, backend: &[&str], tool: &str, arguments: Value) -> Val
     }
     reply
 }
+
+/// HS2-AW2AKF: how the controller machine is paired with a peer.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Pairing {
+    /// A device certificate over mTLS (`cert issue --bundle`).
+    Certificate,
+    /// A paired-device session over HTTP, the desktop's remote pairing
+    /// (`desktopRemoteBeginPair` / `FinishPair`, then `remotes register`).
+    Session,
+}
+
+/// The browser origin the desktop pairs from; the peer binds the session to it.
+const PAIRED_ORIGIN: &str = "http://localhost:4175";
+
+enum PeerControl {
+    Certificate(Paths),
+    Session {
+        router: axum::Router,
+        device: String,
+    },
+}
+
+/// A served peer and the credentials this machine registers it with (HS2-AW2AKF).
+pub(super) struct PairedPeer {
+    pub(super) origin: String,
+    pub(super) credentials: RemoteCredentials,
+    running: Running,
+    control: PeerControl,
+}
+
+impl PairedPeer {
+    /// Serve `state` and pair with it as `pairing` does, read-write.
+    pub(super) async fn serve(pairing: Pairing, state: AppState, root: &Path) -> Self {
+        match pairing {
+            Pairing::Certificate => {
+                let paths = Paths::at(root.join("tls"));
+                hotsheet_tls::init_ca(&paths, &[]).unwrap();
+                let device = hotsheet_tls::issue_device(&paths, "synthetic-orchestrator").unwrap();
+                hotsheet_tls::set_device_role(
+                    &paths,
+                    "synthetic-orchestrator",
+                    hotsheet_tls::DeviceRole::ReadWrite,
+                )
+                .unwrap();
+                let running = serve(state, &paths, None).await;
+                Self {
+                    origin: running.origin.clone(),
+                    credentials: credentials(&device),
+                    running,
+                    control: PeerControl::Certificate(paths),
+                }
+            }
+            Pairing::Session => Self::serve_session(state).await,
+        }
+    }
+
+    async fn serve_session(state: AppState) -> Self {
+        let state = state.with_machine_remote_auth().unwrap();
+        let router = app(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let served = router.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                served.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move {
+                let _ = stopped.await;
+            })
+            .await
+            .map_err(anyhow::Error::from)
+        });
+        let origin = format!("http://{address}");
+        // The desktop's pairing: request from the browser origin, the host approves
+        // read-write, the requester redeems and keeps the session and CSRF cookies.
+        let (status, pairing, _) = owner_call(
+            &router,
+            "POST",
+            "/remote-auth/pair",
+            Some(serde_json::json!({"label": "Synthetic orchestrator"})),
+            false,
+        )
+        .await;
+        assert_eq!(status, 201, "{pairing}");
+        let (status, body, _) = owner_call(
+            &router,
+            "POST",
+            "/remote-auth/owner/approve",
+            Some(serde_json::json!({"id": pairing["id"], "role": "read_write"})),
+            true,
+        )
+        .await;
+        assert_eq!(status, 204, "{body}");
+        let (status, device, cookies) = owner_call(
+            &router,
+            "POST",
+            "/remote-auth/redeem",
+            Some(serde_json::json!({"id": pairing["id"], "challenge": pairing["challenge"]})),
+            false,
+        )
+        .await;
+        assert_eq!(status, 200, "{device}");
+        let cookie = |name: &str| {
+            cookies
+                .iter()
+                .find_map(|value| {
+                    value
+                        .strip_prefix(&format!("{name}="))
+                        .and_then(|rest| rest.split(';').next())
+                })
+                .unwrap()
+                .to_owned()
+        };
+        let credentials = RemoteCredentials {
+            bearer_secret: format!("session:{}", cookie("hs2_remote_session")),
+            session_origin: Some(PAIRED_ORIGIN.into()),
+            session_csrf: Some(cookie("hs2_remote_csrf")),
+            ca_pem: None,
+            client_certificate_pem: None,
+            client_key_pem: None,
+        };
+        Self {
+            origin: origin.clone(),
+            credentials,
+            running: Running {
+                origin,
+                address,
+                stop,
+                task,
+            },
+            control: PeerControl::Session {
+                router,
+                device: device["id"].as_str().unwrap().to_owned(),
+            },
+        }
+    }
+
+    /// The peer narrows this machine's pairing to read-only.
+    pub(super) async fn read_only(&self) {
+        match &self.control {
+            PeerControl::Certificate(paths) => {
+                hotsheet_tls::set_device_role(
+                    paths,
+                    "synthetic-orchestrator",
+                    hotsheet_tls::DeviceRole::ReadOnly,
+                )
+                .unwrap();
+            }
+            PeerControl::Session { router, device } => {
+                let (status, body, _) = owner_call(
+                    router,
+                    "PATCH",
+                    &format!("/remote-auth/owner/devices/{device}"),
+                    Some(serde_json::json!({"role": "read_only"})),
+                    true,
+                )
+                .await;
+                assert_eq!(status, 200, "{body}");
+            }
+        }
+    }
+
+    pub(super) async fn stop(self) -> std::net::SocketAddr {
+        self.running.stop().await
+    }
+}
+
+/// One in-process request to the peer's router, from the paired browser origin, or from
+/// the hosting machine itself with its secret.
+async fn owner_call(
+    router: &axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    owner: bool,
+) -> (u16, Value, Vec<String>) {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let mut request = axum::http::Request::builder()
+        .method(method)
+        .uri(path)
+        .header("origin", PAIRED_ORIGIN)
+        .header("content-type", "application/json");
+    if owner {
+        request = request.header("x-hotsheet-secret", SECRET);
+    }
+    let request = request
+        .body(axum::body::Body::from(
+            body.map(|value| value.to_string()).unwrap_or_default(),
+        ))
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    let status = response.status().as_u16();
+    let cookies = response
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|value| value.to_str().ok().map(str::to_owned))
+        .collect();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        cookies,
+    )
+}

@@ -415,10 +415,7 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
             "codex",
         ],
     );
-    assert!(
-        refused.contains("target_provider_unauthorized"),
-        "{refused}"
-    );
+    assert!(refused.contains("target_peer_read_only"), "{refused}");
     // Every answer and refusal is in the controller's journal, by code only.
     let audit = cli_named(&home, &human, &["audit", "--project", &owner.id]);
     let entries = audit["entries"].as_array().unwrap();
@@ -430,7 +427,7 @@ async fn hs2_j8prtv_real_tls_remote_capacity_and_admission_through_the_cli() {
     assert!(entries.iter().any(|entry| {
         entry["action"] == "sessions_manage"
             && entry["outcome"] == "failed"
-            && entry["reason"] == "target_provider_unauthorized"
+            && entry["reason"] == "target_peer_read_only"
     }));
     peer.stop().await;
 }

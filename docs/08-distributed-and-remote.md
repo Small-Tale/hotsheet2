@@ -148,8 +148,12 @@ another name. Re-importing with the same origin keeps the same registration.
 The input bundle keeps `bearer_secret` for stored-format compatibility. It may be
 empty or absent only for an HTTPS device identity (certificate and key, no paired
 session), which never sends it (HS2-FZXXTG). A
-paired session uses `session:<opaque-session-token>` in that field; transport
-sends it only as a cookie. A paired session keeps its approved
+paired session uses `session:<opaque-session-token>` in that field. The
+machine's server-to-server calls send it as an `Authorization: Bearer` header,
+which the peer accepts for writes without browser Origin and CSRF proof, and
+also as the session cookie so a peer that predates bearer sessions still reads;
+for such a peer's writes they add the stored Origin and CSRF proof
+(HS2-AW2AKF). A paired session keeps its approved
 `session_origin` and `session_csrf` in the private secret record for writes and
 WebSocket upgrades; neither appears in `remotes.json` or a browser response.
 HTTPS requires `ca_pem` to verify the reviewed server;

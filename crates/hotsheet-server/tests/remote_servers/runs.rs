@@ -25,13 +25,19 @@ fn ticket(store: &FsStore, prefix: &str, title: &str) -> hotsheet_model::Ticket 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cli() {
+    remote_dispatch_supervise_and_cancel_through_the_cli(Pairing::Certificate).await;
+}
+
+/// HS2-AW2AKF: a paired-device session dispatches (work_start), renews and cancels runs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_aw2akf_session_paired_remote_dispatch_supervise_and_cancel_through_the_cli() {
+    remote_dispatch_supervise_and_cancel_through_the_cli(Pairing::Session).await;
+}
+
+async fn remote_dispatch_supervise_and_cancel_through_the_cli(pairing: Pairing) {
     assert!(hotsheet_aitools::test_permission_vault_available());
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
-    let paths = Paths::at(root.path().join("tls"));
-    init_ca(&paths, &[]).unwrap();
-    let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
     let peer_home = root.path().join("peer-home");
     let peer_source = root.path().join("peer-store");
     let peer_state = state(&peer_source, &peer_home);
@@ -45,7 +51,7 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
     let first = ticket(&peer_store, "TST", "Synthetic remote work one");
     let second = ticket(&peer_store, "TST", "Synthetic remote work two");
     let expected = identity(&peer_home);
-    let peer = serve(peer_state, &paths, None).await;
+    let peer = PairedPeer::serve(pairing, peer_state, root.path()).await;
     let home = root.path().join("controller-home");
     std::fs::create_dir(&home).unwrap();
     let source = root.path().join("controller-store");
@@ -57,7 +63,7 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
         .unwrap();
     let orchestration = ticket(&owner_store, "OWN", "Coordinate the synthetic release");
     let input = home.join("supplied-credentials.json");
-    write_credentials(&input, &credentials(&device));
+    write_credentials(&input, &peer.credentials);
     cli(
         &home,
         &[
@@ -377,16 +383,13 @@ async fn hs2_ebhdsb_real_tls_remote_dispatch_supervise_and_cancel_through_the_cl
     assert!(!peer_store.read_ticket(&second.id).unwrap().up_next);
     // The peer narrows the pairing to read-only: a new dispatch is refused by the
     // target itself and the run records the failure reason.
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadOnly).unwrap();
+    peer.read_only().await;
     let refused = fail(&other(
         &second.id.to_string(),
         "op-run-5",
         "remote-worker-1",
     ));
-    assert!(
-        refused.contains("target_provider_unauthorized"),
-        "{refused}"
-    );
+    assert!(refused.contains("target_peer_read_only"), "{refused}");
     assert!(
         peer_store
             .read_ticket(&second.id)

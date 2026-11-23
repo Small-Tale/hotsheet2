@@ -696,7 +696,7 @@ describe("adding a remote server's open projects (HS2-92FJXM)", () => {
     await t.settings.loadSettings(REMOTE_OWNER);
     expect(remote().hostedError).toBeUndefined();
     vi.mocked(t.api.addHostedOrchestrationProject).mockRejectedValueOnce(
-      new ApiHttpError('client certificate is read-only', 403, 'forbidden'),
+      new ApiHttpError('client certificate is read-only', 403, 'read_only'),
     );
     await t.settings.addHostedProject(REMOTE_OWNER, 'billing-0000000000ab');
     expect(remote().message).toContain('Could not add Billing.');

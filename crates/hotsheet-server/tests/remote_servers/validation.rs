@@ -484,7 +484,7 @@ async fn hs2_wn0mxz_real_tls_remote_validation_runs_on_the_peer_through_the_cli(
         .concat(),
     );
     assert_eq!(refused["result"]["state"], "unavailable", "{refused}");
-    assert_eq!(refused["result"]["reason"], "target_provider_unauthorized");
+    assert_eq!(refused["result"]["reason"], "target_peer_read_only");
     assert_eq!(
         std::fs::read_to_string(peer_project.join("smoke-runs"))
             .unwrap()

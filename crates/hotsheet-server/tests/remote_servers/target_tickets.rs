@@ -10,13 +10,19 @@ const TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FD0";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
+    remote_target_tickets_through_the_owned_cli(Pairing::Certificate).await;
+}
+
+/// HS2-AW2AKF: a paired-device session writes target tickets without browser proof.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hs2_aw2akf_session_paired_remote_target_tickets_through_the_owned_cli() {
+    remote_target_tickets_through_the_owned_cli(Pairing::Session).await;
+}
+
+async fn remote_target_tickets_through_the_owned_cli(pairing: Pairing) {
     assert!(hotsheet_aitools::test_permission_vault_available());
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
-    let paths = Paths::at(root.path().join("tls"));
-    init_ca(&paths, &[]).unwrap();
-    let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
     // The peer machine hosts the target checkout and its git ticket store.
     let peer_home = root.path().join("peer-home");
     let peer_source = root.path().join("peer-store");
@@ -28,7 +34,7 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
         .unwrap();
     let peer_connection = peer_checkout.sources[0].connection_id.clone();
     let expected = identity(&peer_home);
-    let peer = serve(peer_state, &paths, None).await;
+    let peer = PairedPeer::serve(pairing, peer_state, root.path()).await;
     // The controller machine owns the orchestration project and its ticket store.
     let home = root.path().join("controller-home");
     std::fs::create_dir(&home).unwrap();
@@ -51,7 +57,7 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
     )
     .unwrap();
     let input = home.join("supplied-credentials.json");
-    write_credentials(&input, &credentials(&device));
+    write_credentials(&input, &peer.credentials);
     cli(
         &home,
         &[
@@ -287,7 +293,7 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
     assert_eq!(links[0]["summary"]["status"], "started");
     // The peer narrows the pairing to read-only: reads still work, writes are refused
     // by the target server itself whatever the grant says.
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadOnly).unwrap();
+    peer.read_only().await;
     assert_eq!(
         run(&worker, &with("show", &["--id", &native_id]))["status"],
         "started"
@@ -297,7 +303,7 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
             &worker,
             &with("update", &["--id", &native_id, "--title", "Refused"])
         )
-        .contains("target_provider_unauthorized")
+        .contains("target_peer_read_only")
     );
     assert_eq!(
         peer_store.read_ticket(&on_peer[0].id).unwrap().title,
@@ -311,7 +317,7 @@ async fn hs2_az15ga_real_tls_remote_target_tickets_through_the_owned_cli() {
     );
     let text = journal.to_string();
     assert!(text.contains("\"operation_id\":\"op-remote-1\""));
-    assert!(text.contains("target_provider_unauthorized"));
+    assert!(text.contains("target_peer_read_only"));
     assert!(!text.contains("Synthetic remote work"));
     // Unlinking is the controller's own write; the peer's ticket is not touched.
     let unlinked = cli_named(

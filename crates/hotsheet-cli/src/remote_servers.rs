@@ -650,7 +650,24 @@ fn remote_auth_request(
     credentials: &RemoteCredentials,
 ) -> ureq::Request {
     if let Some(token) = credentials.session_token() {
-        request = request.set("Cookie", &format!("hs2_remote_session={token}"));
+        // HS2-AW2AKF: a server-to-server call presents the paired credential as a bearer,
+        // which the peer accepts for writes without browser Origin and CSRF proof. The
+        // cookie stays for a peer that predates bearer sessions; for its writes, send the
+        // paired origin and CSRF proof stored at pairing. Reads never send the CSRF proof,
+        // so a stale one cannot refuse them.
+        request = request
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Cookie", &format!("hs2_remote_session={token}"));
+        if !matches!(request.method(), "GET" | "HEAD")
+            && let (Some(paired_origin), Some(csrf)) = (
+                credentials.session_origin.as_deref(),
+                credentials.session_csrf.as_deref(),
+            )
+        {
+            request = request
+                .set("Origin", paired_origin)
+                .set("X-Hotsheet-Csrf", csrf);
+        }
     } else if origin.starts_with("http://127.0.0.1:") || origin.starts_with("http://[::1]:") {
         request = request.set("X-Hotsheet-Secret", &credentials.bearer_secret);
     }

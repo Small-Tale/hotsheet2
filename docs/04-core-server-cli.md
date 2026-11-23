@@ -2162,7 +2162,13 @@ credential, role and grants. A desktop asks a remote host to renew its own bindi
 `remote renew <binding-id>` and reads its lifetime with `remote session <binding-id>`.
 A refused session answers 401 with `code` `session_expired`, `session_revoked` or
 `session_invalid`. The browser host checks same-origin writes,
-and the server requires the matching Origin and CSRF token; WebSocket upgrades
+and for the session cookie the server requires the matching Origin and CSRF token
+(`csrf_required` otherwise). A paired machine's server-to-server call may present
+the same session as `Authorization: Bearer <token>` instead: a browser never sends
+that header on its own, so it needs no Origin or CSRF proof, while revocation,
+expiry and the read-only role (`read_only`) still apply (HS2-AW2AKF). An mTLS
+listener refuses a read-only certificate's write with `read_only` and a denied
+certificate with `certificate_denied`. WebSocket upgrades
 require the approved Origin, with terminal input requiring write role and CSRF.
 Every terminal attach, including a desktop bridge's attach to a remote project's
 PTY, is input-capable and so needs the read-write role and CSRF; REST terminal

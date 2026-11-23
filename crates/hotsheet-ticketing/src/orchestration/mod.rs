@@ -264,7 +264,7 @@ pub enum OrchestrationError {
     Forbidden(&'static str),
     /// HS2-AZ15GA: the target's own ticket source refused or could not perform an
     /// authorized operation. The target stays authoritative; nothing is retried elsewhere.
-    #[error("target ticket operation failed: {}", .0.code())]
+    #[error("{}", .0.message())]
     TargetOperation(TargetOpError),
     /// HS2-EBHDSB: the dispatch run does not allow this request in its current state.
     #[error("orchestration run refused the request: {}", .0.code())]
@@ -354,6 +354,19 @@ pub enum TargetOpError {
     /// The orchestration ticket's own source cannot store structured links.
     LinksUnsupported,
     Failed,
+    /// HS2-AW2AKF: the peer refused this machine's pairing itself, not a provider
+    /// credential: its approval expired and needs renewal on the peer.
+    PeerSessionExpired,
+    /// HS2-AW2AKF: the peer revoked this machine's pairing; only a new pairing helps.
+    PeerSessionRevoked,
+    /// HS2-AW2AKF: the peer paired this machine read-only, so it refuses every write.
+    PeerReadOnly,
+    /// HS2-AW2AKF: the peer asked for browser write proof (Origin and CSRF): it predates
+    /// bearer authentication for paired machines and needs updating.
+    PeerCsrfRequired,
+    /// HS2-AW2AKF: the peer refused this machine's credential for another reason, such as
+    /// an unknown pairing or a denied certificate.
+    PeerAuthRefused,
 }
 
 impl TargetOpError {
@@ -369,7 +382,71 @@ impl TargetOpError {
             Self::PeerUnsupported => "target_peer_unsupported",
             Self::LinksUnsupported => "orchestration_links_unsupported",
             Self::Failed => "target_operation_failed",
+            Self::PeerSessionExpired => "target_peer_session_expired",
+            Self::PeerSessionRevoked => "target_peer_session_revoked",
+            Self::PeerReadOnly => "target_peer_read_only",
+            Self::PeerCsrfRequired => "target_peer_csrf_required",
+            Self::PeerAuthRefused => "target_peer_auth_refused",
         }
+    }
+
+    /// HS2-AW2AKF, HS2-8Z9VHH: a person-readable reason with the next step. Content-free
+    /// like the code: it never carries the peer's or the provider's own text.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::NotFound => "the target ticket or its ticket source does not exist on that site",
+            Self::Unsupported => "the target's ticket provider does not support this operation",
+            Self::Conflict => {
+                "the target ticket changed or is held by someone else; refresh and retry"
+            }
+            Self::Unauthorized => {
+                "the target's ticket provider refused its credentials; reconnect that ticket source on the target machine"
+            }
+            Self::RateLimited => {
+                "the target's ticket provider is rate limiting requests; retry later"
+            }
+            Self::Disabled => {
+                "the target's ticket source is disabled; enable it on the target machine"
+            }
+            Self::Invalid => "the target's ticket provider rejected the request as invalid",
+            Self::PeerUnsupported => {
+                "the remote site runs an older Hot Sheet without this operation; update it"
+            }
+            Self::LinksUnsupported => {
+                "the orchestration ticket's source cannot store links; use a Git ticket source"
+            }
+            Self::Failed => "the target ticket operation failed",
+            Self::PeerSessionExpired => {
+                "this computer's approval on the remote site expired; renew it in Settings → Devices on that site"
+            }
+            Self::PeerSessionRevoked => {
+                "the remote site revoked this computer's access; pair this computer with it again"
+            }
+            Self::PeerReadOnly => {
+                "the remote site paired this computer read-only; give it read-write access in Settings → Devices on that site"
+            }
+            Self::PeerCsrfRequired => {
+                "the remote site needs an update before a paired computer can change its tickets or sessions"
+            }
+            Self::PeerAuthRefused => {
+                "the remote site refused this computer's credentials; check its pairing in Settings → Devices on that site"
+            }
+        }
+    }
+
+    /// HS2-AW2AKF: the refusal for a peer's own authentication code, or `None` when the
+    /// code is not one. The peer answers these before any target route runs.
+    pub fn from_peer_auth_code(code: &str) -> Option<Self> {
+        Some(match code {
+            "session_expired" => Self::PeerSessionExpired,
+            "session_revoked" => Self::PeerSessionRevoked,
+            "read_only" => Self::PeerReadOnly,
+            "csrf_required" => Self::PeerCsrfRequired,
+            "session_invalid" | "certificate_denied" | "host_access_required" => {
+                Self::PeerAuthRefused
+            }
+            _ => return None,
+        })
     }
 
     pub fn from_code(code: &str) -> Option<Self> {
@@ -384,6 +461,11 @@ impl TargetOpError {
             Self::PeerUnsupported,
             Self::LinksUnsupported,
             Self::Failed,
+            Self::PeerSessionExpired,
+            Self::PeerSessionRevoked,
+            Self::PeerReadOnly,
+            Self::PeerCsrfRequired,
+            Self::PeerAuthRefused,
         ]
         .into_iter()
         .find(|error| error.code() == code)

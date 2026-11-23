@@ -207,13 +207,19 @@ async fn show_in_drawer_route(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_through_the_cli() {
+    sessions_on_two_targets_with_different_tools_through_the_cli(Pairing::Certificate).await;
+}
+
+/// HS2-AW2AKF: a paired-device session starts and stops target sessions.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hs2_aw2akf_session_paired_sessions_on_two_targets_with_different_tools_through_the_cli() {
+    sessions_on_two_targets_with_different_tools_through_the_cli(Pairing::Session).await;
+}
+
+async fn sessions_on_two_targets_with_different_tools_through_the_cli(pairing: Pairing) {
     assert!(hotsheet_aitools::test_permission_vault_available());
     hotsheet_aitools::enable_test_permission_vault();
     let root = tempfile::tempdir().unwrap();
-    let paths = Paths::at(root.path().join("tls"));
-    init_ca(&paths, &[]).unwrap();
-    let device = issue_device(&paths, "synthetic-orchestrator").unwrap();
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadWrite).unwrap();
     let peer_home = root.path().join("peer-home");
     let peer_source = root.path().join("peer-store");
     let peer_state = state(&peer_source, &peer_home)
@@ -234,7 +240,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
         );
     }
     let expected = identity(&peer_home);
-    let peer = serve(peer_state, &paths, None).await;
+    let peer = PairedPeer::serve(pairing, peer_state, root.path()).await;
     let home = root.path().join("controller-home");
     std::fs::create_dir(&home).unwrap();
     let source = root.path().join("controller-store");
@@ -245,7 +251,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
         .register(&project, None, None, vec![source.clone()])
         .unwrap();
     let input = home.join("supplied-credentials.json");
-    write_credentials(&input, &credentials(&device));
+    write_credentials(&input, &peer.credentials);
     cli(
         &home,
         &[
@@ -669,7 +675,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
         assert!(!wire.contains(private), "{private}");
     }
     // A read-only device may read the peer's sessions and can start nothing.
-    set_device_role(&paths, "synthetic-orchestrator", DeviceRole::ReadOnly).unwrap();
+    peer.read_only().await;
     let read_only = refused(
         &scheduler,
         &[
@@ -682,10 +688,7 @@ async fn hs2_gdjxgz_real_tls_sessions_on_two_targets_with_different_tools_throug
             IDLE_TOOL,
         ],
     );
-    assert!(
-        read_only.contains("target_provider_unauthorized"),
-        "{read_only}"
-    );
+    assert!(read_only.contains("target_peer_read_only"), "{read_only}");
     assert!(drawer(&peer_router).await.is_empty());
     // Every start, stop and refusal is in the controller's journal, by code only.
     let audit = cli_named(&home, &human, &["audit", "--project", &owner.id]);

@@ -1337,7 +1337,10 @@ fn hs2_az15ga_remote_destination_uses_the_reviewed_transport_and_peer_codes() {
     for (status, expected) in [
         (404, TargetOpError::PeerUnsupported),
         (405, TargetOpError::PeerUnsupported),
-        (403, TargetOpError::Unauthorized),
+        // HS2-AW2AKF: an uncoded 401 or 403 is the peer refusing this machine, never a
+        // provider credential.
+        (401, TargetOpError::PeerAuthRefused),
+        (403, TargetOpError::PeerAuthRefused),
         (409, TargetOpError::Conflict),
         (429, TargetOpError::RateLimited),
         (500, TargetOpError::Failed),
@@ -1512,4 +1515,67 @@ fn hs2_az15ga_hosted_routes_validate_requests_and_are_not_machine_fenced() {
         Err(OrchestrationError::Invalid(_))
     ));
     assert!(m.home.join("checkouts.json").is_file());
+}
+
+/// HS2-AW2AKF: a peer's refusal keeps its meaning. Its target routes' own codes win; its
+/// authentication codes map to a peer-auth refusal with their reason, never to a provider
+/// credential failure; only an uncoded reply is classified by status.
+#[test]
+fn hs2_aw2akf_peer_refusals_keep_their_reason() {
+    use super::super::tickets::peer_refusal;
+    for (status, code, expected) in [
+        (
+            502,
+            Some("target_provider_unauthorized"),
+            TargetOpError::Unauthorized,
+        ),
+        (
+            403,
+            Some("target_provider_unauthorized"),
+            TargetOpError::Unauthorized,
+        ),
+        (
+            401,
+            Some("session_expired"),
+            TargetOpError::PeerSessionExpired,
+        ),
+        (
+            401,
+            Some("session_revoked"),
+            TargetOpError::PeerSessionRevoked,
+        ),
+        (401, Some("session_invalid"), TargetOpError::PeerAuthRefused),
+        (403, Some("csrf_required"), TargetOpError::PeerCsrfRequired),
+        (403, Some("read_only"), TargetOpError::PeerReadOnly),
+        (
+            403,
+            Some("certificate_denied"),
+            TargetOpError::PeerAuthRefused,
+        ),
+        (
+            403,
+            Some("host_access_required"),
+            TargetOpError::PeerAuthRefused,
+        ),
+        (403, Some("something_new"), TargetOpError::PeerAuthRefused),
+        (401, None, TargetOpError::PeerAuthRefused),
+        (404, None, TargetOpError::PeerUnsupported),
+        (404, Some("anything"), TargetOpError::NotFound),
+        (500, None, TargetOpError::Failed),
+    ] {
+        assert_eq!(peer_refusal(status, code), expected, "{status} {code:?}");
+    }
+    // Every refusal names itself by a stable code and a person-readable next step.
+    for error in [
+        TargetOpError::PeerSessionExpired,
+        TargetOpError::PeerSessionRevoked,
+        TargetOpError::PeerReadOnly,
+        TargetOpError::PeerCsrfRequired,
+        TargetOpError::PeerAuthRefused,
+        TargetOpError::Unauthorized,
+    ] {
+        assert_eq!(TargetOpError::from_code(error.code()), Some(error));
+        assert!(!error.message().is_empty());
+        assert!(!error.message().contains('_'), "{}", error.message());
+    }
 }
