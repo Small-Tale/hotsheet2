@@ -4,6 +4,43 @@ use super::bindings::{BindingFile, BindingRecord, MAX_BINDINGS, check_expected, 
 use super::manifest::fresh_token;
 use super::*;
 
+/// HS2-S5RPAR: the Git ticket stores a site reaches, by provider-owned store identity.
+/// Sites of one project share their ticket store, not every source: a checkout may also
+/// link an external provider (GitHub Issues, Jira) that its other machine does not.
+pub(crate) fn git_store_identities<'a>(
+    sources: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+) -> std::collections::BTreeSet<String> {
+    sources
+        .into_iter()
+        .filter(|(provider, _)| *provider == "git")
+        .filter_map(|(_, identity)| identity.map(str::to_owned))
+        .collect()
+}
+
+pub(crate) fn binding_git_stores(binding: &BindingRecord) -> std::collections::BTreeSet<String> {
+    git_store_identities(
+        binding
+            .sources
+            .iter()
+            .map(|source| (source.provider.as_str(), Some(source.identity.as_str()))),
+    )
+}
+
+/// Two sites reach the same ticket store when they share a Git store identity. Without
+/// Git identities on both sides, fall back to the whole-checkout authority (HS2-SHH7WW).
+pub(crate) fn same_ticket_store(
+    left_authority: &str,
+    left_git: &std::collections::BTreeSet<String>,
+    right_authority: &str,
+    right_git: &std::collections::BTreeSet<String>,
+) -> bool {
+    if left_git.is_empty() || right_git.is_empty() {
+        left_authority == right_authority
+    } else {
+        !left_git.is_disjoint(right_git)
+    }
+}
+
 /// A trusted adapter's observation, not a deserializable HTTP/MCP proof.
 pub struct ObservedTarget<P> {
     proof: P,
@@ -133,7 +170,18 @@ impl Orchestration {
         file: &super::bindings::BindingFile,
         target: &TargetRef,
         destination: &TargetDestination,
+        sources: Option<&[TargetSource]>,
     ) -> Result<(), OrchestrationError> {
+        // Before the probe the candidate's store identities are unknown; the check runs
+        // again with the observed sources before anything is bound (HS2-S5RPAR).
+        let Some(sources) = sources else {
+            return Ok(());
+        };
+        let candidate = git_store_identities(
+            sources
+                .iter()
+                .map(|source| (source.provider.as_str(), source.identity.as_deref())),
+        );
         let sites = ProjectSites::of(&manifest.targets);
         let live = |id: &str| {
             manifest
@@ -146,10 +194,14 @@ impl Orchestration {
                 && binding.target.target_id != target.target_id
                 && live(&binding.target.target_id)
                 && sites.same_project(&binding.target.target_id, &target.target_id)
-                && binding
-                    .destination
-                    .as_ref()
-                    .is_some_and(|other| other.authority() != destination.authority())
+                && binding.destination.as_ref().is_some_and(|other| {
+                    !same_ticket_store(
+                        other.authority(),
+                        &binding_git_stores(binding),
+                        destination.authority(),
+                        &candidate,
+                    )
+                })
         });
         if mismatch {
             Err(OrchestrationError::Site(SiteError::StoreMismatch))
@@ -165,7 +217,13 @@ impl Orchestration {
         &self,
         project: &str,
         destination: &TargetDestination,
+        sources: &[TargetSource],
     ) -> Result<(), OrchestrationError> {
+        let candidate = git_store_identities(
+            sources
+                .iter()
+                .map(|source| (source.provider.as_str(), source.identity.as_deref())),
+        );
         let Some(manifest) = self.manifest.document()? else {
             return Err(OrchestrationError::Site(SiteError::ProjectUnknown));
         };
@@ -181,10 +239,14 @@ impl Orchestration {
             binding.target.owner_checkout_id == self.owner_checkout_id
                 && live(&binding.target.target_id)
                 && sites.project_of(&binding.target.target_id) == project
-                && binding
-                    .destination
-                    .as_ref()
-                    .is_some_and(|other| other.authority() != destination.authority())
+                && binding.destination.as_ref().is_some_and(|other| {
+                    !same_ticket_store(
+                        other.authority(),
+                        &binding_git_stores(binding),
+                        destination.authority(),
+                        &candidate,
+                    )
+                })
         });
         if mismatch {
             Err(OrchestrationError::Site(SiteError::StoreMismatch))
@@ -310,7 +372,18 @@ impl Orchestration {
                     .manifest
                     .document()?
                     .ok_or(OrchestrationError::NotFound)?;
-                self.check_site_store(&manifest, file, &request.target, &request.destination)?;
+                let observed = outcome
+                    .as_ref()
+                    .ok()
+                    .map(|projection| projection.sources.as_slice());
+                self.check_site_store(
+                    &manifest,
+                    file,
+                    &request.target,
+                    &request.destination,
+                    // A failed probe binds nothing, so there is no store to compare.
+                    Some(observed.unwrap_or(&[])),
+                )?;
                 let index = file
                     .bindings
                     .iter()
@@ -381,7 +454,13 @@ impl Orchestration {
                 let _binding_lock = self.bindings.storage.lock()?;
                 let mut file = self.bindings.read_file()?;
                 // HS2-SHH7WW: refuse another store before any probe.
-                self.check_site_store(&manifest, &file, &request.target, &request.destination)?;
+                self.check_site_store(
+                    &manifest,
+                    &file,
+                    &request.target,
+                    &request.destination,
+                    None,
+                )?;
                 let index = match file
                     .bindings
                     .iter()

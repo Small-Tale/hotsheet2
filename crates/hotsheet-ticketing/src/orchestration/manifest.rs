@@ -300,7 +300,10 @@ impl ManifestStore {
                 .iter()
                 .any(|target| target.target_id == id && target.state == DeclarationState::Active)
         };
-        let mut stores: BTreeMap<&str, String> = BTreeMap::new();
+        // HS2-S5RPAR: sites of a project match by a shared Git ticket store, not by every
+        // linked source, so one machine's extra GitHub or Jira source is not a mismatch.
+        let mut stores: BTreeMap<&str, (String, std::collections::BTreeSet<String>)> =
+            BTreeMap::new();
         for binding in &file.bindings {
             let Some(destination) = &binding.destination else {
                 continue;
@@ -309,11 +312,11 @@ impl ManifestStore {
                 continue;
             }
             let authority = destination.authority();
-            if *stores
+            let git = super::workflow::binding_git_stores(binding);
+            let (first_authority, first_git) = stores
                 .entry(sites.project_of(&binding.target.target_id))
-                .or_insert_with(|| authority.to_owned())
-                != authority
-            {
+                .or_insert_with(|| (authority.to_owned(), git.clone()));
+            if !super::workflow::same_ticket_store(first_authority, first_git, authority, &git) {
                 return Err(OrchestrationError::Site(SiteError::StoreMismatch));
             }
         }

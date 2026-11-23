@@ -397,7 +397,11 @@ impl OrchestrationRuntime {
         let candidate = observer.inspect(inspect)?;
         // HS2-E9VVQF: a site of another ticket store is refused before it is declared.
         if let Some(project) = &request.site_of {
-            flow.check_site_candidate(project, &candidate.destination)?;
+            flow.check_site_candidate(
+                project,
+                &candidate.destination,
+                &candidate.projection.sources,
+            )?;
         }
         let label = request
             .label

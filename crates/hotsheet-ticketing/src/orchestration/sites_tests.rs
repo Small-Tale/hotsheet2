@@ -1358,3 +1358,68 @@ fn hs2_rdbmvm_grouping_joins_site_connection_ids_by_bound_sources() {
         on(2, "site-conn", "T-2")
     );
 }
+
+/// HS2-S5RPAR: sites match by their shared Git ticket store. One machine's checkout may
+/// also link an external provider (GitHub Issues) that the other does not; that changes
+/// the whole-checkout authority but not the ticket store, so the site is accepted. A site
+/// on a different Git store is still refused.
+#[test]
+fn hs2_s5rpar_an_extra_external_source_on_one_site_is_not_another_ticket_store() {
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let clock = Clock(100);
+    let mut rng = Rng(1);
+    let mut tx = Transaction {
+        clock: &clock,
+        rng: &mut rng,
+    };
+    let (mut local, _) = checkout("widgets-local", 'a');
+    local.sources.push(TargetSource {
+        connection_id: "github-synthetic-widgets".into(),
+        provider: "github".into(),
+        identity: Some("c".repeat(64)),
+        state: SourceState::Available,
+        capabilities: Some(crate::ProviderCapabilities::git()),
+    });
+    local.checkout_authority = checkout_authority(&local.sources).unwrap();
+    let at_local = TargetDestination::Local {
+        server_id: local.server_id.clone(),
+        checkout_id: local.checkout_id.clone(),
+        checkout_authority: local.checkout_authority.clone(),
+    };
+    let (remote, at_remote) = checkout_on("widgets-remote", 'a', "other-path");
+    assert_ne!(local.checkout_authority, remote.checkout_authority);
+    let (other, at_other) = checkout("widgets-fork", 'b');
+    let stores = Stores {
+        root: root.path().into(),
+        projections: Mutex::new(vec![local, remote, other]),
+    };
+    let flow = Orchestration::new(
+        OWNER.into(),
+        ManifestStore::new(root.path()),
+        BindingRegistry::new(home.path()),
+    )
+    .unwrap();
+    for (target, label, site_of) in [
+        (1, "Widgets", None),
+        (2, "Widgets remote", Some(id(1))),
+        (3, "Widgets fork", Some(id(1))),
+    ] {
+        flow.add(
+            AddTarget {
+                expected_revision: flow.declarations().unwrap().revision,
+                target_id: Some(id(target)),
+                label: label.into(),
+                expected_repository_identity: None,
+                site_of,
+            },
+            &stores,
+            &mut tx,
+        )
+        .unwrap();
+    }
+    bind(&flow, &stores, 1, &at_local, &mut tx).unwrap();
+    bind(&flow, &stores, 2, &at_remote, &mut tx).unwrap();
+    let refused = bind(&flow, &stores, 3, &at_other, &mut tx).unwrap_err();
+    assert_eq!(refused.code(), "site_store_mismatch");
+}
