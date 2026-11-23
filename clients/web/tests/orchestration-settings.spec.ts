@@ -846,6 +846,9 @@ test('HS2-TK9ADC turns a project coordination sessions on and off through the re
  * checkout-scoped paths the routed bridge rewrites to the native checkout as the real bridge does.
  * Web and Docs are registered on that server but not open here.
  */
+/** The Orchestration view's read-only POSTs: where planning stands, the dry-run schedule, the decisions. */
+const READ_ONLY_POSTS = /\/orchestration\/(?:planning\/show|scheduler\/plan|scheduler\/decisions)$/;
+
 async function openRemoteOrchestration(page: Page) {
   const server = await realTicketServer();
   const binding = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -890,7 +893,9 @@ async function openRemoteOrchestration(page: Page) {
     const path = incoming.pathname
       .slice(remotePath.length)
       .replace(`/checkouts/${encoded}`, `/checkouts/${server.checkoutId}`);
-    if (route.request().method() === 'POST') posted.push(path);
+    // The Orchestration view an orchestration project opens in (HS2-BRRSYM) reads its plan and decisions
+    // through POSTs that change nothing; only the writes are recorded.
+    if (route.request().method() === 'POST' && !READ_ONLY_POSTS.test(path)) posted.push(path);
     if (route.request().method() === 'DELETE') posted.push(`DELETE ${path}`);
     try {
       const response = await proxyFetch(route, {

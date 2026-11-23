@@ -102,7 +102,12 @@ async function planAndDispatch(server: Server) {
   };
 }
 
-async function openProject(page: Page, server: Server, name: string) {
+/**
+ * Open the project through the real shell. `routes` installs a spec's own mocks after the API proxy
+ * and before the page loads: an orchestration project opens straight in its Orchestration view
+ * (HS2-BRRSYM), so a mock installed after opening misses the view's first reads.
+ */
+async function openProject(page: Page, server: Server, name: string, routes?: () => Promise<void>) {
   const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
   await page.routeWebSocket(/.*/, (route) => {
     void route.close();
@@ -126,6 +131,7 @@ async function openProject(page: Page, server: Server, name: string) {
       await route.abort().catch(() => undefined);
     }
   });
+  await routes?.();
   await page.goto('/');
   await openMockedProject(page);
 }
@@ -700,46 +706,47 @@ test('HS2-HDHT5E remote target tickets show their titles, read once through the 
     await asOrchestrationProject(server);
     const plan = await planAndDispatch(server);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openProject(page, server, 'Launch');
     // The real timeline, with both target tickets placed on a paired server: the read on this machine has
     // only their slugs, never their titles (HS2-J89JC7).
     const remote = new Set([plan.first.id, plan.second.id]);
-    await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
-      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
-        incoming = new URL(route.request().url());
-      try {
-        const response = await proxyFetch(route, {
-          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
-          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-          timeout: 60_000,
-        });
-        const body = (await response.json()) as {
-          waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
-        };
-        for (const wave of body.waves)
-          for (const item of wave.items)
-            if (remote.has(item.target.native_id)) {
-              item.location = 'remote';
-              item.machine_label = 'Build host';
-              delete item.title;
-            }
-        await route.fulfill({ response, json: body });
-      } catch {
-        // A long poll still open when the page or the server goes away.
-        await route.abort().catch(() => undefined);
-      }
-    });
-    // The label read goes to the real gated route; the second ticket's target refuses it.
     const reads: string[] = [];
-    await page.route(/\/orchestration\/tickets\/read$/, async (route) => {
-      const native = (route.request().postDataJSON() as { native_id: string }).native_id;
-      reads.push(native);
-      if (native === plan.second.id)
-        return route.fulfill({
-          status: 404,
-          json: { error: 'target ticket not found', code: 'target_ticket_not_found' },
-        });
-      return route.fallback();
+    await openProject(page, server, 'Launch', async () => {
+      await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
+        const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
+          incoming = new URL(route.request().url());
+        try {
+          const response = await proxyFetch(route, {
+            url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          const body = (await response.json()) as {
+            waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
+          };
+          for (const wave of body.waves)
+            for (const item of wave.items)
+              if (remote.has(item.target.native_id)) {
+                item.location = 'remote';
+                item.machine_label = 'Build host';
+                delete item.title;
+              }
+          await route.fulfill({ response, json: body });
+        } catch {
+          // A long poll still open when the page or the server goes away.
+          await route.abort().catch(() => undefined);
+        }
+      });
+      // The label read goes to the real gated route; the second ticket's target refuses it.
+      await page.route(/\/orchestration\/tickets\/read$/, async (route) => {
+        const native = (route.request().postDataJSON() as { native_id: string }).native_id;
+        reads.push(native);
+        if (native === plan.second.id)
+          return route.fulfill({
+            status: 404,
+            json: { error: 'target ticket not found', code: 'target_ticket_not_found' },
+          });
+        return route.fallback();
+      });
     });
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const view = page.locator('[data-orchestration-view="true"]');
@@ -789,35 +796,36 @@ test('HS2-6GE7WM a card shows the site its run was placed on and gathers under t
     const sites = real.waves.flatMap((wave) => wave.items.map((item) => item.site_id));
     expect(sites).toEqual([TARGET, TARGET]);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openProject(page, server, 'Launch');
     // The scheduler placed the first step's run on another site of the project, on a paired Mac, as the
     // two-site server test (`e2e_sites.rs`) shows the real timeline reporting it.
     const otherSite = '01ARZ3NDEKTSV4RRFFQ69G5FJ9';
-    await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
-      const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
-        incoming = new URL(route.request().url());
-      try {
-        const response = await proxyFetch(route, {
-          url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
-          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
-          timeout: 60_000,
-        });
-        const body = (await response.json()) as {
-          waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
-        };
-        for (const wave of body.waves)
-          for (const item of wave.items)
-            if (item.target.native_id === plan.first.id)
-              Object.assign(item, {
-                site_id: otherSite,
-                project_label: 'Self on the second Mac',
-                location: 'remote',
-                machine_label: 'Second Mac',
-              });
-        await route.fulfill({ response, json: body });
-      } catch {
-        await route.abort().catch(() => undefined);
-      }
+    await openProject(page, server, 'Launch', async () => {
+      await page.route(/\/orchestration\/timeline(\?|$)/, async (route) => {
+        const apiPath = `/__hotsheet/project-api/${server.checkoutId}`,
+          incoming = new URL(route.request().url());
+        try {
+          const response = await proxyFetch(route, {
+            url: `${server.url}${incoming.pathname.slice(apiPath.length)}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          const body = (await response.json()) as {
+            waves: Array<{ items: Array<Record<string, unknown> & { target: { native_id: string } }> }>;
+          };
+          for (const wave of body.waves)
+            for (const item of wave.items)
+              if (item.target.native_id === plan.first.id)
+                Object.assign(item, {
+                  site_id: otherSite,
+                  project_label: 'Self on the second Mac',
+                  location: 'remote',
+                  machine_label: 'Second Mac',
+                });
+          await route.fulfill({ response, json: body });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
     });
     await page.locator('[data-segment-value="orchestration"]').first().click();
     const view = page.locator('[data-orchestration-view="true"]');
