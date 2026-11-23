@@ -68,22 +68,29 @@ test('never ellipsizes a remote project tab name (HS2-08P0V5)', async ({ page })
       const name = element.querySelector<HTMLElement>('.kui-tab-bar-item__name')!;
       const scroller = element.closest<HTMLElement>('.kui-tab-bar__tabs')!;
       const nameRect = name.getBoundingClientRect(),
+        tabRect = element.getBoundingClientRect(),
         stripRect = scroller.getBoundingClientRect();
       return {
         ellipsized: name.scrollWidth > name.clientWidth,
         fullName: name.textContent,
         nameInsideStrip: nameRect.left >= stripRect.left - 1 && nameRect.right <= stripRect.right + 1,
+        tabInsideStrip: tabRect.left >= stripRect.left - 1 && tabRect.right <= stripRect.right + 1,
         nameWidth: Math.round(nameRect.width),
         stripWidth: Math.round(stripRect.width),
       };
     });
   await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName, nameInsideStrip: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-08p0v5-wide.png', animations: 'disabled' });
-  // The local tab ellipsizes at this width (HS2-A7QPW4); the remote name is never ellipsized. When the one
-  // remote tab is wider than Kerf's whole strip, the strip still clips it: blocked on KF-0M3ZPT, so this
-  // width does not yet assert `nameInsideStrip` (HS2-08P0V5 stays open until it can).
+  // The local tab ellipsizes at this width (HS2-A7QPW4). The one remote tab is wider than Kerf's whole strip
+  // here, so Kerf (KF-0M3ZPT, beta.131) fits it to the strip, ellipsizes it there, and titles it with the full
+  // name: the tab is never clipped by the strip, and the whole name stays one hover away.
   await page.setViewportSize({ width: 1024, height: 900 });
-  await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName });
+  await expect
+    .poll(geometry)
+    .toMatchObject({ ellipsized: true, fullName: remoteName, nameInsideStrip: true, tabInsideStrip: true });
+  // wireTabBars titles a truncated tab with its full name when the pointer reaches it.
+  await tab.getByRole('tab').hover();
+  await expect(tab.getByRole('tab')).toHaveAttribute('title', remoteName);
   await page.screenshot({ path: 'target/visual-captures/hs2-08p0v5-after-1024.png', animations: 'disabled' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect.poll(geometry).toMatchObject({ ellipsized: false, fullName: remoteName, nameInsideStrip: true });

@@ -563,6 +563,10 @@ same explanation (HS2-CGXGWY).
   that click is a no-op (HS2-42T028). Orchestration projects remember their own view apart
   from the software projects' ticket view, Orchestration by default (HS2-BRRSYM, §26.26). Project names ellipsize as tabs shrink at medium widths,
   including with the terminal drawer open, before the strip scrolls (HS2-A7QPW4).
+  A remote project's `<host> · <project>` name never ellipsizes to make room: it keeps its full
+  width and the strip scrolls instead. Only a remote tab wider than the whole strip (one remote
+  tab at 1024px with the drawer grid open) takes the strip's width, ellipsizes there, and shows
+  its full name as the tab's title on hover (HS2-08P0V5, Kerf KF-0M3ZPT).
   Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
   ticket-view action (HS2-NE8JBS). While the project tabs overflow the strip (for example one
