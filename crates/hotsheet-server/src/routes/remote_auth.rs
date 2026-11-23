@@ -342,8 +342,10 @@ pub(crate) fn session(
     // bearer header. A browser never sends that header on its own, so it needs no Origin
     // or CSRF proof; the cookie path below keeps both for browsers. A bearer that names no
     // paired session (another credential on the same header) falls through to the cookie.
-    if let Some(token) = bearer(headers) {
-        match catalog(state)?
+    // Without remote authentication there is no paired session to name, and the header
+    // keeps its other meanings (a resource-claim renewal token): the cookie path decides.
+    if let (Some(token), Some(catalog)) = (bearer(headers), state.remote_auth.as_ref()) {
+        match catalog
             .authorize_bearer(token, write, now(state))
             .map_err(|_| internal())?
         {
